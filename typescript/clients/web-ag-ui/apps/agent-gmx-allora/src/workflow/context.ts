@@ -71,6 +71,24 @@ export type ClmmTransaction = {
   timestamp: string;
 };
 
+export type GmxLatestSnapshot = {
+  poolAddress?: `0x${string}`;
+  totalUsd?: number;
+  leverage?: number;
+  feesUsd?: number;
+  feesApy?: number;
+  timestamp?: string;
+  positionOpenedAt?: string;
+  positionTokens: Array<{
+    address: `0x${string}`;
+    symbol: string;
+    decimals: number;
+    amount?: number;
+    amountBaseUnits?: string;
+    valueUsd?: number;
+  }>;
+};
+
 export type ClmmMetrics = {
   lastSnapshot?: GmxMarket;
   previousPrice?: number;
@@ -78,6 +96,19 @@ export type ClmmMetrics = {
   staleCycles: number;
   iteration: number;
   latestCycle?: GmxAlloraTelemetry;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
+  latestSnapshot?: GmxLatestSnapshot;
+  // When running in plan-only mode (no submission), we may want to avoid re-planning
+  // the same open action every time the signal stays stable. This field tracks the
+  // last assumed position side for decisioning until a close/flip occurs.
+  assumedPositionSide?: 'long' | 'short';
+  // Last observed Allora inference metrics fingerprint for the selected topic.
+  lastInferenceSnapshotKey?: string;
+  // Fingerprint of the last successful trade action. Used to prevent duplicate actions
+  // when inference metrics have not changed.
+  lastTradedInferenceSnapshotKey?: string;
 };
 
 export type TaskState =
@@ -246,6 +277,13 @@ const defaultViewState = (): ClmmViewState => ({
     staleCycles: 0,
     iteration: 0,
     latestCycle: undefined,
+    aumUsd: undefined,
+    apy: undefined,
+    lifetimePnlUsd: undefined,
+    latestSnapshot: undefined,
+    assumedPositionSide: undefined,
+    lastInferenceSnapshotKey: undefined,
+    lastTradedInferenceSnapshotKey: undefined,
   },
   transactionHistory: [],
 });
@@ -327,13 +365,30 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     pools: right.profile?.pools ?? left.profile.pools,
     allowedPools: right.profile?.allowedPools ?? left.profile.allowedPools,
   };
+  const rightMetrics = right.metrics;
+  const hasAssumedPositionSideUpdate =
+    rightMetrics !== undefined &&
+    Object.prototype.hasOwnProperty.call(rightMetrics, 'assumedPositionSide');
+  const hasLatestSnapshotUpdate =
+    rightMetrics !== undefined && Object.prototype.hasOwnProperty.call(rightMetrics, 'latestSnapshot');
   const nextMetrics: ClmmMetrics = {
-    lastSnapshot: right.metrics?.lastSnapshot ?? left.metrics.lastSnapshot,
-    previousPrice: right.metrics?.previousPrice ?? left.metrics.previousPrice,
-    cyclesSinceRebalance: right.metrics?.cyclesSinceRebalance ?? left.metrics.cyclesSinceRebalance,
-    staleCycles: right.metrics?.staleCycles ?? left.metrics.staleCycles,
-    iteration: right.metrics?.iteration ?? left.metrics.iteration,
-    latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
+    lastSnapshot: rightMetrics?.lastSnapshot ?? left.metrics.lastSnapshot,
+    previousPrice: rightMetrics?.previousPrice ?? left.metrics.previousPrice,
+    cyclesSinceRebalance: rightMetrics?.cyclesSinceRebalance ?? left.metrics.cyclesSinceRebalance,
+    staleCycles: rightMetrics?.staleCycles ?? left.metrics.staleCycles,
+    iteration: rightMetrics?.iteration ?? left.metrics.iteration,
+    latestCycle: rightMetrics?.latestCycle ?? left.metrics.latestCycle,
+    aumUsd: rightMetrics?.aumUsd ?? left.metrics.aumUsd,
+    apy: rightMetrics?.apy ?? left.metrics.apy,
+    lifetimePnlUsd: rightMetrics?.lifetimePnlUsd ?? left.metrics.lifetimePnlUsd,
+    latestSnapshot: hasLatestSnapshotUpdate ? rightMetrics?.latestSnapshot : left.metrics.latestSnapshot,
+    assumedPositionSide: hasAssumedPositionSideUpdate
+      ? rightMetrics?.assumedPositionSide
+      : left.metrics.assumedPositionSide,
+    lastInferenceSnapshotKey:
+      rightMetrics?.lastInferenceSnapshotKey ?? left.metrics.lastInferenceSnapshotKey,
+    lastTradedInferenceSnapshotKey:
+      rightMetrics?.lastTradedInferenceSnapshotKey ?? left.metrics.lastTradedInferenceSnapshotKey,
   };
 
   return {
@@ -361,7 +416,10 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
   };
 };
 
-const mergeCopilotkit = (left: CopilotkitState, right?: Partial<CopilotkitState>): CopilotkitState => ({
+const mergeCopilotkit = (
+  left: CopilotkitState,
+  right?: Partial<CopilotkitState>,
+): CopilotkitState => ({
   actions: right?.actions ?? left.actions ?? [],
   context: right?.context ?? left.context ?? [],
 });

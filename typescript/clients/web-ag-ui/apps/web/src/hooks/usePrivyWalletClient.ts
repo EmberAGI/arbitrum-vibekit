@@ -32,14 +32,24 @@ function parseChainId(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function usePrivyWalletClient(): UsePrivyWalletClientReturn {
+export function usePrivyWalletClient(preferredWalletAddress?: string): UsePrivyWalletClientReturn {
   const { wallets } = useWallets();
   const queryClient = useQueryClient();
   const hasInitializedDefaultChain = useRef(false);
 
+  const normalizeAddress = (value: string | undefined): string | null => {
+    if (!value) return null;
+    return value.trim().toLowerCase();
+  };
+
+  const preferredAddress = normalizeAddress(preferredWalletAddress);
+
   const privyWallet = useMemo(() => {
+    if (preferredAddress) {
+      return wallets.find((wallet) => wallet.address.toLowerCase() === preferredAddress) ?? null;
+    }
     return wallets.find((wallet) => wallet.walletClientType === 'privy') ?? null;
-  }, [wallets]);
+  }, [wallets, preferredAddress]);
 
   useEffect(() => {
     if (!privyWallet) return;

@@ -1,7 +1,15 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { usePathname } from 'next/navigation';
 import { z } from 'zod';
 
@@ -143,9 +151,11 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
           profile: (payload.data.profile ?? undefined) as AgentViewProfile | undefined,
           metrics: (payload.data.metrics ?? undefined) as AgentViewMetrics | undefined,
           taskId,
-          taskState: hasTask ? ((payload.data.taskState ?? undefined) as TaskState | undefined) : undefined,
-          haltReason: hasTask ? payload.data.haltReason ?? undefined : undefined,
-          executionError: hasTask ? payload.data.executionError ?? undefined : undefined,
+          taskState: hasTask
+            ? ((payload.data.taskState ?? undefined) as TaskState | undefined)
+            : undefined,
+          haltReason: hasTask ? (payload.data.haltReason ?? undefined) : undefined,
+          executionError: hasTask ? (payload.data.executionError ?? undefined) : undefined,
           error: undefined,
         });
       } catch (error) {
@@ -184,7 +194,11 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
         if (!entry.taskState) {
           return;
         }
-        if (entry.taskState === 'completed' || entry.taskState === 'failed' || entry.taskState === 'canceled') {
+        if (
+          entry.taskState === 'completed' ||
+          entry.taskState === 'failed' ||
+          entry.taskState === 'canceled'
+        ) {
           return;
         }
         void syncAgent(agentId, { force: true });

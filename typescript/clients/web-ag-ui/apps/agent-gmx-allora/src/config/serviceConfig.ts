@@ -85,9 +85,7 @@ export function resolveLangGraphDefaults(): LangGraphDefaults {
   return cachedDefaults;
 }
 
-export function resolveLangGraphDurability(
-  override?: LangGraphDurability,
-): LangGraphDurability {
+export function resolveLangGraphDurability(override?: LangGraphDurability): LangGraphDurability {
   if (override) {
     return override;
   }

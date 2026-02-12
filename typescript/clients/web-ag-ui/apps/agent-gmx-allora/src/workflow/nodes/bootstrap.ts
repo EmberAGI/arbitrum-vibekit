@@ -1,7 +1,14 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import { resolvePollIntervalMs, resolveStreamLimit } from '../../config/constants.js';
+import {
+  resolveAlloraApiBaseUrl,
+  resolveDelegationsBypass,
+  resolveGmxAlloraMode,
+  resolveOnchainActionsApiUrl,
+  resolvePollIntervalMs,
+  resolveStreamLimit,
+} from '../../config/constants.js';
 import { logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
 import { ALLOWED_TOKENS, MARKETS } from '../seedData.js';
 
@@ -22,16 +29,19 @@ export const bootstrapNode = async (
     });
   }
 
-  const mode = process.env['GMX_ALLORA_MODE'] === 'production' ? 'production' : 'debug';
+  const mode = resolveGmxAlloraMode();
   const pollIntervalMs = resolvePollIntervalMs();
   const streamLimit = resolveStreamLimit();
-  const delegationsBypassActive = process.env['DELEGATIONS_BYPASS'] === 'true';
+  const delegationsBypassActive = resolveDelegationsBypass();
+  const onchainActionsBaseUrl = resolveOnchainActionsApiUrl({ logger: logInfo });
 
   logInfo('Initialized GMX Allora workflow context', {
     mode,
     pollIntervalMs,
     streamLimit,
     delegationsBypassActive,
+    onchainActionsBaseUrl,
+    alloraApiBaseUrl: resolveAlloraApiBaseUrl(),
   });
 
   const dispatch: ClmmEvent = {

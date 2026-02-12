@@ -142,6 +142,35 @@ pnpm test:ci        # Optimized for CI (unit + integration)
 pnpm test:ci:main   # Full test suite including E2E
 ```
 
+### Agent GMX Allora E2E (Starts Local onchain-actions)
+
+`agent-gmx-allora` E2E tests now start a local `onchain-actions` dev server (plus Memgraph) automatically.
+
+Requirements:
+- Docker running (for Memgraph via `docker compose`)
+- A local onchain-actions worktree at `worktrees/onchain-actions-001` (override with `ONCHAIN_ACTIONS_WORKTREE_DIR`)
+- Network access (E2E hits Allora consumer API; set `ALLORA_API_KEY` if needed)
+
+Commands:
+```bash
+cd typescript/clients/web-ag-ui/apps/agent-gmx-allora
+
+# Full suite (unit + integration + e2e)
+pnpm test
+
+# E2E only (starts Memgraph + onchain-actions automatically)
+pnpm test:e2e
+```
+
+Optional overrides:
+```bash
+# Use a different onchain-actions worktree location
+ONCHAIN_ACTIONS_WORKTREE_DIR=/absolute/path/to/worktrees/onchain-actions-001 pnpm test:e2e
+
+# Use a different compose file (rare)
+ONCHAIN_ACTIONS_MEMGRAPH_COMPOSE_FILE=/absolute/path/to/compose.dev.db.yaml pnpm test:e2e
+```
+
 ### Running Specific Tests
 
 ```bash

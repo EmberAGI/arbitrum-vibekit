@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "dev:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true turbo run dev",
+    "qa": "bash scripts/qa.sh",
     "build": "turbo run build",
     "start": "turbo run start",
     "start:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true turbo run start",

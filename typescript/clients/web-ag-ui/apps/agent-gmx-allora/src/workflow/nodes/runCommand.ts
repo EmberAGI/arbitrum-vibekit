@@ -55,7 +55,7 @@ export function extractCommand(messages: ClmmState['messages']): Command | null 
 export function runCommandNode(state: ClmmState): ClmmState {
   const parsedCommand = extractCommand(state.messages);
   const nextCommand =
-    parsedCommand === 'sync' ? state.view.command : parsedCommand ?? state.view.command;
+    parsedCommand === 'sync' ? state.view.command : (parsedCommand ?? state.view.command);
   return {
     ...state,
     view: {

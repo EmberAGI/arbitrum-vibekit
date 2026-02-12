@@ -37,6 +37,7 @@ import type {
 } from '../types/agent';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import { formatPoolPair } from '../utils/poolFormat';
+import { resolveMetricsTabLabel } from '../utils/agentUi';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -281,9 +282,7 @@ export function AgentDetailPage({
                     onClick={onFire}
                     disabled={isFiring}
                     className={`px-4 py-1.5 rounded-lg text-white text-sm font-medium transition-colors ${
-                      isFiring
-                        ? 'bg-gray-600 cursor-wait'
-                        : 'bg-[#fd6731] hover:bg-[#e55a28]'
+                      isFiring ? 'bg-gray-600 cursor-wait' : 'bg-[#fd6731] hover:bg-[#e55a28]'
                     }`}
                   >
                     {isFiring ? 'Firing...' : 'Fire'}
@@ -321,7 +320,7 @@ export function AgentDetailPage({
               Agent Blockers
             </TabButton>
             <TabButton active={resolvedTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
-              Metrics
+              {resolveMetricsTabLabel(agentId)}
             </TabButton>
             <TabButton
               active={resolvedTab === 'transactions'}
@@ -363,18 +362,14 @@ export function AgentDetailPage({
               metrics={metrics}
               fullMetrics={fullMetrics}
               events={events}
+              transactions={transactions}
             />
           )}
 
-          {resolvedTab === 'transactions' && (
-            <TransactionHistoryTab transactions={transactions} />
-          )}
+          {resolvedTab === 'transactions' && <TransactionHistoryTab transactions={transactions} />}
 
           {resolvedTab === 'settings' && (
-            <SettingsTab
-              settings={settings}
-              onSettingsChange={onSettingsChange}
-            />
+            <SettingsTab settings={settings} onSettingsChange={onSettingsChange} />
           )}
         </div>
       </div>
@@ -490,21 +485,21 @@ export function AgentDetailPage({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setActiveTab('metrics')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'metrics'
-                    ? 'bg-[#fd6731] text-white'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Metrics
-              </button>
-              <button
-                disabled
-                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed"
-              >
+	            <div className="flex items-center gap-2">
+	              <button
+	                onClick={() => setActiveTab('metrics')}
+	                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+	                  activeTab === 'metrics'
+	                    ? 'bg-[#fd6731] text-white'
+	                    : 'text-gray-400 hover:text-white'
+	                }`}
+	              >
+	                {resolveMetricsTabLabel(agentId)}
+	              </button>
+	              <button
+	                disabled
+	                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed"
+	              >
                 Chat
               </button>
             </div>
@@ -515,14 +510,15 @@ export function AgentDetailPage({
                 profile={profile}
                 metrics={metrics}
                 fullMetrics={fullMetrics}
-                events={[]}
+                events={events}
+                transactions={transactions}
               />
             )}
           </div>
         </div>
       </div>
-    </div>
-  );
+	    </div>
+	  );
 }
 
 // Tab Button Component
@@ -591,35 +587,38 @@ function TransactionHistoryTab({ transactions }: TransactionHistoryTabProps) {
         <p className="text-sm text-gray-500">{transactions.length} transactions</p>
       </div>
       <div className="divide-y divide-[#2a2a2a]">
-        {transactions.slice(-10).reverse().map((tx, index) => (
-          <div key={`${tx.cycle}-${index}`} className="p-4 hover:bg-[#252525] transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-white">
-                  Cycle {tx.cycle} • {tx.action}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {tx.txHash ? `${tx.txHash.slice(0, 12)}…` : 'pending'}
-                  {tx.reason ? ` · ${tx.reason}` : ''}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    tx.status === 'success'
-                      ? 'bg-teal-500/20 text-teal-400'
-                      : tx.status === 'failed'
-                        ? 'bg-red-500/20 text-red-400'
-                        : 'bg-yellow-500/20 text-yellow-400'
-                  }`}
-                >
-                  {tx.status}
-                </span>
-                <span className="text-xs text-gray-500">{formatDate(tx.timestamp)}</span>
+        {transactions
+          .slice(-10)
+          .reverse()
+          .map((tx, index) => (
+            <div key={`${tx.cycle}-${index}`} className="p-4 hover:bg-[#252525] transition-colors">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-white">
+                    Cycle {tx.cycle} • {tx.action}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {tx.txHash ? `${tx.txHash.slice(0, 12)}…` : 'pending'}
+                    {tx.reason ? ` · ${tx.reason}` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      tx.status === 'success'
+                        ? 'bg-teal-500/20 text-teal-400'
+                        : tx.status === 'failed'
+                          ? 'bg-red-500/20 text-red-400'
+                          : 'bg-yellow-500/20 text-yellow-400'
+                    }`}
+                  >
+                    {tx.status}
+                  </span>
+                  <span className="text-xs text-gray-500">{formatDate(tx.timestamp)}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
       </div>
     </div>
   );
@@ -682,6 +681,11 @@ function AgentBlockersTab({
   settings,
   onSettingsChange,
 }: AgentBlockersTabProps) {
+  const preferredDelegatorAddress =
+    activeInterrupt && 'delegatorAddress' in activeInterrupt
+      ? activeInterrupt.delegatorAddress
+      : undefined;
+
   const {
     walletClient,
     privyWallet,
@@ -689,7 +693,7 @@ function AgentBlockersTab({
     switchChain,
     isLoading: isWalletLoading,
     error: walletError,
-  } = usePrivyWalletClient();
+  } = usePrivyWalletClient(preferredDelegatorAddress);
   const delegationsBypassEnabled =
     (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_DELEGATIONS_BYPASS : undefined) ===
     'true';
@@ -952,8 +956,10 @@ function AgentBlockersTab({
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
-        const aValue = typeof a.valueUsd === 'number' && Number.isFinite(a.valueUsd) ? a.valueUsd : null;
-        const bValue = typeof b.valueUsd === 'number' && Number.isFinite(b.valueUsd) ? b.valueUsd : null;
+        const aValue =
+          typeof a.valueUsd === 'number' && Number.isFinite(a.valueUsd) ? a.valueUsd : null;
+        const bValue =
+          typeof b.valueUsd === 'number' && Number.isFinite(b.valueUsd) ? b.valueUsd : null;
         if (aValue !== null && bValue !== null && aValue !== bValue) {
           return bValue - aValue;
         }
@@ -1006,6 +1012,7 @@ function AgentBlockersTab({
     const interrupt = activeInterrupt as unknown as {
       chainId: number;
       delegationManager: `0x${string}`;
+      delegatorAddress: `0x${string}`;
       delegationsToSign: UnsignedDelegation[];
     };
 
@@ -1026,15 +1033,33 @@ function AgentBlockersTab({
       return;
     }
 
+    const requiredDelegatorAddress = interrupt.delegatorAddress.toLowerCase();
+    const signerAddress = walletClient.account?.address?.toLowerCase();
+    if (!signerAddress || signerAddress !== requiredDelegatorAddress) {
+      setError(
+        `Switch to Privy wallet ${interrupt.delegatorAddress} to sign delegations. Current signer: ${
+          walletClient.account?.address ?? 'unknown'
+        }.`,
+      );
+      return;
+    }
+
     setIsSigningDelegations(true);
     try {
       const signedDelegations = [];
       for (const delegation of delegationsToSign) {
+        if (delegation.delegator.toLowerCase() !== requiredDelegatorAddress) {
+          throw new Error(
+            `Delegation delegator ${delegation.delegator} does not match required signer ${interrupt.delegatorAddress}.`,
+          );
+        }
+        const allowInsecureUnrestrictedDelegation = delegation.caveats.length === 0;
         const signature = await signDelegation(walletClient, {
           delegation,
           delegationManager: interrupt.delegationManager,
           chainId: interrupt.chainId,
-          account: walletClient.account,
+          account: interrupt.delegatorAddress,
+          allowInsecureUnrestrictedDelegation,
         });
         signedDelegations.push({ ...delegation, signature });
       }
@@ -1044,7 +1069,11 @@ function AgentBlockersTab({
       onInterruptSubmit?.(response);
     } catch (signError: unknown) {
       const message =
-        signError instanceof Error ? signError.message : typeof signError === 'string' ? signError : 'Unknown error';
+        signError instanceof Error
+          ? signError.message
+          : typeof signError === 'string'
+            ? signError
+            : 'Unknown error';
       setError(`Failed to sign delegations: ${message}`);
     } finally {
       setIsSigningDelegations(false);
@@ -1113,19 +1142,19 @@ function AgentBlockersTab({
         <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
           <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Latest Activity</div>
           <div className="space-y-2">
-            {telemetry.slice(-3).reverse().map((t, i) => (
-              <div
-                key={`${t.cycle}-${i}`}
-                className="flex items-center justify-between text-sm"
-              >
-                <div>
-                  <span className="text-white">Cycle {t.cycle}</span>
-                  <span className="text-gray-500 mx-2">•</span>
-                  <span className="text-gray-400">{t.action}</span>
+            {telemetry
+              .slice(-3)
+              .reverse()
+              .map((t, i) => (
+                <div key={`${t.cycle}-${i}`} className="flex items-center justify-between text-sm">
+                  <div>
+                    <span className="text-white">Cycle {t.cycle}</span>
+                    <span className="text-gray-500 mx-2">•</span>
+                    <span className="text-gray-400">{t.action}</span>
+                  </div>
+                  <span className="text-xs text-gray-500">{formatDate(t.timestamp)}</span>
                 </div>
-                <span className="text-xs text-gray-500">{formatDate(t.timestamp)}</span>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       )}
@@ -1134,8 +1163,8 @@ function AgentBlockersTab({
       <div>
         <h2 className="text-xl font-semibold text-white mb-2">Set up agent</h2>
         <p className="text-gray-400 text-sm mb-6">
-          Get this agent started working on your wallet in a few steps, delegate assets and set
-          your preferences.
+          Get this agent started working on your wallet in a few steps, delegate assets and set your
+          preferences.
         </p>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
@@ -1162,12 +1191,18 @@ function AgentBlockersTab({
                   </div>
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">Auto-selected yield</div>
+                    <div className="text-gray-300 text-sm font-medium mb-2">
+                      Auto-selected yield
+                    </div>
                     <p className="text-gray-400 text-xs">
-                      The agent will automatically select the highest-yield YT market and rotate when yields change.
+                      The agent will automatically select the highest-yield YT market and rotate
+                      when yields change.
                     </p>
                     <p className="text-gray-500 text-xs mt-3">
-                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
+                      Wallet:{' '}
+                      {connectedWalletAddress
+                        ? `${connectedWalletAddress.slice(0, 10)}…`
+                        : 'Not connected'}
                     </p>
                   </div>
                 </div>
@@ -1249,12 +1284,18 @@ function AgentBlockersTab({
                   </div>
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">Allora Signal Source</div>
+                    <div className="text-gray-300 text-sm font-medium mb-2">
+                      Allora Signal Source
+                    </div>
                     <p className="text-gray-400 text-xs">
-                      The agent consumes 8-hour Allora prediction feeds and enforces max 2x leverage.
+                      The agent consumes 8-hour Allora prediction feeds and enforces max 2x
+                      leverage.
                     </p>
                     <p className="text-gray-500 text-xs mt-3">
-                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
+                      Wallet:{' '}
+                      {connectedWalletAddress
+                        ? `${connectedWalletAddress.slice(0, 10)}…`
+                        : 'Not connected'}
                     </p>
                   </div>
                 </div>
@@ -1297,7 +1338,9 @@ function AgentBlockersTab({
                   </div>
 
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">Allocated Funds (USD)</label>
+                    <label className="block text-sm text-gray-400 mb-2">
+                      Allocated Funds (USD)
+                    </label>
                     <input
                       type="number"
                       value={baseContributionUsd}
@@ -1344,7 +1387,8 @@ function AgentBlockersTab({
                     <option value="">Choose a token...</option>
                     {fundingOptions.map((option) => (
                       <option key={option.address} value={option.address}>
-                        {option.symbol} — {formatFundingBalance(option)} ({option.address.slice(0, 8)}…)
+                        {option.symbol} — {formatFundingBalance(option)} (
+                        {option.address.slice(0, 8)}…)
                       </option>
                     ))}
                   </select>
@@ -1373,17 +1417,23 @@ function AgentBlockersTab({
                     <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
                       <div className="text-yellow-300 text-sm font-medium mb-2">Warnings</div>
                       <ul className="space-y-1 text-yellow-200 text-xs">
-                        {(activeInterrupt as unknown as { warnings: string[] }).warnings.map((w) => (
-                          <li key={w}>{w}</li>
-                        ))}
+                        {(activeInterrupt as unknown as { warnings: string[] }).warnings.map(
+                          (w) => (
+                            <li key={w}>{w}</li>
+                          ),
+                        )}
                       </ul>
                     </div>
                   ) : null}
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">What you are authorizing</div>
+                    <div className="text-gray-300 text-sm font-medium mb-2">
+                      What you are authorizing
+                    </div>
                     <ul className="space-y-1 text-gray-400 text-xs">
-                      {(activeInterrupt as unknown as { descriptions?: string[] }).descriptions?.map((d) => (
+                      {(
+                        activeInterrupt as unknown as { descriptions?: string[] }
+                      ).descriptions?.map((d) => (
                         <li key={d}>{d}</li>
                       ))}
                     </ul>
@@ -1418,9 +1468,9 @@ function AgentBlockersTab({
                         <button
                           type="button"
                           onClick={() =>
-                            switchChain((activeInterrupt as unknown as { chainId: number }).chainId).catch(
-                              () => void 0,
-                            )
+                            switchChain(
+                              (activeInterrupt as unknown as { chainId: number }).chainId,
+                            ).catch(() => void 0)
                           }
                           className="px-4 py-2 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white text-sm transition-colors"
                           disabled={isSigningDelegations}
@@ -1432,8 +1482,11 @@ function AgentBlockersTab({
                       type="button"
                       onClick={() =>
                         handleSignDelegations(
-                          (activeInterrupt as unknown as { delegationsToSign: UnsignedDelegation[] })
-                            .delegationsToSign,
+                          (
+                            activeInterrupt as unknown as {
+                              delegationsToSign: UnsignedDelegation[];
+                            }
+                          ).delegationsToSign,
                         )
                       }
                       className="px-6 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#fd6731]/90 text-white font-medium transition-colors disabled:opacity-60"
@@ -1639,12 +1692,136 @@ interface MetricsTabProps {
   metrics: AgentMetrics;
   fullMetrics?: AgentViewMetrics;
   events: ClmmEvent[];
+  transactions: Transaction[];
 }
 
-function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsTabProps) {
-  if (agentId === 'agent-pendle') {
-    return <PendleMetricsTab profile={profile} metrics={metrics} fullMetrics={fullMetrics} events={events} />;
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord | undefined {
+  return value && typeof value === 'object' ? (value as UnknownRecord) : undefined;
+}
+
+function getNestedRecord(value: unknown, key: string): UnknownRecord | undefined {
+  const record = asRecord(value);
+  const nested = record ? record[key] : undefined;
+  return asRecord(nested);
+}
+
+function getStringField(value: unknown, key: string): string | undefined {
+  const record = asRecord(value);
+  const candidate = record ? record[key] : undefined;
+  return typeof candidate === 'string' ? candidate : undefined;
+}
+
+function getNumberField(value: unknown, key: string): number | undefined {
+  const record = asRecord(value);
+  const candidate = record ? record[key] : undefined;
+  return typeof candidate === 'number' ? candidate : undefined;
+}
+
+function getBooleanField(value: unknown, key: string): boolean | undefined {
+  const record = asRecord(value);
+  const candidate = record ? record[key] : undefined;
+  return typeof candidate === 'boolean' ? candidate : undefined;
+}
+
+function getArrayField(value: unknown, key: string): unknown[] | undefined {
+  const record = asRecord(value);
+  const candidate = record ? record[key] : undefined;
+  return Array.isArray(candidate) ? candidate : undefined;
+}
+
+function getArtifactId(artifact: unknown): string | undefined {
+  const name = getStringField(artifact, 'name');
+  if (name && name.trim().length > 0) return name;
+
+  const artifactId = getStringField(artifact, 'artifactId');
+  if (artifactId && artifactId.trim().length > 0) return artifactId;
+
+  const type = getStringField(artifact, 'type');
+  if (type && type.trim().length > 0) return type;
+
+  const id = getStringField(artifact, 'id');
+  if (id && id.trim().length > 0) return id;
+
+  return undefined;
+}
+
+function getArtifactDescription(artifact: unknown): string | undefined {
+  const description = getStringField(artifact, 'description');
+  return description && description.trim().length > 0 ? description : undefined;
+}
+
+function getArtifactDataPart(artifact: unknown): UnknownRecord | undefined {
+  const parts = getArrayField(artifact, 'parts');
+  if (parts) {
+    for (const part of parts) {
+      const record = asRecord(part);
+      if (!record) continue;
+      if (record['kind'] === 'data') {
+        const dataRecord = asRecord(record['data']);
+        if (dataRecord) return dataRecord;
+      }
+    }
   }
+
+  return getNestedRecord(artifact, 'data');
+}
+
+function toArbiscanTxUrl(txHash: string): string {
+  return `https://arbiscan.io/tx/${txHash}`;
+}
+
+function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactions }: MetricsTabProps) {
+  if (agentId === 'agent-pendle') {
+    return (
+      <PendleMetricsTab
+        profile={profile}
+        metrics={metrics}
+        fullMetrics={fullMetrics}
+        events={events}
+      />
+    );
+  }
+
+  if (agentId === 'agent-gmx-allora') {
+    return (
+      <GmxAlloraMetricsTab
+        profile={profile}
+        metrics={metrics}
+        fullMetrics={fullMetrics}
+        events={events}
+        transactions={transactions}
+      />
+    );
+  }
+
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+  const formatArtifactLabel = (artifact: unknown): string => {
+    if (!isRecord(artifact)) return 'unknown';
+
+    const name = artifact['name'];
+    if (typeof name === 'string' && name.trim().length > 0) return name;
+
+    const artifactId = artifact['artifactId'];
+    if (typeof artifactId === 'string' && artifactId.trim().length > 0) return artifactId;
+
+    const type = artifact['type'];
+    if (typeof type === 'string' && type.trim().length > 0) return type;
+
+    const id = artifact['id'];
+    if (typeof id === 'string' && id.trim().length > 0) return id;
+
+    return 'unknown';
+  };
+
+  const formatArtifactDescription = (artifact: unknown): string | null => {
+    if (!isRecord(artifact)) return null;
+    const description = artifact['description'];
+    return typeof description === 'string' && description.trim().length > 0 ? description : null;
+  };
 
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
@@ -1678,7 +1855,9 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
     return `${minutes}m`;
   };
 
-  const formatTokenAmount = (token: NonNullable<AgentViewMetrics['latestSnapshot']>['positionTokens'][number]) => {
+  const formatTokenAmount = (
+    token: NonNullable<AgentViewMetrics['latestSnapshot']>['positionTokens'][number],
+  ) => {
     if (token.amount !== undefined) {
       return token.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
     }
@@ -1692,6 +1871,8 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
   const poolSnapshot = fullMetrics?.lastSnapshot;
   const poolName = formatPoolPair(poolSnapshot);
   const positionTokens = latestSnapshot?.positionTokens ?? [];
+  const resolvedApy = metrics.apy ?? profile.apy;
+  const resolvedAum = metrics.aumUsd ?? profile.aum;
 
   return (
     <div className="space-y-6">
@@ -1702,13 +1883,13 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
             <div className="text-2xl font-bold text-teal-400">
-              {metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : '—'}
+              {resolvedApy !== undefined ? `${resolvedApy.toFixed(1)}%` : '—'}
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
             <div className="text-2xl font-bold text-white">
-              {metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}
+              {resolvedAum !== undefined ? `$${resolvedAum.toLocaleString()}` : '—'}
             </div>
           </div>
           <div>
@@ -1832,27 +2013,38 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
         <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
           <div className="space-y-3 max-h-64 overflow-y-auto">
-            {events.slice(-10).reverse().map((event, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
-                <div
-                  className={`w-2 h-2 rounded-full mt-2 ${
-                    event.type === 'status'
-                      ? 'bg-blue-400'
-                      : event.type === 'artifact'
-                        ? 'bg-purple-400'
-                        : 'bg-gray-400'
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
-                  <div className="text-sm text-white mt-1">
-                    {event.type === 'status' && event.message}
-                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
-                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+            {events
+              .slice(-10)
+              .reverse()
+              .map((event, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                  <div
+                    className={`w-2 h-2 rounded-full mt-2 ${
+                      event.type === 'status'
+                        ? 'bg-blue-400'
+                        : event.type === 'artifact'
+                          ? 'bg-purple-400'
+                          : 'bg-gray-400'
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-gray-500 uppercase tracking-wide">
+                      {event.type}
+                    </div>
+                    <div className="text-sm text-white mt-1">
+                      {event.type === 'status' && event.message}
+                      {event.type === 'artifact' && `Artifact: ${formatArtifactLabel(event.artifact)}`}
+                      {event.type === 'dispatch-response' &&
+                        `Response with ${event.parts?.length ?? 0} parts`}
+                    </div>
+                    {event.type === 'artifact' && formatArtifactDescription(event.artifact) && (
+                      <div className="text-xs text-gray-400 mt-1 truncate">
+                        {formatArtifactDescription(event.artifact)}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       )}
@@ -1860,7 +2052,295 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
   );
 }
 
-function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<MetricsTabProps, 'agentId'>) {
+function GmxAlloraMetricsTab({
+  profile,
+  metrics,
+  fullMetrics,
+  events,
+  transactions,
+}: Omit<MetricsTabProps, 'agentId'>) {
+  const formatDate = (timestamp?: string) => {
+    if (!timestamp) return '—';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatUsd = (value?: number, maxFractionDigits = 2): string => {
+    if (value === undefined) return '—';
+    return `$${value.toLocaleString(undefined, { maximumFractionDigits: maxFractionDigits })}`;
+  };
+
+  const latestCycle = fullMetrics?.latestCycle;
+  const latestSnapshot = fullMetrics?.latestSnapshot;
+  const latestPrediction = latestCycle?.prediction;
+  const latestDecisionMetrics = latestCycle?.metrics;
+  const latestTransaction = transactions.at(-1);
+
+  let latestExecutionData: UnknownRecord | undefined;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!event || event.type !== 'artifact') continue;
+    if (getArtifactId(event.artifact) !== 'gmx-allora-execution-result') continue;
+    latestExecutionData = getArtifactDataPart(event.artifact);
+    break;
+  }
+
+  const artifactTxHashes =
+    getArrayField(latestExecutionData, 'txHashes')
+      ?.filter((value): value is string => typeof value === 'string')
+      .filter((value) => /^0x[0-9a-fA-F]{64}$/.test(value)) ?? [];
+
+  const executionHashCandidates = [
+    ...artifactTxHashes,
+    getStringField(latestExecutionData, 'lastTxHash'),
+    latestTransaction?.txHash,
+    latestCycle?.txHash,
+  ];
+
+  const executionTxHashes = Array.from(
+    new Set(
+      executionHashCandidates.filter(
+        (value): value is string => typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value),
+      ),
+    ),
+  );
+
+  const executionOk = getBooleanField(latestExecutionData, 'ok');
+  const executionError = getStringField(latestExecutionData, 'error');
+  const executionStatus =
+    executionOk === true
+      ? 'confirmed'
+      : executionOk === false
+        ? 'failed'
+        : latestTransaction?.status === 'success'
+          ? 'confirmed'
+          : latestTransaction?.status === 'failed'
+            ? 'failed'
+            : 'pending';
+  const marketLabel = latestCycle?.marketSymbol ?? formatPoolPair(fullMetrics?.lastSnapshot);
+  const sideLabel = latestCycle?.side ? latestCycle.side.toUpperCase() : '—';
+  const displayedLeverage = latestCycle?.leverage ?? latestSnapshot?.leverage;
+  const displayedNotionalUsd = latestCycle?.sizeUsd ?? latestSnapshot?.totalUsd;
+  const positionStatus =
+    latestCycle?.action === 'close' ? 'Closed' : latestSnapshot?.totalUsd && latestSnapshot.totalUsd > 0 ? 'Open' : 'Pending';
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Strategy Performance</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-2xl font-bold text-teal-400">
+              {metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : profile.apy !== undefined ? `${profile.apy.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-2xl font-bold text-white">
+              {metrics.aumUsd !== undefined
+                ? formatUsd(metrics.aumUsd)
+                : profile.aum !== undefined
+                  ? formatUsd(profile.aum)
+                  : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Agent Income</div>
+            <div className="text-2xl font-bold text-white">
+              {profile.agentIncome !== undefined ? formatUsd(profile.agentIncome) : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PnL</div>
+            <div className="text-2xl font-bold text-white">
+              {metrics.lifetimePnlUsd !== undefined ? formatUsd(metrics.lifetimePnlUsd) : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-lg font-semibold text-white">Latest Execution</h3>
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-medium ${
+              executionStatus === 'confirmed'
+                ? 'bg-teal-500/20 text-teal-400'
+                : executionStatus === 'failed'
+                  ? 'bg-red-500/20 text-red-400'
+                  : 'bg-yellow-500/20 text-yellow-400'
+            }`}
+          >
+            {executionStatus}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
+            <div className="text-white font-medium">{latestCycle?.action ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Market</div>
+            <div className="text-white font-medium">{marketLabel}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Side</div>
+            <div className="text-white font-medium">{sideLabel}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Executed At</div>
+            <div className="text-white font-medium">{formatDate(latestTransaction?.timestamp ?? latestCycle?.timestamp)}</div>
+          </div>
+        </div>
+        {executionError && (
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {executionError}
+          </div>
+        )}
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Transaction Hashes</div>
+          {executionTxHashes.length > 0 ? (
+            <div className="space-y-2">
+              {executionTxHashes.map((txHash) => (
+                <a
+                  key={txHash}
+                  href={toArbiscanTxUrl(txHash)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block text-sm text-blue-300 hover:text-blue-200 underline underline-offset-2 truncate"
+                >
+                  {txHash}
+                </a>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-400">No transaction hash yet.</div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Perp Position + Allora Signal</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Status</div>
+            <div className="text-white font-medium">{positionStatus}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
+            <div className="text-white font-medium">{formatUsd(latestSnapshot?.totalUsd)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Leverage</div>
+            <div className="text-white font-medium">
+              {displayedLeverage !== undefined ? `${displayedLeverage.toFixed(1)}x` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Notional</div>
+            <div className="text-white font-medium">{formatUsd(displayedNotionalUsd)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Signal Direction</div>
+            <div className="text-white font-medium">{latestPrediction?.direction ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Signal Confidence</div>
+            <div className="text-white font-medium">
+              {latestPrediction?.confidence !== undefined
+                ? `${(latestPrediction.confidence * 100).toFixed(1)}%`
+                : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Predicted Price</div>
+            <div className="text-white font-medium">{formatUsd(latestPrediction?.predictedPrice, 6)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Decision Threshold</div>
+            <div className="text-white font-medium">
+              {latestDecisionMetrics?.decisionThreshold !== undefined
+                ? `${(latestDecisionMetrics.decisionThreshold * 100).toFixed(1)}%`
+                : '—'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a] grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
+            <div className="text-white font-medium">{metrics.iteration ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycles Since Trade</div>
+            <div className="text-white font-medium">{metrics.cyclesSinceRebalance ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Stale Signal Cycles</div>
+            <div className="text-white font-medium">{metrics.staleCycles ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reference Price</div>
+            <div className="text-white font-medium">
+              {fullMetrics?.previousPrice !== undefined ? fullMetrics.previousPrice.toFixed(6) : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {events.length > 0 && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {events
+              .slice(-10)
+              .reverse()
+              .map((event, index) => {
+                const artifactId = event.type === 'artifact' ? getArtifactId(event.artifact) : undefined;
+                const description = event.type === 'artifact' ? getArtifactDescription(event.artifact) : undefined;
+                return (
+                  <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                    <div
+                      className={`w-2 h-2 rounded-full mt-2 ${
+                        event.type === 'status'
+                          ? 'bg-blue-400'
+                          : event.type === 'artifact'
+                            ? 'bg-purple-400'
+                            : 'bg-gray-400'
+                      }`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
+                      <div className="text-sm text-white mt-1">
+                        {event.type === 'status' && event.message}
+                        {event.type === 'artifact' && `Artifact: ${artifactId ?? 'unknown'}`}
+                        {event.type === 'dispatch-response' &&
+                          `Response with ${event.parts?.length ?? 0} parts`}
+                      </div>
+                      {description && <div className="text-xs text-gray-400 mt-1">{description}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PendleMetricsTab({
+  profile: _profile,
+  metrics,
+  fullMetrics,
+  events: _events,
+}: Omit<MetricsTabProps, 'agentId' | 'transactions'>) {
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
@@ -2065,94 +2545,10 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
               ))}
             </div>
           ) : (
-            <div className="text-gray-400 text-sm">—</div>
+            <div className="text-sm text-gray-400">—</div>
           )}
         </div>
       </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard
-          label="Iteration"
-          value={metrics.iteration?.toString() ?? '—'}
-          icon={<TrendingUp className="w-4 h-4 text-teal-400" />}
-        />
-        <MetricCard
-          label="Cycles Since Rotation"
-          value={metrics.cyclesSinceRebalance?.toString() ?? '—'}
-          icon={<Minus className="w-4 h-4 text-yellow-400" />}
-        />
-        <MetricCard
-          label="Best APY"
-          value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
-          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
-        />
-        <MetricCard
-          label="APY Delta"
-          value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
-          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
-        />
-      </div>
-
-      {latestCycle && (
-        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Latest Cycle</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
-              <div className="text-white font-medium">{latestCycle.cycle}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
-              <div className="text-white font-medium">{latestCycle.action}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
-              <div className="text-white font-medium">
-                {latestCycle.apy !== undefined ? `${latestCycle.apy.toFixed(2)}%` : '—'}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Timestamp</div>
-              <div className="text-white font-medium">{formatDate(latestCycle.timestamp)}</div>
-            </div>
-          </div>
-          {latestCycle.reason && (
-            <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reason</div>
-              <div className="text-gray-300 text-sm">{latestCycle.reason}</div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {events.length > 0 && (
-        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
-          <div className="space-y-3 max-h-64 overflow-y-auto">
-            {events.slice(-10).reverse().map((event, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
-                <div
-                  className={`w-2 h-2 rounded-full mt-2 ${
-                    event.type === 'status'
-                      ? 'bg-blue-400'
-                      : event.type === 'artifact'
-                        ? 'bg-purple-400'
-                        : 'bg-gray-400'
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
-                  <div className="text-sm text-white mt-1">
-                    {event.type === 'status' && event.message}
-                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
-                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -2189,8 +2585,7 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
     if (!onSettingsChange) return;
 
     const trimmedAmount = localAmount.trim();
-    const parsedAmount =
-      trimmedAmount === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedAmount);
+    const parsedAmount = trimmedAmount === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedAmount);
     if (!Number.isFinite(parsedAmount) || parsedAmount < MIN_BASE_CONTRIBUTION_USD) {
       return;
     }

@@ -630,6 +630,9 @@ importers:
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
+      p-retry:
+        specifier: ^7.1.1
+        version: 7.1.1
       permissionless:
         specifier: ^0.2.57
         version: 0.2.57(ox@0.8.6(typescript@5.9.3)(zod@4.3.5))(viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.5))
@@ -673,6 +676,9 @@ importers:
       eslint-plugin-import:
         specifier: 2.32.0
         version: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1))
+      msw:
+        specifier: ^2.12.8
+        version: 2.12.8(@types/node@22.19.2)(typescript@5.9.3)
       prettier:
         specifier: 'catalog:'
         version: 3.6.2
@@ -834,6 +840,9 @@ importers:
         specifier: ^3.24.4
         version: 3.25.76
     devDependencies:
+      '@ag-ui/client':
+        specifier: 0.0.42
+        version: 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       '@eslint/eslintrc':
         specifier: ^3
         version: 3.3.1
@@ -858,6 +867,9 @@ importers:
       eslint-config-next:
         specifier: 16.0.8
         version: 16.0.8(@typescript-eslint/parser@8.45.0(eslint@9.36.0(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
+      rxjs:
+        specifier: 7.8.1
+        version: 7.8.1
       tailwindcss:
         specifier: ^4
         version: 4.1.17
@@ -1254,6 +1266,8 @@ importers:
       vitest:
         specifier: ^1.2.0
         version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4)(lightningcss@1.30.2)(terser@5.44.0)
+
+  community/agents/gmx-allora-agent: {}
 
   community/agents/lending-agent-no-wallet:
     dependencies:

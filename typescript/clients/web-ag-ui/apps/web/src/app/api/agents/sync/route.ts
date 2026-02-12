@@ -245,7 +245,10 @@ async function fetchViewState(baseUrl: string, threadId: string): Promise<Thread
   }
   const parsed = ThreadStateSchema.safeParse(values);
   if (!parsed.success) {
-    console.warn('[agent-sync] Unable to parse thread state', { threadId, error: parsed.error.message });
+    console.warn('[agent-sync] Unable to parse thread state', {
+      threadId,
+      error: parsed.error.message,
+    });
     return null;
   }
   return parsed.data;
@@ -262,7 +265,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const runtime = resolveAgentRuntime(parsed.data.agentId);
   if (!runtime) {
-    return NextResponse.json({ error: 'Unknown agent', agentId: parsed.data.agentId }, { status: 404 });
+    return NextResponse.json(
+      { error: 'Unknown agent', agentId: parsed.data.agentId },
+      { status: 404 },
+    );
   }
 
   const baseUrl = normalizeBaseUrl(runtime.deploymentUrl);
@@ -306,18 +312,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         transactionHistory: state?.view?.transactionHistory ?? null,
         task: task ?? null,
         taskId,
-        taskState: hasTask ? task?.taskStatus?.state ?? null : null,
-        haltReason: hasTask ? state?.view?.haltReason ?? null : null,
-        executionError: hasTask ? state?.view?.executionError ?? null : null,
+        taskState: hasTask ? (task?.taskStatus?.state ?? null) : null,
+        haltReason: hasTask ? (state?.view?.haltReason ?? null) : null,
+        executionError: hasTask ? (state?.view?.executionError ?? null) : null,
       },
       { status: 200 },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[agent-sync] Sync failed', { agentId: parsed.data.agentId, error: message });
-    return NextResponse.json(
-      { error: 'Sync failed', details: message },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: 'Sync failed', details: message }, { status: 500 });
   }
 }

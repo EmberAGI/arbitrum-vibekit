@@ -16,7 +16,7 @@ export type ChainConfig = {
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   42161: {
     name: 'Arbitrum One',
-    rpcUrl: process.env.ARBITRUM_ONE_RPC_URL || 'https://arbitrum.gateway.tenderly.co',
+    rpcUrl: process.env.ARBITRUM_RPC_URL || 'https://arb1.arbitrum.io/rpc',
     varName: 'ARBITRUM_ONE',
     wrappedNativeToken: {
       name: 'WETH',

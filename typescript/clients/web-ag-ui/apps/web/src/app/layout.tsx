@@ -17,7 +17,7 @@ export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-  }>) {
+}>) {
   const themeColor = '#fd6731';
 
   return (

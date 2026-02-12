@@ -12,9 +12,7 @@ type CheckpointConfig = RunnableConfig<Record<string, unknown>> & {
 type ThreadStorage = MemorySaver['storage'][string];
 
 export class ShallowMemorySaver extends MemorySaver {
-  override async put(
-    ...args: Parameters<MemorySaver['put']>
-  ): ReturnType<MemorySaver['put']> {
+  override async put(...args: Parameters<MemorySaver['put']>): ReturnType<MemorySaver['put']> {
     const nextConfig = await super.put(...args);
     this.pruneHistory(nextConfig as CheckpointConfig);
     return nextConfig;

@@ -5,11 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
 import { useAgent } from '@/contexts/AgentContext';
 
-export default function AgentDetailRoute({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default function AgentDetailRoute({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const agent = useAgent();

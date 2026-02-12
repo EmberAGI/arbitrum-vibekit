@@ -273,6 +273,9 @@ importers:
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
+      p-retry:
+        specifier: ^7.1.1
+        version: 7.1.1
       permissionless:
         specifier: ^0.2.57
         version: 0.2.57(viem@2.45.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
@@ -316,6 +319,9 @@ importers:
       eslint-plugin-import:
         specifier: 2.32.0
         version: 2.32.0(@typescript-eslint/parser@8.54.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@4.4.4)(eslint@9.39.2(jiti@2.6.1))
+      msw:
+        specifier: ^2.12.8
+        version: 2.12.9(@types/node@22.19.7)(typescript@5.9.3)
       prettier:
         specifier: 'catalog:'
         version: 3.8.1
@@ -477,6 +483,9 @@ importers:
         specifier: ^3.24.4
         version: 3.25.76
     devDependencies:
+      '@ag-ui/client':
+        specifier: 0.0.42
+        version: 0.0.42(patch_hash=g3vb6i4qg2banxpgna3ko3w63m)
       '@eslint/eslintrc':
         specifier: ^3
         version: 3.3.3
@@ -501,6 +510,9 @@ importers:
       eslint-config-next:
         specifier: 16.0.8
         version: 16.0.8(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
+      rxjs:
+        specifier: 7.8.1
+        version: 7.8.1
       tailwindcss:
         specifier: ^4
         version: 4.1.18
@@ -20193,7 +20205,7 @@ snapshots:
       '@types/uuid': 8.3.4
       '@types/ws': 8.18.1
       buffer: 6.0.3
-      eventemitter3: 5.0.1
+      eventemitter3: 5.0.4
       uuid: 8.3.2
       ws: 8.19.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
     optionalDependencies:
