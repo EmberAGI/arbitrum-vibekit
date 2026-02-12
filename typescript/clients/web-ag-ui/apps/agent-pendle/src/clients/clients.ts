@@ -1,10 +1,11 @@
 import { createPublicClient, createWalletClient, http, type Account } from 'viem';
 import { arbitrum } from 'viem/chains';
 
+const DEFAULT_ARBITRUM_RPC_URL = 'https://arb1.arbitrum.io/rpc';
+
 const ARBITRUM_RPC_URL =
-  // Default to a public Arbitrum One RPC so local dev works without requiring a paid RPC key.
-  // If you need higher reliability/throughput, set ARBITRUM_RPC_URL to an Alchemy/Infura/etc endpoint.
-  process.env['ARBITRUM_RPC_URL'] ?? 'https://arb1.arbitrum.io/rpc';
+  // Default to a public Arbitrum One RPC for local dev; set ARBITRUM_RPC_URL to override.
+  process.env['ARBITRUM_RPC_URL'] ?? DEFAULT_ARBITRUM_RPC_URL;
 
 const RPC_RETRY_COUNT = 2;
 const RPC_TIMEOUT_MS = 8000;

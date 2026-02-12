@@ -1,10 +1,7 @@
 'use client';
 
 import { createContext, useContext, type ReactNode } from 'react';
-import {
-  useAgentConnection,
-  type UseAgentConnectionResult,
-} from '../hooks/useAgentConnection';
+import { useAgentConnection, type UseAgentConnectionResult } from '../hooks/useAgentConnection';
 import { DEFAULT_AGENT_ID, getAgentConfig } from '../config/agents';
 import {
   defaultActivity,

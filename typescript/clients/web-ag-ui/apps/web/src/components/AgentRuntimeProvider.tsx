@@ -71,14 +71,7 @@ function AgentListRuntimeBridge() {
 
     upsertAgent(agentId, update);
     lastTaskIdRef.current = hasTask ? taskId : undefined;
-  }, [
-    agentId,
-    taskId,
-    taskState,
-    haltReason,
-    executionError,
-    upsertAgent,
-  ]);
+  }, [agentId, taskId, taskState, haltReason, executionError, upsertAgent]);
 
   return null;
 }

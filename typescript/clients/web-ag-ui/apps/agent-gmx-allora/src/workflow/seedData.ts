@@ -1,28 +1,20 @@
+import { ROOT_AUTHORITY } from '@metamask/delegation-toolkit';
+
 import type { AlloraPrediction, GmxMarket } from '../domain/types.js';
 
-import type {
-  DelegationIntentSummary,
-  FundingTokenOption,
-  UnsignedDelegation,
-} from './context.js';
+import type { DelegationIntentSummary, FundingTokenOption, UnsignedDelegation } from './context.js';
 
-export const AGENT_WALLET_ADDRESS =
-  '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as const;
-export const DELEGATION_MANAGER =
-  '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as const;
-export const DELEGATION_ENFORCER =
-  '0xcccccccccccccccccccccccccccccccccccccccc' as const;
 const ZERO_WORD = `0x${'0'.repeat(64)}` as const;
 const SALT_WORD = `0x${'1'.repeat(64)}` as const;
 
-const USDC_ADDRESS = '0x1111111111111111111111111111111111111111' as const;
-const USDT_ADDRESS = '0x2222222222222222222222222222222222222222' as const;
-const WETH_ADDRESS = '0x3333333333333333333333333333333333333333' as const;
-const ARB_ADDRESS = '0x4444444444444444444444444444444444444444' as const;
+const USDC_ADDRESS = '0xaf88d065e77c8cc2239327c5edb3a432268e5831' as const;
+const USDT_ADDRESS = '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9' as const;
+const WETH_ADDRESS = '0x82af49447d8a07e3bd95bd0d56f35241523fbab1' as const;
+const ARB_ADDRESS = '0x912ce59144191c1204e64559fe8253a0e49e6548' as const;
 
 export const MARKETS: GmxMarket[] = [
   {
-    address: '0xaaaa000000000000000000000000000000000101',
+    address: '0x47c031236e19d024b42f8ae6780e44a573170703',
     baseSymbol: 'BTC',
     quoteSymbol: 'USDC',
     token0: { symbol: 'BTC' },
@@ -30,7 +22,7 @@ export const MARKETS: GmxMarket[] = [
     maxLeverage: 2,
   },
   {
-    address: '0xaaaa000000000000000000000000000000000102',
+    address: '0x70d95587d40a2caf56bd97485ab3eec10bee6336',
     baseSymbol: 'ETH',
     quoteSymbol: 'USDC',
     token0: { symbol: 'ETH' },
@@ -104,25 +96,19 @@ export const DELEGATION_DESCRIPTIONS = [
   'Use Allora predictions to size low-leverage trades.',
 ];
 
-export const DELEGATION_WARNINGS = [
-  'This delegation flow is for testing only.',
-];
+export const DELEGATION_WARNINGS = ['This delegation flow is for testing only.'];
 
-export function buildDelegations(
-  delegatorAddress: `0x${string}`,
-): UnsignedDelegation[] {
+export function buildDelegations(params: {
+  delegatorAddress: `0x${string}`;
+  delegateeAddress: `0x${string}`;
+}): UnsignedDelegation[] {
   return [
     {
-      delegate: AGENT_WALLET_ADDRESS,
-      delegator: delegatorAddress,
-      authority: ZERO_WORD,
-      caveats: [
-        {
-          enforcer: DELEGATION_ENFORCER,
-          terms: ZERO_WORD,
-          args: ZERO_WORD,
-        },
-      ],
+      delegate: params.delegateeAddress,
+      delegator: params.delegatorAddress,
+      authority: ROOT_AUTHORITY,
+      // Keep this open for now; in production we'd want to constrain scope via caveats.
+      caveats: [],
       salt: SALT_WORD,
     },
   ];

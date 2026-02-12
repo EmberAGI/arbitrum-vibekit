@@ -27,6 +27,25 @@ Optional configuration:
 
 - `NEXT_PUBLIC_AGENT_LIST_SYNC_POLL_MS` — polling interval (ms) for list-page sync refresh. Defaults to `15000`.
 
+### E2E Profiles
+
+- `E2E_PROFILE=mocked` (default for `pnpm test:e2e`):
+  - Runs deterministic GMX Allora system tests with agent-local MSW handlers for Allora + onchain-actions.
+  - Skips booting local onchain-actions/docker dependencies.
+- `E2E_PROFILE=live`:
+  - Runs against real HTTP providers.
+  - Uses `ONCHAIN_ACTIONS_API_URL` when set, otherwise boots local onchain-actions + Memgraph.
+
+Examples:
+
+```bash
+# Fast deterministic lane
+E2E_PROFILE=mocked pnpm test:e2e tests/gmxAllora.system.e2e.test.ts
+
+# Live-provider lane
+E2E_PROFILE=live pnpm test:e2e tests/gmxAllora.system.e2e.test.ts
+```
+
 ## 📁 Project Structure
 
 ```
