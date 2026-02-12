@@ -10,7 +10,11 @@ import {
 } from '../../config/constants.js';
 import { buildEligibleYieldTokens, toYieldToken } from '../../core/pendleMarkets.js';
 import type { ResolvedPendleConfig } from '../../domain/types.js';
-import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
+import {
+  getAgentWalletAddress,
+  getOnchainActionsClient,
+  getOnchainClients,
+} from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -20,8 +24,7 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 import { executeInitialDeposit } from '../execution.js';
-import { AGENT_WALLET_ADDRESS } from '../seedData.js';
-import { buildPendleLatestSnapshot } from '../viewMapping.js';
+import { buildPendleLatestSnapshot, buildPendleLatestSnapshotFromOnchain } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -99,24 +102,24 @@ export const prepareOperatorNode = async (
 
   const delegationsBypassActive = state.view.delegationsBypassActive === true;
   if (!delegationsBypassActive && !state.view.delegationBundle) {
-    const failureMessage =
-      'ERROR: Delegation bundle missing. Complete delegation signing before continuing.';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const message = 'Delegation signature required. Please approve the required permissions to continue.';
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: {
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        onboarding: state.view.onboarding,
+      },
     });
     return new Command({
       update: {
         view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          onboarding: state.view.onboarding,
         },
       },
-      goto: 'summarize',
+      goto: 'collectDelegations',
     });
   }
 
@@ -126,6 +129,7 @@ export const prepareOperatorNode = async (
   let supportedTokens = [];
   let existingMarketAddress: string | undefined;
   let existingFundingTokenAddress: `0x${string}` | undefined;
+  let existingPosition: Awaited<ReturnType<typeof onchainActionsClient.listTokenizedYieldPositions>>[number] | undefined;
   try {
     const chainIds = resolvePendleChainIds();
     const [markets, fetchedTokens] = await Promise.all([
@@ -147,6 +151,10 @@ export const prepareOperatorNode = async (
       });
       const positionMarketAddress = positions[0]?.marketIdentifier.address;
       if (positionMarketAddress) {
+        existingPosition = positions.find(
+          (position) =>
+            position.marketIdentifier.address.toLowerCase() === positionMarketAddress.toLowerCase(),
+        );
         const matchedMarket = markets.find(
           (market) => market.marketIdentifier.address.toLowerCase() === positionMarketAddress.toLowerCase(),
         );
@@ -234,8 +242,38 @@ export const prepareOperatorNode = async (
       ? existingFundingTokenAddress
       : fundingTokenAddress;
 
+  let executionWalletAddress: `0x${string}` = operatorWalletAddress;
+  if (delegationsBypassActive) {
+    try {
+      executionWalletAddress = getAgentWalletAddress();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const failureMessage = `ERROR: Delegations bypass requires a real agent wallet. ${message}`;
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+            metrics: state.view.metrics,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+  }
+
   const operatorConfig: ResolvedPendleConfig = {
-    walletAddress: delegationsBypassActive ? AGENT_WALLET_ADDRESS : operatorWalletAddress,
+    // Always keep the owner wallet address for reading positions/balances.
+    walletAddress: operatorWalletAddress,
+    // Use a dedicated execution wallet when delegations bypass is enabled.
+    executionWalletAddress,
     baseContributionUsd: operatorInput.baseContributionUsd ?? 10,
     fundingTokenAddress: fundingTokenAddressResolved,
     targetYieldToken: selectedYieldToken,
@@ -347,7 +385,8 @@ export const prepareOperatorNode = async (
           onchainActionsClient,
           clients,
           txExecutionMode,
-          walletAddress: operatorConfig.walletAddress,
+          delegationBundle: delegationsBypassActive ? undefined : state.view.delegationBundle,
+          walletAddress: operatorConfig.executionWalletAddress,
           fundingToken,
           targetMarket,
           fundingAmount,
@@ -396,12 +435,34 @@ export const prepareOperatorNode = async (
 
   const timestamp = new Date().toISOString();
   const positionOpenedAt = state.view.metrics.latestSnapshot?.positionOpenedAt ?? timestamp;
-  const latestSnapshot = buildPendleLatestSnapshot({
+  const previousOpenedTotalUsd = state.view.metrics.latestSnapshot?.positionOpenedTotalUsd;
+  // If the wallet already has a Pendle PT position, we don't have its true entry cost basis here.
+  // In that case we initialize "opened value" to the current observed value so net PnL starts at 0.
+  const positionOpenedTotalUsd = hasExistingPositionInSelectedMarket ? undefined : previousOpenedTotalUsd;
+
+  let latestSnapshot = buildPendleLatestSnapshot({
     operatorConfig,
     totalUsd: operatorConfig.baseContributionUsd,
     timestamp,
     positionOpenedAt,
+    positionOpenedTotalUsd,
   });
+  try {
+    const walletBalances = await onchainActionsClient.listWalletBalances(operatorWalletAddress);
+    latestSnapshot = buildPendleLatestSnapshotFromOnchain({
+      operatorConfig,
+      position: hasExistingPositionInSelectedMarket ? existingPosition : undefined,
+      walletBalances,
+      timestamp,
+      positionOpenedAt,
+      positionOpenedTotalUsd,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logInfo('Unable to hydrate initial Pendle snapshot from wallet balances; using configured snapshot', {
+      error: message,
+    });
+  }
 
   return {
     view: {

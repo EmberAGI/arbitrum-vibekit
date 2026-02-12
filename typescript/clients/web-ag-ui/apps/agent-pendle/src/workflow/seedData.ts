@@ -1,19 +1,6 @@
 import type { PendleYieldToken } from '../domain/types.js';
 
-import type {
-  DelegationIntentSummary,
-  FundingTokenOption,
-  UnsignedDelegation,
-} from './context.js';
-
-export const AGENT_WALLET_ADDRESS =
-  '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as const;
-export const DELEGATION_MANAGER =
-  '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as const;
-export const DELEGATION_ENFORCER =
-  '0xcccccccccccccccccccccccccccccccccccccccc' as const;
-const ZERO_WORD = `0x${'0'.repeat(64)}` as const;
-const SALT_WORD = `0x${'1'.repeat(64)}` as const;
+import type { FundingTokenOption } from './context.js';
 
 const USD_AI_ADDRESS = '0x1111111111111111111111111111111111111111' as const;
 const RE_USD_ADDRESS = '0x2222222222222222222222222222222222222222' as const;
@@ -152,49 +139,6 @@ export const FUNDING_TOKENS: FundingTokenOption[] = [
     balance: '140000000000000000000',
   },
 ];
-
-export const DELEGATION_INTENTS: DelegationIntentSummary[] = [
-  {
-    target: '0xdddddddddddddddddddddddddddddddddddddddd',
-    selector: '0x0c49ccbe',
-    allowedCalldata: [],
-  },
-  {
-    target: '0xdddddddddddddddddddddddddddddddddddddddd',
-    selector: '0xfc6f7865',
-    allowedCalldata: [{ startIndex: 36, value: ZERO_WORD }],
-  },
-];
-
-export const DELEGATION_DESCRIPTIONS = [
-  'Swap into Pendle stablecoin markets on your behalf.',
-  'Rotate YT exposure to the highest-yielding market.',
-  'Claim and compound Pendle yield into your wallet.',
-];
-
-export const DELEGATION_WARNINGS = [
-  'This delegation flow is for testing only.',
-];
-
-export function buildDelegations(
-  delegatorAddress: `0x${string}`,
-): UnsignedDelegation[] {
-  return [
-    {
-      delegate: AGENT_WALLET_ADDRESS,
-      delegator: delegatorAddress,
-      authority: ZERO_WORD,
-      caveats: [
-        {
-          enforcer: DELEGATION_ENFORCER,
-          terms: ZERO_WORD,
-          args: ZERO_WORD,
-        },
-      ],
-      salt: SALT_WORD,
-    },
-  ];
-}
 
 export const STABLECOIN_WHITELIST = [
   'USDai',

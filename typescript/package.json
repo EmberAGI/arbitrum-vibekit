@@ -88,7 +88,13 @@
       "protobufjs"
     ],
     "patchedDependencies": {
-      "@anolilab/multi-semantic-release": "patches/@anolilab__multi-semantic-release.patch"
+      "@ag-ui/client@0.0.42": "clients/web-ag-ui/patches/@ag-ui__client@0.0.42.patch",
+      "@ag-ui/langgraph@0.0.20": "clients/web-ag-ui/patches/@ag-ui__langgraph@0.0.20.patch",
+      "@anolilab/multi-semantic-release": "patches/@anolilab__multi-semantic-release.patch",
+      "@copilotkit/runtime@1.50.1": "clients/web-ag-ui/patches/@copilotkit__runtime@1.50.1.patch",
+      "@copilotkit/react-core@1.50.1": "clients/web-ag-ui/patches/@copilotkit__react-core@1.50.1.patch",
+      "@copilotkitnext/core@0.0.33": "clients/web-ag-ui/patches/@copilotkitnext__core@0.0.33.patch",
+      "@copilotkitnext/runtime@0.0.33": "clients/web-ag-ui/patches/@copilotkitnext__runtime@0.0.33.patch"
     }
   }
 }

@@ -8,6 +8,7 @@ import { CopilotKit } from '@copilotkit/react-core';
 import { isRegisteredAgentId } from '../config/agents';
 import { AgentProvider, InactiveAgentProvider, useAgent } from '../contexts/AgentContext';
 import { useAgentList } from '../contexts/AgentListContext';
+import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import type { TaskState } from '../types/agent';
 import { getAgentThreadId } from '../utils/agentThread';
 
@@ -90,6 +91,7 @@ function resolveAgentIdFromPath(pathname: string | null): string | null {
 
 export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { privyWallet } = usePrivyWalletClient();
 
   const agentId = useMemo(() => {
     const pathAgentId = resolveAgentIdFromPath(pathname);
@@ -103,10 +105,14 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
     return <InactiveAgentProvider>{children}</InactiveAgentProvider>;
   }
 
-  const threadId = getAgentThreadId(agentId);
+  const threadId = getAgentThreadId(agentId, privyWallet?.address);
+
+  if (!threadId) {
+    return <InactiveAgentProvider>{children}</InactiveAgentProvider>;
+  }
 
   return (
-    <CopilotKit runtimeUrl="/api/copilotkit" agent={agentId} threadId={threadId} key={agentId}>
+    <CopilotKit runtimeUrl="/api/copilotkit" agent={agentId} threadId={threadId} key={threadId}>
       <AgentProvider agentId={agentId}>
         <AgentListRuntimeBridge />
         {children}

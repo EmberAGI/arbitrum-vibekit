@@ -45,7 +45,7 @@ describe('clientFactory', () => {
 
   it('creates and caches onchain clients using the agent private key', async () => {
     process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY =
-      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      `0x${'1'.repeat(64)}`;
 
     const { getOnchainClients } = await import('./clientFactory.js');
     const { privateKeyToAccount } = await import('viem/accounts');
@@ -61,7 +61,7 @@ describe('clientFactory', () => {
 
     expect(first).toBe(second);
     expect(privateKeyToAccount).toHaveBeenCalledWith(
-      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      `0x${'1'.repeat(64)}`,
     );
     expect(createClientsMock).toHaveBeenCalledWith(account);
   });

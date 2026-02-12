@@ -101,9 +101,12 @@ export function resolvePendleSmokeMode(): boolean {
 export function resolvePendleTxExecutionMode(): PendleTxExecutionMode {
   const raw = process.env['PENDLE_TX_EXECUTION_MODE'];
   if (!raw) {
-    // In delegation bypass mode we typically do not have a signing key available locally,
-    // but we still want to exercise tx building for smoke testing.
-    return resolveDelegationsBypass() ? 'plan' : DEFAULT_TX_EXECUTION_MODE;
+    // In delegation bypass mode we sometimes *do* have a signing key available locally.
+    // Default to planning only when there is no agent key present.
+    if (resolveDelegationsBypass()) {
+      return process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'] ? 'execute' : 'plan';
+    }
+    return DEFAULT_TX_EXECUTION_MODE;
   }
   const normalized = raw.trim().toLowerCase();
   return normalized === 'plan' ? 'plan' : DEFAULT_TX_EXECUTION_MODE;

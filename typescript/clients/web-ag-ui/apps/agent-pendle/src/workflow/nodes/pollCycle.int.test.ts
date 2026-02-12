@@ -236,6 +236,7 @@ describe('pollCycleNode', () => {
         },
         operatorConfig: {
           walletAddress: '0x0000000000000000000000000000000000000001',
+          executionWalletAddress: '0x0000000000000000000000000000000000000001',
           baseContributionUsd: 10,
           fundingTokenAddress: '0x0000000000000000000000000000000000000002',
           targetYieldToken: {
@@ -406,6 +407,7 @@ describe('pollCycleNode', () => {
         },
         operatorConfig: {
           walletAddress: '0x0000000000000000000000000000000000000001',
+          executionWalletAddress: '0x0000000000000000000000000000000000000001',
           baseContributionUsd: 10,
           fundingTokenAddress: '0x0000000000000000000000000000000000000002',
           targetYieldToken: {
@@ -608,6 +610,7 @@ describe('pollCycleNode', () => {
         },
         operatorConfig: {
           walletAddress: '0x0000000000000000000000000000000000000001',
+          executionWalletAddress: '0x0000000000000000000000000000000000000001',
           baseContributionUsd: 10,
           fundingTokenAddress: '0x0000000000000000000000000000000000000002',
           targetYieldToken: {
@@ -879,6 +882,7 @@ describe('pollCycleNode', () => {
         },
         operatorConfig: {
           walletAddress: '0x0000000000000000000000000000000000000001',
+          executionWalletAddress: '0x0000000000000000000000000000000000000001',
           baseContributionUsd: 10,
           fundingTokenAddress: '0xusdai',
           targetYieldToken: {
@@ -1083,6 +1087,7 @@ describe('pollCycleNode', () => {
         },
         operatorConfig: {
           walletAddress: '0x0000000000000000000000000000000000000001',
+          executionWalletAddress: '0x0000000000000000000000000000000000000001',
           baseContributionUsd: 10,
           fundingTokenAddress: '0x0000000000000000000000000000000000000002',
           targetYieldToken: {
@@ -1321,6 +1326,7 @@ describe('pollCycleNode', () => {
         },
         operatorConfig: {
           walletAddress: '0x0000000000000000000000000000000000000001',
+          executionWalletAddress: '0x0000000000000000000000000000000000000001',
           baseContributionUsd: 10,
           fundingTokenAddress: '0xusde',
           targetYieldToken: {
@@ -1577,6 +1583,7 @@ describe('pollCycleNode', () => {
         },
         operatorConfig: {
           walletAddress: '0x0000000000000000000000000000000000000001',
+          executionWalletAddress: '0x0000000000000000000000000000000000000001',
           baseContributionUsd: 10,
           fundingTokenAddress: '0xusde',
           targetYieldToken: {

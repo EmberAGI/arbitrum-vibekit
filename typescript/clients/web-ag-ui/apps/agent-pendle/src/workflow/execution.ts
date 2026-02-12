@@ -7,13 +7,22 @@ import type {
   TokenizedYieldPosition,
 } from '../clients/onchainActions.js';
 import { type PendleTxExecutionMode } from '../config/constants.js';
+import { redeemDelegationsAndExecuteTransactions } from '../core/delegatedExecution.js';
 import { executeTransaction } from '../core/transaction.js';
 
+import type { DelegationBundle } from './context.js';
 import { logInfo, normalizeHexAddress } from './context.js';
 
 type ExecutionResult = {
   txHashes: `0x${string}`[];
   lastTxHash?: `0x${string}`;
+};
+
+export type UnwindResult = {
+  txHashes: `0x${string}`[];
+  lastTxHash?: `0x${string}`;
+  positionCount: number;
+  transactionCount: number;
 };
 
 function normalizeHexData(value: string, label: string): `0x${string}` {
@@ -101,6 +110,7 @@ async function executePlanTransactions(params: {
 async function planOrExecuteTransactions(params: {
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
   transactions: TransactionPlan[];
 }): Promise<ExecutionResult> {
   if (params.txExecutionMode === 'plan') {
@@ -110,16 +120,28 @@ async function planOrExecuteTransactions(params: {
   if (!params.clients) {
     throw new Error('Onchain clients are required to execute Pendle transactions');
   }
+  if (params.delegationBundle) {
+    const outcome = await redeemDelegationsAndExecuteTransactions({
+      clients: params.clients,
+      delegationBundle: params.delegationBundle,
+      transactions: params.transactions,
+    });
+    return {
+      txHashes: outcome.txHashes,
+      lastTxHash: outcome.txHashes.at(-1),
+    };
+  }
   return executePlanTransactions({ clients: params.clients, transactions: params.transactions });
 }
 
 export async function executeRebalance(params: {
   onchainActionsClient: Pick<
     OnchainActionsClient,
-    'createTokenizedYieldSellPt' | 'createSwap' | 'createTokenizedYieldBuyPt'
+    'createTokenizedYieldSellPt' | 'createTokenizedYieldBuyPt'
   >;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
   walletAddress: `0x${string}`;
   position: TokenizedYieldPosition;
   currentMarket: TokenizedYieldMarket;
@@ -132,34 +154,16 @@ export async function executeRebalance(params: {
     slippage: '0.01',
   });
 
-  let amountForBuy = sellPlan.exactAmountOut;
   const transactions: TransactionPlan[] = [...sellPlan.transactions];
 
-  const currentUnderlying = params.currentMarket.underlyingToken.tokenUid;
-  const targetUnderlying = params.targetMarket.underlyingToken.tokenUid;
-
-  if (
-    currentUnderlying.chainId !== targetUnderlying.chainId ||
-    currentUnderlying.address.toLowerCase() !== targetUnderlying.address.toLowerCase()
-  ) {
-    const swapPlan = await params.onchainActionsClient.createSwap({
-      walletAddress: params.walletAddress,
-      amount: sellPlan.exactAmountOut,
-      amountType: 'exactIn',
-      fromTokenUid: currentUnderlying,
-      toTokenUid: targetUnderlying,
-      slippageTolerance: '0.01',
-    });
-
-    amountForBuy = swapPlan.exactToAmount;
-    transactions.push(...swapPlan.transactions);
-  }
-
+  // Use the token we actually receive from selling PT as the input token for the next PT buy.
+  // Pendle can route from many tokens into a target PT without requiring a separate generic swap step.
+  const buyInputTokenUid = sellPlan.tokenOut.tokenUid;
   const buyPlan = await params.onchainActionsClient.createTokenizedYieldBuyPt({
     walletAddress: params.walletAddress,
     marketAddress: params.targetMarket.marketIdentifier.address,
-    inputTokenUid: targetUnderlying,
-    amount: amountForBuy,
+    inputTokenUid: buyInputTokenUid,
+    amount: sellPlan.exactAmountOut,
     slippage: '0.01',
   });
 
@@ -174,6 +178,7 @@ export async function executeRebalance(params: {
   return planOrExecuteTransactions({
     txExecutionMode: params.txExecutionMode,
     clients: params.clients,
+    delegationBundle: params.delegationBundle,
     transactions,
   });
 }
@@ -181,10 +186,11 @@ export async function executeRebalance(params: {
 export async function executeRollover(params: {
   onchainActionsClient: Pick<
     OnchainActionsClient,
-    'createTokenizedYieldRedeemPt' | 'createSwap' | 'createTokenizedYieldBuyPt'
+    'createTokenizedYieldRedeemPt' | 'createTokenizedYieldBuyPt'
   >;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
   walletAddress: `0x${string}`;
   position: TokenizedYieldPosition;
   currentMarket: TokenizedYieldMarket;
@@ -196,40 +202,23 @@ export async function executeRollover(params: {
     amount: params.position.pt.exactAmount,
   });
 
-  let amountForBuy = redeemPlan.exactAmountOut ?? redeemPlan.exactUnderlyingAmount;
-  const redeemedUnderlying =
-    redeemPlan.tokenOut?.tokenUid ?? redeemPlan.underlyingTokenIdentifier;
+  const amountForBuy = redeemPlan.exactAmountOut ?? redeemPlan.exactUnderlyingAmount;
+  const redeemedTokenUid = redeemPlan.tokenOut?.tokenUid ?? redeemPlan.underlyingTokenIdentifier;
   if (!amountForBuy) {
     throw new Error('Redeem PT plan did not include output amount.');
   }
-  if (!redeemedUnderlying) {
+  if (!redeemedTokenUid) {
     throw new Error('Redeem PT plan did not include output token.');
   }
 
   const transactions: TransactionPlan[] = [...redeemPlan.transactions];
-  const targetUnderlying = params.targetMarket.underlyingToken.tokenUid;
 
-  if (
-    redeemedUnderlying.chainId !== targetUnderlying.chainId ||
-    redeemedUnderlying.address.toLowerCase() !== targetUnderlying.address.toLowerCase()
-  ) {
-    const swapPlan = await params.onchainActionsClient.createSwap({
-      walletAddress: params.walletAddress,
-      amount: amountForBuy,
-      amountType: 'exactIn',
-      fromTokenUid: redeemedUnderlying,
-      toTokenUid: targetUnderlying,
-      slippageTolerance: '0.01',
-    });
-
-    amountForBuy = swapPlan.exactToAmount;
-    transactions.push(...swapPlan.transactions);
-  }
-
+  // Use the token we actually receive from redeeming PT as the input token for the new PT buy.
+  // Pendle can route between underlying assets inside the PT buy itself when needed.
   const buyPlan = await params.onchainActionsClient.createTokenizedYieldBuyPt({
     walletAddress: params.walletAddress,
     marketAddress: params.targetMarket.marketIdentifier.address,
-    inputTokenUid: targetUnderlying,
+    inputTokenUid: redeemedTokenUid,
     amount: amountForBuy,
     slippage: '0.01',
   });
@@ -245,6 +234,7 @@ export async function executeRollover(params: {
   return planOrExecuteTransactions({
     txExecutionMode: params.txExecutionMode,
     clients: params.clients,
+    delegationBundle: params.delegationBundle,
     transactions,
   });
 }
@@ -256,6 +246,7 @@ export async function executeCompound(params: {
   >;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
   walletAddress: `0x${string}`;
   position: TokenizedYieldPosition;
   currentMarket: TokenizedYieldMarket;
@@ -310,47 +301,357 @@ export async function executeCompound(params: {
   return planOrExecuteTransactions({
     txExecutionMode: params.txExecutionMode,
     clients: params.clients,
+    delegationBundle: params.delegationBundle,
     transactions,
   });
 }
 
-export async function executeInitialDeposit(params: {
-  onchainActionsClient: Pick<OnchainActionsClient, 'createSwap' | 'createTokenizedYieldBuyPt'>;
+function parsePositiveBigInt(value: string): bigint {
+  try {
+    const parsed = BigInt(value);
+    return parsed > 0n ? parsed : 0n;
+  } catch {
+    return 0n;
+  }
+}
+
+function isMarketMatured(params: { expiry: string; nowMs: number }): boolean {
+  const parsed = Date.parse(params.expiry);
+  if (Number.isNaN(parsed)) {
+    return false;
+  }
+  return parsed <= params.nowMs;
+}
+
+function formatErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'Unknown error';
+}
+
+async function retryOperation<T>(params: {
+  label: string;
+  maxAttempts: number;
+  onProgress?: (message: string) => void | Promise<void>;
+  operation: () => Promise<T>;
+}): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= params.maxAttempts; attempt += 1) {
+    try {
+      await params.onProgress?.(`${params.label} (attempt ${attempt}/${params.maxAttempts})`);
+      return await params.operation();
+    } catch (error: unknown) {
+      lastError = error;
+      const message = formatErrorMessage(error);
+      await params.onProgress?.(
+        `${params.label} failed (attempt ${attempt}/${params.maxAttempts}): ${message}`,
+      );
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(formatErrorMessage(lastError));
+}
+
+async function executeTransactionWithRetries(params: {
+  clients: OnchainClients;
+  tx: TransactionPlan;
+  maxAttempts: number;
+  onProgress?: (message: string) => void | Promise<void>;
+  label: string;
+}): Promise<`0x${string}`> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= params.maxAttempts; attempt += 1) {
+    try {
+      await params.onProgress?.(`${params.label} (attempt ${attempt}/${params.maxAttempts})`);
+      return await executePlannedTransaction({ clients: params.clients, tx: params.tx });
+    } catch (error: unknown) {
+      lastError = error;
+      const message = formatErrorMessage(error);
+      await params.onProgress?.(
+        `${params.label} failed (attempt ${attempt}/${params.maxAttempts}): ${message}`,
+      );
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(formatErrorMessage(lastError));
+}
+
+export async function executeUnwind(params: {
+  onchainActionsClient: Pick<
+    OnchainActionsClient,
+    | 'listTokenizedYieldMarkets'
+    | 'listTokenizedYieldPositions'
+    | 'createTokenizedYieldClaimRewards'
+    | 'createTokenizedYieldRedeemPt'
+    | 'createTokenizedYieldSellPt'
+  >;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
+  walletAddress: `0x${string}`;
+  chainIds?: string[];
+  nowMs?: number;
+  onProgress?: (message: string) => void | Promise<void>;
+  maxRetries?: number;
+}): Promise<UnwindResult> {
+  const nowMs = params.nowMs ?? Date.now();
+  const maxAttempts = (params.maxRetries ?? 2) + 1;
+  await params.onProgress?.('Unwind: fetching markets and positions');
+
+  const [markets, positions] = await Promise.all([
+    params.onchainActionsClient.listTokenizedYieldMarkets({ chainIds: params.chainIds }),
+    params.onchainActionsClient.listTokenizedYieldPositions({
+      walletAddress: params.walletAddress,
+      chainIds: params.chainIds,
+    }),
+  ]);
+
+  if (positions.length === 0) {
+    await params.onProgress?.('Unwind: no positions found');
+    return { txHashes: [], positionCount: 0, transactionCount: 0 };
+  }
+
+  const expiryByMarketAddress = new Map<string, string>();
+  for (const market of markets) {
+    expiryByMarketAddress.set(market.marketIdentifier.address.toLowerCase(), market.expiry);
+  }
+
+  const txHashes: `0x${string}`[] = [];
+  let plannedTxCount = 0;
+
+  await params.onProgress?.(`Unwind: planning actions for ${positions.length} position(s)`);
+
+  for (const [positionIndex, position] of positions.entries()) {
+    const claimableRewards = position.yt.claimableRewards ?? [];
+    const hasClaimable = claimableRewards.some(
+      (reward) => parsePositiveBigInt(reward.exactAmount) > 0n,
+    );
+    if (hasClaimable) {
+      const claimPlan = await retryOperation({
+        label: `Unwind: planning claim rewards [${positionIndex + 1}/${positions.length}]`,
+        maxAttempts,
+        onProgress: params.onProgress,
+        operation: async () =>
+          params.onchainActionsClient.createTokenizedYieldClaimRewards({
+            walletAddress: params.walletAddress,
+            ytTokenUid: position.yt.token.tokenUid,
+          }),
+      });
+      plannedTxCount += claimPlan.transactions.length;
+      if (params.txExecutionMode === 'execute') {
+        if (!params.clients) {
+          throw new Error('Onchain clients are required to execute Pendle transactions');
+        }
+        for (const [txIndex, tx] of claimPlan.transactions.entries()) {
+          const label = `Unwind: execute claim tx [${positionIndex + 1}/${positions.length}] (${txIndex + 1}/${claimPlan.transactions.length})`;
+          if (params.delegationBundle) {
+            const clients = params.clients;
+            const delegationBundle = params.delegationBundle;
+            if (!clients) {
+              throw new Error('Onchain clients are required to execute Pendle transactions');
+            }
+            if (!delegationBundle) {
+              throw new Error('Delegation bundle is required for delegated execution');
+            }
+            const outcome = await retryOperation({
+              label,
+              maxAttempts,
+              onProgress: params.onProgress,
+              operation: async () =>
+                redeemDelegationsAndExecuteTransactions({
+                  clients,
+                  delegationBundle,
+                  transactions: [tx],
+                }),
+            });
+            const hash = outcome.txHashes[0];
+            if (!hash) {
+              throw new Error('Delegated execution did not return a transaction hash');
+            }
+            txHashes.push(hash);
+          } else {
+            const hash = await executeTransactionWithRetries({
+              clients: params.clients,
+              tx,
+              maxAttempts,
+              onProgress: params.onProgress,
+              label,
+            });
+            txHashes.push(hash);
+          }
+        }
+      }
+    }
+
+    const ptAmount = parsePositiveBigInt(position.pt.exactAmount);
+    if (ptAmount <= 0n) {
+      continue;
+    }
+
+    const expiry =
+      expiryByMarketAddress.get(position.marketIdentifier.address.toLowerCase()) ?? '';
+    if (expiry && isMarketMatured({ expiry, nowMs })) {
+      const redeemPlan = await retryOperation({
+        label: `Unwind: planning redeem PT [${positionIndex + 1}/${positions.length}]`,
+        maxAttempts,
+        onProgress: params.onProgress,
+        operation: async () =>
+          params.onchainActionsClient.createTokenizedYieldRedeemPt({
+            walletAddress: params.walletAddress,
+            ptTokenUid: position.pt.token.tokenUid,
+            amount: position.pt.exactAmount,
+          }),
+      });
+      plannedTxCount += redeemPlan.transactions.length;
+      if (params.txExecutionMode === 'execute') {
+        if (!params.clients) {
+          throw new Error('Onchain clients are required to execute Pendle transactions');
+        }
+        for (const [txIndex, tx] of redeemPlan.transactions.entries()) {
+          const label = `Unwind: execute redeem tx [${positionIndex + 1}/${positions.length}] (${txIndex + 1}/${redeemPlan.transactions.length})`;
+          if (params.delegationBundle) {
+            const clients = params.clients;
+            const delegationBundle = params.delegationBundle;
+            if (!clients) {
+              throw new Error('Onchain clients are required to execute Pendle transactions');
+            }
+            if (!delegationBundle) {
+              throw new Error('Delegation bundle is required for delegated execution');
+            }
+            const outcome = await retryOperation({
+              label,
+              maxAttempts,
+              onProgress: params.onProgress,
+              operation: async () =>
+                redeemDelegationsAndExecuteTransactions({
+                  clients,
+                  delegationBundle,
+                  transactions: [tx],
+                }),
+            });
+            const hash = outcome.txHashes[0];
+            if (!hash) {
+              throw new Error('Delegated execution did not return a transaction hash');
+            }
+            txHashes.push(hash);
+          } else {
+            const hash = await executeTransactionWithRetries({
+              clients: params.clients,
+              tx,
+              maxAttempts,
+              onProgress: params.onProgress,
+              label,
+            });
+            txHashes.push(hash);
+          }
+        }
+      }
+    } else {
+      const sellPlan = await retryOperation({
+        label: `Unwind: planning sell PT [${positionIndex + 1}/${positions.length}]`,
+        maxAttempts,
+        onProgress: params.onProgress,
+        operation: async () =>
+          params.onchainActionsClient.createTokenizedYieldSellPt({
+            walletAddress: params.walletAddress,
+            ptTokenUid: position.pt.token.tokenUid,
+            amount: position.pt.exactAmount,
+          }),
+      });
+      plannedTxCount += sellPlan.transactions.length;
+      if (params.txExecutionMode === 'execute') {
+        if (!params.clients) {
+          throw new Error('Onchain clients are required to execute Pendle transactions');
+        }
+        for (const [txIndex, tx] of sellPlan.transactions.entries()) {
+          const label = `Unwind: execute sell tx [${positionIndex + 1}/${positions.length}] (${txIndex + 1}/${sellPlan.transactions.length})`;
+          if (params.delegationBundle) {
+            const clients = params.clients;
+            const delegationBundle = params.delegationBundle;
+            if (!clients) {
+              throw new Error('Onchain clients are required to execute Pendle transactions');
+            }
+            if (!delegationBundle) {
+              throw new Error('Delegation bundle is required for delegated execution');
+            }
+            const outcome = await retryOperation({
+              label,
+              maxAttempts,
+              onProgress: params.onProgress,
+              operation: async () =>
+                redeemDelegationsAndExecuteTransactions({
+                  clients,
+                  delegationBundle,
+                  transactions: [tx],
+                }),
+            });
+            const hash = outcome.txHashes[0];
+            if (!hash) {
+              throw new Error('Delegated execution did not return a transaction hash');
+            }
+            txHashes.push(hash);
+          } else {
+            const hash = await executeTransactionWithRetries({
+              clients: params.clients,
+              tx,
+              maxAttempts,
+              onProgress: params.onProgress,
+              label,
+            });
+            txHashes.push(hash);
+          }
+        }
+      }
+    }
+  }
+
+  if (plannedTxCount === 0) {
+    await params.onProgress?.('Unwind: nothing to do (no claimable rewards or PT balances)');
+    return { txHashes: [], positionCount: positions.length, transactionCount: 0 };
+  }
+
+  logInfo('Pendle unwind plan assembled', {
+    transactionCount: plannedTxCount,
+    positionCount: positions.length,
+  });
+
+  if (params.txExecutionMode === 'plan') {
+    await params.onProgress?.(`Unwind: planned ${plannedTxCount} transaction(s)`);
+    return { txHashes: [], positionCount: positions.length, transactionCount: plannedTxCount };
+  }
+
+  await params.onProgress?.(`Unwind: executed ${txHashes.length}/${plannedTxCount} transaction(s)`);
+  return {
+    txHashes,
+    lastTxHash: txHashes.at(-1),
+    positionCount: positions.length,
+    transactionCount: plannedTxCount,
+  };
+}
+
+export async function executeInitialDeposit(params: {
+  onchainActionsClient: Pick<OnchainActionsClient, 'createTokenizedYieldBuyPt'>;
+  txExecutionMode: PendleTxExecutionMode;
+  clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
   walletAddress: `0x${string}`;
   fundingToken: Token;
   targetMarket: TokenizedYieldMarket;
   fundingAmount: string;
 }): Promise<ExecutionResult> {
-  let amountForBuy = params.fundingAmount;
+  const fundingTokenUid = params.fundingToken.tokenUid;
   const transactions: TransactionPlan[] = [];
 
-  const fundingTokenUid = params.fundingToken.tokenUid;
-  const underlyingTokenUid = params.targetMarket.underlyingToken.tokenUid;
-
-  if (
-    fundingTokenUid.chainId !== underlyingTokenUid.chainId ||
-    fundingTokenUid.address.toLowerCase() !== underlyingTokenUid.address.toLowerCase()
-  ) {
-    const swapPlan = await params.onchainActionsClient.createSwap({
-      walletAddress: params.walletAddress,
-      amount: params.fundingAmount,
-      amountType: 'exactIn',
-      fromTokenUid: fundingTokenUid,
-      toTokenUid: underlyingTokenUid,
-      slippageTolerance: '0.01',
-    });
-
-    amountForBuy = swapPlan.exactToAmount;
-    transactions.push(...swapPlan.transactions);
-  }
-
+  // Buy PT using the selected funding token directly.
+  // Pendle can route from common stables (eg USDai) into PT markets even when the market underlying differs (eg sUSDai),
+  // so we avoid forcing a generic DEX swap to the underlying first.
   const buyPlan = await params.onchainActionsClient.createTokenizedYieldBuyPt({
     walletAddress: params.walletAddress,
     marketAddress: params.targetMarket.marketIdentifier.address,
-    inputTokenUid: underlyingTokenUid,
-    amount: amountForBuy,
+    inputTokenUid: fundingTokenUid,
+    amount: params.fundingAmount,
     slippage: '0.01',
   });
 
@@ -364,6 +665,7 @@ export async function executeInitialDeposit(params: {
   return planOrExecuteTransactions({
     txExecutionMode: params.txExecutionMode,
     clients: params.clients,
+    delegationBundle: params.delegationBundle,
     transactions,
   });
 }

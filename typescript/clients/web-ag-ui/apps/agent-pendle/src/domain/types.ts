@@ -47,7 +47,17 @@ export interface FundingTokenInput extends FundingTokenInputBase {
 }
 
 export type ResolvedPendleConfig = {
+  /**
+   * Wallet that owns the user's Pendle position and should be used for reading
+   * balances/positions (metrics, onboarding detection, etc).
+   */
   walletAddress: `0x${string}`;
+  /**
+   * Wallet used to execute onchain actions. In delegations-bypass mode this
+   * points at the seeded agent wallet so we can exercise tx planning without
+   * requiring the user's signer.
+   */
+  executionWalletAddress: `0x${string}`;
   baseContributionUsd: number;
   fundingTokenAddress: `0x${string}`;
   targetYieldToken: PendleYieldToken;

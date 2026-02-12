@@ -4,6 +4,7 @@ import { arbitrum } from 'viem/chains';
 const DEFAULT_ARBITRUM_RPC_URL = 'https://arb1.arbitrum.io/rpc';
 
 const ARBITRUM_RPC_URL =
+  // Allow either env var name; fall back to a public Arbitrum One RPC for local dev.
   process.env['ARBITRUM_RPC_URL'] ??
   process.env['ARBITRUM_ONE_RPC_URL'] ??
   DEFAULT_ARBITRUM_RPC_URL;

@@ -49,14 +49,19 @@ const DEFAULT_DURABILITY = resolveLangGraphDefaults().durability;
 await configureLangGraphApiCheckpointer();
 
 const rawAgentPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
-if (!rawAgentPrivateKey) {
-  throw new Error('A2A_TEST_AGENT_NODE_PRIVATE_KEY environment variable is required');
+if (rawAgentPrivateKey) {
+  const agentPrivateKey = normalizeHexAddress(rawAgentPrivateKey, 'agent private key');
+  const account = privateKeyToAccount(agentPrivateKey);
+  const agentWalletAddress = normalizeHexAddress(account.address, 'agent wallet address');
+  await saveBootstrapContext({ privateKey: agentPrivateKey, agentWalletAddress }, store);
+} else {
+  // Keep the dev server up even if a developer hasn't configured the executor key.
+  // Nodes that need delegated execution will error with a clear message when they
+  // attempt to load the bootstrap context.
+  console.warn(
+    '[CLMM] A2A_TEST_AGENT_NODE_PRIVATE_KEY not set; delegated execution is disabled for this dev session.',
+  );
 }
-const agentPrivateKey = normalizeHexAddress(rawAgentPrivateKey, 'agent private key');
-const account = privateKeyToAccount(agentPrivateKey);
-const agentWalletAddress = normalizeHexAddress(account.address, 'agent wallet address');
-
-await saveBootstrapContext({ privateKey: agentPrivateKey, agentWalletAddress }, store);
 
 const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('runCommand', runCommandNode)

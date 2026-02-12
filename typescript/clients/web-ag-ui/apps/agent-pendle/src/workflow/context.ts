@@ -105,6 +105,11 @@ export type PendleLatestSnapshot = {
   feesApy?: number;
   timestamp?: string;
   positionOpenedAt?: string;
+  /**
+   * USD value of the position when we began tracking it in the UI.
+   * This is not guaranteed to represent the user's true entry cost basis.
+   */
+  positionOpenedTotalUsd?: number;
   positionTokens: Array<{
     address: `0x${string}`;
     symbol: string;

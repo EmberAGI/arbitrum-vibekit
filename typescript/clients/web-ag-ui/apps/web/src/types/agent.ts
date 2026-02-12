@@ -308,6 +308,7 @@ export interface AgentViewMetrics {
     feesApy?: number;
     timestamp?: string;
     positionOpenedAt?: string;
+    positionOpenedTotalUsd?: number;
     positionTokens: Array<{
       address: `0x${string}`;
       symbol: string;

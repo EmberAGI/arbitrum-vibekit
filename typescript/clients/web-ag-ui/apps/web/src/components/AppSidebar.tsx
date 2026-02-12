@@ -403,7 +403,7 @@ export function AppSidebar() {
         </div>
 
         {/* Build Agent Button */}
-        <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#e55a28] text-white font-medium transition-colors">
+        <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#252525] hover:bg-[#2a2a2a] text-white font-medium transition-colors">
           Build my Agent
         </button>
 
@@ -527,7 +527,7 @@ export function AppSidebar() {
             type="button"
             onClick={() => login()}
             disabled={!ready || (ready && authenticated)}
-            className="w-full flex items-center justify-center px-4 py-2.5 rounded-lg bg-[#252525] hover:bg-[#2a2a2a] text-white font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#252525]"
+            className="w-full flex items-center justify-center px-4 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#e55a28] text-white font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#fd6731]"
           >
             {ready ? 'Login / Connect' : 'Loading...'}
           </button>
