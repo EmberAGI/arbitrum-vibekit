@@ -104,6 +104,27 @@ function parseUsdMetric(raw: string | undefined): number | undefined {
   return Number.isFinite(value) ? value : undefined;
 }
 
+function parseBaseUnitAmount(raw: string | undefined, decimals: number): number | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  if (!Number.isInteger(decimals) || decimals < 0) {
+    return undefined;
+  }
+  const normalized = raw.trim();
+  if (!/^-?\d+$/u.test(normalized)) {
+    return undefined;
+  }
+
+  const base = 10n ** BigInt(decimals);
+  const value = BigInt(normalized);
+  const sign = value < 0n ? -1 : 1;
+  const abs = value < 0n ? -value : value;
+  const integerPart = abs / base;
+  const fractionalPart = abs % base;
+  return sign * (Number(integerPart) + Number(fractionalPart) / Number(base));
+}
+
 function parseEpochToIso(raw: string | undefined): string | undefined {
   if (!raw) {
     return undefined;
@@ -140,11 +161,20 @@ function buildLatestSnapshot(params: {
   timestamp: string;
   position?: PerpetualPosition;
   fallbackSizeUsd?: number;
+  fallbackLeverage?: number;
   fallbackOpenedAt?: string;
   previous?: GmxLatestSnapshot;
 }): GmxLatestSnapshot {
   const positionSize = params.position ? parseUsdMetric(params.position.sizeInUsd) : undefined;
   const totalUsd = positionSize ?? params.fallbackSizeUsd;
+  const collateralUsd = params.position
+    ? parseBaseUnitAmount(params.position.collateralAmount, params.position.collateralToken.decimals)
+    : undefined;
+  const derivedLeverage =
+    positionSize !== undefined && collateralUsd !== undefined && collateralUsd > 0
+      ? positionSize / collateralUsd
+      : undefined;
+  const leverage = derivedLeverage ?? params.fallbackLeverage ?? params.previous?.leverage;
 
   const openedAt = params.position
     ? parseEpochToIso(params.position.increasedAtTime)
@@ -165,6 +195,7 @@ function buildLatestSnapshot(params: {
     return {
       poolAddress: normalizeHexAddress(params.position.marketAddress, 'market address'),
       totalUsd,
+      leverage,
       timestamp: params.timestamp,
       positionOpenedAt: openedAt,
       positionTokens: [
@@ -173,7 +204,7 @@ function buildLatestSnapshot(params: {
           symbol: params.position.collateralToken.symbol,
           decimals: params.position.collateralToken.decimals,
           amountBaseUnits: params.position.collateralAmount,
-          valueUsd: totalUsd,
+          valueUsd: collateralUsd,
         },
       ],
     };
@@ -182,6 +213,7 @@ function buildLatestSnapshot(params: {
   return {
     poolAddress: params.marketAddress,
     totalUsd,
+    leverage,
     timestamp: params.timestamp,
     positionOpenedAt: openedAt,
     positionTokens: [],
@@ -572,6 +604,10 @@ export const pollCycleNode = async (
     timestamp: latestCycle.timestamp,
     position: positionAfterExecution,
     fallbackSizeUsd,
+    fallbackLeverage:
+      executionResult.ok && (executionPlan.action === 'long' || executionPlan.action === 'short')
+        ? latestCycle.leverage
+        : undefined,
     fallbackOpenedAt:
       executionResult.ok && (executionPlan.action === 'long' || executionPlan.action === 'short')
         ? latestCycle.timestamp

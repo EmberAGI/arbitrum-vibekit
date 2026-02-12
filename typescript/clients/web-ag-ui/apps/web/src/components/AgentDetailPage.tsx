@@ -2125,6 +2125,8 @@ function GmxAlloraMetricsTab({
             : 'pending';
   const marketLabel = latestCycle?.marketSymbol ?? formatPoolPair(fullMetrics?.lastSnapshot);
   const sideLabel = latestCycle?.side ? latestCycle.side.toUpperCase() : '—';
+  const displayedLeverage = latestCycle?.leverage ?? latestSnapshot?.leverage;
+  const displayedNotionalUsd = latestCycle?.sizeUsd ?? latestSnapshot?.totalUsd;
   const positionStatus =
     latestCycle?.action === 'close' ? 'Closed' : latestSnapshot?.totalUsd && latestSnapshot.totalUsd > 0 ? 'Open' : 'Pending';
 
@@ -2238,12 +2240,12 @@ function GmxAlloraMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Leverage</div>
             <div className="text-white font-medium">
-              {latestCycle?.leverage !== undefined ? `${latestCycle.leverage}x` : '—'}
+              {displayedLeverage !== undefined ? `${displayedLeverage.toFixed(1)}x` : '—'}
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Notional</div>
-            <div className="text-white font-medium">{formatUsd(latestCycle?.sizeUsd)}</div>
+            <div className="text-white font-medium">{formatUsd(displayedNotionalUsd)}</div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Signal Direction</div>

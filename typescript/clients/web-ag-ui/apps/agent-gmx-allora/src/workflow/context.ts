@@ -74,6 +74,7 @@ export type ClmmTransaction = {
 export type GmxLatestSnapshot = {
   poolAddress?: `0x${string}`;
   totalUsd?: number;
+  leverage?: number;
   feesUsd?: number;
   feesApy?: number;
   timestamp?: string;

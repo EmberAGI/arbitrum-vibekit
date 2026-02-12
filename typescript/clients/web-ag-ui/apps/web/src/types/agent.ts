@@ -303,6 +303,7 @@ export interface AgentViewMetrics {
   latestSnapshot?: {
     poolAddress?: `0x${string}`;
     totalUsd?: number;
+    leverage?: number;
     feesUsd?: number;
     feesApy?: number;
     timestamp?: string;

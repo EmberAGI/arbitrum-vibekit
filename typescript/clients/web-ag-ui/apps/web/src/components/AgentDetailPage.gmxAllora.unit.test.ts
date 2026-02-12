@@ -187,4 +187,87 @@ describe('AgentDetailPage (GMX Allora)', () => {
     expect(html).toContain('https://arbiscan.io/tx/0xb24f42dbfc6c0a30c16b7660ad5878a2a92abfb53a5ce02609bfd7e06a2cde7e');
     expect(html).not.toContain('Rebalance Cycles');
   });
+
+  it('falls back to snapshot leverage/notional when the latest cycle is hold', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-gmx-allora',
+        agentName: 'GMX Allora Trader',
+        agentDescription: 'Trades GMX perps using Allora 8-hour prediction feeds.',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        ownerAddress: undefined,
+        rank: 3,
+        rating: 5,
+        avatar: '📈',
+        avatarBg: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+        profile: {
+          chains: ['Arbitrum One'],
+          protocols: ['GMX', 'Allora'],
+          tokens: ['USDC'],
+          agentIncome: 4109.5,
+          aum: 42180,
+          apy: 9.2,
+          totalUsers: 58,
+        },
+        metrics: {
+          iteration: 2,
+          cyclesSinceRebalance: 1,
+          staleCycles: 0,
+          aumUsd: 16,
+          apy: 9.2,
+          lifetimePnlUsd: 0,
+        },
+        fullMetrics: {
+          cyclesSinceRebalance: 1,
+          staleCycles: 0,
+          iteration: 2,
+          previousPrice: 67602.611,
+          latestCycle: {
+            cycle: 2,
+            action: 'hold',
+            reason: 'Inference metrics unchanged since last trade; holding position.',
+            marketSymbol: 'BTC/USDC',
+            side: undefined,
+            leverage: undefined,
+            sizeUsd: undefined,
+            timestamp: '2026-02-12T02:40:35.221Z',
+          },
+          latestSnapshot: {
+            poolAddress: '0x47c031236e19d024b42f8AE6780E44A573170703',
+            totalUsd: 16,
+            leverage: 2,
+            timestamp: '2026-02-12T02:40:35.221Z',
+            positionTokens: [],
+          },
+        },
+        isHired: false,
+        isHiring: false,
+        isFiring: false,
+        isSyncing: false,
+        currentCommand: undefined,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        activeInterrupt: undefined,
+        allowedPools: [],
+        onInterruptSubmit: () => {},
+        taskId: undefined,
+        taskStatus: undefined,
+        haltReason: undefined,
+        executionError: undefined,
+        delegationsBypassActive: undefined,
+        onboarding: undefined,
+        transactions: [],
+        telemetry: [],
+        events: [],
+        settings: undefined,
+        onSettingsChange: () => {},
+      }),
+    );
+
+    expect(html).toContain('>2.0x<');
+    expect(html).toContain('$16');
+  });
 });

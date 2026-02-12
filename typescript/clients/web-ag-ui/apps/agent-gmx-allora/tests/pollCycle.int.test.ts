@@ -517,6 +517,62 @@ describe('pollCycleNode (integration)', () => {
     expect(artifactIds).not.toContain('gmx-allora-execution-plan');
   });
 
+  it('hydrates leverage and notional from an existing onchain position when holding', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValueOnce([
+      {
+        chainId: '42161',
+        key: '0xpos2',
+        contractKey: '0xposition2',
+        account: '0xwallet',
+        marketAddress: '0xmarket',
+        sizeInUsd: '16000000000000000000000000000000',
+        sizeInTokens: '0.01',
+        collateralAmount: '8000000',
+        pendingBorrowingFeesUsd: '0',
+        increasedAtTime: '1739325000',
+        decreasedAtTime: '0',
+        positionSide: 'long',
+        isLong: true,
+        fundingFeeAmount: '0',
+        claimableLongTokenAmount: '0',
+        claimableShortTokenAmount: '0',
+        isOpening: false,
+        pnl: '0',
+        positionFeeAmount: '0',
+        traderDiscountAmount: '0',
+        uiFeeAmount: '0',
+        collateralToken: {
+          tokenUid: { chainId: '42161', address: '0xusdc' },
+          name: 'USD Coin',
+          symbol: 'USDC',
+          isNative: false,
+          decimals: 6,
+          iconUri: null,
+          isVetted: true,
+        },
+      },
+    ]);
+
+    const state = buildBaseState();
+    state.view.metrics.previousPrice = 46000;
+    state.view.metrics.assumedPositionSide = 'long';
+
+    const result = await pollCycleNode(state, {});
+    const update = (result as { update: ClmmState }).update;
+    const snapshot = update.view?.metrics.latestSnapshot;
+
+    expect(createPerpetualLongMock).not.toHaveBeenCalled();
+    expect(snapshot?.totalUsd).toBe(16);
+    expect(snapshot?.leverage).toBe(2);
+    expect(snapshot?.positionTokens[0]?.valueUsd).toBe(8);
+  });
+
   it('fails the cycle when no GMX market matches', async () => {
     fetchAlloraInferenceMock.mockResolvedValueOnce({
       topicId: 14,
