@@ -3,7 +3,7 @@ import { Command } from '@langchain/langgraph';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
-import { ARBITRUM_CHAIN_ID, DEFAULT_TICK_BANDWIDTH_BPS } from '../../config/constants.js';
+import { ARBITRUM_CHAIN_ID, resolveTickBandwidthBps } from '../../config/constants.js';
 import { type ResolvedOperatorConfig } from '../../domain/types.js';
 import { resolveAccountingContextId } from '../accounting.js';
 import { getCamelotClient } from '../clientFactory.js';
@@ -15,7 +15,9 @@ import {
   normalizeHexAddress,
   type ClmmEvent,
 } from '../context.js';
+import { appendFlowLogHistory, loadFlowLogHistory } from '../historyStore.js';
 import { loadBootstrapContext } from '../store.js';
+import { applyAccountingToView } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };
@@ -161,13 +163,17 @@ export const prepareOperatorNode = async (
 
   const operatorConfig: ResolvedOperatorConfig = {
     walletAddress: delegationsBypassActive ? agentWalletAddress : operatorWalletAddress,
-    baseContributionUsd: operatorInput.baseContributionUsd ?? 5_000,
-    manualBandwidthBps: DEFAULT_TICK_BANDWIDTH_BPS,
+    baseContributionUsd: operatorInput.baseContributionUsd,
+    manualBandwidthBps: resolveTickBandwidthBps(),
     autoCompoundFees: true,
   };
 
   let accounting = state.view.accounting;
   const threadId = (config as Configurable).configurable?.thread_id;
+  const storedFlowLog = threadId ? await loadFlowLogHistory({ threadId }) : [];
+  if (storedFlowLog.length > 0) {
+    accounting = { ...accounting, flowLog: storedFlowLog };
+  }
   const contextId = resolveAccountingContextId({
     state,
     threadId,
@@ -183,6 +189,7 @@ export const prepareOperatorNode = async (
       chainId: ARBITRUM_CHAIN_ID,
       usdValue: operatorConfig.baseContributionUsd,
     });
+    await appendFlowLogHistory({ threadId, events: [hireEvent] });
     accounting = applyAccountingUpdate({
       existing: accounting,
       flowEvents: [hireEvent],
@@ -212,22 +219,29 @@ export const prepareOperatorNode = async (
 
   const events: ClmmEvent[] = [statusEvent];
 
+  const { profile: nextProfile, metrics: nextMetrics } = applyAccountingToView({
+    profile: state.view.profile,
+    metrics: {
+      lastSnapshot: selectedPool,
+      previousPrice: undefined,
+      cyclesSinceRebalance: 0,
+      staleCycles: 0,
+      rebalanceCycles: 0,
+      iteration: 0,
+      latestCycle: undefined,
+    },
+    accounting,
+  });
+
   return {
     view: {
       operatorConfig,
       selectedPool,
-      metrics: {
-        lastSnapshot: selectedPool,
-        previousPrice: undefined,
-        cyclesSinceRebalance: 0,
-        staleCycles: 0,
-        iteration: 0,
-        latestCycle: undefined,
-      },
+      metrics: nextMetrics,
       task,
       activity: { events, telemetry: state.view.activity.telemetry },
       transactionHistory: state.view.transactionHistory,
-      profile: state.view.profile,
+      profile: nextProfile,
       accounting,
     },
     private: {

@@ -8,6 +8,8 @@
  * Uses the PolymarketAdapter from the plugin via dynamic import.
  */
 
+import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+
 import type {
   PolymarketState,
   PolymarketUpdate,
@@ -18,6 +20,11 @@ import type {
   UserPosition,
 } from '../context.js';
 import { logInfo, buildTaskStatus } from '../context.js';
+import { startCron } from '../../agent.js';
+
+// Type for CopilotKit config parameter (contains threadId and other metadata)
+type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+type Configurable = { configurable?: { thread_id?: string } };
 import {
   scanForOpportunities,
   filterOpportunities,
@@ -308,7 +315,10 @@ async function fetchMarketsFromPlugin(adapter: IPolymarketAdapter, iteration: nu
  * 5. Execute adapter.createShortPosition() for NO
  * 6. Track positions and PnL, report to frontend
  */
-export async function pollCycleNode(state: PolymarketState): Promise<PolymarketUpdate> {
+export async function pollCycleNode(
+  state: PolymarketState,
+  config: CopilotKitConfig,
+): Promise<PolymarketUpdate> {
   const iteration = (state.view.metrics.iteration ?? 0) + 1;
   const now = new Date().toISOString();
 
@@ -321,6 +331,9 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
       view: {
         metrics: { ...state.view.metrics, iteration, lastPoll: now },
       },
+      private: {
+        cronScheduled: state.private.cronScheduled,
+      },
     };
   }
 
@@ -332,6 +345,9 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
         lifecycleState: 'stopped',
         haltReason: 'Kill switch activated (POLY_KILL_SWITCH=true)',
         metrics: { ...state.view.metrics, iteration, lastPoll: now },
+      },
+      private: {
+        cronScheduled: state.private.cronScheduled,
       },
     };
   }
@@ -376,6 +392,9 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
           events: [statusEvent],
           executionError: 'Missing Polymarket credentials',
         },
+        private: {
+          cronScheduled: state.private.cronScheduled,
+        },
       };
     }
 
@@ -415,6 +434,9 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
         portfolioValueUsd,
         metrics: { ...state.view.metrics, iteration, lastPoll: now },
         events: [statusEvent],
+      },
+      private: {
+        cronScheduled: state.private.cronScheduled,
       },
     };
   }
@@ -622,6 +644,9 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
             tradesFailed: state.view.metrics.tradesFailed,
           },
           events: [statusEvent, ...opportunityEvents, ...crossOpportunityEvents, ...relationshipEvents],
+        },
+        private: {
+          cronScheduled: state.private.cronScheduled,
         },
       };
     }
@@ -882,7 +907,20 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
     portfolioValueUsd,
   });
 
-  return {
+  // Schedule cron after first poll cycle (similar to Pendle pattern)
+  let cronScheduled = state.private.cronScheduled;
+  // Extract thread_id from config (LangGraph provides it automatically)
+  const threadId = (config as Configurable).configurable?.thread_id;
+
+  if (threadId && !cronScheduled && !useMockData) {
+    const pollInterval = parseInt(process.env.POLY_POLL_INTERVAL_MS ?? '300000', 10);
+    startCron(threadId, pollInterval);
+    logInfo('Cron scheduled after first Polymarket cycle', { threadId, pollInterval });
+    cronScheduled = true;
+  }
+
+  // Emit state update to frontend for real-time UI updates
+  await copilotkitEmitState(config, {
     view: {
       task,
       markets,
@@ -906,6 +944,40 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
         tradesFailed: state.view.metrics.tradesFailed + tradesFailed,
       },
       events: [statusEvent, ...opportunityEvents, ...crossOpportunityEvents, ...relationshipEvents],
+    },
+  });
+
+  return {
+    view: {
+      task,
+      markets,
+      opportunities,
+      crossMarketOpportunities: crossOpportunities,
+      detectedRelationships: relationships,
+      userPositions,
+      tradingHistory,
+      portfolioValueUsd,
+      // Only pass NEW transactions — the mergeAppendOrReplace reducer appends them.
+      // Passing the full array causes duplication because LangGraph deserializes
+      // checkpoint state (new object refs), so the reducer's prefix check fails
+      // and it concatenates left + right instead of replacing.
+      transactionHistory: newTransactions,
+      metrics: {
+        iteration,
+        lastPoll: now,
+        totalPnl: state.view.metrics.totalPnl,
+        realizedPnl: state.view.metrics.realizedPnl,
+        unrealizedPnl: state.view.metrics.unrealizedPnl,
+        activePositions: userPositions.length,
+        opportunitiesFound: state.view.metrics.opportunitiesFound + totalOpportunitiesFound,
+        opportunitiesExecuted: state.view.metrics.opportunitiesExecuted + opportunitiesExecuted,
+        tradesExecuted: state.view.metrics.tradesExecuted + tradesExecuted,
+        tradesFailed: state.view.metrics.tradesFailed + tradesFailed,
+      },
+      events: [statusEvent, ...opportunityEvents, ...crossOpportunityEvents, ...relationshipEvents],
+    },
+    private: {
+      cronScheduled,
     },
   };
 }

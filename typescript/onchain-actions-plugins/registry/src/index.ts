@@ -19,6 +19,8 @@ export function initializePublicRegistry(chainConfigs: ChainConfig[]) {
 }
 
 export { type ChainConfig, PublicEmberPluginRegistry };
+export { EndpointInterfaces } from './endpoint-interfaces/index.js';
+export * as PluginInterfaces from './core/index.js';
 export * from './core/index.js';
 
 // Polymarket plugin exports (prediction markets)

@@ -39,6 +39,30 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     isFeatured: true,
     featuredRank: 2,
   },
+  'agent-pendle': {
+    id: 'agent-pendle',
+    name: 'Pendle Yield',
+    description:
+      'Automatically allocates stablecoins into the highest-yielding Pendle YT markets and rotates when yields shift.',
+    creator: 'Ember AI Team',
+    creatorVerified: true,
+    avatar: '🪙',
+    avatarBg: 'linear-gradient(135deg, #f97316 0%, #facc15 100%)',
+    isFeatured: true,
+    featuredRank: 2,
+  },
+  'agent-gmx-allora': {
+    id: 'agent-gmx-allora',
+    name: 'GMX Allora Trader',
+    description:
+      'Trades GMX perps on Arbitrum using Allora 8-hour prediction feeds with strict low-leverage controls.',
+    creator: 'Ember AI Team',
+    creatorVerified: true,
+    avatar: '📈',
+    avatarBg: 'linear-gradient(135deg, #10b981 0%, #22c55e 100%)',
+    isFeatured: true,
+    featuredRank: 3,
+  },
 };
 
 export function getAgentConfig(agentId: string): AgentConfig {
@@ -68,10 +92,14 @@ export function getAllAgents(): AgentConfig[] {
   return Object.values(AGENT_REGISTRY);
 }
 
+export function isRegisteredAgentId(agentId: string): boolean {
+  return Boolean(AGENT_REGISTRY[agentId]);
+}
+
 export function getFeaturedAgents(): AgentConfig[] {
   return Object.values(AGENT_REGISTRY)
     .filter((agent) => agent.isFeatured)
     .sort((a, b) => (a.featuredRank ?? 999) - (b.featuredRank ?? 999));
 }
 
-export const DEFAULT_AGENT_ID = process.env.NEXT_PUBLIC_DEFAULT_AGENT_ID || 'agent-clmm';
+export const DEFAULT_AGENT_ID = process.env.NEXT_PUBLIC_DEFAULT_AGENT_ID || 'agent-polymarket';

@@ -173,7 +173,7 @@ export async function collectTradeApprovalNode(
       update: {
         view: {
           pendingTrades: undefined, // Clear all pending trades
-          transactionHistory: [...state.view.transactionHistory, ...newTransactions],
+          transactionHistory: newTransactions,
           metrics: {
             ...state.view.metrics,
             tradesExecuted: state.view.metrics.tradesExecuted + tradesExecuted,

@@ -1,9 +1,15 @@
 import { pathToFileURL } from 'node:url';
 
-import { END, GraphInterrupt, InMemoryStore, START, StateGraph } from '@langchain/langgraph';
+import { END, InMemoryStore, START, StateGraph } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
 import { privateKeyToAccount } from 'viem/accounts';
+import { z } from 'zod';
 
+import {
+  resolveLangGraphDefaults,
+  resolveLangGraphDurability,
+  type LangGraphDurability,
+} from './config/serviceConfig.js';
 import {
   ClmmStateAnnotation,
   memory,
@@ -11,6 +17,7 @@ import {
   type ClmmState,
 } from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
+import { configureLangGraphApiCheckpointer } from './workflow/langgraphApiCheckpointer.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
 import { collectDelegationsNode } from './workflow/nodes/collectDelegations.js';
 import { collectFundingTokenInputNode } from './workflow/nodes/collectFundingTokenInput.js';
@@ -20,7 +27,7 @@ import { hireCommandNode } from './workflow/nodes/hireCommand.js';
 import { listPoolsNode } from './workflow/nodes/listPools.js';
 import { pollCycleNode } from './workflow/nodes/pollCycle.js';
 import { prepareOperatorNode } from './workflow/nodes/prepareOperator.js';
-import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
+import { extractCommand, resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
@@ -32,20 +39,29 @@ import { saveBootstrapContext } from './workflow/store.js';
  * - hire/cycle: continue to listPools for full setup flow
  */
 function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
-  return state.view.command === 'sync' ? 'syncState' : 'listPools';
+  const command = extractCommand(state.messages) ?? state.view.command;
+  return command === 'sync' ? 'syncState' : 'listPools';
 }
 
 const store = new InMemoryStore();
+const DEFAULT_DURABILITY = resolveLangGraphDefaults().durability;
+
+await configureLangGraphApiCheckpointer();
 
 const rawAgentPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
-if (!rawAgentPrivateKey) {
-  throw new Error('A2A_TEST_AGENT_NODE_PRIVATE_KEY environment variable is required');
+if (rawAgentPrivateKey) {
+  const agentPrivateKey = normalizeHexAddress(rawAgentPrivateKey, 'agent private key');
+  const account = privateKeyToAccount(agentPrivateKey);
+  const agentWalletAddress = normalizeHexAddress(account.address, 'agent wallet address');
+  await saveBootstrapContext({ privateKey: agentPrivateKey, agentWalletAddress }, store);
+} else {
+  // Keep the dev server up even if a developer hasn't configured the executor key.
+  // Nodes that need delegated execution will error with a clear message when they
+  // attempt to load the bootstrap context.
+  console.warn(
+    '[CLMM] A2A_TEST_AGENT_NODE_PRIVATE_KEY not set; delegated execution is disabled for this dev session.',
+  );
 }
-const agentPrivateKey = normalizeHexAddress(rawAgentPrivateKey, 'agent private key');
-const account = privateKeyToAccount(agentPrivateKey);
-const agentWalletAddress = normalizeHexAddress(account.address, 'agent wallet address');
-
-await saveBootstrapContext({ privateKey: agentPrivateKey, agentWalletAddress }, store);
 
 const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('runCommand', runCommandNode)
@@ -82,8 +98,186 @@ export const clmmGraph = workflow.compile({
 });
 
 const runningThreads = new Set<string>();
+const ThreadResponseSchema = z.object({ thread_id: z.string() }).catchall(z.unknown());
+const ThreadStateUpdateResponseSchema = z
+  .object({ checkpoint_id: z.string().optional() })
+  .catchall(z.unknown());
+const RunResponseSchema = z.object({ run_id: z.string(), status: z.string().optional() }).catchall(z.unknown());
 
-export async function runGraphOnce(threadId: string) {
+type RunStatus = string | undefined;
+
+function resolveLangGraphDeploymentUrl(): string {
+  const raw = process.env['LANGGRAPH_DEPLOYMENT_URL'] ?? 'http://localhost:8124';
+  return raw.endsWith('/') ? raw.slice(0, -1) : raw;
+}
+
+function resolveLangGraphGraphId(): string {
+  return process.env['LANGGRAPH_GRAPH_ID'] ?? 'agent-clmm';
+}
+
+async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>): Promise<T> {
+  const payloadText = await response.text();
+  if (!response.ok) {
+    throw new Error(`LangGraph API request failed (${response.status}): ${payloadText}`);
+  }
+  const trimmed = payloadText.trim();
+  const payload = trimmed.length > 0 ? (JSON.parse(trimmed) as unknown) : ({} as unknown);
+  return schema.parse(payload);
+}
+
+type ThreadStateValues = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function extractThreadStateValues(payload: unknown): ThreadStateValues | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const values = payload['values'];
+  if (isRecord(values)) {
+    return values;
+  }
+
+  const state = payload['state'];
+  if (isRecord(state)) {
+    return state;
+  }
+
+  const data = payload['data'];
+  if (isRecord(data)) {
+    return data;
+  }
+
+  if (isRecord(payload['view'])) {
+    return payload;
+  }
+
+  return null;
+}
+
+async function fetchThreadStateValues(
+  baseUrl: string,
+  threadId: string,
+): Promise<ThreadStateValues | null> {
+  const response = await fetch(`${baseUrl}/threads/${threadId}/state`);
+  const payload = await parseJsonResponse(response, z.unknown());
+  return extractThreadStateValues(payload);
+}
+
+async function ensureThread(baseUrl: string, threadId: string, graphId: string) {
+  const metadata = { graph_id: graphId };
+  const response = await fetch(`${baseUrl}/threads`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ thread_id: threadId, if_exists: 'do_nothing', metadata }),
+  });
+  await parseJsonResponse(response, ThreadResponseSchema);
+
+  const patchResponse = await fetch(`${baseUrl}/threads/${threadId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ metadata }),
+  });
+  await parseJsonResponse(patchResponse, ThreadResponseSchema);
+}
+
+async function updateCycleState(baseUrl: string, threadId: string, runMessage: { id: string; role: 'user'; content: string }) {
+  let existingView: Record<string, unknown> | null = null;
+  try {
+    const currentState = await fetchThreadStateValues(baseUrl, threadId);
+    if (currentState && isRecord(currentState['view'])) {
+      existingView = currentState['view'];
+    }
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
+    console.warn('[cron] Unable to fetch thread state before cycle update', { threadId, error: message });
+  }
+
+  const view = existingView ? { ...existingView, command: 'cycle' } : { command: 'cycle' };
+  const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      values: { messages: [runMessage], view },
+      as_node: 'runCommand',
+    }),
+  });
+  await parseJsonResponse(response, ThreadStateUpdateResponseSchema);
+}
+
+async function createRun(params: {
+  baseUrl: string;
+  threadId: string;
+  graphId: string;
+  durability: LangGraphDurability;
+}): Promise<string | undefined> {
+  const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      assistant_id: params.graphId,
+      input: null,
+      config: {
+        configurable: { thread_id: params.threadId },
+        durability: params.durability,
+      },
+      metadata: { source: 'cron' },
+      stream_mode: ['events', 'values', 'messages'],
+      stream_resumable: true,
+    }),
+  });
+
+  if (response.status === 422) {
+    const payloadText = await response.text();
+    console.info(`[cron] Run rejected; thread busy (thread=${params.threadId})`, { detail: payloadText });
+    return undefined;
+  }
+
+  const run = await parseJsonResponse(response, RunResponseSchema);
+  return run.run_id;
+}
+
+async function fetchRun(baseUrl: string, threadId: string, runId: string) {
+  const response = await fetch(`${baseUrl}/threads/${threadId}/runs/${runId}`);
+  return parseJsonResponse(response, RunResponseSchema);
+}
+
+async function waitForRunStreamCompletion(params: {
+  baseUrl: string;
+  threadId: string;
+  runId: string;
+}): Promise<RunStatus> {
+  const response = await fetch(
+    `${params.baseUrl}/threads/${params.threadId}/runs/${params.runId}/stream`,
+    {
+      headers: {
+        Accept: 'text/event-stream',
+      },
+    },
+  );
+  if (!response.ok) {
+    const payloadText = await response.text();
+    throw new Error(`LangGraph run stream failed (${response.status}): ${payloadText}`);
+  }
+
+  const stream = response.body;
+  if (stream) {
+    for await (const chunk of stream) {
+      void chunk;
+    }
+  }
+
+  const run = await fetchRun(params.baseUrl, params.threadId, params.runId);
+  return run.status;
+}
+
+export async function runGraphOnce(
+  threadId: string,
+  options?: { durability?: LangGraphDurability },
+) {
   if (runningThreads.has(threadId)) {
     console.info(`[cron] Skipping tick - run already in progress (thread=${threadId})`);
     return;
@@ -91,7 +285,7 @@ export async function runGraphOnce(threadId: string) {
 
   runningThreads.add(threadId);
   const startedAt = Date.now();
-  console.info(`[cron] Starting CLMM graph run (thread=${threadId})`);
+  console.info(`[cron] Starting CLMM graph run via API (thread=${threadId})`);
 
   const runMessage = {
     id: uuidv7(),
@@ -99,58 +293,39 @@ export async function runGraphOnce(threadId: string) {
     content: JSON.stringify({ command: 'cycle' }),
   };
 
-  // Cron jobs are scheduled inside an AG-UI request context, so their ticks inherit
-  // AsyncLocalStorage runnable config (including EventStreamCallbackHandler tied to a
-  // closed SSE stream). Explicitly override callbacks to prevent "WritableStream is closed"
-  // errors during background runs.
-  const config = { configurable: { thread_id: threadId }, callbacks: [] };
+  const baseUrl = resolveLangGraphDeploymentUrl();
+  const graphId = resolveLangGraphGraphId();
+  const durability = resolveLangGraphDurability(options?.durability ?? DEFAULT_DURABILITY);
 
   try {
-    // When a graph reaches END, subsequent invoke() calls return immediately without
-    // running any nodes. Use updateState with asNode to "rewind" the execution point
-    // so the graph restarts from runCommand on the next invoke.
-    // Note: updateState(..., asNode="runCommand") treats this patch as the output of
-    // runCommand, so ensure we set view.command to the intended value.
-    await clmmGraph.updateState(
-      config,
-      { messages: [runMessage], view: { command: 'cycle' } },
-      'runCommand',
-    );
-
-    // Now invoke - the graph will continue from the node after runCommand
-    await clmmGraph.invoke(null, config);
-    console.info(`[cron] Run complete in ${Date.now() - startedAt}ms`);
-  } catch (error) {
-    if (error instanceof GraphInterrupt) {
-      console.warn(
-        '[cron] Graph interrupted awaiting operator input; supply input via UI and rerun.',
-      );
+    await ensureThread(baseUrl, threadId, graphId);
+    await updateCycleState(baseUrl, threadId, runMessage);
+    const runId = await createRun({ baseUrl, threadId, graphId, durability });
+    if (!runId) {
       return;
     }
-
+    const status = await waitForRunStreamCompletion({ baseUrl, threadId, runId });
+    if (status === 'interrupted') {
+      console.warn('[cron] Graph interrupted awaiting operator input; supply input via UI and rerun.');
+      return;
+    }
+    if (status && status !== 'success') {
+      console.error('[cron] Graph run failed', { threadId, runId, status });
+      return;
+    }
+    console.info(`[cron] Run complete in ${Date.now() - startedAt}ms`, { runId });
+  } catch (error) {
     console.error('[cron] Graph run failed', error);
   } finally {
     runningThreads.delete(threadId);
   }
 }
 
-export async function startClmmCron(threadId: string) {
-  const initialRunMessage = {
-    id: uuidv7(),
-    role: 'user' as const,
-    content: JSON.stringify({ command: 'cycle' }),
-  };
-
-  // Cron scheduling happens in pollCycle after first cycle completes
-  const stream = await clmmGraph.stream(
-    { messages: [initialRunMessage] },
-    {
-      configurable: { thread_id: threadId },
-    },
-  );
-  for await (const event of stream) {
-    void event;
-  }
+export async function startClmmCron(
+  threadId: string,
+  options?: { durability?: LangGraphDurability },
+) {
+  await runGraphOnce(threadId, options);
 }
 
 configureCronExecutor(runGraphOnce);

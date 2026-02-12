@@ -173,7 +173,7 @@ export async function redeemPositionsNode(
     return {
       view: {
         positions: remainingPositions,
-        transactionHistory: [...state.view.transactionHistory, ...newTransactions],
+        transactionHistory: newTransactions,
         metrics: {
           ...state.view.metrics,
           activePositions: remainingPositions.length,

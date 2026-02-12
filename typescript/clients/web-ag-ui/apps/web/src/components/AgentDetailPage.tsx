@@ -7,7 +7,6 @@ import {
   Printer,
   MoreHorizontal,
   TrendingUp,
-  TrendingDown,
   Minus,
   Check,
   RefreshCw,
@@ -24,7 +23,11 @@ import type {
   FundingTokenOption,
   OnboardingState,
   Pool,
+  PendleMarket,
   OperatorConfigInput,
+  PendleSetupInput,
+  FundWalletAcknowledgement,
+  GmxSetupInput,
   FundingTokenInput,
   DelegationSigningResponse,
   UnsignedDelegation,
@@ -33,8 +36,11 @@ import type {
   ClmmEvent,
 } from '../types/agent';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
+import { formatPoolPair } from '../utils/poolFormat';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
+
+const MIN_BASE_CONTRIBUTION_USD = 10;
 
 interface AgentDetailPageProps {
   agentId: string;
@@ -61,9 +67,15 @@ interface AgentDetailPageProps {
   onBack: () => void;
   // Interrupt handling
   activeInterrupt?: AgentInterrupt | null;
-  allowedPools: Pool[];
+  allowedPools: Array<Pool | PendleMarket>;
   onInterruptSubmit?: (
-    input: OperatorConfigInput | FundingTokenInput | DelegationSigningResponse,
+    input:
+      | OperatorConfigInput
+      | PendleSetupInput
+      | FundWalletAcknowledgement
+      | GmxSetupInput
+      | FundingTokenInput
+      | DelegationSigningResponse,
   ) => void;
   // Task state
   taskId?: string;
@@ -87,6 +99,7 @@ const DEFAULT_AVATAR = '🤖';
 const DEFAULT_AVATAR_BG = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
 
 export function AgentDetailPage({
+  agentId,
   agentName,
   agentDescription,
   creatorName,
@@ -124,6 +137,7 @@ export function AgentDetailPage({
   onSettingsChange,
 }: AgentDetailPageProps) {
   const [activeTab, setActiveTab] = useState<TabType>(isHired ? 'blockers' : 'metrics');
+  const resolvedTab: TabType = activeInterrupt ? 'blockers' : activeTab;
 
   const formatAddress = (address: string) => {
     if (address.length <= 10) return address;
@@ -285,7 +299,7 @@ export function AgentDetailPage({
               <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} />
               <StatBox label="APY" value={formatPercent(profile.apy)} valueColor="text-teal-400" />
               <StatBox label="Your Assets" value={null} />
-              <StatBox label="Your PnL" value={null} />
+              <StatBox label="Your PnL" value={formatCurrency(metrics.lifetimePnlUsd)} />
             </div>
 
             {/* Tags Row */}
@@ -300,32 +314,33 @@ export function AgentDetailPage({
           {/* Tabs */}
           <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
             <TabButton
-              active={activeTab === 'blockers'}
+              active={resolvedTab === 'blockers'}
               onClick={() => setActiveTab('blockers')}
               highlight
             >
               Agent Blockers
             </TabButton>
-            <TabButton active={activeTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
+            <TabButton active={resolvedTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
               Metrics
             </TabButton>
             <TabButton
-              active={activeTab === 'transactions'}
+              active={resolvedTab === 'transactions'}
               onClick={() => setActiveTab('transactions')}
             >
               Transaction history
             </TabButton>
-            <TabButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')}>
+            <TabButton active={resolvedTab === 'settings'} onClick={() => setActiveTab('settings')}>
               Settings and policies
             </TabButton>
-            <TabButton active={activeTab === 'chat'} onClick={() => {}} disabled>
+            <TabButton active={resolvedTab === 'chat'} onClick={() => {}} disabled>
               Chat
             </TabButton>
           </div>
 
           {/* Tab Content */}
-          {activeTab === 'blockers' && (
+          {resolvedTab === 'blockers' && (
             <AgentBlockersTab
+              agentId={agentId}
               activeInterrupt={activeInterrupt}
               allowedPools={allowedPools}
               onInterruptSubmit={onInterruptSubmit}
@@ -341,8 +356,9 @@ export function AgentDetailPage({
             />
           )}
 
-          {activeTab === 'metrics' && (
+          {resolvedTab === 'metrics' && (
             <MetricsTab
+              agentId={agentId}
               profile={profile}
               metrics={metrics}
               fullMetrics={fullMetrics}
@@ -350,11 +366,11 @@ export function AgentDetailPage({
             />
           )}
 
-          {activeTab === 'transactions' && (
+          {resolvedTab === 'transactions' && (
             <TransactionHistoryTab transactions={transactions} />
           )}
 
-          {activeTab === 'settings' && (
+          {resolvedTab === 'settings' && (
             <SettingsTab
               settings={settings}
               onSettingsChange={onSettingsChange}
@@ -495,8 +511,10 @@ export function AgentDetailPage({
 
             {activeTab === 'metrics' && (
               <MetricsTab
+                agentId={agentId}
                 profile={profile}
                 metrics={metrics}
+                fullMetrics={fullMetrics}
                 events={[]}
               />
             )}
@@ -609,10 +627,17 @@ function TransactionHistoryTab({ transactions }: TransactionHistoryTabProps) {
 
 // Agent Blockers Tab Component
 interface AgentBlockersTabProps {
+  agentId: string;
   activeInterrupt?: AgentInterrupt | null;
-  allowedPools: Pool[];
+  allowedPools: Array<Pool | PendleMarket>;
   onInterruptSubmit?: (
-    input: OperatorConfigInput | FundingTokenInput | DelegationSigningResponse,
+    input:
+      | OperatorConfigInput
+      | PendleSetupInput
+      | FundWalletAcknowledgement
+      | GmxSetupInput
+      | FundingTokenInput
+      | DelegationSigningResponse,
   ) => void;
   taskId?: string;
   taskStatus?: string;
@@ -643,6 +668,7 @@ const SETUP_STEPS = [
 ];
 
 function AgentBlockersTab({
+  agentId,
   activeInterrupt,
   allowedPools,
   onInterruptSubmit,
@@ -664,17 +690,48 @@ function AgentBlockersTab({
     isLoading: isWalletLoading,
     error: walletError,
   } = usePrivyWalletClient();
+  const delegationsBypassEnabled =
+    (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_DELEGATIONS_BYPASS : undefined) ===
+    'true';
+  // Treat empty-string env as unset so the UI does not render a blank address.
+  const walletBypassAddress =
+    (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS : undefined)?.trim() ||
+    '0x0000000000000000000000000000000000000000';
+  const isPendleAgent = agentId === 'agent-pendle';
+  const isGmxAlloraAgent = agentId === 'agent-gmx-allora';
+  const delegationsBypassEnv = 'DELEGATIONS_BYPASS';
+  const delegationContextLabel = isPendleAgent
+    ? 'Pendle execution'
+    : isGmxAlloraAgent
+      ? 'GMX perps execution'
+      : 'liquidity management';
+  const connectedWalletAddress =
+    privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
 
   const [currentStep, setCurrentStep] = useState(1);
   const [poolAddress, setPoolAddress] = useState('');
   const [baseContributionUsd, setBaseContributionUsd] = useState(
     settings?.amount?.toString() ?? '',
   );
+  const [targetMarket, setTargetMarket] = useState<'BTC' | 'ETH'>('BTC');
   const [fundingTokenAddress, setFundingTokenAddress] = useState('');
   const [isSigningDelegations, setIsSigningDelegations] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isTerminalTask =
+    taskStatus === 'failed' || taskStatus === 'canceled' || taskStatus === 'rejected';
+  const showBlockingError = Boolean(haltReason || executionError) && isTerminalTask;
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
+  const uniqueAllowedPools: Pool[] = [];
+  const seenPoolAddresses = new Set<string>();
+  const isPool = (value: Pool | PendleMarket): value is Pool => 'address' in value;
+  for (const poolCandidate of allowedPools) {
+    if (!isPool(poolCandidate)) continue;
+    const pool = poolCandidate;
+    if (seenPoolAddresses.has(pool.address)) continue;
+    seenPoolAddresses.add(pool.address);
+    uniqueAllowedPools.push(pool);
+  }
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -685,35 +742,158 @@ function AgentBlockersTab({
       return;
     }
 
-    const operatorWalletAddress = privyWallet?.address ?? '';
+    const operatorWalletAddress =
+      privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
 
     if (!operatorWalletAddress) {
-      setError('Connect a wallet to continue.');
+      setError(
+        delegationsBypassEnabled
+          ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
+          : 'Connect a wallet to continue.',
+      );
       return;
     }
 
     if (!isHexAddress(operatorWalletAddress)) {
-      setError('Connected wallet address is not a valid 0x-prefixed hex string.');
+      setError(
+        delegationsBypassEnabled
+          ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
+          : 'Connected wallet address is not a valid 0x-prefixed hex string.',
+      );
       return;
     }
 
-    let baseContributionNumber: number | undefined;
-    if (baseContributionUsd.trim() !== '') {
-      const parsed = Number(baseContributionUsd);
-      if (Number.isNaN(parsed) || parsed <= 0) {
-        setError('Base contribution must be a positive number when provided.');
-        return;
-      }
-      baseContributionNumber = parsed;
-      onSettingsChange?.({ amount: baseContributionNumber });
+    const trimmedContribution = baseContributionUsd.trim();
+    const parsedContribution =
+      trimmedContribution === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedContribution);
+    if (!Number.isFinite(parsedContribution)) {
+      setError('Base contribution must be a valid number.');
+      return;
     }
+    if (parsedContribution < MIN_BASE_CONTRIBUTION_USD) {
+      setError(`Base contribution must be at least $${MIN_BASE_CONTRIBUTION_USD}.`);
+      return;
+    }
+
+    if (trimmedContribution === '') {
+      setBaseContributionUsd(`${MIN_BASE_CONTRIBUTION_USD}`);
+    }
+
+    const baseContributionNumber = parsedContribution;
+    onSettingsChange?.({ amount: baseContributionNumber });
 
     onInterruptSubmit?.({
       poolAddress: poolAddress as `0x${string}`,
       walletAddress: operatorWalletAddress as `0x${string}`,
-      ...(baseContributionNumber !== undefined
-        ? { baseContributionUsd: baseContributionNumber }
-        : {}),
+      baseContributionUsd: baseContributionNumber,
+    });
+    setCurrentStep(2);
+  };
+
+  const handlePendleSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    const operatorWalletAddress =
+      privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
+
+    if (!operatorWalletAddress) {
+      setError(
+        delegationsBypassEnabled
+          ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
+          : 'Connect a wallet to continue.',
+      );
+      return;
+    }
+
+    if (!isHexAddress(operatorWalletAddress)) {
+      setError(
+        delegationsBypassEnabled
+          ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
+          : 'Connected wallet address is not a valid 0x-prefixed hex string.',
+      );
+      return;
+    }
+
+    const trimmedContribution = baseContributionUsd.trim();
+    const parsedContribution =
+      trimmedContribution === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedContribution);
+    if (!Number.isFinite(parsedContribution)) {
+      setError('Funding amount must be a valid number.');
+      return;
+    }
+    if (parsedContribution < MIN_BASE_CONTRIBUTION_USD) {
+      setError(`Funding amount must be at least $${MIN_BASE_CONTRIBUTION_USD}.`);
+      return;
+    }
+
+    if (trimmedContribution === '') {
+      setBaseContributionUsd(`${MIN_BASE_CONTRIBUTION_USD}`);
+    }
+
+    const baseContributionNumber = parsedContribution;
+    onSettingsChange?.({ amount: baseContributionNumber });
+
+    onInterruptSubmit?.({
+      walletAddress: operatorWalletAddress as `0x${string}`,
+      baseContributionUsd: baseContributionNumber,
+    });
+    setCurrentStep(2);
+  };
+
+  const handleGmxSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    const operatorWalletAddress =
+      privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
+
+    if (!operatorWalletAddress) {
+      setError(
+        delegationsBypassEnabled
+          ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
+          : 'Connect a wallet to continue.',
+      );
+      return;
+    }
+
+    if (!isHexAddress(operatorWalletAddress)) {
+      setError(
+        delegationsBypassEnabled
+          ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
+          : 'Connected wallet address is not a valid 0x-prefixed hex string.',
+      );
+      return;
+    }
+
+    if (targetMarket !== 'BTC' && targetMarket !== 'ETH') {
+      setError('Select a valid GMX market (BTC or ETH).');
+      return;
+    }
+
+    const trimmedContribution = baseContributionUsd.trim();
+    const parsedContribution =
+      trimmedContribution === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedContribution);
+    if (!Number.isFinite(parsedContribution)) {
+      setError('USDC allocation must be a valid number.');
+      return;
+    }
+    if (parsedContribution < MIN_BASE_CONTRIBUTION_USD) {
+      setError(`USDC allocation must be at least $${MIN_BASE_CONTRIBUTION_USD}.`);
+      return;
+    }
+
+    if (trimmedContribution === '') {
+      setBaseContributionUsd(`${MIN_BASE_CONTRIBUTION_USD}`);
+    }
+
+    const baseContributionNumber = parsedContribution;
+    onSettingsChange?.({ amount: baseContributionNumber });
+
+    onInterruptSubmit?.({
+      walletAddress: operatorWalletAddress as `0x${string}`,
+      baseContributionUsd: baseContributionNumber,
+      targetMarket,
     });
     setCurrentStep(2);
   };
@@ -732,19 +912,35 @@ function AgentBlockersTab({
 
   // Derive which form to show from the interrupt type (the authoritative source)
   const showOperatorConfigForm = activeInterrupt?.type === 'operator-config-request';
-  const showFundingTokenForm = activeInterrupt?.type === 'clmm-funding-token-request';
-  const showDelegationSigningForm = activeInterrupt?.type === 'clmm-delegation-signing-request';
+  const showPendleSetupForm = activeInterrupt?.type === 'pendle-setup-request';
+  const showPendleFundWalletForm = activeInterrupt?.type === 'pendle-fund-wallet-request';
+  const showGmxSetupForm = activeInterrupt?.type === 'gmx-setup-request';
+  const showFundingTokenForm =
+    activeInterrupt?.type === 'clmm-funding-token-request' ||
+    activeInterrupt?.type === 'pendle-funding-token-request' ||
+    activeInterrupt?.type === 'gmx-funding-token-request';
+  const showDelegationSigningForm =
+    activeInterrupt?.type === 'clmm-delegation-signing-request' ||
+    activeInterrupt?.type === 'pendle-delegation-signing-request' ||
+    activeInterrupt?.type === 'gmx-delegation-signing-request';
 
   // Sync currentStep with the interrupt type when it changes
   useEffect(() => {
-    if (showOperatorConfigForm) {
+    if (showOperatorConfigForm || showPendleSetupForm || showPendleFundWalletForm || showGmxSetupForm) {
       setCurrentStep(1);
     } else if (showFundingTokenForm) {
       setCurrentStep(2);
     } else if (showDelegationSigningForm) {
       setCurrentStep(3);
     }
-  }, [showOperatorConfigForm, showFundingTokenForm, showDelegationSigningForm]);
+  }, [
+    showOperatorConfigForm,
+    showPendleSetupForm,
+    showPendleFundWalletForm,
+    showGmxSetupForm,
+    showFundingTokenForm,
+    showDelegationSigningForm,
+  ]);
 
   // Also sync from onboarding.step if provided by the agent
   useEffect(() => {
@@ -756,6 +952,13 @@ function AgentBlockersTab({
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
+        const aValue = typeof a.valueUsd === 'number' && Number.isFinite(a.valueUsd) ? a.valueUsd : null;
+        const bValue = typeof b.valueUsd === 'number' && Number.isFinite(b.valueUsd) ? b.valueUsd : null;
+        if (aValue !== null && bValue !== null && aValue !== bValue) {
+          return bValue - aValue;
+        }
+        if (aValue !== null && bValue === null) return -1;
+        if (aValue === null && bValue !== null) return 1;
         try {
           const aBal = BigInt(a.balance);
           const bBal = BigInt(b.balance);
@@ -851,7 +1054,7 @@ function AgentBlockersTab({
   return (
     <div className="space-y-6">
       {/* Error/Halt Display */}
-      {(haltReason || executionError) && (
+      {showBlockingError && (
         <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-4">
           <div className="flex items-center gap-2 text-red-400 mb-2">
             <span className="text-lg">⚠️</span>
@@ -865,7 +1068,19 @@ function AgentBlockersTab({
         <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
           <div className="text-yellow-300 text-sm font-medium mb-1">Delegation bypass active</div>
           <p className="text-yellow-200 text-xs">
-            `CLMM_DELEGATIONS_BYPASS=true` is set. The agent will use its own wallet for liquidity management (not your wallet).
+            {` ${delegationsBypassEnv}=true `}is set. The agent will use its own wallet for
+            {` ${delegationContextLabel} `}(not your wallet).
+          </p>
+        </div>
+      )}
+
+      {delegationsBypassEnabled && (
+        <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
+          <div className="text-yellow-300 text-sm font-medium mb-1">Wallet bypass enabled</div>
+          <p className="text-yellow-200 text-xs">
+            `DELEGATIONS_BYPASS=true` is set. When no wallet is connected, the UI will use
+            {` ${walletBypassAddress} `}for onboarding. Run the agent with
+            {` ${delegationsBypassEnv}=true `}to skip delegation signing.
           </p>
         </div>
       )}
@@ -926,7 +1141,137 @@ function AgentBlockersTab({
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
           {/* Form Area */}
           <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-            {showOperatorConfigForm ? (
+            {showPendleSetupForm ? (
+              <form onSubmit={handlePendleSetupSubmit}>
+                <h3 className="text-lg font-semibold text-white mb-4">Pendle Setup</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Funding Amount (USD)</label>
+                    <input
+                      type="number"
+                      value={baseContributionUsd}
+                      onChange={(e) => setBaseContributionUsd(e.target.value)}
+                      placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
+                      min={MIN_BASE_CONTRIBUTION_USD}
+                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                    <div className="text-gray-300 text-sm font-medium mb-2">Auto-selected yield</div>
+                    <p className="text-gray-400 text-xs">
+                      The agent will automatically select the highest-yield YT market and rotate when yields change.
+                    </p>
+                    <p className="text-gray-500 text-xs mt-3">
+                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
+                    </p>
+                  </div>
+                </div>
+
+                {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isWalletLoading}
+                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </form>
+            ) : showPendleFundWalletForm ? (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-4">Fund Wallet</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
+                <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4 mb-6">
+                  <div className="text-yellow-300 text-sm font-medium mb-2">What to do</div>
+                  <ul className="space-y-1 text-yellow-200 text-xs">
+                    <li>
+                      Add a small balance of an eligible stablecoin on Arbitrum to your wallet, then click Continue.
+                    </li>
+                    <li>
+                      Eligible: {(activeInterrupt as unknown as { whitelistSymbols?: string[] }).whitelistSymbols?.join(', ') || 'USDai, USDC'}
+                    </li>
+                    <li>
+                      Wallet: {(activeInterrupt as unknown as { walletAddress?: string }).walletAddress || connectedWalletAddress || 'Unknown'}
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onInterruptSubmit?.({ acknowledged: true })}
+                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            ) : showGmxSetupForm ? (
+              <form onSubmit={handleGmxSetupSubmit}>
+                <h3 className="text-lg font-semibold text-white mb-4">GMX Allora Setup</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Target Market</label>
+                    <select
+                      value={targetMarket}
+                      onChange={(e) => setTargetMarket(e.target.value as 'BTC' | 'ETH')}
+                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white focus:border-[#fd6731] focus:outline-none transition-colors"
+                    >
+                      <option value="BTC">BTC / USDC</option>
+                      <option value="ETH">ETH / USDC</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">USDC Allocation</label>
+                    <input
+                      type="number"
+                      value={baseContributionUsd}
+                      onChange={(e) => setBaseContributionUsd(e.target.value)}
+                      placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
+                      min={MIN_BASE_CONTRIBUTION_USD}
+                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                    <div className="text-gray-300 text-sm font-medium mb-2">Allora Signal Source</div>
+                    <p className="text-gray-400 text-xs">
+                      The agent consumes 8-hour Allora prediction feeds and enforces max 2x leverage.
+                    </p>
+                    <p className="text-gray-500 text-xs mt-3">
+                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
+                    </p>
+                  </div>
+                </div>
+
+                {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isWalletLoading}
+                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </form>
+            ) : showOperatorConfigForm ? (
               <form onSubmit={handleSubmit}>
                 <h3 className="text-lg font-semibold text-white mb-4">Agent Preferences</h3>
                 {activeInterrupt?.message && (
@@ -942,9 +1287,9 @@ function AgentBlockersTab({
                       className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white focus:border-[#fd6731] focus:outline-none transition-colors"
                     >
                       <option value="">Choose a pool...</option>
-                      {allowedPools.map((pool) => (
+                      {uniqueAllowedPools.map((pool) => (
                         <option key={pool.address} value={pool.address}>
-                          {pool.token0.symbol}/{pool.token1.symbol} — {pool.address.slice(0, 10)}
+                          {formatPoolPair(pool)} — {pool.address.slice(0, 10)}
                           ...
                         </option>
                       ))}
@@ -957,7 +1302,8 @@ function AgentBlockersTab({
                       type="number"
                       value={baseContributionUsd}
                       onChange={(e) => setBaseContributionUsd(e.target.value)}
-                      placeholder="$12,561"
+                      placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
+                      min={MIN_BASE_CONTRIBUTION_USD}
                       className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
                     />
                     <button
@@ -1048,6 +1394,12 @@ function AgentBlockersTab({
 
                 {walletError && !error && (
                   <p className="text-red-400 text-sm mb-4">{walletError.message}</p>
+                )}
+                {delegationsBypassEnabled && !walletClient && !error && !walletError && (
+                  <p className="text-yellow-300 text-sm mb-4">
+                    Wallet bypass is enabled. To skip delegation signing, run the agent with
+                    {` ${delegationsBypassEnv}=true`}.
+                  </p>
                 )}
 
                 <div className="flex items-center justify-between">
@@ -1242,7 +1594,7 @@ function PointsColumn({ metrics }: PointsColumnProps) {
   const hasAnyMetric =
     metrics.iteration !== undefined ||
     metrics.cyclesSinceRebalance !== undefined ||
-    metrics.staleCycles !== undefined;
+    metrics.rebalanceCycles !== undefined;
 
   if (!hasAnyMetric) {
     return (
@@ -1269,10 +1621,10 @@ function PointsColumn({ metrics }: PointsColumnProps) {
             <span className="text-sm text-white">{metrics.cyclesSinceRebalance}x</span>
           </div>
         )}
-        {metrics.staleCycles !== undefined && metrics.staleCycles > 0 && (
+        {metrics.rebalanceCycles !== undefined && (
           <div className="flex items-center gap-2">
-            <TrendingDown className="w-4 h-4 text-red-400" />
-            <span className="text-sm text-white">{metrics.staleCycles}x</span>
+            <RefreshCw className="w-4 h-4 text-blue-400" />
+            <span className="text-sm text-white">{metrics.rebalanceCycles}x</span>
           </div>
         )}
       </div>
@@ -1282,13 +1634,18 @@ function PointsColumn({ metrics }: PointsColumnProps) {
 
 // Metrics Tab Component
 interface MetricsTabProps {
+  agentId: string;
   profile: AgentProfile;
   metrics: AgentMetrics;
   fullMetrics?: AgentViewMetrics;
   events: ClmmEvent[];
 }
 
-function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) {
+function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsTabProps) {
+  if (agentId === 'agent-pendle') {
+    return <PendleMetricsTab profile={profile} metrics={metrics} fullMetrics={fullMetrics} events={events} />;
+  }
+
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
@@ -1301,8 +1658,116 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
     });
   };
 
+  const formatDuration = (startTimestamp?: string, endTimestamp?: string) => {
+    if (!startTimestamp || !endTimestamp) return '—';
+    const start = new Date(startTimestamp).getTime();
+    if (Number.isNaN(start)) return '—';
+    const end = new Date(endTimestamp).getTime();
+    if (Number.isNaN(end)) return '—';
+    const deltaMs = end - start;
+    if (deltaMs <= 0) return '—';
+    const minutes = Math.floor(deltaMs / (1000 * 60));
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) {
+      return `${days}d ${hours % 24}h`;
+    }
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`;
+    }
+    return `${minutes}m`;
+  };
+
+  const formatTokenAmount = (token: NonNullable<AgentViewMetrics['latestSnapshot']>['positionTokens'][number]) => {
+    if (token.amount !== undefined) {
+      return token.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+    }
+    if (token.amountBaseUnits) {
+      return formatUnits(BigInt(token.amountBaseUnits), token.decimals);
+    }
+    return '—';
+  };
+
+  const latestSnapshot = fullMetrics?.latestSnapshot;
+  const poolSnapshot = fullMetrics?.lastSnapshot;
+  const poolName = formatPoolPair(poolSnapshot);
+  const positionTokens = latestSnapshot?.positionTokens ?? [];
+
   return (
     <div className="space-y-6">
+      {/* Profile Stats */}
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Your Performance</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-2xl font-bold text-teal-400">
+              {metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-2xl font-bold text-white">
+              {metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Earned Income</div>
+            <div className="text-2xl font-bold text-white">
+              {profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Your Position */}
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Your Position</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Pool</div>
+            <div className="text-white font-medium">{poolName}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
+            <div className="text-white font-medium">
+              {latestSnapshot?.totalUsd !== undefined
+                ? `$${latestSnapshot.totalUsd.toLocaleString()}`
+                : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Opened</div>
+            <div className="text-white font-medium">
+              {formatDuration(latestSnapshot?.positionOpenedAt, latestSnapshot?.timestamp)}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Fees (USD)</div>
+            <div className="text-white font-medium">
+              {latestSnapshot?.feesUsd !== undefined
+                ? `$${latestSnapshot.feesUsd.toLocaleString()}`
+                : '—'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Token Amounts</div>
+          {positionTokens.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {positionTokens.map((token) => (
+                <div key={token.address} className="flex items-center justify-between">
+                  <span className="text-gray-300">{token.symbol}</span>
+                  <span className="text-white font-medium">{formatTokenAmount(token)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-gray-400 text-sm">—</div>
+          )}
+        </div>
+      </div>
+
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
@@ -1316,46 +1781,15 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
           icon={<Minus className="w-4 h-4 text-yellow-400" />}
         />
         <MetricCard
-          label="Stale Cycles"
-          value={metrics.staleCycles?.toString() ?? '—'}
-          icon={<TrendingDown className="w-4 h-4 text-red-400" />}
+          label="Rebalance Cycles"
+          value={metrics.rebalanceCycles?.toString() ?? '—'}
+          icon={<RefreshCw className="w-4 h-4 text-blue-400" />}
         />
         <MetricCard
           label="Previous Price"
           value={fullMetrics?.previousPrice?.toFixed(6) ?? '—'}
           icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
         />
-      </div>
-
-      {/* Profile Stats */}
-      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Performance</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
-            <div className="text-2xl font-bold text-teal-400">
-              {profile.apy !== undefined ? `${profile.apy.toFixed(1)}%` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
-            <div className="text-2xl font-bold text-white">
-              {profile.aum !== undefined ? `$${profile.aum.toLocaleString()}` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Agent Income</div>
-            <div className="text-2xl font-bold text-white">
-              {profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Users</div>
-            <div className="text-2xl font-bold text-white">
-              {profile.totalUsers !== undefined ? profile.totalUsers.toLocaleString() : '—'}
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Latest Cycle Info */}
@@ -1426,6 +1860,303 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
   );
 }
 
+function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<MetricsTabProps, 'agentId'>) {
+  const formatDate = (timestamp?: string) => {
+    if (!timestamp) return '—';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatUsd = (value?: number) => {
+    if (value === undefined) return '—';
+    return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+  };
+
+  const formatTokenAmount = (params: {
+    amountBaseUnits?: string;
+    decimals: number;
+    fallbackRaw?: string;
+  }): string => {
+    const { amountBaseUnits, decimals, fallbackRaw } = params;
+    if (!amountBaseUnits) {
+      return fallbackRaw ?? '—';
+    }
+    try {
+      const formatted = formatUnits(BigInt(amountBaseUnits), decimals);
+      const [whole, fraction] = formatted.split('.');
+      if (!fraction) return whole;
+      return `${whole}.${fraction.slice(0, 6)}`; // keep UI compact
+    } catch {
+      return fallbackRaw ?? '—';
+    }
+  };
+
+  const strategy = fullMetrics?.pendle;
+  const latestCycle = fullMetrics?.latestCycle;
+  const latestSnapshot = fullMetrics?.latestSnapshot;
+  const snapshot = latestSnapshot?.pendle;
+  const snapshotTokens = latestSnapshot?.positionTokens ?? [];
+
+  const ptSymbol = snapshot?.ptSymbol ?? strategy?.position?.ptSymbol;
+  const ytSymbol = snapshot?.ytSymbol ?? strategy?.position?.ytSymbol;
+  const ptToken = ptSymbol ? snapshotTokens.find((token) => token.symbol === ptSymbol) : undefined;
+  const ytToken = ytSymbol ? snapshotTokens.find((token) => token.symbol === ytSymbol) : undefined;
+
+  const rewardLines = strategy?.position?.claimableRewards ?? [];
+  const impliedYieldPct = snapshot?.impliedApyPct ?? strategy?.currentApy ?? metrics.apy;
+  const apyDetails = [
+    { label: 'Implied', value: snapshot?.impliedApyPct },
+    { label: 'Aggregated', value: snapshot?.aggregatedApyPct },
+    { label: 'Underlying', value: snapshot?.underlyingApyPct },
+    { label: 'Swap Fee', value: snapshot?.swapFeeApyPct },
+    { label: 'Pendle', value: snapshot?.pendleApyPct },
+    { label: 'YT Float', value: snapshot?.ytFloatingApyPct },
+    { label: 'Max Boost', value: snapshot?.maxBoostedApyPct },
+  ].filter((entry) => entry.value !== undefined);
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Strategy</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Target YT</div>
+            <div className="text-white font-medium">{strategy?.ytSymbol ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Underlying</div>
+            <div className="text-white font-medium">{strategy?.underlyingSymbol ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Current APY</div>
+            <div className="text-white font-medium">
+              {strategy?.currentApy !== undefined ? `${strategy.currentApy.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Contribution</div>
+            <div className="text-white font-medium">
+              {strategy?.baseContributionUsd !== undefined ? `$${strategy.baseContributionUsd.toLocaleString()}` : '—'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a] grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Maturity</div>
+            <div className="text-white font-medium">{strategy?.maturity ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Best APY</div>
+            <div className="text-white font-medium">
+              {strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Delta</div>
+            <div className="text-white font-medium">
+              {strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Funding Token</div>
+            <div className="text-white font-medium">
+              {strategy?.fundingTokenAddress ? strategy.fundingTokenAddress.slice(0, 10) + '…' : '—'}
+            </div>
+          </div>
+        </div>
+
+        {apyDetails.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">APY Details</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {apyDetails.map((entry) => (
+                <div key={entry.label}>
+                  <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{entry.label}</div>
+                  <div className="text-white font-medium">
+                    {entry.value !== undefined ? `${entry.value.toFixed(2)}%` : '—'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Position</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PT</div>
+            <div className="text-white font-medium">
+              {ptSymbol
+                ? `${ptSymbol} ${formatTokenAmount({
+                    amountBaseUnits: ptToken?.amountBaseUnits,
+                    decimals: ptToken?.decimals ?? 18,
+                    fallbackRaw: strategy?.position?.ptAmount,
+                  })}`.trim()
+                : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">YT</div>
+            <div className="text-white font-medium">
+              {ytSymbol
+                ? `${ytSymbol} ${formatTokenAmount({
+                    amountBaseUnits: ytToken?.amountBaseUnits,
+                    decimals: ytToken?.decimals ?? 18,
+                    fallbackRaw: strategy?.position?.ytAmount,
+                  })}`.trim()
+                : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Implied Yield</div>
+            <div className="text-white font-medium">
+              {impliedYieldPct !== undefined ? `${impliedYieldPct.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Value</div>
+            <div className="text-white font-medium">{formatUsd(latestSnapshot?.totalUsd)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Net PnL</div>
+            <div className="text-white font-medium">
+              {snapshot?.netPnlUsd !== undefined ? (
+                <>
+                  {formatUsd(snapshot.netPnlUsd)}
+                  {snapshot.netPnlPct !== undefined && (
+                    <span className="text-gray-400">{` (${snapshot.netPnlPct.toFixed(2)}%)`}</span>
+                  )}
+                </>
+              ) : (
+                '—'
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-white font-medium">
+              {metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-white font-medium">
+              {metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Claimable Rewards</div>
+          {rewardLines.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {rewardLines.map((reward) => (
+                <div key={reward.symbol} className="flex items-center justify-between">
+                  <span className="text-gray-300">{reward.symbol}</span>
+                  <span className="text-white font-medium">{reward.amount}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-gray-400 text-sm">—</div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard
+          label="Iteration"
+          value={metrics.iteration?.toString() ?? '—'}
+          icon={<TrendingUp className="w-4 h-4 text-teal-400" />}
+        />
+        <MetricCard
+          label="Cycles Since Rotation"
+          value={metrics.cyclesSinceRebalance?.toString() ?? '—'}
+          icon={<Minus className="w-4 h-4 text-yellow-400" />}
+        />
+        <MetricCard
+          label="Best APY"
+          value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
+          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
+        />
+        <MetricCard
+          label="APY Delta"
+          value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
+          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
+        />
+      </div>
+
+      {latestCycle && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Latest Cycle</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
+              <div className="text-white font-medium">{latestCycle.cycle}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
+              <div className="text-white font-medium">{latestCycle.action}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+              <div className="text-white font-medium">
+                {latestCycle.apy !== undefined ? `${latestCycle.apy.toFixed(2)}%` : '—'}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Timestamp</div>
+              <div className="text-white font-medium">{formatDate(latestCycle.timestamp)}</div>
+            </div>
+          </div>
+          {latestCycle.reason && (
+            <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reason</div>
+              <div className="text-gray-300 text-sm">{latestCycle.reason}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {events.slice(-10).reverse().map((event, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                <div
+                  className={`w-2 h-2 rounded-full mt-2 ${
+                    event.type === 'status'
+                      ? 'bg-blue-400'
+                      : event.type === 'artifact'
+                        ? 'bg-purple-400'
+                        : 'bg-gray-400'
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
+                  <div className="text-sm text-white mt-1">
+                    {event.type === 'status' && event.message}
+                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface MetricCardProps {
   label: string;
   value: string;
@@ -1457,13 +2188,18 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
   const handleSave = () => {
     if (!onSettingsChange) return;
 
-    const amount = localAmount.trim() === '' ? undefined : Number(localAmount);
-    if (amount !== undefined && (Number.isNaN(amount) || amount < 0)) {
+    const trimmedAmount = localAmount.trim();
+    const parsedAmount =
+      trimmedAmount === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < MIN_BASE_CONTRIBUTION_USD) {
       return;
     }
 
     setIsSaving(true);
-    onSettingsChange({ amount });
+    if (trimmedAmount === '') {
+      setLocalAmount(`${MIN_BASE_CONTRIBUTION_USD}`);
+    }
+    onSettingsChange({ amount: parsedAmount });
     setTimeout(() => setIsSaving(false), 1000);
   };
 
@@ -1482,7 +2218,8 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
               type="number"
               value={localAmount}
               onChange={(e) => setLocalAmount(e.target.value)}
-              placeholder="Enter amount..."
+              placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
+              min={MIN_BASE_CONTRIBUTION_USD}
               className="flex-1 px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
             />
             <button

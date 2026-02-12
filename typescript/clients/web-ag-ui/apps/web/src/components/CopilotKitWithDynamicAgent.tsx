@@ -26,7 +26,7 @@ export function useCurrentAgentId(): string {
  *
  * When a user visits /hire-agents/agent-polymarket, this component extracts
  * "agent-polymarket" from the URL and passes it to CopilotKit, which then routes
- * requests to the polymarket agent backend on port 8125 instead of the default
+ * requests to the polymarket agent backend on port 8127 instead of the default
  * clmm agent on port 8124.
  */
 export function CopilotKitWithDynamicAgent({ children }: { children: ReactNode }) {
@@ -51,7 +51,7 @@ export function CopilotKitWithDynamicAgent({ children }: { children: ReactNode }
   // Use key={agentId} to force CopilotKit to reconnect when switching between agents.
   // This is necessary because:
   // - agent-clmm connects to port 8124
-  // - agent-polymarket connects to port 8125
+  // - agent-polymarket connects to port 8127
   // Without the key, CopilotKit maintains the old connection and fails to find the agent
   // on the wrong backend ("Agent 'agent-clmm' was not found. Available agents are: agent-polymarket")
   return (

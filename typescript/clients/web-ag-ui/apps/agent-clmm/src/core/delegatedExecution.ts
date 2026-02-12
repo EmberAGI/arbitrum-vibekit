@@ -1,12 +1,13 @@
 import { createExecution, ExecutionMode } from '@metamask/delegation-toolkit';
 import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
-import { createClient, http, publicActions, type TransactionReceipt } from 'viem';
+import { createClient, publicActions, type TransactionReceipt } from 'viem';
 
-import type { createClients } from '../clients/clients.js';
+import { createRpcTransport, type createClients } from '../clients/clients.js';
 import type { TransactionInformation } from '../clients/emberApi.js';
 import {
   EmberEvmTransactionSchema,
   normalizeAndExpandTransactions,
+  summarizeNormalizedTransactions,
   txMatchesDelegationIntent,
 } from '../delegations/emberDelegations.js';
 import { logInfo, type DelegationBundle } from '../workflow/context.js';
@@ -65,6 +66,15 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
 
   const emberTxs = EmberEvmTransactionSchema.array().parse(params.transactions);
   const normalization = normalizeAndExpandTransactions({ transactions: emberTxs });
+  const normalizedSummary = summarizeNormalizedTransactions({
+    chainId: normalization.chainId,
+    transactions: normalization.normalizedTransactions,
+  });
+  logInfo(
+    'Delegated execution normalized calls',
+    { callCount: normalizedSummary.length, calls: normalizedSummary },
+    { detailed: true },
+  );
 
   if (normalization.chainId !== params.delegationBundle.chainId) {
     throw new Error(
@@ -147,7 +157,7 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
   const simulationClient = createClient({
     account: params.clients.wallet.account,
     chain: params.clients.wallet.chain,
-    transport: http(resolvedRpcUrl),
+    transport: createRpcTransport(resolvedRpcUrl),
   }).extend(publicActions);
 
   const requiresMultipleRedemptions = [...intentSegmentCounts.values()].some((count) => count > 1);
@@ -223,18 +233,60 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
       modes: plan.modes,
       executions: plan.executions,
     });
-    const estimatedGas = typeof simulation.request.gas === 'bigint' ? simulation.request.gas : undefined;
-    const gas = estimatedGas ? (estimatedGas * 12n) / 10n : undefined;
+    const estimatedGasFromSimulation =
+      typeof simulation.request.gas === 'bigint' ? simulation.request.gas : undefined;
+
+    const data = DelegationManager.encode.redeemDelegations({
+      delegations: plan.permissionContexts,
+      modes: plan.modes,
+      executions: plan.executions,
+    });
+
+    let estimatedGasFromNode: bigint | undefined;
+    try {
+      estimatedGasFromNode = await params.clients.public.estimateGas({
+        account: params.clients.wallet.account,
+        to: params.delegationBundle.delegationManager,
+        data,
+        value: 0n,
+      });
+    } catch (error) {
+      logInfo(
+        'Delegated execution gas estimate failed; falling back to simulation estimate',
+        {
+          error: error instanceof Error ? error.message : String(error),
+          planIndex,
+        },
+      );
+    }
+
+    const baseEstimate =
+      estimatedGasFromNode && estimatedGasFromSimulation
+        ? estimatedGasFromNode > estimatedGasFromSimulation
+          ? estimatedGasFromNode
+          : estimatedGasFromSimulation
+        : estimatedGasFromNode ?? estimatedGasFromSimulation;
+    const gasFloor = 200_000n;
+    const bufferedGas = baseEstimate ? (baseEstimate * 3n) / 2n : undefined;
+    const gas = bufferedGas ? (bufferedGas > gasFloor ? bufferedGas : gasFloor) : gasFloor;
+
+    logInfo(
+      'Delegated execution gas selected',
+      {
+        planIndex,
+        gasFloor: gasFloor.toString(),
+        estimateFromNode: estimatedGasFromNode?.toString(),
+        estimateFromSimulation: estimatedGasFromSimulation?.toString(),
+        selectedGas: gas.toString(),
+      },
+      { detailed: true },
+    );
 
     const txHash = await params.clients.wallet.sendTransaction({
       account: params.clients.wallet.account,
       chain: params.clients.wallet.chain,
       to: params.delegationBundle.delegationManager,
-      data: DelegationManager.encode.redeemDelegations({
-        delegations: plan.permissionContexts,
-        modes: plan.modes,
-        executions: plan.executions,
-      }),
+      data,
       value: 0n,
       ...(gas ? { gas } : {}),
     });

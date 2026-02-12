@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v7 as uuidv7 } from 'uuid';
 
-const POLYMARKET_DEPLOYMENT_URL = process.env.LANGGRAPH_POLYMARKET_URL || 'http://localhost:8125';
+const POLYMARKET_DEPLOYMENT_URL = process.env.LANGGRAPH_POLYMARKET_URL || 'http://localhost:8127';
 const GRAPH_ID = 'agent-polymarket';
 
 // Retry configuration

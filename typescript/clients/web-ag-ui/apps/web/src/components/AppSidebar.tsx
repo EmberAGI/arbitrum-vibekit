@@ -13,12 +13,15 @@ import {
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
 import { supportedEvmChains, getEvmChainOrDefault } from '@/config/evmChains';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
 import { useAgent } from '@/contexts/AgentContext';
+import { useAgentList } from '@/contexts/AgentListContext';
+import { getAllAgents } from '@/config/agents';
+import type { TaskState } from '@/types/agent';
 
 export interface AgentActivity {
   id: string;
@@ -36,6 +39,11 @@ export function AppSidebar() {
   const [isActiveExpanded, setIsActiveExpanded] = useState(true);
   const [isCompletedExpanded, setIsCompletedExpanded] = useState(false);
   const [isChainMenuOpen, setIsChainMenuOpen] = useState(false);
+  const [isAddressPopoverOpen, setIsAddressPopoverOpen] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const addressPopoverRef = useRef<HTMLDivElement | null>(null);
+  const copyResetTimeoutRef = useRef<number | null>(null);
+  const addressPopoverId = useId();
 
   const { ready, authenticated } = usePrivy();
   const { login } = useLogin();
@@ -52,64 +60,154 @@ export function AppSidebar() {
 
   // Get agent activity data from shared context
   const agent = useAgent();
+  const { agents: listAgents } = useAgentList();
 
-  // Derive task status - only show a card if there's a task ID
-  const taskId = agent.view.task?.id;
-  const taskState = agent.view.task?.taskStatus?.state;
+  const agentConfigs = getAllAgents();
+  const isInactiveRuntime = agent.config.id === 'inactive-agent';
+  const runtimeAgentId = isInactiveRuntime ? null : agent.config.id;
+  const runtimeTaskId = agent.view.task?.id;
+  const runtimeTaskState = agent.view.task?.taskStatus?.state as TaskState | undefined;
+  const runtimeHaltReason = agent.view.haltReason;
+  const runtimeExecutionError = agent.view.executionError;
+  const runtimeNeedsInput = Boolean(agent.activeInterrupt);
 
-  // Determine which category this task belongs to (mutually exclusive)
-  // Check both taskState and activeInterrupt for blocked detection
-  const needsInput = taskState === 'input-required' || Boolean(agent.activeInterrupt);
-  const hasError = Boolean(agent.view.haltReason || agent.view.executionError);
-  const isBlocked = needsInput || hasError;
-  const isCompleted = taskState === 'completed' || taskState === 'canceled';
-  const isRunning = taskId && agent.isActive && !isBlocked && !isCompleted;
+  const blockedAgents: AgentActivity[] = [];
+  const activeAgents: AgentActivity[] = [];
+  const completedAgents: AgentActivity[] = [];
 
-  const blockedAgents: AgentActivity[] =
-    taskId && isBlocked
-      ? [
-          {
-            id: taskId,
-            name: agent.config.name,
-            subtitle: needsInput
-              ? 'Set up agent'
-              : agent.view.haltReason ?? agent.view.executionError ?? 'Blocked',
-            status: 'blocked',
-          },
-        ]
-      : [];
+  agentConfigs.forEach((config) => {
+    const listEntry = listAgents[config.id];
+    const useRuntime = runtimeAgentId === config.id && Boolean(runtimeTaskId);
+    const entry = useRuntime
+      ? {
+          ...listEntry,
+          taskId: runtimeTaskId,
+          taskState: runtimeTaskState,
+          haltReason: runtimeHaltReason,
+          executionError: runtimeExecutionError,
+        }
+      : listEntry;
 
-  const activeAgents: AgentActivity[] =
-    taskId && isRunning
-      ? [
-          {
-            id: taskId,
-            name: agent.config.name,
-            subtitle: `Task: ${taskId.slice(0, 8)}...`,
-            status: 'active',
-          },
-        ]
-      : [];
+    const taskState = entry?.taskState;
+    if (!taskState) {
+      return;
+    }
 
-  const completedAgents: AgentActivity[] =
-    taskId && isCompleted
-      ? [
-          {
-            id: taskId,
-            name: agent.config.name,
-            subtitle: taskState === 'canceled' ? 'Canceled' : 'Completed',
-            status: 'completed',
-          },
-        ]
-      : [];
+    const taskId = entry.taskId ?? config.id;
+    const needsInput = taskState === 'input-required' && runtimeNeedsInput;
+    const hasError = taskState === 'failed';
+    const isBlocked = needsInput || hasError;
+    const isCompleted = taskState === 'completed' || taskState === 'canceled';
+
+    if (isBlocked) {
+      blockedAgents.push({
+        id: config.id,
+        name: config.name,
+        subtitle: needsInput ? 'Set up agent' : 'Blocked',
+        status: 'blocked',
+      });
+      return;
+    }
+
+    if (isCompleted) {
+      completedAgents.push({
+        id: config.id,
+        name: config.name,
+        subtitle: taskState === 'canceled' ? 'Canceled' : 'Completed',
+        status: 'completed',
+      });
+      return;
+    }
+
+    activeAgents.push({
+      id: config.id,
+      name: config.name,
+      subtitle: taskId ? `Task: ${taskId.slice(0, 8)}...` : `Task: ${taskState}`,
+      status: 'active',
+    });
+  });
 
   const selectedChain = getEvmChainOrDefault(chainId);
 
   const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
 
+  const clearCopyResetTimeout = () => {
+    if (copyResetTimeoutRef.current !== null) {
+      window.clearTimeout(copyResetTimeoutRef.current);
+      copyResetTimeoutRef.current = null;
+    }
+  };
+
+  const closeAddressPopover = () => {
+    setIsAddressPopoverOpen(false);
+    setCopyStatus('idle');
+  };
+
+  const handleCopyAddress = async () => {
+    if (!privyWallet?.address) return;
+
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error('Clipboard unavailable');
+      }
+      await navigator.clipboard.writeText(privyWallet.address);
+      setCopyStatus('success');
+    } catch {
+      setCopyStatus('error');
+    }
+
+    clearCopyResetTimeout();
+    copyResetTimeoutRef.current = window.setTimeout(() => {
+      setCopyStatus('idle');
+    }, 2000);
+  };
+
+  const handleAddressFieldFocus: React.FocusEventHandler<HTMLInputElement> = (event) => {
+    event.currentTarget.select();
+  };
+
+  const handleAddressFieldClick: React.MouseEventHandler<HTMLInputElement> = (event) => {
+    event.currentTarget.select();
+  };
+
+  useEffect(() => {
+    if (!isAddressPopoverOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (addressPopoverRef.current?.contains(target)) return;
+      closeAddressPopover();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeAddressPopover();
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAddressPopoverOpen]);
+
+  useEffect(() => {
+    return () => {
+      clearCopyResetTimeout();
+    };
+  }, []);
+
+  useEffect(() => {
+    setCopyStatus('idle');
+  }, [privyWallet?.address]);
+
   // Navigate to agent detail page when clicking on an agent in the sidebar
-  const handleAgentClick = () => {
-    router.push(`/hire-agents/${agent.config.id}`);
+  const handleAgentClick = (agentId: string) => {
+    router.push(`/hire-agents/${agentId}`);
   };
 
   const canSelectChain = ready && authenticated && Boolean(privyWallet) && !isWalletLoading;
@@ -339,9 +437,33 @@ export function AppSidebar() {
             Wallet unavailable
           </div>
         ) : authenticated && privyWallet ? (
-          <div className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#252525]">
+          <div
+            ref={addressPopoverRef}
+            className="relative w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#252525]"
+          >
             <div className="w-2 h-2 rounded-full bg-green-500" />
-            <span className="text-sm font-mono truncate">{formatAddress(privyWallet.address)}</span>
+            <button
+              type="button"
+              onClick={() => setIsAddressPopoverOpen((prev) => !prev)}
+              className="flex-1 min-w-0 text-left text-sm font-mono truncate hover:text-white"
+              aria-haspopup="dialog"
+              aria-expanded={isAddressPopoverOpen}
+              aria-controls={addressPopoverId}
+            >
+              {formatAddress(privyWallet.address)}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAddressPopoverOpen((prev) => !prev)}
+              className="text-xs text-gray-300 hover:text-white"
+              aria-label={isAddressPopoverOpen ? 'Hide full wallet address' : 'Show full wallet address'}
+            >
+              {isAddressPopoverOpen ? (
+                <ChevronDown className="w-4 h-4 rotate-180" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </button>
             <button
               type="button"
               onClick={() => void logout()}
@@ -350,6 +472,48 @@ export function AppSidebar() {
             >
               Logout
             </button>
+
+            {isAddressPopoverOpen && (
+              <div
+                id={addressPopoverId}
+                role="dialog"
+                aria-label="Privy wallet address"
+                className="absolute left-3 bottom-full mb-2 z-30 w-max rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] p-3 shadow-lg"
+              >
+                <div className="text-xs text-gray-400">Privy wallet address</div>
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={privyWallet.address}
+                    onFocus={handleAddressFieldFocus}
+                    onClick={handleAddressFieldClick}
+                    className="shrink-0 w-auto rounded-md border border-[#2a2a2a] bg-[#151515] px-2 py-1 text-xs font-mono text-gray-200"
+                    style={{
+                      width: `calc(${Math.max(privyWallet.address.length, 20)}ch + 1rem)`,
+                    }}
+                    aria-label="Full wallet address"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyAddress()}
+                    className="shrink-0 rounded-md border border-[#2a2a2a] bg-[#2a2a2a] px-2 py-1 text-xs text-white hover:bg-[#333]"
+                  >
+                    {copyStatus === 'success' ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+                {copyStatus === 'error' && (
+                  <div className="mt-2 text-xs text-red-300" role="status" aria-live="polite">
+                    Clipboard unavailable. Select and copy manually.
+                  </div>
+                )}
+                {copyStatus === 'success' && (
+                  <div className="mt-2 text-xs text-green-300" role="status" aria-live="polite">
+                    Copied to clipboard.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <button

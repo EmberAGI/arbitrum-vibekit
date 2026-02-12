@@ -1,0 +1,679 @@
+diff --git a/dist/chunk-CYGKHYOB.mjs b/dist/chunk-CYGKHYOB.mjs
+index f08fbd41fe3e7cb829def4d82f6f6e30929b9790..bd65aff3d0b03e1b96da283584d2adce02b00af9 100644
+--- a/dist/chunk-CYGKHYOB.mjs
++++ b/dist/chunk-CYGKHYOB.mjs
+@@ -31,6 +31,9 @@ var InMemoryEventStore = class {
+   currentEvents = null;
+ };
+ var GLOBAL_STORE = /* @__PURE__ */ new Map();
++// Tracks active /agent/connect streams so they can be terminated explicitly via /agent/stop.
++// Next.js does not reliably trigger request.signal abort when the browser navigates away.
++var CONNECT_ABORTERS_BY_THREAD = globalThis.__copilotkitConnectAbortersByThread || (globalThis.__copilotkitConnectAbortersByThread = /* @__PURE__ */ new Map());
+ var InMemoryAgentRunner = class extends AgentRunner {
+   run(request) {
+     let existingStore = GLOBAL_STORE.get(request.threadId);
+@@ -404,6 +407,7 @@ async function handleRunAgent({
+             } catch (error) {
+               if (error instanceof Error && error.name === "AbortError") {
+                 streamClosed = true;
++                abortHandler();
+               }
+             }
+           }
+@@ -488,6 +492,7 @@ async function handleConnectAgent({
+   agentId
+ }) {
+   try {
++    const debug = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === "true" || process.env.AGENT_CONNECT_DEBUG === "true";
+     const agents = await runtime.agents;
+     if (!agents[agentId]) {
+       return new Response(
+@@ -505,6 +510,8 @@ async function handleConnectAgent({
+     const writer = stream.writable.getWriter();
+     const encoder = new EventEncoder2();
+     let streamClosed = false;
++    let unregisterAborter = () => {
++    };
+     (async () => {
+       let input;
+       try {
+@@ -518,16 +525,98 @@ async function handleConnectAgent({
+           { status: 400 }
+         );
+       }
+-      runtime.runner.connect({
+-        threadId: input.threadId
+-      }).subscribe({
++      const registeredAgent = agents[agentId];
++      const agent = typeof registeredAgent.clone === "function" ? registeredAgent.clone() : registeredAgent;
++      if (agent) {
++        agent.setMessages(input.messages);
++        agent.setState(input.state);
++        agent.threadId = input.threadId;
++      }
++      const connectKey = `${agentId}:${input.threadId}`;
++      const agentName = agent && agent.constructor ? agent.constructor.name : typeof agent;
++      const hasConnect = agent && typeof agent.connect === "function";
++      const hasConnectAgent = agent && typeof agent.connectAgent === "function";
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect]", {
++          agentId,
++          agentName,
++          hasConnect,
++          hasConnectAgent,
++          threadId: input.threadId
++        });
++      }
++    const events$ = hasConnect ? agent.connect(input) : runtime.runner.connect({
++      threadId: input.threadId
++    });
++    let abortRequested = false;
++    let subscription;
++    const registerAborter = () => {
++      const existing = CONNECT_ABORTERS_BY_THREAD.get(connectKey);
++      const aborters = existing || /* @__PURE__ */ new Set();
++      if (!existing) {
++        CONNECT_ABORTERS_BY_THREAD.set(connectKey, aborters);
++      }
++      aborters.add(abortHandler);
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect] register", { connectKey, size: aborters.size });
++      }
++    };
++    const unregisterAborterInner = () => {
++      const aborters = CONNECT_ABORTERS_BY_THREAD.get(connectKey);
++      if (!aborters) {
++        return;
++      }
++      aborters.delete(abortHandler);
++      if (aborters.size === 0) {
++        CONNECT_ABORTERS_BY_THREAD.delete(connectKey);
++      }
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect] unregister", { connectKey, size: aborters.size });
++      }
++    };
++    unregisterAborter = unregisterAborterInner;
++    const abortHandler = () => {
++      if (abortRequested) {
++        return;
++      }
++      abortRequested = true;
++      unregisterAborterInner();
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect] abort", {
++          agentId,
++          threadId: input.threadId,
++          aborted: request.signal ? request.signal.aborted : void 0
++        });
++      }
++      if (agent && typeof agent.abortRun === "function") {
++        try {
++          agent.abortRun();
++        } catch {
++        }
++      }
++      if (subscription) {
++        try {
++          subscription.unsubscribe();
++        } catch {
++        }
++      }
++      if (!streamClosed) {
++        streamClosed = true;
++        try {
++          writer.close();
++        } catch {
++        }
++      }
++    };
++    registerAborter();
++    subscription = events$.subscribe({
+         next: async (event) => {
+           if (!request.signal.aborted && !streamClosed) {
+             try {
+               await writer.write(encoder.encode(event));
+             } catch (error) {
+               if (error instanceof Error && error.name === "AbortError") {
+-                streamClosed = true;
++                abortHandler();
+               }
+             }
+           }
+@@ -541,6 +630,10 @@ async function handleConnectAgent({
+             } catch {
+             }
+           }
++          unregisterAborter();
++          if (request.signal) {
++            request.signal.removeEventListener("abort", abortHandler);
++          }
+         },
+         complete: async () => {
+           if (!streamClosed) {
+@@ -550,8 +643,25 @@ async function handleConnectAgent({
+             } catch {
+             }
+           }
++          unregisterAborter();
++          if (request.signal) {
++            request.signal.removeEventListener("abort", abortHandler);
++          }
+         }
+       });
++      if (request.signal) {
++        if (debug) {
++          console.debug("[CopilotRuntime.handleConnect] abortListener", {
++            agentId,
++            threadId: input.threadId,
++            aborted: request.signal.aborted
++          });
++        }
++        request.signal.addEventListener("abort", abortHandler);
++        if (request.signal.aborted) {
++          abortHandler();
++        }
++      }
+     })().catch((error) => {
+       console.error("Error running agent:", error);
+       console.error(
+@@ -563,6 +673,7 @@ async function handleConnectAgent({
+         message: error instanceof Error ? error.message : String(error),
+         cause: error instanceof Error ? error.cause : void 0
+       });
++      unregisterAborter();
+       if (!streamClosed) {
+         try {
+           writer.close();
+@@ -612,6 +723,7 @@ async function handleStopAgent({
+   threadId
+ }) {
+   try {
++    const debug = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === "true" || process.env.AGENT_CONNECT_DEBUG === "true";
+     const agents = await runtime.agents;
+     if (!agents[agentId]) {
+       return new Response(
+@@ -625,6 +737,19 @@ async function handleStopAgent({
+         }
+       );
+     }
++    const connectKey = `${agentId}:${threadId}`;
++    const aborters = CONNECT_ABORTERS_BY_THREAD.get(connectKey);
++    if (aborters && aborters.size > 0) {
++      if (debug) {
++        console.debug("[CopilotRuntime.handleStop] abort connects", { connectKey, count: aborters.size });
++      }
++      for (const aborter of Array.from(aborters)) {
++        try {
++          aborter();
++        } catch {
++        }
++      }
++    }
+     const stopped = await runtime.runner.stop({ threadId });
+     if (!stopped) {
+       return new Response(
+diff --git a/dist/express.js b/dist/express.js
+index 074ed112f287403dc665a89d7386c971dd92cd3b..68a5828ed3bd9ca7a846261b55de58c7bfdc5868 100644
+--- a/dist/express.js
++++ b/dist/express.js
+@@ -111,6 +111,7 @@ async function handleRunAgent({
+             } catch (error) {
+               if (error instanceof Error && error.name === "AbortError") {
+                 streamClosed = true;
++                abortHandler();
+               }
+             }
+           }
+@@ -189,12 +190,14 @@ async function handleRunAgent({
+ // src/handlers/handle-connect.ts
+ var import_client2 = require("@ag-ui/client");
+ var import_encoder2 = require("@ag-ui/encoder");
++var CONNECT_ABORTERS_BY_THREAD = globalThis.__copilotkitConnectAbortersByThread || (globalThis.__copilotkitConnectAbortersByThread = /* @__PURE__ */ new Map());
+ async function handleConnectAgent({
+   runtime,
+   request,
+   agentId
+ }) {
+   try {
++    const debug = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === "true" || process.env.AGENT_CONNECT_DEBUG === "true";
+     const agents = await runtime.agents;
+     if (!agents[agentId]) {
+       return new Response(
+@@ -212,6 +215,8 @@ async function handleConnectAgent({
+     const writer = stream.writable.getWriter();
+     const encoder = new import_encoder2.EventEncoder();
+     let streamClosed = false;
++    let unregisterAborter = () => {
++    };
+     (async () => {
+       let input;
+       try {
+@@ -225,40 +230,143 @@ async function handleConnectAgent({
+           { status: 400 }
+         );
+       }
+-      runtime.runner.connect({
++    const registeredAgent = agents[agentId];
++    const agent = typeof registeredAgent.clone === "function" ? registeredAgent.clone() : registeredAgent;
++    if (agent) {
++      agent.setMessages(input.messages);
++      agent.setState(input.state);
++      agent.threadId = input.threadId;
++    }
++    const connectKey = `${agentId}:${input.threadId}`;
++    const agentName = agent && agent.constructor ? agent.constructor.name : typeof agent;
++    const hasConnect = agent && typeof agent.connect === "function";
++    const hasConnectAgent = agent && typeof agent.connectAgent === "function";
++    if (debug) {
++      console.debug("[CopilotRuntime.handleConnect]", {
++        agentId,
++        agentName,
++        hasConnect,
++        hasConnectAgent,
+         threadId: input.threadId
+-      }).subscribe({
++      });
++    }
++    const events$ = hasConnect ? agent.connect(input) : runtime.runner.connect({
++      threadId: input.threadId
++    });
++    let abortRequested = false;
++    let subscription;
++    const registerAborter = () => {
++      const existing = CONNECT_ABORTERS_BY_THREAD.get(connectKey);
++      const aborters = existing || /* @__PURE__ */ new Set();
++      if (!existing) {
++        CONNECT_ABORTERS_BY_THREAD.set(connectKey, aborters);
++      }
++      aborters.add(abortHandler);
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect] register", { connectKey, size: aborters.size });
++      }
++    };
++    const unregisterAborterInner = () => {
++      const aborters = CONNECT_ABORTERS_BY_THREAD.get(connectKey);
++      if (!aborters) {
++        return;
++      }
++      aborters.delete(abortHandler);
++      if (aborters.size === 0) {
++        CONNECT_ABORTERS_BY_THREAD.delete(connectKey);
++      }
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect] unregister", { connectKey, size: aborters.size });
++      }
++    };
++    unregisterAborter = unregisterAborterInner;
++    const abortHandler = () => {
++      if (abortRequested) {
++        return;
++      }
++      abortRequested = true;
++      unregisterAborterInner();
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect] abort", {
++          agentId,
++          threadId: input.threadId,
++          aborted: request.signal ? request.signal.aborted : void 0
++        });
++      }
++      if (agent && typeof agent.abortRun === "function") {
++        try {
++          agent.abortRun();
++        } catch {
++        }
++      }
++      if (subscription) {
++        try {
++          subscription.unsubscribe();
++        } catch {
++        }
++      }
++      if (!streamClosed) {
++        streamClosed = true;
++        try {
++          writer.close();
++        } catch {
++        }
++      }
++    };
++    registerAborter();
++    subscription = events$.subscribe({
+         next: async (event) => {
+           if (!request.signal.aborted && !streamClosed) {
+             try {
+               await writer.write(encoder.encode(event));
+             } catch (error) {
+               if (error instanceof Error && error.name === "AbortError") {
+-                streamClosed = true;
++                abortHandler();
+               }
+             }
+           }
+         },
+-        error: async (error) => {
+-          console.error("Error running agent:", error);
+-          if (!streamClosed) {
+-            try {
+-              await writer.close();
+-              streamClosed = true;
+-            } catch {
+-            }
++      error: async (error) => {
++        console.error("Error running agent:", error);
++        if (!streamClosed) {
++          try {
++            await writer.close();
++            streamClosed = true;
++          } catch {
+           }
+-        },
+-        complete: async () => {
+-          if (!streamClosed) {
+-            try {
+-              await writer.close();
+-              streamClosed = true;
+-            } catch {
+-            }
++        }
++        unregisterAborter();
++        if (request.signal) {
++          request.signal.removeEventListener("abort", abortHandler);
++        }
++      },
++      complete: async () => {
++        if (!streamClosed) {
++          try {
++            await writer.close();
++            streamClosed = true;
++          } catch {
+           }
+         }
+-      });
++        unregisterAborter();
++        if (request.signal) {
++          request.signal.removeEventListener("abort", abortHandler);
++        }
++      }
++    });
++    if (request.signal) {
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect] abortListener", {
++          agentId,
++          threadId: input.threadId,
++          aborted: request.signal.aborted
++        });
++      }
++        request.signal.addEventListener("abort", abortHandler);
++      if (request.signal.aborted) {
++        abortHandler();
++      }
++    }
+     })().catch((error) => {
+       console.error("Error running agent:", error);
+       console.error(
+@@ -270,6 +378,7 @@ async function handleConnectAgent({
+         message: error instanceof Error ? error.message : String(error),
+         cause: error instanceof Error ? error.cause : void 0
+       });
++      unregisterAborter();
+       if (!streamClosed) {
+         try {
+           writer.close();
+@@ -319,6 +428,7 @@ async function handleStopAgent({
+   threadId
+ }) {
+   try {
++    const debug = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === "true" || process.env.AGENT_CONNECT_DEBUG === "true";
+     const agents = await runtime.agents;
+     if (!agents[agentId]) {
+       return new Response(
+@@ -332,6 +442,19 @@ async function handleStopAgent({
+         }
+       );
+     }
++    const connectKey = `${agentId}:${threadId}`;
++    const aborters = CONNECT_ABORTERS_BY_THREAD.get(connectKey);
++    if (aborters && aborters.size > 0) {
++      if (debug) {
++        console.debug("[CopilotRuntime.handleStop] abort connects", { connectKey, count: aborters.size });
++      }
++      for (const aborter of Array.from(aborters)) {
++        try {
++          aborter();
++        } catch {
++        }
++      }
++    }
+     const stopped = await runtime.runner.stop({ threadId });
+     if (!stopped) {
+       return new Response(
+diff --git a/dist/index.js b/dist/index.js
+index 7674d2075147e2179024f3046a26f5f1d8633617..6536d9ff5b698f4a4ce7790c4f540c73f0903cb4 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -682,12 +682,14 @@ async function callAfterRequestMiddleware({
+ // src/handlers/handle-connect.ts
+ var import_client3 = require("@ag-ui/client");
+ var import_encoder2 = require("@ag-ui/encoder");
++var CONNECT_ABORTERS_BY_THREAD = globalThis.__copilotkitConnectAbortersByThread || (globalThis.__copilotkitConnectAbortersByThread = /* @__PURE__ */ new Map());
+ async function handleConnectAgent({
+   runtime,
+   request,
+   agentId
+ }) {
+   try {
++    const debug = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === "true" || process.env.AGENT_CONNECT_DEBUG === "true";
+     const agents = await runtime.agents;
+     if (!agents[agentId]) {
+       return new Response(
+@@ -705,6 +707,8 @@ async function handleConnectAgent({
+     const writer = stream.writable.getWriter();
+     const encoder = new import_encoder2.EventEncoder();
+     let streamClosed = false;
++    let unregisterAborter = () => {
++    };
+     (async () => {
+       let input;
+       try {
+@@ -718,40 +722,143 @@ async function handleConnectAgent({
+           { status: 400 }
+         );
+       }
+-      runtime.runner.connect({
++    const registeredAgent = agents[agentId];
++    const agent = typeof registeredAgent.clone === "function" ? registeredAgent.clone() : registeredAgent;
++    if (agent) {
++      agent.setMessages(input.messages);
++      agent.setState(input.state);
++      agent.threadId = input.threadId;
++    }
++    const connectKey = `${agentId}:${input.threadId}`;
++    const agentName = agent && agent.constructor ? agent.constructor.name : typeof agent;
++    const hasConnect = agent && typeof agent.connect === "function";
++    const hasConnectAgent = agent && typeof agent.connectAgent === "function";
++    if (debug) {
++      console.debug("[CopilotRuntime.handleConnect]", {
++        agentId,
++        agentName,
++        hasConnect,
++        hasConnectAgent,
+         threadId: input.threadId
+-      }).subscribe({
++      });
++    }
++    const events$ = hasConnect ? agent.connect(input) : runtime.runner.connect({
++      threadId: input.threadId
++    });
++    let abortRequested = false;
++    let subscription;
++    const registerAborter = () => {
++      const existing = CONNECT_ABORTERS_BY_THREAD.get(connectKey);
++      const aborters = existing || /* @__PURE__ */ new Set();
++      if (!existing) {
++        CONNECT_ABORTERS_BY_THREAD.set(connectKey, aborters);
++      }
++      aborters.add(abortHandler);
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect] register", { connectKey, size: aborters.size });
++      }
++    };
++    const unregisterAborterInner = () => {
++      const aborters = CONNECT_ABORTERS_BY_THREAD.get(connectKey);
++      if (!aborters) {
++        return;
++      }
++      aborters.delete(abortHandler);
++      if (aborters.size === 0) {
++        CONNECT_ABORTERS_BY_THREAD.delete(connectKey);
++      }
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect] unregister", { connectKey, size: aborters.size });
++      }
++    };
++    unregisterAborter = unregisterAborterInner;
++    const abortHandler = () => {
++      if (abortRequested) {
++        return;
++      }
++      abortRequested = true;
++      unregisterAborterInner();
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect] abort", {
++          agentId,
++          threadId: input.threadId,
++          aborted: request.signal ? request.signal.aborted : void 0
++        });
++      }
++      if (agent && typeof agent.abortRun === "function") {
++        try {
++          agent.abortRun();
++        } catch {
++        }
++      }
++      if (subscription) {
++        try {
++          subscription.unsubscribe();
++        } catch {
++        }
++      }
++      if (!streamClosed) {
++        streamClosed = true;
++        try {
++          writer.close();
++        } catch {
++        }
++      }
++    };
++    registerAborter();
++    subscription = events$.subscribe({
+         next: async (event) => {
+           if (!request.signal.aborted && !streamClosed) {
+             try {
+               await writer.write(encoder.encode(event));
+             } catch (error) {
+               if (error instanceof Error && error.name === "AbortError") {
+-                streamClosed = true;
++                abortHandler();
+               }
+             }
+           }
+         },
+-        error: async (error) => {
+-          console.error("Error running agent:", error);
+-          if (!streamClosed) {
+-            try {
+-              await writer.close();
+-              streamClosed = true;
+-            } catch {
+-            }
++      error: async (error) => {
++        console.error("Error running agent:", error);
++        if (!streamClosed) {
++          try {
++            await writer.close();
++            streamClosed = true;
++          } catch {
+           }
+-        },
+-        complete: async () => {
+-          if (!streamClosed) {
+-            try {
+-              await writer.close();
+-              streamClosed = true;
+-            } catch {
+-            }
++        }
++        unregisterAborter();
++        if (request.signal) {
++          request.signal.removeEventListener("abort", abortHandler);
++        }
++      },
++      complete: async () => {
++        if (!streamClosed) {
++          try {
++            await writer.close();
++            streamClosed = true;
++          } catch {
+           }
+         }
+-      });
++        unregisterAborter();
++        if (request.signal) {
++          request.signal.removeEventListener("abort", abortHandler);
++        }
++      }
++    });
++    if (request.signal) {
++      if (debug) {
++        console.debug("[CopilotRuntime.handleConnect] abortListener", {
++          agentId,
++          threadId: input.threadId,
++          aborted: request.signal.aborted
++        });
++      }
++        request.signal.addEventListener("abort", abortHandler);
++      if (request.signal.aborted) {
++        abortHandler();
++      }
++    }
+     })().catch((error) => {
+       console.error("Error running agent:", error);
+       console.error(
+@@ -763,6 +870,7 @@ async function handleConnectAgent({
+         message: error instanceof Error ? error.message : String(error),
+         cause: error instanceof Error ? error.cause : void 0
+       });
++      unregisterAborter();
+       if (!streamClosed) {
+         try {
+           writer.close();
+@@ -812,6 +920,7 @@ async function handleStopAgent({
+   threadId
+ }) {
+   try {
++    const debug = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === "true" || process.env.AGENT_CONNECT_DEBUG === "true";
+     const agents = await runtime.agents;
+     if (!agents[agentId]) {
+       return new Response(
+@@ -825,6 +934,19 @@ async function handleStopAgent({
+         }
+       );
+     }
++    const connectKey = `${agentId}:${threadId}`;
++    const aborters = CONNECT_ABORTERS_BY_THREAD.get(connectKey);
++    if (aborters && aborters.size > 0) {
++      if (debug) {
++        console.debug("[CopilotRuntime.handleStop] abort connects", { connectKey, count: aborters.size });
++      }
++      for (const aborter of Array.from(aborters)) {
++        try {
++          aborter();
++        } catch {
++        }
++      }
++    }
+     const stopped = await runtime.runner.stop({ threadId });
+     if (!stopped) {
+       return new Response(

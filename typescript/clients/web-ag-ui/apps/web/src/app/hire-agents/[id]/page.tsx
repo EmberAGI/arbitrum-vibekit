@@ -5,40 +5,44 @@ import { useRouter } from 'next/navigation';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
 import { PolymarketAgentDetailPage } from '@/components/polymarket/PolymarketAgentDetailPage';
 import { useAgent } from '@/contexts/AgentContext';
-import { usePolymarketPolling } from '@/hooks/usePolymarketPolling';
+// COMMENTED OUT: Web polling replaced with agent's internal cron scheduler (like Pendle)
+// import { usePolymarketPolling } from '@/hooks/usePolymarketPolling';
 
-export default function AgentDetailRoute({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default function AgentDetailRoute({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const agent = useAgent();
+  const activeAgentId = agent.config.id;
+  const routeAgentId = id;
+  const selectedAgentId = activeAgentId === routeAgentId ? routeAgentId : activeAgentId;
 
   // Note: Agent context syncing is handled by the layout.tsx in this folder
   // The layout ensures the agent is loaded BEFORE this page renders
 
-  // Extract Polymarket-specific state for polling (safe type cast)
-  const polymarketLifecycleState = (agent.view as { lifecycleState?: string }).lifecycleState;
-
-  // Get poll interval from environment variable (Next.js requires NEXT_PUBLIC_ prefix for client-side)
-  // Falls back to agent config, then to 60 seconds default
-  const envPollInterval = process.env.NEXT_PUBLIC_POLY_POLL_INTERVAL_MS
-    ? parseInt(process.env.NEXT_PUBLIC_POLY_POLL_INTERVAL_MS, 10)
-    : undefined;
-  const configPollInterval = (agent.view as { config?: { pollIntervalMs?: number } }).config?.pollIntervalMs;
-  const polymarketPollInterval = envPollInterval ?? configPollInterval ?? 60000;
-
-  // Frontend-triggered polling for Polymarket agent
-  // Called unconditionally at top level to follow React hooks rules
-  // The hook internally checks if enabled and if lifecycleState is 'running'
-  usePolymarketPolling(
-    id === 'agent-polymarket',
-    polymarketLifecycleState,
-    agent.runCommand,
-    polymarketPollInterval,
-  );
+  // COMMENTED OUT: Web polling replaced with agent's internal cron scheduler (like Pendle)
+  // The agent now handles its own polling via node-cron after the first cycle
+  // This prevents race conditions with approval updates and matches Pendle's architecture
+  // // Extract Polymarket-specific state for polling (safe type cast)
+  // const polymarketLifecycleState = (agent.view as { lifecycleState?: string }).lifecycleState;
+  //
+  // // Get poll interval from environment variable (Next.js requires NEXT_PUBLIC_ prefix for client-side)
+  // // Falls back to agent config, then to 60 seconds default
+  // const envPollInterval = process.env.NEXT_PUBLIC_POLY_POLL_INTERVAL_MS
+  //   ? parseInt(process.env.NEXT_PUBLIC_POLY_POLL_INTERVAL_MS, 10)
+  //   : undefined;
+  // const configPollInterval = (agent.view as { config?: { pollIntervalMs?: number } }).config
+  //   ?.pollIntervalMs;
+  // const polymarketPollInterval = envPollInterval ?? configPollInterval ?? 60000;
+  //
+  // // Frontend-triggered polling for Polymarket agent
+  // // Called unconditionally at top level to follow React hooks rules
+  // // The hook internally checks if enabled and if lifecycleState is 'running'
+  // usePolymarketPolling(
+  //   id === 'agent-polymarket',
+  //   polymarketLifecycleState,
+  //   agent.runCommand,
+  //   polymarketPollInterval,
+  // );
 
   const handleBack = () => {
     router.push('/hire-agents');
@@ -212,8 +216,16 @@ export default function AgentDetailRoute({
 
     // Debug: Log polymarket view data
     console.log('[PAGE] polymarketView data:');
-    console.log('[PAGE] - userPositions:', polymarketView.userPositions?.length ?? 0, polymarketView.userPositions);
-    console.log('[PAGE] - tradingHistory:', polymarketView.tradingHistory?.length ?? 0, polymarketView.tradingHistory);
+    console.log(
+      '[PAGE] - userPositions:',
+      polymarketView.userPositions?.length ?? 0,
+      polymarketView.userPositions,
+    );
+    console.log(
+      '[PAGE] - tradingHistory:',
+      polymarketView.tradingHistory?.length ?? 0,
+      polymarketView.tradingHistory,
+    );
     console.log('[PAGE] - full view keys:', Object.keys(polymarketView));
 
     return (
@@ -236,24 +248,28 @@ export default function AgentDetailRoute({
           protocols: ['Polymarket'],
           tokens: ['USDC'],
         }}
-        metrics={polymarketView.metrics ?? {
-          iteration: 0,
-          totalPnl: 0,
-          realizedPnl: 0,
-          unrealizedPnl: 0,
-          activePositions: 0,
-          opportunitiesFound: 0,
-          opportunitiesExecuted: 0,
-          tradesExecuted: 0,
-          tradesFailed: 0,
-        }}
-        config={polymarketView.config ?? {
-          minSpreadThreshold: 0.02,
-          maxPositionSizeUsd: 100,
-          portfolioRiskPct: 3,
-          pollIntervalMs: 30000,
-          maxTotalExposureUsd: 500,
-        }}
+        metrics={
+          polymarketView.metrics ?? {
+            iteration: 0,
+            totalPnl: 0,
+            realizedPnl: 0,
+            unrealizedPnl: 0,
+            activePositions: 0,
+            opportunitiesFound: 0,
+            opportunitiesExecuted: 0,
+            tradesExecuted: 0,
+            tradesFailed: 0,
+          }
+        }
+        config={
+          polymarketView.config ?? {
+            minSpreadThreshold: 0.02,
+            maxPositionSizeUsd: 100,
+            portfolioRiskPct: 3,
+            pollIntervalMs: 30000,
+            maxTotalExposureUsd: 500,
+          }
+        }
         portfolioValueUsd={polymarketView.portfolioValueUsd ?? 0}
         opportunities={polymarketView.opportunities ?? []}
         crossMarketOpportunities={polymarketView.crossMarketOpportunities ?? []}
@@ -282,10 +298,18 @@ export default function AgentDetailRoute({
           console.log('[APPROVAL FLOW] Page callback received user wallet:', userWalletAddress);
           console.log('[APPROVAL FLOW] Calling resolveInterrupt with amount and wallet');
           // Pass data directly in interrupt payload - backend will merge it into state
-          agent.resolveInterrupt({ requestedApprovalAmount: amount, userWalletAddress });
+          agent.resolveInterrupt({
+            requestedApprovalAmount: amount,
+            userWalletAddress: userWalletAddress as `0x${string}`,
+          });
           console.log('[APPROVAL FLOW] resolveInterrupt called');
         }}
-        onUsdcPermitSign={async (signature: { v: number; r: string; s: string; deadline: number }) => {
+        onUsdcPermitSign={async (signature: {
+          v: number;
+          r: string;
+          s: string;
+          deadline: number;
+        }) => {
           console.log('[APPROVAL FLOW] Page callback received permit signature:', signature);
           console.log('[APPROVAL FLOW] Calling resolveInterrupt with signature');
           // Pass signature directly in interrupt payload
@@ -313,16 +337,13 @@ export default function AgentDetailRoute({
         onUpdateConfig={(configUpdate: Partial<typeof polymarketView.config>) => {
           console.log('[SETTINGS] Config update requested:', configUpdate);
 
-          // Update config via state
-          agent.setState({
-            view: {
-              ...polymarketView,
-              config: {
-                ...polymarketView.config,
-                ...configUpdate,
-              },
+          // Update config via view state
+          agent.setStateFromApiResponse({
+            ...polymarketView,
+            config: {
+              ...polymarketView.config,
+              ...configUpdate,
             },
-            settings: agent.settings,
           } as any);
 
           // Sync to apply changes
@@ -337,7 +358,7 @@ export default function AgentDetailRoute({
   // Render CLMM-specific page for agent-clmm
   return (
     <AgentDetailPage
-      agentId={agent.config.id}
+      agentId={selectedAgentId}
       agentName={agent.config.name}
       agentDescription={agent.config.description}
       creatorName={agent.config.creator}
@@ -359,6 +380,10 @@ export default function AgentDetailRoute({
         iteration: agent.metrics.iteration,
         cyclesSinceRebalance: agent.metrics.cyclesSinceRebalance,
         staleCycles: agent.metrics.staleCycles,
+        rebalanceCycles: agent.metrics.rebalanceCycles,
+        aumUsd: agent.metrics.aumUsd,
+        apy: agent.metrics.apy,
+        lifetimePnlUsd: agent.metrics.lifetimePnlUsd,
       }}
       fullMetrics={agent.metrics}
       isHired={agent.isHired}

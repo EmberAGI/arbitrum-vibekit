@@ -27,7 +27,7 @@ export const bootstrapNode = async (
   const mode = process.env['CLMM_MODE'] === 'production' ? 'production' : 'debug';
   const pollIntervalMs = resolvePollIntervalMs();
   const streamLimit = resolveStreamLimit();
-  const delegationsBypassActive = process.env['CLMM_DELEGATIONS_BYPASS'] === 'true';
+  const delegationsBypassActive = process.env['DELEGATIONS_BYPASS'] === 'true';
 
   logInfo('Initialized LangGraph workflow context', {
     mode,
@@ -80,6 +80,7 @@ export const bootstrapNode = async (
         previousPrice: undefined,
         cyclesSinceRebalance: 0,
         staleCycles: 0,
+        rebalanceCycles: 0,
         iteration: 0,
         latestCycle: undefined,
       },

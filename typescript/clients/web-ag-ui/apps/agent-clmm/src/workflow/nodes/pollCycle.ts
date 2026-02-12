@@ -2,15 +2,16 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
-import type { FlowLogEventInput } from '../../accounting/types.js';
+import type { AccountingState, FlowLogEventInput } from '../../accounting/types.js';
 import { formatEmberApiError, fetchPoolSnapshot } from '../../clients/emberApi.js';
 import {
   ARBITRUM_CHAIN_ID,
   DATA_STALE_CYCLE_LIMIT,
-  DEFAULT_REBALANCE_THRESHOLD_PCT,
   MAX_GAS_SPEND_ETH,
   resolveEthUsdPrice,
+  resolveMinAllocationPct,
   resolvePollIntervalMs,
+  resolveRebalanceThresholdPct,
 } from '../../config/constants.js';
 import {
   buildRange,
@@ -38,6 +39,14 @@ import {
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';
 import { executeDecision } from '../execution.js';
+import {
+  appendFlowLogHistory,
+  appendNavSnapshotHistory,
+  appendTelemetryHistory,
+  appendTransactionHistory,
+  loadFlowLogHistory,
+} from '../historyStore.js';
+import { applyAccountingToView } from '../viewMapping.js';
 
 const DEBUG_MODE = process.env['DEBUG_MODE'] === 'true';
 
@@ -45,6 +54,66 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = {
   configurable?: { thread_id?: string };
 };
+
+function buildAccountingLogSummary(params: {
+  iteration: number;
+  accounting: AccountingState;
+  contextId: string | null;
+  threadId?: string;
+}): Record<string, unknown> {
+  const latestSnapshot = params.accounting.latestNavSnapshot;
+  return {
+    iteration: params.iteration,
+    threadId: params.threadId,
+    contextId: params.contextId,
+    latestSnapshot: latestSnapshot
+      ? {
+          cycle: latestSnapshot.cycle,
+          trigger: latestSnapshot.trigger,
+          timestamp: latestSnapshot.timestamp,
+          totalUsd: latestSnapshot.totalUsd,
+          positions: latestSnapshot.positions.length,
+          feesUsd: latestSnapshot.feesUsd,
+          rewardsUsd: latestSnapshot.rewardsUsd,
+          priceSource: latestSnapshot.priceSource,
+          transactionHash: latestSnapshot.transactionHash,
+          isCurrentCycle: latestSnapshot.cycle === params.iteration,
+        }
+      : null,
+    metrics: {
+      aumUsd: params.accounting.aumUsd,
+      positionsUsd: params.accounting.positionsUsd,
+      cashUsd: params.accounting.cashUsd,
+      lifetimePnlUsd: params.accounting.lifetimePnlUsd,
+      lifetimeReturnPct: params.accounting.lifetimeReturnPct,
+      highWaterMarkUsd: params.accounting.highWaterMarkUsd,
+      apy: params.accounting.apy,
+      initialAllocationUsd: params.accounting.initialAllocationUsd,
+      lifecycleStart: params.accounting.lifecycleStart,
+      lifecycleEnd: params.accounting.lifecycleEnd,
+      lastUpdated: params.accounting.lastUpdated,
+    },
+    counts: {
+      navSnapshots: params.accounting.navSnapshots.length,
+      flowEvents: params.accounting.flowLog.length,
+    },
+  };
+}
+
+function logAccountingSummary(params: {
+  iteration: number;
+  accounting: AccountingState;
+  contextId: string | null;
+  threadId?: string;
+  note?: string;
+}): void {
+  const summary = buildAccountingLogSummary(params);
+  logInfo(
+    'Accounting summary',
+    params.note ? { ...summary, note: params.note } : summary,
+    { detailed: true },
+  );
+}
 
 export const pollCycleNode = async (
   state: ClmmState,
@@ -86,6 +155,12 @@ export const pollCycleNode = async (
   const clients = await getOnchainClients();
 
   const iteration = (state.view.metrics.iteration ?? 0) + 1;
+  const threadId = (config as Configurable).configurable?.thread_id;
+  const contextId = resolveAccountingContextId({ state, threadId });
+  const storedFlowLog = threadId ? await loadFlowLogHistory({ threadId }) : [];
+  const logCycleAccountingSummary = (accounting: AccountingState, note?: string) => {
+    logAccountingSummary({ iteration, accounting, contextId, threadId, note });
+  };
   logInfo('Polling cycle begin', { iteration, poolAddress: selectedPool.address });
 
   let staleCycles = state.view.metrics.staleCycles ?? 0;
@@ -121,6 +196,7 @@ export const pollCycleNode = async (
           activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
         },
       });
+      logCycleAccountingSummary(state.view.accounting, 'cycle-abort: ember api unreachable');
       return new Command({
         update: {
           view: {
@@ -161,6 +237,7 @@ export const pollCycleNode = async (
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
     });
+    logCycleAccountingSummary(state.view.accounting, 'cycle-abort: missing pool snapshot');
     return new Command({
       update: {
         view: {
@@ -205,6 +282,7 @@ export const pollCycleNode = async (
     const failureMessage = `ERROR: Unable to locate a WETH/USD price for pool ${poolSnapshot.address}`;
     const { task, statusEvent } = buildTaskStatus(taskState, 'failed', failureMessage);
     await copilotkitEmitState(config, { view: { task, events: [statusEvent] } });
+    logCycleAccountingSummary(state.view.accounting, 'cycle-abort: missing eth price');
     return new Command({
       update: {
         view: {
@@ -220,11 +298,18 @@ export const pollCycleNode = async (
   }
   const maxGasSpendUsd = MAX_GAS_SPEND_ETH * ethUsd;
   const estimatedFeeValueUsd = estimateFeeValueUsd(currentPosition, poolSnapshot);
+  const minAllocationPct = resolveMinAllocationPct();
+  const positionValueUsd =
+    state.view.accounting.positionsUsd ?? state.view.accounting.latestNavSnapshot?.totalUsd;
+  const targetAllocationUsd = operatorConfig.baseContributionUsd;
 
-  const rebalanceThresholdPct = DEFAULT_REBALANCE_THRESHOLD_PCT;
+  const rebalanceThresholdPct = resolveRebalanceThresholdPct();
   const decision = evaluateDecision({
     pool: poolSnapshot,
     position: currentPosition,
+    positionValueUsd,
+    targetAllocationUsd,
+    minAllocationPct,
     midPrice,
     volatilityPct,
     cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
@@ -351,6 +436,7 @@ export const pollCycleNode = async (
   logInfo('Decision evaluated', { iteration, decision: decisionSummary });
 
   let cyclesSinceRebalance = state.view.metrics.cyclesSinceRebalance ?? 0;
+  let rebalanceCycles = state.view.metrics.rebalanceCycles ?? 0;
   let txHash: string | undefined;
   let gasSpentWei: bigint | undefined;
   let executionFlowEvents: FlowLogEventInput[] = [];
@@ -390,6 +476,9 @@ export const pollCycleNode = async (
             : typeof executionError === 'string'
               ? executionError
               : 'Unknown execution error';
+        const rateLimitDetected = /Status:\s*429\b|"code"\s*:\s*429\b|code:\s*429\b/iu.test(
+          rawMessage,
+        );
         const errorMessage = emberError
           ? `Ember API ${emberError.status}${
               emberError.upstreamStatus ? ` (upstream ${emberError.upstreamStatus})` : ''
@@ -403,7 +492,6 @@ export const pollCycleNode = async (
         });
 
         // Schedule cron before returning so next cycle will run
-        const threadId = (config as Configurable).configurable?.thread_id;
         let cronScheduled = state.private.cronScheduled;
         if (threadId && !cronScheduled) {
           const intervalMs = state.private.pollIntervalMs ?? resolvePollIntervalMs();
@@ -412,7 +500,9 @@ export const pollCycleNode = async (
           cronScheduled = true;
         }
 
-        const failureStatusMessage = `[Cycle ${iteration}] ${decision.kind} FAILED: ${errorMessage}`;
+        const failureStatusMessage = rateLimitDetected
+          ? `[Cycle ${iteration}] warning: RPC rate limit (HTTP 429). Will retry next cycle.`
+          : `[Cycle ${iteration}] ${decision.kind} FAILED: ${errorMessage}`;
         const { task: failedTask, statusEvent: failureEvent } = buildTaskStatus(
           taskState,
           'working', // Use 'working' not 'failed' - we'll retry on next cron cycle
@@ -422,7 +512,7 @@ export const pollCycleNode = async (
           view: {
             task: failedTask,
             activity: { events: [failureEvent], telemetry: state.view.activity.telemetry },
-            executionError: errorMessage,
+            ...(rateLimitDetected ? {} : { executionError: errorMessage }),
           },
         });
 
@@ -450,26 +540,35 @@ export const pollCycleNode = async (
                 : 'Unknown accounting error';
           logInfo('Accounting snapshot failed after execution error', { iteration, error: message });
         }
+        logCycleAccountingSummary(accountingState, 'cycle-abort: execution failed');
+
+        const { profile: nextProfile, metrics: nextMetrics } = applyAccountingToView({
+          profile: state.view.profile,
+          metrics: {
+            ...state.view.metrics,
+            lastSnapshot: poolSnapshot,
+            previousPrice: midPrice,
+            cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
+            staleCycles,
+            rebalanceCycles,
+            iteration,
+            latestCycle: state.view.metrics.latestCycle,
+          },
+          accounting: accountingState,
+        });
 
         // Return gracefully - don't throw. The cron job will run the next cycle.
         return new Command({
           update: {
             view: {
-              metrics: {
-                lastSnapshot: poolSnapshot,
-                previousPrice: midPrice,
-                cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0, // Don't reset - we didn't complete
-                staleCycles,
-                iteration,
-                latestCycle: state.view.metrics.latestCycle,
-              },
+              metrics: nextMetrics,
               task: failedTask,
               activity: {
                 telemetry: state.view.activity.telemetry,
                 events: [...preCycleEvents, failureEvent],
               },
               transactionHistory: state.view.transactionHistory,
-              profile: state.view.profile,
+              profile: nextProfile,
               executionError: errorMessage, // Store error for debugging/display
               accounting: accountingState,
             },
@@ -482,6 +581,9 @@ export const pollCycleNode = async (
       }
     }
     cyclesSinceRebalance = 0;
+    if (decision.kind === 'enter-range' || decision.kind === 'adjust-range') {
+      rebalanceCycles += 1;
+    }
     logInfo('Action execution complete', {
       iteration,
       action: decision.kind,
@@ -540,7 +642,6 @@ export const pollCycleNode = async (
   };
 
   // Schedule cron after first cycle completes (ensures no concurrent runs)
-  const threadId = (config as Configurable).configurable?.thread_id;
   let cronScheduled = state.private.cronScheduled;
   if (threadId && !cronScheduled) {
     const intervalMs = state.private.pollIntervalMs ?? resolvePollIntervalMs();
@@ -561,9 +662,11 @@ export const pollCycleNode = async (
           timestamp: cycleTelemetry.timestamp,
         };
 
-  let accountingState = state.view.accounting;
+  let accountingState =
+    storedFlowLog.length > 0
+      ? { ...state.view.accounting, flowLog: storedFlowLog }
+      : state.view.accounting;
   try {
-    const contextId = resolveAccountingContextId({ state, threadId });
     const flowEvents =
       contextId && executionFlowEvents.length > 0
         ? executionFlowEvents.map((event) =>
@@ -580,6 +683,7 @@ export const pollCycleNode = async (
     }
 
     if (flowEvents.length > 0) {
+      await appendFlowLogHistory({ threadId, events: flowEvents });
       accountingState = applyAccountingUpdate({
         existing: accountingState,
         flowEvents,
@@ -606,6 +710,7 @@ export const pollCycleNode = async (
           }),
         );
       }
+      await appendNavSnapshotHistory({ threadId, snapshots });
       accountingState = applyAccountingUpdate({
         existing: accountingState,
         snapshots,
@@ -620,18 +725,32 @@ export const pollCycleNode = async (
           : 'Unknown accounting error';
     logInfo('Accounting snapshot failed during poll cycle', { iteration, error: message });
   }
+  logCycleAccountingSummary(accountingState, 'cycle-complete');
+
+  await appendTelemetryHistory({ threadId, telemetry: [cycleTelemetry] });
+  if (transactionEntry) {
+    await appendTransactionHistory({ threadId, transactions: [transactionEntry] });
+  }
+
+  const { profile: nextProfile, metrics: nextMetrics } = applyAccountingToView({
+    profile: state.view.profile,
+    metrics: {
+      ...state.view.metrics,
+      lastSnapshot: poolSnapshot,
+      previousPrice: midPrice,
+      cyclesSinceRebalance,
+      staleCycles,
+      rebalanceCycles,
+      iteration,
+      latestCycle: cycleTelemetry,
+    },
+    accounting: accountingState,
+  });
 
   return new Command({
     update: {
       view: {
-        metrics: {
-          lastSnapshot: poolSnapshot,
-          previousPrice: midPrice,
-          cyclesSinceRebalance,
-          staleCycles,
-          iteration,
-          latestCycle: cycleTelemetry,
-        },
+        metrics: nextMetrics,
         task,
         activity: {
           telemetry: [cycleTelemetry],
@@ -640,7 +759,7 @@ export const pollCycleNode = async (
         transactionHistory: transactionEntry
           ? [...state.view.transactionHistory, transactionEntry]
           : state.view.transactionHistory,
-        profile: state.view.profile,
+        profile: nextProfile,
         accounting: accountingState,
       },
       private: {

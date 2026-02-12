@@ -4,8 +4,8 @@ import {
   AUTO_COMPOUND_COST_RATIO,
   DEFAULT_MIN_TVL_USD,
   DEFAULT_REBALANCE_THRESHOLD_PCT,
-  DEFAULT_TICK_BANDWIDTH_BPS,
   VOLATILE_TICK_BANDWIDTH_BPS,
+  resolveTickBandwidthBps,
 } from '../config/constants.js';
 import type {
   CamelotPool,
@@ -45,12 +45,14 @@ export function tickToPrice(tick: number, decimalsDiff: number) {
   return ratio * Math.pow(10, decimalsDiff);
 }
 
-function snapTick(tick: number, spacing: number) {
-  const remainder = tick % spacing;
-  if (remainder === 0) {
+function snapTickToSpacing(tick: number, spacing: number, mode: 'floor' | 'ceil' | 'round') {
+  if (spacing <= 0) {
     return tick;
   }
-  return tick - remainder;
+  const normalized = tick / spacing;
+  const snapped =
+    mode === 'floor' ? Math.floor(normalized) : mode === 'ceil' ? Math.ceil(normalized) : Math.round(normalized);
+  return snapped * spacing;
 }
 
 export function buildRange(
@@ -62,8 +64,18 @@ export function buildRange(
   const pct = bandwidthBps / 10_000;
   const lowerPrice = midPrice * (1 - pct);
   const upperPrice = midPrice * (1 + pct);
-  const lowerTick = snapTick(priceToTick(lowerPrice, decimalsDiff), tickSpacing);
-  const upperTick = snapTick(priceToTick(upperPrice, decimalsDiff), tickSpacing);
+  const lowerTickEstimate = priceToTick(lowerPrice, decimalsDiff);
+  const upperTickEstimate = priceToTick(upperPrice, decimalsDiff);
+  const rawWidth = Math.max(tickSpacing, upperTickEstimate - lowerTickEstimate);
+  let widthMultiple = Math.max(1, Math.round(rawWidth / tickSpacing));
+  if (widthMultiple % 2 !== 0) {
+    widthMultiple += 1;
+  }
+  const widthTicks = widthMultiple * tickSpacing;
+  const centerTick = snapTickToSpacing(priceToTick(midPrice, decimalsDiff), tickSpacing, 'round');
+  const halfWidth = Math.trunc(widthTicks / 2);
+  const lowerTick = centerTick - halfWidth;
+  const upperTick = centerTick + halfWidth;
 
   return {
     lowerTick,
@@ -119,7 +131,7 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
   const decimalsDiff = ctx.pool.token0.decimals - ctx.pool.token1.decimals;
   const bandwidthBps =
     ctx.tickBandwidthBps ??
-    (ctx.volatilityPct >= 1.0 ? VOLATILE_TICK_BANDWIDTH_BPS : DEFAULT_TICK_BANDWIDTH_BPS);
+    (ctx.volatilityPct >= 1.0 ? VOLATILE_TICK_BANDWIDTH_BPS : resolveTickBandwidthBps());
   const targetRange = buildRange(ctx.midPrice, bandwidthBps, ctx.pool.tickSpacing, decimalsDiff);
   const exitUnsafePool = shouldExit(ctx.pool);
 
@@ -144,19 +156,39 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
     };
   }
 
+  const minAllocationPct = ctx.minAllocationPct;
+  const shouldEnforceAllocation =
+    typeof minAllocationPct === 'number' && Number.isFinite(minAllocationPct) && minAllocationPct > 0;
+  if (
+    shouldEnforceAllocation &&
+    typeof ctx.positionValueUsd === 'number' &&
+    Number.isFinite(ctx.positionValueUsd) &&
+    typeof ctx.targetAllocationUsd === 'number' &&
+    Number.isFinite(ctx.targetAllocationUsd) &&
+    ctx.targetAllocationUsd > 0
+  ) {
+    const allocationPct = (ctx.positionValueUsd / ctx.targetAllocationUsd) * 100;
+    if (Number.isFinite(allocationPct) && allocationPct < minAllocationPct) {
+      return {
+        kind: 'exit-range',
+        reason: `Position allocation ${allocationPct.toFixed(2)}% below minimum ${minAllocationPct.toFixed(2)}%`,
+      };
+    }
+  }
+
   const width = ctx.position.tickUpper - ctx.position.tickLower;
-  const innerWidth = Math.round(
-    width * (ctx.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT),
-  );
+  const rebalanceThresholdPct = ctx.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT;
+  const innerWidth = Math.round(width * rebalanceThresholdPct);
   const padding = Math.max(1, Math.floor((width - innerWidth) / 2));
   const innerLower = ctx.position.tickLower + padding;
   const innerUpper = ctx.position.tickUpper - padding;
   const currentTick = ctx.pool.tick;
 
   if (currentTick <= innerLower || currentTick >= innerUpper) {
+    const innerBandPercent = Math.round(rebalanceThresholdPct * 100);
     return {
       kind: 'adjust-range',
-      reason: 'Price drifted outside the 60% inner safety band',
+      reason: `Price drifted outside the ${innerBandPercent}% inner safety band`,
       targetRange,
     };
   }
@@ -172,6 +204,15 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
     return {
       kind: 'compound-fees',
       reason: 'Auto-compound rule satisfied (fees exceed 1% gas threshold)',
+    };
+  }
+
+  const targetWidth = targetRange.upperTick - targetRange.lowerTick;
+  const positionWidth = ctx.position.tickUpper - ctx.position.tickLower;
+  if (positionWidth !== targetWidth) {
+    return {
+      kind: 'exit-range',
+      reason: 'Active range width differs from target bandwidth; exiting to refresh next cycle',
     };
   }
 

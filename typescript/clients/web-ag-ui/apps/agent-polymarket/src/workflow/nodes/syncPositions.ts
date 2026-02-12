@@ -11,6 +11,8 @@
  * 4. Update state with positions and metrics
  */
 
+import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+
 import type { PolymarketState, PolymarketUpdate, Position } from '../context.js';
 import { logInfo } from '../context.js';
 import { createAdapterFromEnv, fetchMarketPrices } from '../../clients/polymarketClient.js';
@@ -19,12 +21,16 @@ import {
   updatePositionsWithPnL,
 } from '../../strategy/pnl.js';
 
+// Type for CopilotKit config parameter (contains threadId)
+type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+
 /**
  * Sync positions and calculate PnL.
  * Non-interrupting - just updates state and returns.
  */
 export async function syncPositionsNode(
   state: PolymarketState,
+  config: CopilotKitConfig,
 ): Promise<PolymarketUpdate> {
   const walletAddress = state.private.walletAddress;
 
@@ -153,11 +159,36 @@ export async function syncPositionsNode(
       roi: portfolioPnL.roi.toFixed(2) + '%',
     });
 
+    // Emit state update to frontend for real-time UI updates
+    // Preserve array fields from being cleared by partial state update
+    await copilotkitEmitState(config, {
+      view: {
+        positions,
+        portfolioValueUsd: portfolioPnL.totalCurrentValue,
+        detectedRelationships: state.view.detectedRelationships,
+        crossMarketOpportunities: state.view.crossMarketOpportunities,
+        opportunities: state.view.opportunities,
+        markets: state.view.markets,
+        metrics: {
+          ...state.view.metrics,
+          activePositions: positions.length,
+          unrealizedPnl: portfolioPnL.totalUnrealizedPnl,
+          realizedPnl: portfolioPnL.totalRealizedPnl,
+          totalPnl: portfolioPnL.totalPnl,
+        },
+      },
+    });
+
     // Update state
     return {
       view: {
         positions,
         portfolioValueUsd: portfolioPnL.totalCurrentValue,
+        // Preserve arrays from state to prevent partial merge from clearing them
+        detectedRelationships: state.view.detectedRelationships,
+        crossMarketOpportunities: state.view.crossMarketOpportunities,
+        opportunities: state.view.opportunities,
+        markets: state.view.markets,
         metrics: {
           ...state.view.metrics,
           activePositions: positions.length,

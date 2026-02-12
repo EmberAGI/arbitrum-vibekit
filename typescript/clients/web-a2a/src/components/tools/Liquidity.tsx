@@ -13,7 +13,7 @@ interface IPool {
   symbol1: string;
   token0: { chainId: string; address: string };
   token1: { chainId: string; address: string };
-  price: string;
+  currentPrice?: string;
 }
 
 interface IPosition {
@@ -28,7 +28,6 @@ interface IPosition {
   symbol1: string;
   amount0: string;
   amount1: string;
-  price: string;
   providerId: string;
   positionRange: { fromPrice: string; toPrice: string };
 }
@@ -121,7 +120,10 @@ export function Liquidity({
             </h2>
           </div>
           {pools.map((x) => (
-            <div key={x.handle + x.price} className="bg-black/30 rounded p-3 space-y-2">
+            <div
+              key={x.handle + (x.currentPrice ?? '')}
+              className="bg-black/30 rounded p-3 space-y-2"
+            >
               <div className="text-sm font-semibold text-white">
                 {x.symbol0} / {x.symbol1}
               </div>
@@ -135,7 +137,9 @@ export function Liquidity({
                   <div className="text-gray-600 truncate">{x.token1.address}</div>
                 </div>
               </div>
-              <div className="text-xs text-gray-500">Price: {strToDecimal(x.price)}</div>
+              <div className="text-xs text-gray-500">
+                Current Price: {x.currentPrice ? strToDecimal(x.currentPrice) : 'N/A'}
+              </div>
             </div>
           ))}
         </div>

@@ -1,241 +1,312 @@
-/**
- * This is the main entry point for the agent.
- * It defines the workflow graph, state, tools, nodes and edges.
- */
+import { pathToFileURL } from 'node:url';
 
+import { END, START, StateGraph } from '@langchain/langgraph';
+import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
-import { tool } from '@langchain/core/tools';
-import { ToolNode } from '@langchain/langgraph/prebuilt';
-import { BaseMessage, SystemMessage } from '@langchain/core/messages';
+
 import {
-  END,
-  InMemoryStore,
-  MemorySaver,
-  START,
-  StateGraph,
-  interrupt,
-} from '@langchain/langgraph';
-import { ChatOpenAI } from '@langchain/openai';
-import {
-  convertActionsToDynamicStructuredTools,
-  copilotkitEmitState,
-  CopilotKitStateAnnotation,
-} from '@copilotkit/sdk-js/langgraph';
-import { Annotation } from '@langchain/langgraph';
-import type { AIMessage } from '@copilotkit/shared';
-import { v7 } from 'uuid';
+  resolveLangGraphDefaults,
+  resolveLangGraphDurability,
+  type LangGraphDurability,
+} from './config/serviceConfig.js';
+import { ClmmStateAnnotation, memory, type ClmmState } from './workflow/context.js';
+import { configureCronExecutor } from './workflow/cronScheduler.js';
+import { bootstrapNode } from './workflow/nodes/bootstrap.js';
+import { collectDelegationsNode } from './workflow/nodes/collectDelegations.js';
+import { collectFundingTokenInputNode } from './workflow/nodes/collectFundingTokenInput.js';
+import { collectOperatorInputNode } from './workflow/nodes/collectOperatorInput.js';
+import { fireCommandNode } from './workflow/nodes/fireCommand.js';
+import { hireCommandNode } from './workflow/nodes/hireCommand.js';
+import { listPoolsNode } from './workflow/nodes/listPools.js';
+import { pollCycleNode } from './workflow/nodes/pollCycle.js';
+import { prepareOperatorNode } from './workflow/nodes/prepareOperator.js';
+import { extractCommand, resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
+import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
+import { summarizeNode } from './workflow/nodes/summarize.js';
+import { syncStateNode } from './workflow/nodes/syncState.js';
 
-type Task = {
-  id: string;
-  taskStatus: TaskStatus;
-};
-
-type TaskState =
-  | 'submitted'
-  | 'working'
-  | 'input-required'
-  | 'completed'
-  | 'canceled'
-  | 'failed'
-  | 'rejected'
-  | 'auth-required'
-  | 'unknown';
-
-type TaskStatus = {
-  state: TaskState;
-  message?: AIMessage;
-  timestamp?: string; // ISO 8601
-};
-
-// 1. Define our agent state, which includes CopilotKit state to
-//    provide actions to the state.
-const AgentStateAnnotation = Annotation.Root({
-  ...CopilotKitStateAnnotation.spec, // CopilotKit state annotation already includes messages, as well as frontend tools
-  command: Annotation<string>,
-  amount: Annotation<number>,
-  task: Annotation<Task>,
-});
-
-// 2. Define the type for our agent state
-export type AgentState = typeof AgentStateAnnotation.State;
-
-const commandSchema = z.object({
-  command: z.enum(['hire', 'fire']),
-});
-
-// 5. Define the chat node, which will handle the chat logic
-async function chat_node(state: AgentState, config: RunnableConfig) {
-  console.log(`state.copilotkit: ${JSON.stringify(state.copilotkit)}`);
-  //console.log(`config: ${JSON.stringify(config)}`);
-
-  return state;
+function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
+  const command = extractCommand(state.messages) ?? state.view.command;
+  return command === 'sync' ? 'syncState' : 'listPools';
 }
 
-async function hire_node(state: AgentState, config: RunnableConfig) {
-  const amount = state.amount;
-  console.log(`amount: ${amount}`);
-
-  if (state.task && isTaskActive(state.task.taskStatus.state)) {
-    const message: AIMessage = {
-      id: v7(),
-      role: 'assistant',
-      content: `Task ${state.task.id} is already in a active state.`,
-    };
-    return {
-      ...state,
-      messages: [...state.messages, message],
-    };
-  }
-
-  const message: AIMessage = {
-    id: v7(),
-    role: 'assistant',
-    content: `Agent hired! Trading ${amount} tokens...`,
-  };
-
-  const taskStatus: TaskStatus = {
-    state: 'submitted',
-    message: message,
-  };
-
-  const task: Task = {
-    id: v7(),
-    taskStatus: taskStatus,
-  };
-
-  return {
-    ...state,
-    task: task,
-    command: 'hire',
-  };
-}
-
-async function fire_node(state: AgentState, config: RunnableConfig) {
-  console.log(`state.copilotkit: ${JSON.stringify(state.copilotkit)}`);
-  //console.log(`config: ${JSON.stringify(config)}`);
-
-  const currentTask = state.task;
-
-  if (isTaskTerminal(currentTask.taskStatus.state)) {
-    const message: AIMessage = {
-      id: v7(),
-      role: 'assistant',
-      content: `Task ${currentTask.id} is already in a terminal state.`,
-    };
-    return {
-      ...state,
-      messages: [...state.messages, message],
-    };
-  }
-
-  const message: AIMessage = {
-    id: v7(),
-    role: 'assistant',
-    content: `Agent fired! It no longer trades your tokens.`,
-  };
-
-  const taskStatus: TaskStatus = {
-    state: 'canceled',
-    message: message,
-  };
-
-  const task: Task = {
-    ...currentTask,
-    taskStatus: taskStatus,
-  };
-
-  return {
-    ...state,
-    task: task,
-    command: 'fire',
-  };
-}
-
-function runCommand({ messages }: AgentState) {
-  const lastMessage = messages[messages.length - 1];
-  console.log(`lastMessage: ${lastMessage.content}`);
-
-  let command: string;
-  if (typeof lastMessage.content === 'string') {
-    try {
-      const parsed = commandSchema.safeParse(JSON.parse(lastMessage.content));
-      if (parsed.success) {
-        command = parsed.data.command;
-      } else {
-        command = parsed.error.message;
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(errorMessage);
-      command = errorMessage;
-    }
-  } else {
-    return '__end__';
-  }
-
-  switch (command) {
-    case 'hire':
-      return 'hire_node';
-    case 'fire':
-      return 'fire_node';
-    default:
-      return '__end__';
-  }
-}
-
-// TODO: Figure out when during the graph lifecycle state deltas are sent back to AG-UI
-
-// • In the CopilotKit TypeScript LangGraph adapter the runtime always sends full snapshots—
-//   there’s no delta emission:
-
-//   - While streaming LangGraph events, remote-lg-action.ts emits an OnCopilotKitStateSync
-//     event with the entire state object whenever the state changes, the node name changes,
-//     or a node exits. That’s effectively a full snapshot per node exit (and also during
-//     intermediate “predict/emit state” streams). (apps/web/node_modules/@copilotkit/
-//     runtime/src/lib/runtime/remote-lg-action.ts around the exitingNode / getStateSyncEvent
-//     block)
-//   - If a node manually emits state (copilotkitEmitState / copilotkit:emit-intermediate-
-//     state), langgraph-agent.ts turns that into a STATE_SNAPSHOT immediately. (apps/web/
-//     node_modules/@copilotkit/runtime/src/lib/runtime/langgraph/langgraph-agent.ts custom-
-//     event handling)
-//   - When the run finishes, the runtime fetches the thread state and sends one last full
-//     snapshot with messages included. (remote-lg-action.ts after the stream loop)
-
-//   The pipeline never generates STATE_DELTA; all AgentStateMessage events the client
-//   receives are full snapshots, so the client re-baselines each time.
-
-// Define the workflow graph
-const workflow = new StateGraph(AgentStateAnnotation)
-  .addNode('chat_node', chat_node)
-  .addNode('hire_node', hire_node)
-  .addNode('fire_node', fire_node)
-  .addEdge(START, 'chat_node')
-  .addConditionalEdges('chat_node', runCommand as any)
-  .addEdge('hire_node', END)
-  .addEdge('fire_node', END);
-
-const memory = new MemorySaver();
+const workflow = new StateGraph(ClmmStateAnnotation)
+  .addNode('runCommand', runCommandNode)
+  .addNode('hireCommand', hireCommandNode)
+  .addNode('fireCommand', fireCommandNode)
+  .addNode('runCycleCommand', runCycleCommandNode)
+  .addNode('syncState', syncStateNode)
+  .addNode('bootstrap', bootstrapNode)
+  .addNode('listPools', listPoolsNode)
+  .addNode('collectOperatorInput', collectOperatorInputNode)
+  .addNode('collectFundingTokenInput', collectFundingTokenInputNode)
+  .addNode('collectDelegations', collectDelegationsNode)
+  .addNode('prepareOperator', prepareOperatorNode)
+  .addNode('pollCycle', pollCycleNode, { ends: ['summarize'] })
+  .addNode('summarize', summarizeNode)
+  .addEdge(START, 'runCommand')
+  .addConditionalEdges('runCommand', resolveCommandTarget)
+  .addEdge('hireCommand', 'bootstrap')
+  .addEdge('fireCommand', END)
+  .addEdge('runCycleCommand', 'pollCycle')
+  .addEdge('syncState', END)
+  .addConditionalEdges('bootstrap', resolvePostBootstrap)
+  .addEdge('listPools', 'collectOperatorInput')
+  .addEdge('collectOperatorInput', 'collectFundingTokenInput')
+  .addEdge('collectFundingTokenInput', 'collectDelegations')
+  .addEdge('collectDelegations', 'prepareOperator')
+  .addEdge('prepareOperator', 'pollCycle')
+  .addEdge('pollCycle', 'summarize')
+  .addEdge('summarize', END);
 
 export const graph = workflow.compile({
   checkpointer: memory,
 });
 
-const isTaskTerminal = (state: TaskState) => {
-  return (
-    state === 'completed' ||
-    state === 'failed' ||
-    state === 'canceled' ||
-    state === 'rejected' ||
-    state === 'unknown'
-  );
-};
+const runningThreads = new Set<string>();
+const ThreadResponseSchema = z.object({ thread_id: z.string() }).catchall(z.unknown());
+const ThreadStateUpdateResponseSchema = z
+  .object({ checkpoint_id: z.string().optional() })
+  .catchall(z.unknown());
+const RunResponseSchema = z
+  .object({ run_id: z.string(), status: z.string().optional() })
+  .catchall(z.unknown());
 
-const isTaskActive = (state: TaskState) => {
-  return (
-    state === 'submitted' ||
-    state === 'working' ||
-    state === 'input-required' ||
-    state === 'auth-required'
-  );
-};
+type RunStatus = string | undefined;
+
+function resolveLangGraphDeploymentUrl(): string {
+  const raw = process.env['LANGGRAPH_DEPLOYMENT_URL'] ?? 'http://localhost:8123';
+  return raw.endsWith('/') ? raw.slice(0, -1) : raw;
+}
+
+function resolveLangGraphGraphId(): string {
+  return process.env['LANGGRAPH_GRAPH_ID'] ?? 'starterAgent';
+}
+
+async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>): Promise<T> {
+  const payloadText = await response.text();
+  if (!response.ok) {
+    throw new Error(`LangGraph API request failed (${response.status}): ${payloadText}`);
+  }
+  const trimmed = payloadText.trim();
+  const payload = trimmed.length > 0 ? (JSON.parse(trimmed) as unknown) : ({} as unknown);
+  return schema.parse(payload);
+}
+
+type ThreadStateValues = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function extractThreadStateValues(payload: unknown): ThreadStateValues | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const values = payload['values'];
+  if (isRecord(values)) {
+    return values;
+  }
+
+  const state = payload['state'];
+  if (isRecord(state)) {
+    return state;
+  }
+
+  const data = payload['data'];
+  if (isRecord(data)) {
+    return data;
+  }
+
+  if (isRecord(payload['view'])) {
+    return payload;
+  }
+
+  return null;
+}
+
+async function fetchThreadStateValues(
+  baseUrl: string,
+  threadId: string,
+): Promise<ThreadStateValues | null> {
+  const response = await fetch(`${baseUrl}/threads/${threadId}/state`);
+  const payload = await parseJsonResponse(response, z.unknown());
+  return extractThreadStateValues(payload);
+}
+
+async function ensureThread(baseUrl: string, threadId: string, graphId: string) {
+  const metadata = { graph_id: graphId };
+  const response = await fetch(`${baseUrl}/threads`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ thread_id: threadId, if_exists: 'do_nothing', metadata }),
+  });
+  await parseJsonResponse(response, ThreadResponseSchema);
+
+  const patchResponse = await fetch(`${baseUrl}/threads/${threadId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ metadata }),
+  });
+  await parseJsonResponse(patchResponse, ThreadResponseSchema);
+}
+
+async function updateCycleState(
+  baseUrl: string,
+  threadId: string,
+  runMessage: { id: string; role: 'user'; content: string },
+) {
+  let existingView: Record<string, unknown> | null = null;
+  try {
+    const currentState = await fetchThreadStateValues(baseUrl, threadId);
+    if (currentState && isRecord(currentState['view'])) {
+      existingView = currentState['view'];
+    }
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
+    console.warn('[cron] Unable to fetch thread state before cycle update', { threadId, error: message });
+  }
+
+  const view = existingView ? { ...existingView, command: 'cycle' } : { command: 'cycle' };
+  const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      values: { messages: [runMessage], view },
+      as_node: 'runCommand',
+    }),
+  });
+  await parseJsonResponse(response, ThreadStateUpdateResponseSchema);
+}
+
+async function createRun(params: {
+  baseUrl: string;
+  threadId: string;
+  graphId: string;
+  durability: LangGraphDurability;
+}): Promise<string | undefined> {
+  const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      assistant_id: params.graphId,
+      input: null,
+      config: {
+        configurable: { thread_id: params.threadId },
+        durability: params.durability,
+      },
+      metadata: { source: 'cron' },
+      stream_mode: ['events', 'values', 'messages'],
+      stream_resumable: true,
+    }),
+  });
+
+  if (response.status === 422) {
+    const payloadText = await response.text();
+    console.info(`[cron] Run rejected; thread busy (thread=${params.threadId})`, { detail: payloadText });
+    return undefined;
+  }
+
+  const run = await parseJsonResponse(response, RunResponseSchema);
+  return run.run_id;
+}
+
+async function fetchRun(baseUrl: string, threadId: string, runId: string) {
+  const response = await fetch(`${baseUrl}/threads/${threadId}/runs/${runId}`);
+  return parseJsonResponse(response, RunResponseSchema);
+}
+
+async function waitForRunStreamCompletion(params: {
+  baseUrl: string;
+  threadId: string;
+  runId: string;
+}): Promise<RunStatus> {
+  const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs/${params.runId}/stream`, {
+    headers: {
+      Accept: 'text/event-stream',
+    },
+  });
+  if (!response.ok) {
+    const payloadText = await response.text();
+    throw new Error(`LangGraph run stream failed (${response.status}): ${payloadText}`);
+  }
+
+  const stream = response.body;
+  if (stream) {
+    for await (const chunk of stream) {
+      void chunk;
+    }
+  }
+
+  const run = await fetchRun(params.baseUrl, params.threadId, params.runId);
+  return run.status;
+}
+
+export async function runGraphOnce(
+  threadId: string,
+  options?: { durability?: LangGraphDurability },
+) {
+  if (runningThreads.has(threadId)) {
+    console.info(`[cron] Skipping tick - run already in progress (thread=${threadId})`);
+    return;
+  }
+
+  runningThreads.add(threadId);
+  const startedAt = Date.now();
+  console.info(`[cron] Starting mock CLMM graph run via API (thread=${threadId})`);
+
+  const runMessage = {
+    id: uuidv7(),
+    role: 'user' as const,
+    content: JSON.stringify({ command: 'cycle' }),
+  };
+
+  const baseUrl = resolveLangGraphDeploymentUrl();
+  const graphId = resolveLangGraphGraphId();
+  const defaultDurability = resolveLangGraphDefaults().durability;
+  const durability = resolveLangGraphDurability(options?.durability ?? defaultDurability);
+
+  try {
+    await ensureThread(baseUrl, threadId, graphId);
+    await updateCycleState(baseUrl, threadId, runMessage);
+    const runId = await createRun({ baseUrl, threadId, graphId, durability });
+    if (!runId) {
+      return;
+    }
+    const status = await waitForRunStreamCompletion({ baseUrl, threadId, runId });
+    if (status === 'interrupted') {
+      console.warn('[cron] Graph interrupted awaiting operator input; supply input via UI and rerun.');
+      return;
+    }
+    if (status && status !== 'success') {
+      console.error('[cron] Graph run failed', { threadId, runId, status });
+      return;
+    }
+    console.info(`[cron] Run complete in ${Date.now() - startedAt}ms`, { runId });
+  } catch (error) {
+    console.error('[cron] Graph run failed', error);
+  } finally {
+    runningThreads.delete(threadId);
+  }
+}
+
+export async function startMockCron(
+  threadId: string,
+  options?: { durability?: LangGraphDurability },
+) {
+  await runGraphOnce(threadId, options);
+}
+
+configureCronExecutor(runGraphOnce);
+
+const invokedAsEntryPoint =
+  process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+if (invokedAsEntryPoint) {
+  const initialThreadId = process.env['STARTER_THREAD_ID'] ?? uuidv7();
+  if (!process.env['STARTER_THREAD_ID']) {
+    console.info(`[cron] STARTER_THREAD_ID not provided; generated thread id ${initialThreadId}`);
+  }
+
+  await startMockCron(initialThreadId);
+}

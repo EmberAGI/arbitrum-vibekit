@@ -5,6 +5,8 @@ import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
 import { resolveAccountingContextId } from '../accounting.js';
 import { buildTaskStatus, isTaskTerminal, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
+import { appendFlowLogHistory, loadFlowLogHistory } from '../historyStore.js';
+import { applyAccountingToView } from '../viewMapping.js';
 
 type Configurable = { configurable?: { thread_id?: string } };
 
@@ -36,28 +38,44 @@ export const fireCommandNode = async (
     };
   }
 
-  const { task, statusEvent } = buildTaskStatus(currentTask, 'canceled', 'Agent fired! It will stop trading.');
+  const onboardingComplete = Boolean(state.view.operatorConfig);
+  const terminalState = onboardingComplete ? 'completed' : 'canceled';
+  const terminalMessage = onboardingComplete
+    ? 'Agent fired. Workflow completed.'
+    : 'Agent fired before onboarding completed.';
+  const { task, statusEvent } = buildTaskStatus(currentTask, terminalState, terminalMessage);
   await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
 
   const contextId = resolveAccountingContextId({ state, threadId });
   const aumUsd = state.view.accounting.aumUsd ?? state.view.accounting.latestNavSnapshot?.totalUsd;
-  const accounting =
-    contextId && aumUsd !== undefined
-      ? applyAccountingUpdate({
-          existing: state.view.accounting,
-          flowEvents: [
-            createFlowEvent({
-              type: 'fire',
-              contextId,
-              chainId: ARBITRUM_CHAIN_ID,
-              usdValue: aumUsd,
-            }),
-          ],
-        })
-      : state.view.accounting;
+  let accountingBase = state.view.accounting;
+  const storedFlowLog = threadId ? await loadFlowLogHistory({ threadId }) : [];
+  if (storedFlowLog.length > 0) {
+    accountingBase = { ...accountingBase, flowLog: storedFlowLog };
+  }
+  let accounting = accountingBase;
+  if (contextId && aumUsd !== undefined) {
+    const fireEvent = createFlowEvent({
+      type: 'fire',
+      contextId,
+      chainId: ARBITRUM_CHAIN_ID,
+      usdValue: aumUsd,
+    });
+    await appendFlowLogHistory({ threadId, events: [fireEvent] });
+    accounting = applyAccountingUpdate({
+      existing: accountingBase,
+      flowEvents: [fireEvent],
+    });
+  }
   if (!contextId) {
     logInfo('Accounting fire event skipped: missing threadId', {});
   }
+
+  const { profile, metrics } = applyAccountingToView({
+    profile: state.view.profile,
+    metrics: state.view.metrics,
+    accounting,
+  });
 
   return {
     view: {
@@ -65,6 +83,8 @@ export const fireCommandNode = async (
       command: 'fire',
       activity: { events: [statusEvent], telemetry: [] },
       accounting,
+      profile,
+      metrics,
     },
   };
 };

@@ -917,7 +917,7 @@ pnpm install
 # Development mode (with hot reload)
 pnpm dev
 
-# Start LangGraph server on port 8125
+# Start LangGraph server on port 8127
 ```
 
 ### 4. Test via Frontend

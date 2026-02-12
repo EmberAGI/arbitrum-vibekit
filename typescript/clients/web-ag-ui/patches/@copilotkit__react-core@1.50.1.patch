@@ -1,0 +1,34 @@
+diff --git a/dist/chunk-VV56AVPB.mjs b/dist/chunk-VV56AVPB.mjs
+index 257506bee0671b8148c1508bb552b624d4a91d1b..c216bf3fc8cb7e843d4d4fc2368a9aacca6974df 100644
+--- a/dist/chunk-VV56AVPB.mjs
++++ b/dist/chunk-VV56AVPB.mjs
+@@ -53,6 +53,12 @@ function useLangGraphInterruptRender(agent) {
+       onRunStartedEvent: () => {
+         localInterrupt = null;
+       },
++      onRunFinishedEvent: () => {
++        if (localInterrupt) {
++          addInterruptEvent(localInterrupt);
++          localInterrupt = null;
++        }
++      },
+       onRunFinalized: () => {
+         if (localInterrupt) {
+           addInterruptEvent(localInterrupt);
+diff --git a/dist/hooks/use-langgraph-interrupt-render.js b/dist/hooks/use-langgraph-interrupt-render.js
+index fd76dbf76c5d441b2e51dcd9540cb9c06c007201..6e52cdba02ea6ab997d01dc62242a139736bba03 100644
+--- a/dist/hooks/use-langgraph-interrupt-render.js
++++ b/dist/hooks/use-langgraph-interrupt-render.js
+@@ -246,6 +246,12 @@ function useLangGraphInterruptRender(agent) {
+       onRunStartedEvent: () => {
+         localInterrupt = null;
+       },
++      onRunFinishedEvent: () => {
++        if (localInterrupt) {
++          addInterruptEvent(localInterrupt);
++          localInterrupt = null;
++        }
++      },
+       onRunFinalized: () => {
+         if (localInterrupt) {
+           addInterruptEvent(localInterrupt);

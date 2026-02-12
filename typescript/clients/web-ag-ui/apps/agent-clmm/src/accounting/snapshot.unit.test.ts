@@ -64,6 +64,56 @@ const basePosition: WalletPosition = {
 };
 
 describe('createCamelotNavSnapshot', () => {
+  it('computes fees APY from lifecycle duration', async () => {
+    const { createCamelotNavSnapshot } = await import('./snapshot.js');
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-11T00:00:00.000Z'));
+
+    const flowLog: FlowLogEvent[] = [
+      {
+        id: 'flow-1',
+        type: 'supply',
+        timestamp: '2025-01-01T00:00:00.000Z',
+        contextId: 'ctx-1',
+        chainId: 42161,
+        poolAddress: '0xpool1',
+      },
+    ];
+
+    const { client } = buildClient({ positions: [basePosition], pools: [basePool] });
+    resolveTokenPriceMap.mockResolvedValue(new Map());
+    computeCamelotPositionValues.mockReturnValue([
+      {
+        positionId: 'camelot-0xpool1-0',
+        poolAddress: '0xpool1',
+        protocolId: 'camelot-clmm',
+        tokens: [
+          {
+            tokenAddress: '0xtoken0',
+            symbol: 'AAA',
+            decimals: 18,
+            category: 'supplied',
+            source: 'ember',
+          },
+        ],
+        positionValueUsd: 100,
+        feesUsd: 1,
+      },
+    ]);
+
+    const snapshot = await createCamelotNavSnapshot({
+      contextId: 'ctx-1',
+      trigger: 'cycle',
+      walletAddress: '0xabc',
+      chainId: 42161,
+      camelotClient: client,
+      flowLog,
+    });
+
+    expect(snapshot.feesApy).toBeCloseTo(36.5, 6);
+    vi.useRealTimers();
+  });
+
   it('returns an empty snapshot when no positions exist', async () => {
     const { createCamelotNavSnapshot } = await import('./snapshot.js');
 

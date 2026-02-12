@@ -2,14 +2,17 @@
 
 import { createContext, useContext, useCallback, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAgentConnection, type UseAgentConnectionResult } from '../hooks/useAgentConnection';
+import { DEFAULT_AGENT_ID, getAgentConfig } from '../config/agents';
 import {
-  useAgentConnection,
-  type UseAgentConnectionResult,
-} from '../hooks/useAgentConnection';
-import { useCurrentAgentId } from '../components/CopilotKitWithDynamicAgent';
+  defaultActivity,
+  defaultMetrics,
+  defaultProfile,
+  defaultSettings,
+  defaultView,
+} from '../types/agent';
 
-// Context value includes the agent connection and a way to switch agents
-interface AgentContextValue {
+export interface AgentContextValue {
   agent: UseAgentConnectionResult;
   currentAgentId: string;
   setCurrentAgentId: (id: string) => void;
@@ -22,13 +25,7 @@ const AgentContext = createContext<AgentContextValue | null>(null);
  * This is keyed by agentId to force remount when switching agents,
  * which ensures useCoAgent is called with the correct agent name.
  */
-function AgentConnectionProvider({
-  agentId,
-  children,
-}: {
-  agentId: string;
-  children: ReactNode;
-}) {
+function AgentConnectionProvider({ agentId, children }: { agentId: string; children: ReactNode }) {
   const router = useRouter();
 
   // Connect to the agent - this component remounts when agentId changes due to key
@@ -51,16 +48,75 @@ function AgentConnectionProvider({
   );
 }
 
-export function AgentProvider({ children }: { children: ReactNode }) {
-  // Get agent ID from the CopilotKit wrapper (which derives it from URL)
-  const currentAgentId = useCurrentAgentId();
+const inactiveAgent: UseAgentConnectionResult = {
+  config: getAgentConfig('inactive-agent'),
+  isConnected: false,
+  threadId: undefined,
+  interruptRenderer: null,
+  view: defaultView,
+  profile: defaultProfile,
+  metrics: defaultMetrics,
+  activity: defaultActivity,
+  transactionHistory: [],
+  events: [],
+  settings: defaultSettings,
+  isHired: false,
+  isActive: false,
+  isHiring: false,
+  isFiring: false,
+  isSyncing: false,
+  activeInterrupt: null,
+  runHire: () => undefined,
+  runFire: () => undefined,
+  runSync: () => undefined,
+  runCommand: () => undefined,
+  resolveInterrupt: () => undefined,
+  updateSettings: () => undefined,
+  setStateFromApiResponse: () => undefined,
+};
 
-  // Key the inner component by agentId to force remount when switching agents
-  // This ensures useCoAgent is called fresh with the new agent name
+export function AgentProvider({
+  children,
+  agentId = DEFAULT_AGENT_ID,
+}: {
+  children: ReactNode;
+  agentId?: string;
+}) {
+  const agent = useAgentConnection(agentId);
+  const router = useRouter();
+
+  const setCurrentAgentId = useCallback(
+    (id: string) => {
+      if (id !== agentId) {
+        router.push(`/hire-agents/${id}`);
+      }
+    },
+    [agentId, router],
+  );
+
   return (
-    <AgentConnectionProvider key={currentAgentId} agentId={currentAgentId}>
+    <AgentContext.Provider value={{ agent, currentAgentId: agentId, setCurrentAgentId }}>
       {children}
-    </AgentConnectionProvider>
+      {agent.interruptRenderer}
+    </AgentContext.Provider>
+  );
+}
+
+export function InactiveAgentProvider({ children }: { children: ReactNode }) {
+  const setCurrentAgentId = useCallback(() => {
+    // No-op for inactive agent
+  }, []);
+
+  return (
+    <AgentContext.Provider
+      value={{
+        agent: inactiveAgent,
+        currentAgentId: 'inactive-agent',
+        setCurrentAgentId,
+      }}
+    >
+      {children}
+    </AgentContext.Provider>
   );
 }
 

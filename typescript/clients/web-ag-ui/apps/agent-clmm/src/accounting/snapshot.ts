@@ -40,6 +40,24 @@ function buildTokenDescriptors(params: {
       });
     }
 
+    for (const token of position.feesOwedTokens ?? []) {
+      addToken({
+        chainId: params.chainId,
+        address: token.tokenAddress,
+        symbol: token.symbol,
+        decimals: token.decimals,
+      });
+    }
+
+    for (const token of position.rewardsOwedTokens ?? []) {
+      addToken({
+        chainId: params.chainId,
+        address: token.tokenAddress,
+        symbol: token.symbol,
+        decimals: token.decimals,
+      });
+    }
+
     if (position.tokensOwed0 || position.tokensOwed1) {
       const pool = params.poolsByAddress.get(position.poolAddress.toLowerCase());
       if (pool) {
@@ -80,13 +98,21 @@ function sum(values: number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }
 
+function parseTimestamp(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 function extractManagedPools(flowLog: FlowLogEvent[] | undefined): Set<string> | null {
   if (!flowLog) {
     return null;
   }
   const pools = new Set<string>();
   for (const event of flowLog) {
-    if (event.protocolId !== CAMELOT_PROTOCOL_ID) {
+    if (event.protocolId && event.protocolId !== CAMELOT_PROTOCOL_ID) {
       continue;
     }
     if (event.poolAddress) {
@@ -94,6 +120,63 @@ function extractManagedPools(flowLog: FlowLogEvent[] | undefined): Set<string> |
     }
   }
   return pools;
+}
+
+function computeFeesApy(params: {
+  totalUsd: number;
+  feesUsd?: number;
+  positionOpenedAt?: string;
+  now: string;
+}): number | undefined {
+  if (params.totalUsd <= 0) {
+    return undefined;
+  }
+  if (!params.feesUsd || params.feesUsd <= 0) {
+    return undefined;
+  }
+  const start = parseTimestamp(params.positionOpenedAt);
+  if (!start) {
+    return undefined;
+  }
+  const end = parseTimestamp(params.now);
+  if (!end || end <= start) {
+    return undefined;
+  }
+  const days = (end - start) / (1000 * 60 * 60 * 24);
+  if (days <= 0) {
+    return undefined;
+  }
+  return (params.feesUsd / params.totalUsd) * (365 / days) * 100;
+}
+
+function resolvePositionOpenedAt(params: {
+  flowLog?: FlowLogEvent[];
+  poolAddresses: Array<`0x${string}`>;
+}): string | undefined {
+  if (!params.flowLog || params.flowLog.length === 0) {
+    return undefined;
+  }
+  const targetPools = new Set(params.poolAddresses.map((address) => address.toLowerCase()));
+  if (targetPools.size === 0) {
+    return undefined;
+  }
+  const supplies = params.flowLog.filter(
+    (event) =>
+      event.type === 'supply' &&
+      event.poolAddress &&
+      targetPools.has(event.poolAddress.toLowerCase()),
+  );
+  if (supplies.length === 0) {
+    return undefined;
+  }
+  return supplies.reduce<string | undefined>((latest, event) => {
+    if (!latest) {
+      return event.timestamp;
+    }
+    const latestTs = parseTimestamp(latest) ?? 0;
+    const eventTs = parseTimestamp(event.timestamp) ?? 0;
+    return eventTs >= latestTs ? event.timestamp : latest;
+  }, undefined);
 }
 
 export async function createCamelotNavSnapshot(params: {
@@ -108,6 +191,7 @@ export async function createCamelotNavSnapshot(params: {
   cycle?: number;
 }): Promise<NavSnapshot> {
   const managedPools = extractManagedPools(params.flowLog);
+  const snapshotTimestamp = new Date().toISOString();
   const allPositions = await params.camelotClient.getWalletPositions(
     params.walletAddress,
     params.chainId,
@@ -125,7 +209,7 @@ export async function createCamelotNavSnapshot(params: {
     return {
       contextId: params.contextId,
       trigger: params.trigger,
-      timestamp: new Date().toISOString(),
+      timestamp: snapshotTimestamp,
       protocolId: CAMELOT_PROTOCOL_ID,
       walletAddress: normalizeAddress(params.walletAddress),
       chainId: params.chainId,
@@ -138,7 +222,10 @@ export async function createCamelotNavSnapshot(params: {
     };
   }
 
-  const pools = await params.camelotClient.listCamelotPools(params.chainId);
+  const poolAddresses = Array.from(
+    new Set(positions.map((position) => normalizeAddress(position.poolAddress))),
+  );
+  const pools = await params.camelotClient.listCamelotPools(params.chainId, { poolAddresses });
   const poolsByAddress = new Map(pools.map((pool) => [pool.address.toLowerCase(), pool]));
   const tokens = buildTokenDescriptors({
     chainId: params.chainId,
@@ -150,6 +237,7 @@ export async function createCamelotNavSnapshot(params: {
     chainId: params.chainId,
     pools,
     tokens,
+    positions,
   });
 
   const positionsValued = computeCamelotPositionValues({
@@ -171,17 +259,30 @@ export async function createCamelotNavSnapshot(params: {
   const feesUsd = sum(positionsValued.map((position) => position.feesUsd ?? 0));
   const rewardsUsd = sum(positionsValued.map((position) => position.rewardsUsd ?? 0));
   const totalUsd = Number(sum(positionsValued.map((position) => position.positionValueUsd)).toFixed(6));
+  const positionOpenedAt = resolvePositionOpenedAt({
+    flowLog: params.flowLog,
+    poolAddresses: positionsValued
+      .map((position) => position.poolAddress)
+      .filter((address): address is `0x${string}` => Boolean(address)),
+  });
+  const feesApy = computeFeesApy({
+    totalUsd,
+    feesUsd,
+    positionOpenedAt,
+    now: snapshotTimestamp,
+  });
 
   return {
     contextId: params.contextId,
     trigger: params.trigger,
-    timestamp: new Date().toISOString(),
+    timestamp: snapshotTimestamp,
     protocolId: CAMELOT_PROTOCOL_ID,
     walletAddress: normalizeAddress(params.walletAddress),
     chainId: params.chainId,
     totalUsd,
     positions: positionsValued,
     feesUsd: feesUsd > 0 ? Number(feesUsd.toFixed(6)) : undefined,
+    feesApy: feesApy !== undefined ? Number(feesApy.toFixed(6)) : undefined,
     rewardsUsd: rewardsUsd > 0 ? Number(rewardsUsd.toFixed(6)) : undefined,
     priceSource: summarizePriceSources(priceSources),
     transactionHash: params.transactionHash,

@@ -5,9 +5,14 @@
  * Also fetches current markets to show in the UI.
  */
 
+import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+
 import type { PolymarketState, PolymarketUpdate, Market, UserPosition } from '../context.js';
 import { logInfo, buildTaskStatus } from '../context.js';
 import { fetchMarketsFromGamma, fetchMarketPrices, createAdapterFromEnv, type TradingHistoryItem } from '../../clients/polymarketClient.js';
+
+// Type for CopilotKit config parameter (contains threadId)
+type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
 /**
  * Fetch markets and convert to our Market type.
@@ -117,7 +122,10 @@ async function fetchTradingHistory(userWalletAddress?: string): Promise<TradingH
  * - After bootstrap for initial state return
  * - Periodic sync checks
  */
-export async function syncStateNode(state: PolymarketState): Promise<PolymarketUpdate> {
+export async function syncStateNode(
+  state: PolymarketState,
+  config: CopilotKitConfig,
+): Promise<PolymarketUpdate> {
   logInfo('=== POLYMARKET AGENT syncing state ===', {
     lifecycle: state.view.lifecycleState,
     iteration: state.view.metrics.iteration,
@@ -183,13 +191,35 @@ export async function syncStateNode(state: PolymarketState): Promise<PolymarketU
     `State synced. ${markets.length} markets, ${opportunities.length} opportunities, ${userPositions.length} positions.`,
   );
 
+  // Emit state update to frontend for real-time UI updates
+  await copilotkitEmitState(config, {
+    view: {
+      task,
+      markets,
+      userPositions,
+      tradingHistory,
+      // Preserve pollCycle's data - these are managed by pollCycle, not syncState
+      opportunities: state.view.opportunities,
+      crossMarketOpportunities: state.view.crossMarketOpportunities,
+      detectedRelationships: state.view.detectedRelationships,
+      portfolioValueUsd: state.view.portfolioValueUsd,
+      positions: state.view.positions,
+      events: [statusEvent],
+    },
+  });
+
   return {
     view: {
       task,
       markets,
-      opportunities,
       userPositions,
       tradingHistory,
+      // Preserve pollCycle's data - these are managed by pollCycle, not syncState
+      opportunities: state.view.opportunities,
+      crossMarketOpportunities: state.view.crossMarketOpportunities,
+      detectedRelationships: state.view.detectedRelationships,
+      portfolioValueUsd: state.view.portfolioValueUsd,
+      positions: state.view.positions,
       events: [statusEvent],
     },
   };

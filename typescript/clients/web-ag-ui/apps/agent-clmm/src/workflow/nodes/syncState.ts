@@ -2,6 +2,7 @@ import { applyAccountingUpdate } from '../../accounting/state.js';
 import { createCamelotAccountingSnapshot } from '../accounting.js';
 import { getCamelotClient } from '../clientFactory.js';
 import { logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
+import { applyAccountingToView } from '../viewMapping.js';
 
 /**
  * No-op sync node.
@@ -39,7 +40,12 @@ export async function syncStateNode(
       existing: state.view.accounting,
       snapshots: [snapshot],
     });
-    return { view: { accounting } };
+    const { profile, metrics } = applyAccountingToView({
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      accounting,
+    });
+    return { view: { accounting, profile, metrics } };
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';

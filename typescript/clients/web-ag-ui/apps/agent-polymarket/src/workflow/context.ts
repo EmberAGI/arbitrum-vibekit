@@ -398,7 +398,7 @@ const defaultPrivateState = (): PolymarketPrivateState => ({
 // State Merge Functions
 // ============================================================================
 
-const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
+const mergeAppendOrReplace = <T>(left: T[], right?: T[], maxSize?: number): T[] => {
   if (!right) return left;
   if (right.length === 0) return left;
   if (right === left) return left;
@@ -411,27 +411,26 @@ const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
         break;
       }
     }
-    if (isPrefix) return right;
+    if (isPrefix) {
+      const result = right;
+      return maxSize ? result.slice(-maxSize) : result;
+    }
   }
-  return [...left, ...right];
+  const merged = [...left, ...right];
+  return maxSize ? merged.slice(-maxSize) : merged;
 };
 
 const mergeViewState = (
   left: PolymarketViewState,
   right?: Partial<PolymarketViewState>,
 ): PolymarketViewState => {
-  console.log('[STATE MERGE] mergeViewState called');
-  console.log('[STATE MERGE] Left requestedApprovalAmount:', left.requestedApprovalAmount);
-  console.log('[STATE MERGE] Right requestedApprovalAmount:', right?.requestedApprovalAmount);
-  console.log('[STATE MERGE] Right keys:', right ? Object.keys(right) : 'none');
-
   if (!right) return left;
 
-  const nextTransactions = mergeAppendOrReplace(left.transactionHistory, right.transactionHistory);
+  const nextTransactions = mergeAppendOrReplace(left.transactionHistory, right.transactionHistory, 200);
   // tradingHistory comes from API (complete list), so replace instead of append
   // Only use mergeAppendOrReplace for agent-generated data like transactionHistory and events
   const nextTradingHistory = right.tradingHistory ?? left.tradingHistory;
-  const nextEvents = mergeAppendOrReplace(left.events, right.events);
+  const nextEvents = mergeAppendOrReplace(left.events, right.events, 100);
 
   const nextMetrics: PolymarketMetrics = {
     iteration: right.metrics?.iteration ?? left.metrics.iteration,
@@ -468,8 +467,6 @@ const mergeViewState = (
     events: nextEvents,
     metrics: nextMetrics,
   };
-
-  console.log('[STATE MERGE] Merged requestedApprovalAmount:', merged.requestedApprovalAmount);
 
   return merged;
 };

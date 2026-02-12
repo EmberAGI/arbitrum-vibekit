@@ -1,7 +1,12 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useCoAgent, useCopilotContext } from '@copilotkit/react-core';
+import { useCopilotContext, useLangGraphInterruptRender } from '@copilotkit/react-core';
+import {
+  useAgent,
+  useCopilotKit,
+  CopilotKitCoreRuntimeConnectionStatus,
+} from '@copilotkit/react-core/v2';
 import { v7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
 import { getAgentConfig, type AgentConfig } from '../config/agents';
@@ -14,8 +19,14 @@ import {
   type AgentSettings,
   type AgentInterrupt,
   type OperatorConfigInput,
+  type PendleSetupInput,
+  type GmxSetupInput,
+  type PolymarketApprovalInput,
+  type PolymarketPermitSignatureInput,
+  type PolymarketCtfApprovalInput,
   type FundingTokenInput,
   type DelegationSigningResponse,
+  type FundWalletAcknowledgement,
   type Transaction,
   type ClmmEvent,
   defaultView,
@@ -25,6 +36,8 @@ import {
   defaultSettings,
   initialAgentState,
 } from '../types/agent';
+import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSync';
+import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 
 export type {
   AgentState,
@@ -35,6 +48,12 @@ export type {
   AgentSettings,
   AgentInterrupt,
   OperatorConfigInput,
+  PendleSetupInput,
+  GmxSetupInput,
+  PolymarketApprovalInput,
+  PolymarketPermitSignatureInput,
+  PolymarketCtfApprovalInput,
+  FundWalletAcknowledgement,
   FundingTokenInput,
   Transaction,
   ClmmEvent,
@@ -44,8 +63,15 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
   typeof value === 'object' &&
   value !== null &&
   ((value as { type?: string }).type === 'operator-config-request' ||
+    (value as { type?: string }).type === 'pendle-setup-request' ||
+    (value as { type?: string }).type === 'pendle-fund-wallet-request' ||
+    (value as { type?: string }).type === 'gmx-setup-request' ||
     (value as { type?: string }).type === 'clmm-funding-token-request' ||
+    (value as { type?: string }).type === 'pendle-funding-token-request' ||
+    (value as { type?: string }).type === 'gmx-funding-token-request' ||
     (value as { type?: string }).type === 'clmm-delegation-signing-request' ||
+    (value as { type?: string }).type === 'pendle-delegation-signing-request' ||
+    (value as { type?: string }).type === 'gmx-delegation-signing-request' ||
     (value as { type?: string }).type === 'approval-amount-request' ||
     (value as { type?: string }).type === 'usdc-permit-signature-request');
 
@@ -53,6 +79,7 @@ export interface UseAgentConnectionResult {
   config: AgentConfig;
   isConnected: boolean;
   threadId: string | undefined;
+  interruptRenderer: ReturnType<typeof useLangGraphInterruptRender>;
 
   // Full view state
   view: AgentView;
@@ -81,20 +108,18 @@ export interface UseAgentConnectionResult {
   resolveInterrupt: (
     input:
       | OperatorConfigInput
+      | PendleSetupInput
+      | GmxSetupInput
+      | PolymarketApprovalInput
+      | PolymarketPermitSignatureInput
+      | PolymarketCtfApprovalInput
+      | FundWalletAcknowledgement
       | FundingTokenInput
-      | DelegationSigningResponse
-      | { [key: string]: unknown },
+      | DelegationSigningResponse,
   ) => void;
 
   // Settings management: updates local state then syncs to backend
   updateSettings: (updates: Partial<AgentSettings>) => void;
-
-  // State management: direct state updates
-  setState: (
-    update: AgentState | ((prev: AgentState | undefined) => AgentState),
-  ) => void;
-
-  // Update view state from direct API response (avoids starting a new run)
   setStateFromApiResponse: (viewUpdate: Partial<AgentView>) => void;
 }
 
@@ -102,81 +127,314 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const initialSyncDone = useRef(false);
+  const lastConnectedThreadRef = useRef<string | null>(null);
+  const lastSyncedThreadRef = useRef<string | null>(null);
+  const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
+  const messagesSnapshotRef = useRef(false);
+  const runInFlightRef = useRef(false);
+  const connectSeqRef = useRef(0);
+  const agentDebugIdsRef = useRef(new WeakMap<object, number>());
+  const nextAgentDebugIdRef = useRef(1);
 
   const config = getAgentConfig(agentId);
   const prevAgentId = useRef(agentId);
 
-  const { state, setState, run } = useCoAgent<AgentState>({
-    name: agentId,
-    initialState: initialAgentState,
+  const { copilotkit } = useCopilotKit();
+  const { agent } = useAgent({
+    agentId,
+    updates: ['OnStateChanged'] as NonNullable<Parameters<typeof useAgent>[0]>['updates'],
   });
   const { threadId } = useCopilotContext();
+  const runtimeStatus = copilotkit.runtimeConnectionStatus;
 
   const { activeInterrupt, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
     enabled: isAgentInterrupt,
   });
+  const interruptRenderer = useLangGraphInterruptRender(agent);
+
+  const debugConnect = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === 'true';
+
+  const getAgentDebugId = useCallback((value: ReturnType<typeof useAgent>['agent'] | null) => {
+    if (!value) return 'none';
+    const key = value as unknown as object;
+    const cached = agentDebugIdsRef.current.get(key);
+    if (cached) return `agent#${cached}`;
+    const nextId = nextAgentDebugIdRef.current;
+    nextAgentDebugIdRef.current = nextId + 1;
+    agentDebugIdsRef.current.set(key, nextId);
+    return `agent#${nextId}`;
+  }, []);
+
+  const logConnectEvent = useCallback(
+    (event: string, payload: Record<string, unknown>) => {
+      if (!debugConnect) return;
+      console.debug('[agent-connect]', {
+        ts: new Date().toISOString(),
+        event,
+        ...payload,
+      });
+    },
+    [debugConnect],
+  );
 
   // Simple command runner - no queuing, just run the command
   const runCommand = useCallback(
     (command: string, data?: Record<string, unknown>) => {
-      console.log(`[useAgentConnection] Running command "${command}" on agent: ${agentId}`, data ? { data } : '');
-      console.log(`[useAgentConnection] threadId: ${threadId}`);
-      console.log(`[useAgentConnection] state.view.command: ${state?.view?.command}`);
-      console.log(`[useAgentConnection] activeInterrupt: ${activeInterrupt ? JSON.stringify(activeInterrupt) : 'none'}`);
+      if (!agent || !threadId) return false;
+      if (runInFlightRef.current) return false;
 
+      runInFlightRef.current = true;
+
+      const payload = data ? { command, data } : { command };
       const message = {
         id: v7(),
         role: 'user' as const,
-        content: JSON.stringify(data ? { command, data } : { command }),
+        content: JSON.stringify(payload),
       };
-      console.log(`[useAgentConnection] Sending message:`, message);
 
-      try {
-        const result = run(() => message);
-        console.log(`[useAgentConnection] run() returned:`, result);
-      } catch (error) {
-        console.error(`[useAgentConnection] run() threw error:`, error);
-      }
+      agent.addMessage(message);
+      void copilotkit.runAgent({ agent }).catch((error) => {
+        runInFlightRef.current = false;
+        console.error('Agent run failed', error);
+      });
+
+      return true;
     },
-    [run, agentId, threadId, state?.view?.command, activeInterrupt],
+    [agent, copilotkit, threadId],
   );
 
-  // Reset initial sync when agent changes to ensure new agent gets synced
-  useEffect(() => {
-    if (prevAgentId.current !== agentId) {
-      console.log(`[useAgentConnection] Agent changed: ${prevAgentId.current} -> ${agentId}`);
-      initialSyncDone.current = false;
-      prevAgentId.current = agentId;
-    }
-  }, [agentId]);
+  const hasStateValues = useCallback((value: unknown): value is AgentState => {
+    return Boolean(
+      value &&
+      typeof value === 'object' &&
+      Object.keys(value as Record<string, unknown>).length > 0,
+    );
+  }, []);
 
-  // Initial sync when thread is established - runs once when threadId becomes available
-  // Also runs when agent changes (due to reset above)
-  // We delay the sync to ensure CopilotKit is fully initialized after remount
+  const needsSync = useCallback((value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return true;
+    const state = value as AgentState;
+    const view = state.view;
+    if (!view) return true;
+
+    const profile = view.profile ?? defaultProfile;
+    const metrics = view.metrics ?? defaultMetrics;
+    const activity = view.activity ?? defaultActivity;
+
+    const hasProfile =
+      profile.totalUsers !== undefined ||
+      profile.agentIncome !== undefined ||
+      profile.aum !== undefined ||
+      profile.apy !== undefined ||
+      profile.pools.length > 0 ||
+      profile.allowedPools.length > 0;
+    const hasMetrics =
+      metrics.iteration !== 0 ||
+      metrics.cyclesSinceRebalance !== 0 ||
+      metrics.staleCycles !== 0 ||
+      metrics.lastSnapshot !== undefined ||
+      metrics.latestCycle !== undefined ||
+      metrics.previousPrice !== undefined ||
+      metrics.aumUsd !== undefined ||
+      metrics.apy !== undefined ||
+      metrics.lifetimePnlUsd !== undefined ||
+      metrics.latestSnapshot !== undefined ||
+      metrics.rebalanceCycles !== undefined;
+    const hasActivity = activity.telemetry.length > 0 || activity.events.length > 0;
+    const hasHistory = view.transactionHistory.length > 0;
+
+    return !(hasProfile || hasMetrics || hasActivity || hasHistory);
+  }, []);
+
   useEffect(() => {
-    if (threadId && !initialSyncDone.current) {
-      console.log(`[useAgentConnection] Running initial sync for agent: ${agentId}, thread: ${threadId}`);
-      initialSyncDone.current = true;
-      // Delay sync to ensure CopilotKit is fully initialized after remount
-      // This prevents "Cannot read properties of undefined (reading 'agentName')" errors
-      // 500ms gives CopilotKit time to establish connection to the correct backend
-      const timer = setTimeout(() => {
-        console.log(`[useAgentConnection] Executing sync command for agent: ${agentId}`);
-        runCommand('sync');
-      }, 500);
-      return () => clearTimeout(timer);
+    if (!agent) {
+      return undefined;
     }
-  }, [threadId, runCommand, agentId]);
+
+    const clearRunFlag = () => {
+      runInFlightRef.current = false;
+    };
+
+    const subscription = agent.subscribe({
+      onRunStartedEvent: () => {
+        runInFlightRef.current = true;
+      },
+      onRunFinishedEvent: clearRunFlag,
+      onRunErrorEvent: clearRunFlag,
+      onRunFailed: clearRunFlag,
+      onRunFinalized: clearRunFlag,
+      onRunInitialized: ({ state }) => {
+        if (hasStateValues(state)) {
+          agent.setState(state);
+          return;
+        }
+
+        if (hasStateValues(agent.state)) {
+          return;
+        }
+
+        agent.setState(initialAgentState);
+      },
+      onMessagesSnapshotEvent: () => {
+        messagesSnapshotRef.current = true;
+      },
+    });
+
+    return () => subscription.unsubscribe();
+  }, [agent, hasStateValues]);
+
+  // Initial sync when thread is established - runs once per agent instance
+  useEffect(() => {
+    agentRef.current = agent ?? null;
+  }, [agent]);
+
+  useEffect(() => {
+    if (!agent) return undefined;
+
+    return () => {
+      logConnectEvent('cleanup', {
+        agentId,
+        agent: getAgentDebugId(agent),
+        threadId,
+      });
+      agent.abortRun();
+      void agent.detachActiveRun();
+    };
+  }, [agent, agentId, getAgentDebugId, logConnectEvent, threadId]);
+
+  useEffect(() => {
+    runInFlightRef.current = false;
+    lastSyncedThreadRef.current = null;
+    lastConnectedThreadRef.current = null;
+  }, [threadId]);
+
+  useEffect(() => {
+    if (!threadId || !agent) return;
+    if (runtimeStatus !== CopilotKitCoreRuntimeConnectionStatus.Connected) return;
+    if (lastConnectedThreadRef.current === threadId) return;
+
+    let cancelled = false;
+    const connectSeq = connectSeqRef.current + 1;
+    connectSeqRef.current = connectSeq;
+
+    const connectAndSync = () => {
+      const currentAgent = agentRef.current;
+      if (!currentAgent) return;
+      currentAgent.threadId = threadId;
+      lastConnectedThreadRef.current = threadId;
+      messagesSnapshotRef.current = false;
+
+      const hasConnectAgent = typeof currentAgent.connectAgent === 'function';
+
+      logConnectEvent('start', {
+        agentId,
+        seq: connectSeq,
+        threadId,
+        agent: getAgentDebugId(currentAgent),
+        hasConnectAgent,
+      });
+
+      void copilotkit.connectAgent({ agent: currentAgent }).catch(() => {
+        // Errors are already reported via CopilotKit core subscribers.
+      });
+    };
+
+    void connectAndSync();
+
+    return () => {
+      cancelled = true;
+      logConnectEvent('effect-cleanup', {
+        agentId,
+        seq: connectSeq,
+        threadId,
+        agent: getAgentDebugId(agentRef.current),
+      });
+    };
+  }, [
+    threadId,
+    agent,
+    runtimeStatus,
+    copilotkit,
+    runCommand,
+    hasStateValues,
+    needsSync,
+    agentId,
+    getAgentDebugId,
+    logConnectEvent,
+  ]);
+
+  // Poll `/api/agents/sync` to pick up backend-driven state changes (cron ticks, external runs).
+  // CopilotKit connect should stream state, but this provides a deterministic fallback for the detail page.
+  useEffect(() => {
+    console.log('useEffect.......', { threadId, agent });
+    if (!threadId) return undefined;
+    if (!agent) return undefined;
+
+    const rawInterval = Number(process.env.NEXT_PUBLIC_AGENT_DETAIL_SYNC_POLL_MS ?? 5000);
+    const intervalMs = Number.isFinite(rawInterval) && rawInterval > 0 ? rawInterval : 5000;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (inFlight) return;
+      if (runInFlightRef.current) return;
+
+      inFlight = true;
+      try {
+        const response = await fetch('/api/agents/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId, threadId }),
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const rawResponse = await response.json().catch(() => null);
+
+        const parsed = parseAgentSyncResponse(rawResponse);
+
+        const currentAgent = agentRef.current;
+        if (!currentAgent) {
+          return;
+        }
+        const currentState = hasStateValues(currentAgent.state)
+          ? (currentAgent.state as AgentState)
+          : initialAgentState;
+
+        const nextState = applyAgentSyncToState(currentState, parsed);
+
+        currentAgent.setState(nextState);
+      } catch {
+        // Silence sync errors; connect stream still drives primary updates.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void tick();
+    const timer = window.setInterval(() => void tick(), intervalMs);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [agent, agentId, hasStateValues, threadId]);
 
   // Extract state with defaults
-  const view = state?.view ?? defaultView;
+  const currentState =
+    agent.state && Object.keys(agent.state).length > 0
+      ? (agent.state as AgentState)
+      : initialAgentState;
+  const view = currentState.view ?? defaultView;
   const profile = view.profile ?? defaultProfile;
   const metrics = view.metrics ?? defaultMetrics;
   const activity = view.activity ?? defaultActivity;
   const transactionHistory = view.transactionHistory ?? [];
   const events = activity.events ?? [];
-  const settings = state?.settings ?? defaultSettings;
+  const settings = currentState.settings ?? defaultSettings;
 
   // Derived state
   // isHired should be true for any command except 'fire' and undefined (initial state)
@@ -187,23 +445,23 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
 
   const runSync = useCallback(() => {
+    if (!runCommand('sync')) return;
     setIsSyncing(true);
-    runCommand('sync');
     setTimeout(() => setIsSyncing(false), 2000);
   }, [runCommand]);
 
   const runHire = useCallback(() => {
     if (!isHired && !isHiring) {
+      if (!runCommand('hire')) return;
       setIsHiring(true);
-      runCommand('hire');
       setTimeout(() => setIsHiring(false), 5000);
     }
   }, [runCommand, isHired, isHiring]);
 
   const runFire = useCallback(() => {
     if (!isFiring) {
+      if (!runCommand('fire')) return;
       setIsFiring(true);
-      runCommand('fire');
       setTimeout(() => setIsFiring(false), 3000);
     }
   }, [runCommand, isFiring]);
@@ -212,48 +470,57 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     (
       input:
         | OperatorConfigInput
+        | PendleSetupInput
+        | GmxSetupInput
+        | PolymarketApprovalInput
+        | PolymarketPermitSignatureInput
+        | PolymarketCtfApprovalInput
+        | FundWalletAcknowledgement
         | FundingTokenInput
-        | DelegationSigningResponse
-        | { [key: string]: unknown },
+        | DelegationSigningResponse,
     ) => {
       resolve(JSON.stringify(input));
+      scheduleCycleAfterInterruptResolution({
+        interruptType: activeInterrupt?.type,
+        runCommand,
+      });
     },
-    [resolve],
+    [activeInterrupt?.type, resolve, runCommand],
   );
 
   // Settings sync pattern: update local state only (no automatic sync to avoid 409)
   const updateSettings = useCallback(
     (updates: Partial<AgentSettings>) => {
-      setState((prev) => ({
-        ...(prev ?? initialAgentState),
+      agent.setState({
+        ...currentState,
         settings: {
-          ...(prev?.settings ?? defaultSettings),
+          ...(currentState.settings ?? defaultSettings),
           ...updates,
         },
-      }));
+      });
     },
-    [setState],
+    [agent, currentState],
   );
 
-  // Update state from direct API response (avoids starting a new run like runSync would)
+  // Update state from API response - used for external state updates
   const setStateFromApiResponse = useCallback(
     (viewUpdate: Partial<AgentView>) => {
-      console.log('[useAgentConnection] setStateFromApiResponse called with:', Object.keys(viewUpdate));
-      setState((prev) => ({
-        ...(prev ?? initialAgentState),
+      agent.setState({
+        ...currentState,
         view: {
-          ...(prev?.view ?? defaultView),
+          ...view,
           ...viewUpdate,
         },
-      }));
+      });
     },
-    [setState],
+    [agent, currentState, view],
   );
 
   return {
     config,
     isConnected: !!threadId,
     threadId,
+    interruptRenderer,
     view,
     profile,
     metrics,
@@ -273,7 +540,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     runCommand,
     resolveInterrupt,
     updateSettings,
-    setState,
     setStateFromApiResponse,
   };
 }

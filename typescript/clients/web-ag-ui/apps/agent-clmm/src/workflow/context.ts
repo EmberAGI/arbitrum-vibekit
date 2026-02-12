@@ -1,12 +1,16 @@
-import type { CopilotKitState } from '@copilotkit/sdk-js/langgraph';
 import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
-import { Annotation, MemorySaver, messagesStateReducer } from '@langchain/langgraph';
-import type { Messages } from '@langchain/langgraph';
+import { Annotation } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
 
 import type { AccountingState } from '../accounting/types.js';
-import { resolvePollIntervalMs, resolveStreamLimit } from '../config/constants.js';
+import {
+  resolveAccountingHistoryLimit,
+  resolvePollIntervalMs,
+  resolveStateHistoryLimit,
+  resolveStreamLimit,
+} from '../config/constants.js';
+import { createCheckpointer } from '../config/serviceConfig.js';
 import {
   type CamelotPool,
   type FundingTokenInput,
@@ -17,7 +21,19 @@ import {
 
 export type AgentMessage = CopilotKitAIMessage;
 
-type CopilotState = CopilotKitState;
+type ClmmMessage = Record<string, unknown> | string;
+type ClmmMessageUpdate = ClmmMessage | ClmmMessage[];
+
+const clmmMessagesReducer = (left: ClmmMessageUpdate, right: ClmmMessageUpdate): ClmmMessage[] => {
+  const leftMessages = Array.isArray(left) ? left : [left];
+  const rightMessages = Array.isArray(right) ? right : [right];
+  return [...leftMessages, ...rightMessages];
+};
+
+type CopilotkitState = {
+  actions: Array<unknown>;
+  context: Array<{ description: string; value: string }>;
+};
 
 export type ClmmSettings = {
   amount?: number;
@@ -62,8 +78,28 @@ export type ClmmMetrics = {
   previousPrice?: number;
   cyclesSinceRebalance: number;
   staleCycles: number;
+  rebalanceCycles?: number;
   iteration: number;
   latestCycle?: RebalanceTelemetry;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
+  latestSnapshot?: {
+    poolAddress?: `0x${string}`;
+    totalUsd?: number;
+    feesUsd?: number;
+    feesApy?: number;
+    timestamp?: string;
+    positionOpenedAt?: string;
+    positionTokens: Array<{
+      address: `0x${string}`;
+      symbol: string;
+      decimals: number;
+      amount?: number;
+      amountBaseUnits?: string;
+      valueUsd?: number;
+    }>;
+  };
 };
 
 export type ClmmAccounting = AccountingState;
@@ -107,6 +143,7 @@ export type FundingTokenOption = {
   symbol: string;
   decimals: number;
   balance: string; // base units (decimal string)
+  valueUsd?: number;
 };
 
 export type FundingTokenInterrupt = {
@@ -232,8 +269,13 @@ const defaultViewState = (): ClmmViewState => ({
     previousPrice: undefined,
     cyclesSinceRebalance: 0,
     staleCycles: 0,
+    rebalanceCycles: 0,
     iteration: 0,
     latestCycle: undefined,
+    aumUsd: undefined,
+    apy: undefined,
+    lifetimePnlUsd: undefined,
+    latestSnapshot: undefined,
   },
   transactionHistory: [],
   accounting: {
@@ -253,6 +295,9 @@ const defaultViewState = (): ClmmViewState => ({
     apy: undefined,
   },
 });
+
+const STATE_HISTORY_LIMIT = resolveStateHistoryLimit();
+const ACCOUNTING_HISTORY_LIMIT = resolveAccountingHistoryLimit();
 
 const mergeSettings = (left: ClmmSettings, right?: Partial<ClmmSettings>): ClmmSettings => ({
   amount: right?.amount ?? left.amount,
@@ -294,14 +339,30 @@ const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
   return [...left, ...right];
 };
 
+const limitHistory = <T>(items: T[], limit: number): T[] => {
+  if (limit <= 0 || items.length <= limit) {
+    return items;
+  }
+  return items.slice(-limit);
+};
+
 const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): ClmmViewState => {
   if (!right) {
     return left;
   }
 
-  const nextTelemetry = mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry);
-  const nextEvents = mergeAppendOrReplace(left.activity.events, right.activity?.events);
-  const nextTransactions = mergeAppendOrReplace(left.transactionHistory, right.transactionHistory);
+  const nextTelemetry = limitHistory(
+    mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry),
+    STATE_HISTORY_LIMIT,
+  );
+  const nextEvents = limitHistory(
+    mergeAppendOrReplace(left.activity.events, right.activity?.events),
+    STATE_HISTORY_LIMIT,
+  );
+  const nextTransactions = limitHistory(
+    mergeAppendOrReplace(left.transactionHistory, right.transactionHistory),
+    STATE_HISTORY_LIMIT,
+  );
   const nextProfile: ClmmProfile = {
     agentIncome: right.profile?.agentIncome ?? left.profile.agentIncome,
     aum: right.profile?.aum ?? left.profile.aum,
@@ -319,15 +380,23 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     cyclesSinceRebalance:
       right.metrics?.cyclesSinceRebalance ?? left.metrics.cyclesSinceRebalance ?? 0,
     staleCycles: right.metrics?.staleCycles ?? left.metrics.staleCycles ?? 0,
+    rebalanceCycles: right.metrics?.rebalanceCycles ?? left.metrics.rebalanceCycles ?? 0,
     iteration: right.metrics?.iteration ?? left.metrics.iteration ?? 0,
     latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
+    aumUsd: right.metrics?.aumUsd ?? left.metrics.aumUsd,
+    apy: right.metrics?.apy ?? left.metrics.apy,
+    lifetimePnlUsd: right.metrics?.lifetimePnlUsd ?? left.metrics.lifetimePnlUsd,
+    latestSnapshot: right.metrics?.latestSnapshot ?? left.metrics.latestSnapshot,
   };
   const nextAccounting: ClmmAccounting = {
-    navSnapshots: mergeAppendOrReplace(
-      left.accounting.navSnapshots,
-      right.accounting?.navSnapshots,
+    navSnapshots: limitHistory(
+      mergeAppendOrReplace(left.accounting.navSnapshots, right.accounting?.navSnapshots),
+      ACCOUNTING_HISTORY_LIMIT,
     ),
-    flowLog: mergeAppendOrReplace(left.accounting.flowLog, right.accounting?.flowLog),
+    flowLog: limitHistory(
+      mergeAppendOrReplace(left.accounting.flowLog, right.accounting?.flowLog),
+      ACCOUNTING_HISTORY_LIMIT,
+    ),
     latestNavSnapshot: right.accounting?.latestNavSnapshot ?? left.accounting.latestNavSnapshot,
     lastUpdated: right.accounting?.lastUpdated ?? left.accounting.lastUpdated,
     lifecycleStart: right.accounting?.lifecycleStart ?? left.accounting.lifecycleStart,
@@ -370,19 +439,19 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
 };
 
 const mergeCopilotkit = (
-  left: CopilotState['copilotkit'],
-  right?: Partial<CopilotState['copilotkit']>,
-): CopilotState['copilotkit'] => ({
+  left: CopilotkitState,
+  right?: Partial<CopilotkitState>,
+): CopilotkitState => ({
   actions: right?.actions ?? left.actions ?? [],
   context: right?.context ?? left.context ?? [],
 });
 
 export const ClmmStateAnnotation = Annotation.Root({
-  messages: Annotation<Messages>({
+  messages: Annotation<ClmmMessage[], ClmmMessageUpdate>({
     default: () => [],
-    reducer: messagesStateReducer,
+    reducer: clmmMessagesReducer,
   }),
-  copilotkit: Annotation<CopilotState['copilotkit'], Partial<CopilotState['copilotkit']>>({
+  copilotkit: Annotation<CopilotkitState, Partial<CopilotkitState>>({
     default: () => ({ actions: [], context: [] }),
     reducer: (left, right) => mergeCopilotkit(left ?? { actions: [], context: [] }, right),
   }),
@@ -403,7 +472,7 @@ export const ClmmStateAnnotation = Annotation.Root({
 export type ClmmState = typeof ClmmStateAnnotation.State;
 export type ClmmUpdate = typeof ClmmStateAnnotation.Update;
 
-export const memory = new MemorySaver();
+export const memory = createCheckpointer();
 
 function buildAgentMessage(message: string): AgentMessage {
   return {

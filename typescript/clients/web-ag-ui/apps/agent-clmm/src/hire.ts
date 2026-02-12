@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { v7 as uuidv7 } from 'uuid';
 
 import { clmmGraph } from './agent.js';
+import { resolveLangGraphDurability, type LangGraphDurability } from './config/serviceConfig.js';
 import { type FundingTokenInput, FundingTokenInputSchema, type OperatorConfigInput, OperatorConfigInputSchema } from './domain/types.js';
 import { runGraphWithAutoResume } from './workflow/autoResumeRunner.js';
 import { type DelegationSigningInterrupt, type FundingTokenInterrupt, type OperatorInterrupt } from './workflow/context.js';
@@ -24,16 +25,21 @@ function resolveOperatorInputFromEnv(): OperatorConfigInput {
   const poolAddress = process.env['CLMM_POOL_ADDRESS'];
   const walletAddress = process.env['CLMM_WALLET_ADDRESS'];
   const baseContributionUsd = process.env['CLMM_BASE_CONTRIBUTION_USD'];
+  let envInput: unknown = undefined;
+  if (!candidate && poolAddress && walletAddress) {
+    if (baseContributionUsd === undefined) {
+      throw new Error(
+        'CLMM_BASE_CONTRIBUTION_USD is required when using CLMM_POOL_ADDRESS and CLMM_WALLET_ADDRESS. Set it to a number >= 10.',
+      );
+    }
+    const parsedBaseContributionUsd = Number(baseContributionUsd);
+    if (!Number.isFinite(parsedBaseContributionUsd) || parsedBaseContributionUsd < 10) {
+      throw new Error('CLMM_BASE_CONTRIBUTION_USD must be a number >= 10.');
+    }
+    envInput = { poolAddress, walletAddress, baseContributionUsd: parsedBaseContributionUsd };
+  }
 
-  const input: unknown =
-    candidate ??
-    (poolAddress && walletAddress
-      ? {
-          poolAddress,
-          walletAddress,
-          baseContributionUsd: baseContributionUsd ? Number(baseContributionUsd) : undefined,
-        }
-      : undefined);
+  const input: unknown = candidate ?? envInput;
 
   const parsed = OperatorConfigInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -73,7 +79,11 @@ function isDelegationSigningInterrupt(value: unknown): value is DelegationSignin
   );
 }
 
-export async function startClmmHire(threadId: string, operatorInput: OperatorConfigInput) {
+export async function startClmmHire(
+  threadId: string,
+  operatorInput: OperatorConfigInput,
+  options?: { durability?: LangGraphDurability },
+) {
   const hireMessage = {
     id: uuidv7(),
     role: 'user' as const,
@@ -85,7 +95,10 @@ export async function startClmmHire(threadId: string, operatorInput: OperatorCon
   type ClmmInvokeConfig = Parameters<typeof clmmGraph.invoke>[1];
 
   const initialInput: ClmmInvokeInput = { messages: [hireMessage] } as ClmmInvokeInput;
-  const invokeConfig: ClmmInvokeConfig = { configurable: { thread_id: threadId } } as ClmmInvokeConfig;
+  const invokeConfig: ClmmInvokeConfig = {
+    configurable: { thread_id: threadId },
+    durability: resolveLangGraphDurability(options?.durability),
+  } as ClmmInvokeConfig;
 
   const output = await runGraphWithAutoResume<ClmmInvokeInput, ClmmInvokeOutput, ClmmInvokeConfig>({
     graph: clmmGraph,
@@ -108,7 +121,7 @@ export async function startClmmHire(threadId: string, operatorInput: OperatorCon
       }
       if (isDelegationSigningInterrupt(value)) {
         throw new Error(
-          'Delegation signing is required. This CLI auto-resume does not support wallet signing; rerun with CLMM_DELEGATIONS_BYPASS=true or complete onboarding via the web UI.',
+          'Delegation signing is required. This CLI auto-resume does not support wallet signing; rerun with DELEGATIONS_BYPASS=true or complete onboarding via the web UI.',
         );
       }
       throw new Error(

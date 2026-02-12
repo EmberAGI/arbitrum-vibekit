@@ -5,9 +5,14 @@
  * Sets up initial state and prepares for trading.
  */
 
+import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { ethers } from 'ethers';
+
 import type { PolymarketState, PolymarketUpdate } from '../context.js';
 import { logInfo, buildTaskStatus, DEFAULT_STRATEGY_CONFIG } from '../context.js';
+
+// Type for CopilotKit config parameter (contains threadId)
+type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
 /**
  * Bootstrap the Polymarket agent workflow.
@@ -17,11 +22,14 @@ import { logInfo, buildTaskStatus, DEFAULT_STRATEGY_CONFIG } from '../context.js
  * 2. Initializes metrics
  * 3. Sets lifecycle state to 'running'
  */
-export async function bootstrapNode(state: PolymarketState): Promise<PolymarketUpdate> {
+export async function bootstrapNode(
+  state: PolymarketState,
+  config: CopilotKitConfig,
+): Promise<PolymarketUpdate> {
   logInfo('Bootstrap node starting');
 
   // Load configuration from environment with defaults
-  const config = {
+  const strategyConfig = {
     ...DEFAULT_STRATEGY_CONFIG,
     minSpreadThreshold: parseFloat(process.env['POLY_MIN_SPREAD_THRESHOLD'] ?? '0.02'),
     maxPositionSizeUsd: parseFloat(process.env['POLY_MAX_POSITION_SIZE_USD'] ?? '100'),
@@ -61,23 +69,33 @@ export async function bootstrapNode(state: PolymarketState): Promise<PolymarketU
   );
 
   logInfo('Bootstrap complete', {
-    minSpread: config.minSpreadThreshold,
-    maxPosition: config.maxPositionSizeUsd,
-    maxTotalExposure: config.maxTotalExposureUsd,
-    pollInterval: config.pollIntervalMs,
-    minShareSize: config.minShareSize,
+    minSpread: strategyConfig.minSpreadThreshold,
+    maxPosition: strategyConfig.maxPositionSizeUsd,
+    maxTotalExposure: strategyConfig.maxTotalExposureUsd,
+    pollInterval: strategyConfig.pollIntervalMs,
+    minShareSize: strategyConfig.minShareSize,
+  });
+
+  // Emit state update to frontend for real-time UI updates
+  await copilotkitEmitState(config, {
+    view: {
+      task,
+      lifecycleState: 'running',
+      config: strategyConfig,
+      events: [statusEvent],
+    },
   });
 
   return {
     view: {
       task,
       lifecycleState: 'running',
-      config,
+      config: strategyConfig,
       events: [statusEvent],
     },
     private: {
       bootstrapped: true,
-      pollIntervalMs: config.pollIntervalMs,
+      pollIntervalMs: strategyConfig.pollIntervalMs,
       walletAddress,
     },
   };

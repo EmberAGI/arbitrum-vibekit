@@ -144,7 +144,13 @@ export function resolveCommandTarget(state: PolymarketState): CommandTarget {
       target = state.private.bootstrapped ? 'runCycleCommand' : 'hireCommand';
       break;
     case 'sync':
-      target = state.private.bootstrapped ? 'syncState' : 'hireCommand';
+      // Only auto-bootstrap if agent is already hired (not disabled)
+      // Prevents auto-hire on page load when sync is triggered
+      target = state.private.bootstrapped
+        ? 'syncState'
+        : state.view.lifecycleState !== 'disabled'
+          ? 'hireCommand'
+          : 'syncState';
       break;
     case 'updateApproval':
       target = 'updateApprovalCommand';

@@ -12,7 +12,7 @@ export const CamelotPoolSchema = z.object({
   address: z.templateLiteral(['0x', z.string()]),
   token0: PoolTokenSchema,
   token1: PoolTokenSchema,
-  tickSpacing: z.number().int().positive().default(60),
+  tickSpacing: z.number().int().positive().default(10),
   tick: z.coerce.number(),
   sqrtPriceX96: z.string().optional(),
   liquidity: z.string(),
@@ -32,18 +32,23 @@ const WalletPositionTokenSchema = z.object({
   symbol: z.string(),
   decimals: z.number().int().nonnegative(),
   amount: z.string().optional(),
+  usdPrice: z.number().nonnegative().optional(),
+  valueUsd: z.number().nonnegative().optional(),
 });
 export type WalletPositionToken = z.infer<typeof WalletPositionTokenSchema>;
 
 export const WalletPositionSchema = z.object({
   poolAddress: z.templateLiteral(['0x', z.string()]),
   operator: z.string(),
+  positionId: z.string().optional(),
   liquidity: z.string().optional(),
   tickLower: z.number().int(),
   tickUpper: z.number().int(),
   tokensOwed0: z.string().optional(),
   tokensOwed1: z.string().optional(),
   suppliedTokens: z.array(WalletPositionTokenSchema).optional(),
+  feesOwedTokens: z.array(WalletPositionTokenSchema).optional(),
+  rewardsOwedTokens: z.array(WalletPositionTokenSchema).optional(),
 });
 export type WalletPosition = z.infer<typeof WalletPositionSchema>;
 
@@ -57,12 +62,17 @@ const EmberPoolTokenSchema = z.object({
   isVetted: z.boolean().optional(),
 });
 
+const EmberNumberishSchema = z.union([z.string(), z.number()]);
+
 export const PoolListResponseSchema = z.object({
   liquidityPools: z.array(
     z.object({
       identifier: ChainIdentifierSchema,
       tokens: z.array(EmberPoolTokenSchema).min(2),
-      currentPrice: z.string().optional(), // API changed: 'price' → 'currentPrice'
+      currentPrice: z.string(),
+      token0PriceUsd: EmberNumberishSchema.optional(),
+      token1PriceUsd: EmberNumberishSchema.optional(),
+      tickSpacing: z.number().int().positive().optional(),
       providerId: z.string(),
       poolName: z.string(),
     }),
@@ -84,6 +94,10 @@ const EmberPositionRangeSchema = z
 
 const EmberWalletTokenSchema = EmberPoolTokenSchema.extend({
   amount: z.string().optional(),
+  suppliedAmount: z.string().optional(),
+  owedTokens: z.string().optional(),
+  usdPrice: EmberNumberishSchema.optional(),
+  valueUsd: EmberNumberishSchema.optional(),
 });
 
 export const WalletPositionsResponseSchema = z.object({
@@ -91,10 +105,23 @@ export const WalletPositionsResponseSchema = z.object({
     z.object({
       poolIdentifier: ChainIdentifierSchema,
       operator: z.string(),
+      positionId: z.string().optional(),
       price: z.string().optional(),
       providerId: z.string(),
+      poolName: z.string().optional(),
+      currentPrice: z.string().optional(),
+      currentTick: z.number().int().optional(),
+      tickLower: z.number().int().optional(),
+      tickUpper: z.number().int().optional(),
+      inRange: z.boolean().optional(),
+      feesValueUsd: EmberNumberishSchema.optional(),
+      rewardsValueUsd: EmberNumberishSchema.optional(),
+      positionValueUsd: EmberNumberishSchema.optional(),
       positionRange: EmberPositionRangeSchema,
-      suppliedTokens: z.array(EmberWalletTokenSchema),
+      suppliedTokens: z.array(EmberWalletTokenSchema).optional(),
+      pooledTokens: z.array(EmberWalletTokenSchema).optional(),
+      feesOwedTokens: z.array(EmberWalletTokenSchema).optional(),
+      rewardsOwedTokens: z.array(EmberWalletTokenSchema).optional(),
     }),
   ),
   cursor: z.string().nullable().optional(),
@@ -107,7 +134,7 @@ export type WalletPositionsResponse = z.infer<typeof WalletPositionsResponseSche
 export const OperatorConfigInputSchema = z.object({
   poolAddress: z.templateLiteral(['0x', z.string()]),
   walletAddress: z.templateLiteral(['0x', z.string()]),
-  baseContributionUsd: z.number().positive().optional(),
+  baseContributionUsd: z.number().min(10),
 });
 type OperatorConfigInputBase = z.infer<typeof OperatorConfigInputSchema>;
 export interface OperatorConfigInput extends OperatorConfigInputBase {
@@ -150,6 +177,9 @@ export type PositionSnapshot = {
 export interface DecisionContext {
   pool: CamelotPool;
   position?: PositionSnapshot;
+  positionValueUsd?: number;
+  targetAllocationUsd?: number;
+  minAllocationPct?: number;
   midPrice: number;
   volatilityPct: number;
   cyclesSinceRebalance: number;

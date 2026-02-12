@@ -6,23 +6,30 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint \"src\" --ext .ts,.tsx"
+    "lint": "eslint .",
+    "test": "pnpm test:unit",
+    "test:ci": "pnpm test:unit",
+    "test:watch": "vitest watch --config vitest.config.unit.ts",
+    "test:unit": "vitest run --config vitest.config.unit.ts",
+    "test:int": "vitest run --config vitest.config.unit.ts",
+    "test:e2e": "vitest run --config vitest.config.unit.ts",
+    "test:coverage": "vitest run --config vitest.config.unit.ts --coverage"
   },
   "dependencies": {
-    "@copilotkit/react-core": "1.10.6",
-    "@copilotkit/react-ui": "1.10.6",
-    "@copilotkit/runtime": "1.10.6",
-    "@copilotkit/runtime-client-gql": "1.10.6",
-    "@copilotkit/shared": "^1.10.6",
+    "@copilotkit/react-core": "1.50.1",
+    "@copilotkit/react-ui": "1.50.1",
+    "@copilotkit/runtime": "1.50.1",
+    "@copilotkit/shared": "1.50.1",
     "@metamask/delegation-toolkit": "^0.13.0",
     "@privy-io/react-auth": "^3.9.0",
     "@tanstack/react-query": "^5.90.12",
     "lucide-react": "^0.561.0",
-    "next": "16.0.7",
+    "next": "16.0.8",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
+    "shiki": "^3.21.0",
     "uuid": "^13.0.0",
-    "viem": "^2.26.3",
+    "viem": "catalog:",
     "zod": "^3.24.4"
   },
   "devDependencies": {
@@ -31,10 +38,12 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^9",
-    "eslint-config-next": "16.0.7",
-    "eslint-plugin-next": "^0.0.0",
+    "eslint-config-next": "16.0.8",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite-tsconfig-paths": "^6.0.5",
+    "vitest": "^4.0.18"
   }
 }

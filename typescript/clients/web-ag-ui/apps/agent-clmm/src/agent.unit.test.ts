@@ -60,7 +60,7 @@ function makeClients(): TestClients {
 
 const operatorConfig: ResolvedOperatorConfig = {
   walletAddress: '0xwallet',
-  baseContributionUsd: 1.5,
+  baseContributionUsd: 10,
   autoCompoundFees: true,
   manualBandwidthBps: 75,
 };

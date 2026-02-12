@@ -26,9 +26,23 @@ export interface Task {
 // Pool types
 export interface Pool {
   address: string;
-  token0: { symbol: string };
-  token1: { symbol: string };
+  // Some agents (e.g. Pendle) do not model pools as token0/token1 pairs.
+  // Keep the UI resilient so a missing snapshot doesn't crash the detail page.
+  token0?: { symbol?: string } | null;
+  token1?: { symbol?: string } | null;
   feeTierBps?: number;
+}
+
+// Pendle market snapshot type emitted by agent-pendle.
+export interface PendleMarket {
+  marketAddress: `0x${string}`;
+  ptAddress: `0x${string}`;
+  ytAddress: `0x${string}`;
+  ptSymbol: string;
+  ytSymbol: string;
+  underlyingSymbol: string;
+  apy: number; // percent, e.g. 17.88
+  maturity: string; // ISO-ish date string
 }
 
 // Transaction types
@@ -47,7 +61,42 @@ export interface TelemetryItem {
   action: string;
   reason?: string;
   midPrice?: number;
+  apy?: number;
+  ytSymbol?: string;
+  metrics?: {
+    bestApy?: number;
+    currentApy?: number;
+    apyDelta?: number;
+    rebalanceThresholdPct?: number;
+  };
   timestamp?: string;
+}
+
+export interface PendleRewardMetric {
+  symbol: string;
+  amount: string;
+}
+
+export interface PendlePositionMetric {
+  marketAddress: string;
+  ptSymbol?: string;
+  ptAmount?: string;
+  ytSymbol?: string;
+  ytAmount?: string;
+  claimableRewards?: PendleRewardMetric[];
+}
+
+export interface PendleStrategyMetric {
+  marketAddress: string;
+  ytSymbol: string;
+  underlyingSymbol?: string;
+  maturity?: string;
+  baseContributionUsd?: number;
+  fundingTokenAddress?: string;
+  currentApy?: number;
+  bestApy?: number;
+  apyDelta?: number;
+  position?: PendlePositionMetric;
 }
 
 // Event types for activity streaming
@@ -68,6 +117,7 @@ export type FundingTokenOption = {
   symbol: string;
   decimals: number;
   balance: string;
+  valueUsd?: number;
 };
 
 export type OperatorConfigRequestInterrupt = {
@@ -77,8 +127,35 @@ export type OperatorConfigRequestInterrupt = {
   artifactId?: string;
 };
 
+export type PendleSetupRequestInterrupt = {
+  type: 'pendle-setup-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+};
+
+export type PendleFundWalletRequestInterrupt = {
+  type: 'pendle-fund-wallet-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+  artifactId?: string;
+  walletAddress?: `0x${string}`;
+  whitelistSymbols?: string[];
+};
+
+export type GmxSetupRequestInterrupt = {
+  type: 'gmx-setup-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+};
+
+export type PolymarketApprovalRequestInterrupt = {
+  type: 'polymarket-approval-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+};
+
 export type FundingTokenRequestInterrupt = {
-  type: 'clmm-funding-token-request';
+  type: 'clmm-funding-token-request' | 'pendle-funding-token-request' | 'gmx-funding-token-request';
   message: string;
   payloadSchema?: unknown;
   options: FundingTokenOption[];
@@ -103,7 +180,10 @@ export type SignedDelegation = UnsignedDelegation & {
 };
 
 export type DelegationSigningRequestInterrupt = {
-  type: 'clmm-delegation-signing-request';
+  type:
+    | 'clmm-delegation-signing-request'
+    | 'pendle-delegation-signing-request'
+    | 'gmx-delegation-signing-request';
   message: string;
   payloadSchema?: unknown;
   chainId: number;
@@ -117,6 +197,10 @@ export type DelegationSigningRequestInterrupt = {
 
 export type AgentInterrupt =
   | OperatorConfigRequestInterrupt
+  | PendleSetupRequestInterrupt
+  | PendleFundWalletRequestInterrupt
+  | GmxSetupRequestInterrupt
+  | PolymarketApprovalRequestInterrupt
   | FundingTokenRequestInterrupt
   | DelegationSigningRequestInterrupt;
 
@@ -124,7 +208,40 @@ export type AgentInterrupt =
 export interface OperatorConfigInput {
   poolAddress: `0x${string}`;
   walletAddress: `0x${string}`;
-  baseContributionUsd?: number;
+  baseContributionUsd: number;
+}
+
+export interface PendleSetupInput {
+  walletAddress: `0x${string}`;
+  baseContributionUsd: number;
+}
+
+export interface FundWalletAcknowledgement {
+  acknowledged: true;
+}
+
+export interface GmxSetupInput {
+  walletAddress: `0x${string}`;
+  baseContributionUsd: number;
+  targetMarket: 'BTC' | 'ETH';
+}
+
+export interface PolymarketApprovalInput {
+  requestedApprovalAmount: string;
+  userWalletAddress: `0x${string}`;
+}
+
+export interface PolymarketPermitSignatureInput {
+  usdcPermitSignature: {
+    v: number;
+    r: string;
+    s: string;
+    deadline: number;
+  };
+}
+
+export interface PolymarketCtfApprovalInput {
+  ctfApprovalTxHash: string;
 }
 
 export interface FundingTokenInput {
@@ -160,8 +277,8 @@ export interface AgentViewProfile {
   chains: string[];
   protocols: string[];
   tokens: string[];
-  pools: Pool[];
-  allowedPools: Pool[];
+  pools: Array<Pool | PendleMarket>;
+  allowedPools: Array<Pool | PendleMarket>;
 }
 
 // Activity types (ClmmActivity)
@@ -174,10 +291,49 @@ export interface AgentViewActivity {
 export interface AgentViewMetrics {
   lastSnapshot?: Pool;
   previousPrice?: number;
+  previousApy?: number;
   cyclesSinceRebalance: number;
   staleCycles: number;
+  rebalanceCycles?: number;
   iteration: number;
   latestCycle?: TelemetryItem;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
+  pendle?: PendleStrategyMetric;
+  latestSnapshot?: {
+    poolAddress?: `0x${string}`;
+    totalUsd?: number;
+    feesUsd?: number;
+    feesApy?: number;
+    timestamp?: string;
+    positionOpenedAt?: string;
+    positionOpenedTotalUsd?: number;
+    positionTokens: Array<{
+      address: `0x${string}`;
+      symbol: string;
+      decimals: number;
+      amount?: number;
+      amountBaseUnits?: string;
+      valueUsd?: number;
+    }>;
+    pendle?: {
+      marketAddress: `0x${string}`;
+      ptSymbol: string;
+      ytSymbol: string;
+      underlyingSymbol: string;
+      maturity: string;
+      impliedApyPct?: number;
+      underlyingApyPct?: number;
+      pendleApyPct?: number;
+      aggregatedApyPct?: number;
+      swapFeeApyPct?: number;
+      ytFloatingApyPct?: number;
+      maxBoostedApyPct?: number;
+      netPnlUsd?: number;
+      netPnlPct?: number;
+    };
+  };
 }
 
 // Settings types (ClmmSettings)
@@ -200,7 +356,7 @@ export interface AgentView {
   task?: Task;
   onboarding?: OnboardingState;
   poolArtifact?: Artifact;
-  operatorInput?: OperatorConfigInput;
+  operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput;
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: Pool;
   operatorConfig?: unknown;
@@ -212,6 +368,13 @@ export interface AgentView {
   activity: AgentViewActivity;
   metrics: AgentViewMetrics;
   transactionHistory: Transaction[];
+  // Polymarket agent fields
+  detectedRelationships?: unknown[];
+  opportunities?: unknown[];
+  crossMarketOpportunities?: unknown[];
+  markets?: unknown[];
+  positions?: unknown[];
+  portfolioValueUsd?: number;
 }
 
 // Full agent state (ClmmState)
@@ -241,6 +404,10 @@ export interface AgentMetrics {
   iteration?: number;
   cyclesSinceRebalance?: number;
   staleCycles?: number;
+  rebalanceCycles?: number;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
 }
 
 // Default values for state initialization
@@ -259,10 +426,17 @@ export const defaultProfile: AgentViewProfile = {
 export const defaultMetrics: AgentViewMetrics = {
   lastSnapshot: undefined,
   previousPrice: undefined,
+  previousApy: undefined,
   cyclesSinceRebalance: 0,
   staleCycles: 0,
+  rebalanceCycles: 0,
   iteration: 0,
   latestCycle: undefined,
+  aumUsd: undefined,
+  apy: undefined,
+  lifetimePnlUsd: undefined,
+  pendle: undefined,
+  latestSnapshot: undefined,
 };
 
 export const defaultActivity: AgentViewActivity = {

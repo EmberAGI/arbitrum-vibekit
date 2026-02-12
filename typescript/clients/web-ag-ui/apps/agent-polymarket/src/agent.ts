@@ -13,6 +13,7 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
+import cron, { type ScheduledTask } from 'node-cron';
 import { v7 as uuidv7 } from 'uuid';
 
 import {
@@ -67,23 +68,14 @@ function resolvePostPollCycle(state: PolymarketState): 'collectTradeApproval' | 
 }
 
 /**
- * Routes after summarize - check if we should sync positions/redeem or loop back.
+ * Routes after summarize - check if we should sync positions/redeem, otherwise end.
  */
-function resolvePostSummarize(
-  state: PolymarketState,
-): 'syncPositions' | 'redeemPositions' | 'waitAndLoop' | typeof END {
+function resolvePostSummarize(state: PolymarketState): 'syncPositions' | 'redeemPositions' | typeof END {
   // Check if position syncing is enabled (default: true)
   const syncEnabled = process.env.POLY_SYNC_POSITIONS !== 'false';
 
   // Check if auto-redemption is enabled (default: false for safety)
   const redeemEnabled = process.env.POLY_AUTO_REDEEM === 'true';
-
-  // Check if continuous polling is enabled (default: false to allow commands between cycles)
-  // When disabled, the cron scheduler handles periodic polling instead of waitAndLoop
-  const continuousPolling = process.env.POLY_CONTINUOUS_POLLING === 'true';
-
-  // Check max iterations (default: unlimited, set to limit cycles)
-  const maxIterations = parseInt(process.env.POLY_MAX_ITERATIONS ?? '0', 10);
 
   // Sync positions on every 5th cycle to keep data fresh
   if (syncEnabled && state.view.metrics.iteration % 5 === 0) {
@@ -96,43 +88,8 @@ function resolvePostSummarize(
     return 'redeemPositions';
   }
 
-  // Loop back for continuous polling if enabled and running
-  if (
-    continuousPolling &&
-    state.view.lifecycleState === 'running' &&
-    (maxIterations === 0 || state.view.metrics.iteration < maxIterations)
-  ) {
-    return 'waitAndLoop';
-  }
-
-  // Otherwise end
+  // Otherwise end - external cron will trigger next cycle
   return END;
-}
-
-/**
- * Wait and loop node - waits for poll interval then loops back to checkApprovals.
- */
-async function waitAndLoopNode(state: PolymarketState): Promise<{ view: { metrics: { lastPoll: string } } }> {
-  const pollIntervalMs = parseInt(process.env.POLY_POLL_INTERVAL_MS ?? '60000', 10);
-  const intervalSec = (pollIntervalMs / 1000).toFixed(0);
-
-  logInfo(`⏳ Waiting ${intervalSec}s before next poll cycle...`, {
-    iteration: state.view.metrics.iteration,
-    pollIntervalMs,
-  });
-
-  // Wait for the poll interval
-  await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-
-  logInfo('⏰ Poll interval elapsed, starting next cycle');
-
-  return {
-    view: {
-      metrics: {
-        lastPoll: new Date().toISOString(),
-      },
-    },
-  };
 }
 
 const workflow = new StateGraph(PolymarketStateAnnotation)
@@ -157,9 +114,6 @@ const workflow = new StateGraph(PolymarketStateAnnotation)
   // Position management nodes
   .addNode('syncPositions', syncPositionsNode)
   .addNode('redeemPositions', redeemPositionsNode)
-
-  // Continuous polling node
-  .addNode('waitAndLoop', waitAndLoopNode)
 
   // Edges from START
   .addEdge(START, 'runCommand')
@@ -190,10 +144,7 @@ const workflow = new StateGraph(PolymarketStateAnnotation)
 
   // Position management flow
   .addEdge('syncPositions', END)
-  .addEdge('redeemPositions', END)
-
-  // Continuous polling loop
-  .addEdge('waitAndLoop', 'checkApprovals');
+  .addEdge('redeemPositions', END);
 
 export const polymarketGraph = workflow.compile({
   checkpointer: memory,
@@ -204,7 +155,32 @@ export const polymarketGraph = workflow.compile({
 // ============================================================================
 
 const runningThreads = new Set<string>();
-let cronInterval: ReturnType<typeof setInterval> | null = null;
+const cronJobs = new Map<string, ScheduledTask>();
+
+/**
+ * Convert interval in milliseconds to cron expression.
+ */
+function toCronExpression(intervalMs: number): string {
+  const intervalSeconds = Math.max(1, Math.round(intervalMs / 1000));
+
+  // For intervals less than 60 seconds, use seconds syntax
+  if (intervalSeconds < 60) {
+    return `*/${intervalSeconds} * * * * *`;
+  }
+
+  // For clean minute multiples, use minutes syntax
+  if (intervalSeconds % 60 === 0) {
+    const minutes = Math.max(1, Math.floor(intervalSeconds / 60));
+    return `0 */${minutes} * * * *`;
+  }
+
+  // For non-clean intervals, clamp to max 59 seconds
+  const clampedSeconds = Math.min(59, intervalSeconds);
+  console.warn(
+    `[cron] Requested interval ${intervalMs}ms is not a clean minute multiple; clamping to ${clampedSeconds}s cron schedule.`,
+  );
+  return `*/${clampedSeconds} * * * * *`;
+}
 
 /**
  * Run a single graph execution for the given thread.
@@ -255,34 +231,40 @@ export async function runGraphOnce(threadId: string): Promise<void> {
 /**
  * Start the cron scheduler for periodic arbitrage checks.
  */
-export function startCron(threadId: string, intervalMs: number = 30000): void {
-  if (cronInterval) {
-    console.log('⚠️ [CRON] Cron already running');
-    logInfo('Cron already running');
+export function startCron(threadId: string, intervalMs: number = 300000): void {
+  if (cronJobs.has(threadId)) {
+    console.log('⚠️ [CRON] Cron already scheduled for this thread');
+    logInfo('Cron already scheduled', { threadId });
     return;
   }
 
+  const cronExpression = toCronExpression(intervalMs);
   const intervalSec = (intervalMs / 1000).toFixed(0);
   console.log(`⏰ [CRON] Starting cron scheduler (every ${intervalSec}s)`);
   console.log(`Thread ID: ${threadId}`);
-  logInfo('Starting cron scheduler', { threadId, intervalMs });
+  console.log(`Cron expression: ${cronExpression}`);
+  logInfo('Starting cron scheduler', { threadId, intervalMs, cronExpression });
 
   let tickCount = 0;
-  cronInterval = setInterval(() => {
+  const job = cron.schedule(cronExpression, () => {
     tickCount++;
     console.log(`\n⏰ [CRON] Tick #${tickCount} - ${new Date().toISOString()}`);
     void runGraphOnce(threadId);
-  }, intervalMs);
+  });
+
+  cronJobs.set(threadId, job);
 }
 
 /**
- * Stop the cron scheduler.
+ * Stop the cron scheduler for a specific thread.
  */
-export function stopCron(): void {
-  if (cronInterval) {
-    clearInterval(cronInterval);
-    cronInterval = null;
-    logInfo('Cron scheduler stopped');
+export function stopCron(threadId: string): void {
+  const job = cronJobs.get(threadId);
+  if (job) {
+    job.stop();
+    cronJobs.delete(threadId);
+    console.log(`⏹️ [CRON] Stopped cron for thread ${threadId}`);
+    logInfo('Cron scheduler stopped', { threadId });
   }
 }
 
@@ -315,8 +297,8 @@ export async function startPolymarketAgent(threadId: string): Promise<void> {
 
   logInfo('Initial hire complete, starting cron');
 
-  // Start periodic polling
-  const pollInterval = parseInt(process.env['POLY_POLL_INTERVAL_MS'] ?? '30000', 10);
+  // Start periodic polling (default: 5 minutes)
+  const pollInterval = parseInt(process.env['POLY_POLL_INTERVAL_MS'] ?? '300000', 10);
   startCron(threadId, pollInterval);
 }
 
