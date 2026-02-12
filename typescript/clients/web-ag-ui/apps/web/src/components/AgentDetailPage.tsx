@@ -11,7 +11,6 @@ import {
   Check,
   RefreshCw,
 } from 'lucide-react';
-import { signDelegation } from '@metamask/delegation-toolkit/actions';
 import { formatUnits } from 'viem';
 import { useEffect, useState, type FormEvent } from 'react';
 import type {
@@ -38,6 +37,7 @@ import type {
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import { formatPoolPair } from '../utils/poolFormat';
 import { resolveMetricsTabLabel } from '../utils/agentUi';
+import { signDelegationWithFallback } from '../utils/delegationSigning';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -1053,13 +1053,12 @@ function AgentBlockersTab({
             `Delegation delegator ${delegation.delegator} does not match required signer ${interrupt.delegatorAddress}.`,
           );
         }
-        const allowInsecureUnrestrictedDelegation = delegation.caveats.length === 0;
-        const signature = await signDelegation(walletClient, {
+        const signature = await signDelegationWithFallback({
+          walletClient,
           delegation,
           delegationManager: interrupt.delegationManager,
           chainId: interrupt.chainId,
           account: interrupt.delegatorAddress,
-          allowInsecureUnrestrictedDelegation,
         });
         signedDelegations.push({ ...delegation, signature });
       }
