@@ -9,6 +9,10 @@ import {
   resolveLangGraphDurability,
   type LangGraphDurability,
 } from './config/serviceConfig.js';
+import {
+  canStartBackgroundCycle,
+  getBackgroundCycleReadiness,
+} from './workflow/backgroundCycleReadiness.js';
 import { ClmmStateAnnotation, memory, type ClmmState } from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
@@ -154,7 +158,7 @@ async function updateCycleState(
   baseUrl: string,
   threadId: string,
   runMessage: { id: string; role: 'user'; content: string },
-) {
+): Promise<boolean> {
   let existingView: Record<string, unknown> | null = null;
   try {
     const currentState = await fetchThreadStateValues(baseUrl, threadId);
@@ -167,6 +171,14 @@ async function updateCycleState(
     console.warn('[cron] Unable to fetch thread state before cycle update', { threadId, error: message });
   }
 
+  if (!canStartBackgroundCycle(existingView)) {
+    console.warn('[cron] Skipping cycle run; onboarding/setup is incomplete for background execution', {
+      threadId,
+      readiness: getBackgroundCycleReadiness(existingView),
+    });
+    return false;
+  }
+
   const view = existingView ? { ...existingView, command: 'cycle' } : { command: 'cycle' };
   const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
@@ -177,6 +189,7 @@ async function updateCycleState(
     }),
   });
   await parseJsonResponse(response, ThreadStateUpdateResponseSchema);
+  return true;
 }
 
 async function createRun(params: {
@@ -268,7 +281,10 @@ export async function runGraphOnce(
 
   try {
     await ensureThread(baseUrl, threadId, graphId);
-    await updateCycleState(baseUrl, threadId, runMessage);
+    const stateUpdated = await updateCycleState(baseUrl, threadId, runMessage);
+    if (!stateUpdated) {
+      return;
+    }
     const runId = await createRun({ baseUrl, threadId, graphId, durability });
     if (!runId) {
       return;
