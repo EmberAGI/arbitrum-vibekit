@@ -227,8 +227,10 @@ jobs:
 
             echo "Created sync PR: $pr_url"
 
-            # Prefer a linear, fast-forward style merge; fall back to a merge commit if rebase isn't allowed.
-            gh pr merge --auto --rebase "$pr_url" || gh pr merge --auto --merge "$pr_url" || \
+            # Prefer merge-commit so commits from main keep their SHAs.
+            # Note: GitHub PR merges cannot "fast-forward" next to main; the best we can do under PR-only
+            # branch protection is ensure next contains main, while preserving main's commit SHAs.
+            gh pr merge --auto --merge "$pr_url" || gh pr merge --auto --rebase "$pr_url" || \
               echo "::warning::Unable to auto-merge $pr_url; please merge manually."
           else
             echo "::warning::origin/next has diverged from main; skipping auto-sync. Please merge main into next manually."
