@@ -1,0 +1,125 @@
+services:
+  traefik:
+    image: traefik:v3.0
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.cloudflare.acme.storage=/acme/acme.json
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
+      - --experimental.plugins.trauth.moduleName=github.com/leonjza/trauth
+      - --experimental.plugins.trauth.version=v1.6.7
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./auth/users.htpasswd:/etc/traefik/users.htpasswd:ro
+      - ./traefik/acme.json:/acme/acme.json
+    env_file:
+      - traefik.env
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+      args:
+        APP_NAME: web
+        APP_ENV_FILE: apps/web/.env
+    environment:
+      NODE_ENV: production
+      LANGGRAPH_DEPLOYMENT_URL: http://agent-clmm:8124
+      LANGGRAPH_PENDLE_DEPLOYMENT_URL: http://agent-pendle:8125
+      LANGGRAPH_GMX_ALLORA_DEPLOYMENT_URL: http://agent-gmx-allora:8126
+    env_file:
+      - apps/web/.env
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.demo.rule=Host(`demo.emberai.xyz`)
+      - traefik.http.routers.demo.entrypoints=websecure
+      - traefik.http.routers.demo.tls=true
+      - traefik.http.routers.demo.tls.certresolver=cloudflare
+      - traefik.http.routers.demo.middlewares=site-auth@docker
+      - traefik.http.services.demo.loadbalancer.server.port=3000
+      - traefik.http.middlewares.site-auth.plugin.trauth.domain=demo.emberai.xyz
+      - traefik.http.middlewares.site-auth.plugin.trauth.usersfile=/etc/traefik/users.htpasswd
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiekey=${TRAUTH_COOKIE_KEY}
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiename=trauth
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiesecure=true
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiehttponly=true
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+      args:
+        APP_NAME: agent
+        APP_ENV_FILE: apps/agent/.env
+    environment:
+      NODE_ENV: production
+      AGENT_CONFIG_DIR: /app/apps/agent/config
+    env_file:
+      - apps/agent/.env
+    ports:
+      - "8123:8123"
+    command: ["sh", "-lc", "npx @langchain/langgraph-cli dev --host 0.0.0.0 --port 8123 --no-browser -c /app/apps/agent"]
+    restart: unless-stopped
+
+  agent-clmm:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+      args:
+        APP_NAME: agent-clmm
+        APP_ENV_FILE: apps/agent-clmm/.env
+    environment:
+      NODE_ENV: production
+      AGENT_CONFIG_DIR: /app/apps/agent-clmm/config
+    env_file:
+      - apps/agent-clmm/.env
+    ports:
+      - "8124:8124"
+    command: ["sh", "-lc", "npx @langchain/langgraph-cli dev --host 0.0.0.0 --port 8124 --no-browser -c /app/apps/agent-clmm"]
+    restart: unless-stopped
+
+  agent-pendle:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+      args:
+        APP_NAME: agent-pendle
+        APP_ENV_FILE: apps/agent-pendle/.env
+    environment:
+      NODE_ENV: production
+      AGENT_CONFIG_DIR: /app/apps/agent-pendle/config
+    env_file:
+      - apps/agent-pendle/.env
+    ports:
+      - "8125:8125"
+    command: ["sh", "-lc", "npx @langchain/langgraph-cli dev --host 0.0.0.0 --port 8125 --no-browser -c /app/apps/agent-pendle"]
+    restart: unless-stopped
+
+  agent-gmx-allora:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+      args:
+        APP_NAME: agent-gmx-allora
+        APP_ENV_FILE: apps/agent-gmx-allora/.env
+    environment:
+      NODE_ENV: production
+      AGENT_CONFIG_DIR: /app/apps/agent-gmx-allora/config
+    env_file:
+      - apps/agent-gmx-allora/.env
+    ports:
+      - "8126:8126"
+    command: ["sh", "-lc", "npx @langchain/langgraph-cli dev --host 0.0.0.0 --port 8126 --no-browser -c /app/apps/agent-gmx-allora"]
+    restart: unless-stopped
