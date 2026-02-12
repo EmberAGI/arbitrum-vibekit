@@ -153,9 +153,7 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
   const resolvedRpcUrl =
     typeof rpcUrl === 'string'
       ? rpcUrl
-      : process.env['ARBITRUM_RPC_URL'] ??
-        process.env['ARBITRUM_ONE_RPC_URL'] ??
-        defaultArbitrumRpcUrl;
+      : process.env['ARBITRUM_RPC_URL'] ?? defaultArbitrumRpcUrl;
 
   const simulationClient = createClient({
     account: params.clients.wallet.account,

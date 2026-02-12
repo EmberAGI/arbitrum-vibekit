@@ -47,7 +47,7 @@ const CLOSE_POSITION_SETTLE_TIMEOUT_MS = 180_000;
 const MAX_FULL_CYCLE_USDC_LOSS_BASE_UNITS = 1_000_000n;
 
 const resolveArbitrumRpcUrl = (): string =>
-  process.env['ARBITRUM_RPC_URL'] ?? process.env['ARBITRUM_ONE_RPC_URL'] ?? 'https://arbitrum.gateway.tenderly.co';
+  process.env['ARBITRUM_RPC_URL'] ?? 'https://arb1.arbitrum.io/rpc';
 
 const resolveBaseUrl = (): string =>
   resolveOnchainActionsApiUrl({

@@ -4,9 +4,8 @@ import { arbitrum } from 'viem/chains';
 const DEFAULT_ARBITRUM_RPC_URL = 'https://arb1.arbitrum.io/rpc';
 
 const ARBITRUM_RPC_URL =
-  process.env['ARBITRUM_RPC_URL'] ??
-  process.env['ARBITRUM_ONE_RPC_URL'] ??
-  DEFAULT_ARBITRUM_RPC_URL;
+  // Default to a public Arbitrum One RPC for local dev; set ARBITRUM_RPC_URL to override.
+  process.env['ARBITRUM_RPC_URL'] ?? DEFAULT_ARBITRUM_RPC_URL;
 
 const RPC_RETRY_COUNT = 2;
 const RPC_TIMEOUT_MS = 8000;
