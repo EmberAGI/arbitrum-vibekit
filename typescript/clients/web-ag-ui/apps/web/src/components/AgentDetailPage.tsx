@@ -356,7 +356,14 @@ export function AgentDetailPage({
           )}
 
           {resolvedTab === 'metrics' && (
-            <MetricsTab profile={profile} metrics={metrics} fullMetrics={fullMetrics} events={events} />
+            <MetricsTab
+              agentId={agentId}
+              profile={profile}
+              metrics={metrics}
+              fullMetrics={fullMetrics}
+              events={events}
+              transactions={transactions}
+            />
           )}
 
           {resolvedTab === 'transactions' && <TransactionHistoryTab transactions={transactions} />}
@@ -498,7 +505,14 @@ export function AgentDetailPage({
             </div>
 
             {activeTab === 'metrics' && (
-              <MetricsTab profile={profile} metrics={metrics} fullMetrics={fullMetrics} events={events} />
+              <MetricsTab
+                agentId={agentId}
+                profile={profile}
+                metrics={metrics}
+                fullMetrics={fullMetrics}
+                events={events}
+                transactions={transactions}
+              />
             )}
           </div>
         </div>
@@ -667,6 +681,11 @@ function AgentBlockersTab({
   settings,
   onSettingsChange,
 }: AgentBlockersTabProps) {
+  const preferredDelegatorAddress =
+    activeInterrupt && 'delegatorAddress' in activeInterrupt
+      ? activeInterrupt.delegatorAddress
+      : undefined;
+
   const {
     walletClient,
     privyWallet,
@@ -674,7 +693,7 @@ function AgentBlockersTab({
     switchChain,
     isLoading: isWalletLoading,
     error: walletError,
-  } = usePrivyWalletClient();
+  } = usePrivyWalletClient(preferredDelegatorAddress);
   const delegationsBypassEnabled =
     (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_DELEGATIONS_BYPASS : undefined) ===
     'true';
@@ -993,6 +1012,7 @@ function AgentBlockersTab({
     const interrupt = activeInterrupt as unknown as {
       chainId: number;
       delegationManager: `0x${string}`;
+      delegatorAddress: `0x${string}`;
       delegationsToSign: UnsignedDelegation[];
     };
 
@@ -1013,15 +1033,33 @@ function AgentBlockersTab({
       return;
     }
 
+    const requiredDelegatorAddress = interrupt.delegatorAddress.toLowerCase();
+    const signerAddress = walletClient.account?.address?.toLowerCase();
+    if (!signerAddress || signerAddress !== requiredDelegatorAddress) {
+      setError(
+        `Switch to Privy wallet ${interrupt.delegatorAddress} to sign delegations. Current signer: ${
+          walletClient.account?.address ?? 'unknown'
+        }.`,
+      );
+      return;
+    }
+
     setIsSigningDelegations(true);
     try {
       const signedDelegations = [];
       for (const delegation of delegationsToSign) {
+        if (delegation.delegator.toLowerCase() !== requiredDelegatorAddress) {
+          throw new Error(
+            `Delegation delegator ${delegation.delegator} does not match required signer ${interrupt.delegatorAddress}.`,
+          );
+        }
+        const allowInsecureUnrestrictedDelegation = delegation.caveats.length === 0;
         const signature = await signDelegation(walletClient, {
           delegation,
           delegationManager: interrupt.delegationManager,
           chainId: interrupt.chainId,
-          account: walletClient.account,
+          account: interrupt.delegatorAddress,
+          allowInsecureUnrestrictedDelegation,
         });
         signedDelegations.push({ ...delegation, signature });
       }
@@ -1649,10 +1687,12 @@ function PointsColumn({ metrics }: PointsColumnProps) {
 
 // Metrics Tab Component
 interface MetricsTabProps {
+  agentId: string;
   profile: AgentProfile;
   metrics: AgentMetrics;
   fullMetrics?: AgentViewMetrics;
   events: ClmmEvent[];
+  transactions: Transaction[];
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -1679,7 +1719,83 @@ function getNumberField(value: unknown, key: string): number | undefined {
   return typeof candidate === 'number' ? candidate : undefined;
 }
 
-function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) {
+function getBooleanField(value: unknown, key: string): boolean | undefined {
+  const record = asRecord(value);
+  const candidate = record ? record[key] : undefined;
+  return typeof candidate === 'boolean' ? candidate : undefined;
+}
+
+function getArrayField(value: unknown, key: string): unknown[] | undefined {
+  const record = asRecord(value);
+  const candidate = record ? record[key] : undefined;
+  return Array.isArray(candidate) ? candidate : undefined;
+}
+
+function getArtifactId(artifact: unknown): string | undefined {
+  const name = getStringField(artifact, 'name');
+  if (name && name.trim().length > 0) return name;
+
+  const artifactId = getStringField(artifact, 'artifactId');
+  if (artifactId && artifactId.trim().length > 0) return artifactId;
+
+  const type = getStringField(artifact, 'type');
+  if (type && type.trim().length > 0) return type;
+
+  const id = getStringField(artifact, 'id');
+  if (id && id.trim().length > 0) return id;
+
+  return undefined;
+}
+
+function getArtifactDescription(artifact: unknown): string | undefined {
+  const description = getStringField(artifact, 'description');
+  return description && description.trim().length > 0 ? description : undefined;
+}
+
+function getArtifactDataPart(artifact: unknown): UnknownRecord | undefined {
+  const parts = getArrayField(artifact, 'parts');
+  if (parts) {
+    for (const part of parts) {
+      const record = asRecord(part);
+      if (!record) continue;
+      if (record['kind'] === 'data') {
+        const dataRecord = asRecord(record['data']);
+        if (dataRecord) return dataRecord;
+      }
+    }
+  }
+
+  return getNestedRecord(artifact, 'data');
+}
+
+function toArbiscanTxUrl(txHash: string): string {
+  return `https://arbiscan.io/tx/${txHash}`;
+}
+
+function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactions }: MetricsTabProps) {
+  if (agentId === 'agent-pendle') {
+    return (
+      <PendleMetricsTab
+        profile={profile}
+        metrics={metrics}
+        fullMetrics={fullMetrics}
+        events={events}
+      />
+    );
+  }
+
+  if (agentId === 'agent-gmx-allora') {
+    return (
+      <GmxAlloraMetricsTab
+        profile={profile}
+        metrics={metrics}
+        fullMetrics={fullMetrics}
+        events={events}
+        transactions={transactions}
+      />
+    );
+  }
+
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -1936,7 +2052,293 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
   );
 }
 
-function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<MetricsTabProps, 'agentId'>) {
+function GmxAlloraMetricsTab({
+  profile,
+  metrics,
+  fullMetrics,
+  events,
+  transactions,
+}: Omit<MetricsTabProps, 'agentId'>) {
+  const formatDate = (timestamp?: string) => {
+    if (!timestamp) return '—';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatUsd = (value?: number, maxFractionDigits = 2): string => {
+    if (value === undefined) return '—';
+    return `$${value.toLocaleString(undefined, { maximumFractionDigits: maxFractionDigits })}`;
+  };
+
+  const latestCycle = fullMetrics?.latestCycle;
+  const latestSnapshot = fullMetrics?.latestSnapshot;
+  const latestPrediction = latestCycle?.prediction;
+  const latestDecisionMetrics = latestCycle?.metrics;
+  const latestTransaction = transactions.at(-1);
+
+  let latestExecutionData: UnknownRecord | undefined;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!event || event.type !== 'artifact') continue;
+    if (getArtifactId(event.artifact) !== 'gmx-allora-execution-result') continue;
+    latestExecutionData = getArtifactDataPart(event.artifact);
+    break;
+  }
+
+  const artifactTxHashes =
+    getArrayField(latestExecutionData, 'txHashes')
+      ?.filter((value): value is string => typeof value === 'string')
+      .filter((value) => /^0x[0-9a-fA-F]{64}$/.test(value)) ?? [];
+
+  const executionHashCandidates = [
+    ...artifactTxHashes,
+    getStringField(latestExecutionData, 'lastTxHash'),
+    latestTransaction?.txHash,
+    latestCycle?.txHash,
+  ];
+
+  const executionTxHashes = Array.from(
+    new Set(
+      executionHashCandidates.filter(
+        (value): value is string => typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value),
+      ),
+    ),
+  );
+
+  const executionOk = getBooleanField(latestExecutionData, 'ok');
+  const executionError = getStringField(latestExecutionData, 'error');
+  const executionStatus =
+    executionOk === true
+      ? 'confirmed'
+      : executionOk === false
+        ? 'failed'
+        : latestTransaction?.status === 'success'
+          ? 'confirmed'
+          : latestTransaction?.status === 'failed'
+            ? 'failed'
+            : 'pending';
+  const marketLabel = latestCycle?.marketSymbol ?? formatPoolPair(fullMetrics?.lastSnapshot);
+  const sideLabel = latestCycle?.side ? latestCycle.side.toUpperCase() : '—';
+  const positionStatus =
+    latestCycle?.action === 'close' ? 'Closed' : latestSnapshot?.totalUsd && latestSnapshot.totalUsd > 0 ? 'Open' : 'Pending';
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Strategy Performance</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-2xl font-bold text-teal-400">
+              {metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : profile.apy !== undefined ? `${profile.apy.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-2xl font-bold text-white">
+              {metrics.aumUsd !== undefined
+                ? formatUsd(metrics.aumUsd)
+                : profile.aum !== undefined
+                  ? formatUsd(profile.aum)
+                  : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Agent Income</div>
+            <div className="text-2xl font-bold text-white">
+              {profile.agentIncome !== undefined ? formatUsd(profile.agentIncome) : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PnL</div>
+            <div className="text-2xl font-bold text-white">
+              {metrics.lifetimePnlUsd !== undefined ? formatUsd(metrics.lifetimePnlUsd) : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-lg font-semibold text-white">Latest Execution</h3>
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-medium ${
+              executionStatus === 'confirmed'
+                ? 'bg-teal-500/20 text-teal-400'
+                : executionStatus === 'failed'
+                  ? 'bg-red-500/20 text-red-400'
+                  : 'bg-yellow-500/20 text-yellow-400'
+            }`}
+          >
+            {executionStatus}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
+            <div className="text-white font-medium">{latestCycle?.action ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Market</div>
+            <div className="text-white font-medium">{marketLabel}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Side</div>
+            <div className="text-white font-medium">{sideLabel}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Executed At</div>
+            <div className="text-white font-medium">{formatDate(latestTransaction?.timestamp ?? latestCycle?.timestamp)}</div>
+          </div>
+        </div>
+        {executionError && (
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {executionError}
+          </div>
+        )}
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Transaction Hashes</div>
+          {executionTxHashes.length > 0 ? (
+            <div className="space-y-2">
+              {executionTxHashes.map((txHash) => (
+                <a
+                  key={txHash}
+                  href={toArbiscanTxUrl(txHash)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block text-sm text-blue-300 hover:text-blue-200 underline underline-offset-2 truncate"
+                >
+                  {txHash}
+                </a>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-400">No transaction hash yet.</div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Perp Position + Allora Signal</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Status</div>
+            <div className="text-white font-medium">{positionStatus}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
+            <div className="text-white font-medium">{formatUsd(latestSnapshot?.totalUsd)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Leverage</div>
+            <div className="text-white font-medium">
+              {latestCycle?.leverage !== undefined ? `${latestCycle.leverage}x` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Notional</div>
+            <div className="text-white font-medium">{formatUsd(latestCycle?.sizeUsd)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Signal Direction</div>
+            <div className="text-white font-medium">{latestPrediction?.direction ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Signal Confidence</div>
+            <div className="text-white font-medium">
+              {latestPrediction?.confidence !== undefined
+                ? `${(latestPrediction.confidence * 100).toFixed(1)}%`
+                : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Predicted Price</div>
+            <div className="text-white font-medium">{formatUsd(latestPrediction?.predictedPrice, 6)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Decision Threshold</div>
+            <div className="text-white font-medium">
+              {latestDecisionMetrics?.decisionThreshold !== undefined
+                ? `${(latestDecisionMetrics.decisionThreshold * 100).toFixed(1)}%`
+                : '—'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a] grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
+            <div className="text-white font-medium">{metrics.iteration ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycles Since Trade</div>
+            <div className="text-white font-medium">{metrics.cyclesSinceRebalance ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Stale Signal Cycles</div>
+            <div className="text-white font-medium">{metrics.staleCycles ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reference Price</div>
+            <div className="text-white font-medium">
+              {fullMetrics?.previousPrice !== undefined ? fullMetrics.previousPrice.toFixed(6) : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {events.length > 0 && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {events
+              .slice(-10)
+              .reverse()
+              .map((event, index) => {
+                const artifactId = event.type === 'artifact' ? getArtifactId(event.artifact) : undefined;
+                const description = event.type === 'artifact' ? getArtifactDescription(event.artifact) : undefined;
+                return (
+                  <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                    <div
+                      className={`w-2 h-2 rounded-full mt-2 ${
+                        event.type === 'status'
+                          ? 'bg-blue-400'
+                          : event.type === 'artifact'
+                            ? 'bg-purple-400'
+                            : 'bg-gray-400'
+                      }`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
+                      <div className="text-sm text-white mt-1">
+                        {event.type === 'status' && event.message}
+                        {event.type === 'artifact' && `Artifact: ${artifactId ?? 'unknown'}`}
+                        {event.type === 'dispatch-response' &&
+                          `Response with ${event.parts?.length ?? 0} parts`}
+                      </div>
+                      {description && <div className="text-xs text-gray-400 mt-1">{description}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PendleMetricsTab({
+  profile: _profile,
+  metrics,
+  fullMetrics,
+  events: _events,
+}: Omit<MetricsTabProps, 'agentId' | 'transactions'>) {
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
@@ -2148,9 +2550,6 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
     </div>
   );
 }
-
-// GMX Allora uses the same Metrics/Activity layout as other agents. Any agent-specific
-// surface area should be reflected through standard artifacts/events.
 
 interface MetricCardProps {
   label: string;

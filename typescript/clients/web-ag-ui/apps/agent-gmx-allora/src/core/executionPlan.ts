@@ -1,3 +1,5 @@
+import { parseUnits } from 'viem';
+
 import type { GmxAlloraTelemetry } from '../domain/types.js';
 
 export type ExecutionPlan = {
@@ -35,6 +37,8 @@ function formatNumber(value: number | undefined): string | undefined {
   return String(value);
 }
 
+const USDC_DECIMALS = 6;
+
 function toAmountString(value: number | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
@@ -42,7 +46,14 @@ function toAmountString(value: number | undefined): string | undefined {
   if (!Number.isFinite(value) || value <= 0) {
     return undefined;
   }
-  return String(Math.round(value));
+
+  // onchain-actions expects token base units (e.g., 10 USDC => 10000000).
+  const normalized = value.toFixed(USDC_DECIMALS);
+  try {
+    return parseUnits(normalized, USDC_DECIMALS).toString();
+  } catch {
+    return undefined;
+  }
 }
 
 function toGmxUsdDelta(positionSizeInUsd: string | undefined): string | undefined {

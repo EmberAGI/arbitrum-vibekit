@@ -11,9 +11,11 @@ const DEFAULT_E2E_PROFILE: E2EProfile = 'live';
 const DEFAULT_ALLORA_CHAIN_ID = 'ethereum-11155111';
 const DEFAULT_ALLORA_INFERENCE_CACHE_TTL_MS = 30_000;
 const DEFAULT_ALLORA_8H_INFERENCE_CACHE_TTL_MS = 30_000;
+const DEFAULT_GMX_ALLORA_MODE: GmxAlloraMode = 'production';
 const DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE: GmxAlloraTxExecutionMode = 'plan';
 const DEFAULT_DELEGATIONS_BYPASS = false;
 
+export type GmxAlloraMode = 'debug' | 'production';
 export type GmxAlloraTxExecutionMode = 'plan' | 'execute';
 export type E2EProfile = 'mocked' | 'live';
 
@@ -173,6 +175,22 @@ export function resolveDelegationsBypass(): boolean {
   }
   const normalized = raw.trim().toLowerCase();
   return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+export function resolveGmxAlloraMode(): GmxAlloraMode {
+  const raw = process.env['GMX_ALLORA_MODE'];
+  if (!raw) {
+    return DEFAULT_GMX_ALLORA_MODE;
+  }
+
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'debug') {
+    return 'debug';
+  }
+  if (normalized === 'production') {
+    return 'production';
+  }
+  return DEFAULT_GMX_ALLORA_MODE;
 }
 
 function normalizeHexAddress(value: string, label: string): `0x${string}` {

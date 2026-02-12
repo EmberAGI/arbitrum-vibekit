@@ -1,7 +1,11 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
+import type { PerpetualMarket } from '../../clients/onchainActions.js';
+import { ARBITRUM_CHAIN_ID, ONCHAIN_ACTIONS_API_URL } from '../../config/constants.js';
+import { selectGmxPerpetualMarket } from '../../core/marketSelection.js';
 import { type FundingTokenInput } from '../../domain/types.js';
+import { getOnchainActionsClient } from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -10,13 +14,28 @@ import {
   type ClmmUpdate,
   type OnboardingState,
 } from '../context.js';
-import { FUNDING_TOKENS } from '../seedData.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
 const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
   totalSteps: 3,
 };
+
+function resolveUsdcTokenAddressFromMarket(market: PerpetualMarket): `0x${string}` {
+  const longToken = market.longToken;
+  const shortToken = market.shortToken;
+  if (!longToken || !shortToken) {
+    throw new Error('Selected GMX market is missing long/short token metadata.');
+  }
+
+  const candidates = [shortToken, longToken];
+  const usdcToken = candidates.find((token) => token.symbol.toUpperCase() === 'USDC');
+  if (!usdcToken) {
+    throw new Error('Selected GMX market does not provide USDC collateral.');
+  }
+
+  return normalizeHexAddress(usdcToken.tokenUid.address, 'funding token address');
+}
 
 export const collectFundingTokenInputNode = async (
   state: ClmmState,
@@ -62,9 +81,25 @@ export const collectFundingTokenInputNode = async (
     },
   });
 
-  const usdcOption = FUNDING_TOKENS.find((option) => option.symbol.toUpperCase() === 'USDC');
-  if (!usdcOption) {
-    const failureMessage = 'ERROR: USDC funding option unavailable for GMX onboarding.';
+  let normalizedFundingToken: `0x${string}`;
+  try {
+    const onchainActionsClient = getOnchainActionsClient();
+    const markets = await onchainActionsClient.listPerpetualMarkets({
+      chainIds: [ARBITRUM_CHAIN_ID.toString()],
+    });
+    const selectedMarket = selectGmxPerpetualMarket({
+      markets,
+      baseSymbol: operatorInput.targetMarket,
+      quoteSymbol: 'USDC',
+    });
+    if (!selectedMarket) {
+      throw new Error(`No GMX ${operatorInput.targetMarket}/USDC market available`);
+    }
+
+    normalizedFundingToken = resolveUsdcTokenAddressFromMarket(selectedMarket);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const failureMessage = `ERROR: Failed to resolve USDC funding token from ${ONCHAIN_ACTIONS_API_URL}: ${message}`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
@@ -78,7 +113,6 @@ export const collectFundingTokenInputNode = async (
     };
   }
 
-  const normalizedFundingToken = normalizeHexAddress(usdcOption.address, 'funding token address');
   const { task, statusEvent } = buildTaskStatus(
     awaitingInput.task,
     'working',

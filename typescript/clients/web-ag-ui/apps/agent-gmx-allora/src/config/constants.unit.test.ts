@@ -6,6 +6,7 @@ import {
   resolveAgentWalletAddress,
   resolveDelegationsBypass,
   resolveE2EProfile,
+  resolveGmxAlloraMode,
   resolveGmxAlloraTxExecutionMode,
   resolveOnchainActionsApiUrl,
   resolvePollIntervalMs,
@@ -111,6 +112,24 @@ describe('config/constants', () => {
 
     process.env.DELEGATIONS_BYPASS = 'false';
     expect(resolveDelegationsBypass()).toBe(false);
+  });
+
+  it('defaults GMX mode to production', () => {
+    delete process.env.GMX_ALLORA_MODE;
+    expect(resolveGmxAlloraMode()).toBe('production');
+  });
+
+  it('parses GMX mode from environment', () => {
+    process.env.GMX_ALLORA_MODE = 'debug';
+    expect(resolveGmxAlloraMode()).toBe('debug');
+
+    process.env.GMX_ALLORA_MODE = 'production';
+    expect(resolveGmxAlloraMode()).toBe('production');
+  });
+
+  it('falls back to production for unknown GMX mode values', () => {
+    process.env.GMX_ALLORA_MODE = 'staging';
+    expect(resolveGmxAlloraMode()).toBe('production');
   });
 
   it('resolves agent wallet address from explicit address env var', () => {

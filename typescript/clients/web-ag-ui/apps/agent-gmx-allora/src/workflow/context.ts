@@ -71,6 +71,23 @@ export type ClmmTransaction = {
   timestamp: string;
 };
 
+export type GmxLatestSnapshot = {
+  poolAddress?: `0x${string}`;
+  totalUsd?: number;
+  feesUsd?: number;
+  feesApy?: number;
+  timestamp?: string;
+  positionOpenedAt?: string;
+  positionTokens: Array<{
+    address: `0x${string}`;
+    symbol: string;
+    decimals: number;
+    amount?: number;
+    amountBaseUnits?: string;
+    valueUsd?: number;
+  }>;
+};
+
 export type ClmmMetrics = {
   lastSnapshot?: GmxMarket;
   previousPrice?: number;
@@ -78,6 +95,10 @@ export type ClmmMetrics = {
   staleCycles: number;
   iteration: number;
   latestCycle?: GmxAlloraTelemetry;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
+  latestSnapshot?: GmxLatestSnapshot;
   // When running in plan-only mode (no submission), we may want to avoid re-planning
   // the same open action every time the signal stays stable. This field tracks the
   // last assumed position side for decisioning until a close/flip occurs.
@@ -255,6 +276,10 @@ const defaultViewState = (): ClmmViewState => ({
     staleCycles: 0,
     iteration: 0,
     latestCycle: undefined,
+    aumUsd: undefined,
+    apy: undefined,
+    lifetimePnlUsd: undefined,
+    latestSnapshot: undefined,
     assumedPositionSide: undefined,
     lastInferenceSnapshotKey: undefined,
     lastTradedInferenceSnapshotKey: undefined,
@@ -343,6 +368,8 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
   const hasAssumedPositionSideUpdate =
     rightMetrics !== undefined &&
     Object.prototype.hasOwnProperty.call(rightMetrics, 'assumedPositionSide');
+  const hasLatestSnapshotUpdate =
+    rightMetrics !== undefined && Object.prototype.hasOwnProperty.call(rightMetrics, 'latestSnapshot');
   const nextMetrics: ClmmMetrics = {
     lastSnapshot: rightMetrics?.lastSnapshot ?? left.metrics.lastSnapshot,
     previousPrice: rightMetrics?.previousPrice ?? left.metrics.previousPrice,
@@ -350,6 +377,10 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     staleCycles: rightMetrics?.staleCycles ?? left.metrics.staleCycles,
     iteration: rightMetrics?.iteration ?? left.metrics.iteration,
     latestCycle: rightMetrics?.latestCycle ?? left.metrics.latestCycle,
+    aumUsd: rightMetrics?.aumUsd ?? left.metrics.aumUsd,
+    apy: rightMetrics?.apy ?? left.metrics.apy,
+    lifetimePnlUsd: rightMetrics?.lifetimePnlUsd ?? left.metrics.lifetimePnlUsd,
+    latestSnapshot: hasLatestSnapshotUpdate ? rightMetrics?.latestSnapshot : left.metrics.latestSnapshot,
     assumedPositionSide: hasAssumedPositionSideUpdate
       ? rightMetrics?.assumedPositionSide
       : left.metrics.assumedPositionSide,

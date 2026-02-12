@@ -28,7 +28,7 @@ describe('buildPerpetualExecutionPlan', () => {
 
     expect(plan.action).toBe('long');
     expect(plan.request).toEqual({
-      amount: '160',
+      amount: '160000000',
       walletAddress: '0xwallet',
       chainId: '42161',
       marketAddress: '0xmarket',
@@ -92,7 +92,7 @@ describe('buildPerpetualExecutionPlan', () => {
 
     expect(plan.action).toBe('short');
     expect(plan.request).toEqual({
-      amount: '180',
+      amount: '180000000',
       walletAddress: '0xwallet',
       chainId: '42161',
       marketAddress: '0xmarket',
@@ -167,5 +167,30 @@ describe('buildPerpetualExecutionPlan', () => {
 
     expect(openPlan).toEqual({ action: 'none' });
     expect(closePlan).toEqual({ action: 'none' });
+  });
+
+  it('converts fractional open size into USDC base units', () => {
+    const telemetry: GmxAlloraTelemetry = {
+      cycle: 7,
+      action: 'open',
+      reason: 'fractional sizing',
+      marketSymbol: 'BTC/USDC',
+      side: 'long',
+      leverage: 2,
+      sizeUsd: 10.5,
+      timestamp: '2026-02-05T12:30:00.000Z',
+    };
+
+    const plan = buildPerpetualExecutionPlan({
+      telemetry,
+      chainId: '42161',
+      marketAddress: '0xmarket',
+      walletAddress: '0xwallet',
+      payTokenAddress: '0xusdc',
+      collateralTokenAddress: '0xusdc',
+    });
+
+    expect(plan.action).toBe('long');
+    expect(plan.request?.amount).toBe('10500000');
   });
 });

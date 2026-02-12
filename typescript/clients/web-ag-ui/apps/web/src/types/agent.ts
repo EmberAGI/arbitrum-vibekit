@@ -61,13 +61,29 @@ export interface TelemetryItem {
   action: string;
   reason?: string;
   midPrice?: number;
+  marketSymbol?: string;
+  side?: 'long' | 'short';
+  leverage?: number;
+  sizeUsd?: number;
+  txHash?: `0x${string}`;
   apy?: number;
   ytSymbol?: string;
+  prediction?: {
+    topic: string;
+    horizonHours: number;
+    confidence: number;
+    direction: 'up' | 'down';
+    predictedPrice: number;
+    timestamp: string;
+  };
   metrics?: {
     bestApy?: number;
     currentApy?: number;
     apyDelta?: number;
     rebalanceThresholdPct?: number;
+    confidence?: number;
+    decisionThreshold?: number;
+    cooldownRemaining?: number;
   };
   timestamp?: string;
 }
@@ -101,9 +117,17 @@ export interface PendleStrategyMetric {
 
 // Event types for activity streaming
 export interface Artifact {
-  id: string;
-  type: string;
-  data: unknown;
+  id?: string;
+  type?: string;
+  data?: unknown;
+  artifactId?: string;
+  name?: string;
+  description?: string;
+  parts?: Array<{
+    kind: string;
+    text?: string;
+    data?: unknown;
+  }>;
 }
 
 export type ClmmEvent =

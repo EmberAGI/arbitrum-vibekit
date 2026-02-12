@@ -2,12 +2,13 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
 import { fetchAlloraInference, type AlloraInference } from '../../clients/allora.js';
-import type { PerpetualPosition } from '../../clients/onchainActions.js';
+import type { PerpetualPosition, TransactionPlan } from '../../clients/onchainActions.js';
 import {
   ALLORA_HORIZON_HOURS,
   ALLORA_TOPIC_IDS,
   ALLORA_TOPIC_LABELS,
   ARBITRUM_CHAIN_ID,
+  ONCHAIN_ACTIONS_API_URL,
   resolveAlloraApiBaseUrl,
   resolveAlloraApiKey,
   resolveAlloraChainId,
@@ -30,7 +31,9 @@ import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js'
 import {
   buildTaskStatus,
   logInfo,
+  normalizeHexAddress,
   type ClmmEvent,
+  type GmxLatestSnapshot,
   type ClmmState,
   type ClmmUpdate,
 } from '../context.js';
@@ -44,6 +47,7 @@ const DECISION_THRESHOLD = 0.62;
 const CONNECT_DELAY_MS = 2500;
 const CONNECT_DELAY_STEPS = 3;
 const ALLORA_STALE_CYCLE_LIMIT = 3;
+const ERC20_APPROVE_SELECTOR = '0x095ea7b3';
 
 function shouldDelayIteration(iteration: number): boolean {
   return iteration % 3 === 0;
@@ -67,6 +71,121 @@ function buildInferenceSnapshotKey(inference: AlloraInference): string {
 
 function isTradePlanAction(action: 'none' | 'long' | 'short' | 'close' | 'reduce'): boolean {
   return action !== 'none';
+}
+
+function parseUsdMetric(raw: string | undefined): number | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const normalized = raw.trim();
+  if (normalized.length === 0) {
+    return undefined;
+  }
+  if (/^-?\d+\.\d+$/u.test(normalized)) {
+    const value = Number(normalized);
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (!/^-?\d+$/u.test(normalized)) {
+    return undefined;
+  }
+
+  const sign = normalized.startsWith('-') ? -1 : 1;
+  const digits = normalized.startsWith('-') ? normalized.slice(1) : normalized;
+  if (digits.length > 18) {
+    const scale = 10n ** 30n;
+    const bigint = BigInt(normalized);
+    const abs = bigint < 0n ? -bigint : bigint;
+    const integerPart = abs / scale;
+    const fractionPart = abs % scale;
+    return sign * (Number(integerPart) + Number(fractionPart) / Number(scale));
+  }
+
+  const value = Number(normalized);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function parseEpochToIso(raw: string | undefined): string | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  if (!/^\d+$/u.test(trimmed)) {
+    return undefined;
+  }
+  const asNumber = Number(trimmed);
+  if (!Number.isFinite(asNumber) || asNumber <= 0) {
+    return undefined;
+  }
+  const millis = asNumber > 1_000_000_000_000 ? asNumber : asNumber * 1000;
+  const date = new Date(millis);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function getCallSelector(data: string): string | undefined {
+  if (!data.startsWith('0x') || data.length < 10) {
+    return undefined;
+  }
+  return data.slice(0, 10).toLowerCase();
+}
+
+function isApprovalOnlyTransactions(transactions: TransactionPlan[] | undefined): boolean {
+  if (!transactions || transactions.length === 0) {
+    return false;
+  }
+  return transactions.every((tx) => getCallSelector(tx.data) === ERC20_APPROVE_SELECTOR);
+}
+
+function buildLatestSnapshot(params: {
+  marketAddress: `0x${string}`;
+  timestamp: string;
+  position?: PerpetualPosition;
+  fallbackSizeUsd?: number;
+  fallbackOpenedAt?: string;
+  previous?: GmxLatestSnapshot;
+}): GmxLatestSnapshot {
+  const positionSize = params.position ? parseUsdMetric(params.position.sizeInUsd) : undefined;
+  const totalUsd = positionSize ?? params.fallbackSizeUsd;
+
+  const openedAt = params.position
+    ? parseEpochToIso(params.position.increasedAtTime)
+    : params.fallbackOpenedAt ?? params.previous?.positionOpenedAt;
+
+  if (!params.position && totalUsd === undefined && params.previous) {
+    return {
+      ...params.previous,
+      timestamp: params.timestamp,
+    };
+  }
+
+  if (params.position) {
+    const collateralAddress = normalizeHexAddress(
+      params.position.collateralToken.tokenUid.address,
+      'collateral token address',
+    );
+    return {
+      poolAddress: normalizeHexAddress(params.position.marketAddress, 'market address'),
+      totalUsd,
+      timestamp: params.timestamp,
+      positionOpenedAt: openedAt,
+      positionTokens: [
+        {
+          address: collateralAddress,
+          symbol: params.position.collateralToken.symbol,
+          decimals: params.position.collateralToken.decimals,
+          amountBaseUnits: params.position.collateralAmount,
+          valueUsd: totalUsd,
+        },
+      ],
+    };
+  }
+
+  return {
+    poolAddress: params.marketAddress,
+    totalUsd,
+    timestamp: params.timestamp,
+    positionOpenedAt: openedAt,
+    positionTokens: [],
+  };
 }
 
 export const pollCycleNode = async (
@@ -199,8 +318,8 @@ export const pollCycleNode = async (
 
   let gmxMarketAddress: string;
   let positions: PerpetualPosition[] = [];
+  const onchainActionsClient = getOnchainActionsClient();
   try {
-    const onchainActionsClient = getOnchainActionsClient();
     const chainIds = [ARBITRUM_CHAIN_ID.toString()];
     const [markets, walletPositions] = await Promise.all([
       onchainActionsClient.listPerpetualMarkets({ chainIds }),
@@ -244,7 +363,7 @@ export const pollCycleNode = async (
     positions = walletPositions;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    const failureMessage = `ERROR: Failed to fetch GMX markets/positions: ${message}`;
+    const failureMessage = `ERROR: Failed to fetch GMX markets/positions from ${ONCHAIN_ACTIONS_API_URL}: ${message}`;
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
@@ -375,16 +494,10 @@ export const pollCycleNode = async (
     }
   }
 
-  const telemetryEvent: ClmmEvent = {
-    type: 'artifact',
-    artifact: buildTelemetryArtifact(adjustedTelemetry),
-    append: true,
-  };
-
   const txExecutionMode = resolveGmxAlloraTxExecutionMode();
   const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
   const executionResult = await executePerpetualPlan({
-    client: getOnchainActionsClient(),
+    client: onchainActionsClient,
     clients,
     plan: executionPlan,
     txExecutionMode,
@@ -393,9 +506,92 @@ export const pollCycleNode = async (
     delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
     delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
   });
+  const approvalOnlyExecution =
+    executionResult.ok &&
+    (executionPlan.action === 'long' || executionPlan.action === 'short') &&
+    isApprovalOnlyTransactions(executionResult.transactions);
+
+  if (!executionResult.ok) {
+    const executionFailure = buildTaskStatus(
+      task,
+      'working',
+      `[Cycle ${iteration}] execution failed: ${executionResult.error ?? 'Unknown error'}`,
+    );
+    task = executionFailure.task;
+    statusEvent = executionFailure.statusEvent;
+  } else if (approvalOnlyExecution) {
+    const approvalStatus = buildTaskStatus(
+      task,
+      'working',
+      `[Cycle ${iteration}] approval completed; waiting for executable GMX trade transaction.`,
+    );
+    task = approvalStatus.task;
+    statusEvent = approvalStatus.statusEvent;
+  }
+
+  const latestCycle =
+    approvalOnlyExecution
+      ? {
+          ...adjustedTelemetry,
+          action: 'hold' as const,
+          side: undefined,
+          leverage: undefined,
+          sizeUsd: undefined,
+          txHash: undefined,
+          reason: `${adjustedTelemetry.reason} Approval completed; waiting for executable GMX trade transaction.`,
+        }
+      : adjustedTelemetry;
+
+  let positionAfterExecution = currentMarketPosition;
+  if (executionResult.ok && executionPlan.action !== 'none') {
+    try {
+      const refreshedPositions = await onchainActionsClient.listPerpetualPositions({
+        walletAddress: operatorConfig.delegatorWalletAddress,
+        chainIds: [ARBITRUM_CHAIN_ID.toString()],
+      });
+      positionAfterExecution = refreshedPositions.find(
+        (position) => position.marketAddress.toLowerCase() === normalizedTargetMarket,
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      logInfo('Unable to refresh GMX position snapshot after execution', { error: message });
+    }
+  }
+
+  const fallbackSizeUsd =
+    approvalOnlyExecution
+      ? undefined
+      : executionResult.ok && executionPlan.action === 'close'
+      ? 0
+      : executionResult.ok && (executionPlan.action === 'long' || executionPlan.action === 'short')
+        ? adjustedTelemetry.sizeUsd
+        : undefined;
+
+  const latestSnapshot = buildLatestSnapshot({
+    marketAddress: normalizeHexAddress(gmxMarketAddress, 'market address'),
+    timestamp: latestCycle.timestamp,
+    position: positionAfterExecution,
+    fallbackSizeUsd,
+    fallbackOpenedAt:
+      executionResult.ok && (executionPlan.action === 'long' || executionPlan.action === 'short')
+        ? latestCycle.timestamp
+        : undefined,
+    previous: state.view.metrics.latestSnapshot,
+  });
+
+  const hasCompletedTradeEffect =
+    executionResult.ok && executionPlan.action !== 'none' && !approvalOnlyExecution;
+  const lifetimePnlUsd = positionAfterExecution
+    ? parseUsdMetric(positionAfterExecution.pnl)
+    : executionResult.ok && executionPlan.action === 'close'
+      ? 0
+      : state.view.metrics.lifetimePnlUsd;
 
   const nextAssumedPositionSide = (() => {
     if (!executionResult.ok) {
+      return assumedPositionSide;
+    }
+    if (approvalOnlyExecution) {
       return assumedPositionSide;
     }
     // Planned actions should advance local assumptions immediately so we don't
@@ -410,8 +606,8 @@ export const pollCycleNode = async (
       return 'short';
     }
     // Otherwise, prefer actual onchain state when available.
-    if (currentPositionSide) {
-      return currentPositionSide;
+    if (positionAfterExecution?.positionSide) {
+      return positionAfterExecution.positionSide;
     }
     return assumedPositionSide;
   })();
@@ -420,7 +616,7 @@ export const pollCycleNode = async (
       ? undefined
       : {
           type: 'artifact',
-          artifact: buildExecutionPlanArtifact({ plan: executionPlan, telemetry: adjustedTelemetry }),
+          artifact: buildExecutionPlanArtifact({ plan: executionPlan, telemetry: latestCycle }),
           append: true,
         };
   const executionResultEvent: ClmmEvent | undefined =
@@ -433,13 +629,18 @@ export const pollCycleNode = async (
           plan: executionPlan,
           ok: executionResult.ok,
           error: executionResult.error,
-          telemetry: adjustedTelemetry,
+          telemetry: latestCycle,
           transactions: executionResult.transactions,
           txHashes: executionResult.txHashes,
           lastTxHash: executionResult.lastTxHash,
         }),
         append: true,
       };
+  const telemetryEvent: ClmmEvent = {
+    type: 'artifact',
+    artifact: buildTelemetryArtifact(latestCycle),
+    append: true,
+  };
 
   let cronScheduled = state.private.cronScheduled;
   const threadId = (config as Configurable).configurable?.thread_id;
@@ -450,22 +651,25 @@ export const pollCycleNode = async (
     cronScheduled = true;
   }
 
-  const resolvedTxHash = executionResult.lastTxHash ?? txHash;
-  const transactionEntry = resolvedTxHash
-    ? {
-        cycle: iteration,
-        action,
-        txHash: resolvedTxHash,
-        status: 'success' as const,
-        reason,
-        timestamp: adjustedTelemetry.timestamp,
-      }
-    : undefined;
+  const finalAction = latestCycle.action;
+  const finalReason = latestCycle.reason;
+  const resolvedTxHash = executionResult.lastTxHash ?? latestCycle.txHash;
+  const transactionEntry =
+    executionPlan.action !== 'none'
+      ? {
+          cycle: iteration,
+          action: finalAction,
+          txHash: resolvedTxHash,
+          status: executionResult.ok ? ('success' as const) : ('failed' as const),
+          reason: executionResult.ok ? finalReason : executionResult.error ?? finalReason,
+          timestamp: latestCycle.timestamp,
+        }
+      : undefined;
 
   const baseAum = state.view.profile.aum ?? 52_000;
   const baseIncome = state.view.profile.agentIncome ?? 5_400;
-  const aumDelta = action === 'hold' || action === 'cooldown' ? 10 : 180;
-  const incomeDelta = action === 'hold' || action === 'cooldown' ? 1.2 : 9.5;
+  const aumDelta = finalAction === 'hold' || finalAction === 'cooldown' ? 10 : 180;
+  const incomeDelta = finalAction === 'hold' || finalAction === 'cooldown' ? 1.2 : 9.5;
   const nextProfile = {
     ...state.view.profile,
     aum: Number((baseAum + aumDelta).toFixed(2)),
@@ -478,20 +682,26 @@ export const pollCycleNode = async (
         metrics: {
           lastSnapshot: selectedPool,
           previousPrice: prediction.predictedPrice,
-          cyclesSinceRebalance: nextCyclesSinceTrade,
+          cyclesSinceRebalance: approvalOnlyExecution
+            ? (state.view.metrics.cyclesSinceRebalance ?? 0) + 1
+            : nextCyclesSinceTrade,
           staleCycles: state.view.metrics.staleCycles ?? 0,
           iteration,
-          latestCycle: adjustedTelemetry,
+          latestCycle,
+          aumUsd: latestSnapshot.totalUsd,
+          apy: state.view.metrics.apy ?? state.view.profile.apy,
+          lifetimePnlUsd,
+          latestSnapshot,
           assumedPositionSide: nextAssumedPositionSide,
           lastInferenceSnapshotKey: inferenceSnapshotKey,
           lastTradedInferenceSnapshotKey:
-            executionPlan.action !== 'none' && executionResult.ok && inferenceSnapshotKey
+            hasCompletedTradeEffect && inferenceSnapshotKey
               ? inferenceSnapshotKey
               : state.view.metrics.lastTradedInferenceSnapshotKey,
         },
         task,
         activity: {
-          telemetry: [adjustedTelemetry],
+          telemetry: [latestCycle],
           events: executionPlanEvent
             ? executionResultEvent
               ? [telemetryEvent, executionPlanEvent, executionResultEvent, statusEvent]

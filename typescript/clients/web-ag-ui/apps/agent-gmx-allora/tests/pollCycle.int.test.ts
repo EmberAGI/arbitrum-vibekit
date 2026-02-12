@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AlloraInference } from '../src/clients/allora.js';
 import type { PerpetualMarket, PerpetualPosition } from '../src/clients/onchainActions.js';
+import { ONCHAIN_ACTIONS_API_URL } from '../src/config/constants.js';
 import type { ClmmState } from '../src/workflow/context.js';
 import { pollCycleNode } from '../src/workflow/nodes/pollCycle.js';
 
@@ -163,6 +164,14 @@ const baseMarket: PerpetualMarket = {
   },
 };
 
+const approvalOnlyTransaction = {
+  type: 'transaction',
+  to: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+  data: '0x095ea7b30000000000000000000000001111111111111111111111111111111111111111',
+  value: '0',
+  chainId: '42161',
+};
+
 describe('pollCycleNode (integration)', () => {
   beforeEach(() => {
     fetchAlloraInferenceMock.mockReset();
@@ -194,6 +203,24 @@ describe('pollCycleNode (integration)', () => {
     expect(statusMessages.join(' ')).toContain('WARNING');
   });
 
+  it('surfaces onchain-actions endpoint in GMX markets/positions fetch failures', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+    });
+    listPerpetualMarketsMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+
+    const state = buildBaseState();
+    const result = await pollCycleNode(state, {});
+    const update = (result as { update: ClmmState }).update;
+
+    expect(update.view?.haltReason).toContain(
+      `ERROR: Failed to fetch GMX markets/positions from ${ONCHAIN_ACTIONS_API_URL}`,
+    );
+    expect(update.view?.haltReason).toContain('fetch failed');
+  });
+
   it('emits telemetry and execution plan artifacts on open action', async () => {
     fetchAlloraInferenceMock.mockResolvedValueOnce({
       topicId: 14,
@@ -202,8 +229,10 @@ describe('pollCycleNode (integration)', () => {
     });
     listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
     listPerpetualPositionsMock.mockResolvedValueOnce([]);
+    createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
 
     const state = buildBaseState();
+    state.view.metrics.previousPrice = 46000;
     const result = await pollCycleNode(state, {});
 
     const update = (result as { update: ClmmState }).update;
@@ -214,6 +243,7 @@ describe('pollCycleNode (integration)', () => {
 
     expect(artifactIds).toContain('gmx-allora-telemetry');
     expect(artifactIds).toContain('gmx-allora-execution-plan');
+    expect(update.view?.metrics.latestSnapshot?.totalUsd).toBeGreaterThan(0);
   });
 
   it('routes open long decisions to createPerpetualLong', async () => {
@@ -348,6 +378,80 @@ describe('pollCycleNode (integration)', () => {
 
     expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
     expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries open trades when the prior cycle only submitted approval transactions', async () => {
+    fetchAlloraInferenceMock
+      .mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      })
+      .mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+    listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValue([]);
+    createPerpetualLongMock.mockResolvedValue({ transactions: [approvalOnlyTransaction] });
+
+    const firstState = buildBaseState();
+    firstState.view.metrics.previousPrice = 46000;
+    const firstResult = await pollCycleNode(firstState, {});
+
+    const firstUpdate = (firstResult as { update: { view?: { metrics?: ClmmState['view']['metrics'] } } })
+      .update;
+
+    const secondState = buildBaseState();
+    secondState.view.metrics = {
+      ...secondState.view.metrics,
+      ...(firstUpdate.view?.metrics ?? {}),
+    };
+    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics?.latestCycle;
+    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics?.previousPrice;
+
+    await pollCycleNode(secondState, {});
+
+    expect(createPerpetualLongMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves the last known position snapshot when no fresh position snapshot is available', async () => {
+    fetchAlloraInferenceMock
+      .mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      })
+      .mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+    listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValue([]);
+    createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
+
+    const firstState = buildBaseState();
+    firstState.view.metrics.previousPrice = 46000;
+    const firstResult = await pollCycleNode(firstState, {});
+    const firstUpdate = (firstResult as { update: ClmmState }).update;
+    const firstSnapshot = firstUpdate.view?.metrics.latestSnapshot;
+    expect(firstSnapshot?.totalUsd).toBeGreaterThan(0);
+
+    const secondState = buildBaseState();
+    secondState.view.metrics = {
+      ...secondState.view.metrics,
+      ...(firstUpdate.view?.metrics ?? {}),
+    };
+    secondState.view.metrics.assumedPositionSide = firstUpdate.view?.metrics.assumedPositionSide;
+    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics.latestCycle;
+    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics.previousPrice;
+
+    const secondResult = await pollCycleNode(secondState, {});
+    const secondUpdate = (secondResult as { update: ClmmState }).update;
+
+    expect(secondUpdate.view?.metrics.latestSnapshot?.totalUsd).toBe(firstSnapshot?.totalUsd);
   });
 
   it('executes reduce plans via onchain-actions reduce endpoint when position exists', async () => {

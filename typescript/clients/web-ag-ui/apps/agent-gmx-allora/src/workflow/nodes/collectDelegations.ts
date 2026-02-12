@@ -3,7 +3,11 @@ import { Command, interrupt } from '@langchain/langgraph';
 import { getDeleGatorEnvironment } from '@metamask/delegation-toolkit';
 import { z } from 'zod';
 
-import { ARBITRUM_CHAIN_ID, resolveAgentWalletAddress } from '../../config/constants.js';
+import {
+  ARBITRUM_CHAIN_ID,
+  resolveAgentWalletAddress,
+  resolveGmxAlloraMode,
+} from '../../config/constants.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -138,6 +142,8 @@ export const collectDelegationsNode = async (
     operatorInput.walletAddress,
     'delegator wallet address',
   );
+  const mode = state.private.mode ?? resolveGmxAlloraMode();
+  const warnings = mode === 'debug' ? [...DELEGATION_WARNINGS] : [];
   const delegateeAddress = resolveAgentWalletAddress();
   const { DelegationManager } = getDeleGatorEnvironment(ARBITRUM_CHAIN_ID);
   const delegationManager = normalizeHexAddress(DelegationManager, 'delegation manager');
@@ -152,7 +158,7 @@ export const collectDelegationsNode = async (
     delegateeAddress,
     delegationsToSign: buildDelegations({ delegatorAddress, delegateeAddress }),
     descriptions: [...DELEGATION_DESCRIPTIONS],
-    warnings: [...DELEGATION_WARNINGS],
+    warnings,
   };
 
   const awaitingInput = buildTaskStatus(
@@ -231,7 +237,7 @@ export const collectDelegationsNode = async (
     delegations: signedDelegations,
     intents: [...DELEGATION_INTENTS],
     descriptions: [...DELEGATION_DESCRIPTIONS],
-    warnings: [...DELEGATION_WARNINGS],
+    warnings,
   };
 
   const { task, statusEvent } = buildTaskStatus(

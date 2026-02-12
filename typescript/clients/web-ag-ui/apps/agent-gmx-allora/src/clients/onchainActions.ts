@@ -149,7 +149,8 @@ export class OnchainActionsRequestError extends Error {
 }
 
 export type PerpetualLongRequest = {
-  // REST API accepts a bigint-like decimal string; avoid JSON number precision loss.
+  // REST API accepts token base units as a bigint-like decimal string
+  // (e.g., 10 USDC => "10000000" with 6 decimals).
   amount: string;
   walletAddress: `0x${string}`;
   chainId: string;

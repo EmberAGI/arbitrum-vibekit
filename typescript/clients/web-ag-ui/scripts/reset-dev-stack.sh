@@ -3,8 +3,8 @@
 set -u
 
 # Web QA uses 3000, LangGraph dev servers use 8123-8126.
-# onchain-actions defaults to 3001 but local dev commonly runs it on 50051.
-ports=(3000 3001 3002 3003 3004 3005 8123 8124 8125 8126 50051)
+# Keep 50051 untouched so external onchain-actions dev sessions are not killed.
+ports=(3000 3001 3002 3003 3004 3005 8123 8124 8125 8126)
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
@@ -118,7 +118,7 @@ kill_pnpm_dev() {
 }
 
 cleanup_state() {
-  rm -rf apps/agent-clmm/.langgraph_api apps/agent/.langgraph_api apps/agent-pendle/.langgraph_api apps/agent-gmx-allora/.langgraph_api apps/web/.next/dev/lock
+  rm -rf apps/agent-clmm/.langgraph_api apps/agent/.langgraph_api apps/agent-pendle/.langgraph_api apps/agent-gmx-allora/.langgraph_api apps/web/.next
 }
 
 kill_ports
