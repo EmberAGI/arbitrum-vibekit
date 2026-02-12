@@ -92,9 +92,33 @@ export type PerpetualsOrder = z.infer<typeof OrderSchema>;
 
 export const OrdersDataSchema = z.array(OrderSchema);
 
+const BaseUnitAmountSchema = z.preprocess((value) => {
+  if (typeof value === 'bigint') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || !Number.isInteger(value)) {
+      return value;
+    }
+
+    return BigInt(value);
+  }
+
+  if (typeof value === 'string') {
+    if (!/^\d+$/u.test(value)) {
+      return value;
+    }
+
+    return BigInt(value);
+  }
+
+  return value;
+}, z.bigint());
+
 // Definition for plugin with mapped entities already in place
 export const CreatePerpetualsPositionRequestSchema = z.object({
-  amount: z.bigint(),
+  amount: BaseUnitAmountSchema,
   walletAddress: z.string(),
   chainId: z.string(),
   marketAddress: z.string(),
