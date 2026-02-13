@@ -224,6 +224,92 @@ describe('fireCommandNode', () => {
     expect(emittedMessages).toContain('Unwind: planned 0 transaction(s)');
   });
 
+  it('records unwind tx hashes in transactionHistory', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+    try {
+      copilotkitEmitStateMock.mockResolvedValue(undefined);
+      const state = baseState();
+      state.view.metrics.iteration = 12;
+      state.view.operatorConfig = {
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        executionWalletAddress: '0x0000000000000000000000000000000000000001',
+        baseContributionUsd: 10,
+        fundingTokenAddress: '0x0000000000000000000000000000000000000002',
+        targetYieldToken: {
+          marketAddress: '0x0000000000000000000000000000000000000003',
+          ptAddress: '0x0000000000000000000000000000000000000004',
+          ytAddress: '0x0000000000000000000000000000000000000005',
+          ptSymbol: 'PT',
+          ytSymbol: 'YT',
+          underlyingSymbol: 'USDai',
+          apy: 1,
+          maturity: '2030-01-01',
+        },
+      };
+
+      resolvePendleTxExecutionModeMock.mockReturnValue('execute');
+      resolvePendleChainIdsMock.mockReturnValue(['42161']);
+      executeUnwindMock.mockResolvedValue({
+        txHashes: ['0xdeadbeef'],
+        positionCount: 1,
+        transactionCount: 1,
+      });
+
+      const result = await fireCommandNode(state, {});
+
+      expect(result.view.transactionHistory).toEqual([
+        {
+          cycle: 12,
+          action: 'unwind',
+          txHash: '0xdeadbeef',
+          status: 'success',
+          reason: 'fire',
+          timestamp: '2026-01-01T00:00:00.000Z',
+        },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('includes last unwind tx hash in the completion status message', async () => {
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+    const state = baseState();
+    state.view.operatorConfig = {
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      executionWalletAddress: '0x0000000000000000000000000000000000000001',
+      baseContributionUsd: 10,
+      fundingTokenAddress: '0x0000000000000000000000000000000000000002',
+      targetYieldToken: {
+        marketAddress: '0x0000000000000000000000000000000000000003',
+        ptAddress: '0x0000000000000000000000000000000000000004',
+        ytAddress: '0x0000000000000000000000000000000000000005',
+        ptSymbol: 'PT',
+        ytSymbol: 'YT',
+        underlyingSymbol: 'USDai',
+        apy: 1,
+        maturity: '2030-01-01',
+      },
+    };
+
+    resolvePendleTxExecutionModeMock.mockReturnValue('execute');
+    resolvePendleChainIdsMock.mockReturnValue(['42161']);
+    executeUnwindMock.mockResolvedValue({
+      txHashes: ['0xdeadbeef'],
+      positionCount: 1,
+      transactionCount: 1,
+    });
+
+    await fireCommandNode(state, {});
+
+    const lastCall = copilotkitEmitStateMock.mock.calls.at(-1);
+    const lastMessage = getEmittedStatusMessage(lastCall?.[1] as unknown);
+    expect(typeof lastMessage).toBe('string');
+    expect(lastMessage).toContain('0xdeadbeef');
+  });
+
   it('completes with a "nothing to unwind" message when no positions are found', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();

@@ -94,21 +94,48 @@ export const fireCommandNode = async (
       onProgress: async (message) => emitWorking(message),
     });
 
+    const unwindTxHashes = unwindResult.txHashes;
+    const unwindTimestamp = new Date().toISOString();
+    const unwindCycle = state.view.metrics.iteration ?? 0;
+    const unwindTransactions =
+      unwindTxHashes.length > 0
+        ? unwindTxHashes.map((txHash) => ({
+            cycle: unwindCycle,
+            action: 'unwind',
+            txHash,
+            status: 'success' as const,
+            reason: 'fire',
+            timestamp: unwindTimestamp,
+          }))
+        : [];
+    const transactionHistory =
+      unwindTransactions.length > 0
+        ? [...state.view.transactionHistory, ...unwindTransactions]
+        : state.view.transactionHistory;
+
+    const lastUnwindTxHash = unwindResult.lastTxHash ?? unwindTxHashes.at(-1);
     const completionMessage =
       unwindResult.positionCount === 0
         ? 'Agent fired. No positions found to unwind. Workflow completed.'
         : unwindResult.transactionCount === 0
           ? `Agent fired. Nothing to unwind for ${unwindResult.positionCount} position(s). Workflow completed.`
-          : `Agent fired. Unwind complete for ${unwindResult.positionCount} position(s) (${unwindResult.transactionCount} transaction(s) planned). Workflow completed.`;
+          : lastUnwindTxHash
+            ? `Agent fired. Unwind complete for ${unwindResult.positionCount} position(s) (${unwindResult.transactionCount} transaction(s) planned). Workflow completed. Last tx: ${lastUnwindTxHash}`
+            : `Agent fired. Unwind complete for ${unwindResult.positionCount} position(s) (${unwindResult.transactionCount} transaction(s) planned). Workflow completed.`;
     const { task, statusEvent } = buildTaskStatus(currentTask, 'completed', completionMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: {
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        transactionHistory,
+      },
     });
     return {
       view: {
         task,
         command: 'fire',
         activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        transactionHistory,
       },
     };
   } catch (error: unknown) {
