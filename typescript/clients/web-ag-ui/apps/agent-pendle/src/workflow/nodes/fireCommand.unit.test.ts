@@ -144,6 +144,37 @@ describe('fireCommandNode', () => {
     expect(result.view.task?.taskStatus.state).toBe('completed');
   });
 
+  it('attempts unwind even when task is failed', async () => {
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+    const state = baseState();
+    state.view.task = { id: 'task-1', taskStatus: { state: 'failed' } };
+    state.view.operatorConfig = {
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      executionWalletAddress: '0x0000000000000000000000000000000000000001',
+      baseContributionUsd: 10,
+      fundingTokenAddress: '0x0000000000000000000000000000000000000002',
+      targetYieldToken: {
+        marketAddress: '0x0000000000000000000000000000000000000003',
+        ptAddress: '0x0000000000000000000000000000000000000004',
+        ytAddress: '0x0000000000000000000000000000000000000005',
+        ptSymbol: 'PT',
+        ytSymbol: 'YT',
+        underlyingSymbol: 'USDai',
+        apy: 1,
+        maturity: '2030-01-01',
+      },
+    };
+
+    resolvePendleTxExecutionModeMock.mockReturnValue('plan');
+    resolvePendleChainIdsMock.mockReturnValue(['42161']);
+    executeUnwindMock.mockResolvedValue({ txHashes: [], positionCount: 0, transactionCount: 0 });
+
+    const result = await fireCommandNode(state, {});
+
+    expect(executeUnwindMock).toHaveBeenCalledTimes(1);
+    expect(result.view.task?.taskStatus.state).toBe('completed');
+  });
+
   it('cancels cron when thread_id is present', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();
@@ -376,5 +407,40 @@ describe('fireCommandNode', () => {
     const lastMessage = getEmittedStatusMessage(lastCall?.[1] as unknown);
     expect(typeof lastMessage).toBe('string');
     expect(lastMessage).toContain('ERROR: Unwind failed after 2 retries');
+  });
+
+  it('marks the task completed when unwind is interrupted', async () => {
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+    const state = baseState();
+    state.view.operatorConfig = {
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      executionWalletAddress: '0x0000000000000000000000000000000000000001',
+      baseContributionUsd: 10,
+      fundingTokenAddress: '0x0000000000000000000000000000000000000002',
+      targetYieldToken: {
+        marketAddress: '0x0000000000000000000000000000000000000003',
+        ptAddress: '0x0000000000000000000000000000000000000004',
+        ytAddress: '0x0000000000000000000000000000000000000005',
+        ptSymbol: 'PT',
+        ytSymbol: 'YT',
+        underlyingSymbol: 'USDai',
+        apy: 1,
+        maturity: '2030-01-01',
+      },
+    };
+
+    resolvePendleTxExecutionModeMock.mockReturnValue('plan');
+    resolvePendleChainIdsMock.mockReturnValue(['42161']);
+    executeUnwindMock.mockRejectedValueOnce(new Error('interrupt'));
+
+    const result = await fireCommandNode(state, {});
+
+    expect(executeUnwindMock).toHaveBeenCalledTimes(1);
+    expect(result.view.command).toBe('fire');
+    expect(result.view.task?.taskStatus.state).toBe('completed');
+    const lastCall = copilotkitEmitStateMock.mock.calls.at(-1);
+    const lastMessage = getEmittedStatusMessage(lastCall?.[1] as unknown);
+    expect(typeof lastMessage).toBe('string');
+    expect(lastMessage).toContain('Unwind was interrupted');
   });
 });

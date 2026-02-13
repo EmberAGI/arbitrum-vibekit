@@ -72,9 +72,17 @@ export function AppSidebar() {
   const runtimeAgentId = isInactiveRuntime ? null : agent.config.id;
   const runtimeTaskId = agent.view.task?.id;
   const runtimeTaskState = agent.view.task?.taskStatus?.state as TaskState | undefined;
+  const runtimeCommand = agent.view.command;
   const runtimeHaltReason = agent.view.haltReason;
   const runtimeExecutionError = agent.view.executionError;
   const runtimeNeedsInput = Boolean(agent.activeInterrupt);
+  const runtimeTaskMessage = (() => {
+    const message = agent.view.task?.taskStatus?.message;
+    if (typeof message !== 'object' || message === null) return undefined;
+    if (!('content' in message)) return undefined;
+    const content = (message as { content?: unknown }).content;
+    return typeof content === 'string' ? content : undefined;
+  })();
 
   const blockedAgents: AgentActivity[] = [];
   const activeAgents: AgentActivity[] = [];
@@ -88,6 +96,8 @@ export function AppSidebar() {
           ...listEntry,
           taskId: runtimeTaskId,
           taskState: runtimeTaskState,
+          command: runtimeCommand,
+          taskMessage: runtimeTaskMessage,
           haltReason: runtimeHaltReason,
           executionError: runtimeExecutionError,
         }
@@ -98,11 +108,20 @@ export function AppSidebar() {
       return;
     }
 
+    const isFireInterruptCompletion = (() => {
+      if (entry?.command !== 'fire') return false;
+      if (taskState !== 'failed') return false;
+      const message = entry?.taskMessage;
+      if (typeof message !== 'string') return false;
+      const normalized = message.toLowerCase();
+      return normalized.includes('interrupt') || normalized.includes('aborted') || normalized.includes('aborterror');
+    })();
+
     const taskId = entry.taskId ?? config.id;
     const needsInput = taskState === 'input-required' && runtimeNeedsInput;
-    const hasError = taskState === 'failed';
+    const hasError = taskState === 'failed' && !isFireInterruptCompletion;
     const isBlocked = needsInput || hasError;
-    const isCompleted = taskState === 'completed' || taskState === 'canceled';
+    const isCompleted = taskState === 'completed' || taskState === 'canceled' || isFireInterruptCompletion;
 
     if (isBlocked) {
       blockedAgents.push({

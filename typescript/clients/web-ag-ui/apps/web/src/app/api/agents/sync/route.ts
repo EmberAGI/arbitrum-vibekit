@@ -31,6 +31,11 @@ const ThreadStateSchema = z
             taskStatus: z
               .object({
                 state: z.string().optional(),
+                message: z
+                  .object({
+                    content: z.string().optional(),
+                  })
+                  .optional(),
               })
               .optional(),
           })
@@ -315,19 +320,58 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const task = state?.view?.task;
     const taskId = task?.id ?? null;
     const hasTask = Boolean(taskId);
+    const command = state?.view?.command ?? null;
+    const taskState = hasTask ? (task?.taskStatus?.state ?? null) : null;
+    const taskMessage = hasTask ? (task?.taskStatus?.message?.content ?? null) : null;
+    const transactionHistory = state?.view?.transactionHistory ?? null;
+    const normalizedTaskMessage = typeof taskMessage === 'string' ? taskMessage.toLowerCase() : '';
+    const derivedTaskState =
+      command === 'fire' &&
+      taskState === 'failed' &&
+      (normalizedTaskMessage.includes('interrupt') ||
+        normalizedTaskMessage.includes('aborted') ||
+        normalizedTaskMessage.includes('aborterror'))
+        ? 'completed'
+        : taskState;
+
+    if (
+      parsed.data.agentId === 'agent-pendle' &&
+      (command === 'fire' ||
+        taskState === 'failed' ||
+        taskState === 'input-required' ||
+        (Array.isArray(transactionHistory) && transactionHistory.length > 0) ||
+        Boolean(initialState.hasInterrupts))
+    ) {
+      const lastTxHash = Array.isArray(transactionHistory)
+        ? (transactionHistory.at(-1) as { txHash?: unknown } | undefined)?.txHash
+        : undefined;
+      console.info('[agent-sync-debug]', {
+        agentId: parsed.data.agentId,
+        threadId,
+        command,
+        taskStateRaw: taskState,
+        taskState: derivedTaskState,
+        taskMessage,
+        hasInterrupts: initialState.hasInterrupts,
+        transactionCount: Array.isArray(transactionHistory) ? transactionHistory.length : null,
+        lastTxHash: typeof lastTxHash === 'string' ? lastTxHash : null,
+      });
+    }
+
     return NextResponse.json(
       {
         agentId: parsed.data.agentId,
-        command: state?.view?.command ?? null,
+        command,
         onboarding: state?.view?.onboarding ?? null,
         delegationsBypassActive: state?.view?.delegationsBypassActive ?? null,
         profile: state?.view?.profile ?? null,
         metrics: state?.view?.metrics ?? null,
         activity: state?.view?.activity ?? null,
-        transactionHistory: state?.view?.transactionHistory ?? null,
+        transactionHistory,
         task: task ?? null,
         taskId,
-        taskState: hasTask ? (task?.taskStatus?.state ?? null) : null,
+        taskState: derivedTaskState,
+        taskMessage,
         haltReason: hasTask ? (state?.view?.haltReason ?? null) : null,
         executionError: hasTask ? (state?.view?.executionError ?? null) : null,
       },

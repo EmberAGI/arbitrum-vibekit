@@ -264,8 +264,8 @@ export const collectDelegationsNode = async (
         target: normalizeHexAddress(tx.to, 'planned transaction target'),
         selector: tx.data.slice(0, 10).toLowerCase() as `0x${string}`,
       }))
-      // Ignore approvals here; we always include stablecoin approvals explicitly.
-      .filter((intent) => intent.selector !== ERC20_APPROVE_SELECTOR);
+      // Keep approvals: unwinds/rebalances frequently require approving PT (and other) tokens,
+      // and filtering these out causes delegated execution to fail at runtime.
 
     const intentKey = (intent: { target: `0x${string}`; selector: `0x${string}` }) =>
       `${intent.target.toLowerCase()}:${intent.selector.toLowerCase()}`;

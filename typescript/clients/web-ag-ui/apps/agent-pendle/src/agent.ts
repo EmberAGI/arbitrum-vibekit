@@ -176,6 +176,13 @@ async function updateCycleState(
       as_node: 'runCommand',
     }),
   });
+  if (response.status === 409 || response.status === 422) {
+    const payloadText = await response.text();
+    console.info(`[cron] Cycle state update rejected; thread busy (thread=${threadId})`, {
+      detail: payloadText,
+    });
+    return;
+  }
   await parseJsonResponse(response, ThreadStateUpdateResponseSchema);
 }
 
