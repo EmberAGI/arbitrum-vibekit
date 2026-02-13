@@ -1,7 +1,18 @@
 import { z } from 'zod';
 
 function normalizeBaseUrl(value: string): string {
-  return value.endsWith('/') ? value.slice(0, -1) : value;
+  const trimmed = value.trim();
+
+  if (trimmed.startsWith('/')) {
+    // Allow same-origin proxy base URLs in the browser (ex: "/api/onchain-actions").
+    if (typeof window !== 'undefined' && typeof window.location?.origin === 'string') {
+      const resolved = new URL(trimmed, window.location.origin).toString();
+      return resolved.endsWith('/') ? resolved.slice(0, -1) : resolved;
+    }
+    throw new Error(`Relative baseUrl is only supported in the browser: "${value}"`);
+  }
+
+  return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
 }
 
 async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>): Promise<T> {
@@ -92,4 +103,3 @@ export async function fetchOnchainActionsTokensPage(options: {
   const response = await fetch(url);
   return await parseJsonResponse(response, TokensPageSchema);
 }
-

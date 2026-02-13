@@ -28,8 +28,6 @@ export default function AgentDetailRoute({
       agentDescription={agent.config.description}
       creatorName={agent.config.creator}
       creatorVerified={agent.config.creatorVerified}
-      avatar={agent.config.avatar}
-      avatarBg={agent.config.avatarBg}
       rank={1}
       rating={5}
       profile={{

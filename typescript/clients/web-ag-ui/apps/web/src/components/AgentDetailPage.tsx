@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import {
   ChevronRight,
   Star,
@@ -12,7 +14,7 @@ import {
 } from 'lucide-react';
 import { signDelegation } from '@metamask/delegation-toolkit/actions';
 import { formatUnits } from 'viem';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type {
   AgentProfile,
   AgentMetrics,
@@ -35,8 +37,12 @@ import type {
   ClmmEvent,
 } from '../types/agent';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
+import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
+import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
+import { normalizeNameKey, normalizeSymbolKey, resolveAgentAvatarUri } from '../utils/iconResolution';
 import { formatPoolPair } from '../utils/poolFormat';
 import { Skeleton } from './ui/Skeleton';
+import { LoadingValue } from './ui/LoadingValue';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -54,8 +60,6 @@ interface AgentDetailPageProps {
   ownerAddress?: string;
   rank?: number;
   rating?: number;
-  avatar?: string;
-  avatarBg?: string;
   profile: AgentProfile;
   metrics: AgentMetrics;
   fullMetrics?: AgentViewMetrics;
@@ -99,9 +103,6 @@ interface AgentDetailPageProps {
 
 type TabType = 'blockers' | 'metrics' | 'transactions' | 'settings' | 'chat';
 
-const DEFAULT_AVATAR = '🤖';
-const DEFAULT_AVATAR_BG = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
-
 export function AgentDetailPage({
   agentId,
   agentName,
@@ -111,8 +112,6 @@ export function AgentDetailPage({
   ownerAddress,
   rank,
   rating,
-  avatar = DEFAULT_AVATAR,
-  avatarBg = DEFAULT_AVATAR_BG,
   profile,
   metrics,
   fullMetrics,
@@ -145,6 +144,42 @@ export function AgentDetailPage({
   const isOnboardingActive = onboarding?.step !== undefined;
   const forceBlockersTab = Boolean(activeInterrupt) || isOnboardingActive;
   const resolvedTab: TabType = forceBlockersTab ? 'blockers' : activeTab;
+
+  const desiredTokenSymbols = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    const addSymbol = (symbol: string | undefined) => {
+      if (!symbol) return;
+      const trimmed = symbol.trim();
+      if (trimmed.length === 0) return;
+      if (seen.has(trimmed)) return;
+      seen.add(trimmed);
+      out.push(trimmed);
+    };
+
+    for (const symbol of profile.tokens ?? []) addSymbol(symbol);
+    for (const protocol of profile.protocols ?? []) addSymbol(PROTOCOL_TOKEN_FALLBACK[protocol]);
+
+    return out;
+  }, [profile.protocols, profile.tokens]);
+
+  const { chainIconByName, tokenIconBySymbol, isLoaded: iconsLoaded } = useOnchainActionsIconMaps({
+    chainNames: profile.chains ?? [],
+    tokenSymbols: desiredTokenSymbols,
+  });
+
+  const agentAvatarUri = useMemo(
+    () =>
+      resolveAgentAvatarUri({
+        protocols: profile.protocols ?? [],
+        tokenIconBySymbol,
+      }) ??
+      (profile.chains && profile.chains.length > 0
+        ? chainIconByName[normalizeNameKey(profile.chains[0])] ?? null
+        : null),
+    [chainIconByName, profile.chains, profile.protocols, tokenIconBySymbol],
+  );
 
   const formatAddress = (address: string) => {
     if (address.length <= 10) return address;
@@ -218,12 +253,20 @@ export function AgentDetailPage({
           <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 mb-6">
             <div className="flex gap-6">
               {/* Agent Avatar */}
-              <div
-                className="w-32 h-32 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: avatarBg }}
-              >
-                <div className="text-6xl">{avatar}</div>
-              </div>
+              {!iconsLoaded ? (
+                <Skeleton className="h-32 w-32 rounded-full flex-shrink-0" />
+              ) : (
+                <div className="w-32 h-32 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a]">
+                  {agentAvatarUri ? (
+                    <img
+                      src={agentAvatarUri}
+                      alt=""
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : null}
+                </div>
+              )}
 
               {/* Agent Info */}
               <div className="flex-1 min-w-0">
@@ -331,9 +374,28 @@ export function AgentDetailPage({
 
             {/* Tags Row */}
             <div className="grid grid-cols-5 gap-4 mt-6 pt-6 border-t border-[#2a2a2a]">
-              <TagColumn title="Chains" items={profile.chains} />
-              <TagColumn title="Protocols" items={profile.protocols} />
-              <TagColumn title="Tokens" items={profile.tokens} />
+              <TagColumn
+                title="Chains"
+                items={profile.chains}
+                iconsLoaded={iconsLoaded}
+                getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
+              />
+              <TagColumn
+                title="Protocols"
+                items={profile.protocols}
+                iconsLoaded={iconsLoaded}
+                getIconUri={(protocol) => {
+                  const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+                  if (!fallback) return null;
+                  return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
+                }}
+              />
+              <TagColumn
+                title="Tokens"
+                items={profile.tokens}
+                iconsLoaded={iconsLoaded}
+                getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
+              />
               <PointsColumn metrics={metrics} />
             </div>
           </div>
@@ -399,6 +461,7 @@ export function AgentDetailPage({
               metrics={metrics}
               fullMetrics={fullMetrics}
               events={events}
+              hasLoadedView={hasLoadedView}
             />
           )}
 
@@ -435,12 +498,20 @@ export function AgentDetailPage({
           {/* Left Column - Agent Card */}
           <div className="space-y-6">
 	            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-              <div
-                className="w-full aspect-square rounded-xl flex items-center justify-center mb-6 overflow-hidden"
-                style={{ background: avatarBg }}
-              >
-                <div className="text-8xl">{avatar}</div>
-              </div>
+              {!iconsLoaded ? (
+                <Skeleton className="w-full aspect-square rounded-full mb-6" />
+              ) : (
+                <div className="w-full aspect-square rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a]">
+                  {agentAvatarUri ? (
+                    <img
+                      src={agentAvatarUri}
+                      alt=""
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : null}
+                </div>
+              )}
 
               <button
                 onClick={onHire}
@@ -535,9 +606,28 @@ export function AgentDetailPage({
               )}
 
 	              <div className="grid grid-cols-4 gap-4 mt-6">
-	                <TagColumn title="Chains" items={profile.chains} />
-	                <TagColumn title="Protocols" items={profile.protocols} />
-	                <TagColumn title="Tokens" items={profile.tokens} />
+	                <TagColumn
+	                  title="Chains"
+	                  items={profile.chains}
+	                  iconsLoaded={iconsLoaded}
+	                  getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
+	                />
+	                <TagColumn
+	                  title="Protocols"
+	                  items={profile.protocols}
+	                  iconsLoaded={iconsLoaded}
+	                  getIconUri={(protocol) => {
+	                    const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+	                    if (!fallback) return null;
+	                    return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
+	                  }}
+	                />
+	                <TagColumn
+	                  title="Tokens"
+	                  items={profile.tokens}
+	                  iconsLoaded={iconsLoaded}
+	                  getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
+	                />
 	                <PointsColumn metrics={metrics} />
 	              </div>
 	            </div>
@@ -1562,9 +1652,11 @@ function StatBox({ label, value, valueColor = 'text-white', isLoaded }: StatBoxP
 interface TagColumnProps {
   title: string;
   items: string[];
+  iconsLoaded: boolean;
+  getIconUri: (item: string) => string | null;
 }
 
-function TagColumn({ title, items }: TagColumnProps) {
+function TagColumn({ title, items, iconsLoaded, getIconUri }: TagColumnProps) {
   if (items.length === 0) {
     return (
       <div>
@@ -1574,35 +1666,28 @@ function TagColumn({ title, items }: TagColumnProps) {
     );
   }
 
-  const getChainIcon = (chain: string) => {
-    const icons: Record<string, { bg: string; letter: string }> = {
-      arbitrum: { bg: 'bg-blue-500', letter: 'A' },
-      linea: { bg: 'bg-cyan-500', letter: 'L' },
-      abstract: { bg: 'bg-green-500', letter: 'A' },
-      polygon: { bg: 'bg-purple-500', letter: 'P' },
-      ethereum: { bg: 'bg-blue-600', letter: 'E' },
-      base: { bg: 'bg-blue-400', letter: 'B' },
-      optimism: { bg: 'bg-red-500', letter: 'O' },
-    };
-    return (
-      icons[chain.toLowerCase()] || { bg: 'bg-gray-500', letter: chain.charAt(0).toUpperCase() }
-    );
-  };
-
   return (
     <div>
       <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">{title}</div>
       <div className="space-y-1.5">
         {items.slice(0, 3).map((item) => {
-          const icon = getChainIcon(item);
+          const iconUri = getIconUri(item);
           return (
             <div key={item} className="flex items-center gap-2">
-              <div
-                className={`w-4 h-4 rounded-full ${icon.bg} flex items-center justify-center text-[8px] font-bold text-white`}
-              >
-                {icon.letter}
-              </div>
-              <span className="text-sm text-white capitalize">{item}</span>
+              {!iconsLoaded ? (
+                <Skeleton className="h-4 w-4 rounded-full" />
+              ) : iconUri ? (
+                <img
+                  src={iconUri}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-4 w-4 rounded-full bg-[#111] ring-1 ring-[#2a2a2a] object-contain"
+                />
+              ) : (
+                <div className="h-4 w-4" aria-hidden="true" />
+              )}
+              <span className="text-sm text-white">{item}</span>
             </div>
           );
         })}
@@ -1665,11 +1750,20 @@ interface MetricsTabProps {
   metrics: AgentMetrics;
   fullMetrics?: AgentViewMetrics;
   events: ClmmEvent[];
+  hasLoadedView: boolean;
 }
 
-function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsTabProps) {
+function MetricsTab({ agentId, profile, metrics, fullMetrics, events, hasLoadedView }: MetricsTabProps) {
   if (agentId === 'agent-pendle') {
-    return <PendleMetricsTab profile={profile} metrics={metrics} fullMetrics={fullMetrics} events={events} />;
+    return (
+      <PendleMetricsTab
+        profile={profile}
+        metrics={metrics}
+        fullMetrics={fullMetrics}
+        events={events}
+        hasLoadedView={hasLoadedView}
+      />
+    );
   }
 
   const formatDate = (timestamp?: string) => {
@@ -1711,7 +1805,7 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
     if (token.amountBaseUnits) {
       return formatUnits(BigInt(token.amountBaseUnits), token.decimals);
     }
-    return '—';
+    return null;
   };
 
   const latestSnapshot = fullMetrics?.latestSnapshot;
@@ -1728,19 +1822,36 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
             <div className="text-2xl font-bold text-teal-400">
-              {metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-8 w-24"
+                loadedClassName="text-teal-400"
+                value={metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
             <div className="text-2xl font-bold text-white">
-              {metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-8 w-28"
+                loadedClassName="text-white"
+                value={metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Earned Income</div>
             <div className="text-2xl font-bold text-white">
-              {profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-8 w-28"
+                loadedClassName="text-white"
+                value={
+                  profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : null
+                }
+              />
             </div>
           </div>
         </div>
@@ -1757,9 +1868,12 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
             <div className="text-white font-medium">
-              {latestSnapshot?.totalUsd !== undefined
-                ? `$${latestSnapshot.totalUsd.toLocaleString()}`
-                : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-24"
+                loadedClassName="text-white font-medium"
+                value={latestSnapshot?.totalUsd !== undefined ? `$${latestSnapshot.totalUsd.toLocaleString()}` : null}
+              />
             </div>
           </div>
           <div>
@@ -1771,9 +1885,12 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Fees (USD)</div>
             <div className="text-white font-medium">
-              {latestSnapshot?.feesUsd !== undefined
-                ? `$${latestSnapshot.feesUsd.toLocaleString()}`
-                : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-24"
+                loadedClassName="text-white font-medium"
+                value={latestSnapshot?.feesUsd !== undefined ? `$${latestSnapshot.feesUsd.toLocaleString()}` : null}
+              />
             </div>
           </div>
         </div>
@@ -1784,7 +1901,7 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
               {positionTokens.map((token) => (
                 <div key={token.address} className="flex items-center justify-between">
                   <span className="text-gray-300">{token.symbol}</span>
-                  <span className="text-white font-medium">{formatTokenAmount(token)}</span>
+                  <span className="text-white font-medium">{formatTokenAmount(token) ?? '-'}</span>
                 </div>
               ))}
             </div>
@@ -1798,22 +1915,26 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
           label="Iteration"
-          value={metrics.iteration?.toString() ?? '—'}
+          isLoaded={hasLoadedView}
+          value={metrics.iteration?.toString() ?? null}
           icon={<TrendingUp className="w-4 h-4 text-teal-400" />}
         />
         <MetricCard
           label="Cycles Since Rebalance"
-          value={metrics.cyclesSinceRebalance?.toString() ?? '—'}
+          isLoaded={hasLoadedView}
+          value={metrics.cyclesSinceRebalance?.toString() ?? null}
           icon={<Minus className="w-4 h-4 text-yellow-400" />}
         />
         <MetricCard
           label="Rebalance Cycles"
-          value={metrics.rebalanceCycles?.toString() ?? '—'}
+          isLoaded={hasLoadedView}
+          value={metrics.rebalanceCycles?.toString() ?? null}
           icon={<RefreshCw className="w-4 h-4 text-blue-400" />}
         />
         <MetricCard
           label="Previous Price"
-          value={fullMetrics?.previousPrice?.toFixed(6) ?? '—'}
+          isLoaded={hasLoadedView}
+          value={fullMetrics?.previousPrice?.toFixed(6) ?? null}
           icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
         />
       </div>
@@ -1834,7 +1955,12 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
             <div>
               <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Mid Price</div>
               <div className="text-white font-medium">
-                {fullMetrics.latestCycle.midPrice?.toFixed(6) ?? '—'}
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-24"
+                  loadedClassName="text-white font-medium"
+                  value={fullMetrics.latestCycle.midPrice?.toFixed(6) ?? null}
+                />
               </div>
             </div>
             <div>
@@ -1886,7 +2012,13 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
   );
 }
 
-function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<MetricsTabProps, 'agentId'>) {
+function PendleMetricsTab({
+  profile,
+  metrics,
+  fullMetrics,
+  events,
+  hasLoadedView,
+}: Omit<MetricsTabProps, 'agentId'>) {
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
@@ -1900,7 +2032,7 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
   };
 
   const formatUsd = (value?: number) => {
-    if (value === undefined) return '—';
+    if (value === undefined) return null;
     return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
   };
 
@@ -1908,10 +2040,10 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
     amountBaseUnits?: string;
     decimals: number;
     fallbackRaw?: string;
-  }): string => {
+  }): string | null => {
     const { amountBaseUnits, decimals, fallbackRaw } = params;
     if (!amountBaseUnits) {
-      return fallbackRaw ?? '—';
+      return fallbackRaw ?? null;
     }
     try {
       const formatted = formatUnits(BigInt(amountBaseUnits), decimals);
@@ -1919,7 +2051,7 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
       if (!fraction) return whole;
       return `${whole}.${fraction.slice(0, 6)}`; // keep UI compact
     } catch {
-      return fallbackRaw ?? '—';
+      return fallbackRaw ?? null;
     }
   };
 
@@ -1962,13 +2094,27 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Current APY</div>
             <div className="text-white font-medium">
-              {strategy?.currentApy !== undefined ? `${strategy.currentApy.toFixed(2)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-20"
+                loadedClassName="text-white font-medium"
+                value={strategy?.currentApy !== undefined ? `${strategy.currentApy.toFixed(2)}%` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Contribution</div>
             <div className="text-white font-medium">
-              {strategy?.baseContributionUsd !== undefined ? `$${strategy.baseContributionUsd.toLocaleString()}` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-24"
+                loadedClassName="text-white font-medium"
+                value={
+                  strategy?.baseContributionUsd !== undefined
+                    ? `$${strategy.baseContributionUsd.toLocaleString()}`
+                    : null
+                }
+              />
             </div>
           </div>
         </div>
@@ -1980,13 +2126,23 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Best APY</div>
             <div className="text-white font-medium">
-              {strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-20"
+                loadedClassName="text-white font-medium"
+                value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Delta</div>
             <div className="text-white font-medium">
-              {strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-20"
+                loadedClassName="text-white font-medium"
+                value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : null}
+              />
             </div>
           </div>
           <div>
@@ -2002,13 +2158,18 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">APY Details</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {apyDetails.map((entry) => (
-                <div key={entry.label}>
-                  <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{entry.label}</div>
-                  <div className="text-white font-medium">
-                    {entry.value !== undefined ? `${entry.value.toFixed(2)}%` : '—'}
+                  <div key={entry.label}>
+                    <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{entry.label}</div>
+                    <div className="text-white font-medium">
+                      <LoadingValue
+                        isLoaded={hasLoadedView}
+                        skeletonClassName="h-5 w-20"
+                        loadedClassName="text-white font-medium"
+                        value={entry.value !== undefined ? `${entry.value.toFixed(2)}%` : null}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
         )}
@@ -2020,62 +2181,107 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PT</div>
             <div className="text-white font-medium">
-              {ptSymbol
-                ? `${ptSymbol} ${formatTokenAmount({
-                    amountBaseUnits: ptToken?.amountBaseUnits,
-                    decimals: ptToken?.decimals ?? 18,
-                    fallbackRaw: strategy?.position?.ptAmount,
-                  })}`.trim()
-                : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-28"
+                loadedClassName="text-white font-medium"
+                value={
+                  ptSymbol
+                    ? `${ptSymbol} ${
+                        formatTokenAmount({
+                          amountBaseUnits: ptToken?.amountBaseUnits,
+                          decimals: ptToken?.decimals ?? 18,
+                          fallbackRaw: strategy?.position?.ptAmount,
+                        }) ?? '-'
+                      }`.trim()
+                    : null
+                }
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">YT</div>
             <div className="text-white font-medium">
-              {ytSymbol
-                ? `${ytSymbol} ${formatTokenAmount({
-                    amountBaseUnits: ytToken?.amountBaseUnits,
-                    decimals: ytToken?.decimals ?? 18,
-                    fallbackRaw: strategy?.position?.ytAmount,
-                  })}`.trim()
-                : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-28"
+                loadedClassName="text-white font-medium"
+                value={
+                  ytSymbol
+                    ? `${ytSymbol} ${
+                        formatTokenAmount({
+                          amountBaseUnits: ytToken?.amountBaseUnits,
+                          decimals: ytToken?.decimals ?? 18,
+                          fallbackRaw: strategy?.position?.ytAmount,
+                        }) ?? '-'
+                      }`.trim()
+                    : null
+                }
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Implied Yield</div>
             <div className="text-white font-medium">
-              {impliedYieldPct !== undefined ? `${impliedYieldPct.toFixed(2)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-20"
+                loadedClassName="text-white font-medium"
+                value={impliedYieldPct !== undefined ? `${impliedYieldPct.toFixed(2)}%` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Value</div>
-            <div className="text-white font-medium">{formatUsd(latestSnapshot?.totalUsd)}</div>
+            <div className="text-white font-medium">
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-24"
+                loadedClassName="text-white font-medium"
+                value={formatUsd(latestSnapshot?.totalUsd)}
+              />
+            </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Net PnL</div>
             <div className="text-white font-medium">
-              {snapshot?.netPnlUsd !== undefined ? (
-                <>
-                  {formatUsd(snapshot.netPnlUsd)}
-                  {snapshot.netPnlPct !== undefined && (
-                    <span className="text-gray-400">{` (${snapshot.netPnlPct.toFixed(2)}%)`}</span>
-                  )}
-                </>
-              ) : (
-                '—'
-              )}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-32"
+                loadedClassName="text-white font-medium"
+                value={
+                  snapshot?.netPnlUsd !== undefined ? (
+                    <>
+                      {formatUsd(snapshot.netPnlUsd)}
+                      {snapshot.netPnlPct !== undefined && (
+                        <span className="text-gray-400">{` (${snapshot.netPnlPct.toFixed(2)}%)`}</span>
+                      )}
+                    </>
+                  ) : null
+                }
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
             <div className="text-white font-medium">
-              {metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-20"
+                loadedClassName="text-white font-medium"
+                value={metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
             <div className="text-white font-medium">
-              {metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-24"
+                loadedClassName="text-white font-medium"
+                value={metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : null}
+              />
             </div>
           </div>
         </div>
@@ -2099,22 +2305,26 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
           label="Iteration"
-          value={metrics.iteration?.toString() ?? '—'}
+          isLoaded={hasLoadedView}
+          value={metrics.iteration?.toString() ?? null}
           icon={<TrendingUp className="w-4 h-4 text-teal-400" />}
         />
         <MetricCard
           label="Cycles Since Rotation"
-          value={metrics.cyclesSinceRebalance?.toString() ?? '—'}
+          isLoaded={hasLoadedView}
+          value={metrics.cyclesSinceRebalance?.toString() ?? null}
           icon={<Minus className="w-4 h-4 text-yellow-400" />}
         />
         <MetricCard
           label="Best APY"
-          value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
+          isLoaded={hasLoadedView}
+          value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : null}
           icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
         />
         <MetricCard
           label="APY Delta"
-          value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
+          isLoaded={hasLoadedView}
+          value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : null}
           icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
         />
       </div>
@@ -2134,7 +2344,12 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
             <div>
               <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
               <div className="text-white font-medium">
-                {latestCycle.apy !== undefined ? `${latestCycle.apy.toFixed(2)}%` : '—'}
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-20"
+                  loadedClassName="text-white font-medium"
+                  value={latestCycle.apy !== undefined ? `${latestCycle.apy.toFixed(2)}%` : null}
+                />
               </div>
             </div>
             <div>
@@ -2185,18 +2400,26 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
 
 interface MetricCardProps {
   label: string;
-  value: string;
+  value: string | null;
+  isLoaded: boolean;
   icon: React.ReactNode;
 }
 
-function MetricCard({ label, value, icon }: MetricCardProps) {
+function MetricCard({ label, value, isLoaded, icon }: MetricCardProps) {
   return (
     <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
       <div className="flex items-center gap-2 mb-2">
         {icon}
         <span className="text-xs text-gray-500 uppercase tracking-wide">{label}</span>
       </div>
-      <div className="text-xl font-semibold text-white">{value}</div>
+      <div className="text-xl font-semibold text-white">
+        <LoadingValue
+          isLoaded={isLoaded}
+          skeletonClassName="h-6 w-20"
+          loadedClassName="text-white"
+          value={value}
+        />
+      </div>
     </div>
   );
 }

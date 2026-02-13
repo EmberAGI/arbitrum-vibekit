@@ -9,6 +9,7 @@
     "dev": "turbo run dev",
     "dev:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true turbo run dev",
     "build": "turbo run build",
+    "qa": "pnpm build && pnpm start",
     "start": "turbo run start",
     "start:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true turbo run start",
     "lint": "turbo run lint",

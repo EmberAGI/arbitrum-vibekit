@@ -1,3 +1,5 @@
+/* eslint-disable @next/next/no-img-element */
+
 import { Star, MoreHorizontal, ChevronDown } from 'lucide-react';
 import { Skeleton } from '../ui/Skeleton';
 
@@ -14,8 +16,7 @@ export interface AgentTableItem {
   aum?: number;
   points?: number;
   pointsTrend?: 'up' | 'down' | 'neutral';
-  avatar: string;
-  avatarBg: string;
+  iconUri: string | null;
   isActive?: boolean;
   isLoaded: boolean;
 }
@@ -24,9 +25,10 @@ interface AgentsTableProps {
   agents: AgentTableItem[];
   onAgentClick: (agentId: string) => void;
   onAgentAction: (agentId: string) => void;
+  iconsLoaded: boolean;
 }
 
-export function AgentsTable({ agents, onAgentClick, onAgentAction }: AgentsTableProps) {
+export function AgentsTable({ agents, onAgentClick, onAgentAction, iconsLoaded }: AgentsTableProps) {
   return (
     <div className="rounded-xl border border-[#2a2a2a] overflow-hidden">
       <table className="agent-table">
@@ -52,6 +54,7 @@ export function AgentsTable({ agents, onAgentClick, onAgentAction }: AgentsTable
             <AgentRow
               key={agent.id}
               agent={agent}
+              iconsLoaded={iconsLoaded}
               onClick={() => onAgentClick(agent.id)}
               onAction={() => onAgentAction(agent.id)}
             />
@@ -64,11 +67,12 @@ export function AgentsTable({ agents, onAgentClick, onAgentAction }: AgentsTable
 
 interface AgentRowProps {
   agent: AgentTableItem;
+  iconsLoaded: boolean;
   onClick: () => void;
   onAction: () => void;
 }
 
-function AgentRow({ agent, onClick, onAction }: AgentRowProps) {
+function AgentRow({ agent, iconsLoaded, onClick, onAction }: AgentRowProps) {
   return (
     <tr className="hover:bg-[#1a1a1a] transition-colors cursor-pointer" onClick={onClick}>
       <td className="text-center">
@@ -76,12 +80,21 @@ function AgentRow({ agent, onClick, onAction }: AgentRowProps) {
       </td>
       <td>
         <div className="flex items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center text-lg"
-            style={{ background: agent.avatarBg }}
-          >
-            {agent.avatar}
-          </div>
+          {!iconsLoaded ? (
+            <Skeleton className="h-12 w-12 rounded-full" />
+          ) : (
+            <div className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a]">
+              {agent.iconUri ? (
+                <img
+                  src={agent.iconUri}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
+              ) : null}
+            </div>
+          )}
           <div>
             <div className="flex items-center gap-2">
               {agent.isActive && <span className="w-2 h-2 rounded-full bg-teal-400" />}

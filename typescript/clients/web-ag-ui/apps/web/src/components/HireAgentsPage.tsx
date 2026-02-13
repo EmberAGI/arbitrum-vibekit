@@ -3,13 +3,21 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { SlidersHorizontal, Star, MoreHorizontal, ChevronDown, Flame } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { SearchBar } from './ui/SearchBar';
 import { FilterTabs } from './ui/FilterTabs';
 import { Pagination } from './ui/Pagination';
 import { AgentsTable } from './agents/AgentsTable';
 import { Skeleton } from './ui/Skeleton';
-import { fetchOnchainActionsChainsPage, fetchOnchainActionsTokensPage } from '../clients/onchainActionsIcons';
+import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
+import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
+import {
+  resolveAgentAvatarUri,
+  resolveChainIconUris,
+  resolveProtocolIconUris,
+  resolveTokenIconUris,
+  normalizeNameKey,
+} from '../utils/iconResolution';
 
 export interface Agent {
   id: string;
@@ -29,6 +37,9 @@ export interface Agent {
   avatar?: string;
   avatarBg?: string;
   imageUrl?: string;
+  chains?: string[];
+  protocols?: string[];
+  tokens?: string[];
   status: 'for_hire' | 'hired' | 'unavailable';
   isActive?: boolean;
   isFeatured?: boolean;
@@ -49,6 +60,7 @@ export interface FeaturedAgent {
   weeklyIncome?: number;
   chains?: string[];
   protocols?: string[];
+  tokens?: string[];
   avatar?: string;
   avatarBg?: string;
   imageUrl?: string;
@@ -57,16 +69,6 @@ export interface FeaturedAgent {
   status: 'for_hire' | 'hired' | 'unavailable';
   isLoaded: boolean;
 }
-
-const ONCHAIN_ACTIONS_BASE_URL =
-  process.env.NEXT_PUBLIC_ONCHAIN_ACTIONS_API_URL ?? 'https://api.emberai.xyz';
-
-const PROTOCOL_TOKEN_FALLBACK: Record<string, string> = {
-  Camelot: 'GRAIL',
-  Pendle: 'PENDLE',
-  GMX: 'GMX',
-  Allora: 'ALLO',
-};
 
 interface HireAgentsPageProps {
   agents: Agent[];
@@ -135,6 +137,60 @@ export function HireAgentsPage({
     currentPage * itemsPerPage,
   );
 
+  const desiredChainNames = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    for (const agent of agents) {
+      for (const chain of agent.chains ?? []) {
+        if (seen.has(chain)) continue;
+        seen.add(chain);
+        out.push(chain);
+      }
+    }
+
+    for (const agent of featuredAgents) {
+      for (const chain of agent.chains ?? []) {
+        if (seen.has(chain)) continue;
+        seen.add(chain);
+        out.push(chain);
+      }
+    }
+
+    return out;
+  }, [agents, featuredAgents]);
+
+  const desiredTokenSymbols = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    const addSymbol = (symbol: string | undefined) => {
+      if (!symbol) return;
+      const trimmed = symbol.trim();
+      if (trimmed.length === 0) return;
+      if (seen.has(trimmed)) return;
+      seen.add(trimmed);
+      out.push(trimmed);
+    };
+
+    for (const agent of agents) {
+      for (const token of agent.tokens ?? []) addSymbol(token);
+      for (const protocol of agent.protocols ?? []) addSymbol(PROTOCOL_TOKEN_FALLBACK[protocol]);
+    }
+
+    for (const agent of featuredAgents) {
+      for (const protocol of agent.protocols ?? []) addSymbol(PROTOCOL_TOKEN_FALLBACK[protocol]);
+      for (const token of agent.tokens ?? []) addSymbol(token);
+    }
+
+    return out;
+  }, [agents, featuredAgents]);
+
+  const { chainIconByName, tokenIconBySymbol, isLoaded: iconsLoaded } = useOnchainActionsIconMaps({
+    chainNames: desiredChainNames,
+    tokenSymbols: desiredTokenSymbols,
+  });
+
   return (
     <div className="flex-1 overflow-y-auto p-8">
       <div className="max-w-[1400px] mx-auto">
@@ -172,14 +228,39 @@ export function HireAgentsPage({
         {displayFeaturedAgents.length > 0 && (
           <div className="mb-8">
             <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-              {displayFeaturedAgents.map((agent, index) => (
-                <FeaturedAgentCard
-                  key={agent.id}
-                  agent={agent}
-                  index={index}
-                  onClick={() => onViewAgent?.(agent.id)}
-                />
-              ))}
+              {displayFeaturedAgents.map((agent, index) => {
+                const chainIconUris = resolveChainIconUris({
+                  chainNames: agent.chains ?? [],
+                  chainIconByName,
+                });
+                const avatarUri =
+                  resolveAgentAvatarUri({
+                    protocols: agent.protocols ?? [],
+                    tokenIconBySymbol,
+                  }) ??
+                  chainIconUris[0] ??
+                  null;
+
+                return (
+                  <FeaturedAgentCard
+                    key={agent.id}
+                    agent={agent}
+                    index={index}
+                    iconsLoaded={iconsLoaded}
+                    chainIconUris={chainIconUris}
+                    protocolIconUris={resolveProtocolIconUris({
+                      protocols: agent.protocols ?? [],
+                      tokenIconBySymbol,
+                    })}
+                    tokenIconUris={resolveTokenIconUris({
+                      tokenSymbols: agent.tokens ?? [],
+                      tokenIconBySymbol,
+                    })}
+                    avatarUri={avatarUri}
+                    onClick={() => onViewAgent?.(agent.id)}
+                  />
+                );
+              })}
             </div>
           </div>
         )}
@@ -223,17 +304,29 @@ export function HireAgentsPage({
 
         {/* Agents Table */}
         <AgentsTable
+          iconsLoaded={iconsLoaded}
           agents={paginatedAgents.map((agent, index) => ({
-            ...agent,
+            id: agent.id,
             rank: agent.rank ?? index + 1,
+            name: agent.name,
+            creator: agent.creator,
+            creatorVerified: agent.creatorVerified,
+            rating: agent.rating ?? 0,
             weeklyIncome: agent.weeklyIncome,
             apy: agent.apy,
             users: agent.users,
             aum: agent.aum,
             points: agent.points,
-            rating: agent.rating ?? 0,
-            avatar: agent.avatar ?? '🤖',
-            avatarBg: agent.avatarBg ?? 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
+            pointsTrend: agent.pointsTrend,
+            iconUri: resolveAgentAvatarUri({
+              protocols: agent.protocols ?? [],
+              tokenIconBySymbol,
+            }) ??
+              (agent.chains && agent.chains.length > 0
+                ? chainIconByName[normalizeNameKey(agent.chains[0])] ?? null
+                : null),
+            isActive: agent.isActive,
+            isLoaded: agent.isLoaded,
           }))}
           onAgentClick={(id) => onViewAgent?.(id)}
           onAgentAction={(id) => onHireAgent?.(id)}
@@ -250,179 +343,28 @@ export function HireAgentsPage({
   );
 }
 
-// Generate a beautiful, vibrant abstract SVG pattern based on agent ID
-function generateAbstractPattern(agentId: string): string {
-  // Create a deterministic hash from the agent ID
-  let hash = 0;
-  for (let i = 0; i < agentId.length; i++) {
-    const char = agentId.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-
-  // Generate a vibrant rainbow-like color palette
-  const baseHue = Math.abs(hash % 360);
-  const colors = [
-    `hsl(${baseHue}, 85%, 55%)`,
-    `hsl(${(baseHue + 60) % 360}, 80%, 50%)`,
-    `hsl(${(baseHue + 120) % 360}, 75%, 60%)`,
-    `hsl(${(baseHue + 180) % 360}, 85%, 55%)`,
-    `hsl(${(baseHue + 240) % 360}, 80%, 50%)`,
-    `hsl(${(baseHue + 300) % 360}, 75%, 60%)`,
-  ];
-
-  // Create flowing wave/blob shapes
-  const blobs: string[] = [];
-  const numBlobs = 5 + Math.abs((hash >> 4) % 3);
-
-  for (let i = 0; i < numBlobs; i++) {
-    const seed1 = Math.abs((hash >> (i * 4)) % 1000) / 1000;
-    const seed2 = Math.abs((hash >> (i * 4 + 2)) % 1000) / 1000;
-    const color = colors[i % colors.length];
-
-    // Create organic blob using bezier curves
-    const cx = 20 + seed1 * 60;
-    const cy = 20 + seed2 * 60;
-    const size = 25 + seed1 * 35;
-
-    // Generate control points for organic shape
-    const p1 = { x: cx - size * 0.5, y: cy - size * 0.8 };
-    const p2 = { x: cx + size * 0.8, y: cy - size * 0.3 };
-    const p3 = { x: cx + size * 0.5, y: cy + size * 0.7 };
-    const p4 = { x: cx - size * 0.7, y: cy + size * 0.4 };
-
-    const path = `M ${p1.x} ${p1.y}
-      Q ${p1.x + size * 0.5} ${p1.y - size * 0.3} ${p2.x} ${p2.y}
-      Q ${p2.x + size * 0.3} ${p2.y + size * 0.5} ${p3.x} ${p3.y}
-      Q ${p3.x - size * 0.5} ${p3.y + size * 0.2} ${p4.x} ${p4.y}
-      Q ${p4.x - size * 0.2} ${p4.y - size * 0.4} ${p1.x} ${p1.y}`;
-
-    blobs.push(`<path d="${path}" fill="${color}" opacity="${0.7 + seed1 * 0.3}"/>`);
-  }
-
-  // Add some accent circles
-  const accents: string[] = [];
-  for (let i = 0; i < 3; i++) {
-    const seed = Math.abs((hash >> (i * 7 + 20)) % 1000) / 1000;
-    const x = 15 + seed * 70;
-    const y = 15 + ((seed * 2.3) % 1) * 70;
-    const r = 5 + seed * 12;
-    accents.push(`<circle cx="${x}" cy="${y}" r="${r}" fill="white" opacity="${0.15 + seed * 0.2}"/>`);
-  }
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-    <defs>
-      <linearGradient id="grad-${hash}" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="${colors[0]}"/>
-        <stop offset="50%" stop-color="${colors[2]}"/>
-        <stop offset="100%" stop-color="${colors[4]}"/>
-      </linearGradient>
-      <filter id="glow-${hash}">
-        <feGaussianBlur in="SourceGraphic" stdDeviation="4"/>
-      </filter>
-    </defs>
-    <rect width="100" height="100" fill="url(#grad-${hash})"/>
-    <g filter="url(#glow-${hash})">${blobs.join('')}</g>
-    ${accents.join('')}
-  </svg>`;
-
-  return `data:image/svg+xml;base64,${btoa(svg)}`;
-}
-
 function FeaturedAgentCard({
   agent,
+  iconsLoaded,
+  chainIconUris,
+  protocolIconUris,
+  tokenIconUris,
+  avatarUri,
   onClick,
 }: {
   agent: FeaturedAgent;
   index: number;
+  iconsLoaded: boolean;
+  chainIconUris: string[];
+  protocolIconUris: string[];
+  tokenIconUris: string[];
+  avatarUri: string | null;
   onClick?: () => void;
 }) {
-  const [chainIconMap, setChainIconMap] = useState<Record<string, string>>({});
-  const [tokenIconMap, setTokenIconMap] = useState<Record<string, string>>({});
-  const [iconsLoaded, setIconsLoaded] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const desiredTokenSymbols = new Set<string>();
-    for (const protocol of agent.protocols ?? []) {
-      const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
-      if (fallback) desiredTokenSymbols.add(fallback);
-    }
-
-    const load = async () => {
-      try {
-        const chainsPage = await fetchOnchainActionsChainsPage({
-          baseUrl: ONCHAIN_ACTIONS_BASE_URL,
-          page: 1,
-        });
-
-        const nextChainIconMap = chainsPage.chains.reduce<Record<string, string>>((acc, chain) => {
-          acc[chain.name] = chain.iconUri;
-          return acc;
-        }, {});
-
-        const chainIds = chainsPage.chains
-          .filter((chain) => (agent.chains ?? []).includes(chain.name))
-          .map((chain) => chain.chainId);
-
-        const nextTokenIconMap: Record<string, string> = {};
-
-        if (desiredTokenSymbols.size > 0) {
-          let cursor: string | undefined;
-          let attempts = 0;
-          while (attempts < 5 && Object.keys(nextTokenIconMap).length < desiredTokenSymbols.size) {
-            attempts += 1;
-            const tokensPage = await fetchOnchainActionsTokensPage({
-              baseUrl: ONCHAIN_ACTIONS_BASE_URL,
-              chainIds,
-              cursor,
-            });
-            cursor = tokensPage.cursor || undefined;
-
-            for (const token of tokensPage.tokens) {
-              if (!token.iconUri) continue;
-              if (desiredTokenSymbols.has(token.symbol) && !nextTokenIconMap[token.symbol]) {
-                nextTokenIconMap[token.symbol] = token.iconUri;
-              }
-            }
-
-            if (!cursor) break;
-          }
-        }
-
-        if (cancelled) return;
-        setChainIconMap(nextChainIconMap);
-        setTokenIconMap(nextTokenIconMap);
-        setIconsLoaded(true);
-      } catch {
-        if (cancelled) return;
-        setIconsLoaded(true);
-      }
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [agent.chains, agent.protocols]);
-
-  const placeholderImage = useMemo(() => generateAbstractPattern(agent.id), [agent.id]);
-  const imageUrl = agent.imageUrl || placeholderImage;
-
   const hasRank = agent.rank !== undefined;
   const hasRating = agent.rating !== undefined && agent.rating > 0;
   const hasCreator = agent.creator !== undefined && agent.creator !== '';
   const hasTrend = agent.trendMultiplier !== undefined && agent.trendMultiplier !== '';
-
-  const chainIcons = (agent.chains ?? [])
-    .map((chain) => chainIconMap[chain])
-    .filter((uri): uri is string => typeof uri === 'string' && uri.length > 0);
-
-  const protocolIcons = (agent.protocols ?? [])
-    .map((protocol) => PROTOCOL_TOKEN_FALLBACK[protocol])
-    .map((symbol) => (symbol ? tokenIconMap[symbol] : undefined))
-    .filter((uri): uri is string => typeof uri === 'string' && uri.length > 0);
 
   return (
     <div
@@ -463,72 +405,56 @@ function FeaturedAgentCard({
         </button>
       </div>
 
-      {/* Chain + Protocol Icons */}
-      <div className="px-4 pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {!iconsLoaded ? (
-              <>
-                <Skeleton className="h-6 w-6 rounded-full" />
-                <Skeleton className="h-6 w-6 rounded-full" />
-              </>
-            ) : (
-              chainIcons.slice(0, 4).map((uri) => (
-                <img
-                  key={uri}
-                  src={uri}
-                  alt=""
-                  className="h-6 w-6 rounded-full bg-[#111] ring-1 ring-[#2a2a2a] object-contain"
-                />
-              ))
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {!iconsLoaded ? (
-              <>
-                <Skeleton className="h-6 w-6 rounded-full" />
-                <Skeleton className="h-6 w-6 rounded-full" />
-              </>
-            ) : (
-              protocolIcons.slice(0, 4).map((uri) => (
-                <img
-                  key={uri}
-                  src={uri}
-                  alt=""
-                  className="h-6 w-6 rounded-full bg-[#111] ring-1 ring-[#2a2a2a] object-contain"
-                />
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Main content: Name and avatar */}
       <div className="px-4 pb-4">
         <h3 className="font-bold text-white text-lg leading-snug mb-3">
           {agent.name}
         </h3>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-4">
           {/* Large circular avatar */}
-          <div
-            className="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-2 ring-[#333] ring-offset-2 ring-offset-[#1c1c1c]"
-            style={{
-              backgroundImage: `url("${imageUrl}")`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-            }}
-          />
-
-          {/* Trend badge */}
-          {hasTrend && (
-            <div className="flex items-center gap-1.5 bg-[#fd6731]/15 px-2.5 py-1 rounded-full">
-              <Flame className="w-4 h-4 text-[#fd6731]" />
-              <span className="text-sm font-semibold text-[#fd6731]">
-                {agent.trendMultiplier}
-              </span>
+          {!iconsLoaded ? (
+            <Skeleton className="h-[72px] w-[72px] rounded-full ring-2 ring-[#333] ring-offset-2 ring-offset-[#1c1c1c]" />
+          ) : (
+            <div className="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-2 ring-[#333] ring-offset-2 ring-offset-[#1c1c1c] bg-[#111]">
+              {avatarUri ? (
+                <img src={avatarUri} alt="" decoding="async" className="h-full w-full object-cover" />
+              ) : null}
             </div>
           )}
+
+          {/* Icon groups to the right of the avatar */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              <div className="grid grid-cols-3 gap-3 flex-1">
+                <IconGroup
+                  title="Chains"
+                  iconsLoaded={iconsLoaded}
+                  uris={chainIconUris}
+                />
+                <IconGroup
+                  title="Protocols"
+                  iconsLoaded={iconsLoaded}
+                  uris={protocolIconUris}
+                />
+                <IconGroup
+                  title="Tokens"
+                  iconsLoaded={iconsLoaded}
+                  uris={tokenIconUris}
+                />
+              </div>
+
+              {/* Trend badge */}
+              {hasTrend ? (
+                <div className="flex items-center gap-1.5 bg-[#fd6731]/15 px-2.5 py-1 rounded-full mt-5">
+                  <Flame className="w-4 h-4 text-[#fd6731]" />
+                  <span className="text-sm font-semibold text-[#fd6731]">
+                    {agent.trendMultiplier}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -560,6 +486,51 @@ function FeaturedAgentCard({
       {/* Expand chevron */}
       <div className="flex justify-center py-1.5 bg-[#161616] border-t border-[#222]">
         <ChevronDown className="w-4 h-4 text-gray-600" />
+      </div>
+    </div>
+  );
+}
+
+function IconGroup({
+  title,
+  iconsLoaded,
+  uris,
+}: {
+  title: string;
+  iconsLoaded: boolean;
+  uris: string[];
+}) {
+  const displayUris = uris.slice(0, 4);
+  const remainingCount = Math.max(0, uris.length - displayUris.length);
+
+  return (
+    <div className="min-w-0">
+      <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{title}</div>
+      <div className="flex items-center gap-1.5 min-h-6 overflow-hidden">
+        {!iconsLoaded ? (
+          <>
+            <Skeleton className="h-6 w-6 rounded-full" />
+            <Skeleton className="h-6 w-6 rounded-full" />
+          </>
+        ) : (
+          <>
+            {displayUris.map((uri) => (
+              <img
+                key={uri}
+                src={uri}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="h-6 w-6 rounded-full bg-[#111] ring-1 ring-[#2a2a2a] object-contain"
+              />
+            ))}
+            {remainingCount > 0 ? (
+              <div className="h-6 px-2 rounded-full bg-[#111] ring-1 ring-[#2a2a2a] flex items-center justify-center text-[11px] text-gray-300 font-medium whitespace-nowrap">
+                +{remainingCount}
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );

@@ -46,4 +46,3 @@ describe('AgentDetailPage (skeleton numbers)', () => {
     expect(html).toContain('animate-pulse');
   });
 });
-
