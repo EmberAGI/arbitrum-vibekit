@@ -11,7 +11,7 @@ import { executePerpetualPlan } from '../execution.js';
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };
 
-function hasOpenPosition(position: PerpetualPosition | undefined): boolean {
+function hasOpenPosition(position: PerpetualPosition | undefined): position is PerpetualPosition {
   if (!position) {
     return false;
   }
@@ -67,16 +67,19 @@ export const fireCommandNode = async (
     };
   }
 
+  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
+  const willExecute = txExecutionMode === 'execute';
+
   logInfo('Fire command requested; attempting to close any open GMX position', {
     threadId,
     delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
     marketAddress: operatorConfig.targetMarket.address,
     delegationsBypassActive: state.view.delegationsBypassActive === true,
     hasDelegationBundle: Boolean(state.view.delegationBundle),
-    configuredTxMode: resolveGmxAlloraTxExecutionMode(),
+    configuredTxMode: txExecutionMode,
   });
 
-  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
+  if (willExecute && state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
     const failureMessage =
       'Cannot close GMX position during fire: missing delegation bundle. Complete onboarding and approve delegations, or enable DELEGATIONS_BYPASS to execute from the agent wallet.';
     const { task, statusEvent } = buildTaskStatus(currentTask, 'failed', failureMessage);
@@ -147,41 +150,38 @@ export const fireCommandNode = async (
     },
   };
 
-  // Fire should be a real unwind action. Even if the agent is configured in plan-only mode
-  // for cycles, we attempt to execute the close here. If the local environment cannot
-  // execute (missing signer), we fail loudly with a concrete message.
-  const txExecutionMode: 'execute' = 'execute';
-  let clients: ReturnType<typeof getOnchainClients>;
-  try {
-    clients = getOnchainClients();
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    const failureMessage = `Cannot execute GMX close during fire: ${message}`;
-    const { task, statusEvent } = buildTaskStatus(currentTask, 'failed', failureMessage);
-    await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
-    });
-    return {
-      view: { task, command: 'fire', activity: { events: [statusEvent], telemetry: [] } },
-    };
-  }
+  const clients = (() => {
+    if (!willExecute) {
+      return undefined;
+    }
+    try {
+      return getOnchainClients();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Cannot execute GMX close during fire: ${message}`);
+    }
+  })();
 
-  const executionResult = await executePerpetualPlan({
-    client: onchainActionsClient,
-    clients,
-    plan,
-    txExecutionMode,
-    delegationsBypassActive: state.view.delegationsBypassActive === true,
-    delegationBundle: state.view.delegationBundle,
-    delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
-    delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
-  });
+  const executionResult = await (async () => {
+    try {
+      return await executePerpetualPlan({
+        client: onchainActionsClient,
+        clients,
+        plan,
+        txExecutionMode,
+        delegationsBypassActive: state.view.delegationsBypassActive === true,
+        delegationBundle: state.view.delegationBundle,
+        delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+        delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { action: plan.action, ok: false as const, error: message };
+    }
+  })();
 
   const nextTransactionHistory = (() => {
     const txHash = executionResult.lastTxHash;
-    if (!txHash) {
-      return state.view.transactionHistory;
-    }
     return [
       ...state.view.transactionHistory,
       {
@@ -189,7 +189,11 @@ export const fireCommandNode = async (
         action: 'close',
         txHash,
         status: executionResult.ok ? ('success' as const) : ('failed' as const),
-        reason: executionResult.ok ? 'Closed GMX position during fire.' : executionResult.error,
+        reason: executionResult.ok
+          ? willExecute
+            ? 'Closed GMX position during fire.'
+            : 'Planned GMX close transactions during fire (plan mode; not executed).'
+          : executionResult.error,
         timestamp: new Date().toISOString(),
       },
     ];
@@ -197,7 +201,9 @@ export const fireCommandNode = async (
 
   const terminalState = executionResult.ok ? 'completed' : 'failed';
   const terminalMessage = executionResult.ok
-    ? 'Agent fired. Closed GMX position.'
+    ? willExecute
+      ? 'Agent fired. Closed GMX position.'
+      : 'Agent fired in plan mode. Close transactions prepared (not executed).'
     : `Agent fired, but closing GMX position failed: ${executionResult.error ?? 'Unknown error'}`;
 
   const { task, statusEvent } = buildTaskStatus(currentTask, terminalState, terminalMessage);

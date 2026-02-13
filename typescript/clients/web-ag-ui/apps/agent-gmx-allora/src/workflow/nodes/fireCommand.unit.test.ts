@@ -3,8 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PerpetualPosition } from '../../clients/onchainActions.js';
 import type { ResolvedGmxConfig } from '../../domain/types.js';
 import type { ClmmState } from '../context.js';
-import type { OnchainClients } from '../clients/clients.js';
-
 import { fireCommandNode } from './fireCommand.js';
 
 const {
@@ -132,7 +130,7 @@ describe('fireCommandNode (GMX Allora)', () => {
 
     resolveGmxAlloraTxExecutionModeMock.mockReturnValue('plan');
     getOnchainActionsClientMock.mockReturnValue(onchainActionsClient);
-    getOnchainClientsMock.mockReturnValue({} as unknown as OnchainClients);
+    getOnchainClientsMock.mockReturnValue(undefined);
     executePerpetualPlanMock.mockResolvedValue({
       action: 'close',
       ok: true,
@@ -165,7 +163,7 @@ describe('fireCommandNode (GMX Allora)', () => {
     expect(executePerpetualPlanMock).toHaveBeenCalledWith(
       expect.objectContaining({
         plan: expect.objectContaining({ action: 'close' }),
-        txExecutionMode: 'execute',
+        txExecutionMode: 'plan',
       }),
     );
 
