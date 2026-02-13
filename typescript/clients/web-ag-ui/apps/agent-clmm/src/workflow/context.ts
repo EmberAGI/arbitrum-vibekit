@@ -64,7 +64,7 @@ export type ClmmActivity = {
   events: ClmmEvent[];
 };
 
-export type ClmmTransaction = {
+export type AgentTransaction = {
   cycle: number;
   action: string;
   txHash?: string;
@@ -221,7 +221,7 @@ type ClmmViewState = {
   profile: ClmmProfile;
   activity: ClmmActivity;
   metrics: ClmmMetrics;
-  transactionHistory: ClmmTransaction[];
+  transactionHistory: AgentTransaction[];
   accounting: ClmmAccounting;
   delegationsBypassActive?: boolean;
 };
