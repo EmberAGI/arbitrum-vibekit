@@ -6,6 +6,7 @@ import { SearchBar } from './ui/SearchBar';
 import { FilterTabs } from './ui/FilterTabs';
 import { Pagination } from './ui/Pagination';
 import { AgentsTable } from './agents/AgentsTable';
+import { Skeleton } from './ui/Skeleton';
 
 export interface Agent {
   id: string;
@@ -29,6 +30,7 @@ export interface Agent {
   isActive?: boolean;
   isFeatured?: boolean;
   featuredRank?: number;
+  isLoaded: boolean;
 }
 
 export interface FeaturedAgent {
@@ -48,6 +50,7 @@ export interface FeaturedAgent {
   pointsTrend?: 'up' | 'down';
   trendMultiplier?: string;
   status: 'for_hire' | 'hired' | 'unavailable';
+  isLoaded: boolean;
 }
 
 interface HireAgentsPageProps {
@@ -208,11 +211,11 @@ export function HireAgentsPage({
           agents={paginatedAgents.map((agent, index) => ({
             ...agent,
             rank: agent.rank ?? index + 1,
-            weeklyIncome: agent.weeklyIncome ?? 0,
-            apy: agent.apy ?? 0,
-            users: agent.users ?? 0,
-            aum: agent.aum ?? 0,
-            points: agent.points ?? 0,
+            weeklyIncome: agent.weeklyIncome,
+            apy: agent.apy,
+            users: agent.users,
+            aum: agent.aum,
+            points: agent.points,
             rating: agent.rating ?? 0,
             avatar: agent.avatar ?? '🤖',
             avatarBg: agent.avatarBg ?? 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
@@ -402,13 +405,25 @@ function FeaturedAgentCard({
         <div>
           <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">Users</div>
           <div className="text-white font-semibold text-base">
-            {hasUsers ? agent.users?.toLocaleString() : '—'}
+            {!agent.isLoaded ? (
+              <Skeleton className="h-5 w-14" />
+            ) : hasUsers ? (
+                agent.users?.toLocaleString()
+              ) : (
+                '-'
+              )}
           </div>
         </div>
         <div>
           <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">7d Agent Income</div>
           <div className="text-white font-semibold text-base">
-            {hasWeeklyIncome ? `$${agent.weeklyIncome?.toLocaleString()}` : '—'}
+            {!agent.isLoaded ? (
+              <Skeleton className="h-5 w-20" />
+            ) : hasWeeklyIncome ? (
+                `$${agent.weeklyIncome?.toLocaleString()}`
+              ) : (
+                '-'
+              )}
           </div>
         </div>
       </div>

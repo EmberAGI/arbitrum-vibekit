@@ -15,6 +15,7 @@ export default function HireAgentsRoute() {
     const listState = agentStates[agentConfig.id];
     const profile = listState?.profile;
     const metrics = listState?.metrics;
+    const isLoaded = Boolean(listState?.synced);
 
     return {
       id: agentConfig.id,
@@ -28,14 +29,15 @@ export default function HireAgentsRoute() {
       users: profile?.totalUsers,
       aum: profile?.aum,
       points: metrics?.iteration,
-      pointsTrend: metrics?.iteration && metrics.iteration > 0 ? 'up' : undefined,
-      trendMultiplier: metrics?.iteration ? `${metrics.iteration}x` : undefined,
+      pointsTrend: isLoaded && metrics?.iteration && metrics.iteration > 0 ? 'up' : undefined,
+      trendMultiplier: isLoaded && metrics?.iteration ? `${metrics.iteration}x` : undefined,
       avatar: agentConfig.avatar,
       avatarBg: agentConfig.avatarBg,
       status: 'for_hire' as const,
       isActive: false,
       isFeatured: agentConfig.isFeatured,
       featuredRank: agentConfig.featuredRank,
+      isLoaded,
     };
   });
 
@@ -44,6 +46,7 @@ export default function HireAgentsRoute() {
     const listState = agentStates[config.id];
     const profile = listState?.profile;
     const metrics = listState?.metrics;
+    const isLoaded = Boolean(listState?.synced);
 
     return {
       id: config.id,
@@ -58,9 +61,10 @@ export default function HireAgentsRoute() {
       weeklyIncome: profile?.agentIncome,
       avatar: config.avatar,
       avatarBg: config.avatarBg,
-      pointsTrend: metrics?.iteration && metrics.iteration > 0 ? 'up' : undefined,
-      trendMultiplier: metrics?.iteration ? `${metrics.iteration}x` : undefined,
+      pointsTrend: isLoaded && metrics?.iteration && metrics.iteration > 0 ? 'up' : undefined,
+      trendMultiplier: isLoaded && metrics?.iteration ? `${metrics.iteration}x` : undefined,
       status: 'for_hire' as const,
+      isLoaded,
     };
   });
 
