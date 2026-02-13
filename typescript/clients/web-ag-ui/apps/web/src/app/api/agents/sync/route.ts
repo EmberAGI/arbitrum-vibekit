@@ -80,7 +80,13 @@ function normalizeBaseUrl(value: string): string {
 async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>): Promise<T> {
   const payloadText = await response.text();
   if (!response.ok) {
-    throw new Error(`LangGraph API request failed (${response.status}): ${payloadText}`);
+    const error = new Error(`LangGraph API request failed (${response.status}): ${payloadText}`) as Error & {
+      status?: number;
+      payloadText?: string;
+    };
+    error.status = response.status;
+    error.payloadText = payloadText;
+    throw error;
   }
   const trimmed = payloadText.trim();
   const payload = trimmed.length > 0 ? (JSON.parse(trimmed) as unknown) : ({} as unknown);
@@ -289,9 +295,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!initialState.hasInterrupts) {
       const hasView = Boolean(initialState.values && isRecord(initialState.values['view']));
       if (!hasView) {
-        await updateSyncState(baseUrl, threadId);
-        const run = await createRun(baseUrl, threadId, runtime.graphId);
-        await waitForRunCompletion(baseUrl, threadId, run.run_id);
+        try {
+          await updateSyncState(baseUrl, threadId);
+          const run = await createRun(baseUrl, threadId, runtime.graphId);
+          await waitForRunCompletion(baseUrl, threadId, run.run_id);
+        } catch (error) {
+          const maybeLangGraphError = error as { status?: number };
+          // If the thread is already running (cron/external run), treat this as expected:
+          // we must not clobber state, and we don't want to surface a 500 in the UI.
+          if (maybeLangGraphError.status !== 409 && maybeLangGraphError.status !== 422) {
+            throw error;
+          }
+        }
       }
     }
 
