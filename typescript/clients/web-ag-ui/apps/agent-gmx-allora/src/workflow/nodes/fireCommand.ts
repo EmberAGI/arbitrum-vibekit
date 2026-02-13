@@ -15,8 +15,19 @@ function hasOpenPosition(position: PerpetualPosition | undefined): position is P
   if (!position) {
     return false;
   }
-  // onchain-actions uses decimal strings; treat "0" (and variants) as closed.
-  return position.sizeInUsd.trim() !== '' && position.sizeInUsd !== '0';
+  // onchain-actions uses decimal strings; treat 0-valued strings (e.g. "0", "0.0") as closed.
+  const size = position.sizeInUsd.trim();
+  if (size.length === 0) {
+    return false;
+  }
+
+  const parsed = Number(size);
+  if (Number.isFinite(parsed)) {
+    return Math.abs(parsed) > 0;
+  }
+
+  // If parsing fails, fall back to a conservative non-empty check to avoid false negatives.
+  return size !== '0';
 }
 
 export const fireCommandNode = async (

@@ -22,6 +22,7 @@ import { useAgent } from '@/contexts/AgentContext';
 import { useAgentList } from '@/contexts/AgentListContext';
 import { getAllAgents } from '@/config/agents';
 import type { TaskState } from '@/types/agent';
+import { deriveTaskStateForUi } from '@/utils/deriveTaskStateForUi';
 
 export interface AgentActivity {
   id: string;
@@ -95,7 +96,11 @@ export function AppSidebar() {
       ? {
           ...listEntry,
           taskId: runtimeTaskId,
-          taskState: runtimeTaskState,
+          taskState: (deriveTaskStateForUi({
+            command: runtimeCommand,
+            taskState: runtimeTaskState ?? null,
+            taskMessage: runtimeTaskMessage ?? null,
+          }) ?? undefined) as TaskState | undefined,
           command: runtimeCommand,
           taskMessage: runtimeTaskMessage,
           haltReason: runtimeHaltReason,
@@ -108,20 +113,11 @@ export function AppSidebar() {
       return;
     }
 
-    const isFireInterruptCompletion = (() => {
-      if (entry?.command !== 'fire') return false;
-      if (taskState !== 'failed') return false;
-      const message = entry?.taskMessage;
-      if (typeof message !== 'string') return false;
-      const normalized = message.toLowerCase();
-      return normalized.includes('interrupt') || normalized.includes('aborted') || normalized.includes('aborterror');
-    })();
-
     const taskId = entry.taskId ?? config.id;
     const needsInput = taskState === 'input-required' && runtimeNeedsInput;
-    const hasError = taskState === 'failed' && !isFireInterruptCompletion;
+    const hasError = taskState === 'failed';
     const isBlocked = needsInput || hasError;
-    const isCompleted = taskState === 'completed' || taskState === 'canceled' || isFireInterruptCompletion;
+    const isCompleted = taskState === 'completed' || taskState === 'canceled';
 
     if (isBlocked) {
       blockedAgents.push({

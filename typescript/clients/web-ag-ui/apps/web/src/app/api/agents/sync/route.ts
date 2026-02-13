@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
+import { deriveTaskStateForUi } from '@/utils/deriveTaskStateForUi';
+
 const BodySchema = z.object({
   agentId: z.string().min(1),
   threadId: z.string().min(1),
@@ -324,15 +326,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const taskState = hasTask ? (task?.taskStatus?.state ?? null) : null;
     const taskMessage = hasTask ? (task?.taskStatus?.message?.content ?? null) : null;
     const transactionHistory = state?.view?.transactionHistory ?? null;
-    const normalizedTaskMessage = typeof taskMessage === 'string' ? taskMessage.toLowerCase() : '';
-    const derivedTaskState =
-      command === 'fire' &&
-      taskState === 'failed' &&
-      (normalizedTaskMessage.includes('interrupt') ||
-        normalizedTaskMessage.includes('aborted') ||
-        normalizedTaskMessage.includes('aborterror'))
-        ? 'completed'
-        : taskState;
+    const derivedTaskState = hasTask
+      ? deriveTaskStateForUi({ command, taskState, taskMessage })
+      : taskState;
 
     if (
       parsed.data.agentId === 'agent-pendle' &&

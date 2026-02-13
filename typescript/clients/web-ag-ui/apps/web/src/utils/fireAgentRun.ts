@@ -90,7 +90,7 @@ const startFireRun = async <TAgent extends AgentLike>(
     }
 
     runInFlightRef.current = false;
-    return;
+    throw error;
   }
 };
 
@@ -153,8 +153,10 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
     runInFlightRef,
     0,
     backendAbortAttemptSucceeded,
-  ).catch(() => {
+  ).catch((error: unknown) => {
     runInFlightRef.current = false;
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[fireAgentRun] Failed to start fire run', { threadId, error: message });
   });
 
   return true;

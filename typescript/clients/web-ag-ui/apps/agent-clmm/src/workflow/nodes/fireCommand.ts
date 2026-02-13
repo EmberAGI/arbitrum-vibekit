@@ -211,7 +211,7 @@ export const fireCommandNode = async (
       });
     }
   } else {
-    logInfo('Accounting fire event skipped: missing threadId', {});
+    logInfo('Accounting fire event skipped: missing accounting contextId', {});
   }
 
   const transactionEntry =
