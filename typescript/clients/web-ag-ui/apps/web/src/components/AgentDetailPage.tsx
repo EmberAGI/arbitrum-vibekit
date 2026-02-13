@@ -4,8 +4,7 @@ import {
   ChevronRight,
   Star,
   Globe,
-  Printer,
-  MoreHorizontal,
+  Github,
   TrendingUp,
   Minus,
   Check,
@@ -41,6 +40,9 @@ import { formatPoolPair } from '../utils/poolFormat';
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
 const MIN_BASE_CONTRIBUTION_USD = 10;
+const AGENT_WEBSITE_URL = 'https://emberai.xyz';
+const AGENT_GITHUB_URL = 'https://github.com/EmberAGI/arbitrum-vibekit';
+const AGENT_X_URL = 'https://x.com/emberagi';
 
 interface AgentDetailPageProps {
   agentId: string;
@@ -245,20 +247,35 @@ export function AgentDetailPage({
                   )}
                   {/* Action Icons */}
                   <div className="flex items-center gap-1 ml-auto">
-                    <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
+                    <a
+                      href={AGENT_X_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="X"
+                      className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                    >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                       </svg>
-                    </button>
-                    <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
+                    </a>
+                    <a
+                      href={AGENT_WEBSITE_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Website"
+                      className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                    >
                       <Globe className="w-4 h-4" />
-                    </button>
-                    <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
-                      <Printer className="w-4 h-4" />
-                    </button>
-                    <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
+                    </a>
+                    <a
+                      href={AGENT_GITHUB_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="GitHub"
+                      className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                    >
+                      <Github className="w-4 h-4" />
+                    </a>
                   </div>
                 </div>
 
@@ -459,20 +476,35 @@ export function AgentDetailPage({
               </div>
 
               <div className="flex items-center gap-2 mb-6">
-                <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
+                <a
+                  href={AGENT_X_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="X"
+                  className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                   </svg>
-                </button>
-                <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
+                </a>
+                <a
+                  href={AGENT_WEBSITE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Website"
+                  className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                >
                   <Globe className="w-4 h-4" />
-                </button>
-                <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
-                  <Printer className="w-4 h-4" />
-                </button>
-                <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
-                  <MoreHorizontal className="w-4 h-4" />
-                </button>
+                </a>
+                <a
+                  href={AGENT_GITHUB_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="GitHub"
+                  className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                >
+                  <Github className="w-4 h-4" />
+                </a>
               </div>
 
               <h1 className="text-2xl font-bold text-white mb-2">{agentName}</h1>
