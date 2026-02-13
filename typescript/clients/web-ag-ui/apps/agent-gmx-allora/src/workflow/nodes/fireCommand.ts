@@ -3,7 +3,7 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { ARBITRUM_CHAIN_ID, resolveGmxAlloraTxExecutionMode } from '../../config/constants.js';
 import type { ExecutionPlan } from '../../core/executionPlan.js';
 import type { PerpetualPosition } from '../../clients/onchainActions.js';
-import { buildTaskStatus, isTaskTerminal, type ClmmState, type ClmmUpdate } from '../context.js';
+import { buildTaskStatus, isTaskTerminal, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
 import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
 import { executePerpetualPlan } from '../execution.js';
@@ -47,8 +47,8 @@ export const fireCommandNode = async (
     };
   }
 
-  const onboardingComplete = Boolean(state.view.operatorConfig);
-  if (!onboardingComplete) {
+  const operatorConfig = state.view.operatorConfig;
+  if (!operatorConfig) {
     const { task, statusEvent } = buildTaskStatus(
       currentTask,
       'canceled',
@@ -67,7 +67,27 @@ export const fireCommandNode = async (
     };
   }
 
-  const operatorConfig = state.view.operatorConfig;
+  logInfo('Fire command requested; attempting to close any open GMX position', {
+    threadId,
+    delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+    marketAddress: operatorConfig.targetMarket.address,
+    delegationsBypassActive: state.view.delegationsBypassActive === true,
+    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    configuredTxMode: resolveGmxAlloraTxExecutionMode(),
+  });
+
+  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
+    const failureMessage =
+      'Cannot close GMX position during fire: missing delegation bundle. Complete onboarding and approve delegations, or enable DELEGATIONS_BYPASS to execute from the agent wallet.';
+    const { task, statusEvent } = buildTaskStatus(currentTask, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    });
+    return {
+      view: { task, command: 'fire', activity: { events: [statusEvent], telemetry: [] } },
+    };
+  }
+
   const onchainActionsClient = getOnchainActionsClient();
 
   let positions: PerpetualPosition[] = [];
@@ -127,8 +147,25 @@ export const fireCommandNode = async (
     },
   };
 
-  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
-  const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
+  // Fire should be a real unwind action. Even if the agent is configured in plan-only mode
+  // for cycles, we attempt to execute the close here. If the local environment cannot
+  // execute (missing signer), we fail loudly with a concrete message.
+  const txExecutionMode: 'execute' = 'execute';
+  let clients: ReturnType<typeof getOnchainClients>;
+  try {
+    clients = getOnchainClients();
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    const failureMessage = `Cannot execute GMX close during fire: ${message}`;
+    const { task, statusEvent } = buildTaskStatus(currentTask, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    });
+    return {
+      view: { task, command: 'fire', activity: { events: [statusEvent], telemetry: [] } },
+    };
+  }
+
   const executionResult = await executePerpetualPlan({
     client: onchainActionsClient,
     clients,
