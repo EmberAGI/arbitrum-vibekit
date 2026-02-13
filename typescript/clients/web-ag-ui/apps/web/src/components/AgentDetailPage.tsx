@@ -138,8 +138,10 @@ export function AgentDetailPage({
   settings,
   onSettingsChange,
 }: AgentDetailPageProps) {
-  const [activeTab, setActiveTab] = useState<TabType>(isHired ? 'blockers' : 'metrics');
-  const resolvedTab: TabType = activeInterrupt ? 'blockers' : activeTab;
+  const [activeTab, setActiveTab] = useState<TabType>('blockers');
+  const isOnboardingActive = onboarding?.step !== undefined;
+  const forceBlockersTab = Boolean(activeInterrupt) || isOnboardingActive;
+  const resolvedTab: TabType = forceBlockersTab ? 'blockers' : activeTab;
 
   const formatAddress = (address: string) => {
     if (address.length <= 10) return address;
@@ -337,16 +339,25 @@ export function AgentDetailPage({
             >
               Agent Blockers
             </TabButton>
-            <TabButton active={resolvedTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
+            <TabButton
+              active={resolvedTab === 'metrics'}
+              onClick={() => setActiveTab('metrics')}
+              disabled={isOnboardingActive}
+            >
               Metrics
             </TabButton>
             <TabButton
               active={resolvedTab === 'transactions'}
               onClick={() => setActiveTab('transactions')}
+              disabled={isOnboardingActive}
             >
               Transaction history
             </TabButton>
-            <TabButton active={resolvedTab === 'settings'} onClick={() => setActiveTab('settings')}>
+            <TabButton
+              active={resolvedTab === 'settings'}
+              onClick={() => setActiveTab('settings')}
+              disabled={isOnboardingActive}
+            >
               Settings and policies
             </TabButton>
             <TabButton active={resolvedTab === 'chat'} onClick={() => {}} disabled>
@@ -415,7 +426,7 @@ export function AgentDetailPage({
         <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-8">
           {/* Left Column - Agent Card */}
           <div className="space-y-6">
-            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+	            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
               <div
                 className="w-full aspect-square rounded-xl flex items-center justify-center mb-6 overflow-hidden"
                 style={{ background: avatarBg }}
@@ -514,47 +525,18 @@ export function AgentDetailPage({
                 <p className="text-gray-500 text-sm italic">No description available</p>
               )}
 
-              <div className="grid grid-cols-4 gap-4 mt-6">
-                <TagColumn title="Chains" items={profile.chains} />
-                <TagColumn title="Protocols" items={profile.protocols} />
-                <TagColumn title="Tokens" items={profile.tokens} />
-                <PointsColumn metrics={metrics} />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setActiveTab('metrics')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'metrics'
-                    ? 'bg-[#fd6731] text-white'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Metrics
-              </button>
-              <button
-                disabled
-                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed"
-              >
-                Chat
-              </button>
-            </div>
-
-            {activeTab === 'metrics' && (
-              <MetricsTab
-                agentId={agentId}
-                profile={profile}
-                metrics={metrics}
-                fullMetrics={fullMetrics}
-                events={[]}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+	              <div className="grid grid-cols-4 gap-4 mt-6">
+	                <TagColumn title="Chains" items={profile.chains} />
+	                <TagColumn title="Protocols" items={profile.protocols} />
+	                <TagColumn title="Tokens" items={profile.tokens} />
+	                <PointsColumn metrics={metrics} />
+	              </div>
+	            </div>
+	          </div>
+	        </div>
+	      </div>
+	    </div>
+	  );
 }
 
 // Tab Button Component
