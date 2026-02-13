@@ -1,11 +1,11 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 
+import type { PerpetualPosition } from '../../clients/onchainActions.js';
 import { ARBITRUM_CHAIN_ID, resolveGmxAlloraTxExecutionMode } from '../../config/constants.js';
 import type { ExecutionPlan } from '../../core/executionPlan.js';
-import type { PerpetualPosition } from '../../clients/onchainActions.js';
+import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
 import { buildTaskStatus, isTaskTerminal, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
-import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
 import { executePerpetualPlan } from '../execution.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];

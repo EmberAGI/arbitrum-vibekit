@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PerpetualPosition } from '../../clients/onchainActions.js';
 import type { ResolvedGmxConfig } from '../../domain/types.js';
 import type { ClmmState } from '../context.js';
+
 import { fireCommandNode } from './fireCommand.js';
 
 const {
@@ -160,20 +161,20 @@ describe('fireCommandNode (GMX Allora)', () => {
     expect(onchainActionsClient.listPerpetualPositions).toHaveBeenCalledWith(
       expect.objectContaining({ walletAddress: delegatorWalletAddress }),
     );
-    expect(executePerpetualPlanMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        plan: expect.objectContaining({ action: 'close' }),
-        txExecutionMode: 'plan',
-      }),
-    );
+    expect(executePerpetualPlanMock).toHaveBeenCalled();
+    const firstCall = executePerpetualPlanMock.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    const firstArg = firstCall?.[0] as {
+      plan?: { action?: unknown };
+      txExecutionMode?: unknown;
+    };
+    expect(firstArg.plan?.action).toBe('close');
+    expect(firstArg.txExecutionMode).toBe('plan');
 
     expect('view' in result).toBe(true);
     const view = (result as { view: { command?: unknown; task?: unknown } }).view;
     expect(view.command).toBe('fire');
-    expect(view.task).toEqual(
-      expect.objectContaining({
-        taskStatus: expect.objectContaining({ state: 'completed' }),
-      }),
-    );
+    const task = view.task as { taskStatus?: { state?: unknown } };
+    expect(task.taskStatus?.state).toBe('completed');
   });
 });
