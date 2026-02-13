@@ -1,12 +1,15 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import { SlidersHorizontal, Star, MoreHorizontal, ChevronDown, Flame } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SearchBar } from './ui/SearchBar';
 import { FilterTabs } from './ui/FilterTabs';
 import { Pagination } from './ui/Pagination';
 import { AgentsTable } from './agents/AgentsTable';
 import { Skeleton } from './ui/Skeleton';
+import { fetchOnchainActionsChainsPage, fetchOnchainActionsTokensPage } from '../clients/onchainActionsIcons';
 
 export interface Agent {
   id: string;
@@ -44,6 +47,8 @@ export interface FeaturedAgent {
   aum?: number;
   apy?: number;
   weeklyIncome?: number;
+  chains?: string[];
+  protocols?: string[];
   avatar?: string;
   avatarBg?: string;
   imageUrl?: string;
@@ -52,6 +57,16 @@ export interface FeaturedAgent {
   status: 'for_hire' | 'hired' | 'unavailable';
   isLoaded: boolean;
 }
+
+const ONCHAIN_ACTIONS_BASE_URL =
+  process.env.NEXT_PUBLIC_ONCHAIN_ACTIONS_API_URL ?? 'https://api.emberai.xyz';
+
+const PROTOCOL_TOKEN_FALLBACK: Record<string, string> = {
+  Camelot: 'GRAIL',
+  Pendle: 'PENDLE',
+  GMX: 'GMX',
+  Allora: 'ALLO',
+};
 
 interface HireAgentsPageProps {
   agents: Agent[];
@@ -322,15 +337,92 @@ function FeaturedAgentCard({
   index: number;
   onClick?: () => void;
 }) {
+  const [chainIconMap, setChainIconMap] = useState<Record<string, string>>({});
+  const [tokenIconMap, setTokenIconMap] = useState<Record<string, string>>({});
+  const [iconsLoaded, setIconsLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const desiredTokenSymbols = new Set<string>();
+    for (const protocol of agent.protocols ?? []) {
+      const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+      if (fallback) desiredTokenSymbols.add(fallback);
+    }
+
+    const load = async () => {
+      try {
+        const chainsPage = await fetchOnchainActionsChainsPage({
+          baseUrl: ONCHAIN_ACTIONS_BASE_URL,
+          page: 1,
+        });
+
+        const nextChainIconMap = chainsPage.chains.reduce<Record<string, string>>((acc, chain) => {
+          acc[chain.name] = chain.iconUri;
+          return acc;
+        }, {});
+
+        const chainIds = chainsPage.chains
+          .filter((chain) => (agent.chains ?? []).includes(chain.name))
+          .map((chain) => chain.chainId);
+
+        const nextTokenIconMap: Record<string, string> = {};
+
+        if (desiredTokenSymbols.size > 0) {
+          let cursor: string | undefined;
+          let attempts = 0;
+          while (attempts < 5 && Object.keys(nextTokenIconMap).length < desiredTokenSymbols.size) {
+            attempts += 1;
+            const tokensPage = await fetchOnchainActionsTokensPage({
+              baseUrl: ONCHAIN_ACTIONS_BASE_URL,
+              chainIds,
+              cursor,
+            });
+            cursor = tokensPage.cursor || undefined;
+
+            for (const token of tokensPage.tokens) {
+              if (!token.iconUri) continue;
+              if (desiredTokenSymbols.has(token.symbol) && !nextTokenIconMap[token.symbol]) {
+                nextTokenIconMap[token.symbol] = token.iconUri;
+              }
+            }
+
+            if (!cursor) break;
+          }
+        }
+
+        if (cancelled) return;
+        setChainIconMap(nextChainIconMap);
+        setTokenIconMap(nextTokenIconMap);
+        setIconsLoaded(true);
+      } catch {
+        if (cancelled) return;
+        setIconsLoaded(true);
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [agent.chains, agent.protocols]);
+
   const placeholderImage = useMemo(() => generateAbstractPattern(agent.id), [agent.id]);
   const imageUrl = agent.imageUrl || placeholderImage;
 
   const hasRank = agent.rank !== undefined;
   const hasRating = agent.rating !== undefined && agent.rating > 0;
   const hasCreator = agent.creator !== undefined && agent.creator !== '';
-  const hasUsers = agent.users !== undefined && agent.users > 0;
-  const hasWeeklyIncome = agent.weeklyIncome !== undefined && agent.weeklyIncome > 0;
   const hasTrend = agent.trendMultiplier !== undefined && agent.trendMultiplier !== '';
+
+  const chainIcons = (agent.chains ?? [])
+    .map((chain) => chainIconMap[chain])
+    .filter((uri): uri is string => typeof uri === 'string' && uri.length > 0);
+
+  const protocolIcons = (agent.protocols ?? [])
+    .map((protocol) => PROTOCOL_TOKEN_FALLBACK[protocol])
+    .map((symbol) => (symbol ? tokenIconMap[symbol] : undefined))
+    .filter((uri): uri is string => typeof uri === 'string' && uri.length > 0);
 
   return (
     <div
@@ -371,6 +463,46 @@ function FeaturedAgentCard({
         </button>
       </div>
 
+      {/* Chain + Protocol Icons */}
+      <div className="px-4 pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {!iconsLoaded ? (
+              <>
+                <Skeleton className="h-6 w-6 rounded-full" />
+                <Skeleton className="h-6 w-6 rounded-full" />
+              </>
+            ) : (
+              chainIcons.slice(0, 4).map((uri) => (
+                <img
+                  key={uri}
+                  src={uri}
+                  alt=""
+                  className="h-6 w-6 rounded-full bg-[#111] ring-1 ring-[#2a2a2a] object-contain"
+                />
+              ))
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {!iconsLoaded ? (
+              <>
+                <Skeleton className="h-6 w-6 rounded-full" />
+                <Skeleton className="h-6 w-6 rounded-full" />
+              </>
+            ) : (
+              protocolIcons.slice(0, 4).map((uri) => (
+                <img
+                  key={uri}
+                  src={uri}
+                  alt=""
+                  className="h-6 w-6 rounded-full bg-[#111] ring-1 ring-[#2a2a2a] object-contain"
+                />
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Main content: Name and avatar */}
       <div className="px-4 pb-4">
         <h3 className="font-bold text-white text-lg leading-snug mb-3">
@@ -401,37 +533,59 @@ function FeaturedAgentCard({
       </div>
 
       {/* Stats footer */}
-      <div className="flex items-center gap-8 px-4 py-3 bg-[#161616] border-t border-[#2a2a2a]">
-        <div>
-          <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">Users</div>
-          <div className="text-white font-semibold text-base">
-            {!agent.isLoaded ? (
-              <Skeleton className="h-5 w-14" />
-            ) : hasUsers ? (
-                agent.users?.toLocaleString()
-              ) : (
-                '-'
-              )}
-          </div>
-        </div>
-        <div>
-          <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">7d Agent Income</div>
-          <div className="text-white font-semibold text-base">
-            {!agent.isLoaded ? (
-              <Skeleton className="h-5 w-20" />
-            ) : hasWeeklyIncome ? (
-                `$${agent.weeklyIncome?.toLocaleString()}`
-              ) : (
-                '-'
-              )}
-          </div>
-        </div>
+      <div className="grid grid-cols-4 gap-3 px-4 py-3 bg-[#161616] border-t border-[#2a2a2a]">
+        <FeaturedStat
+          label="AUM"
+          isLoaded={agent.isLoaded}
+          value={agent.aum !== undefined ? `$${agent.aum.toLocaleString()}` : null}
+        />
+        <FeaturedStat
+          label="30d Income"
+          isLoaded={agent.isLoaded}
+          value={agent.weeklyIncome !== undefined ? `$${agent.weeklyIncome.toLocaleString()}` : null}
+        />
+        <FeaturedStat
+          label="APY"
+          isLoaded={agent.isLoaded}
+          value={agent.apy !== undefined ? `${agent.apy}%` : null}
+          valueClassName="text-teal-400"
+        />
+        <FeaturedStat
+          label="Users"
+          isLoaded={agent.isLoaded}
+          value={agent.users !== undefined ? agent.users.toLocaleString() : null}
+        />
       </div>
 
       {/* Expand chevron */}
       <div className="flex justify-center py-1.5 bg-[#161616] border-t border-[#222]">
         <ChevronDown className="w-4 h-4 text-gray-600" />
       </div>
+    </div>
+  );
+}
+
+function FeaturedStat({
+  label,
+  isLoaded,
+  value,
+  valueClassName = 'text-white',
+}: {
+  label: string;
+  isLoaded: boolean;
+  value: string | null;
+  valueClassName?: string;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">{label}</div>
+      {!isLoaded ? (
+        <Skeleton className="h-5 w-14" />
+      ) : value !== null ? (
+          <div className={`font-semibold text-base ${valueClassName}`}>{value}</div>
+        ) : (
+          <div className="text-gray-500 font-semibold text-base">-</div>
+        )}
     </div>
   );
 }

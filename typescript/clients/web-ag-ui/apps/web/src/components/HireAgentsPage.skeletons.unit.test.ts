@@ -23,6 +23,8 @@ describe('HireAgentsPage (skeleton numbers)', () => {
             name: 'Camelot CLMM',
             status: 'for_hire',
             isLoaded: false,
+            chains: [],
+            protocols: [],
           },
         ],
       }),
@@ -31,4 +33,3 @@ describe('HireAgentsPage (skeleton numbers)', () => {
     expect(html).toContain('animate-pulse');
   });
 });
-

@@ -59,6 +59,8 @@ export default function HireAgentsRoute() {
       aum: profile?.aum,
       apy: profile?.apy,
       weeklyIncome: profile?.agentIncome,
+      chains: profile?.chains ?? [],
+      protocols: profile?.protocols ?? [],
       avatar: config.avatar,
       avatarBg: config.avatarBg,
       pointsTrend: isLoaded && metrics?.iteration && metrics.iteration > 0 ? 'up' : undefined,
