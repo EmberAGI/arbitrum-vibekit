@@ -70,6 +70,7 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
 export interface UseAgentConnectionResult {
   config: AgentConfig;
   isConnected: boolean;
+  hasLoadedView: boolean;
   threadId: string | undefined;
   interruptRenderer: ReturnType<typeof useLangGraphInterruptRender>;
 
@@ -438,6 +439,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   // Derived state
   const isHired = view.command === 'hire' || view.command === 'run' || view.command === 'cycle';
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
+  const hasLoadedView = !needsSync(currentState);
 
   const runSync = useCallback(() => {
     if (!runCommand('sync')) return;
@@ -496,6 +498,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   return {
     config,
     isConnected: !!threadId,
+    hasLoadedView,
     threadId,
     interruptRenderer,
     view,

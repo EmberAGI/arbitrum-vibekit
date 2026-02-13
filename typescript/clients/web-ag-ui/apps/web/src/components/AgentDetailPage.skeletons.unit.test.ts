@@ -1,11 +1,24 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { AgentDetailPage } from './AgentDetailPage';
 
-describe('AgentDetailPage (header links)', () => {
-  it('removes the printer icon and renders website/github/x links', () => {
+vi.mock('../hooks/usePrivyWalletClient', () => {
+  return {
+    usePrivyWalletClient: () => ({
+      walletClient: null,
+      privyWallet: null,
+      chainId: null,
+      switchChain: async () => {},
+      isLoading: false,
+      error: null,
+    }),
+  };
+});
+
+describe('AgentDetailPage (skeleton numbers)', () => {
+  it('renders skeletons for numeric stats until the agent view is loaded', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-clmm',
@@ -21,7 +34,7 @@ describe('AgentDetailPage (header links)', () => {
         metrics: {},
         isHired: false,
         isHiring: false,
-        hasLoadedView: true,
+        hasLoadedView: false,
         onHire: () => {},
         onFire: () => {},
         onSync: () => {},
@@ -30,9 +43,7 @@ describe('AgentDetailPage (header links)', () => {
       }),
     );
 
-    expect(html).not.toContain('lucide-printer');
-    expect(html).toContain('href="https://emberai.xyz"');
-    expect(html).toContain('href="https://github.com/EmberAGI/arbitrum-vibekit"');
-    expect(html).toContain('href="https://x.com/emberagi"');
+    expect(html).toContain('animate-pulse');
   });
 });
+

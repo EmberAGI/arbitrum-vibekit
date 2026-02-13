@@ -36,6 +36,7 @@ import type {
 } from '../types/agent';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import { formatPoolPair } from '../utils/poolFormat';
+import { Skeleton } from './ui/Skeleton';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -60,6 +61,7 @@ interface AgentDetailPageProps {
   fullMetrics?: AgentViewMetrics;
   isHired: boolean;
   isHiring: boolean;
+  hasLoadedView: boolean;
   isFiring?: boolean;
   isSyncing?: boolean;
   currentCommand?: string;
@@ -116,6 +118,7 @@ export function AgentDetailPage({
   fullMetrics,
   isHired,
   isHiring,
+  hasLoadedView,
   isFiring,
   isSyncing,
   currentCommand,
@@ -313,12 +316,17 @@ export function AgentDetailPage({
 
             {/* Stats Row */}
             <div className="grid grid-cols-6 gap-4 mt-6 pt-6 border-t border-[#2a2a2a]">
-              <StatBox label="Agent Income" value={formatCurrency(profile.agentIncome)} />
-              <StatBox label="AUM" value={formatCurrency(profile.aum)} />
-              <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} />
-              <StatBox label="APY" value={formatPercent(profile.apy)} valueColor="text-teal-400" />
-              <StatBox label="Your Assets" value={null} />
-              <StatBox label="Your PnL" value={formatCurrency(metrics.lifetimePnlUsd)} />
+              <StatBox label="Agent Income" value={formatCurrency(profile.agentIncome)} isLoaded={hasLoadedView} />
+              <StatBox label="AUM" value={formatCurrency(profile.aum)} isLoaded={hasLoadedView} />
+              <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} isLoaded={hasLoadedView} />
+              <StatBox
+                label="APY"
+                value={formatPercent(profile.apy)}
+                valueColor="text-teal-400"
+                isLoaded={hasLoadedView}
+              />
+              <StatBox label="Your Assets" value={null} isLoaded={hasLoadedView} />
+              <StatBox label="Your PnL" value={formatCurrency(metrics.lifetimePnlUsd)} isLoaded={hasLoadedView} />
             </div>
 
             {/* Tags Row */}
@@ -446,16 +454,17 @@ export function AgentDetailPage({
                 {isHiring ? 'Hiring...' : 'Hire'}
               </button>
 
-              <div className="grid grid-cols-2 gap-4 mt-6">
-                <StatBox label="Agent Income" value={formatCurrency(profile.agentIncome)} />
-                <StatBox label="AUM" value={formatCurrency(profile.aum)} />
-                <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} />
-                <StatBox
-                  label="APY"
-                  value={formatPercent(profile.apy)}
-                  valueColor="text-teal-400"
-                />
-              </div>
+	              <div className="grid grid-cols-2 gap-4 mt-6">
+	                <StatBox label="Agent Income" value={formatCurrency(profile.agentIncome)} isLoaded={hasLoadedView} />
+	                <StatBox label="AUM" value={formatCurrency(profile.aum)} isLoaded={hasLoadedView} />
+	                <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} isLoaded={hasLoadedView} />
+	                <StatBox
+	                  label="APY"
+	                  value={formatPercent(profile.apy)}
+	                  valueColor="text-teal-400"
+	                  isLoaded={hasLoadedView}
+	                />
+	              </div>
             </div>
           </div>
 
@@ -1532,17 +1541,20 @@ interface StatBoxProps {
   label: string;
   value: string | null;
   valueColor?: string;
+  isLoaded: boolean;
 }
 
-function StatBox({ label, value, valueColor = 'text-white' }: StatBoxProps) {
+function StatBox({ label, value, valueColor = 'text-white', isLoaded }: StatBoxProps) {
   return (
     <div>
       <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</div>
-      {value !== null ? (
-        <div className={`text-xl font-semibold ${valueColor}`}>{value}</div>
-      ) : (
-        <div className="text-gray-600 text-sm">—</div>
-      )}
+      {!isLoaded ? (
+        <Skeleton className="h-6 w-20" />
+      ) : value !== null ? (
+          <div className={`text-xl font-semibold ${valueColor}`}>{value}</div>
+        ) : (
+          <div className="text-gray-600 text-sm">-</div>
+        )}
     </div>
   );
 }

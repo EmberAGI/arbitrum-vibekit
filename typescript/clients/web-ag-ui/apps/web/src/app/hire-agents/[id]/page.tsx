@@ -53,6 +53,7 @@ export default function AgentDetailRoute({
       fullMetrics={agent.metrics}
       isHired={agent.isHired}
       isHiring={agent.isHiring}
+      hasLoadedView={agent.hasLoadedView}
       isFiring={agent.isFiring}
       isSyncing={agent.isSyncing}
       currentCommand={agent.view.command}
