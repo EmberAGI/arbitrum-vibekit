@@ -192,7 +192,10 @@ async function createRun(params: {
   graphId: string;
   durability: LangGraphDurability;
 }): Promise<string | undefined> {
-  const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs`, {
+  // NOTE: We intentionally cast the fetch init object to avoid type-level drift in
+  // Node's fetch typings across @types/node / TypeScript versions (CI installs
+  // without a frozen lockfile).
+  const init = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -206,7 +209,9 @@ async function createRun(params: {
       stream_mode: ['events', 'values', 'messages'],
       stream_resumable: true,
     }),
-  });
+  } as unknown as NonNullable<Parameters<typeof fetch>[1]>;
+
+  const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs`, init);
 
   if (response.status === 422) {
     const payloadText = await response.text();
