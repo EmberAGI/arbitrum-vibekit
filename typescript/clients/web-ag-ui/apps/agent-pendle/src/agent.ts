@@ -24,6 +24,13 @@ import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
 
+// NOTE: We avoid depending on the ambient `fetch`/`RequestInit` typings here since CI
+// installs without a frozen lockfile and TypeScript/@types/node can drift.
+const fetchRequest = globalThis.fetch as unknown as (
+  input: string,
+  init?: unknown,
+) => Promise<Response>;
+
 function resolvePostBootstrap(state: ClmmState): 'collectSetupInput' | 'syncState' {
   const command = extractCommand(state.messages) ?? state.view.command;
   return command === 'sync' ? 'syncState' : 'collectSetupInput';
@@ -128,21 +135,21 @@ async function fetchThreadStateValues(
   baseUrl: string,
   threadId: string,
 ): Promise<ThreadStateValues | null> {
-  const response = await fetch(`${baseUrl}/threads/${threadId}/state`);
+  const response = await fetchRequest(`${baseUrl}/threads/${threadId}/state`);
   const payload = await parseJsonResponse(response, z.unknown());
   return extractThreadStateValues(payload);
 }
 
 async function ensureThread(baseUrl: string, threadId: string, graphId: string) {
   const metadata = { graph_id: graphId };
-  const response = await fetch(`${baseUrl}/threads`, {
+  const response = await fetchRequest(`${baseUrl}/threads`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ thread_id: threadId, if_exists: 'do_nothing', metadata }),
   });
   await parseJsonResponse(response, ThreadResponseSchema);
 
-  const patchResponse = await fetch(`${baseUrl}/threads/${threadId}`, {
+  const patchResponse = await fetchRequest(`${baseUrl}/threads/${threadId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ metadata }),
@@ -168,7 +175,7 @@ async function updateCycleState(
   }
 
   const view = existingView ? { ...existingView, command: 'cycle' } : { command: 'cycle' };
-  const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
+  const response = await fetchRequest(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -192,8 +199,6 @@ async function createRun(params: {
   graphId: string;
   durability: LangGraphDurability;
 }): Promise<string | undefined> {
-  // NOTE: We avoid depending on the ambient `fetch`/`RequestInit` typings here since
-  // CI installs without a frozen lockfile and TypeScript/@types/node can drift.
   const body = JSON.stringify({
     assistant_id: params.graphId,
     input: null,
@@ -209,17 +214,11 @@ async function createRun(params: {
     throw new Error('[cron] Failed to serialize LangGraph run create request body');
   }
 
-  const init = {
+  const response = await fetchRequest(`${params.baseUrl}/threads/${params.threadId}/runs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,
-  };
-
-  const fetchRequest = globalThis.fetch as unknown as (
-    input: string,
-    init: unknown,
-  ) => Promise<Response>;
-  const response = await fetchRequest(`${params.baseUrl}/threads/${params.threadId}/runs`, init);
+  });
 
   if (response.status === 422) {
     const payloadText = await response.text();
@@ -232,7 +231,7 @@ async function createRun(params: {
 }
 
 async function fetchRun(baseUrl: string, threadId: string, runId: string) {
-  const response = await fetch(`${baseUrl}/threads/${threadId}/runs/${runId}`);
+  const response = await fetchRequest(`${baseUrl}/threads/${threadId}/runs/${runId}`);
   return parseJsonResponse(response, RunResponseSchema);
 }
 
@@ -241,7 +240,7 @@ async function waitForRunStreamCompletion(params: {
   threadId: string;
   runId: string;
 }): Promise<RunStatus> {
-  const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs/${params.runId}/stream`, {
+  const response = await fetchRequest(`${params.baseUrl}/threads/${params.threadId}/runs/${params.runId}/stream`, {
     headers: {
       Accept: 'text/event-stream',
     },
