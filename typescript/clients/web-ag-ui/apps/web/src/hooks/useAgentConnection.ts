@@ -485,7 +485,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       }
       setTimeout(() => setIsFiring(false), 3000);
     });
-  }, [copilotkit, isFiring, threadId]);
+  }, [agentId, copilotkit, isFiring, threadId]);
 
   const resolveInterrupt = useCallback(
     (
