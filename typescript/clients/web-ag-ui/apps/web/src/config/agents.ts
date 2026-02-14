@@ -9,6 +9,10 @@ export interface AgentConfig {
   creatorVerified: boolean;
   avatar: string;
   avatarBg: string;
+  // Static metadata used for pre-auth and degraded modes (before /api/agents/sync has data).
+  chains?: string[];
+  protocols?: string[];
+  tokens?: string[];
   // Featured agents config
   isFeatured?: boolean;
   featuredRank?: number;
@@ -24,6 +28,9 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '🏰',
     avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+    chains: ['Arbitrum'],
+    protocols: ['Camelot'],
+    tokens: ['USDC', 'ARB', 'WETH'],
     isFeatured: true,
     featuredRank: 1,
   },
@@ -36,6 +43,9 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '🪙',
     avatarBg: 'linear-gradient(135deg, #f97316 0%, #facc15 100%)',
+    chains: ['Arbitrum'],
+    protocols: ['Pendle'],
+    tokens: ['USDC', 'WETH'],
     isFeatured: true,
     featuredRank: 2,
   },
@@ -48,6 +58,9 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '📈',
     avatarBg: 'linear-gradient(135deg, #10b981 0%, #22c55e 100%)',
+    chains: ['Arbitrum'],
+    protocols: ['GMX', 'Allora'],
+    tokens: ['USDC', 'WETH'],
     isFeatured: true,
     featuredRank: 3,
   },

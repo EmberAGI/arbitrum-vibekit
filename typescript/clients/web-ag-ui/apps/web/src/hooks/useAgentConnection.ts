@@ -72,6 +72,7 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
 export interface UseAgentConnectionResult {
   config: AgentConfig;
   isConnected: boolean;
+  hasLoadedView: boolean;
   threadId: string | undefined;
   interruptRenderer: ReturnType<typeof useLangGraphInterruptRender>;
 
@@ -439,9 +440,52 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const events = activity.events ?? [];
   const settings = currentState.settings ?? defaultSettings;
 
+  const mergeUniqueStrings = (params: {
+    primary: string[];
+    secondary: string[];
+    keyFn: (value: string) => string;
+  }): string[] => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    const push = (value: string) => {
+      const trimmed = value.trim();
+      if (trimmed.length === 0) return;
+      const key = params.keyFn(trimmed);
+      if (key.length === 0) return;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(trimmed);
+    };
+
+    for (const value of params.primary) push(value);
+    for (const value of params.secondary) push(value);
+    return out;
+  };
+
+  const profileWithFallback: AgentViewProfile = {
+    ...profile,
+    chains: mergeUniqueStrings({
+      primary: profile.chains,
+      secondary: config.chains ?? [],
+      keyFn: (value) => value.toLowerCase(),
+    }),
+    protocols: mergeUniqueStrings({
+      primary: profile.protocols,
+      secondary: config.protocols ?? [],
+      keyFn: (value) => value.toLowerCase(),
+    }),
+    tokens: mergeUniqueStrings({
+      primary: profile.tokens,
+      secondary: config.tokens ?? [],
+      keyFn: (value) => value.toUpperCase(),
+    }),
+  };
+
   // Derived state
   const isHired = view.command === 'hire' || view.command === 'run' || view.command === 'cycle';
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
+  const hasLoadedView = !needsSync(currentState);
 
   const runSync = useCallback(() => {
     if (!runCommand('sync')) return;
@@ -523,10 +567,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   return {
     config,
     isConnected: !!threadId,
+    hasLoadedView,
     threadId,
     interruptRenderer,
     view,
-    profile,
+    profile: profileWithFallback,
     metrics,
     activity,
     transactionHistory,

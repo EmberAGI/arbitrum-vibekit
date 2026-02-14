@@ -1,11 +1,12 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import {
   ChevronRight,
   Star,
   Globe,
-  Printer,
-  MoreHorizontal,
+  Github,
   TrendingUp,
   Minus,
   Check,
@@ -13,7 +14,7 @@ import {
 } from 'lucide-react';
 import { signDelegation } from '@metamask/delegation-toolkit/actions';
 import { formatUnits } from 'viem';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type {
   AgentProfile,
   AgentMetrics,
@@ -36,12 +37,24 @@ import type {
   ClmmEvent,
 } from '../types/agent';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
+import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
+import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
+import {
+  normalizeNameKey,
+  normalizeSymbolKey,
+  proxyIconUri,
+  resolveAgentAvatarUri,
+} from '../utils/iconResolution';
 import { formatPoolPair } from '../utils/poolFormat';
-import { resolveMetricsTabLabel } from '../utils/agentUi';
+import { Skeleton } from './ui/Skeleton';
+import { LoadingValue } from './ui/LoadingValue';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
 const MIN_BASE_CONTRIBUTION_USD = 10;
+const AGENT_WEBSITE_URL = 'https://emberai.xyz';
+const AGENT_GITHUB_URL = 'https://github.com/EmberAGI/arbitrum-vibekit';
+const AGENT_X_URL = 'https://x.com/emberagi';
 
 interface AgentDetailPageProps {
   agentId: string;
@@ -52,13 +65,12 @@ interface AgentDetailPageProps {
   ownerAddress?: string;
   rank?: number;
   rating?: number;
-  avatar?: string;
-  avatarBg?: string;
   profile: AgentProfile;
   metrics: AgentMetrics;
   fullMetrics?: AgentViewMetrics;
   isHired: boolean;
   isHiring: boolean;
+  hasLoadedView: boolean;
   isFiring?: boolean;
   isSyncing?: boolean;
   currentCommand?: string;
@@ -96,9 +108,6 @@ interface AgentDetailPageProps {
 
 type TabType = 'blockers' | 'metrics' | 'transactions' | 'settings' | 'chat';
 
-const DEFAULT_AVATAR = '🤖';
-const DEFAULT_AVATAR_BG = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
-
 export function AgentDetailPage({
   agentId,
   agentName,
@@ -108,13 +117,12 @@ export function AgentDetailPage({
   ownerAddress,
   rank,
   rating,
-  avatar = DEFAULT_AVATAR,
-  avatarBg = DEFAULT_AVATAR_BG,
   profile,
   metrics,
   fullMetrics,
   isHired,
   isHiring,
+  hasLoadedView,
   isFiring,
   isSyncing,
   currentCommand,
@@ -138,7 +146,45 @@ export function AgentDetailPage({
   onSettingsChange,
 }: AgentDetailPageProps) {
   const [activeTab, setActiveTab] = useState<TabType>(isHired ? 'blockers' : 'metrics');
-  const resolvedTab: TabType = activeInterrupt ? 'blockers' : activeTab;
+  const isOnboardingActive = onboarding?.step !== undefined;
+  const forceBlockersTab = Boolean(activeInterrupt) || isOnboardingActive;
+  const resolvedTab: TabType = forceBlockersTab ? 'blockers' : activeTab;
+
+  const desiredTokenSymbols = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    const addSymbol = (symbol: string | undefined) => {
+      if (!symbol) return;
+      const trimmed = symbol.trim();
+      if (trimmed.length === 0) return;
+      if (seen.has(trimmed)) return;
+      seen.add(trimmed);
+      out.push(trimmed);
+    };
+
+    for (const symbol of profile.tokens ?? []) addSymbol(symbol);
+    for (const protocol of profile.protocols ?? []) addSymbol(PROTOCOL_TOKEN_FALLBACK[protocol]);
+
+    return out;
+  }, [profile.protocols, profile.tokens]);
+
+  const { chainIconByName, tokenIconBySymbol, isLoaded: iconsLoaded } = useOnchainActionsIconMaps({
+    chainNames: profile.chains ?? [],
+    tokenSymbols: desiredTokenSymbols,
+  });
+
+  const agentAvatarUri = useMemo(
+    () =>
+      resolveAgentAvatarUri({
+        protocols: profile.protocols ?? [],
+        tokenIconBySymbol,
+      }) ??
+      (profile.chains && profile.chains.length > 0
+        ? chainIconByName[normalizeNameKey(profile.chains[0])] ?? null
+        : null),
+    [chainIconByName, profile.chains, profile.protocols, tokenIconBySymbol],
+  );
 
   const formatAddress = (address: string) => {
     if (address.length <= 10) return address;
@@ -212,12 +258,20 @@ export function AgentDetailPage({
           <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 mb-6">
             <div className="flex gap-6">
               {/* Agent Avatar */}
-              <div
-                className="w-32 h-32 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: avatarBg }}
-              >
-                <div className="text-6xl">{avatar}</div>
-              </div>
+              {!iconsLoaded ? (
+                <Skeleton className="h-32 w-32 rounded-full flex-shrink-0" />
+              ) : (
+                <div className="w-32 h-32 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a]">
+                  {agentAvatarUri ? (
+                    <img
+                      src={proxyIconUri(agentAvatarUri)}
+                      alt=""
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : null}
+                </div>
+              )}
 
               {/* Agent Info */}
               <div className="flex-1 min-w-0">
@@ -246,20 +300,35 @@ export function AgentDetailPage({
                   )}
                   {/* Action Icons */}
                   <div className="flex items-center gap-1 ml-auto">
-                    <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
+                    <a
+                      href={AGENT_X_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="X"
+                      className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                    >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                       </svg>
-                    </button>
-                    <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
+                    </a>
+                    <a
+                      href={AGENT_WEBSITE_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Website"
+                      className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                    >
                       <Globe className="w-4 h-4" />
-                    </button>
-                    <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
-                      <Printer className="w-4 h-4" />
-                    </button>
-                    <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
+                    </a>
+                    <a
+                      href={AGENT_GITHUB_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="GitHub"
+                      className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                    >
+                      <Github className="w-4 h-4" />
+                    </a>
                   </div>
                 </div>
 
@@ -282,7 +351,9 @@ export function AgentDetailPage({
                     onClick={onFire}
                     disabled={isFiring}
                     className={`px-4 py-1.5 rounded-lg text-white text-sm font-medium transition-colors ${
-                      isFiring ? 'bg-gray-600 cursor-wait' : 'bg-[#fd6731] hover:bg-[#e55a28]'
+                      isFiring
+                        ? 'bg-gray-600 cursor-wait'
+                        : 'bg-[#fd6731] hover:bg-[#e55a28]'
                     }`}
                   >
                     {isFiring ? 'Firing...' : 'Fire'}
@@ -293,19 +364,43 @@ export function AgentDetailPage({
 
             {/* Stats Row */}
             <div className="grid grid-cols-6 gap-4 mt-6 pt-6 border-t border-[#2a2a2a]">
-              <StatBox label="Agent Income" value={formatCurrency(profile.agentIncome)} />
-              <StatBox label="AUM" value={formatCurrency(profile.aum)} />
-              <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} />
-              <StatBox label="APY" value={formatPercent(profile.apy)} valueColor="text-teal-400" />
-              <StatBox label="Your Assets" value={null} />
-              <StatBox label="Your PnL" value={formatCurrency(metrics.lifetimePnlUsd)} />
+              <StatBox label="Agent Income" value={formatCurrency(profile.agentIncome)} isLoaded={hasLoadedView} />
+              <StatBox label="AUM" value={formatCurrency(profile.aum)} isLoaded={hasLoadedView} />
+              <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} isLoaded={hasLoadedView} />
+              <StatBox
+                label="APY"
+                value={formatPercent(profile.apy)}
+                valueColor="text-teal-400"
+                isLoaded={hasLoadedView}
+              />
+              <StatBox label="Your Assets" value={null} isLoaded={hasLoadedView} />
+              <StatBox label="Your PnL" value={formatCurrency(metrics.lifetimePnlUsd)} isLoaded={hasLoadedView} />
             </div>
 
             {/* Tags Row */}
             <div className="grid grid-cols-5 gap-4 mt-6 pt-6 border-t border-[#2a2a2a]">
-              <TagColumn title="Chains" items={profile.chains} />
-              <TagColumn title="Protocols" items={profile.protocols} />
-              <TagColumn title="Tokens" items={profile.tokens} />
+              <TagColumn
+                title="Chains"
+                items={profile.chains}
+                iconsLoaded={iconsLoaded}
+                getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
+              />
+              <TagColumn
+                title="Protocols"
+                items={profile.protocols}
+                iconsLoaded={iconsLoaded}
+                getIconUri={(protocol) => {
+                  const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+                  if (!fallback) return null;
+                  return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
+                }}
+              />
+              <TagColumn
+                title="Tokens"
+                items={profile.tokens}
+                iconsLoaded={iconsLoaded}
+                getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
+              />
               <PointsColumn metrics={metrics} />
             </div>
           </div>
@@ -319,16 +414,25 @@ export function AgentDetailPage({
             >
               Agent Blockers
             </TabButton>
-            <TabButton active={resolvedTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
-              {resolveMetricsTabLabel(agentId)}
+            <TabButton
+              active={resolvedTab === 'metrics'}
+              onClick={() => setActiveTab('metrics')}
+              disabled={isOnboardingActive}
+            >
+              Metrics
             </TabButton>
             <TabButton
               active={resolvedTab === 'transactions'}
               onClick={() => setActiveTab('transactions')}
+              disabled={isOnboardingActive}
             >
               Transaction history
             </TabButton>
-            <TabButton active={resolvedTab === 'settings'} onClick={() => setActiveTab('settings')}>
+            <TabButton
+              active={resolvedTab === 'settings'}
+              onClick={() => setActiveTab('settings')}
+              disabled={isOnboardingActive}
+            >
               Settings and policies
             </TabButton>
             <TabButton active={resolvedTab === 'chat'} onClick={() => {}} disabled>
@@ -363,13 +467,19 @@ export function AgentDetailPage({
               fullMetrics={fullMetrics}
               events={events}
               transactions={transactions}
+              hasLoadedView={hasLoadedView}
             />
           )}
 
-          {resolvedTab === 'transactions' && <TransactionHistoryTab transactions={transactions} />}
+          {resolvedTab === 'transactions' && (
+            <TransactionHistoryTab transactions={transactions} />
+          )}
 
           {resolvedTab === 'settings' && (
-            <SettingsTab settings={settings} onSettingsChange={onSettingsChange} />
+            <SettingsTab
+              settings={settings}
+              onSettingsChange={onSettingsChange}
+            />
           )}
         </div>
       </div>
@@ -393,13 +503,21 @@ export function AgentDetailPage({
         <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-8">
           {/* Left Column - Agent Card */}
           <div className="space-y-6">
-            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-              <div
-                className="w-full aspect-square rounded-xl flex items-center justify-center mb-6 overflow-hidden"
-                style={{ background: avatarBg }}
-              >
-                <div className="text-8xl">{avatar}</div>
-              </div>
+	            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+              {!iconsLoaded ? (
+                <Skeleton className="w-full aspect-square rounded-full mb-6" />
+              ) : (
+                <div className="w-full aspect-square rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a]">
+                  {agentAvatarUri ? (
+                    <img
+                      src={agentAvatarUri}
+                      alt=""
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : null}
+                </div>
+              )}
 
               <button
                 onClick={onHire}
@@ -413,16 +531,17 @@ export function AgentDetailPage({
                 {isHiring ? 'Hiring...' : 'Hire'}
               </button>
 
-              <div className="grid grid-cols-2 gap-4 mt-6">
-                <StatBox label="Agent Income" value={formatCurrency(profile.agentIncome)} />
-                <StatBox label="AUM" value={formatCurrency(profile.aum)} />
-                <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} />
-                <StatBox
-                  label="APY"
-                  value={formatPercent(profile.apy)}
-                  valueColor="text-teal-400"
-                />
-              </div>
+	              <div className="grid grid-cols-2 gap-4 mt-6">
+	                <StatBox label="Agent Income" value={formatCurrency(profile.agentIncome)} isLoaded={hasLoadedView} />
+	                <StatBox label="AUM" value={formatCurrency(profile.aum)} isLoaded={hasLoadedView} />
+	                <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} isLoaded={hasLoadedView} />
+	                <StatBox
+	                  label="APY"
+	                  value={formatPercent(profile.apy)}
+	                  valueColor="text-teal-400"
+	                  isLoaded={hasLoadedView}
+	                />
+	              </div>
             </div>
           </div>
 
@@ -454,20 +573,35 @@ export function AgentDetailPage({
               </div>
 
               <div className="flex items-center gap-2 mb-6">
-                <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
+                <a
+                  href={AGENT_X_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="X"
+                  className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                   </svg>
-                </button>
-                <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
+                </a>
+                <a
+                  href={AGENT_WEBSITE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Website"
+                  className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                >
                   <Globe className="w-4 h-4" />
-                </button>
-                <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
-                  <Printer className="w-4 h-4" />
-                </button>
-                <button className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors">
-                  <MoreHorizontal className="w-4 h-4" />
-                </button>
+                </a>
+                <a
+                  href={AGENT_GITHUB_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="GitHub"
+                  className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                >
+                  <Github className="w-4 h-4" />
+                </a>
               </div>
 
               <h1 className="text-2xl font-bold text-white mb-2">{agentName}</h1>
@@ -477,46 +611,70 @@ export function AgentDetailPage({
                 <p className="text-gray-500 text-sm italic">No description available</p>
               )}
 
-              <div className="grid grid-cols-4 gap-4 mt-6">
-                <TagColumn title="Chains" items={profile.chains} />
-                <TagColumn title="Protocols" items={profile.protocols} />
-                <TagColumn title="Tokens" items={profile.tokens} />
-                <PointsColumn metrics={metrics} />
-              </div>
-            </div>
+	              <div className="grid grid-cols-4 gap-4 mt-6">
+	                <TagColumn
+	                  title="Chains"
+	                  items={profile.chains}
+	                  iconsLoaded={iconsLoaded}
+	                  getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
+	                />
+	                <TagColumn
+	                  title="Protocols"
+	                  items={profile.protocols}
+	                  iconsLoaded={iconsLoaded}
+	                  getIconUri={(protocol) => {
+	                    const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+	                    if (!fallback) return null;
+	                    return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
+	                  }}
+	                />
+	                <TagColumn
+	                  title="Tokens"
+	                  items={profile.tokens}
+	                  iconsLoaded={iconsLoaded}
+	                  getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
+	                />
+	                <PointsColumn metrics={metrics} />
+	              </div>
+	            </div>
 
-	            <div className="flex items-center gap-2">
-	              <button
-	                onClick={() => setActiveTab('metrics')}
-	                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-	                  activeTab === 'metrics'
-	                    ? 'bg-[#fd6731] text-white'
-	                    : 'text-gray-400 hover:text-white'
-	                }`}
-	              >
-	                {resolveMetricsTabLabel(agentId)}
-	              </button>
-	              <button
-	                disabled
-	                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed"
-	              >
-                Chat
-              </button>
-            </div>
+            {agentId === 'agent-gmx-allora' ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setActiveTab('metrics')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === 'metrics'
+                        ? 'bg-[#fd6731] text-white'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Metrics
+                  </button>
+                  <button
+                    disabled
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed"
+                  >
+                    Chat
+                  </button>
+                </div>
 
-            {activeTab === 'metrics' && (
-              <MetricsTab
-                agentId={agentId}
-                profile={profile}
-                metrics={metrics}
-                fullMetrics={fullMetrics}
-                events={events}
-                transactions={transactions}
-              />
-            )}
-          </div>
-        </div>
-      </div>
+                {activeTab === 'metrics' ? (
+                  <MetricsTab
+                    agentId={agentId}
+                    profile={profile}
+                    metrics={metrics}
+                    fullMetrics={fullMetrics}
+                    events={events}
+                    transactions={transactions}
+                    hasLoadedView={hasLoadedView}
+                  />
+                ) : null}
+              </>
+            ) : null}
+	          </div>
+	        </div>
+	      </div>
 	    </div>
 	  );
 }
@@ -587,38 +745,35 @@ function TransactionHistoryTab({ transactions }: TransactionHistoryTabProps) {
         <p className="text-sm text-gray-500">{transactions.length} transactions</p>
       </div>
       <div className="divide-y divide-[#2a2a2a]">
-        {transactions
-          .slice(-10)
-          .reverse()
-          .map((tx, index) => (
-            <div key={`${tx.cycle}-${index}`} className="p-4 hover:bg-[#252525] transition-colors">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-white">
-                    Cycle {tx.cycle} • {tx.action}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {tx.txHash ? `${tx.txHash.slice(0, 12)}…` : 'pending'}
-                    {tx.reason ? ` · ${tx.reason}` : ''}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      tx.status === 'success'
-                        ? 'bg-teal-500/20 text-teal-400'
-                        : tx.status === 'failed'
-                          ? 'bg-red-500/20 text-red-400'
-                          : 'bg-yellow-500/20 text-yellow-400'
-                    }`}
-                  >
-                    {tx.status}
-                  </span>
-                  <span className="text-xs text-gray-500">{formatDate(tx.timestamp)}</span>
-                </div>
+        {transactions.slice(-10).reverse().map((tx, index) => (
+          <div key={`${tx.cycle}-${index}`} className="p-4 hover:bg-[#252525] transition-colors">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-white">
+                  Cycle {tx.cycle} • {tx.action}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {tx.txHash ? `${tx.txHash.slice(0, 12)}…` : 'pending'}
+                  {tx.reason ? ` · ${tx.reason}` : ''}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    tx.status === 'success'
+                      ? 'bg-teal-500/20 text-teal-400'
+                      : tx.status === 'failed'
+                        ? 'bg-red-500/20 text-red-400'
+                        : 'bg-yellow-500/20 text-yellow-400'
+                  }`}
+                >
+                  {tx.status}
+                </span>
+                <span className="text-xs text-gray-500">{formatDate(tx.timestamp)}</span>
               </div>
             </div>
-          ))}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -681,11 +836,6 @@ function AgentBlockersTab({
   settings,
   onSettingsChange,
 }: AgentBlockersTabProps) {
-  const preferredDelegatorAddress =
-    activeInterrupt && 'delegatorAddress' in activeInterrupt
-      ? activeInterrupt.delegatorAddress
-      : undefined;
-
   const {
     walletClient,
     privyWallet,
@@ -693,7 +843,7 @@ function AgentBlockersTab({
     switchChain,
     isLoading: isWalletLoading,
     error: walletError,
-  } = usePrivyWalletClient(preferredDelegatorAddress);
+  } = usePrivyWalletClient();
   const delegationsBypassEnabled =
     (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_DELEGATIONS_BYPASS : undefined) ===
     'true';
@@ -956,10 +1106,8 @@ function AgentBlockersTab({
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
-        const aValue =
-          typeof a.valueUsd === 'number' && Number.isFinite(a.valueUsd) ? a.valueUsd : null;
-        const bValue =
-          typeof b.valueUsd === 'number' && Number.isFinite(b.valueUsd) ? b.valueUsd : null;
+        const aValue = typeof a.valueUsd === 'number' && Number.isFinite(a.valueUsd) ? a.valueUsd : null;
+        const bValue = typeof b.valueUsd === 'number' && Number.isFinite(b.valueUsd) ? b.valueUsd : null;
         if (aValue !== null && bValue !== null && aValue !== bValue) {
           return bValue - aValue;
         }
@@ -1012,7 +1160,6 @@ function AgentBlockersTab({
     const interrupt = activeInterrupt as unknown as {
       chainId: number;
       delegationManager: `0x${string}`;
-      delegatorAddress: `0x${string}`;
       delegationsToSign: UnsignedDelegation[];
     };
 
@@ -1033,33 +1180,15 @@ function AgentBlockersTab({
       return;
     }
 
-    const requiredDelegatorAddress = interrupt.delegatorAddress.toLowerCase();
-    const signerAddress = walletClient.account?.address?.toLowerCase();
-    if (!signerAddress || signerAddress !== requiredDelegatorAddress) {
-      setError(
-        `Switch to Privy wallet ${interrupt.delegatorAddress} to sign delegations. Current signer: ${
-          walletClient.account?.address ?? 'unknown'
-        }.`,
-      );
-      return;
-    }
-
     setIsSigningDelegations(true);
     try {
       const signedDelegations = [];
       for (const delegation of delegationsToSign) {
-        if (delegation.delegator.toLowerCase() !== requiredDelegatorAddress) {
-          throw new Error(
-            `Delegation delegator ${delegation.delegator} does not match required signer ${interrupt.delegatorAddress}.`,
-          );
-        }
-        const allowInsecureUnrestrictedDelegation = delegation.caveats.length === 0;
         const signature = await signDelegation(walletClient, {
           delegation,
           delegationManager: interrupt.delegationManager,
           chainId: interrupt.chainId,
-          account: interrupt.delegatorAddress,
-          allowInsecureUnrestrictedDelegation,
+          account: walletClient.account,
         });
         signedDelegations.push({ ...delegation, signature });
       }
@@ -1069,11 +1198,7 @@ function AgentBlockersTab({
       onInterruptSubmit?.(response);
     } catch (signError: unknown) {
       const message =
-        signError instanceof Error
-          ? signError.message
-          : typeof signError === 'string'
-            ? signError
-            : 'Unknown error';
+        signError instanceof Error ? signError.message : typeof signError === 'string' ? signError : 'Unknown error';
       setError(`Failed to sign delegations: ${message}`);
     } finally {
       setIsSigningDelegations(false);
@@ -1142,19 +1267,19 @@ function AgentBlockersTab({
         <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
           <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Latest Activity</div>
           <div className="space-y-2">
-            {telemetry
-              .slice(-3)
-              .reverse()
-              .map((t, i) => (
-                <div key={`${t.cycle}-${i}`} className="flex items-center justify-between text-sm">
-                  <div>
-                    <span className="text-white">Cycle {t.cycle}</span>
-                    <span className="text-gray-500 mx-2">•</span>
-                    <span className="text-gray-400">{t.action}</span>
-                  </div>
-                  <span className="text-xs text-gray-500">{formatDate(t.timestamp)}</span>
+            {telemetry.slice(-3).reverse().map((t, i) => (
+              <div
+                key={`${t.cycle}-${i}`}
+                className="flex items-center justify-between text-sm"
+              >
+                <div>
+                  <span className="text-white">Cycle {t.cycle}</span>
+                  <span className="text-gray-500 mx-2">•</span>
+                  <span className="text-gray-400">{t.action}</span>
                 </div>
-              ))}
+                <span className="text-xs text-gray-500">{formatDate(t.timestamp)}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1163,8 +1288,8 @@ function AgentBlockersTab({
       <div>
         <h2 className="text-xl font-semibold text-white mb-2">Set up agent</h2>
         <p className="text-gray-400 text-sm mb-6">
-          Get this agent started working on your wallet in a few steps, delegate assets and set your
-          preferences.
+          Get this agent started working on your wallet in a few steps, delegate assets and set
+          your preferences.
         </p>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
@@ -1191,18 +1316,12 @@ function AgentBlockersTab({
                   </div>
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">
-                      Auto-selected yield
-                    </div>
+                    <div className="text-gray-300 text-sm font-medium mb-2">Auto-selected yield</div>
                     <p className="text-gray-400 text-xs">
-                      The agent will automatically select the highest-yield YT market and rotate
-                      when yields change.
+                      The agent will automatically select the highest-yield YT market and rotate when yields change.
                     </p>
                     <p className="text-gray-500 text-xs mt-3">
-                      Wallet:{' '}
-                      {connectedWalletAddress
-                        ? `${connectedWalletAddress.slice(0, 10)}…`
-                        : 'Not connected'}
+                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
                     </p>
                   </div>
                 </div>
@@ -1284,18 +1403,12 @@ function AgentBlockersTab({
                   </div>
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">
-                      Allora Signal Source
-                    </div>
+                    <div className="text-gray-300 text-sm font-medium mb-2">Allora Signal Source</div>
                     <p className="text-gray-400 text-xs">
-                      The agent consumes 8-hour Allora prediction feeds and enforces max 2x
-                      leverage.
+                      The agent consumes 8-hour Allora prediction feeds and enforces max 2x leverage.
                     </p>
                     <p className="text-gray-500 text-xs mt-3">
-                      Wallet:{' '}
-                      {connectedWalletAddress
-                        ? `${connectedWalletAddress.slice(0, 10)}…`
-                        : 'Not connected'}
+                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
                     </p>
                   </div>
                 </div>
@@ -1338,9 +1451,7 @@ function AgentBlockersTab({
                   </div>
 
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">
-                      Allocated Funds (USD)
-                    </label>
+                    <label className="block text-sm text-gray-400 mb-2">Allocated Funds (USD)</label>
                     <input
                       type="number"
                       value={baseContributionUsd}
@@ -1387,8 +1498,7 @@ function AgentBlockersTab({
                     <option value="">Choose a token...</option>
                     {fundingOptions.map((option) => (
                       <option key={option.address} value={option.address}>
-                        {option.symbol} — {formatFundingBalance(option)} (
-                        {option.address.slice(0, 8)}…)
+                        {option.symbol} — {formatFundingBalance(option)} ({option.address.slice(0, 8)}…)
                       </option>
                     ))}
                   </select>
@@ -1417,23 +1527,17 @@ function AgentBlockersTab({
                     <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
                       <div className="text-yellow-300 text-sm font-medium mb-2">Warnings</div>
                       <ul className="space-y-1 text-yellow-200 text-xs">
-                        {(activeInterrupt as unknown as { warnings: string[] }).warnings.map(
-                          (w) => (
-                            <li key={w}>{w}</li>
-                          ),
-                        )}
+                        {(activeInterrupt as unknown as { warnings: string[] }).warnings.map((w) => (
+                          <li key={w}>{w}</li>
+                        ))}
                       </ul>
                     </div>
                   ) : null}
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">
-                      What you are authorizing
-                    </div>
+                    <div className="text-gray-300 text-sm font-medium mb-2">What you are authorizing</div>
                     <ul className="space-y-1 text-gray-400 text-xs">
-                      {(
-                        activeInterrupt as unknown as { descriptions?: string[] }
-                      ).descriptions?.map((d) => (
+                      {(activeInterrupt as unknown as { descriptions?: string[] }).descriptions?.map((d) => (
                         <li key={d}>{d}</li>
                       ))}
                     </ul>
@@ -1468,9 +1572,9 @@ function AgentBlockersTab({
                         <button
                           type="button"
                           onClick={() =>
-                            switchChain(
-                              (activeInterrupt as unknown as { chainId: number }).chainId,
-                            ).catch(() => void 0)
+                            switchChain((activeInterrupt as unknown as { chainId: number }).chainId).catch(
+                              () => void 0,
+                            )
                           }
                           className="px-4 py-2 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white text-sm transition-colors"
                           disabled={isSigningDelegations}
@@ -1482,11 +1586,8 @@ function AgentBlockersTab({
                       type="button"
                       onClick={() =>
                         handleSignDelegations(
-                          (
-                            activeInterrupt as unknown as {
-                              delegationsToSign: UnsignedDelegation[];
-                            }
-                          ).delegationsToSign,
+                          (activeInterrupt as unknown as { delegationsToSign: UnsignedDelegation[] })
+                            .delegationsToSign,
                         )
                       }
                       className="px-6 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#fd6731]/90 text-white font-medium transition-colors disabled:opacity-60"
@@ -1571,17 +1672,20 @@ interface StatBoxProps {
   label: string;
   value: string | null;
   valueColor?: string;
+  isLoaded: boolean;
 }
 
-function StatBox({ label, value, valueColor = 'text-white' }: StatBoxProps) {
+function StatBox({ label, value, valueColor = 'text-white', isLoaded }: StatBoxProps) {
   return (
     <div>
       <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</div>
-      {value !== null ? (
-        <div className={`text-xl font-semibold ${valueColor}`}>{value}</div>
-      ) : (
-        <div className="text-gray-600 text-sm">—</div>
-      )}
+      {!isLoaded ? (
+        <Skeleton className="h-6 w-20" />
+      ) : value !== null ? (
+          <div className={`text-xl font-semibold ${valueColor}`}>{value}</div>
+        ) : (
+          <div className="text-gray-600 text-sm">-</div>
+        )}
     </div>
   );
 }
@@ -1589,9 +1693,11 @@ function StatBox({ label, value, valueColor = 'text-white' }: StatBoxProps) {
 interface TagColumnProps {
   title: string;
   items: string[];
+  iconsLoaded: boolean;
+  getIconUri: (item: string) => string | null;
 }
 
-function TagColumn({ title, items }: TagColumnProps) {
+function TagColumn({ title, items, iconsLoaded, getIconUri }: TagColumnProps) {
   if (items.length === 0) {
     return (
       <div>
@@ -1601,35 +1707,28 @@ function TagColumn({ title, items }: TagColumnProps) {
     );
   }
 
-  const getChainIcon = (chain: string) => {
-    const icons: Record<string, { bg: string; letter: string }> = {
-      arbitrum: { bg: 'bg-blue-500', letter: 'A' },
-      linea: { bg: 'bg-cyan-500', letter: 'L' },
-      abstract: { bg: 'bg-green-500', letter: 'A' },
-      polygon: { bg: 'bg-purple-500', letter: 'P' },
-      ethereum: { bg: 'bg-blue-600', letter: 'E' },
-      base: { bg: 'bg-blue-400', letter: 'B' },
-      optimism: { bg: 'bg-red-500', letter: 'O' },
-    };
-    return (
-      icons[chain.toLowerCase()] || { bg: 'bg-gray-500', letter: chain.charAt(0).toUpperCase() }
-    );
-  };
-
   return (
     <div>
       <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">{title}</div>
       <div className="space-y-1.5">
         {items.slice(0, 3).map((item) => {
-          const icon = getChainIcon(item);
+          const iconUri = getIconUri(item);
           return (
             <div key={item} className="flex items-center gap-2">
-              <div
-                className={`w-4 h-4 rounded-full ${icon.bg} flex items-center justify-center text-[8px] font-bold text-white`}
-              >
-                {icon.letter}
-              </div>
-              <span className="text-sm text-white capitalize">{item}</span>
+              {!iconsLoaded ? (
+                <Skeleton className="h-4 w-4 rounded-full" />
+              ) : iconUri ? (
+                <img
+                  src={proxyIconUri(iconUri)}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-4 w-4 rounded-full bg-[#111] ring-1 ring-[#2a2a2a] object-contain"
+                />
+              ) : (
+                <div className="h-4 w-4" aria-hidden="true" />
+              )}
+              <span className="text-sm text-white">{item}</span>
             </div>
           );
         })}
@@ -1685,38 +1784,16 @@ function PointsColumn({ metrics }: PointsColumnProps) {
   );
 }
 
-// Metrics Tab Component
-interface MetricsTabProps {
-  agentId: string;
-  profile: AgentProfile;
-  metrics: AgentMetrics;
-  fullMetrics?: AgentViewMetrics;
-  events: ClmmEvent[];
-  transactions: Transaction[];
-}
-
 type UnknownRecord = Record<string, unknown>;
 
 function asRecord(value: unknown): UnknownRecord | undefined {
   return value && typeof value === 'object' ? (value as UnknownRecord) : undefined;
 }
 
-function getNestedRecord(value: unknown, key: string): UnknownRecord | undefined {
-  const record = asRecord(value);
-  const nested = record ? record[key] : undefined;
-  return asRecord(nested);
-}
-
 function getStringField(value: unknown, key: string): string | undefined {
   const record = asRecord(value);
   const candidate = record ? record[key] : undefined;
   return typeof candidate === 'string' ? candidate : undefined;
-}
-
-function getNumberField(value: unknown, key: string): number | undefined {
-  const record = asRecord(value);
-  const candidate = record ? record[key] : undefined;
-  return typeof candidate === 'number' ? candidate : undefined;
 }
 
 function getBooleanField(value: unknown, key: string): boolean | undefined {
@@ -1732,58 +1809,51 @@ function getArrayField(value: unknown, key: string): unknown[] | undefined {
 }
 
 function getArtifactId(artifact: unknown): string | undefined {
-  const name = getStringField(artifact, 'name');
-  if (name && name.trim().length > 0) return name;
+  const artifactRecord = asRecord(artifact);
+  if (!artifactRecord) return undefined;
 
-  const artifactId = getStringField(artifact, 'artifactId');
-  if (artifactId && artifactId.trim().length > 0) return artifactId;
+  const idCandidate = artifactRecord['artifactId'];
+  if (typeof idCandidate === 'string' && idCandidate.trim().length > 0) return idCandidate;
 
-  const type = getStringField(artifact, 'type');
-  if (type && type.trim().length > 0) return type;
+  const nameCandidate = artifactRecord['name'];
+  if (typeof nameCandidate === 'string' && nameCandidate.trim().length > 0) return nameCandidate;
 
-  const id = getStringField(artifact, 'id');
-  if (id && id.trim().length > 0) return id;
+  const typeCandidate = artifactRecord['type'];
+  if (typeof typeCandidate === 'string' && typeCandidate.trim().length > 0) return typeCandidate;
+
+  const fallbackCandidate = artifactRecord['id'];
+  if (typeof fallbackCandidate === 'string' && fallbackCandidate.trim().length > 0) return fallbackCandidate;
 
   return undefined;
 }
 
-function getArtifactDescription(artifact: unknown): string | undefined {
-  const description = getStringField(artifact, 'description');
-  return description && description.trim().length > 0 ? description : undefined;
-}
-
 function getArtifactDataPart(artifact: unknown): UnknownRecord | undefined {
   const parts = getArrayField(artifact, 'parts');
-  if (parts) {
-    for (const part of parts) {
-      const record = asRecord(part);
-      if (!record) continue;
-      if (record['kind'] === 'data') {
-        const dataRecord = asRecord(record['data']);
-        if (dataRecord) return dataRecord;
-      }
-    }
+  if (!parts) return undefined;
+
+  for (const part of parts) {
+    const record = asRecord(part);
+    if (!record) continue;
+    if (record['kind'] !== 'data') continue;
+    const dataRecord = asRecord(record['data']);
+    if (dataRecord) return dataRecord;
   }
 
-  return getNestedRecord(artifact, 'data');
+  return undefined;
 }
 
-function toArbiscanTxUrl(txHash: string): string {
-  return `https://arbiscan.io/tx/${txHash}`;
+// Metrics Tab Component
+interface MetricsTabProps {
+  agentId: string;
+  profile: AgentProfile;
+  metrics: AgentMetrics;
+  fullMetrics?: AgentViewMetrics;
+  events: ClmmEvent[];
+  transactions: Transaction[];
+  hasLoadedView: boolean;
 }
 
-function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactions }: MetricsTabProps) {
-  if (agentId === 'agent-pendle') {
-    return (
-      <PendleMetricsTab
-        profile={profile}
-        metrics={metrics}
-        fullMetrics={fullMetrics}
-        events={events}
-      />
-    );
-  }
-
+function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactions, hasLoadedView }: MetricsTabProps) {
   if (agentId === 'agent-gmx-allora') {
     return (
       <GmxAlloraMetricsTab
@@ -1796,32 +1866,18 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
     );
   }
 
-  const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null && !Array.isArray(value);
-
-  const formatArtifactLabel = (artifact: unknown): string => {
-    if (!isRecord(artifact)) return 'unknown';
-
-    const name = artifact['name'];
-    if (typeof name === 'string' && name.trim().length > 0) return name;
-
-    const artifactId = artifact['artifactId'];
-    if (typeof artifactId === 'string' && artifactId.trim().length > 0) return artifactId;
-
-    const type = artifact['type'];
-    if (typeof type === 'string' && type.trim().length > 0) return type;
-
-    const id = artifact['id'];
-    if (typeof id === 'string' && id.trim().length > 0) return id;
-
-    return 'unknown';
-  };
-
-  const formatArtifactDescription = (artifact: unknown): string | null => {
-    if (!isRecord(artifact)) return null;
-    const description = artifact['description'];
-    return typeof description === 'string' && description.trim().length > 0 ? description : null;
-  };
+  if (agentId === 'agent-pendle') {
+    return (
+      <PendleMetricsTab
+        profile={profile}
+        metrics={metrics}
+        fullMetrics={fullMetrics}
+        events={events}
+        transactions={transactions}
+        hasLoadedView={hasLoadedView}
+      />
+    );
+  }
 
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
@@ -1855,24 +1911,20 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
     return `${minutes}m`;
   };
 
-  const formatTokenAmount = (
-    token: NonNullable<AgentViewMetrics['latestSnapshot']>['positionTokens'][number],
-  ) => {
+  const formatTokenAmount = (token: NonNullable<AgentViewMetrics['latestSnapshot']>['positionTokens'][number]) => {
     if (token.amount !== undefined) {
       return token.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
     }
     if (token.amountBaseUnits) {
       return formatUnits(BigInt(token.amountBaseUnits), token.decimals);
     }
-    return '—';
+    return null;
   };
 
   const latestSnapshot = fullMetrics?.latestSnapshot;
   const poolSnapshot = fullMetrics?.lastSnapshot;
   const poolName = formatPoolPair(poolSnapshot);
   const positionTokens = latestSnapshot?.positionTokens ?? [];
-  const resolvedApy = metrics.apy ?? profile.apy;
-  const resolvedAum = metrics.aumUsd ?? profile.aum;
 
   return (
     <div className="space-y-6">
@@ -1883,19 +1935,36 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
             <div className="text-2xl font-bold text-teal-400">
-              {resolvedApy !== undefined ? `${resolvedApy.toFixed(1)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-8 w-24"
+                loadedClassName="text-teal-400"
+                value={metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
             <div className="text-2xl font-bold text-white">
-              {resolvedAum !== undefined ? `$${resolvedAum.toLocaleString()}` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-8 w-28"
+                loadedClassName="text-white"
+                value={metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Earned Income</div>
             <div className="text-2xl font-bold text-white">
-              {profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-8 w-28"
+                loadedClassName="text-white"
+                value={
+                  profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : null
+                }
+              />
             </div>
           </div>
         </div>
@@ -1912,9 +1981,12 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
             <div className="text-white font-medium">
-              {latestSnapshot?.totalUsd !== undefined
-                ? `$${latestSnapshot.totalUsd.toLocaleString()}`
-                : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-24"
+                loadedClassName="text-white font-medium"
+                value={latestSnapshot?.totalUsd !== undefined ? `$${latestSnapshot.totalUsd.toLocaleString()}` : null}
+              />
             </div>
           </div>
           <div>
@@ -1926,9 +1998,12 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Fees (USD)</div>
             <div className="text-white font-medium">
-              {latestSnapshot?.feesUsd !== undefined
-                ? `$${latestSnapshot.feesUsd.toLocaleString()}`
-                : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-24"
+                loadedClassName="text-white font-medium"
+                value={latestSnapshot?.feesUsd !== undefined ? `$${latestSnapshot.feesUsd.toLocaleString()}` : null}
+              />
             </div>
           </div>
         </div>
@@ -1939,7 +2014,7 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
               {positionTokens.map((token) => (
                 <div key={token.address} className="flex items-center justify-between">
                   <span className="text-gray-300">{token.symbol}</span>
-                  <span className="text-white font-medium">{formatTokenAmount(token)}</span>
+                  <span className="text-white font-medium">{formatTokenAmount(token) ?? '-'}</span>
                 </div>
               ))}
             </div>
@@ -1953,22 +2028,26 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
           label="Iteration"
-          value={metrics.iteration?.toString() ?? '—'}
+          isLoaded={hasLoadedView}
+          value={metrics.iteration?.toString() ?? null}
           icon={<TrendingUp className="w-4 h-4 text-teal-400" />}
         />
         <MetricCard
           label="Cycles Since Rebalance"
-          value={metrics.cyclesSinceRebalance?.toString() ?? '—'}
+          isLoaded={hasLoadedView}
+          value={metrics.cyclesSinceRebalance?.toString() ?? null}
           icon={<Minus className="w-4 h-4 text-yellow-400" />}
         />
         <MetricCard
           label="Rebalance Cycles"
-          value={metrics.rebalanceCycles?.toString() ?? '—'}
+          isLoaded={hasLoadedView}
+          value={metrics.rebalanceCycles?.toString() ?? null}
           icon={<RefreshCw className="w-4 h-4 text-blue-400" />}
         />
         <MetricCard
           label="Previous Price"
-          value={fullMetrics?.previousPrice?.toFixed(6) ?? '—'}
+          isLoaded={hasLoadedView}
+          value={fullMetrics?.previousPrice?.toFixed(6) ?? null}
           icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
         />
       </div>
@@ -1989,7 +2068,12 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
             <div>
               <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Mid Price</div>
               <div className="text-white font-medium">
-                {fullMetrics.latestCycle.midPrice?.toFixed(6) ?? '—'}
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-24"
+                  loadedClassName="text-white font-medium"
+                  value={fullMetrics.latestCycle.midPrice?.toFixed(6) ?? null}
+                />
               </div>
             </div>
             <div>
@@ -2013,38 +2097,27 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
         <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
           <div className="space-y-3 max-h-64 overflow-y-auto">
-            {events
-              .slice(-10)
-              .reverse()
-              .map((event, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
-                  <div
-                    className={`w-2 h-2 rounded-full mt-2 ${
-                      event.type === 'status'
-                        ? 'bg-blue-400'
-                        : event.type === 'artifact'
-                          ? 'bg-purple-400'
-                          : 'bg-gray-400'
-                    }`}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-gray-500 uppercase tracking-wide">
-                      {event.type}
-                    </div>
-                    <div className="text-sm text-white mt-1">
-                      {event.type === 'status' && event.message}
-                      {event.type === 'artifact' && `Artifact: ${formatArtifactLabel(event.artifact)}`}
-                      {event.type === 'dispatch-response' &&
-                        `Response with ${event.parts?.length ?? 0} parts`}
-                    </div>
-                    {event.type === 'artifact' && formatArtifactDescription(event.artifact) && (
-                      <div className="text-xs text-gray-400 mt-1 truncate">
-                        {formatArtifactDescription(event.artifact)}
-                      </div>
-                    )}
+            {events.slice(-10).reverse().map((event, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                <div
+                  className={`w-2 h-2 rounded-full mt-2 ${
+                    event.type === 'status'
+                      ? 'bg-blue-400'
+                      : event.type === 'artifact'
+                        ? 'bg-purple-400'
+                        : 'bg-gray-400'
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
+                  <div className="text-sm text-white mt-1">
+                    {event.type === 'status' && event.message}
+                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
                   </div>
                 </div>
-              ))}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -2052,13 +2125,22 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
   );
 }
 
+function toArbiscanTxUrl(txHash: string) {
+  return `https://arbiscan.io/tx/${txHash}`;
+}
+
+type GmxAlloraMetricsTabProps = Pick<
+  MetricsTabProps,
+  'profile' | 'metrics' | 'fullMetrics' | 'events' | 'transactions'
+>;
+
 function GmxAlloraMetricsTab({
   profile,
   metrics,
   fullMetrics,
   events,
   transactions,
-}: Omit<MetricsTabProps, 'agentId'>) {
+}: GmxAlloraMetricsTabProps) {
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
@@ -2106,7 +2188,8 @@ function GmxAlloraMetricsTab({
   const executionTxHashes = Array.from(
     new Set(
       executionHashCandidates.filter(
-        (value): value is string => typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value),
+        (value): value is string =>
+          typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value),
       ),
     ),
   );
@@ -2123,12 +2206,12 @@ function GmxAlloraMetricsTab({
           : latestTransaction?.status === 'failed'
             ? 'failed'
             : 'pending';
+
   const marketLabel = latestCycle?.marketSymbol ?? formatPoolPair(fullMetrics?.lastSnapshot);
   const sideLabel = latestCycle?.side ? latestCycle.side.toUpperCase() : '—';
+
   const displayedLeverage = latestCycle?.leverage ?? latestSnapshot?.leverage;
   const displayedNotionalUsd = latestCycle?.sizeUsd ?? latestSnapshot?.totalUsd;
-  const positionStatus =
-    latestCycle?.action === 'close' ? 'Closed' : latestSnapshot?.totalUsd && latestSnapshot.totalUsd > 0 ? 'Open' : 'Pending';
 
   return (
     <div className="space-y-6">
@@ -2138,7 +2221,11 @@ function GmxAlloraMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
             <div className="text-2xl font-bold text-teal-400">
-              {metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : profile.apy !== undefined ? `${profile.apy.toFixed(1)}%` : '—'}
+              {metrics.apy !== undefined
+                ? `${metrics.apy.toFixed(1)}%`
+                : profile.apy !== undefined
+                  ? `${profile.apy.toFixed(1)}%`
+                  : '—'}
             </div>
           </div>
           <div>
@@ -2196,14 +2283,16 @@ function GmxAlloraMetricsTab({
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Executed At</div>
-            <div className="text-white font-medium">{formatDate(latestTransaction?.timestamp ?? latestCycle?.timestamp)}</div>
+            <div className="text-white font-medium">
+              {formatDate(latestTransaction?.timestamp ?? latestCycle?.timestamp)}
+            </div>
           </div>
         </div>
-        {executionError && (
+        {executionError ? (
           <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
             {executionError}
           </div>
-        )}
+        ) : null}
         <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
           <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Transaction Hashes</div>
           {executionTxHashes.length > 0 ? (
@@ -2230,10 +2319,6 @@ function GmxAlloraMetricsTab({
         <h3 className="text-lg font-semibold text-white mb-4">Perp Position + Allora Signal</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Status</div>
-            <div className="text-white font-medium">{positionStatus}</div>
-          </div>
-          <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
             <div className="text-white font-medium">{formatUsd(latestSnapshot?.totalUsd)}</div>
           </div>
@@ -2248,26 +2333,10 @@ function GmxAlloraMetricsTab({
             <div className="text-white font-medium">{formatUsd(displayedNotionalUsd)}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Signal Direction</div>
-            <div className="text-white font-medium">{latestPrediction?.direction ?? '—'}</div>
-          </div>
-          <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Signal Confidence</div>
             <div className="text-white font-medium">
               {latestPrediction?.confidence !== undefined
                 ? `${(latestPrediction.confidence * 100).toFixed(1)}%`
-                : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Predicted Price</div>
-            <div className="text-white font-medium">{formatUsd(latestPrediction?.predictedPrice, 6)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Decision Threshold</div>
-            <div className="text-white font-medium">
-              {latestDecisionMetrics?.decisionThreshold !== undefined
-                ? `${(latestDecisionMetrics.decisionThreshold * 100).toFixed(1)}%`
                 : '—'}
             </div>
           </div>
@@ -2286,61 +2355,26 @@ function GmxAlloraMetricsTab({
             <div className="text-white font-medium">{metrics.staleCycles ?? '—'}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reference Price</div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Decision Threshold</div>
             <div className="text-white font-medium">
-              {fullMetrics?.previousPrice !== undefined ? fullMetrics.previousPrice.toFixed(6) : '—'}
+              {latestDecisionMetrics?.decisionThreshold !== undefined
+                ? `${(latestDecisionMetrics.decisionThreshold * 100).toFixed(1)}%`
+                : '—'}
             </div>
           </div>
         </div>
       </div>
-
-      {events.length > 0 && (
-        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
-          <div className="space-y-3 max-h-64 overflow-y-auto">
-            {events
-              .slice(-10)
-              .reverse()
-              .map((event, index) => {
-                const artifactId = event.type === 'artifact' ? getArtifactId(event.artifact) : undefined;
-                const description = event.type === 'artifact' ? getArtifactDescription(event.artifact) : undefined;
-                return (
-                  <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
-                    <div
-                      className={`w-2 h-2 rounded-full mt-2 ${
-                        event.type === 'status'
-                          ? 'bg-blue-400'
-                          : event.type === 'artifact'
-                            ? 'bg-purple-400'
-                            : 'bg-gray-400'
-                      }`}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
-                      <div className="text-sm text-white mt-1">
-                        {event.type === 'status' && event.message}
-                        {event.type === 'artifact' && `Artifact: ${artifactId ?? 'unknown'}`}
-                        {event.type === 'dispatch-response' &&
-                          `Response with ${event.parts?.length ?? 0} parts`}
-                      </div>
-                      {description && <div className="text-xs text-gray-400 mt-1">{description}</div>}
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
 function PendleMetricsTab({
-  profile: _profile,
+  profile,
   metrics,
   fullMetrics,
-  events: _events,
-}: Omit<MetricsTabProps, 'agentId' | 'transactions'>) {
+  events,
+  hasLoadedView,
+}: Omit<MetricsTabProps, 'agentId'>) {
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
@@ -2354,7 +2388,7 @@ function PendleMetricsTab({
   };
 
   const formatUsd = (value?: number) => {
-    if (value === undefined) return '—';
+    if (value === undefined) return null;
     return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
   };
 
@@ -2362,10 +2396,10 @@ function PendleMetricsTab({
     amountBaseUnits?: string;
     decimals: number;
     fallbackRaw?: string;
-  }): string => {
+  }): string | null => {
     const { amountBaseUnits, decimals, fallbackRaw } = params;
     if (!amountBaseUnits) {
-      return fallbackRaw ?? '—';
+      return fallbackRaw ?? null;
     }
     try {
       const formatted = formatUnits(BigInt(amountBaseUnits), decimals);
@@ -2373,7 +2407,7 @@ function PendleMetricsTab({
       if (!fraction) return whole;
       return `${whole}.${fraction.slice(0, 6)}`; // keep UI compact
     } catch {
-      return fallbackRaw ?? '—';
+      return fallbackRaw ?? null;
     }
   };
 
@@ -2416,13 +2450,27 @@ function PendleMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Current APY</div>
             <div className="text-white font-medium">
-              {strategy?.currentApy !== undefined ? `${strategy.currentApy.toFixed(2)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-20"
+                loadedClassName="text-white font-medium"
+                value={strategy?.currentApy !== undefined ? `${strategy.currentApy.toFixed(2)}%` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Contribution</div>
             <div className="text-white font-medium">
-              {strategy?.baseContributionUsd !== undefined ? `$${strategy.baseContributionUsd.toLocaleString()}` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-24"
+                loadedClassName="text-white font-medium"
+                value={
+                  strategy?.baseContributionUsd !== undefined
+                    ? `$${strategy.baseContributionUsd.toLocaleString()}`
+                    : null
+                }
+              />
             </div>
           </div>
         </div>
@@ -2434,13 +2482,23 @@ function PendleMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Best APY</div>
             <div className="text-white font-medium">
-              {strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-20"
+                loadedClassName="text-white font-medium"
+                value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Delta</div>
             <div className="text-white font-medium">
-              {strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-20"
+                loadedClassName="text-white font-medium"
+                value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : null}
+              />
             </div>
           </div>
           <div>
@@ -2456,13 +2514,18 @@ function PendleMetricsTab({
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">APY Details</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {apyDetails.map((entry) => (
-                <div key={entry.label}>
-                  <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{entry.label}</div>
-                  <div className="text-white font-medium">
-                    {entry.value !== undefined ? `${entry.value.toFixed(2)}%` : '—'}
+                  <div key={entry.label}>
+                    <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{entry.label}</div>
+                    <div className="text-white font-medium">
+                      <LoadingValue
+                        isLoaded={hasLoadedView}
+                        skeletonClassName="h-5 w-20"
+                        loadedClassName="text-white font-medium"
+                        value={entry.value !== undefined ? `${entry.value.toFixed(2)}%` : null}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
         )}
@@ -2474,62 +2537,107 @@ function PendleMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PT</div>
             <div className="text-white font-medium">
-              {ptSymbol
-                ? `${ptSymbol} ${formatTokenAmount({
-                    amountBaseUnits: ptToken?.amountBaseUnits,
-                    decimals: ptToken?.decimals ?? 18,
-                    fallbackRaw: strategy?.position?.ptAmount,
-                  })}`.trim()
-                : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-28"
+                loadedClassName="text-white font-medium"
+                value={
+                  ptSymbol
+                    ? `${ptSymbol} ${
+                        formatTokenAmount({
+                          amountBaseUnits: ptToken?.amountBaseUnits,
+                          decimals: ptToken?.decimals ?? 18,
+                          fallbackRaw: strategy?.position?.ptAmount,
+                        }) ?? '-'
+                      }`.trim()
+                    : null
+                }
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">YT</div>
             <div className="text-white font-medium">
-              {ytSymbol
-                ? `${ytSymbol} ${formatTokenAmount({
-                    amountBaseUnits: ytToken?.amountBaseUnits,
-                    decimals: ytToken?.decimals ?? 18,
-                    fallbackRaw: strategy?.position?.ytAmount,
-                  })}`.trim()
-                : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-28"
+                loadedClassName="text-white font-medium"
+                value={
+                  ytSymbol
+                    ? `${ytSymbol} ${
+                        formatTokenAmount({
+                          amountBaseUnits: ytToken?.amountBaseUnits,
+                          decimals: ytToken?.decimals ?? 18,
+                          fallbackRaw: strategy?.position?.ytAmount,
+                        }) ?? '-'
+                      }`.trim()
+                    : null
+                }
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Implied Yield</div>
             <div className="text-white font-medium">
-              {impliedYieldPct !== undefined ? `${impliedYieldPct.toFixed(2)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-20"
+                loadedClassName="text-white font-medium"
+                value={impliedYieldPct !== undefined ? `${impliedYieldPct.toFixed(2)}%` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Value</div>
-            <div className="text-white font-medium">{formatUsd(latestSnapshot?.totalUsd)}</div>
+            <div className="text-white font-medium">
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-24"
+                loadedClassName="text-white font-medium"
+                value={formatUsd(latestSnapshot?.totalUsd)}
+              />
+            </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Net PnL</div>
             <div className="text-white font-medium">
-              {snapshot?.netPnlUsd !== undefined ? (
-                <>
-                  {formatUsd(snapshot.netPnlUsd)}
-                  {snapshot.netPnlPct !== undefined && (
-                    <span className="text-gray-400">{` (${snapshot.netPnlPct.toFixed(2)}%)`}</span>
-                  )}
-                </>
-              ) : (
-                '—'
-              )}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-32"
+                loadedClassName="text-white font-medium"
+                value={
+                  snapshot?.netPnlUsd !== undefined ? (
+                    <>
+                      {formatUsd(snapshot.netPnlUsd)}
+                      {snapshot.netPnlPct !== undefined && (
+                        <span className="text-gray-400">{` (${snapshot.netPnlPct.toFixed(2)}%)`}</span>
+                      )}
+                    </>
+                  ) : null
+                }
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
             <div className="text-white font-medium">
-              {metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-20"
+                loadedClassName="text-white font-medium"
+                value={metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : null}
+              />
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
             <div className="text-white font-medium">
-              {metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}
+              <LoadingValue
+                isLoaded={hasLoadedView}
+                skeletonClassName="h-5 w-24"
+                loadedClassName="text-white font-medium"
+                value={metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : null}
+              />
             </div>
           </div>
         </div>
@@ -2545,28 +2653,129 @@ function PendleMetricsTab({
               ))}
             </div>
           ) : (
-            <div className="text-sm text-gray-400">—</div>
+            <div className="text-gray-400 text-sm">—</div>
           )}
         </div>
       </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard
+          label="Iteration"
+          isLoaded={hasLoadedView}
+          value={metrics.iteration?.toString() ?? null}
+          icon={<TrendingUp className="w-4 h-4 text-teal-400" />}
+        />
+        <MetricCard
+          label="Cycles Since Rotation"
+          isLoaded={hasLoadedView}
+          value={metrics.cyclesSinceRebalance?.toString() ?? null}
+          icon={<Minus className="w-4 h-4 text-yellow-400" />}
+        />
+        <MetricCard
+          label="Best APY"
+          isLoaded={hasLoadedView}
+          value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : null}
+          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
+        />
+        <MetricCard
+          label="APY Delta"
+          isLoaded={hasLoadedView}
+          value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : null}
+          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
+        />
+      </div>
+
+      {latestCycle && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Latest Cycle</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
+              <div className="text-white font-medium">{latestCycle.cycle}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
+              <div className="text-white font-medium">{latestCycle.action}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+              <div className="text-white font-medium">
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-20"
+                  loadedClassName="text-white font-medium"
+                  value={latestCycle.apy !== undefined ? `${latestCycle.apy.toFixed(2)}%` : null}
+                />
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Timestamp</div>
+              <div className="text-white font-medium">{formatDate(latestCycle.timestamp)}</div>
+            </div>
+          </div>
+          {latestCycle.reason && (
+            <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reason</div>
+              <div className="text-gray-300 text-sm">{latestCycle.reason}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {events.slice(-10).reverse().map((event, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                <div
+                  className={`w-2 h-2 rounded-full mt-2 ${
+                    event.type === 'status'
+                      ? 'bg-blue-400'
+                      : event.type === 'artifact'
+                        ? 'bg-purple-400'
+                        : 'bg-gray-400'
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
+                  <div className="text-sm text-white mt-1">
+                    {event.type === 'status' && event.message}
+                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 interface MetricCardProps {
   label: string;
-  value: string;
+  value: string | null;
+  isLoaded: boolean;
   icon: React.ReactNode;
 }
 
-function MetricCard({ label, value, icon }: MetricCardProps) {
+function MetricCard({ label, value, isLoaded, icon }: MetricCardProps) {
   return (
     <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
       <div className="flex items-center gap-2 mb-2">
         {icon}
         <span className="text-xs text-gray-500 uppercase tracking-wide">{label}</span>
       </div>
-      <div className="text-xl font-semibold text-white">{value}</div>
+      <div className="text-xl font-semibold text-white">
+        <LoadingValue
+          isLoaded={isLoaded}
+          skeletonClassName="h-6 w-20"
+          loadedClassName="text-white"
+          value={value}
+        />
+      </div>
     </div>
   );
 }
@@ -2585,7 +2794,8 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
     if (!onSettingsChange) return;
 
     const trimmedAmount = localAmount.trim();
-    const parsedAmount = trimmedAmount === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedAmount);
+    const parsedAmount =
+      trimmedAmount === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedAmount);
     if (!Number.isFinite(parsedAmount) || parsedAmount < MIN_BASE_CONTRIBUTION_USD) {
       return;
     }

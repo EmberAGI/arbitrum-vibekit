@@ -162,7 +162,7 @@ html {
 
 .agent-table th {
   text-align: left;
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 1rem;
   font-size: 0.75rem;
   font-weight: 500;
   text-transform: uppercase;
@@ -172,12 +172,22 @@ html {
 }
 
 .agent-table td {
-  padding: 0.75rem 1rem;
+  padding: 0.7rem 1rem;
   border-bottom: 1px solid hsl(var(--border));
 }
 
 .agent-table tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Hide scrollbars without changing scroll behavior (used for featured carousel). */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Star rating styles */
