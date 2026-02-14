@@ -160,6 +160,16 @@ html {
   border-spacing: 0;
 }
 
+.hire-agents-page .agent-table th {
+  padding: 0.55rem 1rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+}
+
+.hire-agents-page .agent-table td {
+  padding: 0.65rem 1rem;
+}
+
 .agent-table th {
   text-align: left;
   padding: 0.625rem 1rem;

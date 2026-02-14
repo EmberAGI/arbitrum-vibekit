@@ -15,7 +15,7 @@ export function SearchBar({ value, onChange, placeholder = 'Search' }: SearchBar
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full h-10 pl-11 pr-4 rounded-full bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:border-[color:var(--hire-accent)] focus:ring-2 focus:ring-[color:var(--hire-accent-soft)] transition-colors"
+        className="w-full h-10 pl-11 pr-4 rounded-full bg-white/5 border border-white/10 text-white text-[13px] placeholder:text-gray-500 focus:outline-none focus:border-[color:var(--hire-accent)] focus:ring-2 focus:ring-[color:var(--hire-accent-soft)] transition-colors"
       />
     </div>
   );

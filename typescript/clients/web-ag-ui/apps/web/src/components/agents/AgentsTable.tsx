@@ -32,7 +32,7 @@ interface AgentsTableProps {
 export function AgentsTable({ agents, onAgentClick, onAgentAction, iconsLoaded }: AgentsTableProps) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-      <table className="agent-table">
+      <table className="agent-table text-sm">
         <thead className="bg-black/20">
           <tr>
             <th className="w-12"></th>
@@ -77,14 +77,14 @@ function AgentRow({ agent, iconsLoaded, onClick, onAction }: AgentRowProps) {
   return (
     <tr className="hover:bg-white/5 transition-colors cursor-pointer" onClick={onClick}>
       <td className="text-center">
-        <span className="text-sm text-gray-500">#{agent.rank}</span>
+        <span className="text-xs text-gray-500">#{agent.rank}</span>
       </td>
       <td>
         <div className="flex items-center gap-3">
           {!iconsLoaded ? (
-            <Skeleton className="h-12 w-12 rounded-full" />
+            <Skeleton className="h-10 w-10 rounded-full" />
           ) : (
-            <div className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden bg-black/30 ring-1 ring-white/10">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden bg-black/30 ring-1 ring-white/10">
               {agent.iconUri ? (
                 <img
                   src={proxyIconUri(agent.iconUri)}
@@ -99,12 +99,12 @@ function AgentRow({ agent, iconsLoaded, onClick, onAction }: AgentRowProps) {
           <div>
             <div className="flex items-center gap-2">
               {agent.isActive && <span className="w-2 h-2 rounded-full bg-teal-400" />}
-              <span className="font-medium text-white">{agent.name}</span>
+              <span className="font-medium text-white text-[15px] leading-5">{agent.name}</span>
             </div>
             <div className="flex items-center gap-1 mt-0.5">
-              <span className="text-xs text-gray-500">by</span>
-              <span className="text-xs text-[color:var(--hire-accent)]">{agent.creator}</span>
-              {agent.creatorVerified && <span className="text-xs text-blue-400">✓</span>}
+              <span className="text-[12px] text-gray-500">by</span>
+              <span className="text-[12px] text-[color:var(--hire-accent)]">{agent.creator}</span>
+              {agent.creatorVerified && <span className="text-[12px] text-blue-400">✓</span>}
             </div>
           </div>
           <div className="star-rating ml-2">

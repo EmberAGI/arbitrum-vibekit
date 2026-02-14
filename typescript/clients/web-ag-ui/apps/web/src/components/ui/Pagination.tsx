@@ -8,8 +8,8 @@ interface PaginationProps {
 
 export function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
   return (
-    <div className="flex items-center justify-end gap-4 mt-6">
-      <span className="text-sm text-gray-400">
+    <div className="flex items-center justify-end gap-4 mt-5">
+      <span className="text-[13px] text-gray-400">
         Page {currentPage} of {totalPages}
       </span>
       <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-1">

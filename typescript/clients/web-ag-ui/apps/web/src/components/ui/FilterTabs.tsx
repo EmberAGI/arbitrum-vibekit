@@ -29,7 +29,7 @@ export function FilterTabs({ tabs, activeTab, onTabChange }: FilterTabsProps) {
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
             className={[
-              'flex items-center gap-2 h-10 px-4 rounded-full text-sm transition-colors',
+              'flex items-center gap-2 h-10 px-4 rounded-full text-[13px] transition-colors',
               isActive ? activeClassName : inactiveClassName,
             ].join(' ')}
           >
@@ -52,4 +52,3 @@ export function FilterTabs({ tabs, activeTab, onTabChange }: FilterTabsProps) {
     </div>
   );
 }
-

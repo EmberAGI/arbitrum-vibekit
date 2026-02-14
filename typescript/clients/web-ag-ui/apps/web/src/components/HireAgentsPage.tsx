@@ -195,7 +195,7 @@ export function HireAgentsPage({
   return (
     <div
       className={[
-        'flex-1 overflow-y-auto p-8',
+        'hire-agents-page flex-1 overflow-y-auto p-8',
         '[--hire-accent:#8b5cf6]',
         '[--hire-accent-hover:#7c3aed]',
         '[--hire-accent-soft:rgba(139,92,246,0.18)]',
@@ -205,7 +205,9 @@ export function HireAgentsPage({
       <div className="max-w-[1400px] mx-auto">
         <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-[#14141a] to-[#0e0e12] shadow-[0_20px_80px_rgba(0,0,0,0.35)] p-8">
           {/* Page Header */}
-          <h1 className="text-3xl font-semibold text-white tracking-tight mb-6">Hire Agents</h1>
+          <h1 className="text-[28px] leading-[1.1] font-semibold text-white tracking-tight mb-5">
+            Hire Agents
+          </h1>
 
           {/* Banner CTA */}
           <div className="relative mb-8 rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-r from-[#191527] via-[#151625] to-[#12121a]">
@@ -215,7 +217,7 @@ export function HireAgentsPage({
               <div className="absolute inset-0 opacity-50 bg-[radial-gradient(circle_at_70%_60%,rgba(236,72,153,0.10),transparent_60%)]" />
               <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-black/60" />
             </div>
-            <div className="relative flex items-center justify-between gap-6 p-6">
+            <div className="relative flex items-center justify-between gap-6 p-5">
               <div className="flex items-center gap-5 min-w-0">
                 <div className="w-24 h-24 rounded-2xl bg-black/25 border border-white/10 flex items-center justify-center overflow-hidden">
                   <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
@@ -223,15 +225,15 @@ export function HireAgentsPage({
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <h2 className="text-xl font-semibold text-white mb-1">
+                  <h2 className="text-lg font-semibold text-white mb-1">
                     Publish your agent for hire
                   </h2>
-                  <p className="text-gray-400 text-sm">
+                  <p className="text-gray-400 text-[13px] leading-5">
                     Your agent earns for it&apos;s services. And so do you.
                   </p>
                 </div>
               </div>
-              <button className="shrink-0 h-10 px-5 rounded-full bg-[color:var(--hire-accent)] hover:bg-[color:var(--hire-accent-hover)] text-white text-sm font-medium transition-colors">
+              <button className="shrink-0 h-10 px-5 rounded-full bg-[color:var(--hire-accent)] hover:bg-[color:var(--hire-accent-hover)] text-white text-[13px] font-medium transition-colors">
                 Publish
               </button>
             </div>
@@ -239,8 +241,8 @@ export function HireAgentsPage({
 
           {/* Featured Agents Carousel */}
           {displayFeaturedAgents.length > 0 && (
-            <div className="mb-8">
-              <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+            <div className="mb-7">
+              <div className="flex gap-4 overflow-x-auto pb-3 scrollbar-hide">
                 {displayFeaturedAgents.map((agent, index) => {
                   const chainIconUris = resolveChainIconUris({
                     chainNames: agent.chains ?? [],
@@ -279,7 +281,7 @@ export function HireAgentsPage({
           )}
 
           {/* Search and Filters */}
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex items-center gap-4 mb-5">
             <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search" />
 
             <div className="flex items-center gap-2">
@@ -287,7 +289,7 @@ export function HireAgentsPage({
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                  className="appearance-none h-10 flex items-center gap-2 px-4 pr-9 rounded-full bg-white/5 border border-white/10 hover:bg-white/7 hover:border-white/15 transition-colors text-sm cursor-pointer focus:outline-none focus:border-[color:var(--hire-accent)] focus:ring-2 focus:ring-[color:var(--hire-accent-soft)]"
+                  className="appearance-none h-10 flex items-center gap-2 px-4 pr-9 rounded-full bg-white/5 border border-white/10 hover:bg-white/7 hover:border-white/15 transition-colors text-[13px] cursor-pointer focus:outline-none focus:border-[color:var(--hire-accent)] focus:ring-2 focus:ring-[color:var(--hire-accent-soft)]"
                 >
                   <option value="income">Sort by: Income</option>
                   <option value="apy">Sort by: APY</option>
@@ -299,7 +301,7 @@ export function HireAgentsPage({
 
               <button className="h-10 flex items-center gap-2 px-4 rounded-full bg-white/5 border border-white/10 hover:bg-white/7 hover:border-white/15 transition-colors">
                 <SlidersHorizontal className="w-4 h-4" />
-                <span className="text-sm">Filter</span>
+                <span className="text-[13px]">Filter</span>
               </button>
             </div>
 
@@ -431,7 +433,7 @@ function FeaturedAgentCard({
 
       {/* Main content: Name and avatar */}
       <div className="px-4 pb-4">
-        <h3 className="font-bold text-white text-lg leading-snug mb-3">
+        <h3 className="text-[17px] leading-[1.2] font-semibold text-white mb-2.5">
           {agent.name}
         </h3>
 
@@ -578,13 +580,13 @@ function FeaturedStat({
 }) {
   return (
     <div>
-      <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">{label}</div>
+      <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">{label}</div>
       {!isLoaded ? (
         <Skeleton className="h-5 w-14" />
       ) : value !== null ? (
-          <div className={`font-semibold text-base ${valueClassName}`}>{value}</div>
+          <div className={`font-semibold text-[15px] leading-5 ${valueClassName}`}>{value}</div>
         ) : (
-          <div className="text-gray-500 font-semibold text-base">-</div>
+          <div className="text-gray-500 font-semibold text-[15px] leading-5">-</div>
         )}
     </div>
   );
