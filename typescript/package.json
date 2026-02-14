@@ -10,7 +10,7 @@
   },
   "scripts": {
     "clean": "rimraf .pnpm '**/node_modules' '**/dist' '**/dist-test' '**/*.tsbuildinfo' && echo 'Workspace cleaned.'",
-    "build": "pnpm -r --stream --filter '!./community/**' --filter '!test-utils' --filter '!./clients/web-legacy' --filter '!./clients/web-ag-ui/apps/**' run build",
+    "build": "pnpm -r --stream --filter '!./community/**' --filter '!test-utils' --filter '!./clients/web-legacy' --filter '!./clients/web-ag-ui' --filter '!./clients/web-ag-ui/apps/**' run build && pnpm -C clients/web-ag-ui build",
     "build:sequential": "pnpm recursive run --sort --workspace-concurrency=1 build",
     "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:build": "docker compose build --no-cache",
