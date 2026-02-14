@@ -23,6 +23,8 @@ type AgentListEntry = {
   metrics?: AgentViewMetrics;
   taskId?: string;
   taskState?: TaskState;
+  command?: string;
+  taskMessage?: string;
   haltReason?: string;
   executionError?: string;
   synced: boolean;
@@ -38,10 +40,12 @@ const AgentListContext = createContext<AgentListState | null>(null);
 
 const SyncResponseSchema = z.object({
   agentId: z.string(),
+  command: z.string().nullable().optional(),
   profile: z.record(z.unknown()).nullable().optional(),
   metrics: z.record(z.unknown()).nullable().optional(),
   taskId: z.string().nullable().optional(),
   taskState: z.string().nullable().optional(),
+  taskMessage: z.string().nullable().optional(),
   haltReason: z.string().nullable().optional(),
   executionError: z.string().nullable().optional(),
 });
@@ -150,10 +154,12 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
           synced: true,
           profile: (payload.data.profile ?? undefined) as AgentViewProfile | undefined,
           metrics: (payload.data.metrics ?? undefined) as AgentViewMetrics | undefined,
+          command: payload.data.command ?? undefined,
           taskId,
           taskState: hasTask
             ? ((payload.data.taskState ?? undefined) as TaskState | undefined)
             : undefined,
+          taskMessage: hasTask ? (payload.data.taskMessage ?? undefined) : undefined,
           haltReason: hasTask ? (payload.data.haltReason ?? undefined) : undefined,
           executionError: hasTask ? (payload.data.executionError ?? undefined) : undefined,
           error: undefined,

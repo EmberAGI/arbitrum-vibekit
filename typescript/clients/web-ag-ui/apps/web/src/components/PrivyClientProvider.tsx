@@ -7,9 +7,14 @@ export function PrivyClientProvider({ children }: { children: React.ReactNode })
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
   if (!appId) {
-    throw new Error(
-      'Privy is not configured. Set NEXT_PUBLIC_PRIVY_APP_ID to a valid Privy App ID and restart the dev server.',
-    );
+    // Privy is optional for CI builds and local dev. If it's not configured, we render
+    // the app without auth features rather than crashing during prerender.
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(
+        'Privy is not configured. Set NEXT_PUBLIC_PRIVY_APP_ID to a valid Privy App ID to enable auth features.',
+      );
+    }
+    return <>{children}</>;
   }
 
   return (

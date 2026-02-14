@@ -58,7 +58,13 @@ const EmberPoolTokenSchema = z.object({
   symbol: z.string(),
   decimals: z.number().int().nonnegative(),
   isNative: z.boolean().optional(),
-  iconUri: z.string().optional(),
+  // Ember occasionally returns `null` for iconUri; normalize to `undefined` so
+  // pool listing doesn't fail due to a missing icon.
+  iconUri: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? undefined),
   isVetted: z.boolean().optional(),
 });
 

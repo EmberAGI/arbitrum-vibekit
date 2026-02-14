@@ -40,15 +40,28 @@ function makeThreadState(params: {
   hasInterrupts: boolean;
   hasView: boolean;
   taskState?: string;
+  command?: string;
+  taskMessage?: string;
 }): unknown {
   const tasks = params.hasInterrupts
     ? [{ interrupts: [{ value: { type: 'pendle-setup-request' } }] }]
     : [{ interrupts: [] }];
 
+  const task = params.taskState
+    ? {
+        id: 'task-1',
+        taskStatus: {
+          state: params.taskState,
+          ...(params.taskMessage ? { message: { content: params.taskMessage } } : {}),
+        },
+      }
+    : undefined;
+
   const values = params.hasView
     ? {
         view: {
-          task: params.taskState ? { id: 'task-1', taskStatus: { state: params.taskState } } : undefined,
+          command: params.command,
+          task,
           profile: { apy: 1 },
           metrics: { iteration: 0 },
         },
@@ -222,6 +235,49 @@ describe('POST /api/agents/sync', () => {
       expect(fetchMock.calls.some((c) => c.url.endsWith(`/threads/${threadId}`) && c.init?.method === 'PATCH')).toBe(
         true,
       );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("treats fire interrupt/abort failures as 'completed' so the UI shows Completed", async () => {
+    const threadId = 'fire-interrupt-thread';
+    const agentId = 'agent-pendle';
+
+    const initial = makeThreadState({
+      hasInterrupts: false,
+      hasView: true,
+      command: 'fire',
+      taskState: 'failed',
+      taskMessage: 'Error: interrupt',
+    });
+
+    const fetchMock = makeFetchMock((call) => {
+      if (call.url.endsWith(`/threads/${threadId}/state`) && (!call.init || call.init.method === 'GET')) {
+        return createJsonResponse(initial);
+      }
+      throw new Error(`Unexpected fetch: ${call.init?.method ?? 'GET'} ${call.url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock.fn);
+    try {
+      const res = await POST(makeRequestJson({ agentId, threadId }) as never);
+      expect(res.status).toBe(200);
+
+      const payload = (await res.json()) as unknown;
+      expect(payload).toEqual(
+        expect.objectContaining({
+          agentId,
+          command: 'fire',
+          taskState: 'completed',
+          taskMessage: 'Error: interrupt',
+        }),
+      );
+
+      expect(didCallSyncStateMutation(fetchMock.calls)).toBe(false);
+      expect(fetchMock.calls.some((c) => c.url.includes(`/threads/${threadId}/runs`))).toBe(false);
+      expect(fetchMock.calls.some((c) => c.url.endsWith('/threads') && c.init?.method === 'POST')).toBe(false);
+      expect(fetchMock.calls.some((c) => c.url.endsWith(`/threads/${threadId}`) && c.init?.method === 'PATCH')).toBe(false);
     } finally {
       vi.unstubAllGlobals();
     }

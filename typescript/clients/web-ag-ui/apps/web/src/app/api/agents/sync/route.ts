@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
+import { deriveTaskStateForUi } from '@/utils/deriveTaskStateForUi';
+
 const BodySchema = z.object({
   agentId: z.string().min(1),
   threadId: z.string().min(1),
@@ -31,6 +33,11 @@ const ThreadStateSchema = z
             taskStatus: z
               .object({
                 state: z.string().optional(),
+                message: z
+                  .object({
+                    content: z.string().optional(),
+                  })
+                  .optional(),
               })
               .optional(),
           })
@@ -80,7 +87,13 @@ function normalizeBaseUrl(value: string): string {
 async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>): Promise<T> {
   const payloadText = await response.text();
   if (!response.ok) {
-    throw new Error(`LangGraph API request failed (${response.status}): ${payloadText}`);
+    const error = new Error(`LangGraph API request failed (${response.status}): ${payloadText}`) as Error & {
+      status?: number;
+      payloadText?: string;
+    };
+    error.status = response.status;
+    error.payloadText = payloadText;
+    throw error;
   }
   const trimmed = payloadText.trim();
   const payload = trimmed.length > 0 ? (JSON.parse(trimmed) as unknown) : ({} as unknown);
@@ -289,9 +302,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!initialState.hasInterrupts) {
       const hasView = Boolean(initialState.values && isRecord(initialState.values['view']));
       if (!hasView) {
-        await updateSyncState(baseUrl, threadId);
-        const run = await createRun(baseUrl, threadId, runtime.graphId);
-        await waitForRunCompletion(baseUrl, threadId, run.run_id);
+        try {
+          await updateSyncState(baseUrl, threadId);
+          const run = await createRun(baseUrl, threadId, runtime.graphId);
+          await waitForRunCompletion(baseUrl, threadId, run.run_id);
+        } catch (error) {
+          const maybeLangGraphError = error as { status?: number };
+          // If the thread is already running (cron/external run), treat this as expected:
+          // we must not clobber state, and we don't want to surface a 500 in the UI.
+          if (maybeLangGraphError.status !== 409 && maybeLangGraphError.status !== 422) {
+            throw error;
+          }
+        }
       }
     }
 
@@ -300,19 +322,52 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const task = state?.view?.task;
     const taskId = task?.id ?? null;
     const hasTask = Boolean(taskId);
+    const command = state?.view?.command ?? null;
+    const taskState = hasTask ? (task?.taskStatus?.state ?? null) : null;
+    const taskMessage = hasTask ? (task?.taskStatus?.message?.content ?? null) : null;
+    const transactionHistory = state?.view?.transactionHistory ?? null;
+    const derivedTaskState = hasTask
+      ? deriveTaskStateForUi({ command, taskState, taskMessage })
+      : taskState;
+
+    if (
+      parsed.data.agentId === 'agent-pendle' &&
+      (command === 'fire' ||
+        taskState === 'failed' ||
+        taskState === 'input-required' ||
+        (Array.isArray(transactionHistory) && transactionHistory.length > 0) ||
+        Boolean(initialState.hasInterrupts))
+    ) {
+      const lastTxHash = Array.isArray(transactionHistory)
+        ? (transactionHistory.at(-1) as { txHash?: unknown } | undefined)?.txHash
+        : undefined;
+      console.info('[agent-sync-debug]', {
+        agentId: parsed.data.agentId,
+        threadId,
+        command,
+        taskStateRaw: taskState,
+        taskState: derivedTaskState,
+        taskMessage,
+        hasInterrupts: initialState.hasInterrupts,
+        transactionCount: Array.isArray(transactionHistory) ? transactionHistory.length : null,
+        lastTxHash: typeof lastTxHash === 'string' ? lastTxHash : null,
+      });
+    }
+
     return NextResponse.json(
       {
         agentId: parsed.data.agentId,
-        command: state?.view?.command ?? null,
+        command,
         onboarding: state?.view?.onboarding ?? null,
         delegationsBypassActive: state?.view?.delegationsBypassActive ?? null,
         profile: state?.view?.profile ?? null,
         metrics: state?.view?.metrics ?? null,
         activity: state?.view?.activity ?? null,
-        transactionHistory: state?.view?.transactionHistory ?? null,
+        transactionHistory,
         task: task ?? null,
         taskId,
-        taskState: hasTask ? (task?.taskStatus?.state ?? null) : null,
+        taskState: derivedTaskState,
+        taskMessage,
         haltReason: hasTask ? (state?.view?.haltReason ?? null) : null,
         executionError: hasTask ? (state?.view?.executionError ?? null) : null,
       },

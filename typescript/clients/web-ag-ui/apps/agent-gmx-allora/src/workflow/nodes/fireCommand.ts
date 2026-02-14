@@ -1,10 +1,34 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 
-import { buildTaskStatus, isTaskTerminal, type ClmmState, type ClmmUpdate } from '../context.js';
+import type { PerpetualPosition } from '../../clients/onchainActions.js';
+import { ARBITRUM_CHAIN_ID, resolveGmxAlloraTxExecutionMode } from '../../config/constants.js';
+import type { ExecutionPlan } from '../../core/executionPlan.js';
+import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
+import { buildTaskStatus, isTaskTerminal, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
+import { executePerpetualPlan } from '../execution.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };
+
+function hasOpenPosition(position: PerpetualPosition | undefined): position is PerpetualPosition {
+  if (!position) {
+    return false;
+  }
+  // onchain-actions uses decimal strings; treat 0-valued strings (e.g. "0", "0.0") as closed.
+  const size = position.sizeInUsd.trim();
+  if (size.length === 0) {
+    return false;
+  }
+
+  const parsed = Number(size);
+  if (Number.isFinite(parsed)) {
+    return Math.abs(parsed) > 0;
+  }
+
+  // If parsing fails, fall back to a conservative non-empty check to avoid false negatives.
+  return size !== '0';
+}
 
 export const fireCommandNode = async (
   state: ClmmState,
@@ -34,14 +58,168 @@ export const fireCommandNode = async (
     };
   }
 
-  const onboardingComplete = Boolean(state.view.operatorConfig);
-  const terminalState = onboardingComplete ? 'completed' : 'canceled';
-  const terminalMessage = onboardingComplete
-    ? 'Agent fired. Workflow completed.'
-    : 'Agent fired before onboarding completed.';
+  const operatorConfig = state.view.operatorConfig;
+  if (!operatorConfig) {
+    const { task, statusEvent } = buildTaskStatus(
+      currentTask,
+      'canceled',
+      'Agent fired before onboarding completed.',
+    );
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    });
+
+    return {
+      view: {
+        task,
+        command: 'fire',
+        activity: { events: [statusEvent], telemetry: [] },
+      },
+    };
+  }
+
+  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
+  const willExecute = txExecutionMode === 'execute';
+
+  logInfo('Fire command requested; attempting to close any open GMX position', {
+    threadId,
+    delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+    marketAddress: operatorConfig.targetMarket.address,
+    delegationsBypassActive: state.view.delegationsBypassActive === true,
+    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    configuredTxMode: txExecutionMode,
+  });
+
+  if (willExecute && state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
+    const failureMessage =
+      'Cannot close GMX position during fire: missing delegation bundle. Complete onboarding and approve delegations, or enable DELEGATIONS_BYPASS to execute from the agent wallet.';
+    const { task, statusEvent } = buildTaskStatus(currentTask, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    });
+    return {
+      view: { task, command: 'fire', activity: { events: [statusEvent], telemetry: [] } },
+    };
+  }
+
+  const onchainActionsClient = getOnchainActionsClient();
+
+  let positions: PerpetualPosition[] = [];
+  try {
+    positions = await onchainActionsClient.listPerpetualPositions({
+      walletAddress: operatorConfig.delegatorWalletAddress,
+      chainIds: [ARBITRUM_CHAIN_ID.toString()],
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    const { task, statusEvent } = buildTaskStatus(
+      currentTask,
+      'failed',
+      `Failed to fetch GMX positions while firing: ${message}`,
+    );
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    });
+    return {
+      view: {
+        task,
+        command: 'fire',
+        activity: { events: [statusEvent], telemetry: [] },
+      },
+    };
+  }
+
+  const normalizedMarket = operatorConfig.targetMarket.address.toLowerCase();
+  const positionToClose = positions.find(
+    (position) => position.marketAddress.toLowerCase() === normalizedMarket,
+  );
+
+  if (!hasOpenPosition(positionToClose)) {
+    const { task, statusEvent } = buildTaskStatus(
+      currentTask,
+      'completed',
+      'Agent fired. No open GMX position detected.',
+    );
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    });
+    return {
+      view: {
+        task,
+        command: 'fire',
+        activity: { events: [statusEvent], telemetry: [] },
+      },
+    };
+  }
+
+  const plan: ExecutionPlan = {
+    action: 'close',
+    request: {
+      walletAddress: operatorConfig.delegatorWalletAddress,
+      marketAddress: operatorConfig.targetMarket.address,
+      positionSide: positionToClose.positionSide,
+    },
+  };
+
+  const clients = (() => {
+    if (!willExecute) {
+      return undefined;
+    }
+    try {
+      return getOnchainClients();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Cannot execute GMX close during fire: ${message}`);
+    }
+  })();
+
+  const executionResult = await (async () => {
+    try {
+      return await executePerpetualPlan({
+        client: onchainActionsClient,
+        clients,
+        plan,
+        txExecutionMode,
+        delegationsBypassActive: state.view.delegationsBypassActive === true,
+        delegationBundle: state.view.delegationBundle,
+        delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+        delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { action: plan.action, ok: false as const, error: message };
+    }
+  })();
+
+  const nextTransactionHistory = (() => {
+    const txHash = executionResult.lastTxHash;
+    return [
+      ...state.view.transactionHistory,
+      {
+        cycle: state.view.metrics.iteration,
+        action: 'close',
+        txHash,
+        status: executionResult.ok ? ('success' as const) : ('failed' as const),
+        reason: executionResult.ok
+          ? willExecute
+            ? 'Closed GMX position during fire.'
+            : 'Planned GMX close transactions during fire (plan mode; not executed).'
+          : executionResult.error,
+        timestamp: new Date().toISOString(),
+      },
+    ];
+  })();
+
+  const terminalState = executionResult.ok ? 'completed' : 'failed';
+  const terminalMessage = executionResult.ok
+    ? willExecute
+      ? 'Agent fired. Closed GMX position.'
+      : 'Agent fired in plan mode. Close transactions prepared (not executed).'
+    : `Agent fired, but closing GMX position failed: ${executionResult.error ?? 'Unknown error'}`;
+
   const { task, statusEvent } = buildTaskStatus(currentTask, terminalState, terminalMessage);
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    view: { task, activity: { events: [statusEvent], telemetry: [] }, transactionHistory: nextTransactionHistory },
   });
 
   return {
@@ -49,6 +227,7 @@ export const fireCommandNode = async (
       task,
       command: 'fire',
       activity: { events: [statusEvent], telemetry: [] },
+      transactionHistory: nextTransactionHistory,
     },
   };
 };

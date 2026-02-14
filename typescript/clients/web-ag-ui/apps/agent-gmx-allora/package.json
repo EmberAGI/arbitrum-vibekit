@@ -12,7 +12,7 @@
     "test": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
     "test:unit": "vitest run --config vitest.config.unit.ts",
     "test:int": "bash -lc 'ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec tsx --env-file=\"$ENV_FILE\" ./node_modules/vitest/vitest.mjs run --config vitest.config.int.ts \"$@\"' --",
-    "test:e2e": "bash -lc 'ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec tsx --env-file=\"$ENV_FILE\" ./node_modules/vitest/vitest.mjs run --config vitest.config.e2e.ts --no-file-parallelism --maxConcurrency=1 \"$@\"' --",
+    "test:e2e": "bash -lc 'ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; GMX_ALLORA_E2E=\"${GMX_ALLORA_E2E:-true}\" LANGGRAPH_DEPLOYMENT_URL=\"${LANGGRAPH_DEPLOYMENT_URL:-http://localhost:8126}\" exec tsx --env-file=\"$ENV_FILE\" ./node_modules/vitest/vitest.mjs run --config vitest.config.e2e.ts --no-file-parallelism --maxConcurrency=1 \"$@\"' --",
     "test:smoke": "bash -lc 'ENV_FILE=.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec tsx --env-file=\"$ENV_FILE\" tests/smoke/gmx-allora-smoke.ts'",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --config vitest.config.coverage.ts",

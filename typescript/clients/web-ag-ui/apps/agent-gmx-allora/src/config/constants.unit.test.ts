@@ -61,10 +61,10 @@ describe('config/constants', () => {
     expect(resolvePollIntervalMs()).toBe(1_800_000);
   });
 
-  it('defaults to plan mode for transaction execution', () => {
+  it('defaults to execute mode for transaction execution', () => {
     delete process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
 
-    expect(resolveGmxAlloraTxExecutionMode()).toBe('plan');
+    expect(resolveGmxAlloraTxExecutionMode()).toBe('execute');
   });
 
   it('uses execute mode when submission mode is submit', () => {

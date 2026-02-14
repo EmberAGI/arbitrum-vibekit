@@ -5,7 +5,7 @@ import type { NavSnapshot, FlowLogEvent } from '../accounting/types.js';
 import { resolveStoreHistoryLimit } from '../config/constants.js';
 import type { RebalanceTelemetry } from '../domain/types.js';
 
-import type { ClmmTransaction } from './context.js';
+import type { AgentTransaction } from './context.js';
 
 const STORE_HISTORY_LIMIT = resolveStoreHistoryLimit();
 
@@ -88,7 +88,7 @@ export async function appendTelemetryHistory(params: {
 
 export async function appendTransactionHistory(params: {
   threadId?: string;
-  transactions: ClmmTransaction[];
+  transactions: AgentTransaction[];
   store?: BaseStore;
 }): Promise<void> {
   await appendHistory({
