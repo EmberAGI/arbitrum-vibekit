@@ -192,26 +192,34 @@ async function createRun(params: {
   graphId: string;
   durability: LangGraphDurability;
 }): Promise<string | undefined> {
-  // NOTE: We intentionally cast the fetch init object to avoid type-level drift in
-  // Node's fetch typings across @types/node / TypeScript versions (CI installs
-  // without a frozen lockfile).
+  // NOTE: We avoid depending on the ambient `fetch`/`RequestInit` typings here since
+  // CI installs without a frozen lockfile and TypeScript/@types/node can drift.
+  const body = JSON.stringify({
+    assistant_id: params.graphId,
+    input: null,
+    config: {
+      configurable: { thread_id: params.threadId },
+      durability: params.durability,
+    },
+    metadata: { source: 'cron' },
+    stream_mode: ['events', 'values', 'messages'],
+    stream_resumable: true,
+  });
+  if (!body) {
+    throw new Error('[cron] Failed to serialize LangGraph run create request body');
+  }
+
   const init = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      assistant_id: params.graphId,
-      input: null,
-      config: {
-        configurable: { thread_id: params.threadId },
-        durability: params.durability,
-      },
-      metadata: { source: 'cron' },
-      stream_mode: ['events', 'values', 'messages'],
-      stream_resumable: true,
-    }),
-  } as unknown as NonNullable<Parameters<typeof fetch>[1]>;
+    body,
+  };
 
-  const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs`, init);
+  const fetchRequest = globalThis.fetch as unknown as (
+    input: string,
+    init: unknown,
+  ) => Promise<Response>;
+  const response = await fetchRequest(`${params.baseUrl}/threads/${params.threadId}/runs`, init);
 
   if (response.status === 422) {
     const payloadText = await response.text();
