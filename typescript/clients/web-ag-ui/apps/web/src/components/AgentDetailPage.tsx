@@ -70,6 +70,7 @@ interface AgentDetailPageProps {
   profile: AgentProfile;
   metrics: AgentMetrics;
   fullMetrics?: AgentViewMetrics;
+  initialTab?: TabType;
   isHired: boolean;
   isHiring: boolean;
   hasLoadedView: boolean;
@@ -214,6 +215,7 @@ export function AgentDetailPage({
   profile,
   metrics,
   fullMetrics,
+  initialTab,
   isHired,
   isHiring,
   hasLoadedView,
@@ -239,7 +241,9 @@ export function AgentDetailPage({
   settings,
   onSettingsChange,
 }: AgentDetailPageProps) {
-  const [activeTab, setActiveTab] = useState<TabType>(isHired ? 'blockers' : 'metrics');
+  const [activeTab, setActiveTab] = useState<TabType>(
+    initialTab ?? (isHired ? 'blockers' : 'metrics'),
+  );
   const isOnboardingActive = onboarding?.step !== undefined;
   const forceBlockersTab = Boolean(activeInterrupt) || isOnboardingActive;
   const resolvedTab: TabType = forceBlockersTab ? 'blockers' : activeTab;

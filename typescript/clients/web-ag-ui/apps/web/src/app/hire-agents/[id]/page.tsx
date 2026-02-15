@@ -8,9 +8,23 @@ import { useAgent } from '@/contexts/AgentContext';
 import type { OnboardingState } from '@/types/agent';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
+type UiPreviewTab = 'blockers' | 'metrics' | 'transactions' | 'settings' | 'chat';
 
 function parseUiPreviewState(value: string | null): UiPreviewState | null {
   if (value === 'prehire' || value === 'onboarding' || value === 'active') return value;
+  return null;
+}
+
+function parseUiPreviewTab(value: string | null): UiPreviewTab | null {
+  if (
+    value === 'blockers' ||
+    value === 'metrics' ||
+    value === 'transactions' ||
+    value === 'settings' ||
+    value === 'chat'
+  ) {
+    return value;
+  }
   return null;
 }
 
@@ -34,6 +48,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
     process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_UI_PREVIEW === 'true';
   const uiPreviewState =
     uiPreviewEnabled ? parseUiPreviewState(searchParams.get('__uiState')) : null;
+  const uiPreviewTab = uiPreviewEnabled ? parseUiPreviewTab(searchParams.get('__tab')) : null;
 
   if (uiPreviewState) {
     const previewAgentId = isRegisteredAgentId(routeAgentId) ? routeAgentId : selectedAgentId;
@@ -74,6 +89,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
           lifetimePnlUsd: 0,
         }}
         fullMetrics={agent.metrics}
+        initialTab={isHired ? (uiPreviewTab ?? undefined) : undefined}
         isHired={isHired}
         isHiring={false}
         hasLoadedView
@@ -130,6 +146,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         lifetimePnlUsd: agent.metrics.lifetimePnlUsd,
       }}
       fullMetrics={agent.metrics}
+      initialTab={agent.isHired ? (uiPreviewTab ?? undefined) : undefined}
       isHired={agent.isHired}
       isHiring={agent.isHiring}
       hasLoadedView={agent.hasLoadedView}

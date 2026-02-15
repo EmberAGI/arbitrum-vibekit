@@ -251,18 +251,18 @@ export function HireAgentsPage({
                     chainNames: agent.chains ?? [],
                     chainIconByName,
                   });
-                  const chainOverflow = (agent.chains ?? []).slice(3).map((label) => ({
+                  const chainItems = (agent.chains ?? []).map((label) => ({
                     label,
                     iconUri: chainIconByName[normalizeNameKey(label)] ?? null,
                   }));
-                  const protocolOverflow = (agent.protocols ?? []).slice(3).map((label) => {
+                  const protocolItems = (agent.protocols ?? []).map((label) => {
                     const fallback = PROTOCOL_TOKEN_FALLBACK[label];
                     const iconUri = fallback
                       ? tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null
                       : null;
                     return { label, iconUri };
                   });
-                  const tokenOverflow = (agent.tokens ?? []).slice(3).map((label) => ({
+                  const tokenItems = (agent.tokens ?? []).map((label) => ({
                     label,
                     iconUri: tokenIconBySymbol[normalizeSymbolKey(label)] ?? null,
                   }));
@@ -280,18 +280,9 @@ export function HireAgentsPage({
                       agent={agent}
                       index={index}
                       iconsLoaded={iconsLoaded}
-                      chainIconUris={chainIconUris}
-                      protocolIconUris={resolveProtocolIconUris({
-                        protocols: agent.protocols ?? [],
-                        tokenIconBySymbol,
-                      })}
-                      tokenIconUris={resolveTokenIconUris({
-                        tokenSymbols: agent.tokens ?? [],
-                        tokenIconBySymbol,
-                      })}
-                      chainOverflow={chainOverflow}
-                      protocolOverflow={protocolOverflow}
-                      tokenOverflow={tokenOverflow}
+                      chainItems={chainItems}
+                      protocolItems={protocolItems}
+                      tokenItems={tokenItems}
                       avatarUri={avatarUri}
                       onClick={() => onViewAgent?.(agent.id)}
                     />
@@ -393,24 +384,18 @@ export function HireAgentsPage({
 function FeaturedAgentCard({
   agent,
   iconsLoaded,
-  chainIconUris,
-  protocolIconUris,
-  tokenIconUris,
-  chainOverflow,
-  protocolOverflow,
-  tokenOverflow,
+  chainItems,
+  protocolItems,
+  tokenItems,
   avatarUri,
   onClick,
 }: {
   agent: FeaturedAgent;
   index: number;
   iconsLoaded: boolean;
-  chainIconUris: string[];
-  protocolIconUris: string[];
-  tokenIconUris: string[];
-  chainOverflow: { label: string; iconUri: string | null }[];
-  protocolOverflow: { label: string; iconUri: string | null }[];
-  tokenOverflow: { label: string; iconUri: string | null }[];
+  chainItems: { label: string; iconUri: string | null }[];
+  protocolItems: { label: string; iconUri: string | null }[];
+  tokenItems: { label: string; iconUri: string | null }[];
   avatarUri: string | null;
   onClick?: () => void;
 }) {
@@ -494,20 +479,17 @@ function FeaturedAgentCard({
                 <IconGroup
                   title="Chains"
                   iconsLoaded={iconsLoaded}
-                  uris={chainIconUris}
-                  overflowItems={chainOverflow}
+                  items={chainItems}
                 />
                 <IconGroup
                   title="Protocols"
                   iconsLoaded={iconsLoaded}
-                  uris={protocolIconUris}
-                  overflowItems={protocolOverflow}
+                  items={protocolItems}
                 />
                 <IconGroup
                   title="Tokens"
                   iconsLoaded={iconsLoaded}
-                  uris={tokenIconUris}
-                  overflowItems={tokenOverflow}
+                  items={tokenItems}
                 />
               </div>
 
@@ -561,18 +543,18 @@ function FeaturedAgentCard({
 function IconGroup({
   title,
   iconsLoaded,
-  uris,
-  overflowItems,
+  items,
 }: {
   title: string;
   iconsLoaded: boolean;
-  uris: string[];
-  overflowItems?: { label: string; iconUri: string | null }[];
+  items: { label: string; iconUri: string | null }[];
 }) {
-  // Keep this compact so the overflow trigger doesn't get clipped by narrow cards.
-  const displayUris = uris.slice(0, 3);
-  const overflow = overflowItems ?? [];
-  const remainingCount = overflow.length;
+  // Keep this compact so we never clip against the card edge.
+  // If there is overflow, show 2 icons + an in-row ellipsis "icon" that opens a tooltip.
+  const MAX_ICONS = 3;
+  const hasOverflow = items.length > MAX_ICONS;
+  const displayItems = hasOverflow ? items.slice(0, MAX_ICONS - 1) : items.slice(0, MAX_ICONS);
+  const overflowItems = hasOverflow ? items.slice(MAX_ICONS - 1) : [];
 
   return (
     <div className="min-w-0">
@@ -586,24 +568,33 @@ function IconGroup({
         ) : (
           <>
             <div className="flex items-center -space-x-2">
-              {displayUris.map((uri) => (
-                <img
-                  key={uri}
-                  src={proxyIconUri(uri)}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
-                />
-              ))}
+              {displayItems.map((item) =>
+                item.iconUri ? (
+                  <img
+                    key={`${item.label}-${item.iconUri}`}
+                    src={proxyIconUri(item.iconUri)}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
+                  />
+                ) : (
+                  <div
+                    key={item.label}
+                    className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12]"
+                    aria-hidden="true"
+                  />
+                ),
+              )}
+
+              {overflowItems.length > 0 ? (
+                <CursorListTooltip title={`${title} (more)`} items={overflowItems}>
+                  <div className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] flex items-center justify-center text-[12px] text-gray-200 font-semibold whitespace-nowrap select-none cursor-default">
+                    …
+                  </div>
+                </CursorListTooltip>
+              ) : null}
             </div>
-            {remainingCount > 0 ? (
-              <CursorListTooltip title={`${title} (more)`} items={overflow}>
-                <div className="ml-1.5 h-6 w-7 flex-shrink-0 rounded-full bg-black/30 ring-1 ring-white/10 flex items-center justify-center text-[12px] text-gray-200 font-semibold whitespace-nowrap select-none cursor-default">
-                  …
-                </div>
-              </CursorListTooltip>
-            ) : null}
           </>
         )}
       </div>
