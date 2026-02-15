@@ -224,6 +224,13 @@ ensure_onchain_actions_50051() {
 ensure_mock_allora
 ensure_onchain_actions_50051
 
+echo "[qa] building web (production-like)..."
+
+# Avoid building while LangGraph dev servers are running: they keep thousands of
+# file descriptors open, which can trip system-wide limits (ENFILE) during `next build`.
+rm -rf "$ROOT_DIR/apps/web/.next" || true
+pnpm --filter web build
+
 echo "[qa] starting agent runtimes (LangGraph dev servers)..."
 
 # Match `apps/web/src/app/api/copilotkit/route.ts` defaults.
@@ -231,5 +238,5 @@ pnpm --filter agent-clmm start >/dev/null 2>&1 &
 pnpm --filter agent-pendle start >/dev/null 2>&1 &
 pnpm --filter agent-gmx-allora start >/dev/null 2>&1 &
 
-echo "[qa] starting web (build + next start) on http://localhost:3000 ..."
-exec pnpm --filter web qa
+echo "[qa] starting web on http://localhost:3000 ..."
+exec pnpm --filter web start

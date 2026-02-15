@@ -237,7 +237,7 @@ export function AppSidebar() {
   const isLeaderboardActive = pathname === '/leaderboard';
 
   return (
-    <div className="flex flex-col h-full w-[260px] bg-[#1a1a1a] border-r border-[#2a2a2a]">
+    <div className="flex flex-col h-full w-[260px] flex-shrink-0 bg-[#1a1a1a] border-r border-[#2a2a2a]">
       {/* Header */}
       <div className="p-4 border-b border-[#2a2a2a]">
         <div className="flex items-center gap-3">
