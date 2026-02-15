@@ -50,6 +50,7 @@ import { Skeleton } from './ui/Skeleton';
 import { LoadingValue } from './ui/LoadingValue';
 import { CreatorIdentity } from './ui/CreatorIdentity';
 import { CursorListTooltip } from './ui/CursorListTooltip';
+import { CTA_SIZE_MD, CTA_SIZE_MD_FULL } from './ui/cta';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -474,7 +475,7 @@ export function AgentDetailPage({
 
                   <div className="flex justify-center">
                     <div
-                      className={`group relative w-full inline-flex h-9 items-stretch overflow-hidden rounded-[999px] bg-[#2a2a2a] ring-1 ring-white/10 transition-[background-color,box-shadow,border-color] duration-300 ease-out hover:ring-white/20 hover:shadow-[0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.06)] group-hover:bg-gradient-to-r group-hover:from-[#ff2a00] group-hover:to-[#fd6731] group-hover:ring-[#fd6731]/30 group-hover:shadow-[0_16px_55px_rgba(255,42,0,0.28),0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.10)] ${
+                      className={`group relative w-full inline-flex h-10 items-stretch overflow-hidden rounded-[999px] bg-[#2a2a2a] ring-1 ring-white/10 transition-[background-color,box-shadow,border-color] duration-300 ease-out hover:ring-white/20 hover:shadow-[0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.06)] group-hover:bg-gradient-to-r group-hover:from-[#ff2a00] group-hover:to-[#fd6731] group-hover:ring-[#fd6731]/30 group-hover:shadow-[0_16px_55px_rgba(255,42,0,0.28),0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.10)] ${
                         isFiring ? 'opacity-90' : ''
                       }`}
                     >
@@ -492,7 +493,7 @@ export function AgentDetailPage({
                         type="button"
                         onClick={onFire}
                         disabled={isFiring}
-                        className={`relative z-10 flex flex-[0_0_84px] items-center justify-center px-3 h-full text-[13px] font-medium text-white border-l border-white/10 transition-[flex-basis,background-color,border-color,color,box-shadow] duration-300 ease-out group-hover:flex-1 group-hover:bg-transparent group-hover:border-white/0 ${
+                        className={`relative z-10 flex flex-[0_0_92px] items-center justify-center px-3 h-full text-[13px] font-medium text-white border-l border-white/10 transition-[flex-basis,background-color,border-color,color,box-shadow] duration-300 ease-out group-hover:flex-1 group-hover:bg-transparent group-hover:border-white/0 ${
                           isFiring
                             ? 'bg-gray-600 cursor-wait'
                             : 'bg-gradient-to-b from-[#ff4d1a] to-[#fd6731] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
@@ -750,9 +751,13 @@ export function AgentDetailPage({
                       <button
                         onClick={onFire}
                         disabled={isFiring}
-                        className={`px-4 py-1.5 rounded-lg text-white text-sm font-medium transition-colors ${
-                          isFiring ? 'bg-gray-600 cursor-wait' : 'bg-[#fd6731] hover:bg-[#e55a28]'
-                        }`}
+                        className={[
+                          CTA_SIZE_MD,
+                          isFiring
+                            ? 'bg-gray-600 cursor-wait'
+                            : 'bg-[#fd6731] hover:bg-[#e55a28] hover:shadow-[0_14px_44px_rgba(253,103,49,0.22)]',
+                          'text-white transition-[background-color,box-shadow] duration-200',
+                        ].join(' ')}
                       >
                         {isFiring ? 'Firing...' : 'Fire'}
                       </button>
@@ -863,11 +868,13 @@ export function AgentDetailPage({
               <button
                 onClick={onHire}
                 disabled={isHiring}
-                className={`w-full py-3.5 rounded-xl font-medium transition-colors ${
+                className={[
+                  CTA_SIZE_MD_FULL,
                   isHiring
                     ? 'bg-purple-500/50 text-white cursor-wait'
-                    : 'bg-purple-500 hover:bg-purple-600 text-white shadow-[0_10px_30px_rgba(168,85,247,0.25)]'
-                }`}
+                    : 'bg-purple-500 hover:bg-purple-600 text-white shadow-[0_10px_30px_rgba(168,85,247,0.25)]',
+                  'transition-[background-color,box-shadow] duration-200',
+                ].join(' ')}
               >
                 {isHiring ? 'Hiring...' : 'Hire'}
               </button>

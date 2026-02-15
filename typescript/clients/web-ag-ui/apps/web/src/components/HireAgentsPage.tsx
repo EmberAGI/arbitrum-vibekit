@@ -11,6 +11,7 @@ import { AgentsTable } from './agents/AgentsTable';
 import { Skeleton } from './ui/Skeleton';
 import { CreatorIdentity } from './ui/CreatorIdentity';
 import { CursorListTooltip } from './ui/CursorListTooltip';
+import { CTA_SIZE_MD } from './ui/cta';
 import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
 import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
 import {
@@ -236,7 +237,13 @@ export function HireAgentsPage({
                   </p>
                 </div>
               </div>
-              <button className="shrink-0 h-10 px-5 rounded-full bg-[color:var(--hire-accent)] hover:bg-[color:var(--hire-accent-hover)] text-white text-[13px] font-medium transition-colors">
+              <button
+                className={[
+                  'shrink-0',
+                  CTA_SIZE_MD,
+                  'bg-[color:var(--hire-accent)] hover:bg-[color:var(--hire-accent-hover)] text-white transition-colors',
+                ].join(' ')}
+              >
                 Publish
               </button>
             </div>
