@@ -10,6 +10,7 @@ import { Pagination } from './ui/Pagination';
 import { AgentsTable } from './agents/AgentsTable';
 import { Skeleton } from './ui/Skeleton';
 import { CreatorIdentity } from './ui/CreatorIdentity';
+import { CursorListTooltip } from './ui/CursorListTooltip';
 import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
 import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
 import {
@@ -18,6 +19,7 @@ import {
   resolveProtocolIconUris,
   resolveTokenIconUris,
   normalizeNameKey,
+  normalizeSymbolKey,
   proxyIconUri,
 } from '../utils/iconResolution';
 
@@ -249,6 +251,21 @@ export function HireAgentsPage({
                     chainNames: agent.chains ?? [],
                     chainIconByName,
                   });
+                  const chainOverflow = (agent.chains ?? []).slice(3).map((label) => ({
+                    label,
+                    iconUri: chainIconByName[normalizeNameKey(label)] ?? null,
+                  }));
+                  const protocolOverflow = (agent.protocols ?? []).slice(3).map((label) => {
+                    const fallback = PROTOCOL_TOKEN_FALLBACK[label];
+                    const iconUri = fallback
+                      ? tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null
+                      : null;
+                    return { label, iconUri };
+                  });
+                  const tokenOverflow = (agent.tokens ?? []).slice(3).map((label) => ({
+                    label,
+                    iconUri: tokenIconBySymbol[normalizeSymbolKey(label)] ?? null,
+                  }));
                   const avatarUri =
                     resolveAgentAvatarUri({
                       protocols: agent.protocols ?? [],
@@ -272,6 +289,9 @@ export function HireAgentsPage({
                         tokenSymbols: agent.tokens ?? [],
                         tokenIconBySymbol,
                       })}
+                      chainOverflow={chainOverflow}
+                      protocolOverflow={protocolOverflow}
+                      tokenOverflow={tokenOverflow}
                       avatarUri={avatarUri}
                       onClick={() => onViewAgent?.(agent.id)}
                     />
@@ -376,6 +396,9 @@ function FeaturedAgentCard({
   chainIconUris,
   protocolIconUris,
   tokenIconUris,
+  chainOverflow,
+  protocolOverflow,
+  tokenOverflow,
   avatarUri,
   onClick,
 }: {
@@ -385,6 +408,9 @@ function FeaturedAgentCard({
   chainIconUris: string[];
   protocolIconUris: string[];
   tokenIconUris: string[];
+  chainOverflow: { label: string; iconUri: string | null }[];
+  protocolOverflow: { label: string; iconUri: string | null }[];
+  tokenOverflow: { label: string; iconUri: string | null }[];
   avatarUri: string | null;
   onClick?: () => void;
 }) {
@@ -469,16 +495,19 @@ function FeaturedAgentCard({
                   title="Chains"
                   iconsLoaded={iconsLoaded}
                   uris={chainIconUris}
+                  overflowItems={chainOverflow}
                 />
                 <IconGroup
                   title="Protocols"
                   iconsLoaded={iconsLoaded}
                   uris={protocolIconUris}
+                  overflowItems={protocolOverflow}
                 />
                 <IconGroup
                   title="Tokens"
                   iconsLoaded={iconsLoaded}
                   uris={tokenIconUris}
+                  overflowItems={tokenOverflow}
                 />
               </div>
 
@@ -533,18 +562,22 @@ function IconGroup({
   title,
   iconsLoaded,
   uris,
+  overflowItems,
 }: {
   title: string;
   iconsLoaded: boolean;
   uris: string[];
+  overflowItems?: { label: string; iconUri: string | null }[];
 }) {
-  const displayUris = uris.slice(0, 4);
-  const remainingCount = Math.max(0, uris.length - displayUris.length);
+  // Keep this compact so the overflow trigger doesn't get clipped by narrow cards.
+  const displayUris = uris.slice(0, 3);
+  const overflow = overflowItems ?? [];
+  const remainingCount = overflow.length;
 
   return (
     <div className="min-w-0">
       <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{title}</div>
-      <div className="flex items-center gap-1.5 min-h-6 overflow-hidden">
+      <div className="flex items-center min-h-6">
         {!iconsLoaded ? (
           <>
             <Skeleton className="h-6 w-6 rounded-full" />
@@ -552,20 +585,24 @@ function IconGroup({
           </>
         ) : (
           <>
-            {displayUris.map((uri) => (
-              <img
-                key={uri}
-                src={proxyIconUri(uri)}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-white/10 object-contain"
-              />
-            ))}
+            <div className="flex items-center -space-x-2">
+              {displayUris.map((uri) => (
+                <img
+                  key={uri}
+                  src={proxyIconUri(uri)}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
+                />
+              ))}
+            </div>
             {remainingCount > 0 ? (
-              <div className="h-6 px-2 rounded-full bg-black/30 ring-1 ring-white/10 flex items-center justify-center text-[11px] text-gray-300 font-medium whitespace-nowrap">
-                +{remainingCount}
-              </div>
+              <CursorListTooltip title={`${title} (more)`} items={overflow}>
+                <div className="ml-1.5 h-6 w-7 flex-shrink-0 rounded-full bg-black/30 ring-1 ring-white/10 flex items-center justify-center text-[12px] text-gray-200 font-semibold whitespace-nowrap select-none cursor-default">
+                  …
+                </div>
+              </CursorListTooltip>
             ) : null}
           </>
         )}

@@ -49,6 +49,7 @@ import { formatPoolPair } from '../utils/poolFormat';
 import { Skeleton } from './ui/Skeleton';
 import { LoadingValue } from './ui/LoadingValue';
 import { CreatorIdentity } from './ui/CreatorIdentity';
+import { CursorListTooltip } from './ui/CursorListTooltip';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -242,6 +243,7 @@ export function AgentDetailPage({
   const isOnboardingActive = onboarding?.step !== undefined;
   const forceBlockersTab = Boolean(activeInterrupt) || isOnboardingActive;
   const resolvedTab: TabType = forceBlockersTab ? 'blockers' : activeTab;
+  const showOnboardingLayout = isHired && isOnboardingActive;
 
   const displayChains = useMemo(() => {
     const out: string[] = [];
@@ -347,6 +349,82 @@ export function AgentDetailPage({
 
   // Render hired state layout
   if (isHired) {
+    const tabs = (
+      <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
+        <TabButton
+          active={resolvedTab === 'blockers'}
+          onClick={() => setActiveTab('blockers')}
+          highlight
+        >
+          Agent Blockers
+        </TabButton>
+        <TabButton
+          active={resolvedTab === 'metrics'}
+          onClick={() => setActiveTab('metrics')}
+          disabled={isOnboardingActive}
+        >
+          Metrics
+        </TabButton>
+        <TabButton
+          active={resolvedTab === 'transactions'}
+          onClick={() => setActiveTab('transactions')}
+          disabled={isOnboardingActive}
+        >
+          Transaction history
+        </TabButton>
+        <TabButton
+          active={resolvedTab === 'settings'}
+          onClick={() => setActiveTab('settings')}
+          disabled={isOnboardingActive}
+        >
+          Settings and policies
+        </TabButton>
+        <TabButton active={resolvedTab === 'chat'} onClick={() => {}} disabled>
+          Chat
+        </TabButton>
+      </div>
+    );
+
+    const tabContent = (
+      <>
+        {resolvedTab === 'blockers' && (
+          <AgentBlockersTab
+            agentId={agentId}
+            activeInterrupt={activeInterrupt}
+            allowedPools={allowedPools}
+            onInterruptSubmit={onInterruptSubmit}
+            taskId={taskId}
+            taskStatus={taskStatus}
+            haltReason={haltReason}
+            executionError={executionError}
+            delegationsBypassActive={delegationsBypassActive}
+            onboarding={onboarding}
+            telemetry={telemetry}
+            settings={settings}
+            onSettingsChange={onSettingsChange}
+          />
+        )}
+
+        {resolvedTab === 'metrics' && (
+          <MetricsTab
+            agentId={agentId}
+            profile={profile}
+            metrics={metrics}
+            fullMetrics={fullMetrics}
+            events={events}
+            transactions={transactions}
+            hasLoadedView={hasLoadedView}
+          />
+        )}
+
+        {resolvedTab === 'transactions' && <TransactionHistoryTab transactions={transactions} />}
+
+        {resolvedTab === 'settings' && (
+          <SettingsTab settings={settings} onSettingsChange={onSettingsChange} />
+        )}
+      </>
+    );
+
     return (
       <div className="flex-1 overflow-y-auto p-8">
         <div className="max-w-[1200px] mx-auto">
@@ -370,233 +448,375 @@ export function AgentDetailPage({
             </button>
           </nav>
 
-          {/* Compact Header Card */}
-          <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 mb-6">
-            <div className="flex gap-6">
-              {/* Agent Avatar */}
-              {!iconsLoaded ? (
-                <Skeleton className="h-32 w-32 rounded-full flex-shrink-0" />
-              ) : (
-                <div className="w-32 h-32 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a]">
-                  {agentAvatarUri ? (
-                    <img
-                      src={proxyIconUri(agentAvatarUri)}
-                      alt=""
-                      decoding="async"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : null}
-                </div>
-              )}
-
-              {/* Agent Info */}
-              <div className="flex-1 min-w-0">
-                {/* Top Row: Rank, Rating, Creator */}
-                <div className="flex items-center gap-4 mb-2">
-                  {rank !== undefined && <span className="text-gray-400 text-sm">#{rank}</span>}
-                  {rating !== undefined && (
-                    <div className="flex items-center gap-1">{renderStars(rating)}</div>
+          {showOnboardingLayout ? (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-stretch">
+                {/* Left summary card (Figma onboarding) */}
+                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
+                  {!iconsLoaded ? (
+                    <Skeleton className="h-[220px] w-[220px] rounded-full mb-6 mx-auto" />
+                  ) : (
+                    <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
+                      {agentAvatarUri ? (
+                        <img
+                          src={proxyIconUri(agentAvatarUri)}
+                          alt=""
+                          decoding="async"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : null}
+                    </div>
                   )}
-                </div>
 
-                <div className="flex items-center gap-4 mb-3">
-                  {creatorName && (
-                    <div className="flex items-center gap-2">
-                      <CreatorIdentity
-                        name={creatorName}
-                        verified={creatorVerified}
-                        size="md"
-                        nameClassName="text-sm text-white"
+                  <div className="flex justify-center">
+                    <div
+                      className={`group relative w-full inline-flex h-9 items-stretch overflow-hidden rounded-[999px] bg-[#2a2a2a] ring-1 ring-white/10 transition-[background-color,box-shadow,border-color] duration-300 ease-out hover:ring-white/20 hover:shadow-[0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.06)] group-hover:bg-gradient-to-r group-hover:from-[#ff2a00] group-hover:to-[#fd6731] group-hover:ring-[#fd6731]/30 group-hover:shadow-[0_16px_55px_rgba(255,42,0,0.28),0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.10)] ${
+                        isFiring ? 'opacity-90' : ''
+                      }`}
+                    >
+                      <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 bg-[radial-gradient(1200px_circle_at_50%_0%,rgba(255,255,255,0.10),transparent_40%)]" />
+
+                      <div className="relative z-10 flex flex-1 min-w-0 items-center gap-2 px-3 text-[13px] font-medium text-gray-100 transition-[opacity,flex-basis,padding] duration-200 ease-out group-hover:opacity-0 group-hover:flex-[0_0_0%] group-hover:px-0 overflow-hidden">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)] transition-transform duration-200 group-hover:scale-110"
+                          aria-hidden="true"
+                        />
+                        <span>Agent is hired</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={onFire}
+                        disabled={isFiring}
+                        className={`relative z-10 flex flex-[0_0_84px] items-center justify-center px-3 h-full text-[13px] font-medium text-white border-l border-white/10 transition-[flex-basis,background-color,border-color,color,box-shadow] duration-300 ease-out group-hover:flex-1 group-hover:bg-transparent group-hover:border-white/0 ${
+                          isFiring
+                            ? 'bg-gray-600 cursor-wait'
+                            : 'bg-gradient-to-b from-[#ff4d1a] to-[#fd6731] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
+                        }`}
+                      >
+                        {isFiring ? 'Firing...' : 'Fire'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
+                    <div>
+                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                        Agent Income
+                      </div>
+                      <LoadingValue
+                        isLoaded={hasLoadedView}
+                        skeletonClassName="h-6 w-24"
+                        loadedClassName="text-lg font-semibold text-white"
+                        value={formatCurrency(profile.agentIncome)}
                       />
                     </div>
-                  )}
-                  {ownerAddress && (
-                    <div className="text-sm text-gray-400">
-                      Owned by <span className="text-white">{formatAddress(ownerAddress)}</span>
+                    <div>
+                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                        AUM
+                      </div>
+                      <LoadingValue
+                        isLoaded={hasLoadedView}
+                        skeletonClassName="h-6 w-24"
+                        loadedClassName="text-lg font-semibold text-white"
+                        value={formatCurrency(profile.aum)}
+                      />
                     </div>
-                  )}
-                  {/* Action Icons */}
-                  <div className="flex items-center gap-1 ml-auto">
-                    <a
-                      href={AGENT_X_URL}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label="X"
-                      className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                      </svg>
-                    </a>
-                    <a
-                      href={AGENT_WEBSITE_URL}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label="Website"
-                      className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
-                    >
-                      <Globe className="w-4 h-4" />
-                    </a>
-                    <a
-                      href={AGENT_GITHUB_URL}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label="GitHub"
-                      className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
-                    >
-                      <Github className="w-4 h-4" />
-                    </a>
+                    <div>
+                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                        Total Users
+                      </div>
+                      <LoadingValue
+                        isLoaded={hasLoadedView}
+                        skeletonClassName="h-6 w-20"
+                        loadedClassName="text-lg font-semibold text-white"
+                        value={formatNumber(profile.totalUsers)}
+                      />
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                        APY
+                      </div>
+                      <LoadingValue
+                        isLoaded={hasLoadedView}
+                        skeletonClassName="h-6 w-16"
+                        loadedClassName="text-lg font-semibold text-teal-400"
+                        value={formatPercent(profile.apy)}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* Agent Name & Description */}
-                <h1 className="text-xl font-bold text-white mb-1">{agentName}</h1>
-                {agentDescription && <p className="text-gray-400 text-sm">{agentDescription}</p>}
+                {/* Right header (no surrounding card) */}
+                <div className="pt-2 h-full flex flex-col">
+                  <div className="flex items-start justify-between gap-6 mb-6">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3 mb-3">
+                        {rank !== undefined && <span className="text-gray-400 text-sm">#{rank}</span>}
+                        {rating !== undefined && (
+                          <div className="flex items-center gap-1">{renderStars(rating)}</div>
+                        )}
+                      </div>
 
-                {/* Status & Fire Button */}
-                <div className="flex items-center gap-3 mt-4">
-                  <span className="px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-400 text-sm font-medium flex items-center gap-2">
-                    <Check className="w-4 h-4" />
-                    Agent is hired
-                  </span>
-                  {currentCommand && (
-                    <span className="px-3 py-1.5 rounded-lg bg-[#2a2a2a] text-gray-300 text-sm">
-                      Command: {currentCommand}
-                    </span>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        {creatorName && (
+                          <CreatorIdentity
+                            name={creatorName}
+                            verified={creatorVerified}
+                            size="md"
+                            nameClassName="text-sm text-white"
+                          />
+                        )}
+                        {ownerAddress && (
+                          <div className="text-sm text-gray-400">
+                            Owned by <span className="text-white">{formatAddress(ownerAddress)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <a
+                        href={AGENT_X_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="X"
+                        className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                        </svg>
+                      </a>
+                      <a
+                        href={AGENT_WEBSITE_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="Website"
+                        className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                      >
+                        <Globe className="w-4 h-4" />
+                      </a>
+                      <a
+                        href={AGENT_GITHUB_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="GitHub"
+                        className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                      >
+                        <Github className="w-4 h-4" />
+                      </a>
+                    </div>
+                  </div>
+
+                  <h1 className="text-2xl font-bold text-white mb-2">{agentName}</h1>
+                  {agentDescription ? (
+                    <p className="text-gray-400 text-sm leading-relaxed">{agentDescription}</p>
+                  ) : (
+                    <p className="text-gray-500 text-sm italic">No description available</p>
                   )}
-                  <button
-                    onClick={onFire}
-                    disabled={isFiring}
-                    className={`px-4 py-1.5 rounded-lg text-white text-sm font-medium transition-colors ${
-                      isFiring
-                        ? 'bg-gray-600 cursor-wait'
-                        : 'bg-[#fd6731] hover:bg-[#e55a28]'
-                    }`}
-                  >
-                    {isFiring ? 'Firing...' : 'Fire'}
-                  </button>
+
+                  <div className="grid grid-cols-4 gap-4 mt-auto pt-6 border-t border-white/10">
+                    <TagColumn
+                      title="Chains"
+                      items={displayChains}
+                      iconsLoaded={iconsLoaded}
+                      getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
+                    />
+                    <TagColumn
+                      title="Protocols"
+                      items={profile.protocols}
+                      iconsLoaded={iconsLoaded}
+                      getIconUri={(protocol) => {
+                        const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+                        if (!fallback) return null;
+                        return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
+                      }}
+                    />
+                    <TagColumn
+                      title="Tokens"
+                      items={profile.tokens}
+                      iconsLoaded={iconsLoaded}
+                      getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
+                    />
+                    <PointsColumn metrics={metrics} />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Stats Row */}
-            <div className="grid grid-cols-6 gap-4 mt-6 pt-6 border-t border-[#2a2a2a]">
-              <StatBox label="Agent Income" value={formatCurrency(profile.agentIncome)} isLoaded={hasLoadedView} />
-              <StatBox label="AUM" value={formatCurrency(profile.aum)} isLoaded={hasLoadedView} />
-              <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} isLoaded={hasLoadedView} />
-              <StatBox
-                label="APY"
-                value={formatPercent(profile.apy)}
-                valueColor="text-teal-400"
-                isLoaded={hasLoadedView}
-              />
-              <StatBox label="Your Assets" value={null} isLoaded={hasLoadedView} />
-              <StatBox label="Your PnL" value={formatCurrency(metrics.lifetimePnlUsd)} isLoaded={hasLoadedView} />
-            </div>
+              {/* Tabs + content span full available width (no empty left column) */}
+              <div className="mt-8">{tabs}</div>
+              <div>{tabContent}</div>
+            </>
+          ) : (
+            <>
+              {/* Compact Header Card */}
+              <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 mb-6">
+                <div className="flex gap-6">
+                  {/* Agent Avatar */}
+                  {!iconsLoaded ? (
+                    <Skeleton className="h-32 w-32 rounded-full flex-shrink-0" />
+                  ) : (
+                    <div className="w-32 h-32 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a]">
+                      {agentAvatarUri ? (
+                        <img
+                          src={proxyIconUri(agentAvatarUri)}
+                          alt=""
+                          decoding="async"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : null}
+                    </div>
+                  )}
 
-            {/* Tags Row */}
-            <div className="grid grid-cols-5 gap-4 mt-6 pt-6 border-t border-[#2a2a2a]">
-              <TagColumn
-                title="Chains"
-                items={profile.chains}
-                iconsLoaded={iconsLoaded}
-                getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
-              />
-              <TagColumn
-                title="Protocols"
-                items={profile.protocols}
-                iconsLoaded={iconsLoaded}
-                getIconUri={(protocol) => {
-                  const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
-                  if (!fallback) return null;
-                  return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
-                }}
-              />
-              <TagColumn
-                title="Tokens"
-                items={profile.tokens}
-                iconsLoaded={iconsLoaded}
-                getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
-              />
-              <PointsColumn metrics={metrics} />
-            </div>
-          </div>
+                  {/* Agent Info */}
+                  <div className="flex-1 min-w-0">
+                    {/* Top Row: Rank, Rating, Creator */}
+                    <div className="flex items-center gap-4 mb-2">
+                      {rank !== undefined && <span className="text-gray-400 text-sm">#{rank}</span>}
+                      {rating !== undefined && (
+                        <div className="flex items-center gap-1">{renderStars(rating)}</div>
+                      )}
+                    </div>
 
-          {/* Tabs */}
-          <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
-            <TabButton
-              active={resolvedTab === 'blockers'}
-              onClick={() => setActiveTab('blockers')}
-              highlight
-            >
-              Agent Blockers
-            </TabButton>
-            <TabButton
-              active={resolvedTab === 'metrics'}
-              onClick={() => setActiveTab('metrics')}
-              disabled={isOnboardingActive}
-            >
-              Metrics
-            </TabButton>
-            <TabButton
-              active={resolvedTab === 'transactions'}
-              onClick={() => setActiveTab('transactions')}
-              disabled={isOnboardingActive}
-            >
-              Transaction history
-            </TabButton>
-            <TabButton
-              active={resolvedTab === 'settings'}
-              onClick={() => setActiveTab('settings')}
-              disabled={isOnboardingActive}
-            >
-              Settings and policies
-            </TabButton>
-            <TabButton active={resolvedTab === 'chat'} onClick={() => {}} disabled>
-              Chat
-            </TabButton>
-          </div>
+                    <div className="flex items-center gap-4 mb-3">
+                      {creatorName && (
+                        <div className="flex items-center gap-2">
+                          <CreatorIdentity
+                            name={creatorName}
+                            verified={creatorVerified}
+                            size="md"
+                            nameClassName="text-sm text-white"
+                          />
+                        </div>
+                      )}
+                      {ownerAddress && (
+                        <div className="text-sm text-gray-400">
+                          Owned by <span className="text-white">{formatAddress(ownerAddress)}</span>
+                        </div>
+                      )}
+                      {/* Action Icons */}
+                      <div className="flex items-center gap-1 ml-auto">
+                        <a
+                          href={AGENT_X_URL}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label="X"
+                          className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                          </svg>
+                        </a>
+                        <a
+                          href={AGENT_WEBSITE_URL}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label="Website"
+                          className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                        >
+                          <Globe className="w-4 h-4" />
+                        </a>
+                        <a
+                          href={AGENT_GITHUB_URL}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label="GitHub"
+                          className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                        >
+                          <Github className="w-4 h-4" />
+                        </a>
+                      </div>
+                    </div>
 
-          {/* Tab Content */}
-          {resolvedTab === 'blockers' && (
-            <AgentBlockersTab
-              agentId={agentId}
-              activeInterrupt={activeInterrupt}
-              allowedPools={allowedPools}
-              onInterruptSubmit={onInterruptSubmit}
-              taskId={taskId}
-              taskStatus={taskStatus}
-              haltReason={haltReason}
-              executionError={executionError}
-              delegationsBypassActive={delegationsBypassActive}
-              onboarding={onboarding}
-              telemetry={telemetry}
-              settings={settings}
-              onSettingsChange={onSettingsChange}
-            />
-          )}
+                    {/* Agent Name & Description */}
+                    <h1 className="text-xl font-bold text-white mb-1">{agentName}</h1>
+                    {agentDescription && <p className="text-gray-400 text-sm">{agentDescription}</p>}
 
-          {resolvedTab === 'metrics' && (
-            <MetricsTab
-              agentId={agentId}
-              profile={profile}
-              metrics={metrics}
-              fullMetrics={fullMetrics}
-              events={events}
-              transactions={transactions}
-              hasLoadedView={hasLoadedView}
-            />
-          )}
+                    {/* Status & Fire Button */}
+                    <div className="flex items-center gap-3 mt-4">
+                      <span className="px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-400 text-sm font-medium flex items-center gap-2">
+                        <Check className="w-4 h-4" />
+                        Agent is hired
+                      </span>
+                      {currentCommand && (
+                        <span className="px-3 py-1.5 rounded-lg bg-[#2a2a2a] text-gray-300 text-sm">
+                          Command: {currentCommand}
+                        </span>
+                      )}
+                      <button
+                        onClick={onFire}
+                        disabled={isFiring}
+                        className={`px-4 py-1.5 rounded-lg text-white text-sm font-medium transition-colors ${
+                          isFiring ? 'bg-gray-600 cursor-wait' : 'bg-[#fd6731] hover:bg-[#e55a28]'
+                        }`}
+                      >
+                        {isFiring ? 'Firing...' : 'Fire'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
 
-          {resolvedTab === 'transactions' && (
-            <TransactionHistoryTab transactions={transactions} />
-          )}
+                {/* Stats Row */}
+                <div className="grid grid-cols-6 gap-4 mt-6 pt-6 border-t border-[#2a2a2a]">
+                  <StatBox
+                    label="Agent Income"
+                    value={formatCurrency(profile.agentIncome)}
+                    isLoaded={hasLoadedView}
+                  />
+                  <StatBox label="AUM" value={formatCurrency(profile.aum)} isLoaded={hasLoadedView} />
+                  <StatBox
+                    label="Total Users"
+                    value={formatNumber(profile.totalUsers)}
+                    isLoaded={hasLoadedView}
+                  />
+                  <StatBox
+                    label="APY"
+                    value={formatPercent(profile.apy)}
+                    valueColor="text-teal-400"
+                    isLoaded={hasLoadedView}
+                  />
+                  <StatBox label="Your Assets" value={null} isLoaded={hasLoadedView} />
+                  <StatBox
+                    label="Your PnL"
+                    value={formatCurrency(metrics.lifetimePnlUsd)}
+                    isLoaded={hasLoadedView}
+                  />
+                </div>
 
-          {resolvedTab === 'settings' && (
-            <SettingsTab
-              settings={settings}
-              onSettingsChange={onSettingsChange}
-            />
+                {/* Tags Row */}
+                <div className="grid grid-cols-5 gap-4 mt-6 pt-6 border-t border-[#2a2a2a]">
+                  <TagColumn
+                    title="Chains"
+                    items={displayChains}
+                    iconsLoaded={iconsLoaded}
+                    getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
+                  />
+                  <TagColumn
+                    title="Protocols"
+                    items={profile.protocols}
+                    iconsLoaded={iconsLoaded}
+                    getIconUri={(protocol) => {
+                      const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+                      if (!fallback) return null;
+                      return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
+                    }}
+                  />
+                  <TagColumn
+                    title="Tokens"
+                    items={profile.tokens}
+                    iconsLoaded={iconsLoaded}
+                    getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
+                  />
+                  <PointsColumn metrics={metrics} />
+                </div>
+              </div>
+
+              {/* Tabs */}
+              {tabs}
+
+              {/* Tab Content */}
+              {tabContent}
+            </>
           )}
         </div>
       </div>
@@ -1954,7 +2174,22 @@ function TagColumn({ title, items, iconsLoaded, getIconUri }: TagColumnProps) {
             </div>
           );
         })}
-        {items.length > 3 && <div className="text-xs text-gray-500">+{items.length - 3} more</div>}
+        {items.length > 3 ? (
+          <CursorListTooltip
+            title={`${title} (more)`}
+            items={items.slice(3).map((label) => ({
+              label,
+              iconUri: iconsLoaded ? getIconUri(label) : null,
+            }))}
+          >
+            <div className="inline-flex items-center gap-1.5 text-xs text-gray-400 select-none cursor-default">
+              <span className="h-5 w-6 rounded-md bg-white/[0.04] ring-1 ring-white/10 flex items-center justify-center text-[12px] text-gray-200 font-semibold">
+                …
+              </span>
+              <span>{items.length - 3} more</span>
+            </div>
+          </CursorListTooltip>
+        ) : null}
       </div>
     </div>
   );

@@ -59,11 +59,11 @@ describe('HireAgentsPage (top cards)', () => {
     expect(html).toContain('APY');
     expect(html).toContain('Users');
 
-    // Token icons render and clamp (first 4 shown, rest summarized).
+    // Token icons render and clamp (first 3 shown, rest summarized).
     expect(html).toContain(encodeURIComponent('https://icons.test/eth.png'));
     expect(html).toContain(encodeURIComponent('https://icons.test/usdc.png'));
     expect(html).toContain(encodeURIComponent('https://icons.test/weth.png'));
-    expect(html).toContain(encodeURIComponent('https://icons.test/arb.png'));
-    expect(html).toContain('+2');
+    expect(html).toContain('…');
+    expect(html).not.toContain('+2');
   });
 });
