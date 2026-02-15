@@ -502,7 +502,7 @@ export function AgentDetailPage({
         </nav>
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-8">
           {/* Left Column - Agent Card */}
           <div className="space-y-6">
             <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
@@ -524,10 +524,10 @@ export function AgentDetailPage({
               <button
                 onClick={onHire}
                 disabled={isHiring}
-                className={`w-full py-3 rounded-xl font-medium transition-colors ${
+                className={`w-full py-3.5 rounded-xl font-medium transition-colors ${
                   isHiring
                     ? 'bg-purple-500/50 text-white cursor-wait'
-                    : 'bg-purple-500 hover:bg-purple-600 text-white'
+                    : 'bg-purple-500 hover:bg-purple-600 text-white shadow-[0_10px_30px_rgba(168,85,247,0.25)]'
                 }`}
               >
                 {isHiring ? 'Hiring...' : 'Hire'}
@@ -659,45 +659,89 @@ export function AgentDetailPage({
               </div>
             </div>
 
-            {agentId === 'agent-gmx-allora' ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setActiveTab('metrics')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      activeTab === 'metrics'
-                        ? 'bg-[#fd6731] text-white'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Metrics
-                  </button>
-                  <button
-                    disabled
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed"
-                  >
-                    Chat
-                  </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-[#fd6731] text-white"
+                aria-current="page"
+              >
+                Metrics
+              </button>
+              <button
+                type="button"
+                disabled
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed"
+              >
+                Chat
+              </button>
+            </div>
+
+            {agentId === 'agent-gmx-allora' || agentId === 'agent-pendle' ? (
+              <MetricsTab
+                agentId={agentId}
+                profile={profile}
+                metrics={metrics}
+                fullMetrics={fullMetrics}
+                events={events}
+                transactions={transactions}
+                hasLoadedView={hasLoadedView}
+              />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-white">APY Change</div>
+                      <div className="text-xs text-gray-500 mt-1">Latest vs previous snapshot</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-semibold text-teal-400">
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-7 w-20"
+                          loadedClassName="text-teal-400"
+                          value={metrics.apy !== undefined ? `${metrics.apy.toFixed(0)}%` : null}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {fullMetrics?.previousApy !== undefined && metrics.apy !== undefined
+                          ? `${(metrics.apy - fullMetrics.previousApy).toFixed(1)}%`
+                          : '—'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-5 h-[110px] rounded-xl bg-white/[0.03] border border-white/10" />
                 </div>
 
-                {activeTab === 'metrics' ? (
-                  <MetricsTab
-                    agentId={agentId}
-                    profile={profile}
-                    metrics={metrics}
-                    fullMetrics={fullMetrics}
-                    events={events}
-                    transactions={transactions}
-                    hasLoadedView={hasLoadedView}
-                  />
-                ) : null}
-              </>
-            ) : null}
-	          </div>
-	        </div>
-	      </div>
-	    </div>
-	  );
+                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-white">Total Users</div>
+                      <div className="text-xs text-gray-500 mt-1">All time</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-semibold text-white">
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-7 w-24"
+                          loadedClassName="text-white"
+                          value={
+                            profile.totalUsers !== undefined ? profile.totalUsers.toLocaleString() : null
+                          }
+                        />
+                      </div>
+                      <div className="text-xs text-gray-500">—</div>
+                    </div>
+                  </div>
+                  <div className="mt-5 h-[110px] rounded-xl bg-white/[0.03] border border-white/10" />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Tab Button Component

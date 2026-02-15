@@ -18,7 +18,7 @@ vi.mock('../hooks/usePrivyWalletClient', () => {
 });
 
 describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
-  it('does not render metrics/chat panel before the agent is hired', () => {
+  it('renders a lightweight metrics preview before the agent is hired', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-clmm',
@@ -43,9 +43,8 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
       }),
     );
 
-    expect(html).not.toContain('>Metrics<');
-    expect(html).not.toContain('>Chat<');
-    expect(html).not.toContain('Key Metrics');
+    expect(html).toContain('APY Change');
+    expect(html).toContain('Total Users');
   });
 
   it('renders metrics tab as disabled while onboarding is in progress', () => {

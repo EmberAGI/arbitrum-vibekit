@@ -28,11 +28,12 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   };
 
   // Dev-only UI preview for screenshot-driven design work.
-  // This is guarded by NODE_ENV so it cannot affect production behavior.
+  // This is guarded by NODE_ENV by default so it cannot affect production behavior.
+  // For local QA runs, it can be explicitly enabled via NEXT_PUBLIC_UI_PREVIEW=true.
+  const uiPreviewEnabled =
+    process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_UI_PREVIEW === 'true';
   const uiPreviewState =
-    process.env.NODE_ENV === 'development'
-      ? parseUiPreviewState(searchParams.get('__uiState'))
-      : null;
+    uiPreviewEnabled ? parseUiPreviewState(searchParams.get('__uiState')) : null;
 
   if (uiPreviewState) {
     const previewAgentId = isRegisteredAgentId(routeAgentId) ? routeAgentId : selectedAgentId;
