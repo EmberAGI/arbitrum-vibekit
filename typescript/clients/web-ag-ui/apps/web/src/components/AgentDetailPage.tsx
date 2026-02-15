@@ -502,14 +502,14 @@ export function AgentDetailPage({
         </nav>
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-8 items-stretch">
           {/* Left Column - Agent Card */}
           <div className="space-y-6">
-            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
               {!iconsLoaded ? (
-                <Skeleton className="w-full aspect-square rounded-full mb-6" />
+                <Skeleton className="h-[220px] w-[220px] rounded-full mb-6 mx-auto" />
               ) : (
-                <div className="w-full aspect-square rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a]">
+                <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
                   {agentAvatarUri ? (
                     <img
                       src={agentAvatarUri}
@@ -533,31 +533,54 @@ export function AgentDetailPage({
                 {isHiring ? 'Hiring...' : 'Hire'}
               </button>
 
-              <div className="grid grid-cols-2 gap-4 mt-6">
-                <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
-                  <StatBox
-                    label="Agent Income"
-                    value={formatCurrency(profile.agentIncome)}
-                    isLoaded={hasLoadedView}
-                  />
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
+                <div>
+                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                    Agent Income
+                  </div>
+                  {!hasLoadedView ? (
+                    <Skeleton className="h-6 w-24" />
+                  ) : (
+                    <div className="text-lg font-semibold text-white">
+                      {formatCurrency(profile.agentIncome) ?? '-'}
+                    </div>
+                  )}
                 </div>
-                <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
-                  <StatBox label="AUM" value={formatCurrency(profile.aum)} isLoaded={hasLoadedView} />
+                <div>
+                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                    AUM
+                  </div>
+                  {!hasLoadedView ? (
+                    <Skeleton className="h-6 w-24" />
+                  ) : (
+                    <div className="text-lg font-semibold text-white">
+                      {formatCurrency(profile.aum) ?? '-'}
+                    </div>
+                  )}
                 </div>
-                <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
-                  <StatBox
-                    label="Total Users"
-                    value={formatNumber(profile.totalUsers)}
-                    isLoaded={hasLoadedView}
-                  />
+                <div>
+                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                    Total Users
+                  </div>
+                  {!hasLoadedView ? (
+                    <Skeleton className="h-6 w-20" />
+                  ) : (
+                    <div className="text-lg font-semibold text-white">
+                      {formatNumber(profile.totalUsers) ?? '-'}
+                    </div>
+                  )}
                 </div>
-                <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
-                  <StatBox
-                    label="APY"
-                    value={formatPercent(profile.apy)}
-                    valueColor="text-teal-400"
-                    isLoaded={hasLoadedView}
-                  />
+                <div>
+                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                    APY
+                  </div>
+                  {!hasLoadedView ? (
+                    <Skeleton className="h-6 w-16" />
+                  ) : (
+                    <div className="text-lg font-semibold text-teal-400">
+                      {formatPercent(profile.apy) ?? '-'}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -565,7 +588,7 @@ export function AgentDetailPage({
 
           {/* Right Column - Details */}
           <div className="space-y-6">
-            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+            <div className="pt-2">
               <div className="flex items-start justify-between gap-6 mb-6">
                 <div className="min-w-0">
                   <div className="flex items-center gap-3 mb-3">
@@ -632,7 +655,7 @@ export function AgentDetailPage({
                 <p className="text-gray-500 text-sm italic">No description available</p>
               )}
 
-              <div className="grid grid-cols-4 gap-4 mt-6">
+              <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-white/10">
                 <TagColumn
                   title="Chains"
                   items={profile.chains}
@@ -658,86 +681,84 @@ export function AgentDetailPage({
                 <PointsColumn metrics={metrics} />
               </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-[#fd6731] text-white"
-                aria-current="page"
-              >
-                Metrics
-              </button>
-              <button
-                type="button"
-                disabled
-                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed"
-              >
-                Chat
-              </button>
-            </div>
-
-            {agentId === 'agent-gmx-allora' || agentId === 'agent-pendle' ? (
-              <MetricsTab
-                agentId={agentId}
-                profile={profile}
-                metrics={metrics}
-                fullMetrics={fullMetrics}
-                events={events}
-                transactions={transactions}
-                hasLoadedView={hasLoadedView}
-              />
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-sm font-semibold text-white">APY Change</div>
-                      <div className="text-xs text-gray-500 mt-1">Latest vs previous snapshot</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-semibold text-teal-400">
-                        <LoadingValue
-                          isLoaded={hasLoadedView}
-                          skeletonClassName="h-7 w-20"
-                          loadedClassName="text-teal-400"
-                          value={metrics.apy !== undefined ? `${metrics.apy.toFixed(0)}%` : null}
-                        />
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {fullMetrics?.previousApy !== undefined && metrics.apy !== undefined
-                          ? `${(metrics.apy - fullMetrics.previousApy).toFixed(1)}%`
-                          : '—'}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-5 h-[110px] rounded-xl bg-white/[0.03] border border-white/10" />
-                </div>
-
-                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-sm font-semibold text-white">Total Users</div>
-                      <div className="text-xs text-gray-500 mt-1">All time</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-semibold text-white">
-                        <LoadingValue
-                          isLoaded={hasLoadedView}
-                          skeletonClassName="h-7 w-24"
-                          loadedClassName="text-white"
-                          value={
-                            profile.totalUsers !== undefined ? profile.totalUsers.toLocaleString() : null
-                          }
-                        />
-                      </div>
-                      <div className="text-xs text-gray-500">—</div>
-                    </div>
-                  </div>
-                  <div className="mt-5 h-[110px] rounded-xl bg-white/[0.03] border border-white/10" />
-                </div>
-              </div>
-            )}
           </div>
+        </div>
+
+        <div className="mt-10 border-b border-white/10 flex items-center gap-6">
+          <button
+            type="button"
+            className="px-1 pb-3 text-sm font-medium text-[#fd6731] border-b-2 border-[#fd6731] -mb-px"
+            aria-current="page"
+          >
+            Metrics
+          </button>
+          <button type="button" disabled className="px-1 pb-3 text-sm font-medium text-gray-600">
+            Chat
+          </button>
+        </div>
+
+        <div className="mt-6">
+          {agentId === 'agent-gmx-allora' || agentId === 'agent-pendle' ? (
+            <MetricsTab
+              agentId={agentId}
+              profile={profile}
+              metrics={metrics}
+              fullMetrics={fullMetrics}
+              events={events}
+              transactions={transactions}
+              hasLoadedView={hasLoadedView}
+            />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-white">APY Change</div>
+                    <div className="text-xs text-gray-500 mt-1">Latest vs previous snapshot</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-semibold text-teal-400">
+                      <LoadingValue
+                        isLoaded={hasLoadedView}
+                        skeletonClassName="h-7 w-20"
+                        loadedClassName="text-teal-400"
+                        value={metrics.apy !== undefined ? `${metrics.apy.toFixed(0)}%` : null}
+                      />
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {fullMetrics?.previousApy !== undefined && metrics.apy !== undefined
+                        ? `${(metrics.apy - fullMetrics.previousApy).toFixed(1)}%`
+                        : '—'}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-5 h-[160px] rounded-xl bg-white/[0.03] border border-white/10" />
+              </div>
+
+              <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-white">Total Users</div>
+                    <div className="text-xs text-gray-500 mt-1">All time</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-semibold text-white">
+                      <LoadingValue
+                        isLoaded={hasLoadedView}
+                        skeletonClassName="h-7 w-24"
+                        loadedClassName="text-white"
+                        value={
+                          profile.totalUsers !== undefined ? profile.totalUsers.toLocaleString() : null
+                        }
+                      />
+                    </div>
+                    <div className="text-xs text-gray-500">—</div>
+                  </div>
+                </div>
+                <div className="mt-5 h-[160px] rounded-xl bg-white/[0.03] border border-white/10" />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
