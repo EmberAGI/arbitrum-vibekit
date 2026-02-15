@@ -109,6 +109,98 @@ interface AgentDetailPageProps {
 
 type TabType = 'blockers' | 'metrics' | 'transactions' | 'settings' | 'chat';
 
+function hashStringToSeed(value: string): number {
+  // Cheap stable hash for deterministic mock series.
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function mulberry32(seed: number): () => number {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let x = Math.imul(t ^ (t >>> 15), 1 | t);
+    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function makeMockSeries(params: {
+  seedKey: string;
+  points: number;
+  start: number;
+  drift: number;
+  noise: number;
+  min?: number;
+  max?: number;
+}): number[] {
+  const { seedKey, points, start, drift, noise, min, max } = params;
+  const rand = mulberry32(hashStringToSeed(seedKey));
+  const out: number[] = [];
+  let current = start;
+
+  for (let i = 0; i < points; i++) {
+    const n = (rand() - 0.5) * 2; // [-1, 1]
+    current += drift + n * noise;
+    if (min !== undefined) current = Math.max(min, current);
+    if (max !== undefined) current = Math.min(max, current);
+    out.push(current);
+  }
+
+  return out;
+}
+
+function Sparkline(props: {
+  values: number[];
+  height?: number;
+  strokeClassName?: string;
+  fillClassName?: string;
+}) {
+  const { values, height = 160, strokeClassName = 'stroke-purple-400', fillClassName = 'fill-purple-500/10' } =
+    props;
+  if (values.length < 2) return null;
+
+  const width = 300;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1e-9, max - min);
+
+  const points = values
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * width;
+      const y = height - ((v - min) / range) * height;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(' ');
+
+  const area = `0,${height} ${points} ${width},${height}`;
+
+  return (
+    <div className="mt-5 h-[160px] rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden">
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <polyline points={area} className={fillClassName} />
+        <polyline
+          points={points}
+          className={`${strokeClassName} stroke-[2]`}
+          fill="none"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export function AgentDetailPage({
   agentId,
   agentName,
@@ -150,6 +242,29 @@ export function AgentDetailPage({
   const isOnboardingActive = onboarding?.step !== undefined;
   const forceBlockersTab = Boolean(activeInterrupt) || isOnboardingActive;
   const resolvedTab: TabType = forceBlockersTab ? 'blockers' : activeTab;
+
+  const displayChains = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    for (const chain of profile.chains ?? []) {
+      const trimmed = chain.trim();
+      if (trimmed.length === 0) continue;
+
+      // Figma expects the canonical label "Arbitrum" even if upstream sources report
+      // "Arbitrum One" or other variants. Keep this narrowly-scoped to avoid unintended
+      // renames for other chains.
+      const normalized = normalizeNameKey(trimmed);
+      const label = normalized.startsWith('arbitrum') ? 'Arbitrum' : trimmed;
+      const dedupeKey = normalizeNameKey(label);
+
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      out.push(label);
+    }
+
+    return out;
+  }, [profile.chains]);
 
   const desiredTokenSymbols = useMemo(() => {
     const out: string[] = [];
@@ -504,7 +619,7 @@ export function AgentDetailPage({
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-8 items-stretch">
           {/* Left Column - Agent Card */}
-          <div className="space-y-6">
+          <div className="h-full">
             <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
               {!iconsLoaded ? (
                 <Skeleton className="h-[220px] w-[220px] rounded-full mb-6 mx-auto" />
@@ -587,8 +702,8 @@ export function AgentDetailPage({
           </div>
 
           {/* Right Column - Details */}
-          <div className="space-y-6">
-            <div className="pt-2">
+          <div className="h-full">
+            <div className="pt-2 h-full flex flex-col">
               <div className="flex items-start justify-between gap-6 mb-6">
                 <div className="min-w-0">
                   <div className="flex items-center gap-3 mb-3">
@@ -655,10 +770,10 @@ export function AgentDetailPage({
                 <p className="text-gray-500 text-sm italic">No description available</p>
               )}
 
-              <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-white/10">
+              <div className="grid grid-cols-4 gap-4 mt-auto pt-6 border-t border-white/10">
                 <TagColumn
                   title="Chains"
-                  items={profile.chains}
+                  items={displayChains}
                   iconsLoaded={iconsLoaded}
                   getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
                 />
@@ -732,7 +847,17 @@ export function AgentDetailPage({
                     </div>
                   </div>
                 </div>
-                <div className="mt-5 h-[160px] rounded-xl bg-white/[0.03] border border-white/10" />
+                <Sparkline
+                  values={makeMockSeries({
+                    seedKey: `${agentId}:apy`,
+                    points: 24,
+                    start: metrics.apy ?? 18,
+                    drift: 0.02,
+                    noise: 0.35,
+                    min: 0,
+                    max: 120,
+                  })}
+                />
               </div>
 
               <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
@@ -755,7 +880,18 @@ export function AgentDetailPage({
                     <div className="text-xs text-gray-500">—</div>
                   </div>
                 </div>
-                <div className="mt-5 h-[160px] rounded-xl bg-white/[0.03] border border-white/10" />
+                <Sparkline
+                  values={makeMockSeries({
+                    seedKey: `${agentId}:users`,
+                    points: 24,
+                    start: Math.max(50, profile.totalUsers ?? 5000) * 0.6,
+                    drift: Math.max(1, (profile.totalUsers ?? 5000) / 400),
+                    noise: Math.max(2, (profile.totalUsers ?? 5000) / 250),
+                    min: 0,
+                  })}
+                  strokeClassName="stroke-purple-300"
+                  fillClassName="fill-purple-400/10"
+                />
               </div>
             </div>
           )}
