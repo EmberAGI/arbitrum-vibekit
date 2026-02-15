@@ -422,7 +422,25 @@ export function AgentDetailPage({
           />
         )}
 
-        {resolvedTab === 'transactions' && <TransactionHistoryTab transactions={transactions} />}
+        {resolvedTab === 'transactions' && (
+          <TransactionHistoryTab
+            transactions={transactions}
+            iconsLoaded={iconsLoaded}
+            chainIconUri={displayChains.length > 0 ? chainIconByName[normalizeNameKey(displayChains[0])] ?? null : null}
+            protocolLabel={
+              profile.protocols && profile.protocols.length > 0 ? profile.protocols[0] : null
+            }
+            protocolIconUri={
+              profile.protocols && profile.protocols.length > 0
+                ? (() => {
+                    const protocol = profile.protocols[0];
+                    const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+                    return fallback ? tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null : null;
+                  })()
+                : null
+            }
+          />
+        )}
 
         {resolvedTab === 'settings' && (
           <SettingsTab settings={settings} onSettingsChange={onSettingsChange} />
@@ -1164,17 +1182,29 @@ function TabButton({ active, onClick, children, disabled, highlight }: TabButton
 // Transaction History Tab Component
 interface TransactionHistoryTabProps {
   transactions: Transaction[];
+  iconsLoaded: boolean;
+  chainIconUri: string | null;
+  protocolIconUri: string | null;
+  protocolLabel: string | null;
 }
 
-function TransactionHistoryTab({ transactions }: TransactionHistoryTabProps) {
+function TransactionHistoryTab({
+  transactions,
+  iconsLoaded,
+  chainIconUri,
+  protocolIconUri,
+  protocolLabel,
+}: TransactionHistoryTabProps) {
   if (transactions.length === 0) {
     return (
-      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-8 text-center">
-        <div className="text-gray-600 text-4xl mb-2">📋</div>
-        <p className="text-gray-500">No transactions yet</p>
-        <p className="text-gray-600 text-sm mt-1">
-          Transactions will appear here once the agent starts operating
-        </p>
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8">
+        <div className="text-[12px] uppercase tracking-[0.14em] text-white/60 mb-2">
+          Transaction History
+        </div>
+        <div className="text-white text-lg font-semibold mb-1">No transactions yet</div>
+        <div className="text-sm text-gray-400">
+          Transactions will appear here once the agent starts operating.
+        </div>
       </div>
     );
   }
@@ -1192,41 +1222,105 @@ function TransactionHistoryTab({ transactions }: TransactionHistoryTabProps) {
   };
 
   return (
-    <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
-      <div className="p-4 border-b border-[#2a2a2a]">
-        <h3 className="text-lg font-semibold text-white">Transaction History</h3>
-        <p className="text-sm text-gray-500">{transactions.length} transactions</p>
-      </div>
-      <div className="divide-y divide-[#2a2a2a]">
-        {transactions.slice(-10).reverse().map((tx, index) => (
-          <div key={`${tx.cycle}-${index}`} className="p-4 hover:bg-[#252525] transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-white">
-                  Cycle {tx.cycle} • {tx.action}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {tx.txHash ? `${tx.txHash.slice(0, 12)}…` : 'pending'}
-                  {tx.reason ? ` · ${tx.reason}` : ''}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    tx.status === 'success'
-                      ? 'bg-teal-500/20 text-teal-400'
-                      : tx.status === 'failed'
-                        ? 'bg-red-500/20 text-red-400'
-                        : 'bg-yellow-500/20 text-yellow-400'
-                  }`}
-                >
-                  {tx.status}
-                </span>
-                <span className="text-xs text-gray-500">{formatDate(tx.timestamp)}</span>
-              </div>
-            </div>
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+      <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-6">
+        <div>
+          <div className="text-[12px] uppercase tracking-[0.14em] text-white/60">
+            Transaction History
           </div>
-        ))}
+          <div className="text-sm text-gray-400 mt-1">
+            Showing the latest {Math.min(10, transactions.length)} of {transactions.length}
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px]">
+          <thead className="bg-white/[0.02]">
+            <tr className="text-[11px] uppercase tracking-[0.14em] text-white/60 border-b border-white/10">
+              <th className="text-left font-medium px-5 py-3">Transaction</th>
+              <th className="text-left font-medium px-5 py-3">Date &amp; time</th>
+              <th className="text-left font-medium px-5 py-3">Protocol</th>
+              <th className="text-right font-medium px-5 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10">
+            {transactions
+              .slice(-10)
+              .reverse()
+              .map((tx, index) => {
+                const shortHash = tx.txHash ? `${tx.txHash.slice(0, 10)}…${tx.txHash.slice(-4)}` : 'pending';
+                const status = tx.status ?? 'pending';
+
+                const statusPillClass =
+                  status === 'success'
+                    ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25'
+                    : status === 'failed'
+                      ? 'bg-red-500/15 text-red-300 ring-1 ring-red-500/25'
+                      : 'bg-yellow-500/15 text-yellow-200 ring-1 ring-yellow-500/25';
+
+                return (
+                  <tr
+                    key={`${tx.cycle}-${index}`}
+                    className="hover:bg-white/[0.04] transition-colors"
+                  >
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center -space-x-2 flex-shrink-0">
+                          {iconsLoaded && chainIconUri ? (
+                            <img
+                              src={proxyIconUri(chainIconUri)}
+                              alt=""
+                              loading="lazy"
+                              decoding="async"
+                              className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
+                            />
+                          ) : (
+                            <div className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12]" />
+                          )}
+                          {iconsLoaded && protocolIconUri ? (
+                            <img
+                              src={proxyIconUri(protocolIconUri)}
+                              alt=""
+                              loading="lazy"
+                              decoding="async"
+                              className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
+                            />
+                          ) : (
+                            <div className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12]" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="text-white font-medium truncate">
+                            Cycle {tx.cycle} · {tx.action}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-0.5 truncate">
+                            {shortHash}
+                            {tx.reason ? ` · ${tx.reason}` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-5 py-4 text-sm text-gray-300 whitespace-nowrap">
+                      {formatDate(tx.timestamp)}
+                    </td>
+
+                    <td className="px-5 py-4 text-sm text-gray-300 whitespace-nowrap">
+                      {protocolLabel ?? '—'}
+                    </td>
+
+                    <td className="px-5 py-4 text-right whitespace-nowrap">
+                      <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[12px] font-medium ${statusPillClass}`}>
+                        {status}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
