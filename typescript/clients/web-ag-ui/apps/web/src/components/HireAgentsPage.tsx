@@ -9,6 +9,7 @@ import { FilterTabs } from './ui/FilterTabs';
 import { Pagination } from './ui/Pagination';
 import { AgentsTable } from './agents/AgentsTable';
 import { Skeleton } from './ui/Skeleton';
+import { CreatorIdentity } from './ui/CreatorIdentity';
 import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
 import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
 import {
@@ -418,8 +419,14 @@ function FeaturedAgentCard({
             </div>
           )}
           {hasCreator && (
-            <span className="text-gray-500">
-              by <span className="text-white">{agent.creator}</span>
+            <span className="text-gray-500 inline-flex items-center gap-1.5">
+              <span>by</span>
+              <CreatorIdentity
+                name={agent.creator ?? ''}
+                verified={agent.creatorVerified}
+                size="sm"
+                nameClassName="text-white"
+              />
             </span>
           )}
         </div>

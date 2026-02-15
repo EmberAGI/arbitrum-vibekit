@@ -48,6 +48,7 @@ import {
 import { formatPoolPair } from '../utils/poolFormat';
 import { Skeleton } from './ui/Skeleton';
 import { LoadingValue } from './ui/LoadingValue';
+import { CreatorIdentity } from './ui/CreatorIdentity';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -286,11 +287,12 @@ export function AgentDetailPage({
                 <div className="flex items-center gap-4 mb-3">
                   {creatorName && (
                     <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#fd6731] flex items-center justify-center text-[10px] font-bold">
-                        E
-                      </div>
-                      <span className="text-sm text-white">{creatorName}</span>
-                      {creatorVerified && <span className="text-blue-400 text-xs">✓</span>}
+                      <CreatorIdentity
+                        name={creatorName}
+                        verified={creatorVerified}
+                        size="md"
+                        nameClassName="text-sm text-white"
+                      />
                     </div>
                   )}
                   {ownerAddress && (
@@ -558,11 +560,12 @@ export function AgentDetailPage({
               <div className="flex items-center gap-4 mb-4">
                 {creatorName && (
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-[#fd6731] flex items-center justify-center text-xs font-bold">
-                      E
-                    </div>
-                    <span className="text-sm text-white">{creatorName}</span>
-                    {creatorVerified && <span className="text-blue-400 text-xs">✓</span>}
+                    <CreatorIdentity
+                      name={creatorName}
+                      verified={creatorVerified}
+                      size="md"
+                      nameClassName="text-sm text-white"
+                    />
                   </div>
                 )}
                 {ownerAddress && (

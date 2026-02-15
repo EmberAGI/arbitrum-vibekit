@@ -3,6 +3,7 @@
 import { Star, MoreHorizontal, ChevronDown } from 'lucide-react';
 import { Skeleton } from '../ui/Skeleton';
 import { proxyIconUri } from '../../utils/iconResolution';
+import { CreatorIdentity } from '../ui/CreatorIdentity';
 
 export interface AgentTableItem {
   id: string;
@@ -103,8 +104,12 @@ function AgentRow({ agent, iconsLoaded, onClick, onAction }: AgentRowProps) {
             </div>
             <div className="flex items-center gap-1 mt-0.5">
               <span className="text-[12px] text-gray-500">by</span>
-              <span className="text-[12px] text-[color:var(--hire-accent)]">{agent.creator}</span>
-              {agent.creatorVerified && <span className="text-[12px] text-blue-400">✓</span>}
+              <CreatorIdentity
+                name={agent.creator}
+                verified={agent.creatorVerified}
+                size="sm"
+                nameClassName="text-[12px] text-gray-200"
+              />
             </div>
           </div>
           <div className="star-rating ml-2">
