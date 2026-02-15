@@ -505,7 +505,7 @@ export function AgentDetailPage({
         <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-8">
           {/* Left Column - Agent Card */}
           <div className="space-y-6">
-	            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
               {!iconsLoaded ? (
                 <Skeleton className="w-full aspect-square rounded-full mb-6" />
               ) : (
@@ -533,78 +533,96 @@ export function AgentDetailPage({
                 {isHiring ? 'Hiring...' : 'Hire'}
               </button>
 
-	              <div className="grid grid-cols-2 gap-4 mt-6">
-	                <StatBox label="Agent Income" value={formatCurrency(profile.agentIncome)} isLoaded={hasLoadedView} />
-	                <StatBox label="AUM" value={formatCurrency(profile.aum)} isLoaded={hasLoadedView} />
-	                <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} isLoaded={hasLoadedView} />
-	                <StatBox
-	                  label="APY"
-	                  value={formatPercent(profile.apy)}
-	                  valueColor="text-teal-400"
-	                  isLoaded={hasLoadedView}
-	                />
-	              </div>
+              <div className="grid grid-cols-2 gap-4 mt-6">
+                <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
+                  <StatBox
+                    label="Agent Income"
+                    value={formatCurrency(profile.agentIncome)}
+                    isLoaded={hasLoadedView}
+                  />
+                </div>
+                <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
+                  <StatBox label="AUM" value={formatCurrency(profile.aum)} isLoaded={hasLoadedView} />
+                </div>
+                <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
+                  <StatBox
+                    label="Total Users"
+                    value={formatNumber(profile.totalUsers)}
+                    isLoaded={hasLoadedView}
+                  />
+                </div>
+                <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
+                  <StatBox
+                    label="APY"
+                    value={formatPercent(profile.apy)}
+                    valueColor="text-teal-400"
+                    isLoaded={hasLoadedView}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Right Column - Details */}
           <div className="space-y-6">
             <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-              <div className="flex items-center gap-3 mb-4">
-                {rank !== undefined && <span className="text-gray-400 text-sm">#{rank}</span>}
-                {rating !== undefined && (
-                  <div className="flex items-center gap-1">{renderStars(rating)}</div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-4 mb-4">
-                {creatorName && (
-                  <div className="flex items-center gap-2">
-                    <CreatorIdentity
-                      name={creatorName}
-                      verified={creatorVerified}
-                      size="md"
-                      nameClassName="text-sm text-white"
-                    />
+              <div className="flex items-start justify-between gap-6 mb-6">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3 mb-3">
+                    {rank !== undefined && <span className="text-gray-400 text-sm">#{rank}</span>}
+                    {rating !== undefined && (
+                      <div className="flex items-center gap-1">{renderStars(rating)}</div>
+                    )}
                   </div>
-                )}
-                {ownerAddress && (
-                  <div className="text-sm text-gray-400">
-                    Owned by <span className="text-white">{formatAddress(ownerAddress)}</span>
-                  </div>
-                )}
-              </div>
 
-              <div className="flex items-center gap-2 mb-6">
-                <a
-                  href={AGENT_X_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="X"
-                  className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                  </svg>
-                </a>
-                <a
-                  href={AGENT_WEBSITE_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Website"
-                  className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
-                >
-                  <Globe className="w-4 h-4" />
-                </a>
-                <a
-                  href={AGENT_GITHUB_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="GitHub"
-                  className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
-                >
-                  <Github className="w-4 h-4" />
-                </a>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    {creatorName && (
+                      <CreatorIdentity
+                        name={creatorName}
+                        verified={creatorVerified}
+                        size="md"
+                        nameClassName="text-sm text-white"
+                      />
+                    )}
+                    {ownerAddress && (
+                      <div className="text-sm text-gray-400">
+                        Owned by <span className="text-white">{formatAddress(ownerAddress)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <a
+                    href={AGENT_X_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="X"
+                    className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    </svg>
+                  </a>
+                  <a
+                    href={AGENT_WEBSITE_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Website"
+                    className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                  >
+                    <Globe className="w-4 h-4" />
+                  </a>
+                  <a
+                    href={AGENT_GITHUB_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="GitHub"
+                    className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                  >
+                    <Github className="w-4 h-4" />
+                  </a>
+                </div>
               </div>
 
               <h1 className="text-2xl font-bold text-white mb-2">{agentName}</h1>
@@ -614,32 +632,32 @@ export function AgentDetailPage({
                 <p className="text-gray-500 text-sm italic">No description available</p>
               )}
 
-	              <div className="grid grid-cols-4 gap-4 mt-6">
-	                <TagColumn
-	                  title="Chains"
-	                  items={profile.chains}
-	                  iconsLoaded={iconsLoaded}
-	                  getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
-	                />
-	                <TagColumn
-	                  title="Protocols"
-	                  items={profile.protocols}
-	                  iconsLoaded={iconsLoaded}
-	                  getIconUri={(protocol) => {
-	                    const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
-	                    if (!fallback) return null;
-	                    return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
-	                  }}
-	                />
-	                <TagColumn
-	                  title="Tokens"
-	                  items={profile.tokens}
-	                  iconsLoaded={iconsLoaded}
-	                  getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
-	                />
-	                <PointsColumn metrics={metrics} />
-	              </div>
-	            </div>
+              <div className="grid grid-cols-4 gap-4 mt-6">
+                <TagColumn
+                  title="Chains"
+                  items={profile.chains}
+                  iconsLoaded={iconsLoaded}
+                  getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
+                />
+                <TagColumn
+                  title="Protocols"
+                  items={profile.protocols}
+                  iconsLoaded={iconsLoaded}
+                  getIconUri={(protocol) => {
+                    const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+                    if (!fallback) return null;
+                    return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
+                  }}
+                />
+                <TagColumn
+                  title="Tokens"
+                  items={profile.tokens}
+                  iconsLoaded={iconsLoaded}
+                  getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
+                />
+                <PointsColumn metrics={metrics} />
+              </div>
+            </div>
 
             {agentId === 'agent-gmx-allora' ? (
               <>
