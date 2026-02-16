@@ -19,6 +19,8 @@ const inactiveAgent: UseAgentConnectionResult = {
   hasLoadedView: false,
   threadId: undefined,
   interruptRenderer: null,
+  uiError: null,
+  clearUiError: () => undefined,
   view: defaultView,
   profile: defaultProfile,
   metrics: defaultMetrics,

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { HireAgentsPage, type Agent, type FeaturedAgent } from '@/components/HireAgentsPage';
 import { useAgentList } from '@/contexts/AgentListContext';
 import { getAllAgents, getFeaturedAgents } from '@/config/agents';
+import { canonicalizeChainLabel } from '@/utils/iconResolution';
 
 function normalizeStringList(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -19,12 +20,13 @@ function mergeUniqueStrings(params: {
   primary: string[];
   secondary: string[];
   keyFn: (value: string) => string;
+  mapFn?: (value: string) => string;
 }): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
 
   const push = (value: string) => {
-    const trimmed = value.trim();
+    const trimmed = (params.mapFn ? params.mapFn(value) : value).trim();
     if (trimmed.length === 0) return;
     const key = params.keyFn(trimmed);
     if (key.length === 0) return;
@@ -53,7 +55,8 @@ export default function HireAgentsRoute() {
     const chains = mergeUniqueStrings({
       primary: normalizeStringList(profile?.chains),
       secondary: normalizeStringList(agentConfig.chains),
-      keyFn: (value) => value.toLowerCase(),
+      mapFn: canonicalizeChainLabel,
+      keyFn: (value) => canonicalizeChainLabel(value).toLowerCase(),
     });
     const protocols = mergeUniqueStrings({
       primary: normalizeStringList(profile?.protocols),
@@ -103,7 +106,8 @@ export default function HireAgentsRoute() {
     const chains = mergeUniqueStrings({
       primary: normalizeStringList(profile?.chains),
       secondary: normalizeStringList(config.chains),
-      keyFn: (value) => value.toLowerCase(),
+      mapFn: canonicalizeChainLabel,
+      keyFn: (value) => canonicalizeChainLabel(value).toLowerCase(),
     });
     const protocols = mergeUniqueStrings({
       primary: normalizeStringList(profile?.protocols),

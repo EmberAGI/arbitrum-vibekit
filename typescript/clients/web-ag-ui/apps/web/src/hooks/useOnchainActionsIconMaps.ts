@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { fetchOnchainActionsChainsPage } from '../clients/onchainActionsIcons';
 import { COINGECKO_TOKEN_ICON_BY_SYMBOL } from '../constants/coingeckoTokenIcons';
-import { chainNameKeyVariants, normalizeSymbolKey } from '../utils/iconResolution';
+import { chainNameKeyVariants, getTokenIconFallbackSymbolKey, normalizeSymbolKey } from '../utils/iconResolution';
 
 type IconMapsState = {
   chainIconByName: Record<string, string>;
@@ -90,6 +90,14 @@ export function useOnchainActionsIconMaps(params: {
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(key);
+
+      // Many Pendle stablecoins do not resolve on coingecko by symbol. We still want an icon
+      // for visual continuity, so we pull a fallback icon symbol into the lookup set.
+      const fallbackKey = getTokenIconFallbackSymbolKey(key);
+      if (fallbackKey && !seen.has(fallbackKey)) {
+        seen.add(fallbackKey);
+        out.push(fallbackKey);
+      }
     }
     return out;
   }, [tokenSymbols]);

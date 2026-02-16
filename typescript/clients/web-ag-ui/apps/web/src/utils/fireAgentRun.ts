@@ -101,6 +101,7 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
   threadId: string | undefined;
   runInFlightRef: BoolRef;
   createId: typeof uuidv7;
+  onError?: (message: string) => void;
 }): Promise<boolean> {
   const { agent, threadId, runInFlightRef } = params;
   if (!agent || !threadId) return false;
@@ -157,6 +158,7 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
     runInFlightRef.current = false;
     const message = error instanceof Error ? error.message : String(error);
     console.error('[fireAgentRun] Failed to start fire run', { threadId, error: message });
+    params.onError?.(message);
   });
 
   return true;

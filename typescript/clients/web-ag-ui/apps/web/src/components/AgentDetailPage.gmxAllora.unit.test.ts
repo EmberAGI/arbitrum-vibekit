@@ -16,8 +16,6 @@ describe('AgentDetailPage (GMX Allora)', () => {
         ownerAddress: undefined,
         rank: 3,
         rating: 5,
-        avatar: '📈',
-        avatarBg: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
         profile: { chains: [], protocols: [], tokens: [] },
         metrics: {
           iteration: 0,
@@ -26,11 +24,14 @@ describe('AgentDetailPage (GMX Allora)', () => {
           rebalanceCycles: 0,
         },
         fullMetrics: undefined,
+        hasLoadedView: true,
         isHired: false,
         isHiring: false,
         isFiring: false,
         isSyncing: false,
         currentCommand: undefined,
+        uiError: null,
+        onClearUiError: () => {},
         onHire: () => {},
         onFire: () => {},
         onSync: () => {},
@@ -56,9 +57,13 @@ describe('AgentDetailPage (GMX Allora)', () => {
     expect(html).not.toContain('>Signals<');
     expect(html).not.toContain('>Latest Signal<');
     expect(html).not.toContain('>Latest Plan<');
+
+    // For-hire view uses the shared chart-card layout (same as CLMM).
+    expect(html).toContain('APY Change');
+    expect(html).toContain('Total Users');
   });
 
-  it('renders GMX execution and signal fields instead of CLMM-only metrics labels', () => {
+  it('does not render GMX execution/signal fields in the for-hire view (charts only)', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-gmx-allora',
@@ -69,8 +74,6 @@ describe('AgentDetailPage (GMX Allora)', () => {
         ownerAddress: undefined,
         rank: 3,
         rating: 5,
-        avatar: '📈',
-        avatarBg: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
         profile: {
           chains: ['Arbitrum One'],
           protocols: ['GMX', 'Allora'],
@@ -124,11 +127,14 @@ describe('AgentDetailPage (GMX Allora)', () => {
             positionTokens: [],
           },
         },
+        hasLoadedView: true,
         isHired: false,
         isHiring: false,
         isFiring: false,
         isSyncing: false,
         currentCommand: undefined,
+        uiError: null,
+        onClearUiError: () => {},
         onHire: () => {},
         onFire: () => {},
         onSync: () => {},
@@ -181,14 +187,19 @@ describe('AgentDetailPage (GMX Allora)', () => {
       }),
     );
 
-    expect(html).toContain('Latest Execution');
-    expect(html).toContain('Signal Confidence');
-    expect(html).toContain('Transaction Hashes');
-    expect(html).toContain('https://arbiscan.io/tx/0xb24f42dbfc6c0a30c16b7660ad5878a2a92abfb53a5ce02609bfd7e06a2cde7e');
+    // Shared pre-hire chart cards.
+    expect(html).toContain('APY Change');
+    expect(html).toContain('Total Users');
+
+    // GMX-specific diagnostics should not appear until after hire/onboarding.
+    expect(html).not.toContain('Latest Execution');
+    expect(html).not.toContain('Signal Confidence');
+    expect(html).not.toContain('Transaction Hashes');
+    expect(html).not.toContain('arbiscan.io/tx/');
     expect(html).not.toContain('Rebalance Cycles');
   });
 
-  it('falls back to snapshot leverage/notional when the latest cycle is hold', () => {
+  it('renders the shared chart cards (and values) for GMX Allora in the for-hire view', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-gmx-allora',
@@ -199,8 +210,6 @@ describe('AgentDetailPage (GMX Allora)', () => {
         ownerAddress: undefined,
         rank: 3,
         rating: 5,
-        avatar: '📈',
-        avatarBg: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
         profile: {
           chains: ['Arbitrum One'],
           protocols: ['GMX', 'Allora'],
@@ -241,11 +250,14 @@ describe('AgentDetailPage (GMX Allora)', () => {
             positionTokens: [],
           },
         },
+        hasLoadedView: true,
         isHired: false,
         isHiring: false,
         isFiring: false,
         isSyncing: false,
         currentCommand: undefined,
+        uiError: null,
+        onClearUiError: () => {},
         onHire: () => {},
         onFire: () => {},
         onSync: () => {},
@@ -267,7 +279,11 @@ describe('AgentDetailPage (GMX Allora)', () => {
       }),
     );
 
-    expect(html).toContain('>2.0x<');
-    expect(html).toContain('$16');
+    expect(html).toContain('APY Change');
+    expect(html).toContain('Total Users');
+
+    // Values should render when `hasLoadedView` is true.
+    expect(html).toContain('9%');
+    expect(html).toContain('58');
   });
 });

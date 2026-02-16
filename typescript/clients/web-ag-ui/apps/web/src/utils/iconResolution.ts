@@ -8,6 +8,60 @@ export function normalizeSymbolKey(value: string): string {
   return value.trim().toUpperCase();
 }
 
+export function canonicalizeChainLabel(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return trimmed;
+  const key = trimmed.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (key === 'arbitrum one' || key === 'arbitrum') return 'Arbitrum';
+  return trimmed;
+}
+
+const TOKEN_SYMBOL_ICON_FALLBACK_BY_SYMBOL_KEY: Record<string, string> = {
+  USDAI: 'DAI',
+  SUSDAI: 'DAI',
+  REUSD: 'USDC',
+  NUSD: 'USDC',
+  RUSD: 'USDC',
+  YZUSD: 'USDC',
+  YSUSDC: 'USDC',
+  UPUSDC: 'USDC',
+  USD3: 'USDC',
+  JRUSDE: 'USDE',
+  IUSD: 'USDC',
+  SYRUPUSDC: 'USDC',
+  SYRUPUSDT: 'USDT',
+};
+
+export function getTokenIconFallbackSymbolKey(symbolKey: string): string | null {
+  const fallback = TOKEN_SYMBOL_ICON_FALLBACK_BY_SYMBOL_KEY[symbolKey];
+  return fallback ?? null;
+}
+
+export function resolveTokenIconUri(params: {
+  symbol: string;
+  tokenIconBySymbol: Record<string, string>;
+}): string | null {
+  const symbolKey = normalizeSymbolKey(params.symbol);
+  const direct = params.tokenIconBySymbol[symbolKey];
+  if (direct) return direct;
+
+  const fallbackKey = getTokenIconFallbackSymbolKey(symbolKey);
+  if (!fallbackKey) return null;
+  return params.tokenIconBySymbol[fallbackKey] ?? null;
+}
+
+export function iconMonogram(label: string): string {
+  const trimmed = label.trim();
+  if (trimmed.length === 0) return '?';
+
+  const match = trimmed.match(/[A-Z]{2,}/);
+  if (match && match[0]) return match[0].slice(0, 2);
+
+  const cleaned = trimmed.replace(/[^a-z0-9]/gi, '');
+  if (cleaned.length === 0) return '?';
+  return cleaned.toUpperCase().slice(0, 2);
+}
+
 export function chainNameKeyVariants(value: string): string[] {
   const normalized = normalizeNameKey(value);
   if (normalized.length === 0) return [];

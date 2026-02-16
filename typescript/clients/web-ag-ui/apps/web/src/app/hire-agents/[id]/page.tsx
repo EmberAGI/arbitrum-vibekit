@@ -96,6 +96,8 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         isFiring={false}
         isSyncing={false}
         currentCommand={currentCommand}
+        uiError={null}
+        onClearUiError={() => undefined}
         onHire={() => undefined}
         onFire={() => undefined}
         onSync={() => undefined}
@@ -150,12 +152,14 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       isHired={agent.isHired}
       isHiring={agent.isHiring}
       hasLoadedView={agent.hasLoadedView}
-      isFiring={agent.isFiring}
-      isSyncing={agent.isSyncing}
-      currentCommand={agent.view.command}
-      onHire={agent.runHire}
-      onFire={agent.runFire}
-      onSync={agent.runSync}
+        isFiring={agent.isFiring}
+        isSyncing={agent.isSyncing}
+        currentCommand={agent.view.command}
+        uiError={agent.uiError}
+        onClearUiError={agent.clearUiError}
+        onHire={agent.runHire}
+        onFire={agent.runFire}
+        onSync={agent.runSync}
       onBack={handleBack}
       activeInterrupt={agent.activeInterrupt}
       allowedPools={agent.profile.allowedPools ?? []}

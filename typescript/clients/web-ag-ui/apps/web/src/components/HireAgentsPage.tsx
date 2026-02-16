@@ -19,6 +19,8 @@ import {
   resolveChainIconUris,
   resolveProtocolIconUris,
   resolveTokenIconUris,
+  resolveTokenIconUri,
+  iconMonogram,
   normalizeNameKey,
   normalizeSymbolKey,
   proxyIconUri,
@@ -271,7 +273,7 @@ export function HireAgentsPage({
                   });
                   const tokenItems = (agent.tokens ?? []).map((label) => ({
                     label,
-                    iconUri: tokenIconBySymbol[normalizeSymbolKey(label)] ?? null,
+                    iconUri: resolveTokenIconUri({ symbol: label, tokenIconBySymbol }),
                   }));
                   const avatarUri =
                     resolveAgentAvatarUri({
@@ -485,17 +487,14 @@ function FeaturedAgentCard({
               <div className="grid grid-cols-3 gap-3 flex-1">
                 <IconGroup
                   title="Chains"
-                  iconsLoaded={iconsLoaded}
                   items={chainItems}
                 />
                 <IconGroup
                   title="Protocols"
-                  iconsLoaded={iconsLoaded}
                   items={protocolItems}
                 />
                 <IconGroup
                   title="Tokens"
-                  iconsLoaded={iconsLoaded}
                   items={tokenItems}
                 />
               </div>
@@ -549,11 +548,9 @@ function FeaturedAgentCard({
 
 function IconGroup({
   title,
-  iconsLoaded,
   items,
 }: {
   title: string;
-  iconsLoaded: boolean;
   items: { label: string; iconUri: string | null }[];
 }) {
   // Keep this compact so we never clip against the card edge.
@@ -567,43 +564,36 @@ function IconGroup({
     <div className="min-w-0">
       <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{title}</div>
       <div className="flex items-center min-h-6">
-        {!iconsLoaded ? (
-          <>
-            <Skeleton className="h-6 w-6 rounded-full" />
-            <Skeleton className="h-6 w-6 rounded-full" />
-          </>
-        ) : (
-          <>
-            <div className="flex items-center -space-x-2">
-              {displayItems.map((item) =>
-                item.iconUri ? (
-                  <img
-                    key={`${item.label}-${item.iconUri}`}
-                    src={proxyIconUri(item.iconUri)}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
-                  />
-                ) : (
-                  <div
-                    key={item.label}
-                    className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12]"
-                    aria-hidden="true"
-                  />
-                ),
-              )}
+        <div className="flex items-center -space-x-2">
+          {displayItems.map((item) =>
+            item.iconUri ? (
+              <img
+                key={`${item.label}-${item.iconUri}`}
+                src={proxyIconUri(item.iconUri)}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
+              />
+            ) : (
+              <div
+                key={item.label}
+                className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] flex items-center justify-center text-[10px] font-semibold text-white/70 select-none"
+                aria-hidden="true"
+              >
+                {iconMonogram(item.label)}
+              </div>
+            ),
+          )}
 
-              {overflowItems.length > 0 ? (
-                <CursorListTooltip title={`${title} (more)`} items={overflowItems}>
-                  <div className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] flex items-center justify-center text-[12px] text-gray-200 font-semibold whitespace-nowrap select-none cursor-default">
-                    …
-                  </div>
-                </CursorListTooltip>
-              ) : null}
-            </div>
-          </>
-        )}
+          {overflowItems.length > 0 ? (
+            <CursorListTooltip title={`${title} (more)`} items={overflowItems}>
+              <div className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] flex items-center justify-center text-[12px] text-gray-200 font-semibold whitespace-nowrap select-none cursor-default">
+                …
+              </div>
+            </CursorListTooltip>
+          ) : null}
+        </div>
       </div>
     </div>
   );

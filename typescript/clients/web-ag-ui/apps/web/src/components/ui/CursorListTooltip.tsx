@@ -4,7 +4,7 @@
 
 import { useCallback, useId, useMemo, useState } from 'react';
 
-import { proxyIconUri } from '../../utils/iconResolution';
+import { iconMonogram, proxyIconUri } from '../../utils/iconResolution';
 
 type CursorPos = { x: number; y: number };
 
@@ -101,9 +101,11 @@ export function CursorListTooltip(props: {
                     />
                   ) : (
                     <span
-                      className="h-4 w-4 rounded-full bg-white/[0.06] ring-1 ring-white/10"
+                      className="h-4 w-4 rounded-full bg-white/[0.06] ring-1 ring-white/10 flex items-center justify-center text-[7px] font-semibold text-white/70 select-none"
                       aria-hidden="true"
-                    />
+                    >
+                      {iconMonogram(item.label)}
+                    </span>
                   )}
                   <span>{item.label}</span>
                 </span>

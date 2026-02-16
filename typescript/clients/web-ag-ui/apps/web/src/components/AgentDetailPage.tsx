@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { signDelegation } from '@metamask/delegation-toolkit/actions';
 import { formatUnits } from 'viem';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import type {
   AgentProfile,
   AgentMetrics,
@@ -36,6 +36,7 @@ import type {
   TelemetryItem,
   ClmmEvent,
 } from '../types/agent';
+import { getAgentConfig } from '../config/agents';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
 import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
@@ -44,6 +45,8 @@ import {
   normalizeSymbolKey,
   proxyIconUri,
   resolveAgentAvatarUri,
+  resolveTokenIconUri,
+  iconMonogram,
 } from '../utils/iconResolution';
 import { formatPoolPair } from '../utils/poolFormat';
 import { Skeleton } from './ui/Skeleton';
@@ -78,6 +81,8 @@ interface AgentDetailPageProps {
   isFiring?: boolean;
   isSyncing?: boolean;
   currentCommand?: string;
+  uiError?: string | null;
+  onClearUiError?: () => void;
   onHire: () => void;
   onFire: () => void;
   onSync: () => void;
@@ -204,6 +209,35 @@ function Sparkline(props: {
   );
 }
 
+function FloatingErrorToast(props: {
+  title: string;
+  message: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed top-5 right-5 z-[60] w-[360px] max-w-[calc(100vw-2.5rem)]">
+      <div className="rounded-2xl border border-red-500/30 bg-[#141414]/95 backdrop-blur px-4 py-3 shadow-[0_18px_60px_rgba(0,0,0,0.55)]">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-red-200">{props.title}</div>
+            <div className="mt-1 text-xs text-red-100/80 leading-relaxed break-words">
+              {props.message}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={props.onClose}
+            className="shrink-0 rounded-lg p-2 text-red-100/70 hover:text-red-100 hover:bg-white/5 transition-colors"
+            aria-label="Dismiss"
+          >
+            <span aria-hidden="true">✕</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AgentDetailPage({
   agentId,
   agentName,
@@ -223,6 +257,8 @@ export function AgentDetailPage({
   isFiring,
   isSyncing,
   currentCommand,
+  uiError,
+  onClearUiError,
   onHire,
   onFire,
   onSync,
@@ -245,10 +281,55 @@ export function AgentDetailPage({
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (isHired ? 'blockers' : 'metrics'),
   );
+  const [hasUserSelectedTab, setHasUserSelectedTab] = useState(false);
+  const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
+  const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
   const isOnboardingActive = onboarding?.step !== undefined;
+  const isOnboardingInterrupt =
+    activeInterrupt?.type === 'operator-config-request' ||
+    activeInterrupt?.type === 'pendle-setup-request' ||
+    activeInterrupt?.type === 'pendle-fund-wallet-request' ||
+    activeInterrupt?.type === 'gmx-setup-request' ||
+    activeInterrupt?.type === 'clmm-funding-token-request' ||
+    activeInterrupt?.type === 'pendle-funding-token-request' ||
+    activeInterrupt?.type === 'gmx-funding-token-request' ||
+    activeInterrupt?.type === 'clmm-delegation-signing-request' ||
+    activeInterrupt?.type === 'pendle-delegation-signing-request' ||
+    activeInterrupt?.type === 'gmx-delegation-signing-request';
   const forceBlockersTab = Boolean(activeInterrupt) || isOnboardingActive;
-  const resolvedTab: TabType = forceBlockersTab ? 'blockers' : activeTab;
-  const showOnboardingLayout = isHired && isOnboardingActive;
+  const selectTab = useCallback((tab: TabType) => {
+    setHasUserSelectedTab(true);
+    setActiveTab(tab);
+  }, []);
+
+  const resolvedTab: TabType = forceBlockersTab
+    ? 'blockers'
+    : !hasUserSelectedTab && isHired
+      ? 'blockers'
+      : activeTab;
+
+  const blockingErrorMessage = (haltReason || executionError || null) as string | null;
+  const showBlockingErrorPopup =
+    Boolean(blockingErrorMessage) && dismissedBlockingError !== blockingErrorMessage;
+
+  const popups = (
+    <>
+      {uiError ? (
+        <FloatingErrorToast
+          title="Action failed"
+          message={uiError}
+          onClose={() => onClearUiError?.()}
+        />
+      ) : null}
+      {!uiError && showBlockingErrorPopup && blockingErrorMessage ? (
+        <FloatingErrorToast
+          title="Agent error"
+          message={blockingErrorMessage}
+          onClose={() => setDismissedBlockingError(blockingErrorMessage)}
+        />
+      ) : null}
+    </>
+  );
 
   const displayChains = useMemo(() => {
     const out: string[] = [];
@@ -273,6 +354,42 @@ export function AgentDetailPage({
     return out;
   }, [profile.chains]);
 
+  const displayProtocols = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    const push = (value: string) => {
+      const trimmed = value.trim();
+      if (trimmed.length === 0) return;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(trimmed);
+    };
+
+    for (const protocol of profile.protocols ?? []) push(protocol);
+    for (const protocol of agentConfig.protocols ?? []) push(protocol);
+    return out;
+  }, [agentConfig.protocols, profile.protocols]);
+
+  const displayTokens = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    const push = (value: string) => {
+      const trimmed = value.trim();
+      if (trimmed.length === 0) return;
+      const key = trimmed.toUpperCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(trimmed);
+    };
+
+    for (const token of profile.tokens ?? []) push(token);
+    for (const token of agentConfig.tokens ?? []) push(token);
+    return out;
+  }, [agentConfig.tokens, profile.tokens]);
+
   const desiredTokenSymbols = useMemo(() => {
     const out: string[] = [];
     const seen = new Set<string>();
@@ -286,11 +403,11 @@ export function AgentDetailPage({
       out.push(trimmed);
     };
 
-    for (const symbol of profile.tokens ?? []) addSymbol(symbol);
-    for (const protocol of profile.protocols ?? []) addSymbol(PROTOCOL_TOKEN_FALLBACK[protocol]);
+    for (const symbol of displayTokens) addSymbol(symbol);
+    for (const protocol of displayProtocols) addSymbol(PROTOCOL_TOKEN_FALLBACK[protocol]);
 
     return out;
-  }, [profile.protocols, profile.tokens]);
+  }, [displayProtocols, displayTokens]);
 
   const { chainIconByName, tokenIconBySymbol, isLoaded: iconsLoaded } = useOnchainActionsIconMaps({
     chainNames: profile.chains ?? [],
@@ -352,34 +469,35 @@ export function AgentDetailPage({
     return stars;
   };
 
-  // Render hired state layout
-  if (isHired) {
+  // Render the upgraded layout immediately during hydration so we never flash the legacy
+  // pre-hire view for already-hired agents.
+  if (isHired || !hasLoadedView) {
     const tabs = (
       <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
         <TabButton
           active={resolvedTab === 'blockers'}
-          onClick={() => setActiveTab('blockers')}
+          onClick={() => selectTab('blockers')}
           highlight
         >
           Agent Blockers
         </TabButton>
         <TabButton
           active={resolvedTab === 'metrics'}
-          onClick={() => setActiveTab('metrics')}
+          onClick={() => selectTab('metrics')}
           disabled={isOnboardingActive}
         >
           Metrics
         </TabButton>
         <TabButton
           active={resolvedTab === 'transactions'}
-          onClick={() => setActiveTab('transactions')}
+          onClick={() => selectTab('transactions')}
           disabled={isOnboardingActive}
         >
           Transaction history
         </TabButton>
         <TabButton
           active={resolvedTab === 'settings'}
-          onClick={() => setActiveTab('settings')}
+          onClick={() => selectTab('settings')}
           disabled={isOnboardingActive}
         >
           Settings and policies
@@ -451,6 +569,7 @@ export function AgentDetailPage({
     return (
       <div className="flex-1 overflow-y-auto p-8">
         <div className="max-w-[1200px] mx-auto">
+          {popups}
           {/* Breadcrumb */}
           <nav className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2 text-sm text-gray-400">
@@ -471,9 +590,8 @@ export function AgentDetailPage({
             </button>
           </nav>
 
-          {showOnboardingLayout ? (
-            <>
-              <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-stretch">
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-stretch">
                 {/* Left summary card (Figma onboarding) */}
                 <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
                   {!iconsLoaded ? (
@@ -492,34 +610,38 @@ export function AgentDetailPage({
                   )}
 
                   <div className="flex justify-center">
-                    <div
-                      className={`group relative w-full inline-flex h-10 items-stretch overflow-hidden rounded-[999px] bg-[#2a2a2a] ring-1 ring-white/10 transition-[background-color,box-shadow,border-color] duration-300 ease-out hover:ring-white/20 hover:shadow-[0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.06)] group-hover:bg-gradient-to-r group-hover:from-[#ff2a00] group-hover:to-[#fd6731] group-hover:ring-[#fd6731]/30 group-hover:shadow-[0_16px_55px_rgba(255,42,0,0.28),0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.10)] ${
-                        isFiring ? 'opacity-90' : ''
-                      }`}
-                    >
-                      <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 bg-[radial-gradient(1200px_circle_at_50%_0%,rgba(255,255,255,0.10),transparent_40%)]" />
-
-                      <div className="relative z-10 flex flex-1 min-w-0 items-center gap-2 px-3 text-[13px] font-medium text-gray-100 transition-[opacity,flex-basis,padding] duration-200 ease-out group-hover:opacity-0 group-hover:flex-[0_0_0%] group-hover:px-0 overflow-hidden">
-                        <span
-                          className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)] transition-transform duration-200 group-hover:scale-110"
-                          aria-hidden="true"
-                        />
-                        <span>Agent is hired</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={onFire}
-                        disabled={isFiring}
-                        className={`relative z-10 flex flex-[0_0_92px] items-center justify-center px-3 h-full text-[13px] font-medium text-white border-l border-white/10 transition-[flex-basis,background-color,border-color,color,box-shadow] duration-300 ease-out group-hover:flex-1 group-hover:bg-transparent group-hover:border-white/0 ${
-                          isFiring
-                            ? 'bg-gray-600 cursor-wait'
-                            : 'bg-gradient-to-b from-[#ff4d1a] to-[#fd6731] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
+                    {isHired ? (
+                      <div
+                        className={`group relative w-full inline-flex h-10 items-stretch overflow-hidden rounded-[999px] bg-[#2a2a2a] ring-1 ring-white/10 transition-[background-color,box-shadow,border-color] duration-300 ease-out hover:ring-white/20 hover:shadow-[0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.06)] group-hover:bg-gradient-to-r group-hover:from-[#ff2a00] group-hover:to-[#fd6731] group-hover:ring-[#fd6731]/30 group-hover:shadow-[0_16px_55px_rgba(255,42,0,0.28),0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.10)] ${
+                          isFiring ? 'opacity-90' : ''
                         }`}
                       >
-                        {isFiring ? 'Firing...' : 'Fire'}
-                      </button>
-                    </div>
+                        <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 bg-[radial-gradient(1200px_circle_at_50%_0%,rgba(255,255,255,0.10),transparent_40%)]" />
+
+                        <div className="relative z-10 flex flex-1 min-w-0 items-center gap-2 px-3 text-[13px] font-medium text-gray-100 transition-[opacity,flex-basis,padding] duration-200 ease-out group-hover:opacity-0 group-hover:flex-[0_0_0%] group-hover:px-0 overflow-hidden">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)] transition-transform duration-200 group-hover:scale-110"
+                            aria-hidden="true"
+                          />
+                          <span>Agent is hired</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={onFire}
+                          disabled={isFiring}
+                          className={`relative z-10 flex flex-[0_0_92px] items-center justify-center px-3 h-full text-[13px] font-medium text-white border-l border-white/10 transition-[flex-basis,background-color,border-color,color,box-shadow] duration-300 ease-out group-hover:flex-1 group-hover:bg-transparent group-hover:border-white/0 ${
+                            isFiring
+                              ? 'bg-gray-600 cursor-wait'
+                              : 'bg-gradient-to-b from-[#ff4d1a] to-[#fd6731] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
+                          }`}
+                        >
+                          {isFiring ? 'Firing...' : 'Fire'}
+                        </button>
+                      </div>
+                    ) : (
+                      <Skeleton className="h-10 w-full rounded-[999px]" />
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
@@ -647,7 +769,7 @@ export function AgentDetailPage({
                     />
                     <TagColumn
                       title="Protocols"
-                      items={profile.protocols}
+                      items={displayProtocols}
                       iconsLoaded={iconsLoaded}
                       getIconUri={(protocol) => {
                         const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
@@ -657,194 +779,19 @@ export function AgentDetailPage({
                     />
                     <TagColumn
                       title="Tokens"
-                      items={profile.tokens}
+                      items={displayTokens}
                       iconsLoaded={iconsLoaded}
-                      getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
+                      getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
                     />
                     <PointsColumn metrics={metrics} />
                   </div>
                 </div>
               </div>
 
-              {/* Tabs + content span full available width (no empty left column) */}
-              <div className="mt-8">{tabs}</div>
-              <div>{tabContent}</div>
-            </>
-          ) : (
-            <>
-              {/* Compact Header Card */}
-              <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 mb-6">
-                <div className="flex gap-6">
-                  {/* Agent Avatar */}
-                  {!iconsLoaded ? (
-                    <Skeleton className="h-32 w-32 rounded-full flex-shrink-0" />
-                  ) : (
-                    <div className="w-32 h-32 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a]">
-                      {agentAvatarUri ? (
-                        <img
-                          src={proxyIconUri(agentAvatarUri)}
-                          alt=""
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : null}
-                    </div>
-                  )}
-
-                  {/* Agent Info */}
-                  <div className="flex-1 min-w-0">
-                    {/* Top Row: Rank, Rating, Creator */}
-                    <div className="flex items-center gap-4 mb-2">
-                      {rank !== undefined && <span className="text-gray-400 text-sm">#{rank}</span>}
-                      {rating !== undefined && (
-                        <div className="flex items-center gap-1">{renderStars(rating)}</div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-4 mb-3">
-                      {creatorName && (
-                        <div className="flex items-center gap-2">
-                          <CreatorIdentity
-                            name={creatorName}
-                            verified={creatorVerified}
-                            size="md"
-                            nameClassName="text-sm text-white"
-                          />
-                        </div>
-                      )}
-                      {ownerAddress && (
-                        <div className="text-sm text-gray-400">
-                          Owned by <span className="text-white">{formatAddress(ownerAddress)}</span>
-                        </div>
-                      )}
-                      {/* Action Icons */}
-                      <div className="flex items-center gap-1 ml-auto">
-                        <a
-                          href={AGENT_X_URL}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label="X"
-                          className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                          </svg>
-                        </a>
-                        <a
-                          href={AGENT_WEBSITE_URL}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label="Website"
-                          className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
-                        >
-                          <Globe className="w-4 h-4" />
-                        </a>
-                        <a
-                          href={AGENT_GITHUB_URL}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label="GitHub"
-                          className="p-2 rounded-lg hover:bg-[#2a2a2a] transition-colors"
-                        >
-                          <Github className="w-4 h-4" />
-                        </a>
-                      </div>
-                    </div>
-
-                    {/* Agent Name & Description */}
-                    <h1 className="text-xl font-bold text-white mb-1">{agentName}</h1>
-                    {agentDescription && <p className="text-gray-400 text-sm">{agentDescription}</p>}
-
-                    {/* Status & Fire Button */}
-                    <div className="flex items-center gap-3 mt-4">
-                      <span className="px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-400 text-sm font-medium flex items-center gap-2">
-                        <Check className="w-4 h-4" />
-                        Agent is hired
-                      </span>
-                      {currentCommand && (
-                        <span className="px-3 py-1.5 rounded-lg bg-[#2a2a2a] text-gray-300 text-sm">
-                          Command: {currentCommand}
-                        </span>
-                      )}
-                      <button
-                        onClick={onFire}
-                        disabled={isFiring}
-                        className={[
-                          CTA_SIZE_MD,
-                          isFiring
-                            ? 'bg-gray-600 cursor-wait'
-                            : 'bg-[#fd6731] hover:bg-[#e55a28] hover:shadow-[0_14px_44px_rgba(253,103,49,0.22)]',
-                          'text-white transition-[background-color,box-shadow] duration-200',
-                        ].join(' ')}
-                      >
-                        {isFiring ? 'Firing...' : 'Fire'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Stats Row */}
-                <div className="grid grid-cols-6 gap-4 mt-6 pt-6 border-t border-[#2a2a2a]">
-                  <StatBox
-                    label="Agent Income"
-                    value={formatCurrency(profile.agentIncome)}
-                    isLoaded={hasLoadedView}
-                  />
-                  <StatBox label="AUM" value={formatCurrency(profile.aum)} isLoaded={hasLoadedView} />
-                  <StatBox
-                    label="Total Users"
-                    value={formatNumber(profile.totalUsers)}
-                    isLoaded={hasLoadedView}
-                  />
-                  <StatBox
-                    label="APY"
-                    value={formatPercent(profile.apy)}
-                    valueColor="text-teal-400"
-                    isLoaded={hasLoadedView}
-                  />
-                  <StatBox label="Your Assets" value={null} isLoaded={hasLoadedView} />
-                  <StatBox
-                    label="Your PnL"
-                    value={formatCurrency(metrics.lifetimePnlUsd)}
-                    isLoaded={hasLoadedView}
-                  />
-                </div>
-
-                {/* Tags Row */}
-                <div className="grid grid-cols-5 gap-4 mt-6 pt-6 border-t border-[#2a2a2a]">
-                  <TagColumn
-                    title="Chains"
-                    items={displayChains}
-                    iconsLoaded={iconsLoaded}
-                    getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
-                  />
-                  <TagColumn
-                    title="Protocols"
-                    items={profile.protocols}
-                    iconsLoaded={iconsLoaded}
-                    getIconUri={(protocol) => {
-                      const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
-                      if (!fallback) return null;
-                      return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
-                    }}
-                  />
-                  <TagColumn
-                    title="Tokens"
-                    items={profile.tokens}
-                    iconsLoaded={iconsLoaded}
-                    getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
-                  />
-                  <PointsColumn metrics={metrics} />
-                </div>
-              </div>
-
-              {/* Tabs */}
-              {tabs}
-
-              {/* Tab Content */}
-              {tabContent}
-            </>
-          )}
+            {/* Tabs + content span full available width (no empty left column) */}
+            <div className="mt-8">{tabs}</div>
+            <div>{tabContent}</div>
+          </>
         </div>
       </div>
     );
@@ -854,6 +801,7 @@ export function AgentDetailPage({
   return (
     <div className="flex-1 overflow-y-auto p-8">
       <div className="max-w-[1200px] mx-auto">
+        {popups}
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-gray-400 mb-6">
           <button onClick={onBack} className="hover:text-white transition-colors">
@@ -864,7 +812,7 @@ export function AgentDetailPage({
         </nav>
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-8 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-stretch">
           {/* Left Column - Agent Card */}
           <div className="h-full">
             <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
@@ -1028,7 +976,7 @@ export function AgentDetailPage({
                 />
                 <TagColumn
                   title="Protocols"
-                  items={profile.protocols}
+                  items={displayProtocols}
                   iconsLoaded={iconsLoaded}
                   getIconUri={(protocol) => {
                     const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
@@ -1038,9 +986,9 @@ export function AgentDetailPage({
                 />
                 <TagColumn
                   title="Tokens"
-                  items={profile.tokens}
+                  items={displayTokens}
                   iconsLoaded={iconsLoaded}
-                  getIconUri={(symbol) => tokenIconBySymbol[normalizeSymbolKey(symbol)] ?? null}
+                  getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
                 />
                 <PointsColumn metrics={metrics} />
               </div>
@@ -1062,88 +1010,76 @@ export function AgentDetailPage({
         </div>
 
         <div className="mt-6">
-          {agentId === 'agent-gmx-allora' || agentId === 'agent-pendle' ? (
-            <MetricsTab
-              agentId={agentId}
-              profile={profile}
-              metrics={metrics}
-              fullMetrics={fullMetrics}
-              events={events}
-              transactions={transactions}
-              hasLoadedView={hasLoadedView}
-            />
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-semibold text-white">APY Change</div>
-                    <div className="text-xs text-gray-500 mt-1">Latest vs previous snapshot</div>
+          {/* Pre-hire should still show the same chart cards across agents (CLMM/Pendle/GMX)
+             so the page doesn't feel "empty" before hire. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-sm font-semibold text-white">APY Change</div>
+                  <div className="text-xs text-gray-500 mt-1">Latest vs previous snapshot</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-semibold text-teal-400">
+                    <LoadingValue
+                      isLoaded={hasLoadedView}
+                      skeletonClassName="h-7 w-20"
+                      loadedClassName="text-teal-400"
+                      value={metrics.apy !== undefined ? `${metrics.apy.toFixed(0)}%` : null}
+                    />
                   </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-semibold text-teal-400">
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-7 w-20"
-                        loadedClassName="text-teal-400"
-                        value={metrics.apy !== undefined ? `${metrics.apy.toFixed(0)}%` : null}
-                      />
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {fullMetrics?.previousApy !== undefined && metrics.apy !== undefined
-                        ? `${(metrics.apy - fullMetrics.previousApy).toFixed(1)}%`
-                        : '—'}
-                    </div>
+                  <div className="text-xs text-gray-500">
+                    {fullMetrics?.previousApy !== undefined && metrics.apy !== undefined
+                      ? `${(metrics.apy - fullMetrics.previousApy).toFixed(1)}%`
+                      : '—'}
                   </div>
                 </div>
-                <Sparkline
-                  values={makeMockSeries({
-                    seedKey: `${agentId}:apy`,
-                    points: 24,
-                    start: metrics.apy ?? 18,
-                    drift: 0.02,
-                    noise: 0.35,
-                    min: 0,
-                    max: 120,
-                  })}
-                />
               </div>
-
-              <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-semibold text-white">Total Users</div>
-                    <div className="text-xs text-gray-500 mt-1">All time</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-semibold text-white">
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-7 w-24"
-                        loadedClassName="text-white"
-                        value={
-                          profile.totalUsers !== undefined ? profile.totalUsers.toLocaleString() : null
-                        }
-                      />
-                    </div>
-                    <div className="text-xs text-gray-500">—</div>
-                  </div>
-                </div>
-                <Sparkline
-                  values={makeMockSeries({
-                    seedKey: `${agentId}:users`,
-                    points: 24,
-                    start: Math.max(50, profile.totalUsers ?? 5000) * 0.6,
-                    drift: Math.max(1, (profile.totalUsers ?? 5000) / 400),
-                    noise: Math.max(2, (profile.totalUsers ?? 5000) / 250),
-                    min: 0,
-                  })}
-                  strokeClassName="stroke-purple-300"
-                  fillClassName="fill-purple-400/10"
-                />
-              </div>
+              <Sparkline
+                values={makeMockSeries({
+                  seedKey: `${agentId}:apy`,
+                  points: 24,
+                  start: metrics.apy ?? 18,
+                  drift: 0.02,
+                  noise: 0.35,
+                  min: 0,
+                  max: 120,
+                })}
+              />
             </div>
-          )}
+
+            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-sm font-semibold text-white">Total Users</div>
+                  <div className="text-xs text-gray-500 mt-1">All time</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-semibold text-white">
+                    <LoadingValue
+                      isLoaded={hasLoadedView}
+                      skeletonClassName="h-7 w-24"
+                      loadedClassName="text-white"
+                      value={profile.totalUsers !== undefined ? profile.totalUsers.toLocaleString() : null}
+                    />
+                  </div>
+                  <div className="text-xs text-gray-500">—</div>
+                </div>
+              </div>
+              <Sparkline
+                values={makeMockSeries({
+                  seedKey: `${agentId}:users`,
+                  points: 24,
+                  start: Math.max(50, profile.totalUsers ?? 5000) * 0.6,
+                  drift: Math.max(1, (profile.totalUsers ?? 5000) / 400),
+                  noise: Math.max(2, (profile.totalUsers ?? 5000) / 250),
+                  min: 0,
+                })}
+                strokeClassName="stroke-purple-300"
+                fillClassName="fill-purple-400/10"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1425,7 +1361,11 @@ function AgentBlockersTab({
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
   const uniqueAllowedPools: Pool[] = [];
   const seenPoolAddresses = new Set<string>();
-  const isPool = (value: Pool | PendleMarket): value is Pool => 'address' in value;
+  const isPool = (value: unknown): value is Pool =>
+    typeof value === 'object' &&
+    value !== null &&
+    'address' in value &&
+    typeof (value as { address?: unknown }).address === 'string';
   for (const poolCandidate of allowedPools) {
     if (!isPool(poolCandidate)) continue;
     const pool = poolCandidate;
@@ -2273,7 +2213,12 @@ function TagColumn({ title, items, iconsLoaded, getIconUri }: TagColumnProps) {
                   className="h-4 w-4 rounded-full bg-[#111] ring-1 ring-[#2a2a2a] object-contain"
                 />
               ) : (
-                <div className="h-4 w-4" aria-hidden="true" />
+                <div
+                  className="h-4 w-4 rounded-full bg-white/[0.06] ring-1 ring-white/10 flex items-center justify-center text-[7px] font-semibold text-white/70 select-none"
+                  aria-hidden="true"
+                >
+                  {iconMonogram(item)}
+                </div>
               )}
               <span className="text-sm text-white">{item}</span>
             </div>
