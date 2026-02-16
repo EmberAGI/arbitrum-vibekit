@@ -24,10 +24,10 @@ import { useAgentList } from '@/contexts/AgentListContext';
 import { getAllAgents } from '@/config/agents';
 import type { TaskState } from '@/types/agent';
 import { deriveTaskStateForUi } from '@/utils/deriveTaskStateForUi';
+import { collectUniqueChainNames, collectUniqueTokenSymbols } from '@/utils/agentCollections';
 import { PROTOCOL_TOKEN_FALLBACK } from '@/constants/protocolTokenFallback';
 import {
   normalizeNameKey,
-  normalizeSymbolKey,
   proxyIconUri,
   resolveAgentAvatarUri,
 } from '@/utils/iconResolution';
@@ -156,46 +156,36 @@ export function AppSidebar() {
   });
 
   const selectedChain = getEvmChainOrDefault(chainId);
-  const sidebarChainNames = useMemo(() => {
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const config of agentConfigs) {
-      const profile = listAgents[config.id]?.profile;
-      const chains = profile?.chains?.length ? profile.chains : (config.chains ?? []);
-      for (const chain of chains) {
-        const trimmed = chain.trim();
-        if (!trimmed) continue;
-        const key = normalizeNameKey(trimmed);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(trimmed);
-      }
-    }
-    return out;
-  }, [agentConfigs, listAgents]);
+  const sidebarIconGroups = useMemo(
+    () =>
+      agentConfigs.map((config) => {
+        const profile = listAgents[config.id]?.profile;
+        return {
+          chains: profile?.chains?.length ? profile.chains : (config.chains ?? []),
+          tokens: profile?.tokens?.length ? profile.tokens : (config.tokens ?? []),
+          protocols: profile?.protocols?.length ? profile.protocols : (config.protocols ?? []),
+        };
+      }),
+    [agentConfigs, listAgents],
+  );
 
-  const sidebarTokenSymbols = useMemo(() => {
-    const out: string[] = [];
-    const seen = new Set<string>();
-    const push = (symbol: string) => {
-      const key = normalizeSymbolKey(symbol);
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      out.push(key);
-    };
+  const sidebarChainNames = useMemo(
+    () =>
+      collectUniqueChainNames({
+        groups: sidebarIconGroups,
+        keyFn: (value) => normalizeNameKey(value),
+      }),
+    [sidebarIconGroups],
+  );
 
-    for (const config of agentConfigs) {
-      const profile = listAgents[config.id]?.profile;
-      const tokens = profile?.tokens?.length ? profile.tokens : (config.tokens ?? []);
-      const protocols = profile?.protocols?.length ? profile.protocols : (config.protocols ?? []);
-      for (const token of tokens) push(token);
-      for (const protocol of protocols) {
-        const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
-        if (fallback) push(fallback);
-      }
-    }
-    return out;
-  }, [agentConfigs, listAgents]);
+  const sidebarTokenSymbols = useMemo(
+    () =>
+      collectUniqueTokenSymbols({
+        groups: sidebarIconGroups,
+        protocolTokenFallback: PROTOCOL_TOKEN_FALLBACK,
+      }),
+    [sidebarIconGroups],
+  );
 
   const { chainIconByName, tokenIconBySymbol } = useOnchainActionsIconMaps({
     chainNames: sidebarChainNames,

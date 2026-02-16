@@ -76,6 +76,61 @@ async function loadTokenIcons(params: { symbolKeys: string[] }): Promise<void> {
   }
 }
 
+function buildTokenIconResolutionSnapshot(params: {
+  requestedSymbolKeys: string[];
+}): {
+  tokenIconBySymbol: Record<string, string>;
+  missingSymbolKeys: string[];
+} {
+  const next: Record<string, string> = {};
+  const missing: string[] = [];
+
+  for (const symbolKey of params.requestedSymbolKeys) {
+    const staticUri = COINGECKO_TOKEN_ICON_BY_SYMBOL[symbolKey];
+    if (typeof staticUri === 'string' && staticUri.length > 0) {
+      next[symbolKey] = staticUri;
+      continue;
+    }
+
+    const cachedUri = getCachedTokenIconUri(symbolKey);
+    if (cachedUri === undefined) {
+      missing.push(symbolKey);
+      continue;
+    }
+    if (cachedUri) next[symbolKey] = cachedUri;
+  }
+
+  return {
+    tokenIconBySymbol: next,
+    missingSymbolKeys: missing,
+  };
+}
+
+function buildRefreshedTokenIconMap(params: {
+  requestedSymbolKeys: string[];
+}): Record<string, string> {
+  const refreshed: Record<string, string> = {};
+
+  for (const symbolKey of params.requestedSymbolKeys) {
+    const staticUri = COINGECKO_TOKEN_ICON_BY_SYMBOL[symbolKey];
+    if (typeof staticUri === 'string' && staticUri.length > 0) {
+      refreshed[symbolKey] = staticUri;
+      continue;
+    }
+    const cachedUri = getCachedTokenIconUri(symbolKey);
+    if (cachedUri) refreshed[symbolKey] = cachedUri;
+  }
+
+  return refreshed;
+}
+
+function resetIconMapsCachesForTests(): void {
+  chainIconByNameCache = null;
+  chainIconLoadPromise = null;
+  tokenIconCache.clear();
+  tokenLoadPromises.clear();
+}
+
 export function useOnchainActionsIconMaps(params: {
   chainNames: string[];
   tokenSymbols: string[];
@@ -124,24 +179,9 @@ export function useOnchainActionsIconMaps(params: {
 
   useEffect(() => {
     let cancelled = false;
-
-    const next: Record<string, string> = {};
-    const missing: string[] = [];
-
-    for (const symbolKey of requestedSymbolKeys) {
-      const staticUri = COINGECKO_TOKEN_ICON_BY_SYMBOL[symbolKey];
-      if (typeof staticUri === 'string' && staticUri.length > 0) {
-        next[symbolKey] = staticUri;
-        continue;
-      }
-
-      const cachedUri = getCachedTokenIconUri(symbolKey);
-      if (cachedUri === undefined) {
-        missing.push(symbolKey);
-        continue;
-      }
-      if (cachedUri) next[symbolKey] = cachedUri;
-    }
+    const { tokenIconBySymbol: next, missingSymbolKeys: missing } = buildTokenIconResolutionSnapshot({
+      requestedSymbolKeys,
+    });
 
     setTokenIconBySymbol(next);
 
@@ -170,18 +210,7 @@ export function useOnchainActionsIconMaps(params: {
 
     void promise.then(() => {
       if (cancelled) return;
-
-      const refreshed: Record<string, string> = {};
-      for (const symbolKey of requestedSymbolKeys) {
-        const staticUri = COINGECKO_TOKEN_ICON_BY_SYMBOL[symbolKey];
-        if (typeof staticUri === 'string' && staticUri.length > 0) {
-          refreshed[symbolKey] = staticUri;
-          continue;
-        }
-        const cachedUri = getCachedTokenIconUri(symbolKey);
-        if (cachedUri) refreshed[symbolKey] = cachedUri;
-      }
-
+      const refreshed = buildRefreshedTokenIconMap({ requestedSymbolKeys });
       setTokenIconBySymbol(refreshed);
       setTokenIconsLoaded(true);
     });
@@ -199,3 +228,12 @@ export function useOnchainActionsIconMaps(params: {
     isLoaded: chainIconsLoaded && tokenIconsLoaded,
   };
 }
+
+export const __useOnchainActionsIconMapsTestOnly = {
+  loadChainIconByName,
+  getCachedTokenIconUri,
+  loadTokenIcons,
+  buildTokenIconResolutionSnapshot,
+  buildRefreshedTokenIconMap,
+  resetIconMapsCachesForTests,
+};

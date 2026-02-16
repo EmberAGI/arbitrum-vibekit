@@ -3389,3 +3389,14 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
     </div>
   );
 }
+
+export const __agentDetailPageTestOnly = {
+  TransactionHistoryTab,
+  AgentBlockersTab,
+  TagColumn,
+  PointsColumn,
+  MetricsTab,
+  GmxAlloraMetricsTab,
+  PendleMetricsTab,
+  SettingsTab,
+};

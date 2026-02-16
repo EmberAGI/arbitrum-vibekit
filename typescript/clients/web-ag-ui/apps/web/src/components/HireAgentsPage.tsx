@@ -14,6 +14,7 @@ import { CursorListTooltip } from './ui/CursorListTooltip';
 import { CTA_SIZE_MD } from './ui/cta';
 import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
 import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
+import { collectUniqueChainNames, collectUniqueTokenSymbols } from '../utils/agentCollections';
 import {
   resolveAgentAvatarUri,
   resolveChainIconUris,
@@ -144,54 +145,21 @@ export function HireAgentsPage({
     currentPage * itemsPerPage,
   );
 
-  const desiredChainNames = useMemo(() => {
-    const out: string[] = [];
-    const seen = new Set<string>();
+  const iconDataSources = useMemo(() => [...agents, ...featuredAgents], [agents, featuredAgents]);
 
-    for (const agent of agents) {
-      for (const chain of agent.chains ?? []) {
-        if (seen.has(chain)) continue;
-        seen.add(chain);
-        out.push(chain);
-      }
-    }
+  const desiredChainNames = useMemo(
+    () => collectUniqueChainNames({ groups: iconDataSources }),
+    [iconDataSources],
+  );
 
-    for (const agent of featuredAgents) {
-      for (const chain of agent.chains ?? []) {
-        if (seen.has(chain)) continue;
-        seen.add(chain);
-        out.push(chain);
-      }
-    }
-
-    return out;
-  }, [agents, featuredAgents]);
-
-  const desiredTokenSymbols = useMemo(() => {
-    const out: string[] = [];
-    const seen = new Set<string>();
-
-    const addSymbol = (symbol: string | undefined) => {
-      if (!symbol) return;
-      const trimmed = symbol.trim();
-      if (trimmed.length === 0) return;
-      if (seen.has(trimmed)) return;
-      seen.add(trimmed);
-      out.push(trimmed);
-    };
-
-    for (const agent of agents) {
-      for (const token of agent.tokens ?? []) addSymbol(token);
-      for (const protocol of agent.protocols ?? []) addSymbol(PROTOCOL_TOKEN_FALLBACK[protocol]);
-    }
-
-    for (const agent of featuredAgents) {
-      for (const protocol of agent.protocols ?? []) addSymbol(PROTOCOL_TOKEN_FALLBACK[protocol]);
-      for (const token of agent.tokens ?? []) addSymbol(token);
-    }
-
-    return out;
-  }, [agents, featuredAgents]);
+  const desiredTokenSymbols = useMemo(
+    () =>
+      collectUniqueTokenSymbols({
+        groups: iconDataSources,
+        protocolTokenFallback: PROTOCOL_TOKEN_FALLBACK,
+      }),
+    [iconDataSources],
+  );
 
   const { chainIconByName, tokenIconBySymbol, isLoaded: iconsLoaded } = useOnchainActionsIconMaps({
     chainNames: desiredChainNames,

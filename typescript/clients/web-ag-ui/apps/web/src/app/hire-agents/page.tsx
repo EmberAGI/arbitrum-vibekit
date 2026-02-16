@@ -5,40 +5,7 @@ import { HireAgentsPage, type Agent, type FeaturedAgent } from '@/components/Hir
 import { useAgentList } from '@/contexts/AgentListContext';
 import { getAllAgents, getFeaturedAgents } from '@/config/agents';
 import { canonicalizeChainLabel } from '@/utils/iconResolution';
-
-function normalizeStringList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === 'string');
-  }
-  if (typeof value === 'string') {
-    return [value];
-  }
-  return [];
-}
-
-function mergeUniqueStrings(params: {
-  primary: string[];
-  secondary: string[];
-  keyFn: (value: string) => string;
-  mapFn?: (value: string) => string;
-}): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-
-  const push = (value: string) => {
-    const trimmed = (params.mapFn ? params.mapFn(value) : value).trim();
-    if (trimmed.length === 0) return;
-    const key = params.keyFn(trimmed);
-    if (key.length === 0) return;
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push(trimmed);
-  };
-
-  for (const value of params.primary) push(value);
-  for (const value of params.secondary) push(value);
-  return out;
-}
+import { mergeUniqueStrings, normalizeStringList } from '@/utils/agentCollections';
 
 export default function HireAgentsRoute() {
   const router = useRouter();
