@@ -309,12 +309,18 @@ export function AppSidebar() {
   return (
     <div className="flex flex-col h-full w-[260px] flex-shrink-0 bg-[#09090B] border-r border-[#242429] text-[#D1D1D1]">
       {/* Header */}
-      <div className="p-4 border-b border-[#242429]">
-        <div className="flex items-center gap-3">
-          <Image src="/ember-logo.svg" alt="Ember Logo" width={28} height={35} />
+      <div className="px-4 py-3.5 border-b border-[#242429]">
+        <div className="flex items-center gap-2.5">
+          <Image
+            src="/ember-logo.svg"
+            alt="Ember Logo"
+            width={12}
+            height={16}
+            className="w-3 h-4 object-contain"
+          />
           <div className="flex items-center gap-2">
-            <Image src="/ember-name.svg" alt="Ember" width={80} height={16} />
-            <span className="text-[11px] text-[#B4B4BC] px-1.5 py-0.5 bg-[#17171b] border border-[#2a2a31] rounded">
+            <Image src="/ember-name.svg" alt="Ember" width={76} height={15} className="h-[15px] w-auto" />
+            <span className="text-[10px] font-medium text-[#A7A7B2] px-1.5 py-0.5 bg-[#15161b] border border-[#2A2B32] rounded-[5px]">
               AI
             </span>
           </div>
@@ -325,7 +331,7 @@ export function AppSidebar() {
       <div className="flex-1 overflow-y-auto p-4">
         {/* Platform Section */}
         <div className="mb-6">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wider px-2 mb-3">
+          <div className="text-[11px] font-medium text-[#6F7280] uppercase tracking-[0.12em] px-2 mb-3">
             Platform
           </div>
           <div className="space-y-1">
@@ -343,12 +349,14 @@ export function AppSidebar() {
               <button
                 onClick={() => setIsAgentsExpanded(!isAgentsExpanded)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors ${
-                  isHireAgentsActive || isAcquireActive ? 'bg-[#252525]' : 'hover:bg-[#252525]'
+                  isHireAgentsActive || isAcquireActive
+                    ? 'bg-[#1B1C21] border border-[#2B2D36]'
+                    : 'hover:bg-[#1B1C21]'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <Users className="w-4 h-4" />
-                  <span className="text-sm font-medium">Agents</span>
+                  <span className="text-sm font-medium text-[#D7D8DE]">Agents</span>
                 </div>
                 {isAgentsExpanded ? (
                   <ChevronDown className="w-4 h-4 text-gray-500" />
@@ -358,13 +366,13 @@ export function AppSidebar() {
               </button>
 
               {isAgentsExpanded && (
-                <div className="ml-7 mt-1 space-y-1">
+                <div className="ml-7 mt-1.5 space-y-1">
                   <Link
                     href="/hire-agents"
                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
                       isHireAgentsActive
-                        ? 'text-white bg-[#2a2a2a]'
-                        : 'text-gray-400 hover:text-white hover:bg-[#252525]'
+                        ? 'text-white bg-[#1C1D23] border border-[#2F313B]'
+                        : 'text-[#9A9CAA] hover:text-white hover:bg-[#1B1C21]'
                     }`}
                   >
                     {isHireAgentsActive && (
@@ -376,8 +384,8 @@ export function AppSidebar() {
                     href="/acquire"
                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
                       isAcquireActive
-                        ? 'text-white bg-[#2a2a2a]'
-                        : 'text-gray-400 hover:text-white hover:bg-[#252525]'
+                        ? 'text-white bg-[#1C1D23] border border-[#2F313B]'
+                        : 'text-[#9A9CAA] hover:text-white hover:bg-[#1B1C21]'
                     }`}
                   >
                     {isAcquireActive && (
@@ -393,21 +401,23 @@ export function AppSidebar() {
             <Link
               href="/leaderboard"
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
-                isLeaderboardActive ? 'bg-[#252525]' : 'hover:bg-[#252525]'
+                isLeaderboardActive
+                  ? 'bg-[#1B1C21] border border-[#2B2D36]'
+                  : 'hover:bg-[#1B1C21]'
               }`}
             >
               {isLeaderboardActive && (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-[#fd6731] rounded-r" />
               )}
               <Trophy className="w-4 h-4" />
-              <span className="text-sm font-medium">Leaderboard</span>
+              <span className="text-sm font-medium text-[#D7D8DE]">Leaderboard</span>
             </Link>
           </div>
         </div>
 
         {/* Agent Activity Section */}
         <div>
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wider px-2 mb-3">
+          <div className="text-[11px] font-medium text-[#6F7280] uppercase tracking-[0.12em] px-2 mb-3">
             Agent Activity
           </div>
 
@@ -657,16 +667,16 @@ function ActivitySection({
       <button
         onClick={onToggle}
         disabled={!hasAgents}
-        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-colors ${
-          hasAgents ? 'hover:bg-[#252525]' : 'cursor-default'
+        className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left transition-colors ${
+          hasAgents ? 'hover:bg-[#17181d]' : 'cursor-default'
         }`}
       >
         <div className="flex items-center gap-2">
           {icon}
-          <span className={`text-sm ${!hasAgents ? 'text-gray-500' : ''}`}>{title}</span>
+          <span className={`text-sm ${!hasAgents ? 'text-[#666A77]' : 'text-[#C4C6D1]'}`}>{title}</span>
           <span
-            className={`text-xs px-2 py-0.5 rounded-full ${
-              hasAgents ? badgeColor : 'bg-gray-700/50 text-gray-500'
+            className={`text-[11px] px-2 py-0.5 rounded-full border ${
+              hasAgents ? `${badgeColor} border-current/20` : 'bg-[#181920] text-[#666A77] border-[#2A2C35]'
             }`}
           >
             {count}
@@ -684,12 +694,12 @@ function ActivitySection({
       </button>
 
       {isExpanded && hasAgents && (
-        <div className="mt-1 ml-4 space-y-1.5">
+        <div className="mt-1.5 ml-4 space-y-1.5">
           {agents.map((agentItem) => (
             <div
               key={agentItem.id}
               onClick={() => onAgentClick?.(agentItem.id)}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-[#25252c] bg-[#101014] hover:bg-[#15151b] hover:border-[#30303a] cursor-pointer transition-colors"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-[#252833] bg-[#111319] hover:bg-[#171a22] hover:border-[#323744] cursor-pointer transition-colors"
             >
               {agentIconById[agentItem.id] ? (
                 <Image
@@ -698,10 +708,10 @@ function ActivitySection({
                   width={32}
                   height={32}
                   unoptimized
-                  className="w-8 h-8 rounded-full bg-black/30 ring-1 ring-[#2a2a31] object-cover"
+                  className="w-8 h-8 rounded-full bg-black/30 ring-1 ring-[#2D3140] object-cover"
                 />
               ) : (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-semibold text-white">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#5f6bff] to-[#8f47ff] flex items-center justify-center text-xs font-semibold text-white">
                   {agentItem.name.charAt(0)}
                 </div>
               )}

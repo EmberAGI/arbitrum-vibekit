@@ -92,7 +92,7 @@ function AgentRow({ agent, iconsLoaded, onClick, onAction }: AgentRowProps) {
                   alt=""
                   loading="lazy"
                   decoding="async"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-contain p-[2px]"
                 />
               ) : null}
             </div>
