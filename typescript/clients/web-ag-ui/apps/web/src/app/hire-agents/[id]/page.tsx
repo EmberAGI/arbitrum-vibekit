@@ -1,13 +1,23 @@
 'use client';
 
 import { use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
+import { getAgentConfig, isRegisteredAgentId } from '@/config/agents';
 import { useAgent } from '@/contexts/AgentContext';
+import type { OnboardingState } from '@/types/agent';
+
+type UiPreviewState = 'prehire' | 'onboarding' | 'active';
+
+function parseUiPreviewState(value: string | null): UiPreviewState | null {
+  if (value === 'prehire' || value === 'onboarding' || value === 'active') return value;
+  return null;
+}
 
 export default function AgentDetailRoute({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const agent = useAgent();
   const activeAgentId = agent.config.id;
   const routeAgentId = id;
@@ -16,6 +26,82 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const handleBack = () => {
     router.push('/hire-agents');
   };
+
+  // Dev-only UI preview for screenshot-driven design work.
+  // This does not change production behavior (guarded by NODE_ENV).
+  const uiPreviewState =
+    process.env.NODE_ENV === 'development'
+      ? parseUiPreviewState(searchParams.get('__uiState'))
+      : null;
+
+  if (uiPreviewState) {
+    const previewAgentId = isRegisteredAgentId(routeAgentId) ? routeAgentId : selectedAgentId;
+    const config = getAgentConfig(previewAgentId);
+
+    const isHired = uiPreviewState !== 'prehire';
+    const onboarding: OnboardingState | undefined =
+      uiPreviewState === 'onboarding'
+        ? { step: 2, totalSteps: 5, key: 'setup-agent' }
+        : undefined;
+
+    const currentCommand =
+      uiPreviewState === 'prehire' ? undefined : uiPreviewState === 'onboarding' ? 'hire' : 'cycle';
+
+    return (
+      <AgentDetailPage
+        agentId={previewAgentId}
+        agentName={config.name}
+        agentDescription={config.description}
+        creatorName={config.creator}
+        creatorVerified={config.creatorVerified}
+        rank={1}
+        rating={5}
+        profile={{
+          agentIncome: 754,
+          aum: 742_510,
+          totalUsers: 5_321,
+          apy: 22,
+          chains: ['Arbitrum'],
+          protocols: ['Camelot'],
+          tokens: ['USDC', 'ARB', 'WETH'],
+        }}
+        metrics={{
+          iteration: 0,
+          cyclesSinceRebalance: 0,
+          staleCycles: 0,
+          rebalanceCycles: 0,
+          aumUsd: 742_510,
+          apy: 22,
+          lifetimePnlUsd: 0,
+        }}
+        fullMetrics={agent.metrics}
+        isHired={isHired}
+        isHiring={false}
+        hasLoadedView
+        isFiring={false}
+        isSyncing={false}
+        currentCommand={currentCommand}
+        onHire={() => undefined}
+        onFire={() => undefined}
+        onSync={() => undefined}
+        onBack={handleBack}
+        activeInterrupt={null}
+        allowedPools={[]}
+        onInterruptSubmit={() => undefined}
+        taskId={undefined}
+        taskStatus={undefined}
+        haltReason={undefined}
+        executionError={undefined}
+        delegationsBypassActive={false}
+        onboarding={onboarding}
+        transactions={[]}
+        telemetry={[]}
+        events={[]}
+        settings={agent.settings}
+        onSettingsChange={() => undefined}
+      />
+    );
+  }
 
   return (
     <AgentDetailPage
