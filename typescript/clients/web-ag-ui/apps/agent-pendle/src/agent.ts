@@ -188,9 +188,10 @@ async function updateCycleState(
     console.info(`[cron] Cycle state update rejected; thread busy (thread=${threadId})`, {
       detail: payloadText,
     });
-    return;
+    return false;
   }
   await parseJsonResponse(response, ThreadStateUpdateResponseSchema);
+  return true;
 }
 
 async function createRun(params: {
