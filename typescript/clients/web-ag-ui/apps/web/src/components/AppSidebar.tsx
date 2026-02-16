@@ -76,7 +76,7 @@ export function AppSidebar() {
   const agent = useAgent();
   const { agents: listAgents } = useAgentList();
 
-  const agentConfigs = getAllAgents();
+  const agentConfigs = useMemo(() => getAllAgents(), []);
   const isInactiveRuntime = agent.config.id === 'inactive-agent';
   const runtimeAgentId = isInactiveRuntime ? null : agent.config.id;
   const runtimeTaskId = agent.view.task?.id;

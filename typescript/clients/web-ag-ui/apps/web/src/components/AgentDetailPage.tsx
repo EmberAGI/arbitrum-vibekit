@@ -409,7 +409,7 @@ export function AgentDetailPage({
     return out;
   }, [displayProtocols, displayTokens]);
 
-  const { chainIconByName, tokenIconBySymbol, isLoaded: iconsLoaded } = useOnchainActionsIconMaps({
+  const { chainIconByName, tokenIconBySymbol } = useOnchainActionsIconMaps({
     chainNames: profile.chains ?? [],
     tokenSymbols: desiredTokenSymbols,
   });
@@ -549,7 +549,6 @@ export function AgentDetailPage({
         {resolvedTab === 'transactions' && (
           <TransactionHistoryTab
             transactions={transactions}
-            iconsLoaded={iconsLoaded}
             chainIconUri={displayChains.length > 0 ? chainIconByName[normalizeNameKey(displayChains[0])] ?? null : null}
             protocolLabel={
               profile.protocols && profile.protocols.length > 0 ? profile.protocols[0] : null
@@ -600,20 +599,20 @@ export function AgentDetailPage({
             <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-stretch">
                 {/* Left summary card (Figma onboarding) */}
                 <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
-                  {!iconsLoaded ? (
-                    <Skeleton className="h-[220px] w-[220px] rounded-full mb-6 mx-auto" />
-                  ) : (
-                    <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
-                      {agentAvatarUri ? (
-                        <img
-                          src={proxyIconUri(agentAvatarUri)}
-                          alt=""
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : null}
-                    </div>
-                  )}
+                  <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
+                    {agentAvatarUri ? (
+                      <img
+                        src={proxyIconUri(agentAvatarUri)}
+                        alt=""
+                        decoding="async"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-4xl font-semibold text-white/75" aria-hidden="true">
+                        {iconMonogram(agentName)}
+                      </span>
+                    )}
+                  </div>
 
                   <div className="flex justify-center">
                     {isHired ? (
@@ -794,13 +793,11 @@ export function AgentDetailPage({
                     <TagColumn
                       title="Chains"
                       items={displayChains}
-                      iconsLoaded={iconsLoaded}
                       getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
                     />
                     <TagColumn
                       title="Protocols"
                       items={displayProtocols}
-                      iconsLoaded={iconsLoaded}
                       getIconUri={(protocol) => {
                         const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
                         if (!fallback) return null;
@@ -810,7 +807,6 @@ export function AgentDetailPage({
                     <TagColumn
                       title="Tokens"
                       items={displayTokens}
-                      iconsLoaded={iconsLoaded}
                       getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
                     />
                     <PointsColumn metrics={metrics} />
@@ -846,20 +842,20 @@ export function AgentDetailPage({
           {/* Left Column - Agent Card */}
           <div className="h-full">
             <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
-              {!iconsLoaded ? (
-                <Skeleton className="h-[220px] w-[220px] rounded-full mb-6 mx-auto" />
-              ) : (
-                <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
-                  {agentAvatarUri ? (
-                    <img
-                      src={agentAvatarUri}
-                      alt=""
-                      decoding="async"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : null}
-                </div>
-              )}
+              <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
+                {agentAvatarUri ? (
+                  <img
+                    src={proxyIconUri(agentAvatarUri)}
+                    alt=""
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="text-4xl font-semibold text-white/75" aria-hidden="true">
+                    {iconMonogram(agentName)}
+                  </span>
+                )}
+              </div>
 
               <button
                 onClick={onHire}
@@ -1001,13 +997,11 @@ export function AgentDetailPage({
                 <TagColumn
                   title="Chains"
                   items={displayChains}
-                  iconsLoaded={iconsLoaded}
                   getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
                 />
                 <TagColumn
                   title="Protocols"
                   items={displayProtocols}
-                  iconsLoaded={iconsLoaded}
                   getIconUri={(protocol) => {
                     const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
                     if (!fallback) return null;
@@ -1017,7 +1011,6 @@ export function AgentDetailPage({
                 <TagColumn
                   title="Tokens"
                   items={displayTokens}
-                  iconsLoaded={iconsLoaded}
                   getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
                 />
                 <PointsColumn metrics={metrics} />
@@ -1148,7 +1141,6 @@ function TabButton({ active, onClick, children, disabled, highlight }: TabButton
 // Transaction History Tab Component
 interface TransactionHistoryTabProps {
   transactions: Transaction[];
-  iconsLoaded: boolean;
   chainIconUri: string | null;
   protocolIconUri: string | null;
   protocolLabel: string | null;
@@ -1156,7 +1148,6 @@ interface TransactionHistoryTabProps {
 
 function TransactionHistoryTab({
   transactions,
-  iconsLoaded,
   chainIconUri,
   protocolIconUri,
   protocolLabel,
@@ -1233,7 +1224,7 @@ function TransactionHistoryTab({
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="flex items-center -space-x-2 flex-shrink-0">
-                          {iconsLoaded && chainIconUri ? (
+                          {chainIconUri ? (
                             <img
                               src={proxyIconUri(chainIconUri)}
                               alt=""
@@ -1244,7 +1235,7 @@ function TransactionHistoryTab({
                           ) : (
                             <div className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12]" />
                           )}
-                          {iconsLoaded && protocolIconUri ? (
+                          {protocolIconUri ? (
                             <img
                               src={proxyIconUri(protocolIconUri)}
                               alt=""
@@ -2228,11 +2219,10 @@ function StatBox({ label, value, valueColor = 'text-white', isLoaded }: StatBoxP
 interface TagColumnProps {
   title: string;
   items: string[];
-  iconsLoaded: boolean;
   getIconUri: (item: string) => string | null;
 }
 
-function TagColumn({ title, items, iconsLoaded, getIconUri }: TagColumnProps) {
+function TagColumn({ title, items, getIconUri }: TagColumnProps) {
   if (items.length === 0) {
     return (
       <div>
@@ -2250,9 +2240,7 @@ function TagColumn({ title, items, iconsLoaded, getIconUri }: TagColumnProps) {
           const iconUri = getIconUri(item);
           return (
             <div key={item} className="flex items-center gap-2">
-              {!iconsLoaded ? (
-                <Skeleton className="h-4 w-4 rounded-full" />
-              ) : iconUri ? (
+              {iconUri ? (
                 <img
                   src={proxyIconUri(iconUri)}
                   alt=""
@@ -2277,7 +2265,7 @@ function TagColumn({ title, items, iconsLoaded, getIconUri }: TagColumnProps) {
             title={`${title} (more)`}
             items={items.slice(3).map((label) => ({
               label,
-              iconUri: iconsLoaded ? getIconUri(label) : null,
+              iconUri: getIconUri(label),
             }))}
           >
             <div className="inline-flex items-center gap-1.5 text-xs text-gray-400 select-none cursor-default">

@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   chainNameKeyVariants,
+  proxyIconUri,
   resolveAgentAvatarUri,
   resolveChainIconUris,
-  resolveTokenIconUri,
   resolveProtocolIconUris,
+  resolveTokenIconUri,
   resolveTokenIconUris,
 } from './iconResolution';
 
@@ -79,5 +80,26 @@ describe('iconResolution', () => {
     });
 
     expect(uri).toBe('https://example.test/grail.png');
+  });
+
+  it('proxies known icon hosts through the icon proxy endpoint', () => {
+    expect(proxyIconUri('https://coin-images.coingecko.com/coins/images/279/large/ethereum.png')).toBe(
+      '/api/icon-proxy?url=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F279%2Flarge%2Fethereum.png',
+    );
+  });
+
+  it('proxies linktr.ee-hosted icons so client blockers do not drop them', () => {
+    expect(proxyIconUri('https://ugc.production.linktr.ee/path/to/icon.png')).toBe(
+      '/api/icon-proxy?url=https%3A%2F%2Fugc.production.linktr.ee%2Fpath%2Fto%2Ficon.png',
+    );
+  });
+
+  it('normalizes github tree/blob asset URLs to raw.githubusercontent.com', () => {
+    expect(proxyIconUri('https://github.com/owner/repo/tree/main/images/icon.webp')).toBe(
+      '/api/icon-proxy?url=https%3A%2F%2Fraw.githubusercontent.com%2Fowner%2Frepo%2Fmain%2Fimages%2Ficon.webp',
+    );
+    expect(proxyIconUri('https://github.com/owner/repo/blob/main/images/icon.webp')).toBe(
+      '/api/icon-proxy?url=https%3A%2F%2Fraw.githubusercontent.com%2Fowner%2Frepo%2Fmain%2Fimages%2Ficon.webp',
+    );
   });
 });

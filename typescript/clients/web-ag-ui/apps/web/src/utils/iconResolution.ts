@@ -1,5 +1,12 @@
 import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
 
+const PROXIED_ICON_HOSTS = new Set<string>([
+  'coin-images.coingecko.com',
+  'assets.coingecko.com',
+  'raw.githubusercontent.com',
+  'ugc.production.linktr.ee',
+]);
+
 export function normalizeNameKey(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -131,5 +138,37 @@ export function resolveAgentAvatarUri(params: {
 }
 
 export function proxyIconUri(uri: string): string {
-  return `/api/icon-proxy?url=${encodeURIComponent(uri)}`;
+  try {
+    const parsed = new URL(uri);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return uri;
+    }
+
+    const normalized = normalizeGithubAssetUri(parsed) ?? parsed;
+    if (!PROXIED_ICON_HOSTS.has(normalized.hostname)) {
+      return normalized.toString();
+    }
+
+    return `/api/icon-proxy?url=${encodeURIComponent(normalized.toString())}`;
+  } catch {
+    return uri;
+  }
+}
+
+function normalizeGithubAssetUri(uri: URL): URL | null {
+  if (uri.hostname !== 'github.com') {
+    return null;
+  }
+
+  const segments = uri.pathname.split('/').filter((segment) => segment.length > 0);
+  if (segments.length < 5) {
+    return null;
+  }
+
+  const [owner, repo, marker, ref, ...rest] = segments;
+  if ((marker !== 'tree' && marker !== 'blob') || rest.length === 0) {
+    return null;
+  }
+
+  return new URL(`https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${rest.join('/')}`);
 }
