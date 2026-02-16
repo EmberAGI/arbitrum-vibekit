@@ -9,7 +9,7 @@ html.light,
 html[data-theme="light"],
 html[data-theme="auto"] {
   --background: 0 0% 7%;
-  --foreground: 0 0% 95%;
+  --foreground: 0 0% 82%;
   --card: 0 0% 12%;
   --card-foreground: 0 0% 95%;
   --popover: 0 0% 12%;
@@ -31,7 +31,7 @@ html[data-theme="auto"] {
 
   /* Ember brand colors */
   --ember-orange: #fd6731;
-  --ember-bg: #121212;
+  --ember-bg: #09090B;
   --ember-card: #1e1e1e;
   --ember-card-hover: #252525;
   --ember-border: #2a2a2a;
@@ -74,7 +74,7 @@ html[data-theme="auto"] {
 }
 
 body {
-  background: #121212 !important;
+  background: #09090B !important;
   color: hsl(var(--foreground)) !important;
   color-scheme: dark !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -160,9 +160,19 @@ html {
   border-spacing: 0;
 }
 
+.hire-agents-page .agent-table th {
+  padding: 0.55rem 1rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+}
+
+.hire-agents-page .agent-table td {
+  padding: 0.65rem 1rem;
+}
+
 .agent-table th {
   text-align: left;
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 1rem;
   font-size: 0.75rem;
   font-weight: 500;
   text-transform: uppercase;
@@ -172,12 +182,22 @@ html {
 }
 
 .agent-table td {
-  padding: 0.75rem 1rem;
+  padding: 0.7rem 1rem;
   border-bottom: 1px solid hsl(var(--border));
 }
 
 .agent-table tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Hide scrollbars without changing scroll behavior (used for featured carousel). */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Star rating styles */

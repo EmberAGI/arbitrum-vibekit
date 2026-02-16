@@ -2,7 +2,9 @@ interface FilterTab {
   id: string;
   label: string;
   count?: number;
-  color?: string;
+  activeClassName?: string;
+  inactiveClassName?: string;
+  countClassName?: string;
 }
 
 interface FilterTabsProps {
@@ -16,32 +18,34 @@ export function FilterTabs({ tabs, activeTab, onTabChange }: FilterTabsProps) {
     <div className="flex items-center gap-2">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
-        const colorClasses = tab.color
-          ? isActive
-            ? tab.color
-            : 'text-gray-400 hover:text-white'
-          : isActive
-            ? 'bg-[#2a2a2a] text-white'
-            : 'text-gray-400 hover:text-white';
+        const activeClassName =
+          tab.activeClassName ?? 'bg-white/10 text-white border border-white/10';
+        const inactiveClassName =
+          tab.inactiveClassName ??
+          'text-gray-400 border border-white/10 hover:text-white hover:bg-white/5';
 
         return (
           <button
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors ${colorClasses}`}
+            className={[
+              'flex items-center gap-2 h-10 px-4 rounded-full text-[13px] transition-colors',
+              isActive ? activeClassName : inactiveClassName,
+            ].join(' ')}
           >
             {tab.label}
-            {tab.count !== undefined && (
+            {tab.count !== undefined ? (
               <span
-                className={`px-1.5 py-0.5 rounded text-xs ${
-                  isActive && tab.color
-                    ? `${tab.color.includes('teal') ? 'bg-teal-500/30' : tab.color.includes('fd6731') ? 'bg-[#fd6731]/30' : 'bg-gray-500/30'}`
-                    : 'bg-gray-500/30'
-                }`}
+                className={[
+                  'px-2 py-0.5 rounded-full text-xs font-medium',
+                  isActive
+                    ? tab.countClassName ?? 'bg-black/20 text-current'
+                    : 'bg-white/10 text-gray-300',
+                ].join(' ')}
               >
                 {tab.count}
               </span>
-            )}
+            ) : null}
           </button>
         );
       })}

@@ -25,11 +25,35 @@ type UsePrivyWalletClientReturn = {
   error: Error | null;
 };
 
-function parseChainId(value: unknown): number | null {
+export function parseChainId(value: unknown): number | null {
   if (typeof value !== 'string') return null;
   if (!value.startsWith('0x')) return null;
   const parsed = Number.parseInt(value, 16);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function normalizeWalletAddress(value: string | undefined): string | null {
+  if (!value) return null;
+  return value.trim().toLowerCase();
+}
+
+export function selectPrivyWallet(params: {
+  wallets: ConnectedWallet[];
+  preferredWalletAddress?: string;
+}): ConnectedWallet | null {
+  const preferredAddress = normalizeWalletAddress(params.preferredWalletAddress);
+  if (preferredAddress) {
+    return params.wallets.find((wallet) => wallet.address.toLowerCase() === preferredAddress) ?? null;
+  }
+  return params.wallets.find((wallet) => wallet.walletClientType === 'privy') ?? null;
+}
+
+export function resolveWalletClientError(params: {
+  providerError: Error | null;
+  chainIdError: Error | null;
+  walletClientError: Error | null;
+}): Error | null {
+  return params.providerError ?? params.chainIdError ?? params.walletClientError ?? null;
 }
 
 export function usePrivyWalletClient(preferredWalletAddress?: string): UsePrivyWalletClientReturn {
@@ -37,19 +61,12 @@ export function usePrivyWalletClient(preferredWalletAddress?: string): UsePrivyW
   const queryClient = useQueryClient();
   const hasInitializedDefaultChain = useRef(false);
 
-  const normalizeAddress = (value: string | undefined): string | null => {
-    if (!value) return null;
-    return value.trim().toLowerCase();
-  };
-
-  const preferredAddress = normalizeAddress(preferredWalletAddress);
-
   const privyWallet = useMemo(() => {
-    if (preferredAddress) {
-      return wallets.find((wallet) => wallet.address.toLowerCase() === preferredAddress) ?? null;
-    }
-    return wallets.find((wallet) => wallet.walletClientType === 'privy') ?? null;
-  }, [wallets, preferredAddress]);
+    return selectPrivyWallet({
+      wallets,
+      preferredWalletAddress,
+    });
+  }, [wallets, preferredWalletAddress]);
 
   useEffect(() => {
     if (!privyWallet) return;
@@ -111,11 +128,11 @@ export function usePrivyWalletClient(preferredWalletAddress?: string): UsePrivyW
     await queryClient.invalidateQueries({ queryKey: ['privyWalletChainId', privyWallet.address] });
   };
 
-  const error =
-    (providerQuery.error as Error | null) ??
-    (chainIdQuery.error as Error | null) ??
-    (walletClientQuery.error as Error | null) ??
-    null;
+  const error = resolveWalletClientError({
+    providerError: providerQuery.error as Error | null,
+    chainIdError: chainIdQuery.error as Error | null,
+    walletClientError: walletClientQuery.error as Error | null,
+  });
 
   return {
     walletClient: walletClientQuery.data ?? null,

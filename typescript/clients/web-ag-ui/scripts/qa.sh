@@ -161,6 +161,10 @@ resolve_onchain_actions_pnpm_bin() {
 }
 
 ensure_onchain_actions_50051() {
+  if [ "${QA_USE_REMOTE_ONCHAIN_ACTIONS:-false}" = "true" ] && [ -z "${ONCHAIN_ACTIONS_API_URL:-}" ]; then
+    export ONCHAIN_ACTIONS_API_URL="${QA_REMOTE_ONCHAIN_ACTIONS_API_URL:-https://api.emberai.xyz}"
+  fi
+
   if [ -n "${ONCHAIN_ACTIONS_API_URL:-}" ]; then
     local markets_url="${ONCHAIN_ACTIONS_API_URL}/perpetuals/markets?chainIds=42161"
     if curl -fs -o /dev/null "$markets_url"; then
@@ -188,8 +192,12 @@ ensure_onchain_actions_50051() {
   fi
 
   if [ -f "$onchain_dir/compose.dev.db.yaml" ] && command -v docker >/dev/null 2>&1; then
-    # Only bring up memgraph (compose file also defines memgraph_lab on 3000 which conflicts with the web QA server).
-    docker compose -f "$onchain_dir/compose.dev.db.yaml" up -d memgraph >/dev/null
+    if docker info >/dev/null 2>&1; then
+      # Only bring up memgraph (compose file also defines memgraph_lab on 3000 which conflicts with the web QA server).
+      docker compose -f "$onchain_dir/compose.dev.db.yaml" up -d memgraph >/dev/null
+    else
+      echo "[qa] docker is installed but the daemon is not reachable; skipping memgraph startup."
+    fi
   fi
 
   local pnpm_bin
@@ -216,6 +224,13 @@ ensure_onchain_actions_50051() {
 ensure_mock_allora
 ensure_onchain_actions_50051
 
+echo "[qa] building web (production-like)..."
+
+# Avoid building while LangGraph dev servers are running: they keep thousands of
+# file descriptors open, which can trip system-wide limits (ENFILE) during `next build`.
+rm -rf "$ROOT_DIR/apps/web/.next" || true
+pnpm --filter web build
+
 echo "[qa] starting agent runtimes (LangGraph dev servers)..."
 
 # Match `apps/web/src/app/api/copilotkit/route.ts` defaults.
@@ -223,5 +238,5 @@ pnpm --filter agent-clmm start >/dev/null 2>&1 &
 pnpm --filter agent-pendle start >/dev/null 2>&1 &
 pnpm --filter agent-gmx-allora start >/dev/null 2>&1 &
 
-echo "[qa] starting web (build + next start) on http://localhost:3000 ..."
-exec pnpm --filter web qa
+echo "[qa] starting web on http://localhost:3000 ..."
+exec pnpm --filter web start

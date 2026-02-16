@@ -16,8 +16,11 @@ const AgentContext = createContext<UseAgentConnectionResult | null>(null);
 const inactiveAgent: UseAgentConnectionResult = {
   config: getAgentConfig('inactive-agent'),
   isConnected: false,
+  hasLoadedView: false,
   threadId: undefined,
   interruptRenderer: null,
+  uiError: null,
+  clearUiError: () => undefined,
   view: defaultView,
   profile: defaultProfile,
   metrics: defaultMetrics,
