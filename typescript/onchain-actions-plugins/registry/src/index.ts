@@ -1,3 +1,4 @@
+import { registerCompoundV3 } from './compound-v3-plugin/index.js';
 import { registerAave } from './aave-lending-plugin/index.js';
 import type { ChainConfig } from './chainConfig.js';
 import { PublicEmberPluginRegistry } from './registry.js';
@@ -13,6 +14,7 @@ export function initializePublicRegistry(chainConfigs: ChainConfig[]) {
   for (const chainConfig of chainConfigs) {
     // Create aave plugins for each chain config
     registerAave(chainConfig, registry);
+    registerCompoundV3(chainConfig, registry);
   }
 
   return registry;
