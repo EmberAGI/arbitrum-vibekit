@@ -12,7 +12,7 @@ const DEFAULT_ALLORA_CHAIN_ID = 'ethereum-11155111';
 const DEFAULT_ALLORA_INFERENCE_CACHE_TTL_MS = 30_000;
 const DEFAULT_ALLORA_8H_INFERENCE_CACHE_TTL_MS = 30_000;
 const DEFAULT_GMX_ALLORA_MODE: GmxAlloraMode = 'production';
-const DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE: GmxAlloraTxExecutionMode = 'plan';
+const DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE: GmxAlloraTxExecutionMode = 'execute';
 const DEFAULT_DELEGATIONS_BYPASS = false;
 
 export type GmxAlloraMode = 'debug' | 'production';

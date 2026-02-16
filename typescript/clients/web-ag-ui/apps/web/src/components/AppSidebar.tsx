@@ -22,6 +22,7 @@ import { useAgent } from '@/contexts/AgentContext';
 import { useAgentList } from '@/contexts/AgentListContext';
 import { getAllAgents } from '@/config/agents';
 import type { TaskState } from '@/types/agent';
+import { deriveTaskStateForUi } from '@/utils/deriveTaskStateForUi';
 
 export interface AgentActivity {
   id: string;
@@ -72,9 +73,17 @@ export function AppSidebar() {
   const runtimeAgentId = isInactiveRuntime ? null : agent.config.id;
   const runtimeTaskId = agent.view.task?.id;
   const runtimeTaskState = agent.view.task?.taskStatus?.state as TaskState | undefined;
+  const runtimeCommand = agent.view.command;
   const runtimeHaltReason = agent.view.haltReason;
   const runtimeExecutionError = agent.view.executionError;
   const runtimeNeedsInput = Boolean(agent.activeInterrupt);
+  const runtimeTaskMessage = (() => {
+    const message = agent.view.task?.taskStatus?.message;
+    if (typeof message !== 'object' || message === null) return undefined;
+    if (!('content' in message)) return undefined;
+    const content = (message as { content?: unknown }).content;
+    return typeof content === 'string' ? content : undefined;
+  })();
 
   const blockedAgents: AgentActivity[] = [];
   const activeAgents: AgentActivity[] = [];
@@ -87,7 +96,13 @@ export function AppSidebar() {
       ? {
           ...listEntry,
           taskId: runtimeTaskId,
-          taskState: runtimeTaskState,
+          taskState: (deriveTaskStateForUi({
+            command: runtimeCommand,
+            taskState: runtimeTaskState ?? null,
+            taskMessage: runtimeTaskMessage ?? null,
+          }) ?? undefined) as TaskState | undefined,
+          command: runtimeCommand,
+          taskMessage: runtimeTaskMessage,
           haltReason: runtimeHaltReason,
           executionError: runtimeExecutionError,
         }

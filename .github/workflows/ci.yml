@@ -25,12 +25,12 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 10.7.0
           run_install: false
 
       - name: Install dependencies in project
         working-directory: ./typescript
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Run linter
         working-directory: ./typescript

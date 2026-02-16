@@ -466,6 +466,15 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       agent: currentAgent,
       runAgent: async (value) =>
         copilotkit.runAgent({ agent: value } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+      abortActiveBackendRun: async () => {
+        await fetch('/api/agents/abort-active-run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId, threadId }),
+        }).catch(() => {
+          // best-effort; ignore
+        });
+      },
       threadId,
       runInFlightRef,
       createId: v7,
@@ -476,7 +485,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       }
       setTimeout(() => setIsFiring(false), 3000);
     });
-  }, [copilotkit, isFiring, threadId]);
+  }, [agentId, copilotkit, isFiring, threadId]);
 
   const resolveInterrupt = useCallback(
     (

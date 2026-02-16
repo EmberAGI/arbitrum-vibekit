@@ -31,10 +31,10 @@ Optional configuration:
 
 - `E2E_PROFILE=mocked` (default for `pnpm test:e2e`):
   - Runs deterministic GMX Allora system tests with agent-local MSW handlers for Allora + onchain-actions.
-  - Skips booting local onchain-actions/docker dependencies.
+  - Does not require a running onchain-actions instance.
 - `E2E_PROFILE=live`:
   - Runs against real HTTP providers.
-  - Uses `ONCHAIN_ACTIONS_API_URL` when set, otherwise boots local onchain-actions + Memgraph.
+  - Requires `ONCHAIN_ACTIONS_API_URL` pointing at an already-running onchain-actions instance (web E2E will not boot it).
 
 Examples:
 
