@@ -42,6 +42,7 @@ function makeThreadState(params: {
   taskState?: string;
   command?: string;
   taskMessage?: string;
+  setupComplete?: boolean;
 }): unknown {
   const tasks = params.hasInterrupts
     ? [{ interrupts: [{ value: { type: 'pendle-setup-request' } }] }]
@@ -58,12 +59,13 @@ function makeThreadState(params: {
     : undefined;
 
   const values = params.hasView
-    ? {
-        view: {
-          command: params.command,
-          task,
-          profile: { apy: 1 },
-          metrics: { iteration: 0 },
+      ? {
+          view: {
+            command: params.command,
+            setupComplete: params.setupComplete,
+            task,
+            profile: { apy: 1 },
+            metrics: { iteration: 0 },
         },
       }
     : {};
@@ -278,6 +280,42 @@ describe('POST /api/agents/sync', () => {
       expect(fetchMock.calls.some((c) => c.url.includes(`/threads/${threadId}/runs`))).toBe(false);
       expect(fetchMock.calls.some((c) => c.url.endsWith('/threads') && c.init?.method === 'POST')).toBe(false);
       expect(fetchMock.calls.some((c) => c.url.endsWith(`/threads/${threadId}`) && c.init?.method === 'PATCH')).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns setupComplete from view state when present', async () => {
+    const threadId = 'setup-complete-thread';
+    const agentId = 'agent-pendle';
+
+    const initial = makeThreadState({
+      hasInterrupts: false,
+      hasView: true,
+      command: 'hire',
+      taskState: 'working',
+      setupComplete: true,
+    });
+
+    const fetchMock = makeFetchMock((call) => {
+      if (call.url.endsWith(`/threads/${threadId}/state`) && (!call.init || call.init.method === 'GET')) {
+        return createJsonResponse(initial);
+      }
+      throw new Error(`Unexpected fetch: ${call.init?.method ?? 'GET'} ${call.url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock.fn);
+    try {
+      const res = await POST(makeRequestJson({ agentId, threadId }) as never);
+      expect(res.status).toBe(200);
+
+      const payload = (await res.json()) as unknown;
+      expect(payload).toEqual(
+        expect.objectContaining({
+          agentId,
+          setupComplete: true,
+        }),
+      );
     } finally {
       vi.unstubAllGlobals();
     }

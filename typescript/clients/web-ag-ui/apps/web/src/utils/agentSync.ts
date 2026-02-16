@@ -17,6 +17,7 @@ const SyncResponseSchema = z.object({
 
   command: z.string().nullable().optional(),
   onboarding: OnboardingStateSchema.nullable().optional(),
+  setupComplete: z.boolean().nullable().optional(),
   delegationsBypassActive: z.boolean().nullable().optional(),
 
   profile: z.record(z.unknown()).nullable().optional(),
@@ -49,6 +50,7 @@ export function applyAgentSyncToState(prevState: AgentState, sync: AgentSyncResp
       ...prevView,
       command: (sync.command ?? undefined) ?? prevView.command,
       onboarding: (sync.onboarding ?? undefined) ?? prevView.onboarding,
+      setupComplete: (sync.setupComplete ?? undefined) ?? prevView.setupComplete,
       delegationsBypassActive:
         (sync.delegationsBypassActive ?? undefined) ?? prevView.delegationsBypassActive,
       profile: nextProfile as typeof prevView.profile,

@@ -22,6 +22,7 @@ const ThreadStateSchema = z
       .object({
         command: z.string().optional(),
         onboarding: z.record(z.unknown()).optional(),
+        setupComplete: z.boolean().optional(),
         delegationsBypassActive: z.boolean().optional(),
         profile: z.record(z.unknown()).optional(),
         metrics: z.record(z.unknown()).optional(),
@@ -359,6 +360,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         agentId: parsed.data.agentId,
         command,
         onboarding: state?.view?.onboarding ?? null,
+        setupComplete: state?.view?.setupComplete ?? null,
         delegationsBypassActive: state?.view?.delegationsBypassActive ?? null,
         profile: state?.view?.profile ?? null,
         metrics: state?.view?.metrics ?? null,

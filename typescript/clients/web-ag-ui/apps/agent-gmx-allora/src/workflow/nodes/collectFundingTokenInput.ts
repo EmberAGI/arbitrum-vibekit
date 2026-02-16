@@ -17,9 +17,16 @@ import {
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
-};
+const FULL_ONBOARDING_TOTAL_STEPS = 3;
+const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
+
+const buildOnboarding = (state: ClmmState, step: number): OnboardingState => ({
+  step,
+  totalSteps:
+    state.view.delegationsBypassActive === true
+      ? REDUCED_ONBOARDING_TOTAL_STEPS
+      : FULL_ONBOARDING_TOTAL_STEPS,
+});
 
 function resolveUsdcTokenAddressFromMarket(market: PerpetualMarket): `0x${string}` {
   const longToken = market.longToken;
@@ -75,7 +82,7 @@ export const collectFundingTokenInputNode = async (
   );
   await copilotkitEmitState(config, {
     view: {
-      onboarding: { ...ONBOARDING, step: 2 },
+      onboarding: buildOnboarding(state, 2),
       task: awaitingInput.task,
       activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
     },
@@ -129,7 +136,7 @@ export const collectFundingTokenInputNode = async (
   return {
     view: {
       fundingTokenInput: input,
-      onboarding: { ...ONBOARDING, step: 3 },
+      onboarding: buildOnboarding(state, state.view.delegationsBypassActive === true ? 2 : 3),
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     },

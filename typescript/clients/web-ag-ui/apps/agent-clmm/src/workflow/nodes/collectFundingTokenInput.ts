@@ -23,9 +23,20 @@ import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
-};
+const FULL_ONBOARDING_TOTAL_STEPS = 3;
+const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
+
+const buildOnboarding = (params: {
+  step: number;
+  delegationsBypassActive: boolean;
+  skipFundingStep?: boolean;
+}): OnboardingState => ({
+  step: params.step,
+  totalSteps:
+    params.skipFundingStep || params.delegationsBypassActive
+      ? REDUCED_ONBOARDING_TOTAL_STEPS
+      : FULL_ONBOARDING_TOTAL_STEPS,
+});
 
 function uniqByAddress<T extends { address: `0x${string}` }>(items: readonly T[]): T[] {
   const seen = new Set<string>();
@@ -177,7 +188,7 @@ export const collectFundingTokenInputNode = async (
     return {
       view: {
         selectedPool,
-        onboarding: { ...ONBOARDING, step: 3 },
+        onboarding: buildOnboarding({ step: 2, delegationsBypassActive, skipFundingStep: true }),
         task,
         activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
       },
@@ -224,7 +235,7 @@ export const collectFundingTokenInputNode = async (
     return {
       view: {
         selectedPool,
-        onboarding: { ...ONBOARDING, step: 3 },
+        onboarding: buildOnboarding({ step: 2, delegationsBypassActive, skipFundingStep: true }),
       },
     };
   }
@@ -335,7 +346,7 @@ export const collectFundingTokenInputNode = async (
   );
   await copilotkitEmitState(config, {
     view: {
-      onboarding: { ...ONBOARDING, step: 2 },
+      onboarding: buildOnboarding({ step: 2, delegationsBypassActive }),
       task: awaitingInput.task,
       activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
       selectedPool,
@@ -421,7 +432,10 @@ export const collectFundingTokenInputNode = async (
     view: {
       selectedPool,
       fundingTokenInput: input,
-      onboarding: { ...ONBOARDING, step: 3 },
+      onboarding: buildOnboarding({
+        step: delegationsBypassActive ? 2 : 3,
+        delegationsBypassActive,
+      }),
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     },

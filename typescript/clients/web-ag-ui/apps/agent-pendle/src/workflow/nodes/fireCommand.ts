@@ -72,6 +72,11 @@ export const fireCommandNode = async (
   const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
   const delegationBundle =
     state.view.delegationsBypassActive === true ? undefined : state.view.delegationBundle;
+  const hasSetupTransaction = state.view.transactionHistory.some(
+    (entry) => entry.action === 'setup' && entry.status === 'success',
+  );
+  const positionLookupAttempts = hasSetupTransaction ? 20 : 1;
+  const positionLookupDelayMs = hasSetupTransaction ? 3_000 : 0;
 
   const emitWorking = async (message: string) => {
     const { task, statusEvent } = buildTaskStatus(currentTask, 'working', message);
@@ -91,6 +96,8 @@ export const fireCommandNode = async (
       walletAddress: operatorConfig.executionWalletAddress,
       chainIds,
       maxRetries: 2,
+      positionLookupAttempts,
+      positionLookupDelayMs,
       onProgress: async (message) => emitWorking(message),
     });
 

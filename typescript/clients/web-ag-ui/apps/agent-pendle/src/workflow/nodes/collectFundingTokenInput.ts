@@ -20,9 +20,16 @@ import {
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
-};
+const FULL_ONBOARDING_TOTAL_STEPS = 3;
+const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
+
+const buildOnboarding = (
+  step: number,
+  totalSteps: number = FULL_ONBOARDING_TOTAL_STEPS,
+): OnboardingState => ({
+  step,
+  totalSteps,
+});
 
 const FundWalletAckSchema = z.object({
   acknowledged: z.literal(true),
@@ -95,7 +102,7 @@ export const collectFundingTokenInputNode = async (
           view: {
             fundingTokenInput: input,
             selectedPool: toYieldToken(matchedMarket),
-            onboarding: { ...ONBOARDING, step: 3 },
+            onboarding: buildOnboarding(2, REDUCED_ONBOARDING_TOTAL_STEPS),
             task,
             activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
           },
@@ -155,7 +162,7 @@ export const collectFundingTokenInputNode = async (
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
     await copilotkitEmitState(config, {
       view: {
-        onboarding: { ...ONBOARDING, step: 2 },
+        onboarding: buildOnboarding(2),
         task,
         activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
       },
@@ -197,7 +204,7 @@ export const collectFundingTokenInputNode = async (
   );
   await copilotkitEmitState(config, {
     view: {
-      onboarding: { ...ONBOARDING, step: 2 },
+      onboarding: buildOnboarding(2),
       task: awaitingInput.task,
       activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
     },
@@ -281,7 +288,7 @@ export const collectFundingTokenInputNode = async (
   return {
     view: {
       fundingTokenInput: input,
-      onboarding: { ...ONBOARDING, step: 3 },
+      onboarding: buildOnboarding(3),
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     },

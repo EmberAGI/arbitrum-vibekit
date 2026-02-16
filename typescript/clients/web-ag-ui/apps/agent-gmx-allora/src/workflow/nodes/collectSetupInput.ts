@@ -12,9 +12,18 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
-};
+const FULL_ONBOARDING_TOTAL_STEPS = 3;
+const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
+
+const resolveOnboardingTotalSteps = (state: ClmmState): number =>
+  state.view.delegationsBypassActive === true
+    ? REDUCED_ONBOARDING_TOTAL_STEPS
+    : FULL_ONBOARDING_TOTAL_STEPS;
+
+const buildOnboarding = (state: ClmmState, step: number): OnboardingState => ({
+  step,
+  totalSteps: resolveOnboardingTotalSteps(state),
+});
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -38,7 +47,7 @@ export const collectSetupInputNode = async (
 
   await copilotkitEmitState(config, {
     view: {
-      onboarding: { ...ONBOARDING, step: 1 },
+      onboarding: buildOnboarding(state, 1),
       task: awaitingInput.task,
       activity: { events: [awaitingInput.statusEvent], telemetry: [] },
     },
@@ -96,7 +105,7 @@ export const collectSetupInputNode = async (
   return {
     view: {
       operatorInput: normalized,
-      onboarding: { ...ONBOARDING, step: 2 },
+      onboarding: buildOnboarding(state, 2),
       task,
       activity: { events: [statusEvent], telemetry: [] },
     },

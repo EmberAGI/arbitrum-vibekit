@@ -28,8 +28,16 @@ import {
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
+const FULL_ONBOARDING_TOTAL_STEPS = 3;
+
+const resolveDelegationOnboarding = (state: ClmmState): OnboardingState => {
+  const configuredTotalSteps = state.view.onboarding?.totalSteps;
+  const totalSteps =
+    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
+      ? configuredTotalSteps
+      : FULL_ONBOARDING_TOTAL_STEPS;
+  const step = totalSteps <= 2 ? 2 : 3;
+  return { step, totalSteps };
 };
 
 const HexSchema = z
@@ -93,6 +101,7 @@ export const collectDelegationsNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+  const delegationOnboarding = resolveDelegationOnboarding(state);
   logInfo('collectDelegations: entering node', {
     delegationsBypassActive: state.view.delegationsBypassActive === true,
     hasDelegationBundle: Boolean(state.view.delegationBundle),
@@ -102,7 +111,7 @@ export const collectDelegationsNode = async (
     return {
       view: {
         delegationsBypassActive: true,
-        onboarding: { ...ONBOARDING, step: 3 },
+        onboarding: delegationOnboarding,
       },
     };
   }
@@ -111,7 +120,7 @@ export const collectDelegationsNode = async (
     return {
       view: {
         delegationBundle: state.view.delegationBundle,
-        onboarding: { ...ONBOARDING, step: 3 },
+        onboarding: delegationOnboarding,
       },
     };
   }
@@ -168,7 +177,7 @@ export const collectDelegationsNode = async (
   );
   await copilotkitEmitState(config, {
     view: {
-      onboarding: { ...ONBOARDING, step: 3 },
+      onboarding: delegationOnboarding,
       task: awaitingInput.task,
       activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
     },
@@ -198,7 +207,7 @@ export const collectDelegationsNode = async (
         haltReason: failureMessage,
         task,
         activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        onboarding: { ...ONBOARDING, step: 3 },
+        onboarding: delegationOnboarding,
       },
     };
   }
@@ -254,7 +263,7 @@ export const collectDelegationsNode = async (
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
       delegationBundle,
-      onboarding: { ...ONBOARDING, step: 3 },
+      onboarding: delegationOnboarding,
     },
   };
 };

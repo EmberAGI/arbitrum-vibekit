@@ -355,6 +355,7 @@ export interface AgentView {
   command?: string;
   task?: Task;
   onboarding?: OnboardingState;
+  setupComplete?: boolean;
   poolArtifact?: Artifact;
   operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput;
   fundingTokenInput?: FundingTokenInput;
@@ -440,6 +441,7 @@ export const defaultActivity: AgentViewActivity = {
 export const defaultView: AgentView = {
   command: undefined,
   task: undefined,
+  setupComplete: undefined,
   poolArtifact: undefined,
   operatorInput: undefined,
   selectedPool: undefined,

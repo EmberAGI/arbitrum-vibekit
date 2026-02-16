@@ -40,6 +40,23 @@ vi.mock('@langchain/langgraph', async (importOriginal) => {
 });
 
 describe('collectDelegationsNode', () => {
+  it('preserves reduced onboarding totals when delegation becomes the final step', async () => {
+    const state = {
+      view: {
+        delegationsBypassActive: true,
+        delegationBundle: undefined,
+        onboarding: { step: 2, totalSteps: 2 },
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectDelegationsNode(state, {});
+
+    expect('view' in result).toBe(true);
+    const onboarding = (result as { view: { onboarding?: { step: number; totalSteps?: number } } }).view
+      .onboarding;
+    expect(onboarding).toEqual({ step: 2, totalSteps: 2 });
+  });
+
   it('requests a single delegation signature and stores a delegation bundle with stablecoin approval intents', async () => {
     const usdaiToken: Token = {
       tokenUid: { chainId: '42161', address: '0x0a1a1a107e45b7ced86833863f482bc5f4ed82ef' },

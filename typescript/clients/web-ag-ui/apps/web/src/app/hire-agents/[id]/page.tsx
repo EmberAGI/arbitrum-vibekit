@@ -128,6 +128,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         executionError={undefined}
         delegationsBypassActive={false}
         onboarding={onboarding}
+        setupComplete={false}
         transactions={[]}
         telemetry={[]}
         events={[]}
@@ -187,6 +188,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       executionError={agent.view.executionError}
       delegationsBypassActive={agent.view.delegationsBypassActive}
       onboarding={agent.view.onboarding}
+      setupComplete={agent.view.setupComplete}
       transactions={agent.transactionHistory}
       telemetry={agent.activity.telemetry}
       events={agent.events}

@@ -106,6 +106,7 @@ interface AgentDetailPageProps {
   executionError?: string;
   delegationsBypassActive?: boolean;
   onboarding?: OnboardingState;
+  setupComplete?: boolean;
   // Activity data
   transactions?: Transaction[];
   telemetry?: TelemetryItem[];
@@ -272,6 +273,7 @@ export function AgentDetailPage({
   executionError,
   delegationsBypassActive,
   onboarding,
+  setupComplete,
   transactions = [],
   telemetry = [],
   events = [],
@@ -284,19 +286,21 @@ export function AgentDetailPage({
   const [hasUserSelectedTab, setHasUserSelectedTab] = useState(false);
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
   const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
-  const isOnboardingActive = onboarding?.step !== undefined;
-  const isOnboardingInterrupt =
-    activeInterrupt?.type === 'operator-config-request' ||
-    activeInterrupt?.type === 'pendle-setup-request' ||
-    activeInterrupt?.type === 'pendle-fund-wallet-request' ||
-    activeInterrupt?.type === 'gmx-setup-request' ||
-    activeInterrupt?.type === 'clmm-funding-token-request' ||
-    activeInterrupt?.type === 'pendle-funding-token-request' ||
-    activeInterrupt?.type === 'gmx-funding-token-request' ||
-    activeInterrupt?.type === 'clmm-delegation-signing-request' ||
-    activeInterrupt?.type === 'pendle-delegation-signing-request' ||
-    activeInterrupt?.type === 'gmx-delegation-signing-request';
-  const forceBlockersTab = Boolean(activeInterrupt) || isOnboardingActive;
+  const isTaskTerminal =
+    taskStatus === 'completed' ||
+    taskStatus === 'failed' ||
+    taskStatus === 'canceled' ||
+    taskStatus === 'rejected';
+  const isPendleOnboardingInFlight =
+    agentId === 'agent-pendle' &&
+    currentCommand === 'hire' &&
+    setupComplete !== true &&
+    !isTaskTerminal;
+  const isOnboardingActive =
+    Boolean(activeInterrupt) ||
+    taskStatus === 'input-required' ||
+    isPendleOnboardingInFlight;
+  const forceBlockersTab = isOnboardingActive;
   const selectTab = useCallback((tab: TabType) => {
     setHasUserSelectedTab(true);
     setActiveTab(tab);
@@ -305,7 +309,7 @@ export function AgentDetailPage({
   const resolvedTab: TabType = forceBlockersTab
     ? 'blockers'
     : !hasUserSelectedTab && isHired
-      ? 'blockers'
+      ? 'metrics'
       : activeTab;
 
   const blockingErrorMessage = (haltReason || executionError || null) as string | null;
@@ -1308,22 +1312,134 @@ interface AgentBlockersTabProps {
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
 }
 
-const SETUP_STEPS = [
-  {
-    id: 1,
-    name: 'Agent Preferences',
-    description:
-      'Define boundaries and ensure compatibility with your strategy. You can update permissions after deployment.',
+type SetupStep = {
+  id: number;
+  name: string;
+  description: string;
+};
+
+type SetupStepKind = 'setup' | 'funding' | 'delegation';
+
+const isFundingInterruptType = (type: AgentInterrupt['type'] | undefined): boolean =>
+  type === 'clmm-funding-token-request' ||
+  type === 'pendle-funding-token-request' ||
+  type === 'gmx-funding-token-request';
+
+const isDelegationInterruptType = (type: AgentInterrupt['type'] | undefined): boolean =>
+  type === 'clmm-delegation-signing-request' ||
+  type === 'pendle-delegation-signing-request' ||
+  type === 'gmx-delegation-signing-request';
+
+const resolveSetupStepKinds = (params: {
+  totalSteps?: number;
+  interruptType?: AgentInterrupt['type'];
+  delegationsBypassActive?: boolean;
+}): SetupStepKind[] => {
+  const resolvedTotalSteps =
+    typeof params.totalSteps === 'number' && Number.isFinite(params.totalSteps)
+      ? Math.max(1, Math.floor(params.totalSteps))
+      : 3;
+
+  if (resolvedTotalSteps === 1) {
+    return ['setup'];
+  }
+
+  if (resolvedTotalSteps === 2) {
+    if (params.delegationsBypassActive === true) {
+      return ['setup', 'funding'];
+    }
+    if (isDelegationInterruptType(params.interruptType)) {
+      return ['setup', 'delegation'];
+    }
+    return ['setup', 'funding'];
+  }
+
+  return ['setup', 'funding', 'delegation'];
+};
+
+const BASE_SETUP_STEP_COPY: Record<
+  'default' | 'pendle' | 'gmx',
+  Record<SetupStepKind, Omit<SetupStep, 'id'>>
+> = {
+  default: {
+    setup: {
+      name: 'Agent Preferences',
+      description: 'Provide strategy inputs so the agent can initialize your configuration.',
+    },
+    funding: {
+      name: 'Funding Token',
+      description: 'Choose the starting asset used to fund agent actions.',
+    },
+    delegation: {
+      name: 'Signing Policies',
+      description: 'Review and sign delegations required for execution.',
+    },
   },
-  {
-    id: 2,
-    name: 'Allowed Assets & Protocols',
-    description: 'Select which assets and protocols the agent can interact with.',
+  pendle: {
+    setup: {
+      name: 'Funding Amount',
+      description: 'Set deployment amount and wallet context for Pendle.',
+    },
+    funding: {
+      name: 'Funding Token',
+      description: 'Select the starting stablecoin (may be auto-selected from existing position).',
+    },
+    delegation: {
+      name: 'Delegation Signing',
+      description: 'Approve permissions needed to manage the Pendle position.',
+    },
   },
-  { id: 3, name: 'Signing Policies', description: 'Configure transaction signing requirements.' },
-  { id: 4, name: 'Claims & Unwinds', description: 'Set up claim and unwind procedures.' },
-  { id: 5, name: 'Summary', description: 'Review and confirm your settings.' },
-];
+  gmx: {
+    setup: {
+      name: 'Strategy Config',
+      description: 'Select market and allocation for the GMX strategy.',
+    },
+    funding: {
+      name: 'Funding Token',
+      description: 'Choose the funding token used for position management.',
+    },
+    delegation: {
+      name: 'Delegation Signing',
+      description: 'Approve execution permissions for GMX operations.',
+    },
+  },
+};
+
+function resolveSetupSteps(params: {
+  agentId: string;
+  totalSteps?: number;
+  interruptType?: AgentInterrupt['type'];
+  delegationsBypassActive?: boolean;
+}): SetupStep[] {
+  const copyKey =
+    params.agentId === 'agent-pendle'
+      ? 'pendle'
+      : params.agentId === 'agent-gmx-allora'
+        ? 'gmx'
+        : 'default';
+  const baseSteps = BASE_SETUP_STEP_COPY[copyKey];
+  const resolvedTotalSteps =
+    typeof params.totalSteps === 'number' && Number.isFinite(params.totalSteps)
+      ? Math.max(1, Math.floor(params.totalSteps))
+      : 3;
+  const resolvedStepKinds = resolveSetupStepKinds({
+    totalSteps: resolvedTotalSteps,
+    interruptType: params.interruptType,
+    delegationsBypassActive: params.delegationsBypassActive,
+  });
+
+  return Array.from({ length: resolvedTotalSteps }, (_, index) => {
+    const stepNumber = index + 1;
+    const stepKind = resolvedStepKinds[index];
+    const baseStep = stepKind ? baseSteps[stepKind] : undefined;
+    return {
+      id: stepNumber,
+      name: baseStep?.name ?? `Step ${stepNumber}`,
+      description:
+        baseStep?.description ?? 'Follow the next agent prompt to continue onboarding.',
+    };
+  });
+}
 
 function AgentBlockersTab({
   agentId,
@@ -1378,6 +1494,21 @@ function AgentBlockersTab({
   const isTerminalTask =
     taskStatus === 'failed' || taskStatus === 'canceled' || taskStatus === 'rejected';
   const showBlockingError = Boolean(haltReason || executionError) && isTerminalTask;
+  const setupSteps = useMemo(
+    () =>
+      resolveSetupSteps({
+        agentId,
+        totalSteps: onboarding?.totalSteps,
+        interruptType: activeInterrupt?.type,
+        delegationsBypassActive,
+      }),
+    [agentId, onboarding?.totalSteps, activeInterrupt?.type, delegationsBypassActive],
+  );
+  const maxSetupStep = setupSteps.length;
+  const clampStep = useCallback(
+    (value: number) => Math.max(1, Math.min(value, maxSetupStep)),
+    [maxSetupStep],
+  );
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
   const uniqueAllowedPools: Pool[] = [];
@@ -1449,7 +1580,7 @@ function AgentBlockersTab({
       walletAddress: operatorWalletAddress as `0x${string}`,
       baseContributionUsd: baseContributionNumber,
     });
-    setCurrentStep(2);
+    setCurrentStep(clampStep(2));
   };
 
   const handlePendleSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -1500,7 +1631,7 @@ function AgentBlockersTab({
       walletAddress: operatorWalletAddress as `0x${string}`,
       baseContributionUsd: baseContributionNumber,
     });
-    setCurrentStep(2);
+    setCurrentStep(clampStep(2));
   };
 
   const handleGmxSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -1557,7 +1688,7 @@ function AgentBlockersTab({
       baseContributionUsd: baseContributionNumber,
       targetMarket,
     });
-    setCurrentStep(2);
+    setCurrentStep(clampStep(2));
   };
 
   const formatDate = (timestamp?: string) => {
@@ -1586,15 +1717,17 @@ function AgentBlockersTab({
     activeInterrupt?.type === 'pendle-delegation-signing-request' ||
     activeInterrupt?.type === 'gmx-delegation-signing-request';
 
-  // Sync currentStep with the interrupt type when it changes
-  useEffect(() => {
+  const interruptStep = useMemo(() => {
     if (showOperatorConfigForm || showPendleSetupForm || showPendleFundWalletForm || showGmxSetupForm) {
-      setCurrentStep(1);
-    } else if (showFundingTokenForm) {
-      setCurrentStep(2);
-    } else if (showDelegationSigningForm) {
-      setCurrentStep(3);
+      return 1;
     }
+    if (showFundingTokenForm) {
+      return 2;
+    }
+    if (showDelegationSigningForm) {
+      return 3;
+    }
+    return null;
   }, [
     showOperatorConfigForm,
     showPendleSetupForm,
@@ -1604,13 +1737,17 @@ function AgentBlockersTab({
     showDelegationSigningForm,
   ]);
 
-  // Also sync from onboarding.step if provided by the agent
+  // Interrupt type is authoritative when present; onboarding.step is a fallback.
   useEffect(() => {
+    if (interruptStep !== null) {
+      setCurrentStep(clampStep(interruptStep));
+      return;
+    }
     const nextStep = onboarding?.step;
     if (typeof nextStep === 'number' && Number.isFinite(nextStep) && nextStep > 0) {
-      setCurrentStep(nextStep);
+      setCurrentStep(clampStep(nextStep));
     }
-  }, [onboarding?.step]);
+  }, [clampStep, interruptStep, onboarding?.step]);
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
@@ -1649,7 +1786,7 @@ function AgentBlockersTab({
       return;
     }
 
-    setCurrentStep(3);
+    setCurrentStep(clampStep(3));
     onInterruptSubmit?.({
       fundingTokenAddress: fundingTokenAddress as `0x${string}`,
     });
@@ -1657,7 +1794,7 @@ function AgentBlockersTab({
 
   const handleRejectDelegations = () => {
     setError(null);
-    setCurrentStep(5);
+    setCurrentStep(maxSetupStep);
     onInterruptSubmit?.({ outcome: 'rejected' });
   };
 
@@ -1720,7 +1857,7 @@ function AgentBlockersTab({
       }
 
       const response: DelegationSigningResponse = { outcome: 'signed', signedDelegations };
-      setCurrentStep(5);
+      setCurrentStep(maxSetupStep);
       onInterruptSubmit?.(response);
     } catch (signError: unknown) {
       const message =
@@ -2146,7 +2283,7 @@ function AgentBlockersTab({
 
           {/* Steps Sidebar */}
           <div className="space-y-2">
-            {SETUP_STEPS.map((step) => (
+            {setupSteps.map((step) => (
               <div
                 key={step.id}
                 className={`flex items-start gap-3 p-3 rounded-xl transition-colors ${
