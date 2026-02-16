@@ -4,9 +4,8 @@ on:
   push:
     branches: [main, master]
   pull_request:
-    paths:
-      - "typescript/**"
-      - ".github/workflows/ci.yml"
+  merge_group:
+    branches: [main, master, next]
   workflow_dispatch:
 
 jobs:
