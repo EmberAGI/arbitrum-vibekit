@@ -4,6 +4,7 @@ import {
   chainNameKeyVariants,
   resolveAgentAvatarUri,
   resolveChainIconUris,
+  resolveTokenIconUri,
   resolveProtocolIconUris,
   resolveTokenIconUris,
 } from './iconResolution';
@@ -51,6 +52,17 @@ describe('iconResolution', () => {
     });
 
     expect(uris).toEqual(['https://example.test/usdc.png', 'https://example.test/weth.png']);
+  });
+
+  it('does not use surrogate symbol fallbacks when token icon is missing', () => {
+    const uri = resolveTokenIconUri({
+      symbol: 'sUSDai',
+      tokenIconBySymbol: {
+        DAI: 'https://example.test/dai.png',
+      },
+    });
+
+    expect(uri).toBeNull();
   });
 
   it('selects the first available protocol token icon as the agent avatar', () => {

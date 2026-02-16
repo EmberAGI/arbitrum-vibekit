@@ -16,38 +16,12 @@ export function canonicalizeChainLabel(value: string): string {
   return trimmed;
 }
 
-const TOKEN_SYMBOL_ICON_FALLBACK_BY_SYMBOL_KEY: Record<string, string> = {
-  USDAI: 'DAI',
-  SUSDAI: 'DAI',
-  REUSD: 'USDC',
-  NUSD: 'USDC',
-  RUSD: 'USDC',
-  YZUSD: 'USDC',
-  YSUSDC: 'USDC',
-  UPUSDC: 'USDC',
-  USD3: 'USDC',
-  JRUSDE: 'USDE',
-  IUSD: 'USDC',
-  SYRUPUSDC: 'USDC',
-  SYRUPUSDT: 'USDT',
-};
-
-export function getTokenIconFallbackSymbolKey(symbolKey: string): string | null {
-  const fallback = TOKEN_SYMBOL_ICON_FALLBACK_BY_SYMBOL_KEY[symbolKey];
-  return fallback ?? null;
-}
-
 export function resolveTokenIconUri(params: {
   symbol: string;
   tokenIconBySymbol: Record<string, string>;
 }): string | null {
   const symbolKey = normalizeSymbolKey(params.symbol);
-  const direct = params.tokenIconBySymbol[symbolKey];
-  if (direct) return direct;
-
-  const fallbackKey = getTokenIconFallbackSymbolKey(symbolKey);
-  if (!fallbackKey) return null;
-  return params.tokenIconBySymbol[fallbackKey] ?? null;
+  return params.tokenIconBySymbol[symbolKey] ?? null;
 }
 
 export function iconMonogram(label: string): string {

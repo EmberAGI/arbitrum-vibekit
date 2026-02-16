@@ -13,16 +13,24 @@ import {
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
 import { supportedEvmChains, getEvmChainOrDefault } from '@/config/evmChains';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
+import { useOnchainActionsIconMaps } from '@/hooks/useOnchainActionsIconMaps';
 import { useAgent } from '@/contexts/AgentContext';
 import { useAgentList } from '@/contexts/AgentListContext';
 import { getAllAgents } from '@/config/agents';
 import type { TaskState } from '@/types/agent';
 import { deriveTaskStateForUi } from '@/utils/deriveTaskStateForUi';
+import { PROTOCOL_TOKEN_FALLBACK } from '@/constants/protocolTokenFallback';
+import {
+  normalizeNameKey,
+  normalizeSymbolKey,
+  proxyIconUri,
+  resolveAgentAvatarUri,
+} from '@/utils/iconResolution';
 
 export interface AgentActivity {
   id: string;
@@ -148,6 +156,68 @@ export function AppSidebar() {
   });
 
   const selectedChain = getEvmChainOrDefault(chainId);
+  const sidebarChainNames = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const config of agentConfigs) {
+      const profile = listAgents[config.id]?.profile;
+      const chains = profile?.chains?.length ? profile.chains : (config.chains ?? []);
+      for (const chain of chains) {
+        const trimmed = chain.trim();
+        if (!trimmed) continue;
+        const key = normalizeNameKey(trimmed);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(trimmed);
+      }
+    }
+    return out;
+  }, [agentConfigs, listAgents]);
+
+  const sidebarTokenSymbols = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (symbol: string) => {
+      const key = normalizeSymbolKey(symbol);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      out.push(key);
+    };
+
+    for (const config of agentConfigs) {
+      const profile = listAgents[config.id]?.profile;
+      const tokens = profile?.tokens?.length ? profile.tokens : (config.tokens ?? []);
+      const protocols = profile?.protocols?.length ? profile.protocols : (config.protocols ?? []);
+      for (const token of tokens) push(token);
+      for (const protocol of protocols) {
+        const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+        if (fallback) push(fallback);
+      }
+    }
+    return out;
+  }, [agentConfigs, listAgents]);
+
+  const { chainIconByName, tokenIconBySymbol } = useOnchainActionsIconMaps({
+    chainNames: sidebarChainNames,
+    tokenSymbols: sidebarTokenSymbols,
+  });
+
+  const agentIconById = useMemo(() => {
+    const out: Record<string, string | null> = {};
+    for (const config of agentConfigs) {
+      const profile = listAgents[config.id]?.profile;
+      const protocols = profile?.protocols?.length ? profile.protocols : (config.protocols ?? []);
+      const chains = profile?.chains?.length ? profile.chains : (config.chains ?? []);
+      const avatar =
+        resolveAgentAvatarUri({
+          protocols,
+          tokenIconBySymbol,
+        }) ??
+        (chains.length > 0 ? chainIconByName[normalizeNameKey(chains[0])] ?? null : null);
+      out[config.id] = avatar ? proxyIconUri(avatar) : null;
+    }
+    return out;
+  }, [agentConfigs, listAgents, chainIconByName, tokenIconBySymbol]);
 
   const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
 
@@ -237,14 +307,16 @@ export function AppSidebar() {
   const isLeaderboardActive = pathname === '/leaderboard';
 
   return (
-    <div className="flex flex-col h-full w-[260px] flex-shrink-0 bg-[#1a1a1a] border-r border-[#2a2a2a]">
+    <div className="flex flex-col h-full w-[260px] flex-shrink-0 bg-[#09090B] border-r border-[#242429] text-[#D1D1D1]">
       {/* Header */}
-      <div className="p-4 border-b border-[#2a2a2a]">
+      <div className="p-4 border-b border-[#242429]">
         <div className="flex items-center gap-3">
           <Image src="/ember-logo.svg" alt="Ember Logo" width={28} height={35} />
           <div className="flex items-center gap-2">
             <Image src="/ember-name.svg" alt="Ember" width={80} height={16} />
-            <span className="text-xs text-gray-400 px-1.5 py-0.5 bg-[#2a2a2a] rounded">AI</span>
+            <span className="text-[11px] text-[#B4B4BC] px-1.5 py-0.5 bg-[#17171b] border border-[#2a2a31] rounded">
+              AI
+            </span>
           </div>
         </div>
       </div>
@@ -348,6 +420,7 @@ export function AppSidebar() {
             onToggle={() => setIsBlockedExpanded(!isBlockedExpanded)}
             badgeColor="bg-red-500/20 text-red-400"
             icon={<AlertCircle className="w-4 h-4 text-red-400" />}
+            agentIconById={agentIconById}
             onAgentClick={handleAgentClick}
           />
 
@@ -360,6 +433,7 @@ export function AppSidebar() {
             onToggle={() => setIsActiveExpanded(!isActiveExpanded)}
             badgeColor="bg-teal-500/20 text-teal-400"
             icon={<Loader className="w-4 h-4 text-teal-400 animate-spin" />}
+            agentIconById={agentIconById}
             onAgentClick={handleAgentClick}
           />
 
@@ -372,13 +446,14 @@ export function AppSidebar() {
             onToggle={() => setIsCompletedExpanded(!isCompletedExpanded)}
             badgeColor="bg-blue-500/20 text-blue-400"
             icon={<CheckCircle className="w-4 h-4 text-blue-400" />}
+            agentIconById={agentIconById}
             onAgentClick={handleAgentClick}
           />
         </div>
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-[#2a2a2a] space-y-3">
+      <div className="p-4 border-t border-[#242429] space-y-3">
         {/* Network Selector */}
         <div className="relative">
           <button
@@ -560,6 +635,7 @@ interface ActivitySectionProps {
   onToggle: () => void;
   badgeColor: string;
   icon: React.ReactNode;
+  agentIconById?: Record<string, string | null>;
   onAgentClick?: (agentId: string) => void;
 }
 
@@ -571,6 +647,7 @@ function ActivitySection({
   onToggle,
   badgeColor,
   icon,
+  agentIconById = {},
   onAgentClick,
 }: ActivitySectionProps) {
   const hasAgents = agents.length > 0;
@@ -607,19 +684,30 @@ function ActivitySection({
       </button>
 
       {isExpanded && hasAgents && (
-        <div className="mt-1 ml-4 space-y-1">
+        <div className="mt-1 ml-4 space-y-1.5">
           {agents.map((agentItem) => (
             <div
               key={agentItem.id}
               onClick={() => onAgentClick?.(agentItem.id)}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#252525] cursor-pointer transition-colors"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-[#25252c] bg-[#101014] hover:bg-[#15151b] hover:border-[#30303a] cursor-pointer transition-colors"
             >
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">
-                {agentItem.name.charAt(0)}
-              </div>
+              {agentIconById[agentItem.id] ? (
+                <Image
+                  src={agentIconById[agentItem.id] ?? ''}
+                  alt=""
+                  width={32}
+                  height={32}
+                  unoptimized
+                  className="w-8 h-8 rounded-full bg-black/30 ring-1 ring-[#2a2a31] object-cover"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-semibold text-white">
+                  {agentItem.name.charAt(0)}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
-                <div className="text-sm text-white truncate">{agentItem.name}</div>
-                <div className="text-xs text-gray-500 truncate">{agentItem.subtitle}</div>
+                <div className="text-[13px] text-[#E7E7EC] font-medium truncate">{agentItem.name}</div>
+                <div className="text-[11px] text-[#8D8D97] truncate">{agentItem.subtitle}</div>
               </div>
               {agentItem.timestamp && (
                 <span className="text-xs text-gray-500">{agentItem.timestamp}</span>

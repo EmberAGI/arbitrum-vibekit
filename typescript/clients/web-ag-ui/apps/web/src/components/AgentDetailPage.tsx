@@ -442,6 +442,12 @@ export function AgentDetailPage({
     return `$${value.toFixed(2)}`;
   };
 
+  const formatSignedCurrency = (value: number | undefined) => {
+    if (value === undefined || value === null) return null;
+    const sign = value > 0 ? '+' : '';
+    return `${sign}${formatCurrency(value)}`;
+  };
+
   const formatNumber = (value: number | undefined) => {
     if (value === undefined || value === null) return null;
     return value.toLocaleString();
@@ -687,6 +693,30 @@ export function AgentDetailPage({
                         skeletonClassName="h-6 w-16"
                         loadedClassName="text-lg font-semibold text-teal-400"
                         value={formatPercent(profile.apy)}
+                      />
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                        Your Assets
+                      </div>
+                      <LoadingValue
+                        isLoaded={hasLoadedView}
+                        skeletonClassName="h-6 w-24"
+                        loadedClassName="text-lg font-semibold text-white"
+                        value={formatCurrency(fullMetrics?.latestSnapshot?.totalUsd)}
+                      />
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                        Your PnL
+                      </div>
+                      <LoadingValue
+                        isLoaded={hasLoadedView}
+                        skeletonClassName="h-6 w-24"
+                        loadedClassName={`text-lg font-semibold ${
+                          (metrics.lifetimePnlUsd ?? 0) >= 0 ? 'text-teal-400' : 'text-red-400'
+                        }`}
+                        value={formatSignedCurrency(metrics.lifetimePnlUsd)}
                       />
                     </div>
                   </div>
