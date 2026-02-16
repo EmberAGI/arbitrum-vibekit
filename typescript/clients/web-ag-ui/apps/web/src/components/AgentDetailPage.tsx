@@ -12,7 +12,6 @@ import {
   Check,
   RefreshCw,
 } from 'lucide-react';
-import { signDelegation } from '@metamask/delegation-toolkit/actions';
 import { formatUnits } from 'viem';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import type {
@@ -54,6 +53,7 @@ import { LoadingValue } from './ui/LoadingValue';
 import { CreatorIdentity } from './ui/CreatorIdentity';
 import { CursorListTooltip } from './ui/CursorListTooltip';
 import { CTA_SIZE_MD, CTA_SIZE_MD_FULL } from './ui/cta';
+import { signDelegationWithFallback } from '../utils/delegationSigning';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -1677,6 +1677,7 @@ function AgentBlockersTab({
     const interrupt = activeInterrupt as unknown as {
       chainId: number;
       delegationManager: `0x${string}`;
+      delegatorAddress: `0x${string}`;
       delegationsToSign: UnsignedDelegation[];
     };
 
@@ -1697,15 +1698,32 @@ function AgentBlockersTab({
       return;
     }
 
+    const requiredDelegatorAddress = interrupt.delegatorAddress.toLowerCase();
+    const signerAddress = walletClient.account?.address?.toLowerCase();
+    if (!signerAddress || signerAddress !== requiredDelegatorAddress) {
+      setError(
+        `Switch to Privy wallet ${interrupt.delegatorAddress} to sign delegations. Current signer: ${
+          walletClient.account?.address ?? 'unknown'
+        }.`,
+      );
+      return;
+    }
+
     setIsSigningDelegations(true);
     try {
       const signedDelegations = [];
       for (const delegation of delegationsToSign) {
-        const signature = await signDelegation(walletClient, {
+        if (delegation.delegator.toLowerCase() !== requiredDelegatorAddress) {
+          throw new Error(
+            `Delegation delegator ${delegation.delegator} does not match required signer ${interrupt.delegatorAddress}.`,
+          );
+        }
+        const signature = await signDelegationWithFallback({
+          walletClient,
           delegation,
           delegationManager: interrupt.delegationManager,
           chainId: interrupt.chainId,
-          account: walletClient.account,
+          account: interrupt.delegatorAddress,
         });
         signedDelegations.push({ ...delegation, signature });
       }
