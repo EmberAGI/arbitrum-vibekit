@@ -9,6 +9,7 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    environment: ci
 
     steps:
       - name: Set up Python
@@ -36,7 +37,7 @@ jobs:
 
           INTERNAL_DEVS = [
               "0xTomDaniel", "0xchepe", "dev-coda",
-              "ParastooGM", "danielkinahan", "varelaseb"
+              "danielkinahan", "varelaseb"
           ]
 
           # Skip internal contributors
@@ -49,6 +50,19 @@ jobs:
               "Notion-Version": "2022-06-28",
               "Content-Type": "application/json"
           }
+
+          def ensure_ok(response, context):
+              """
+              Basic error handling for Notion API calls.
+              Prints the error payload and fails the workflow loudly instead of silently.
+              """
+              if not response.ok:
+                  print(f"[Notion] Error during {context}: {response.status_code}")
+                  try:
+                      print(response.json())
+                  except Exception:
+                      print(response.text)
+                  response.raise_for_status()
 
           def search_notion_for_url(url):
               query = {
@@ -64,6 +78,7 @@ jobs:
                   headers=headers,
                   json=query
               )
+              ensure_ok(resp, f"database query for URL {url}")
               data = resp.json()
               results = data.get("results", [])
               return results[0]["id"] if results else None
@@ -79,11 +94,12 @@ jobs:
 
               payload = {"properties": props}
 
-              requests.patch(
+              resp = requests.patch(
                   f"https://api.notion.com/v1/pages/{page_id}",
                   headers=headers,
                   json=payload
               )
+              ensure_ok(resp, f"updating page {page_id}")
 
           def create_row(actor, issue_url=None, pr_url=None, title=""):
               payload = {
@@ -93,7 +109,7 @@ jobs:
                           "title": [{"text": {"content": actor}}]
                       },
                       "Status": {
-                          "select": {"name": "Active Project"}
+                          "status": {"name": "Active Project"}
                       },
                       "Project": {
                           "rich_text": [{"text": {"content": title}}]
@@ -103,11 +119,12 @@ jobs:
                   }
               }
 
-              requests.post(
+              resp = requests.post(
                   "https://api.notion.com/v1/pages",
                   headers=headers,
                   json=payload
               )
+              ensure_ok(resp, "creating new CRM entry")
 
           # Extract data depending on event type
           if "issue" in event:

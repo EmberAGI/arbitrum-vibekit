@@ -1,0 +1,14 @@
+**/.DS_Store
+**/.git
+**/.gitignore
+**/.next
+**/.turbo
+**/dist
+**/dist-test
+**/node_modules
+**/coverage
+**/.env
+**/.env.*
+**/*.log
+**/tmp
+!apps/**/.env

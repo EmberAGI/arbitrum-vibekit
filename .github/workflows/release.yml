@@ -4,23 +4,32 @@ on:
   workflow_dispatch:
     inputs:
       packages:
-        description: 'Comma separated package overrides (agent-node, registry)'
+        description: "Comma separated package overrides (agent-node, registry)"
         required: false
         type: string
+  pull_request:
+    paths:
+      - "typescript/lib/agent-node/**"
+      - "typescript/onchain-actions-plugins/registry/**"
+      - "typescript/scripts/**"
+      - "typescript/release/**"
+      - "typescript/.multi-releaserc.cjs"
+      - ".github/workflows/release.yml"
   push:
     branches:
       - main
       - next
     paths:
-      - 'typescript/lib/agent-node/**'
-      - 'typescript/onchain-actions-plugins/registry/**'
-      - 'typescript/scripts/**'
-      - 'typescript/release/**'
-      - 'typescript/.multi-releaserc.cjs'
-      - '.github/workflows/release.yml'
+      - "typescript/lib/agent-node/**"
+      - "typescript/onchain-actions-plugins/registry/**"
+      - "typescript/scripts/**"
+      - "typescript/release/**"
+      - "typescript/.multi-releaserc.cjs"
+      - ".github/workflows/release.yml"
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   prepare:
@@ -40,7 +49,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24.10.0
           registry-url: https://registry.npmjs.org
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -57,10 +66,10 @@ jobs:
           echo "matrix=$(jq -c '.matrix' release-targets.json)" >> "$GITHUB_OUTPUT"
           echo "has_changes=$(jq -r '((.selected | length) > 0)|tostring' release-targets.json)" >> "$GITHUB_OUTPUT"
 
-  release:
-    name: Publish ${{ matrix.package.packageName }}
+  validate:
+    name: Validate release (dry-run)
     needs: prepare
-    if: needs.prepare.outputs.has_changes == 'true'
+    if: github.event_name == 'pull_request' && needs.prepare.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -77,8 +86,65 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24.10.0
           registry-url: https://registry.npmjs.org
+      - name: Upgrade npm for OIDC trusted publishing
+        run: npm install -g npm@latest
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Setup test environment
+        if: matrix.package.id == 'agent-node'
+        working-directory: typescript/lib/agent-node
+        run: cp .env.test.example .env.test
+      - name: Build agent-node
+        if: matrix.package.id == 'agent-node'
+        run: pnpm --filter @emberai/agent-node build
+      - name: Test agent-node
+        if: matrix.package.id == 'agent-node'
+        run: pnpm --filter @emberai/agent-node test:ci
+      - name: Build registry
+        if: matrix.package.id == 'registry'
+        run: pnpm --filter @emberai/onchain-actions-registry build
+      - name: Prepare npm publish folder
+        if: matrix.package.id == 'registry'
+        run: node scripts/prepare-npm-publish.mjs
+      - name: Validate release (dry-run)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_DRY_RUN: "true"
+        run: pnpm release -- --dry-run --packages "${{ matrix.package.packageJson }}" --summary-file "release-summary-${{ matrix.package.id }}.json"
+
+  release:
+    name: Publish ${{ matrix.package.packageName }}
+    needs: prepare
+    if: github.event_name != 'pull_request' && needs.prepare.outputs.has_changes == 'true'
+    permissions:
+      contents: write
+      id-token: write
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.10.0
+          registry-url: https://registry.npmjs.org
+      - name: Upgrade npm for OIDC trusted publishing
+        run: npm install -g npm@latest
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -104,9 +170,12 @@ jobs:
       - name: Run multi-semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          pnpm release -- --packages "${{ matrix.package.packageJson }}" --summary-file "release-summary-${{ matrix.package.id }}.json"
+        run: pnpm release -- --packages "${{ matrix.package.packageJson }}" --summary-file "release-summary-${{ matrix.package.id }}.json"
+      - name: Generate release tweet copy
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: node scripts/release-tweet-copy.mjs "release-summary-${{ matrix.package.id }}.json"
       - name: Upload release summary
         if: always()
         uses: actions/upload-artifact@v4
@@ -129,7 +198,7 @@ jobs:
           fetch-depth: 0
       - name: Fast-forward next to main
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           git fetch origin next
@@ -142,8 +211,27 @@ jobs:
           fi
 
           if git merge-base --is-ancestor "$current_next" "$head_sha"; then
-            echo "Fast-forwarding next to $head_sha"
-            git push origin "$head_sha":next
+            echo "Opening PR to sync next to $head_sha"
+
+            existing_pr_url="$(gh pr list --base next --head main --state open --json url --jq '.[0].url')"
+            if [ -n "$existing_pr_url" ]; then
+              echo "Sync PR already exists: $existing_pr_url"
+              exit 0
+            fi
+
+            pr_url="$(gh pr create \
+              --base next \
+              --head main \
+              --title "fix(release): sync next to main" \
+              --body "Automated sync PR opened by the release workflow.\n\nThis replaces direct pushes to \`next\`, which are blocked by repository rules (PR-only changes).")"
+
+            echo "Created sync PR: $pr_url"
+
+            # Prefer merge-commit so commits from main keep their SHAs.
+            # Note: GitHub PR merges cannot "fast-forward" next to main; the best we can do under PR-only
+            # branch protection is ensure next contains main, while preserving main's commit SHAs.
+            gh pr merge --auto --merge "$pr_url" || gh pr merge --auto --rebase "$pr_url" || \
+              echo "::warning::Unable to auto-merge $pr_url; please merge manually."
           else
             echo "::warning::origin/next has diverged from main; skipping auto-sync. Please merge main into next manually."
           fi

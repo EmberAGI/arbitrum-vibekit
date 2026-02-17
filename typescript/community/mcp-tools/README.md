@@ -18,7 +18,7 @@ Welcome to Vibekit's MCP tools directory! Model Context Protocol (MCP) tools are
 
 **Client agents**: All Vibekit agents and templates (core integration)
 
-The official Ember MCP server providing access to Ember's core AI capabilities and DeFi tools. This remote server offers standardized interfaces for agent-to-agent communication and advanced DeFi operations.
+The official Ember MCP server providing access to Ember's core AI capabilities and DeFi tools. This remote server offers standardized interfaces for agent-to-agent communication and advanced DeFi operations. Check out Ember's [MCP Playground](https://mcp.emberai.xyz/) to learn more.
 
 ### Allora MCP Server
 

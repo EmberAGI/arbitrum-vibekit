@@ -5,7 +5,7 @@ export interface EmberPlugin<Type extends PluginType> {
   /**
    * The unique identifier for the plugin.
    */
-  id?: string;
+  id: string;
   /**
    * The type of the plugin, which determines the actions and queries it supports.
    */

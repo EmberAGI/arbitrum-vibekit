@@ -21,7 +21,7 @@ Welcome to Vibekit, the polyglot toolkit for vibe coding smart, autonomous DeFi 
 
 - **Agent Node Framework**: Modern config-driven framework with full A2A protocol compliance, generator-based workflows, and embedded wallet support for building production-ready autonomous agents
 
-- **Model Context Protocol (MCP)**: Standardized integration layer for connecting agents with tools and external data sources, enabling modular and extensible agent capabilities
+- **Model Context Protocol (MCP)**: Standardized integration layer for connecting agents with tools and external data sources, enabling modular and extensible agent capabilities. Check out Ember's [MCP Playground](https://mcp.emberai.xyz/) to learn more
 
 - **X402 Payment Protocol**: HTTP-native payment infrastructure for autonomous agent commerce, supporting micropayments and service monetization
 
@@ -79,7 +79,7 @@ arbitrum-vibekit/
 
 - **[`community/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community)**: Community contributions including agent templates and MCP tool server implementations. This is where developers can contribute their own specialized agents and tools to expand Vibekit's ecosystem.
 
-- **[`clients/web`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web)**: Vibekit web frontend, featuring wallet integration, agent chat interface, and real-time MCP communication for DeFi agent interactions.
+- **[`clients/web`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web)**: Modern chat interface for interacting with AI agents, enabling Agent-to-Agent communication, workflow orchestration, and real-time messaging through an intuitive web interface.
 
 - **[`onchain-actions-plugins/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins)**: The Ember Plugin System providing a registry for on-chain action plugins and smart contract integrations with extensible architecture for adding new blockchain protocols.
 

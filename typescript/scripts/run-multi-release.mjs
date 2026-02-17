@@ -416,6 +416,10 @@ async function main() {
   const cwd = process.cwd();
   const { options, packageSpecs, summaryFile } = parseCliArguments(process.argv.slice(2), cwd);
 
+  if (options.dryRun && !process.env.RELEASE_DRY_RUN) {
+    process.env.RELEASE_DRY_RUN = "true";
+  }
+
   maybeEnableVerboseMsrLogging(options);
 
   const resolvedPackages = resolvePackageSpecs(packageSpecs, cwd);
