@@ -32,6 +32,7 @@ export function useLangGraphInterruptCustomUI<T>(options: {
   enabled: (eventValue: unknown) => eventValue is T;
 }): {
   activeInterrupt: T | null;
+  canResolve: () => boolean;
   resolve: (value: string) => void;
   dismiss: () => void;
 } {
@@ -118,6 +119,7 @@ export function useLangGraphInterruptCustomUI<T>(options: {
       if (resolveRef.current) {
         resolveRef.current(value);
       }
+      resolveRef.current = null;
       setActiveInterrupt(null);
       pendingInterruptRef.current = null;
     },
@@ -131,5 +133,7 @@ export function useLangGraphInterruptCustomUI<T>(options: {
     resolveRef.current = null;
   }, [interruptKey]);
 
-  return { activeInterrupt, resolve, dismiss };
+  const canResolve = useCallback(() => resolveRef.current !== null, []);
+
+  return { activeInterrupt, canResolve, resolve, dismiss };
 }

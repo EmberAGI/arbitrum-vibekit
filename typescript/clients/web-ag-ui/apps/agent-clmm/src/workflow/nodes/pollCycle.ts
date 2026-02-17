@@ -46,6 +46,7 @@ import {
   appendTransactionHistory,
   loadFlowLogHistory,
 } from '../historyStore.js';
+import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 import { applyAccountingToView } from '../viewMapping.js';
 
 const DEBUG_MODE = process.env['DEBUG_MODE'] === 'true';
@@ -122,8 +123,39 @@ export const pollCycleNode = async (
   const { operatorConfig, selectedPool } = state.view;
 
   if (!operatorConfig || !selectedPool) {
-    const failureMessage =
-      'ERROR: Polling node missing required state (operatorConfig or selectedPool)';
+    const nextOnboardingNode = resolveNextOnboardingNode(state);
+    if (nextOnboardingNode !== 'syncState') {
+      const needsUserInput =
+        nextOnboardingNode === 'collectOperatorInput' ||
+        nextOnboardingNode === 'collectFundingTokenInput' ||
+        nextOnboardingNode === 'collectDelegations';
+      const status = needsUserInput ? 'input-required' : 'working';
+      const message = needsUserInput
+        ? 'Cycle paused until onboarding input is complete.'
+        : 'Cycle paused while onboarding prerequisites are prepared.';
+      const { task, statusEvent } = buildTaskStatus(state.view.task, status, message);
+      const mergedView = {
+        ...state.view,
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      };
+      logInfo('pollCycle: onboarding incomplete; rerouting before polling', {
+        nextOnboardingNode,
+        hasOperatorConfig: Boolean(state.view.operatorConfig),
+        hasSelectedPool: Boolean(state.view.selectedPool),
+      });
+      await copilotkitEmitState(config, {
+        view: mergedView,
+      });
+      return new Command({
+        update: {
+          view: mergedView,
+        },
+        goto: nextOnboardingNode,
+      });
+    }
+
+    const failureMessage = 'ERROR: Polling node missing required state (operatorConfig or selectedPool)';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },

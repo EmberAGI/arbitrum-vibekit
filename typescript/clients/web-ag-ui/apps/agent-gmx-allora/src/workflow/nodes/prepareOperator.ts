@@ -75,24 +75,28 @@ export const prepareOperatorNode = async (
     : normalizeHexAddress(operatorInput.walletAddress, 'delegator wallet address');
   const delegatorInputWalletAddress = delegationsBypassActive ? undefined : delegatorWalletAddress;
   if (!delegationsBypassActive && !state.view.delegationBundle) {
-    const failureMessage =
-      'ERROR: Delegation bundle missing. Complete delegation signing before continuing.';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const message = 'Waiting for delegation approval to continue onboarding.';
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
+    const configuredTotalSteps = state.view.onboarding?.totalSteps;
+    const totalSteps =
+      typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
+        ? configuredTotalSteps
+        : 3;
+    const onboardingStep = totalSteps <= 2 ? 2 : 3;
+    const pendingView = {
+      onboarding: { step: onboardingStep, totalSteps },
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    };
+    const mergedView = { ...state.view, ...pendingView };
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: mergedView,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
-        },
+        view: mergedView,
       },
-      goto: 'summarize',
+      goto: 'collectDelegations',
     });
   }
 

@@ -31,6 +31,7 @@ import { extractCommand, resolveCommandTarget, runCommandNode } from './workflow
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
+import { resolveNextOnboardingNode } from './workflow/onboardingRouting.js';
 import { saveBootstrapContext } from './workflow/store.js';
 
 /**
@@ -51,22 +52,7 @@ function resolvePostBootstrap(
   if (command === 'sync') {
     return 'syncState';
   }
-  if (!state.view.poolArtifact) {
-    return 'listPools';
-  }
-  if (!state.view.operatorInput) {
-    return 'collectOperatorInput';
-  }
-  if (!state.view.fundingTokenInput) {
-    return 'collectFundingTokenInput';
-  }
-  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
-    return 'collectDelegations';
-  }
-  if (!state.view.operatorConfig) {
-    return 'prepareOperator';
-  }
-  return 'syncState';
+  return resolveNextOnboardingNode(state);
 }
 
 const store = new InMemoryStore();

@@ -36,8 +36,14 @@ import {
 import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSync';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { fireAgentRun } from '../utils/fireAgentRun';
+import { resumeInterruptViaAgent } from '../utils/interruptResolution';
 import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 import { canonicalizeChainLabel } from '../utils/iconResolution';
+import {
+  isAgentInterrupt,
+  normalizeAgentInterrupt,
+  selectActiveInterrupt,
+} from '../utils/interruptSelection';
 
 export type {
   AgentState,
@@ -55,20 +61,6 @@ export type {
   Transaction,
   ClmmEvent,
 };
-
-const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
-  typeof value === 'object' &&
-  value !== null &&
-  ((value as { type?: string }).type === 'operator-config-request' ||
-    (value as { type?: string }).type === 'pendle-setup-request' ||
-    (value as { type?: string }).type === 'pendle-fund-wallet-request' ||
-    (value as { type?: string }).type === 'gmx-setup-request' ||
-    (value as { type?: string }).type === 'clmm-funding-token-request' ||
-    (value as { type?: string }).type === 'pendle-funding-token-request' ||
-    (value as { type?: string }).type === 'gmx-funding-token-request' ||
-    (value as { type?: string }).type === 'clmm-delegation-signing-request' ||
-    (value as { type?: string }).type === 'pendle-delegation-signing-request' ||
-    (value as { type?: string }).type === 'gmx-delegation-signing-request');
 
 export interface UseAgentConnectionResult {
   config: AgentConfig;
@@ -121,6 +113,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [uiError, setUiError] = useState<string | null>(null);
+  const [syncPendingInterrupt, setSyncPendingInterrupt] = useState<AgentInterrupt | null>(null);
   const lastConnectedThreadRef = useRef<string | null>(null);
   const lastSyncedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
@@ -140,7 +133,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const { threadId } = useCopilotContext();
   const runtimeStatus = copilotkit.runtimeConnectionStatus;
 
-  const { activeInterrupt, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
+  const { activeInterrupt, canResolve, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
     enabled: isAgentInterrupt,
   });
   const interruptRenderer = useLangGraphInterruptRender(agent);
@@ -313,6 +306,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     runInFlightRef.current = false;
     lastSyncedThreadRef.current = null;
     lastConnectedThreadRef.current = null;
+    setSyncPendingInterrupt(null);
   }, [threadId]);
 
   useEffect(() => {
@@ -396,6 +390,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         }
 
         const parsed = parseAgentSyncResponse(await response.json().catch(() => null));
+        if (cancelled) {
+          return;
+        }
         const currentAgent = agentRef.current;
         if (!currentAgent) {
           return;
@@ -403,6 +400,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         const currentState =
           hasStateValues(currentAgent.state) ? (currentAgent.state as AgentState) : initialAgentState;
         currentAgent.setState(applyAgentSyncToState(currentState, parsed));
+        setSyncPendingInterrupt(normalizeAgentInterrupt(parsed.pendingInterrupt ?? null));
       } catch {
         // Silence sync errors; connect stream still drives primary updates.
       } finally {
@@ -594,6 +592,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   }, [agentId, copilotkit, hasStateValues, isFiring, threadId]);
 
   const clearUiError = useCallback(() => setUiError(null), []);
+  const effectiveActiveInterrupt = selectActiveInterrupt({
+    streamInterrupt: activeInterrupt ?? null,
+    syncPendingInterrupt,
+  });
 
   const resolveInterrupt = useCallback(
     (
@@ -605,13 +607,50 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         | FundingTokenInput
         | DelegationSigningResponse,
     ) => {
-      resolve(JSON.stringify(input));
-      scheduleCycleAfterInterruptResolution({
-        interruptType: activeInterrupt?.type,
-        runCommand,
-      });
+      const serializedInput = JSON.stringify(input);
+      const interruptType = effectiveActiveInterrupt?.type;
+      const hasStreamInterrupt = activeInterrupt !== null;
+
+      if (hasStreamInterrupt && canResolve()) {
+        resolve(serializedInput);
+        setSyncPendingInterrupt(null);
+        scheduleCycleAfterInterruptResolution({
+          interruptType,
+          runCommand,
+        });
+        return;
+      }
+
+      runInFlightRef.current = true;
+      void resumeInterruptViaAgent({
+        agent: agentRef.current,
+        resumePayload: serializedInput,
+      })
+        .then((resumed) => {
+          if (!resumed) {
+            runInFlightRef.current = false;
+            setUiError('Unable to submit onboarding input right now. Please retry.');
+            return;
+          }
+
+          setSyncPendingInterrupt(null);
+          scheduleCycleAfterInterruptResolution({
+            interruptType,
+            runCommand,
+          });
+        })
+        .catch((error: unknown) => {
+          runInFlightRef.current = false;
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('[useAgentConnection.resolveInterrupt] Failed to resume interrupt', {
+            threadId,
+            agentId,
+            error: message,
+          });
+          setUiError(message);
+        });
     },
-    [activeInterrupt?.type, resolve, runCommand],
+    [activeInterrupt, agentId, canResolve, effectiveActiveInterrupt?.type, resolve, runCommand, threadId],
   );
 
   // Settings sync pattern: update local state only (no automatic sync to avoid 409)
@@ -648,7 +687,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     isHiring,
     isFiring,
     isSyncing,
-    activeInterrupt: activeInterrupt ?? null,
+    activeInterrupt: effectiveActiveInterrupt,
     runHire,
     runFire,
     runSync,
