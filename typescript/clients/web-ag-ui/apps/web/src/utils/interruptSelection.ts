@@ -4,6 +4,7 @@ const AGENT_INTERRUPT_TYPES = new Set<AgentInterrupt['type']>([
   'operator-config-request',
   'pendle-setup-request',
   'pendle-fund-wallet-request',
+  'gmx-fund-wallet-request',
   'gmx-setup-request',
   'clmm-funding-token-request',
   'pendle-funding-token-request',

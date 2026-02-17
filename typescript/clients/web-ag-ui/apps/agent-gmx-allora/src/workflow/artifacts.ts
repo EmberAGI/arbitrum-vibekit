@@ -145,12 +145,14 @@ export function buildExecutionResultArtifact(params: {
   action: ExecutionPlan['action'];
   plan?: ExecutionPlan;
   ok: boolean;
+  status?: 'confirmed' | 'failed' | 'blocked';
   error?: string;
   telemetry?: GmxAlloraTelemetry;
   transactions?: TransactionPlan[];
   txHashes?: `0x${string}`[];
   lastTxHash?: `0x${string}`;
 }): Artifact {
+  const executionStatus = params.status ?? (params.ok ? 'confirmed' : 'failed');
   const txHash = params.lastTxHash;
   const txPlanSlug = txHash ? null : createTxPlanSlug(params.transactions);
   const placeholderSlug =
@@ -180,13 +182,14 @@ export function buildExecutionResultArtifact(params: {
     parts: [
       {
         kind: 'text',
-        text: headline.length > 0 ? headline : `Execution ${params.ok ? 'succeeded' : 'failed'}`,
+        text: headline.length > 0 ? headline : `Execution ${executionStatus}`,
       },
       {
         kind: 'data',
         data: {
           action: params.action,
           ok: params.ok,
+          status: executionStatus,
           error: params.error,
           txHashes: params.txHashes,
           lastTxHash: params.lastTxHash,

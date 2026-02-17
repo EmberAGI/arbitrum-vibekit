@@ -17,7 +17,10 @@ type Options = {
  * agent can re-check external state (wallet balances, RPC state, etc).
  */
 export function scheduleCycleAfterInterruptResolution(options: Options): void {
-  if (options.interruptType !== 'pendle-fund-wallet-request') {
+  if (
+    options.interruptType !== 'pendle-fund-wallet-request' &&
+    options.interruptType !== 'gmx-fund-wallet-request'
+  ) {
     return;
   }
 
@@ -43,4 +46,3 @@ export function scheduleCycleAfterInterruptResolution(options: Options): void {
 
   schedule(tick, retryMs);
 }
-

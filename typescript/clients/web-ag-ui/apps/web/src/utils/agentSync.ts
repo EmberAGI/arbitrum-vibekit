@@ -59,9 +59,20 @@ export function applyAgentSyncToState(prevState: AgentState, sync: AgentSyncResp
       metrics: nextMetrics as typeof prevView.metrics,
       activity: nextActivity as typeof prevView.activity,
       transactionHistory: nextTransactionHistory as typeof prevView.transactionHistory,
-      task: (sync.task ?? undefined) ? (sync.task as unknown as typeof prevView.task) : prevView.task,
-      haltReason: (sync.haltReason ?? undefined) ?? prevView.haltReason,
-      executionError: (sync.executionError ?? undefined) ?? prevView.executionError,
+      task:
+        sync.task === null
+          ? undefined
+          : sync.task
+            ? (sync.task as unknown as typeof prevView.task)
+            : prevView.task,
+      haltReason:
+        sync.haltReason === null
+          ? undefined
+          : (sync.haltReason ?? undefined) ?? prevView.haltReason,
+      executionError:
+        sync.executionError === null
+          ? undefined
+          : (sync.executionError ?? undefined) ?? prevView.executionError,
     },
   };
 }

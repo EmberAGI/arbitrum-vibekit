@@ -8,6 +8,7 @@ import type {
   AgentProfile,
   AgentViewMetrics,
   ClmmEvent,
+  OnboardingState,
   Pool,
   Transaction,
   UnsignedDelegation,
@@ -226,6 +227,77 @@ describe('AgentDetailPage internals: metrics variants', () => {
     expect(html).toContain('Decision Threshold');
   });
 
+  it('renders GMX funding-blocked execution as pending without a failure banner', () => {
+    const events: ClmmEvent[] = [
+      {
+        type: 'artifact',
+        artifact: {
+          artifactId: 'gmx-allora-execution-result',
+          parts: [
+            {
+              kind: 'data',
+              data: {
+                ok: false,
+                status: 'blocked',
+                txHashes: [HASH_A],
+                lastTxHash: HASH_A,
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const html = renderToStaticMarkup(
+      React.createElement(__agentDetailPageTestOnly.MetricsTab, {
+        agentId: 'agent-gmx-allora',
+        profile: BASE_PROFILE,
+        metrics: {
+          ...BASE_METRICS,
+          lifetimePnlUsd: -25,
+        },
+        fullMetrics: {
+          iteration: 7,
+          cyclesSinceRebalance: 2,
+          staleCycles: 1,
+          latestCycle: {
+            cycle: 7,
+            action: 'open',
+            marketSymbol: 'BTC/USDC',
+            side: 'long',
+            sizeUsd: 100,
+            leverage: 2,
+            timestamp: '2026-02-15T12:00:00.000Z',
+            prediction: {
+              topic: 'allora:btc:8h',
+              horizonHours: 8,
+              confidence: 0.91,
+              direction: 'up',
+              predictedPrice: 71000,
+              timestamp: '2026-02-15T11:59:00.000Z',
+            },
+            metrics: {
+              decisionThreshold: 0.62,
+            },
+          },
+          latestSnapshot: {
+            poolAddress: `0x${'6'.repeat(40)}`,
+            totalUsd: 100,
+            leverage: 2,
+            positionTokens: [],
+          },
+        },
+        events,
+        transactions: [],
+        hasLoadedView: true,
+      }),
+    );
+
+    expect(html).toContain('Latest Execution');
+    expect(html).toContain('pending');
+    expect(html).not.toContain('failed');
+  });
+
   it('renders Pendle metrics with APY details and claimable rewards', () => {
     const html = renderToStaticMarkup(
       React.createElement(__agentDetailPageTestOnly.MetricsTab, {
@@ -417,10 +489,13 @@ describe('AgentDetailPage internals: blockers variants', () => {
     salt: `0x${'1'.repeat(64)}`,
   };
 
-  function renderBlockers(activeInterrupt: AgentInterrupt | null) {
+  function renderBlockers(
+    activeInterrupt: AgentInterrupt | null,
+    options?: { agentId?: string; onboarding?: OnboardingState },
+  ) {
     return renderToStaticMarkup(
       React.createElement(__agentDetailPageTestOnly.AgentBlockersTab, {
-        agentId: 'agent-clmm',
+        agentId: options?.agentId ?? 'agent-clmm',
         activeInterrupt,
         allowedPools: basePools,
         onInterruptSubmit: () => {},
@@ -429,7 +504,7 @@ describe('AgentDetailPage internals: blockers variants', () => {
         haltReason: undefined,
         executionError: undefined,
         delegationsBypassActive: false,
-        onboarding: { step: 2 },
+        onboarding: options?.onboarding ?? { step: 2 },
         telemetry: [
           { cycle: 1, action: 'cycle', timestamp: '2026-02-15T12:00:00.000Z' },
           { cycle: 2, action: 'rebalance', timestamp: '2026-02-15T12:30:00.000Z' },
@@ -469,6 +544,39 @@ describe('AgentDetailPage internals: blockers variants', () => {
     expect(html).toContain('Current Task');
     expect(html).toContain('Latest Activity');
     expect(html.indexOf('USDC')).toBeLessThan(html.indexOf('WETH'));
+  });
+
+  it('renders GMX fund-wallet blocker guidance', () => {
+    const html = renderBlockers({
+      type: 'gmx-fund-wallet-request',
+      message: 'GMX order simulation failed. Fund wallet and continue.',
+      walletAddress: `0x${'6'.repeat(40)}`,
+      requiredCollateralSymbol: 'USDC',
+    });
+
+    expect(html).toContain('Fund Wallet');
+    expect(html).toContain('Add enough USDC on Arbitrum for GMX collateral.');
+    expect(html).toContain('Add a small amount of Arbitrum ETH for execution gas fees.');
+    expect(html).toContain(`0x${'6'.repeat(40)}`);
+    expect(html).toContain('Continue');
+  });
+
+  it('renders dynamic GMX 4-step onboarding model for fund-wallet blocker', () => {
+    const html = renderBlockers(
+      {
+        type: 'gmx-fund-wallet-request',
+        message: 'GMX order simulation failed. Fund wallet and continue.',
+      },
+      {
+        agentId: 'agent-gmx-allora',
+        onboarding: { step: 4, totalSteps: 4, key: 'fund-wallet' },
+      },
+    );
+
+    expect(html).toContain('Strategy Config');
+    expect(html).toContain('Funding Token');
+    expect(html).toContain('Delegation Signing');
+    expect(html).toContain('Fund Wallet');
   });
 
   it('renders delegation signing flow with warnings and switch chain action', () => {

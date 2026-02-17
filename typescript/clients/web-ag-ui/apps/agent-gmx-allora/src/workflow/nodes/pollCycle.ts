@@ -35,10 +35,12 @@ import {
   type ClmmEvent,
   type GmxLatestSnapshot,
   type ClmmState,
+  type TaskState,
   type ClmmUpdate,
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';
 import { executePerpetualPlan } from '../execution.js';
+import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };
@@ -156,6 +158,42 @@ function isApprovalOnlyTransactions(transactions: TransactionPlan[] | undefined)
   return transactions.every((tx) => getCallSelector(tx.data) === ERC20_APPROVE_SELECTOR);
 }
 
+type ExecutionFailureSummary = {
+  taskState: TaskState;
+  statusMessage: string;
+  detail: string;
+  requiresFundingAcknowledgement: boolean;
+};
+
+function summarizeExecutionFailure(params: {
+  iteration: number;
+  error?: string;
+}): ExecutionFailureSummary {
+  const rawError = params.error ?? 'Unknown error';
+  const normalized = rawError.toLowerCase();
+  const isSimulationFailure = normalized.includes('execute order simulation failed');
+  const isLikelyFundingIssue =
+    normalized.includes('insufficient') || normalized.includes('execution fee');
+
+  if (isSimulationFailure || isLikelyFundingIssue) {
+    const detail =
+      'GMX order simulation failed. Ensure the trading wallet has enough USDC collateral and a small amount of Arbitrum ETH for execution fees. After funding, click Continue in Agent Blockers to retry immediately.';
+    return {
+      taskState: 'input-required',
+      statusMessage: `[Cycle ${params.iteration}] trade paused: ${detail}`,
+      detail,
+      requiresFundingAcknowledgement: true,
+    };
+  }
+
+  return {
+    taskState: 'working',
+    statusMessage: `[Cycle ${params.iteration}] execution failed: ${rawError}`,
+    detail: rawError,
+    requiresFundingAcknowledgement: false,
+  };
+}
+
 function buildLatestSnapshot(params: {
   marketAddress: `0x${string}`;
   timestamp: string;
@@ -227,6 +265,38 @@ export const pollCycleNode = async (
   const { operatorConfig, selectedPool } = state.view;
 
   if (!operatorConfig || !selectedPool) {
+    const nextOnboardingNode = resolveNextOnboardingNode(state);
+    if (nextOnboardingNode !== 'syncState') {
+      const needsUserInput =
+        nextOnboardingNode === 'collectSetupInput' ||
+        nextOnboardingNode === 'collectFundingTokenInput' ||
+        nextOnboardingNode === 'collectDelegations';
+      const status = needsUserInput ? 'input-required' : 'working';
+      const message = needsUserInput
+        ? 'Cycle paused until onboarding input is complete.'
+        : 'Cycle paused while onboarding prerequisites are prepared.';
+      const { task, statusEvent } = buildTaskStatus(state.view.task, status, message);
+      const mergedView = {
+        ...state.view,
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      };
+      logInfo('pollCycle: onboarding incomplete; rerouting before polling', {
+        nextOnboardingNode,
+        hasOperatorConfig: Boolean(state.view.operatorConfig),
+        hasSelectedPool: Boolean(state.view.selectedPool),
+      });
+      await copilotkitEmitState(config, {
+        view: mergedView,
+      });
+      return new Command({
+        update: {
+          view: mergedView,
+        },
+        goto: nextOnboardingNode,
+      });
+    }
+
     const failureMessage = 'ERROR: Polling node missing GMX strategy configuration';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
@@ -542,15 +612,21 @@ export const pollCycleNode = async (
     executionResult.ok &&
     (executionPlan.action === 'long' || executionPlan.action === 'short') &&
     isApprovalOnlyTransactions(executionResult.transactions);
+  const executionFailure = executionResult.ok
+    ? undefined
+    : summarizeExecutionFailure({
+        iteration,
+        error: executionResult.error,
+      });
 
-  if (!executionResult.ok) {
-    const executionFailure = buildTaskStatus(
+  if (executionFailure) {
+    const failedStatus = buildTaskStatus(
       task,
-      'working',
-      `[Cycle ${iteration}] execution failed: ${executionResult.error ?? 'Unknown error'}`,
+      executionFailure.taskState,
+      executionFailure.statusMessage,
     );
-    task = executionFailure.task;
-    statusEvent = executionFailure.statusEvent;
+    task = failedStatus.task;
+    statusEvent = failedStatus.statusEvent;
   } else if (approvalOnlyExecution) {
     const approvalStatus = buildTaskStatus(
       task,
@@ -655,21 +731,29 @@ export const pollCycleNode = async (
           artifact: buildExecutionPlanArtifact({ plan: executionPlan, telemetry: latestCycle }),
           append: true,
         };
+  const requiresFundingAcknowledgement = executionFailure?.requiresFundingAcknowledgement === true;
   const executionResultEvent: ClmmEvent | undefined =
     executionPlan.action === 'none'
       ? undefined
       : {
           type: 'artifact',
-        artifact: buildExecutionResultArtifact({
-          action: executionResult.action,
-          plan: executionPlan,
-          ok: executionResult.ok,
-          error: executionResult.error,
-          telemetry: latestCycle,
-          transactions: executionResult.transactions,
-          txHashes: executionResult.txHashes,
-          lastTxHash: executionResult.lastTxHash,
-        }),
+          artifact: buildExecutionResultArtifact({
+            action: executionResult.action,
+            plan: executionPlan,
+            ok: executionResult.ok,
+            status: requiresFundingAcknowledgement
+              ? 'blocked'
+              : executionResult.ok
+                ? 'confirmed'
+                : 'failed',
+            error: requiresFundingAcknowledgement
+              ? undefined
+              : executionFailure?.detail ?? executionResult.error,
+            telemetry: latestCycle,
+            transactions: executionResult.transactions,
+            txHashes: executionResult.txHashes,
+            lastTxHash: executionResult.lastTxHash,
+          }),
         append: true,
       };
   const telemetryEvent: ClmmEvent = {
@@ -691,13 +775,15 @@ export const pollCycleNode = async (
   const finalReason = latestCycle.reason;
   const resolvedTxHash = executionResult.lastTxHash ?? latestCycle.txHash;
   const transactionEntry =
-    executionPlan.action !== 'none'
+    executionPlan.action !== 'none' && !requiresFundingAcknowledgement
       ? {
           cycle: iteration,
           action: finalAction,
           txHash: resolvedTxHash,
           status: executionResult.ok ? ('success' as const) : ('failed' as const),
-          reason: executionResult.ok ? finalReason : executionResult.error ?? finalReason,
+          reason: executionResult.ok
+            ? finalReason
+            : executionFailure?.detail ?? executionResult.error ?? finalReason,
           timestamp: latestCycle.timestamp,
         }
       : undefined;
@@ -749,11 +835,15 @@ export const pollCycleNode = async (
           : state.view.transactionHistory,
         profile: nextProfile,
         selectedPool,
+        haltReason: '',
+        executionError: executionFailure?.requiresFundingAcknowledgement
+          ? ''
+          : executionFailure?.detail,
       },
       private: {
         cronScheduled,
       },
     },
-    goto: 'summarize',
+    goto: executionFailure?.requiresFundingAcknowledgement ? 'acknowledgeFundWallet' : 'summarize',
   });
 };

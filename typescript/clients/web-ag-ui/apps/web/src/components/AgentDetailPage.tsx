@@ -1318,7 +1318,7 @@ type SetupStep = {
   description: string;
 };
 
-type SetupStepKind = 'setup' | 'funding' | 'delegation';
+type SetupStepKind = 'setup' | 'funding' | 'delegation' | 'fund-wallet';
 
 const isFundingInterruptType = (type: AgentInterrupt['type'] | undefined): boolean =>
   type === 'clmm-funding-token-request' ||
@@ -1334,27 +1334,57 @@ const resolveSetupStepKinds = (params: {
   totalSteps?: number;
   interruptType?: AgentInterrupt['type'];
   delegationsBypassActive?: boolean;
+  onboardingStep?: number;
+  onboardingKey?: string;
 }): SetupStepKind[] => {
   const resolvedTotalSteps =
     typeof params.totalSteps === 'number' && Number.isFinite(params.totalSteps)
       ? Math.max(1, Math.floor(params.totalSteps))
-      : 3;
+      : params.interruptType === 'gmx-fund-wallet-request'
+        ? 4
+        : 3;
 
-  if (resolvedTotalSteps === 1) {
-    return ['setup'];
-  }
+  const stepKinds: SetupStepKind[] = (() => {
+    if (resolvedTotalSteps === 1) {
+      return ['setup'];
+    }
 
-  if (resolvedTotalSteps === 2) {
-    if (params.delegationsBypassActive === true) {
+    if (resolvedTotalSteps === 2) {
+      if (params.delegationsBypassActive === true) {
+        return ['setup', 'funding'];
+      }
+      if (isDelegationInterruptType(params.interruptType)) {
+        return ['setup', 'delegation'];
+      }
       return ['setup', 'funding'];
     }
-    if (isDelegationInterruptType(params.interruptType)) {
-      return ['setup', 'delegation'];
+
+    if (resolvedTotalSteps === 3) {
+      return ['setup', 'funding', 'delegation'];
     }
-    return ['setup', 'funding'];
+
+    return [
+      'setup',
+      'funding',
+      'delegation',
+      ...Array.from(
+        { length: resolvedTotalSteps - 3 },
+        (): SetupStepKind => 'fund-wallet',
+      ),
+    ];
+  })();
+
+  if (
+    typeof params.onboardingStep === 'number' &&
+    Number.isFinite(params.onboardingStep) &&
+    params.onboardingStep > 0 &&
+    params.onboardingStep <= resolvedTotalSteps &&
+    params.onboardingKey === 'fund-wallet'
+  ) {
+    stepKinds[params.onboardingStep - 1] = 'fund-wallet';
   }
 
-  return ['setup', 'funding', 'delegation'];
+  return stepKinds;
 };
 
 const BASE_SETUP_STEP_COPY: Record<
@@ -1374,6 +1404,10 @@ const BASE_SETUP_STEP_COPY: Record<
       name: 'Signing Policies',
       description: 'Review and sign delegations required for execution.',
     },
+    'fund-wallet': {
+      name: 'Fund Wallet',
+      description: 'Add required funds, then continue to retry execution.',
+    },
   },
   pendle: {
     setup: {
@@ -1387,6 +1421,10 @@ const BASE_SETUP_STEP_COPY: Record<
     delegation: {
       name: 'Delegation Signing',
       description: 'Approve permissions needed to manage the Pendle position.',
+    },
+    'fund-wallet': {
+      name: 'Fund Wallet',
+      description: 'Fund the wallet with an eligible stablecoin before continuing.',
     },
   },
   gmx: {
@@ -1402,12 +1440,18 @@ const BASE_SETUP_STEP_COPY: Record<
       name: 'Delegation Signing',
       description: 'Approve execution permissions for GMX operations.',
     },
+    'fund-wallet': {
+      name: 'Fund Wallet',
+      description: 'Add GMX collateral + Arbitrum ETH gas before retrying.',
+    },
   },
 };
 
 function resolveSetupSteps(params: {
   agentId: string;
   totalSteps?: number;
+  onboardingStep?: number;
+  onboardingKey?: string;
   interruptType?: AgentInterrupt['type'];
   delegationsBypassActive?: boolean;
 }): SetupStep[] {
@@ -1421,9 +1465,13 @@ function resolveSetupSteps(params: {
   const resolvedTotalSteps =
     typeof params.totalSteps === 'number' && Number.isFinite(params.totalSteps)
       ? Math.max(1, Math.floor(params.totalSteps))
-      : 3;
+      : params.interruptType === 'gmx-fund-wallet-request'
+        ? 4
+        : 3;
   const resolvedStepKinds = resolveSetupStepKinds({
     totalSteps: resolvedTotalSteps,
+    onboardingStep: params.onboardingStep,
+    onboardingKey: params.onboardingKey,
     interruptType: params.interruptType,
     delegationsBypassActive: params.delegationsBypassActive,
   });
@@ -1499,10 +1547,19 @@ function AgentBlockersTab({
       resolveSetupSteps({
         agentId,
         totalSteps: onboarding?.totalSteps,
+        onboardingStep: onboarding?.step,
+        onboardingKey: onboarding?.key,
         interruptType: activeInterrupt?.type,
         delegationsBypassActive,
       }),
-    [agentId, onboarding?.totalSteps, activeInterrupt?.type, delegationsBypassActive],
+    [
+      agentId,
+      onboarding?.totalSteps,
+      onboarding?.step,
+      onboarding?.key,
+      activeInterrupt?.type,
+      delegationsBypassActive,
+    ],
   );
   const maxSetupStep = setupSteps.length;
   const clampStep = useCallback(
@@ -1707,6 +1764,7 @@ function AgentBlockersTab({
   const showOperatorConfigForm = activeInterrupt?.type === 'operator-config-request';
   const showPendleSetupForm = activeInterrupt?.type === 'pendle-setup-request';
   const showPendleFundWalletForm = activeInterrupt?.type === 'pendle-fund-wallet-request';
+  const showGmxFundWalletForm = activeInterrupt?.type === 'gmx-fund-wallet-request';
   const showGmxSetupForm = activeInterrupt?.type === 'gmx-setup-request';
   const showFundingTokenForm =
     activeInterrupt?.type === 'clmm-funding-token-request' ||
@@ -1718,11 +1776,14 @@ function AgentBlockersTab({
     activeInterrupt?.type === 'gmx-delegation-signing-request';
 
   const interruptStep = useMemo(() => {
-    if (showOperatorConfigForm || showPendleSetupForm || showPendleFundWalletForm || showGmxSetupForm) {
+    if (showOperatorConfigForm || showPendleSetupForm || showGmxSetupForm) {
       return 1;
     }
-    if (showFundingTokenForm) {
+    if (showPendleFundWalletForm || showFundingTokenForm) {
       return 2;
+    }
+    if (showGmxFundWalletForm) {
+      return maxSetupStep;
     }
     if (showDelegationSigningForm) {
       return 3;
@@ -1732,20 +1793,22 @@ function AgentBlockersTab({
     showOperatorConfigForm,
     showPendleSetupForm,
     showPendleFundWalletForm,
+    showGmxFundWalletForm,
     showGmxSetupForm,
     showFundingTokenForm,
     showDelegationSigningForm,
+    maxSetupStep,
   ]);
 
-  // Interrupt type is authoritative when present; onboarding.step is a fallback.
+  // Agent-provided onboarding metadata is authoritative when present.
   useEffect(() => {
-    if (interruptStep !== null) {
-      setCurrentStep(clampStep(interruptStep));
-      return;
-    }
     const nextStep = onboarding?.step;
     if (typeof nextStep === 'number' && Number.isFinite(nextStep) && nextStep > 0) {
       setCurrentStep(clampStep(nextStep));
+      return;
+    }
+    if (interruptStep !== null) {
+      setCurrentStep(clampStep(interruptStep));
     }
   }, [clampStep, interruptStep, onboarding?.step]);
 
@@ -2019,6 +2082,42 @@ function AgentBlockersTab({
                     </li>
                     <li>
                       Wallet: {(activeInterrupt as unknown as { walletAddress?: string }).walletAddress || connectedWalletAddress || 'Unknown'}
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onInterruptSubmit?.({ acknowledged: true })}
+                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            ) : showGmxFundWalletForm ? (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-4">Fund Wallet</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
+                <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4 mb-6">
+                  <div className="text-yellow-300 text-sm font-medium mb-2">What to do</div>
+                  <ul className="space-y-1 text-yellow-200 text-xs">
+                    <li>
+                      Add enough{' '}
+                      {(activeInterrupt as unknown as { requiredCollateralSymbol?: string })
+                        .requiredCollateralSymbol || 'USDC'}{' '}
+                      on Arbitrum for GMX collateral.
+                    </li>
+                    <li>Add a small amount of Arbitrum ETH for execution gas fees.</li>
+                    <li>
+                      Wallet:{' '}
+                      {(activeInterrupt as unknown as { walletAddress?: string }).walletAddress ||
+                        connectedWalletAddress ||
+                        'Unknown'}
                     </li>
                   </ul>
                 </div>
@@ -2876,16 +2975,29 @@ function GmxAlloraMetricsTab({
 
   const executionOk = getBooleanField(latestExecutionData, 'ok');
   const executionError = getStringField(latestExecutionData, 'error');
+  const executionResultStatusRaw = getStringField(latestExecutionData, 'status');
+  const executionResultStatus =
+    executionResultStatusRaw === 'confirmed' ||
+    executionResultStatusRaw === 'failed' ||
+    executionResultStatusRaw === 'blocked'
+      ? executionResultStatusRaw
+      : undefined;
   const executionStatus =
-    executionOk === true
+    executionResultStatus === 'blocked'
+      ? 'pending'
+      : executionResultStatus === 'confirmed'
       ? 'confirmed'
-      : executionOk === false
+      : executionResultStatus === 'failed'
         ? 'failed'
-        : latestTransaction?.status === 'success'
+        : executionOk === true
           ? 'confirmed'
-          : latestTransaction?.status === 'failed'
+          : executionOk === false
             ? 'failed'
-            : 'pending';
+            : latestTransaction?.status === 'success'
+              ? 'confirmed'
+              : latestTransaction?.status === 'failed'
+                ? 'failed'
+                : 'pending';
 
   const marketLabel = latestCycle?.marketSymbol ?? formatPoolPair(fullMetrics?.lastSnapshot);
   const sideLabel = latestCycle?.side ? latestCycle.side.toUpperCase() : '—';

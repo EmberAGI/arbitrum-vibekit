@@ -53,4 +53,30 @@ describe('agentSync', () => {
     expect(next.view.profile.chains).toEqual(['arbitrum']);
     expect(next.view.metrics.iteration).toBe(2);
   });
+
+  it('clears task and error fields when sync explicitly returns null', () => {
+    const seeded = applyAgentSyncToState(
+      initialAgentState,
+      parseAgentSyncResponse({
+        agentId: 'agent-gmx-allora',
+        task: { id: 'task-1', taskStatus: { state: 'failed' } },
+        haltReason: 'old halt',
+        executionError: 'old error',
+      }),
+    );
+
+    const next = applyAgentSyncToState(
+      seeded,
+      parseAgentSyncResponse({
+        agentId: 'agent-gmx-allora',
+        task: null,
+        haltReason: null,
+        executionError: null,
+      }),
+    );
+
+    expect(next.view.task).toBeUndefined();
+    expect(next.view.haltReason).toBeUndefined();
+    expect(next.view.executionError).toBeUndefined();
+  });
 });

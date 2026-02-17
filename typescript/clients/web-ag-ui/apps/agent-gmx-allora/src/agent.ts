@@ -12,6 +12,7 @@ import {
 import { setupAgentLocalE2EMocksIfNeeded } from './e2e/agentLocalMocks.js';
 import { ClmmStateAnnotation, memory, type ClmmState } from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
+import { acknowledgeFundWalletNode } from './workflow/nodes/acknowledgeFundWallet.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
 import { collectDelegationsNode } from './workflow/nodes/collectDelegations.js';
 import { collectFundingTokenInputNode } from './workflow/nodes/collectFundingTokenInput.js';
@@ -28,6 +29,7 @@ import {
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
+import { resolveNextOnboardingNode } from './workflow/onboardingRouting.js';
 
 await setupAgentLocalE2EMocksIfNeeded();
 
@@ -40,22 +42,7 @@ function resolvePostBootstrap(
   | 'prepareOperator'
   | 'syncState' {
   const command = extractCommand(state.messages) ?? state.view.command;
-  if (command === 'sync') {
-    return 'syncState';
-  }
-  if (!state.view.operatorInput) {
-    return 'collectSetupInput';
-  }
-  if (!state.view.fundingTokenInput) {
-    return 'collectFundingTokenInput';
-  }
-  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
-    return 'collectDelegations';
-  }
-  if (!state.view.operatorConfig) {
-    return 'prepareOperator';
-  }
-  return 'syncState';
+  return command === 'sync' ? 'syncState' : resolveNextOnboardingNode(state);
 }
 
 const workflow = new StateGraph(ClmmStateAnnotation)
@@ -69,7 +56,8 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('collectFundingTokenInput', collectFundingTokenInputNode)
   .addNode('collectDelegations', collectDelegationsNode)
   .addNode('prepareOperator', prepareOperatorNode)
-  .addNode('pollCycle', pollCycleNode, { ends: ['summarize'] })
+  .addNode('pollCycle', pollCycleNode, { ends: ['summarize', 'acknowledgeFundWallet'] })
+  .addNode('acknowledgeFundWallet', acknowledgeFundWalletNode)
   .addNode('summarize', summarizeNode)
   .addEdge(START, 'runCommand')
   .addConditionalEdges('runCommand', resolveCommandTarget)
@@ -83,6 +71,7 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addEdge('collectDelegations', 'prepareOperator')
   .addEdge('prepareOperator', 'pollCycle')
   .addEdge('pollCycle', 'summarize')
+  .addEdge('acknowledgeFundWallet', END)
   .addEdge('summarize', END);
 
 export const graph = workflow.compile({
