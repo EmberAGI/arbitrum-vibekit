@@ -187,9 +187,16 @@ export const collectDelegationsNode = async (
     currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    state.view = { ...state.view, ...pendingView };
+    const mergedView = { ...state.view, ...pendingView };
+    state.view = mergedView;
     await copilotkitEmitState(config, {
-      view: pendingView,
+      view: mergedView,
+    });
+    return new Command({
+      update: {
+        view: mergedView,
+      },
+      goto: 'collectDelegations',
     });
   }
 

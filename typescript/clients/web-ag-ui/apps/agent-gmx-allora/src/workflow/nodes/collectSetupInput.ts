@@ -1,6 +1,5 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { interrupt } from '@langchain/langgraph';
-import type { Command } from '@langchain/langgraph';
+import { Command, interrupt } from '@langchain/langgraph';
 import { z } from 'zod';
 
 import { GmxSetupInputSchema } from '../../domain/types.js';
@@ -75,9 +74,16 @@ export const collectSetupInputNode = async (
     currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    state.view = { ...state.view, ...pendingView };
+    const mergedView = { ...state.view, ...pendingView };
+    state.view = mergedView;
     await copilotkitEmitState(config, {
-      view: pendingView,
+      view: mergedView,
+    });
+    return new Command({
+      update: {
+        view: mergedView,
+      },
+      goto: 'collectSetupInput',
     });
   }
 
