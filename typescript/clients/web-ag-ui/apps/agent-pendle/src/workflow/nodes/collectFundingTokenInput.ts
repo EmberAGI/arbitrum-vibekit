@@ -31,6 +31,15 @@ const buildOnboarding = (
   totalSteps,
 });
 
+const resolveFundingOnboarding = (state: ClmmState): OnboardingState => {
+  const configuredTotalSteps = state.view.onboarding?.totalSteps;
+  const totalSteps =
+    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
+      ? configuredTotalSteps
+      : FULL_ONBOARDING_TOTAL_STEPS;
+  return buildOnboarding(totalSteps <= 2 ? 2 : 3, totalSteps);
+};
+
 const FundWalletAckSchema = z.object({
   acknowledged: z.literal(true),
 });
@@ -46,24 +55,17 @@ export const collectFundingTokenInputNode = async (
 
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
-    const failureMessage = 'ERROR: Setup input missing before funding-token step';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
-    });
-    return new Command({
-      update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: [] },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+    logInfo('collectFundingTokenInput: setup input missing; rerouting to collectSetupInput');
+    return new Command({ goto: 'collectSetupInput' });
+  }
+
+  if (state.view.fundingTokenInput) {
+    logInfo('collectFundingTokenInput: funding token already present; skipping step');
+    return {
+      view: {
+        onboarding: resolveFundingOnboarding(state),
       },
-      goto: 'summarize',
-    });
+    };
   }
 
   const onchainActionsClient = getOnchainActionsClient();
@@ -160,13 +162,30 @@ export const collectFundingTokenInputNode = async (
     };
 
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
-    await copilotkitEmitState(config, {
-      view: {
-        onboarding: buildOnboarding(2),
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      },
-    });
+    const awaitingMessage = task.taskStatus.message?.content;
+    const pendingView = {
+      onboarding: buildOnboarding(2),
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    };
+    const currentTaskState = state.view.task?.taskStatus?.state;
+    const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
+    const shouldPersistPendingState =
+      currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+    const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+    if (hasRunnableConfig && shouldPersistPendingState) {
+      const mergedView = { ...state.view, ...pendingView };
+      state.view = mergedView;
+      await copilotkitEmitState(config, {
+        view: mergedView,
+      });
+      return new Command({
+        update: {
+          view: mergedView,
+        },
+        goto: 'collectFundingTokenInput',
+      });
+    }
 
     const incoming: unknown = await interrupt(request);
     let inputToParse: unknown = incoming;
@@ -202,13 +221,30 @@ export const collectFundingTokenInputNode = async (
     'input-required',
     'Awaiting funding-token selection to continue onboarding.',
   );
-  await copilotkitEmitState(config, {
-    view: {
-      onboarding: buildOnboarding(2),
-      task: awaitingInput.task,
-      activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
-    },
-  });
+  const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
+  const pendingView = {
+    onboarding: buildOnboarding(2),
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
+  };
+  const currentTaskState = state.view.task?.taskStatus?.state;
+  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
+  const shouldPersistPendingState =
+    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  if (hasRunnableConfig && shouldPersistPendingState) {
+    const mergedView = { ...state.view, ...pendingView };
+    state.view = mergedView;
+    await copilotkitEmitState(config, {
+      view: mergedView,
+    });
+    return new Command({
+      update: {
+        view: mergedView,
+      },
+      goto: 'collectFundingTokenInput',
+    });
+  }
 
   const incoming: unknown = await interrupt(request);
 

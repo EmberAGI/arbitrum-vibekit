@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OnchainActionsClient, Token, TokenizedYieldMarket } from '../../clients/onchainActions.js';
 import type { ClmmState } from '../context.js';
@@ -40,6 +40,133 @@ vi.mock('@langchain/langgraph', async (importOriginal) => {
 });
 
 describe('collectDelegationsNode', () => {
+  beforeEach(() => {
+    interruptMock.mockReset();
+    copilotkitEmitStateMock.mockReset();
+    getAgentWalletAddressMock.mockReset();
+    getOnchainActionsClientMock.mockReset();
+  });
+
+  it('persists input-required state before requesting delegation signatures', async () => {
+    const usdaiToken: Token = {
+      tokenUid: { chainId: '42161', address: '0x0a1a1a107e45b7ced86833863f482bc5f4ed82ef' },
+      name: 'USDai',
+      symbol: 'USDai',
+      isNative: false,
+      decimals: 18,
+      iconUri: undefined,
+      isVetted: true,
+    };
+
+    const targetMarket: TokenizedYieldMarket = {
+      marketIdentifier: { chainId: '42161', address: '0x2092fa5d02276b3136a50f3c2c3a6ed45413183e' },
+      expiry: '2026-02-19',
+      details: { impliedApy: 0.18 },
+      ptToken: {
+        tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+        name: 'PT-sUSDai',
+        symbol: 'PT-sUSDai',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+      ytToken: {
+        tokenUid: { chainId: '42161', address: '0x2222222222222222222222222222222222222222' },
+        name: 'YT-sUSDai',
+        symbol: 'YT-sUSDai',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+      underlyingToken: {
+        tokenUid: usdaiToken.tokenUid,
+        name: usdaiToken.name,
+        symbol: usdaiToken.symbol,
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+    };
+
+    const onchainActionsClient: Pick<
+      OnchainActionsClient,
+      | 'listTokenizedYieldMarkets'
+      | 'listTokens'
+      | 'createTokenizedYieldBuyPt'
+      | 'createTokenizedYieldSellPt'
+      | 'createTokenizedYieldRedeemPt'
+      | 'createTokenizedYieldClaimRewards'
+    > = {
+      listTokenizedYieldMarkets: vi.fn().mockResolvedValue([targetMarket]),
+      listTokens: vi.fn().mockResolvedValue([usdaiToken]),
+      createTokenizedYieldBuyPt: vi.fn().mockResolvedValue({
+        transactions: [{ type: 'EVM_TX', to: '0x888888888889758f76e7103c6cbf23abbf58f946', data: '0xc81f847a', value: '0', chainId: '42161' }],
+      }),
+      createTokenizedYieldSellPt: vi.fn().mockResolvedValue({
+        exactAmountOut: '1',
+        tokenOut: usdaiToken,
+        transactions: [{ type: 'EVM_TX', to: '0x888888888889758f76e7103c6cbf23abbf58f946', data: '0x58181a80', value: '0', chainId: '42161' }],
+      }),
+      createTokenizedYieldRedeemPt: vi.fn().mockResolvedValue({
+        exactUnderlyingAmount: '1',
+        underlyingTokenIdentifier: usdaiToken.tokenUid,
+        transactions: [{ type: 'EVM_TX', to: '0x888888888889758f76e7103c6cbf23abbf58f946', data: '0x58181a80', value: '0', chainId: '42161' }],
+      }),
+      createTokenizedYieldClaimRewards: vi.fn().mockResolvedValue({
+        transactions: [{ type: 'EVM_TX', to: '0x888888888889758f76e7103c6cbf23abbf58f946', data: '0x58181a80', value: '0', chainId: '42161' }],
+      }),
+    };
+
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+    getAgentWalletAddressMock.mockReturnValue('0x0000000000000000000000000000000000000002');
+    getOnchainActionsClientMock.mockReturnValue(onchainActionsClient);
+
+    const state = {
+      view: {
+        delegationsBypassActive: false,
+        delegationBundle: undefined,
+        operatorInput: {
+          walletAddress: '0x0000000000000000000000000000000000000001',
+          amountUsd: 10,
+          maxGasSpendEth: 0.01,
+        },
+        fundingTokenInput: {
+          fundingTokenAddress: usdaiToken.tokenUid.address,
+        },
+        task: { id: 'task-1', taskStatus: { state: 'submitted' } },
+        activity: { telemetry: [], events: [] },
+        profile: { pools: [], allowedPools: [] },
+        metrics: { cyclesSinceRebalance: 0, staleCycles: 0, iteration: 0 },
+        transactionHistory: [],
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectDelegationsNode(state, { configurable: { thread_id: 'thread-1' } });
+
+    expect(interruptMock).not.toHaveBeenCalled();
+    expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
+    const commandResult = result as unknown as { goto?: string[]; update?: { view?: { task?: { taskStatus?: { state?: string } } } } };
+    expect(commandResult.goto).toContain('collectDelegations');
+    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
+    expect(
+      commandResult.update?.view?.operatorInput as { walletAddress?: string } | undefined,
+    ).toEqual(
+      expect.objectContaining({
+        walletAddress: '0x0000000000000000000000000000000000000001',
+      }),
+    );
+    expect(
+      commandResult.update?.view?.fundingTokenInput as { fundingTokenAddress?: string } | undefined,
+    ).toEqual(
+      expect.objectContaining({
+        fundingTokenAddress: '0x0a1a1a107e45b7ced86833863f482bc5f4ed82ef',
+      }),
+    );
+  });
+
   it('preserves reduced onboarding totals when delegation becomes the final step', async () => {
     const state = {
       view: {
@@ -55,6 +182,35 @@ describe('collectDelegationsNode', () => {
     const onboarding = (result as { view: { onboarding?: { step: number; totalSteps?: number } } }).view
       .onboarding;
     expect(onboarding).toEqual({ step: 2, totalSteps: 2 });
+  });
+
+  it('advances task state after delegation bundle is present', async () => {
+    const state = {
+      view: {
+        delegationsBypassActive: false,
+        delegationBundle: {
+          signedDelegations: [],
+        },
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              content: 'Waiting for delegation approval to continue onboarding.',
+            },
+          },
+        },
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectDelegationsNode(state, {});
+
+    expect('view' in result).toBe(true);
+    const view = (result as { view: { task?: { taskStatus?: { state?: string; message?: { content?: string } } } } })
+      .view;
+    expect(view.task?.taskStatus?.state).toBe('working');
+    expect(view.task?.taskStatus?.message?.content).toBe('Delegation approvals received. Continuing onboarding.');
   });
 
   it('requests a single delegation signature and stores a delegation bundle with stablecoin approval intents', async () => {

@@ -35,9 +35,31 @@ const fetchRequest = globalThis.fetch as unknown as (
   init?: unknown,
 ) => Promise<Response>;
 
-function resolvePostBootstrap(state: ClmmState): 'collectSetupInput' | 'syncState' {
+function resolvePostBootstrap(
+  state: ClmmState,
+):
+  | 'collectSetupInput'
+  | 'collectFundingTokenInput'
+  | 'collectDelegations'
+  | 'prepareOperator'
+  | 'syncState' {
   const command = extractCommand(state.messages) ?? state.view.command;
-  return command === 'sync' ? 'syncState' : 'collectSetupInput';
+  if (command === 'sync') {
+    return 'syncState';
+  }
+  if (!state.view.operatorInput) {
+    return 'collectSetupInput';
+  }
+  if (!state.view.fundingTokenInput) {
+    return 'collectFundingTokenInput';
+  }
+  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
+    return 'collectDelegations';
+  }
+  if (!state.view.operatorConfig || state.view.setupComplete !== true) {
+    return 'prepareOperator';
+  }
+  return 'syncState';
 }
 
 const workflow = new StateGraph(ClmmStateAnnotation)

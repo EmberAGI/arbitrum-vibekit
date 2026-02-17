@@ -12,8 +12,20 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 
+const FULL_ONBOARDING_TOTAL_STEPS = 3;
+
 const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
+  totalSteps: FULL_ONBOARDING_TOTAL_STEPS,
+};
+
+const resolveResumeOnboarding = (state: ClmmState): OnboardingState => {
+  const configuredTotalSteps = state.view.onboarding?.totalSteps;
+  const totalSteps =
+    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
+      ? configuredTotalSteps
+      : FULL_ONBOARDING_TOTAL_STEPS;
+  const step = state.view.fundingTokenInput ? (totalSteps <= 2 ? 2 : 3) : 2;
+  return { ...ONBOARDING, step, totalSteps };
 };
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -23,6 +35,15 @@ export const collectSetupInputNode = async (
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   logInfo('collectSetupInput: entering node');
+
+  if (state.view.operatorInput) {
+    logInfo('collectSetupInput: operator input already present; skipping step');
+    return {
+      view: {
+        onboarding: resolveResumeOnboarding(state),
+      },
+    };
+  }
 
   const request: PendleSetupInterrupt = {
     type: 'pendle-setup-request',
@@ -36,14 +57,30 @@ export const collectSetupInputNode = async (
     'input-required',
     'Awaiting funding amount to continue onboarding.',
   );
-
-  await copilotkitEmitState(config, {
-    view: {
-      onboarding: { ...ONBOARDING, step: 1 },
-      task: awaitingInput.task,
-      activity: { events: [awaitingInput.statusEvent], telemetry: [] },
-    },
-  });
+  const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
+  const pendingView = {
+    onboarding: { ...ONBOARDING, step: 1 },
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry: [] },
+  };
+  const currentTaskState = state.view.task?.taskStatus?.state;
+  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
+  const shouldPersistPendingState =
+    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  if (hasRunnableConfig && shouldPersistPendingState) {
+    const mergedView = { ...state.view, ...pendingView };
+    state.view = mergedView;
+    await copilotkitEmitState(config, {
+      view: mergedView,
+    });
+    return new Command({
+      update: {
+        view: mergedView,
+      },
+      goto: 'collectSetupInput',
+    });
+  }
 
   const incoming: unknown = await interrupt(request);
 

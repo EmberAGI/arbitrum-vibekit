@@ -1,5 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { interrupt, type Command } from '@langchain/langgraph';
+import { interrupt } from '@langchain/langgraph';
+import type { Command } from '@langchain/langgraph';
 import { z } from 'zod';
 
 import { GmxSetupInputSchema } from '../../domain/types.js';
@@ -25,6 +26,15 @@ const buildOnboarding = (state: ClmmState, step: number): OnboardingState => ({
   totalSteps: resolveOnboardingTotalSteps(state),
 });
 
+const resolveSetupResumeStep = (state: ClmmState): number => {
+  const configuredTotalSteps = state.view.onboarding?.totalSteps;
+  const totalSteps =
+    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
+      ? configuredTotalSteps
+      : resolveOnboardingTotalSteps(state);
+  return state.view.fundingTokenInput ? (totalSteps <= 2 ? 2 : 3) : 2;
+};
+
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
 export const collectSetupInputNode = async (
@@ -32,6 +42,15 @@ export const collectSetupInputNode = async (
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   logInfo('collectSetupInput: entering node');
+
+  if (state.view.operatorInput) {
+    logInfo('collectSetupInput: setup input already present; skipping step');
+    return {
+      view: {
+        onboarding: buildOnboarding(state, resolveSetupResumeStep(state)),
+      },
+    };
+  }
 
   const request: GmxSetupInterrupt = {
     type: 'gmx-setup-request',
@@ -44,14 +63,23 @@ export const collectSetupInputNode = async (
     'input-required',
     'Awaiting market + allocation to continue onboarding.',
   );
-
-  await copilotkitEmitState(config, {
-    view: {
-      onboarding: buildOnboarding(state, 1),
-      task: awaitingInput.task,
-      activity: { events: [awaitingInput.statusEvent], telemetry: [] },
-    },
-  });
+  const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
+  const pendingView = {
+    onboarding: buildOnboarding(state, 1),
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry: [] },
+  };
+  const currentTaskState = state.view.task?.taskStatus?.state;
+  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
+  const shouldPersistPendingState =
+    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  if (hasRunnableConfig && shouldPersistPendingState) {
+    state.view = { ...state.view, ...pendingView };
+    await copilotkitEmitState(config, {
+      view: pendingView,
+    });
+  }
 
   const incoming: unknown = await interrupt(request);
 

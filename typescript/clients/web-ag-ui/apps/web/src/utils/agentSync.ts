@@ -24,6 +24,8 @@ const SyncResponseSchema = z.object({
   metrics: z.record(z.unknown()).nullable().optional(),
   activity: z.record(z.unknown()).nullable().optional(),
   transactionHistory: z.array(z.unknown()).nullable().optional(),
+  hasInterrupts: z.boolean().optional(),
+  pendingInterrupt: z.unknown().nullable().optional(),
 
   task: z.record(z.unknown()).nullable().optional(),
   haltReason: z.string().nullable().optional(),

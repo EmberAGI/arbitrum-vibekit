@@ -117,6 +117,22 @@ export const collectDelegationsNode = async (
   }
 
   if (state.view.delegationBundle) {
+    if (state.view.task?.taskStatus.state === 'input-required') {
+      const { task, statusEvent } = buildTaskStatus(
+        state.view.task,
+        'working',
+        'Delegation approvals received. Continuing onboarding.',
+      );
+      return {
+        view: {
+          delegationBundle: state.view.delegationBundle,
+          onboarding: delegationOnboarding,
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        },
+      };
+    }
+
     return {
       view: {
         delegationBundle: state.view.delegationBundle,
@@ -127,24 +143,13 @@ export const collectDelegationsNode = async (
 
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
-    const failureMessage = 'ERROR: Setup input missing before delegation step';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
-    });
-    return new Command({
-      update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: [] },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
-      },
-      goto: 'summarize',
-    });
+    logInfo('collectDelegations: setup input missing; rerouting to collectSetupInput');
+    return new Command({ goto: 'collectSetupInput' });
+  }
+  const fundingTokenInput = state.view.fundingTokenInput;
+  if (!fundingTokenInput) {
+    logInfo('collectDelegations: funding token input missing; rerouting to collectFundingTokenInput');
+    return new Command({ goto: 'collectFundingTokenInput' });
   }
 
   const delegatorAddress = normalizeHexAddress(operatorInput.walletAddress, 'delegator wallet address');
@@ -228,10 +233,6 @@ export const collectDelegationsNode = async (
 
     // Collect a representative set of transaction targets+selectors that the agent will use,
     // but generate *one* delegation signature that covers all of them.
-    const fundingTokenInput = state.view.fundingTokenInput;
-    if (!fundingTokenInput) {
-      throw new Error('Funding token input missing before delegation planning');
-    }
     const fundingTokenAddress = normalizeHexAddress(
       fundingTokenInput.fundingTokenAddress,
       'funding token address',
@@ -359,13 +360,30 @@ export const collectDelegationsNode = async (
     'input-required',
     'Waiting for delegation approval to continue onboarding.',
   );
-  await copilotkitEmitState(config, {
-    view: {
-      onboarding: delegationOnboarding,
-      task: awaitingInput.task,
-      activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
-    },
-  });
+  const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
+  const pendingView = {
+    onboarding: delegationOnboarding,
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
+  };
+  const currentTaskState = state.view.task?.taskStatus?.state;
+  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
+  const shouldPersistPendingState =
+    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  if (hasRunnableConfig && shouldPersistPendingState) {
+    const mergedView = { ...state.view, ...pendingView };
+    state.view = mergedView;
+    await copilotkitEmitState(config, {
+      view: mergedView,
+    });
+    return new Command({
+      update: {
+        view: mergedView,
+      },
+      goto: 'collectDelegations',
+    });
+  }
 
   const incoming: unknown = await interrupt(request);
 

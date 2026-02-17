@@ -25,9 +25,35 @@ import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
 
-function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
+function resolvePostBootstrap(
+  state: ClmmState,
+):
+  | 'listPools'
+  | 'collectOperatorInput'
+  | 'collectFundingTokenInput'
+  | 'collectDelegations'
+  | 'prepareOperator'
+  | 'syncState' {
   const command = extractCommand(state.messages) ?? state.view.command;
-  return command === 'sync' ? 'syncState' : 'listPools';
+  if (command === 'sync') {
+    return 'syncState';
+  }
+  if (!state.view.poolArtifact) {
+    return 'listPools';
+  }
+  if (!state.view.operatorInput) {
+    return 'collectOperatorInput';
+  }
+  if (!state.view.fundingTokenInput) {
+    return 'collectFundingTokenInput';
+  }
+  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
+    return 'collectDelegations';
+  }
+  if (!state.view.operatorConfig) {
+    return 'prepareOperator';
+  }
+  return 'syncState';
 }
 
 const workflow = new StateGraph(ClmmStateAnnotation)

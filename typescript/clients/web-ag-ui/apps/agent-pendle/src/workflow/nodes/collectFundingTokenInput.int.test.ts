@@ -406,7 +406,7 @@ describe('collectFundingTokenInputNode', () => {
     });
   });
 
-  it('fails when operator input is missing', async () => {
+  it('reroutes to setup collection when operator input is missing', async () => {
     const state: ClmmState = {
       messages: [],
       copilotkit: { actions: [], context: [] },
@@ -458,9 +458,9 @@ describe('collectFundingTokenInputNode', () => {
     const result = await collectFundingTokenInputNode(state, {});
 
     expect(result).toBeInstanceOf(Command);
-    const update = (result as { update?: ClmmUpdate }).update;
-    const haltReason: string | undefined = update?.view?.haltReason;
-    expect(haltReason).toContain('Setup input missing');
+    const commandResult = result as { goto?: string | string[]; update?: ClmmUpdate };
+    expect(commandResult.goto).toEqual(expect.arrayContaining(['collectSetupInput']));
+    expect(commandResult.update?.view?.haltReason).toBeUndefined();
   });
 
   it('fails when the selected token is not in allowed options', async () => {

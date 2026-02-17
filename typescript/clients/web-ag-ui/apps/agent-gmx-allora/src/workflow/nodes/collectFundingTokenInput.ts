@@ -55,24 +55,17 @@ export const collectFundingTokenInputNode = async (
 
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
-    const failureMessage = 'ERROR: Setup input missing before funding-token step';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
-    });
-    return new Command({
-      update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: [] },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+    logInfo('collectFundingTokenInput: setup input missing; rerouting to collectSetupInput');
+    return new Command({ goto: 'collectSetupInput' });
+  }
+
+  if (state.view.fundingTokenInput) {
+    logInfo('collectFundingTokenInput: funding token already present; skipping step');
+    return {
+      view: {
+        onboarding: buildOnboarding(state, state.view.delegationsBypassActive === true ? 2 : 3),
       },
-      goto: 'summarize',
-    });
+    };
   }
 
   const awaitingInput = buildTaskStatus(

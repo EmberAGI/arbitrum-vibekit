@@ -149,6 +149,8 @@ describe('POST /api/agents/sync', () => {
         expect.objectContaining({
           agentId,
           taskState: 'submitted',
+          hasInterrupts: true,
+          pendingInterrupt: expect.objectContaining({ type: 'pendle-setup-request' }),
         }),
       );
 
@@ -156,6 +158,70 @@ describe('POST /api/agents/sync', () => {
       expect(fetchMock.calls.some((c) => c.url.includes(`/threads/${threadId}/runs`))).toBe(false);
       expect(fetchMock.calls.some((c) => c.url.endsWith('/threads') && c.init?.method === 'POST')).toBe(false);
       expect(fetchMock.calls.some((c) => c.url.endsWith(`/threads/${threadId}`) && c.init?.method === 'PATCH')).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('prefers the latest pending interrupt and parses JSON-string values', async () => {
+    const threadId = 'thread-with-multiple-interrupts';
+    const agentId = 'agent-pendle';
+
+    const stateWithMultipleInterrupts = {
+      values: {
+        view: {
+          command: 'hire',
+          task: {
+            id: 'task-1',
+            taskStatus: {
+              state: 'input-required',
+              message: { content: 'Delegation signature required.' },
+            },
+          },
+          profile: { apy: 1 },
+          metrics: { iteration: 0 },
+        },
+      },
+      tasks: [
+        {
+          interrupts: [
+            {
+              value: { type: 'pendle-setup-request' },
+            },
+          ],
+        },
+        {
+          interrupts: [
+            {
+              value: JSON.stringify({ type: 'pendle-delegation-signing-request' }),
+            },
+          ],
+        },
+      ],
+    };
+
+    const fetchMock = makeFetchMock((call) => {
+      if (call.url.endsWith(`/threads/${threadId}/state`) && (!call.init || call.init.method === 'GET')) {
+        return createJsonResponse(stateWithMultipleInterrupts);
+      }
+      throw new Error(`Unexpected fetch: ${call.init?.method ?? 'GET'} ${call.url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock.fn);
+    try {
+      const res = await POST(makeRequestJson({ agentId, threadId }) as never);
+      expect(res.status).toBe(200);
+
+      const payload = (await res.json()) as unknown;
+      expect(payload).toEqual(
+        expect.objectContaining({
+          hasInterrupts: true,
+          pendingInterrupt: expect.objectContaining({ type: 'pendle-delegation-signing-request' }),
+        }),
+      );
+
+      expect(didCallSyncStateMutation(fetchMock.calls)).toBe(false);
+      expect(fetchMock.calls.some((c) => c.url.includes(`/threads/${threadId}/runs`))).toBe(false);
     } finally {
       vi.unstubAllGlobals();
     }

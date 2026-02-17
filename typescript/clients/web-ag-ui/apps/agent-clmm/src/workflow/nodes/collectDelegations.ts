@@ -328,6 +328,22 @@ export const collectDelegationsNode = async (
 
   if (state.view.delegationBundle) {
     logInfo('collectDelegations: delegation bundle already present; skipping step');
+    if (state.view.task?.taskStatus.state === 'input-required') {
+      const { task, statusEvent } = buildTaskStatus(
+        state.view.task,
+        'working',
+        'Delegation approvals received. Continuing onboarding.',
+      );
+      return {
+        view: {
+          delegationBundle: state.view.delegationBundle,
+          onboarding: delegationOnboarding,
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        },
+      };
+    }
+
     return {
       view: {
         delegationBundle: state.view.delegationBundle,
@@ -338,48 +354,14 @@ export const collectDelegationsNode = async (
 
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
-    const failureMessage = 'ERROR: Operator input missing before delegation step';
-    logInfo('collectDelegations: missing operator input', { failureMessage });
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
-    });
-    return new Command({
-      update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: [] },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
-      },
-      goto: 'summarize',
-    });
+    logInfo('collectDelegations: operator input missing; rerouting to collectOperatorInput');
+    return new Command({ goto: 'collectOperatorInput' });
   }
 
   const selectedPool = state.view.selectedPool;
   if (!selectedPool) {
-    const failureMessage = 'ERROR: Selected pool missing before delegation step';
-    logInfo('collectDelegations: missing selected pool', { failureMessage });
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
-    });
-    return new Command({
-      update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: [] },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
-      },
-      goto: 'summarize',
-    });
+    logInfo('collectDelegations: selected pool missing; rerouting to collectOperatorInput');
+    return new Command({ goto: 'collectOperatorInput' });
   }
 
   const camelotClient = getCamelotClient();
@@ -649,13 +631,23 @@ export const collectDelegationsNode = async (
     'input-required',
     'Waiting for you to approve the required permissions to continue setup.',
   );
-  await copilotkitEmitState(config, {
-    view: {
-      onboarding: delegationOnboarding,
-      task: awaitingInput.task,
-      activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
-    },
-  });
+  const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
+  const pendingView = {
+    onboarding: delegationOnboarding,
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
+  };
+  const currentTaskState = state.view.task?.taskStatus?.state;
+  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
+  const shouldPersistPendingState =
+    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  if (hasRunnableConfig && shouldPersistPendingState) {
+    state.view = { ...state.view, ...pendingView };
+    await copilotkitEmitState(config, {
+      view: pendingView,
+    });
+  }
 
   logInfo('collectDelegations: calling interrupt() - awaiting delegation signatures', {
     chainId: request.chainId,

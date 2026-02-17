@@ -21,4 +21,33 @@ describe('collectDelegationsNode', () => {
       .onboarding;
     expect(onboarding).toEqual({ step: 2, totalSteps: 2 });
   });
+
+  it('advances task state after delegation bundle is present', async () => {
+    const state = {
+      view: {
+        delegationsBypassActive: false,
+        delegationBundle: {
+          delegations: [],
+        },
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              content: 'Waiting for delegation approval to continue onboarding.',
+            },
+          },
+        },
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectDelegationsNode(state, {});
+
+    expect('view' in result).toBe(true);
+    const view = (result as { view: { task?: { taskStatus?: { state?: string; message?: { content?: string } } } } })
+      .view;
+    expect(view.task?.taskStatus?.state).toBe('working');
+    expect(view.task?.taskStatus?.message?.content).toBe('Delegation approvals received. Continuing onboarding.');
+  });
 });

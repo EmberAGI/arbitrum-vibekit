@@ -36,11 +36,37 @@ import { saveBootstrapContext } from './workflow/store.js';
 /**
  * Routes after bootstrap based on the original command.
  * - sync: go to syncState (just return state after bootstrap)
- * - hire/cycle: continue to listPools for full setup flow
+ * - hire/cycle: resume from the next missing onboarding requirement
  */
-function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
+function resolvePostBootstrap(
+  state: ClmmState,
+):
+  | 'listPools'
+  | 'collectOperatorInput'
+  | 'collectFundingTokenInput'
+  | 'collectDelegations'
+  | 'prepareOperator'
+  | 'syncState' {
   const command = extractCommand(state.messages) ?? state.view.command;
-  return command === 'sync' ? 'syncState' : 'listPools';
+  if (command === 'sync') {
+    return 'syncState';
+  }
+  if (!state.view.poolArtifact) {
+    return 'listPools';
+  }
+  if (!state.view.operatorInput) {
+    return 'collectOperatorInput';
+  }
+  if (!state.view.fundingTokenInput) {
+    return 'collectFundingTokenInput';
+  }
+  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
+    return 'collectDelegations';
+  }
+  if (!state.view.operatorConfig) {
+    return 'prepareOperator';
+  }
+  return 'syncState';
 }
 
 const store = new InMemoryStore();

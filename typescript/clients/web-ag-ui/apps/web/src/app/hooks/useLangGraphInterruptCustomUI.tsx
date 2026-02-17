@@ -1,6 +1,18 @@
 import { useLangGraphInterrupt } from '@copilotkit/react-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+const normalizeInterruptEventValue = (eventValue: unknown): unknown => {
+  if (typeof eventValue !== 'string') {
+    return eventValue;
+  }
+
+  try {
+    return JSON.parse(eventValue) as unknown;
+  } catch {
+    return eventValue;
+  }
+};
+
 /**
  * Wrapper around CopilotKit's useLangGraphInterrupt for custom UI rendering.
  *
@@ -69,10 +81,11 @@ export function useLangGraphInterruptCustomUI<T>(options: {
 
   useLangGraphInterrupt<T>({
     enabled: ({ eventValue }) => {
-      const isMatch = options.enabled(eventValue);
+      const normalizedEventValue = normalizeInterruptEventValue(eventValue);
+      const isMatch = options.enabled(normalizedEventValue);
       if (!isMatch) return false;
 
-      const key = interruptKey(eventValue);
+      const key = interruptKey(normalizedEventValue);
       if (key && key === lastResolvedKeyRef.current) {
         return false;
       }
@@ -82,7 +95,7 @@ export function useLangGraphInterruptCustomUI<T>(options: {
         return true;
       }
 
-      pendingInterruptRef.current = eventValue;
+      pendingInterruptRef.current = normalizedEventValue;
       if (!pendingScheduleRef.current) {
         pendingScheduleRef.current = true;
         setTimeout(() => {
