@@ -7,7 +7,7 @@ Scope: `typescript/clients/web-ag-ui/apps/web` and `typescript/clients/web-ag-ui
 
 This C4 document describes the target architecture we want to converge to from the current implementation:
 
-- Web must communicate with agents only through AG-UI semantics (`connect`, `run`, `stop`) via CopilotKit runtime.
+- Web must communicate with agents through AG-UI `connect`/`run` flows via CopilotKit runtime, with `stop` used only for `fire` preemption.
 - Web must not read or mutate LangGraph thread state directly (`/threads/*`).
 - Agent state lifecycle and onboarding/task transitions should be consistent across all agent apps.
 
@@ -80,7 +80,7 @@ flowchart TB
 Container responsibilities:
 
 - UI: rendering only; no LangGraph thread semantics.
-- Stream Manager: owns connect/run/stop lifecycle and focus rules.
+- Stream Manager: owns connect/run lifecycle, stream detach, and focus rules.
 - Projection Store: derives sidebar/detail state from AG-UI events.
 - CopilotKit endpoint: protocol boundary and routing to agents.
 - Agent runtimes: workflow execution and state emission.
@@ -95,7 +95,7 @@ Explicit non-goal container:
 
 - `AgentStreamCoordinator` (new):
   - Ensures only the focused agent keeps a long-lived `connect` stream.
-  - On route blur/unmount, calls protocol stop/cleanup immediately.
+  - On route blur/unmount, detaches stream ownership immediately (without stopping backend runs).
   - Enforces a hard cap of active streams (target: `<= 1` long-lived detail stream).
 
 - `AgentStatusPoller` (refactored list polling):
@@ -109,12 +109,13 @@ Explicit non-goal container:
   - Removes split-brain between stream state and sync endpoint state.
 
 - `AgentCommandBus`:
-  - Sends `hire`, `sync`, `fire`, interrupt responses, and client mutation intents via AG-UI `run` payloads only.
+  - Sends `hire`, `sync`, `fire`, interrupt responses, and client mutation intents via AG-UI `run` payloads.
+  - `fire` may invoke AG-UI `stop` as a pre-dispatch preemption control.
   - No out-of-band command mutation.
 
 - `AgentCommandScheduler` (new):
   - Enforces command concurrency policy by `agentId+threadId`.
-  - `fire` is preemptive (abort/detach then dispatch).
+  - `fire` is preemptive for backend and local ownership (`stop` then detach, wait terminal/timeout, then dispatch).
   - `sync` uses coalescing intent policy (single pending intent, last-write-wins).
   - Normalizes server busy responses into deterministic observe/retry behavior.
 
@@ -129,7 +130,7 @@ Explicit non-goal container:
 
 - `CopilotKit Runtime Route` (`/api/copilotkit`):
   - The only server route used by web for agent communication.
-  - Exposes `connect`, `run`, and `stop` semantics.
+  - Exposes AG-UI `connect`, `run`, and `stop` semantics used by web.
 
 - `Agent Registry`:
   - Maps agent ids to runtime endpoints and capabilities.
@@ -182,10 +183,11 @@ sequenceDiagram
   participant Agent
 
   User->>Web: Leave detail page
-  Web->>Runtime: stop(agentId, threadId)
-  Runtime->>Agent: cancel/stop active connect/run
+  Web->>Runtime: close connect stream (detach)
+  Runtime->>Agent: detach stream subscription
+  Note right of Agent: Active backend run continues if already in progress
   Agent-->>Runtime: stream closed
-  Runtime-->>Web: stop acknowledged
+  Runtime-->>Web: detach acknowledged
 ```
 
 ### 6.3 Sidebar refresh (non-focused agents)
@@ -247,7 +249,7 @@ sequenceDiagram
 5. Focused `connect` is long-lived state authority when present; otherwise active `run` stream is temporary authority.
 6. Local run-in-flight gating is advisory; server busy responses are authoritative for global concurrency.
 7. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
-8. `fire` is preemptive and must attempt abort/detach before dispatch.
+8. `fire` is the only preemptive stop command: issue `stop`, detach local stream, wait terminal/timeout, then dispatch `fire`.
 9. Every run has one terminal state event.
 10. On page blur/unmount, stream teardown is deterministic.
 11. Invariant details and implementation guidance are specified in `docs/ag-ui-client-runtime-invariants.md`.
@@ -263,7 +265,7 @@ sequenceDiagram
 ### Slice 2: Focus-aware stream governance
 
 - Introduce `AgentStreamCoordinator`.
-- Enforce stream ownership and deterministic stop on navigation.
+- Enforce stream ownership and deterministic stream detach on navigation.
 - Add instrumentation for active stream count.
 
 ### Slice 3: Sidebar projection refactor
