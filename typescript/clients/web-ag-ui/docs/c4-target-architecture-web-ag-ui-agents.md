@@ -25,7 +25,7 @@ Current code references that motivate this:
 3. List/status updates are bounded polling and protocol-compliant.
 4. All agents publish one versioned `ThreadView` contract.
 5. Agent command and task transitions are governed by a shared state machine library, not per-agent drift.
-6. No dual sources of truth for UI state (stream projection is primary).
+6. One projection reducer is the source of truth for UI state, with per-agent ownership gates across `connect`/`run`/poll ingress.
 
 ## 3. C4 Level 1: System Context
 
@@ -54,7 +54,7 @@ flowchart TB
   subgraph Browser[Browser]
     UI[React/Next UI]
     Store[Agent Projection Store]
-    StreamMgr[Focus-Aware Stream Manager]
+    StreamMgr[Detail-Route Stream Manager]
   end
 
   subgraph WebServer[Next.js Web App]
@@ -105,7 +105,9 @@ Explicit non-goal container:
 
 - `AgentProjectionReducer`:
   - Target: single reducer from AG-UI events to `ThreadViewProjection` for both sidebar and detail.
-  - Current: sidebar uses shared list projection (`projectAgentListUpdate`), while detail still reads rich `agent.state` directly.
+  - Supports multiple ingress channels (`connect`, `run`, polling) with single-owner authority per agent.
+  - Active detail-page agent is owned by `connect`; non-active-detail agents are owned by polling snapshots.
+  - Applies ownership epoch checks and drops stale/non-owner updates.
   - Removes split-brain between stream state and sync endpoint state.
 
 - `AgentCommandBus`:
@@ -246,7 +248,10 @@ sequenceDiagram
 2. Sidebar polling cadence: default 15s, bounded concurrency.
 3. No direct web calls to `/threads`, `/runs`, or `/state`.
 4. Client-to-agent state mutation is written through AG-UI `run` input; `connect` is attach/replay only.
-5. Focused `connect` is long-lived state authority when present; otherwise active `run` stream is temporary authority.
+5. Per-agent authority is single-owner at a time:
+   - active detail-page agent -> `connect`,
+   - non-active-detail agents -> polling snapshots,
+   - fallback without either -> active `run` stream for that command lifecycle.
 6. Local run-in-flight gating is advisory; server busy responses are authoritative for global concurrency.
 7. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
 8. `fire` is the only preemptive stop command: issue `stop`, detach local stream, wait terminal/timeout, then dispatch `fire`.
@@ -262,7 +267,7 @@ sequenceDiagram
 - Replace `useAgentConnection` sync fallback with AG-UI-only projection path.
 - Keep behavior parity via tests before deletion.
 
-### Slice 2: Focus-aware stream governance
+### Slice 2: Detail-route stream governance
 
 - Introduce `AgentStreamCoordinator`.
 - Enforce stream ownership and deterministic stream detach on navigation.

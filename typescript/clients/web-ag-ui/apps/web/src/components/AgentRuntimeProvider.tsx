@@ -37,7 +37,7 @@ function AgentListRuntimeBridge() {
     }
     lastSnapshotRef.current = snapshotKey;
 
-    upsertAgent(agentId, update);
+    upsertAgent(agentId, update, 'detail-connect');
   }, [agentId, upsertAgent, view.command, view.executionError, view.haltReason, view.metrics, view.profile, view.task]);
 
   return null;
