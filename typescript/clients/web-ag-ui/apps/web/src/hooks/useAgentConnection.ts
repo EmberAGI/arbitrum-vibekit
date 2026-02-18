@@ -441,13 +441,14 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     });
 
     return () => {
-      releaseAgentStreamOwner(ownerId);
-      unregisterAgentStreamOwner(ownerId);
+      void releaseAgentStreamOwner(ownerId);
+      void unregisterAgentStreamOwner(ownerId);
     };
   }, [agentId, getAgentDebugId, logConnectEvent]);
 
   useEffect(() => {
     if (!agent) return undefined;
+    const ownerId = streamOwnerIdRef.current;
 
     return () => {
       logConnectEvent('cleanup', {
@@ -455,7 +456,14 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         agent: getAgentDebugId(agent),
         threadId,
       });
-      void cleanupAgentConnection(agent);
+
+      // Active-owner cleanup is handled by stream coordinator release/unregister.
+      // Only cleanup here when this captured agent instance is stale.
+      if (agentRef.current !== agent) {
+        void cleanupAgentConnection(agent);
+      } else if (ownerId) {
+        void releaseAgentStreamOwner(ownerId);
+      }
     };
   }, [agent, agentId, getAgentDebugId, logConnectEvent, threadId]);
 
@@ -472,7 +480,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
     const ownerId = streamOwnerIdRef.current;
     if (ownerId) {
-      releaseAgentStreamOwner(ownerId);
+      void releaseAgentStreamOwner(ownerId);
     }
 
     logConnectEvent('runtime-disconnected-cleanup', {
@@ -484,7 +492,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
     lastConnectedThreadRef.current = null;
     messagesSnapshotRef.current = false;
-    void cleanupAgentConnection(agent);
   }, [agent, runtimeStatus, agentId, getAgentDebugId, logConnectEvent]);
 
   useEffect(() => {
@@ -534,7 +541,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         threadId,
         agent: getAgentDebugId(agentRef.current),
       });
-      releaseAgentStreamOwner(ownerId);
+      void releaseAgentStreamOwner(ownerId);
     };
   }, [
     threadId,

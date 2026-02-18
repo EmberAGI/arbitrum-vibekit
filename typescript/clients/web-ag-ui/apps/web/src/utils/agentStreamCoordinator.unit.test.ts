@@ -33,7 +33,7 @@ describe('agentStreamCoordinator', () => {
     __resetAgentStreamCoordinatorForTests();
   });
 
-  it('releases the active owner without triggering disconnect', async () => {
+  it('releases the active owner after disconnect cleanup', async () => {
     __resetAgentStreamCoordinatorForTests();
 
     const ownerA = 'owner-a';
@@ -43,11 +43,48 @@ describe('agentStreamCoordinator', () => {
     await acquireAgentStreamOwner(ownerA);
     expect(getActiveAgentStreamOwner()).toBe(ownerA);
 
-    releaseAgentStreamOwner(ownerA);
+    await releaseAgentStreamOwner(ownerA);
     expect(getActiveAgentStreamOwner()).toBeNull();
-    expect(disconnectA).not.toHaveBeenCalled();
+    expect(disconnectA).toHaveBeenCalledTimes(1);
 
-    unregisterAgentStreamOwner(ownerA);
+    await unregisterAgentStreamOwner(ownerA);
+    __resetAgentStreamCoordinatorForTests();
+  });
+
+  it('does not hand off ownership until active-owner disconnect settles', async () => {
+    __resetAgentStreamCoordinatorForTests();
+
+    const ownerA = 'owner-a';
+    const ownerB = 'owner-b';
+    let resolveDisconnectA: (() => void) | null = null;
+    const disconnectA = vi.fn().mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDisconnectA = resolve;
+        }),
+    );
+    const disconnectB = vi.fn().mockResolvedValue(undefined);
+
+    registerAgentStreamOwner(ownerA, disconnectA);
+    registerAgentStreamOwner(ownerB, disconnectB);
+
+    await acquireAgentStreamOwner(ownerA);
+    expect(getActiveAgentStreamOwner()).toBe(ownerA);
+
+    void releaseAgentStreamOwner(ownerA);
+    const acquireOwnerBPromise = acquireAgentStreamOwner(ownerB);
+
+    await Promise.resolve();
+    expect(disconnectA).toHaveBeenCalledTimes(1);
+    expect(getActiveAgentStreamOwner()).toBe(ownerA);
+
+    resolveDisconnectA?.();
+    await acquireOwnerBPromise;
+    expect(getActiveAgentStreamOwner()).toBe(ownerB);
+
+    await releaseAgentStreamOwner(ownerB);
+    await unregisterAgentStreamOwner(ownerA);
+    await unregisterAgentStreamOwner(ownerB);
     __resetAgentStreamCoordinatorForTests();
   });
 });
