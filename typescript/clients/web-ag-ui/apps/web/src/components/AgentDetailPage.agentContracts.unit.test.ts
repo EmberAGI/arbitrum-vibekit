@@ -245,6 +245,8 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     });
 
     expect(html).toContain('Cycle executed successfully.');
+    expect(html).toContain('text-white latest-activity-indicator');
+    expect(html).not.toContain('#93c5fd');
   });
 
   it.each(AGENTS)('keeps latest activity plaintext visible during onboarding for $name', ({ id, name }) => {

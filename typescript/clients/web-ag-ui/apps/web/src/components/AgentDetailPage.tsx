@@ -710,7 +710,7 @@ export function AgentDetailPage({
 
                   {isHired && (
                     <div className="mt-3 text-center text-[11px] font-mono">
-                      <span className="inline-block text-transparent bg-clip-text latest-activity-gradient bg-[linear-gradient(90deg,#93c5fd_0%,#f59e0b_50%,#f97316_100%)]">
+                      <span className="inline-block text-white latest-activity-indicator">
                         {latestActivityLine}
                       </span>
                     </div>

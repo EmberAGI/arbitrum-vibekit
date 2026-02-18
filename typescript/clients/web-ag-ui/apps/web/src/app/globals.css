@@ -138,12 +138,12 @@ html {
   }
 }
 
-@keyframes latestActivityGradient {
+@keyframes latestActivitySweep {
   0% {
-    background-position: 0% 50%;
+    background-position: -120% 50%;
   }
   100% {
-    background-position: 200% 50%;
+    background-position: 120% 50%;
   }
 }
 
@@ -155,9 +155,22 @@ html {
   animation: fadeInSimple 0.35s ease-out forwards;
 }
 
-.latest-activity-gradient {
-  background-size: 200% 100%;
-  animation: latestActivityGradient 2.8s linear infinite;
+.latest-activity-indicator {
+  color: #ffffff;
+  background-image: linear-gradient(
+    90deg,
+    #ffffff 0%,
+    #ffffff 44%,
+    var(--ember-bg) 50%,
+    #ffffff 56%,
+    #ffffff 100%
+  );
+  background-size: 220% 100%;
+  background-position: -120% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: latestActivitySweep 2.8s linear infinite;
 }
 
 /* Staggered animation delays */
