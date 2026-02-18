@@ -1,4 +1,5 @@
 import type { AgentSubscriber } from '@ag-ui/client';
+import { v7 as uuidv7 } from 'uuid';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import {
   projectAgentListUpdateFromState,
@@ -10,9 +11,16 @@ type RuntimeSubscription = {
   unsubscribe: () => void;
 };
 
+type CommandMessage = {
+  id: string;
+  role: 'user';
+  content: string;
+};
+
 export type AgentListPollingRuntimeAgent = {
   subscribe: (subscriber: AgentSubscriber) => RuntimeSubscription;
-  connectAgent: () => Promise<unknown>;
+  addMessage: (message: CommandMessage) => void;
+  runAgent: () => Promise<unknown>;
   detachActiveRun?: () => Promise<void> | void;
 };
 
@@ -114,7 +122,17 @@ export async function pollAgentListUpdateViaAgUi(params: {
     timeoutHandle = setTimeout(() => settle(null), params.timeoutMs);
   });
 
-  void runtimeAgent.connectAgent().catch(() => settle(null));
+  try {
+    runtimeAgent.addMessage({
+      id: uuidv7(),
+      role: 'user',
+      content: JSON.stringify({ command: 'sync' }),
+    });
+  } catch {
+    settle(null);
+  }
+
+  void runtimeAgent.runAgent().catch(() => settle(null));
 
   const result = await resultPromise;
   await cleanupAgentConnection(runtimeAgent);

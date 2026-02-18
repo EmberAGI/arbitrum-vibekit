@@ -21,7 +21,7 @@ Current code references that motivate this:
 ## 2. Architectural principles (target)
 
 1. AG-UI is the only web-to-agent protocol boundary.
-2. One long-lived stream only while an agent detail page is active; no hidden background persistent streams.
+2. One long-lived `connect` stream only while an agent detail page is active; no hidden background persistent streams.
 3. List/status updates are bounded polling and protocol-compliant.
 4. All agents publish one versioned `ThreadView` contract.
 5. Agent command and task transitions are governed by a shared state machine library, not per-agent drift.
@@ -99,7 +99,8 @@ Explicit non-goal container:
   - Enforces a hard cap of active streams (target: `<= 1` long-lived detail stream).
 
 - `AgentStatusPoller` (refactored list polling):
-  - Every 15s, performs short-lived AG-UI status sync for agents whose detail page is not currently active.
+  - Every 15s, performs one-shot AG-UI `run` status sync for agents whose detail page is not currently active.
+  - Poll runs are bounded lifecycle invocations (`run` start -> snapshot/events -> terminal), not persistent `connect` loops.
   - Uses protocol-compliant calls only; no direct thread endpoints.
   - Writes normalized status to shared projection store.
 
@@ -202,9 +203,9 @@ sequenceDiagram
   participant Agent
 
   loop every 15s
-    Poller->>Runtime: bounded AG-UI sync call per non-active-detail agent
-    Runtime->>Agent: protocol-compliant fetch/stream attach
-    Agent-->>Runtime: latest projection events
+    Poller->>Runtime: bounded AG-UI run(agentId, threadId, status/sync)
+    Runtime->>Agent: execute one-shot run
+    Agent-->>Runtime: projection events + terminal
     Runtime-->>Poller: reduced status payload
   end
 ```
@@ -245,20 +246,21 @@ sequenceDiagram
 
 ## 8. Operational invariants
 
-1. Long-lived detail streams: maximum 1 while an agent detail page is active.
+1. Long-lived detail streams: maximum 1 per web client runtime instance (for example, per browser tab) while an agent detail page is active.
 2. Sidebar polling cadence: default 15s, bounded concurrency.
-3. No direct web calls to `/threads`, `/runs`, or `/state`.
-4. Client-to-agent state mutation is written through AG-UI `run` input; `connect` is attach/replay only.
-5. Per-agent authority is single-owner at a time:
+3. Sidebar polling execution path: one-shot AG-UI `run` only; polling must not use persistent `connect`.
+4. No direct web calls to `/threads`, `/runs`, or `/state`.
+5. Client-to-agent state mutation is written through AG-UI `run` input; `connect` is attach/replay only.
+6. Per-agent authority is single-owner at a time:
    - active detail-page agent -> `connect`,
-   - non-active-detail agents -> polling snapshots,
+   - non-active-detail agents -> polling snapshots projected from one-shot poll `run`,
    - fallback without either -> active `run` stream for that command lifecycle.
-6. Local run-in-flight gating is advisory; server busy responses are authoritative for global concurrency.
-7. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
-8. `fire` is the only preemptive stop command: issue `stop`, detach local stream, wait terminal/timeout, then dispatch `fire`.
-9. Terminal run handling is idempotent: client converges on one terminal outcome even if terminal callbacks are duplicated.
-10. On detail-page route leave/unmount, stream teardown is deterministic.
-11. Invariant details and implementation guidance are specified in `docs/ag-ui-client-runtime-invariants.md`.
+7. Local run-in-flight gating is advisory; server busy responses are authoritative for global concurrency.
+8. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
+9. `fire` is the only preemptive stop command: issue `stop`, detach local stream, wait terminal/timeout, then dispatch `fire`.
+10. Terminal run handling is idempotent: client converges on one terminal outcome even if terminal callbacks are duplicated.
+11. On detail-page route leave/unmount, stream teardown is deterministic.
+12. Invariant details and implementation guidance are specified in `docs/ag-ui-client-runtime-invariants.md`.
 
 ## 9. Migration plan (from current state)
 
@@ -276,7 +278,7 @@ sequenceDiagram
 
 ### Slice 3: Sidebar projection refactor
 
-- Replace `AgentListContext` direct sync with bounded AG-UI status polling.
+- Replace `AgentListContext` direct sync with bounded AG-UI one-shot `run` status polling.
 - Share reducer/state model between sidebar and detail.
 
 ### Slice 4: Metrics UI decomposition
@@ -319,7 +321,7 @@ Completed:
 - `/api/agents/abort-active-run` is removed.
 - Web no longer calls LangGraph `/threads`/`/runs` endpoints directly.
 - Detail connection ownership is enforced via `AgentStreamCoordinator`.
-- Sidebar polling now enforces explicit bounded concurrency (`NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT`).
+- Sidebar polling now enforces explicit bounded concurrency (`NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT`) and uses one-shot AG-UI `run` polling (no persistent poll `connect` loop).
 - Shared `TaskState`/`AgentCommand` vocabulary is exported from `agent-workflow-core` and adopted by `apps/agent*` workflow contexts.
 - Shared lifecycle reducers now live in `agent-workflow-core` and are adopted across `apps/agent*`:
   - `resolveSummaryTaskStatus` (summary terminal-state policy),
