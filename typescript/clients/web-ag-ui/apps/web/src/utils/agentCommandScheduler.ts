@@ -16,6 +16,10 @@ export interface AgentCommandScheduler<TAgent extends SchedulableAgent> {
     command: string,
     options?: { allowSyncCoalesce?: boolean; isReplayAttempt?: boolean },
   ): boolean;
+  dispatchCustom(params: {
+    command: string;
+    run: (agent: TAgent) => Promise<unknown>;
+  }): boolean;
   handleRunTerminal(): void;
   reset(): void;
   dispose(): void;
@@ -32,6 +36,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
   isAgentRunning: (agent: TAgent) => boolean;
   onSyncingChange: (isSyncing: boolean) => void;
   onCommandError?: (command: string, error: unknown) => void;
+  onCommandBusy?: (command: string, error: unknown) => void;
   syncReplayDelayMs?: number;
   syncBusyMaxRetries?: number;
   setTimer?: (callback: () => void, ms: number) => TimerHandle;
@@ -57,10 +62,13 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
     replayTimer = null;
   };
 
-  const dispatch = (
-    command: string,
-    options?: { allowSyncCoalesce?: boolean; isReplayAttempt?: boolean },
-  ): boolean => {
+  const dispatchRun = (paramsForRun: {
+    command: string;
+    run: (agent: TAgent) => Promise<unknown>;
+    options?: { allowSyncCoalesce?: boolean; isReplayAttempt?: boolean };
+    beforeRun?: (agent: TAgent) => void;
+  }): boolean => {
+    const { command, run, options, beforeRun } = paramsForRun;
     const agent = params.getAgent();
     const threadId = params.getThreadId();
     if (!agent || !threadId) {
@@ -88,13 +96,9 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
       refreshSyncing();
     }
 
-    agent.addMessage({
-      id: params.createId(),
-      role: 'user',
-      content: JSON.stringify({ command }),
-    });
+    beforeRun?.(agent);
 
-    void Promise.resolve(params.runAgent(agent)).catch((error) => {
+    void Promise.resolve(run(agent)).catch((error) => {
       params.setRunInFlight(false);
 
       if (command === 'sync') {
@@ -120,10 +124,44 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
         refreshSyncing();
       }
 
+      const busy = params.isBusyRunError(error) || params.isAgentRunning(agent);
+      if (busy) {
+        params.onCommandBusy?.(command, error);
+        return;
+      }
+
       params.onCommandError?.(command, error);
     });
 
     return true;
+  };
+
+  const dispatch = (
+    command: string,
+    options?: { allowSyncCoalesce?: boolean; isReplayAttempt?: boolean },
+  ): boolean => {
+    return dispatchRun({
+      command,
+      options,
+      beforeRun: (agent) => {
+        agent.addMessage({
+          id: params.createId(),
+          role: 'user',
+          content: JSON.stringify({ command }),
+        });
+      },
+      run: params.runAgent,
+    });
+  };
+
+  const dispatchCustom = (customRunParams: {
+    command: string;
+    run: (agent: TAgent) => Promise<unknown>;
+  }): boolean => {
+    return dispatchRun({
+      command: customRunParams.command,
+      run: customRunParams.run,
+    });
   };
 
   const replayPendingSync = () => {
@@ -155,6 +193,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
 
   return {
     dispatch,
+    dispatchCustom,
     handleRunTerminal,
     reset,
     dispose,

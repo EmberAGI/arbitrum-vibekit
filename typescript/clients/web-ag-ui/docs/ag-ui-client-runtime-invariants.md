@@ -20,6 +20,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
 - `Run stream`: AG-UI stream created by `run` command execution.
 - `Busy`: server rejects a run because an active run already exists (e.g., 409/422 or equivalent busy message).
 - `Authority`: source of truth used to update client projection state.
+- `Client mutation intent`: web-side state/message change to be applied on agent via the next AG-UI `run` input.
 
 ## 3. Invariants
 
@@ -27,35 +28,40 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - Web communicates with agents only through AG-UI semantics (`connect`, `run`, `stop`) via `/api/copilotkit`.
    - No direct web calls to LangGraph `/threads`, `/runs`, or `/state`.
 
-2. Stream ownership:
+2. State write path:
+   - Client-to-agent state mutation must flow through AG-UI `run` input (`RunAgentInput.state`).
+   - `connect` is attach/replay for projection continuity and is not a mutation write channel.
+   - Practical client pattern: update local agent state/message model, then dispatch `run`.
+
+3. Stream ownership:
    - At most one long-lived focused `connect` stream per `agentId+threadId` in a browser focus context.
    - Focus loss/navigation must deterministically detach the focused stream.
 
-3. State authority:
+4. State authority:
    - If focused `connect` exists, it is authoritative for continuous state projection.
    - If no focused `connect` exists, the active `run` stream is temporary authority for that command lifecycle.
    - All events still flow through one reducer/projection path (no dual writers).
 
-4. Local gating is advisory:
+5. Local gating is advisory:
    - Client-side in-flight flags prevent accidental double-submit from one UI instance.
    - They are not global truth because agent runs may start externally.
 
-5. Busy response is authoritative:
+6. Busy response is authoritative:
    - Server busy is normalized to a deterministic concurrency outcome (not an unknown failure).
    - Client transitions to observe/retry policy instead of dead-ending.
 
-6. `sync` command policy (coalescing intent):
+7. `sync` command policy (coalescing intent):
    - `sync` represents “latest desired mutation/state refresh intent,” not an unbounded queue item.
    - Keep a single pending `sync` intent per `agentId+threadId` (last-write-wins).
    - If current run is active, defer dispatch; replay once terminal state is observed.
    - If replay hits busy, keep pending and retry with bounded policy.
 
-7. `fire` command policy (preemptive):
+8. `fire` command policy (preemptive):
    - `fire` is an escape hatch and must preempt current run attempts.
    - Client attempts abort/detach first, then dispatches `fire`.
    - `fire` may use bounded retry for short server finalization windows.
 
-8. Confirmation semantics:
+9. Confirmation semantics:
    - “Saved/synced” UX should complete only when AG-UI state confirms application (e.g., via task state, version, or acknowledged projection).
    - Optimistic UI is allowed but must reconcile against streamed state.
 

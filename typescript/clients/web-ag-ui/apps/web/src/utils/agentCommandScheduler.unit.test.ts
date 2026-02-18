@@ -14,6 +14,7 @@ describe('agentCommandScheduler', () => {
   let runAgent: ReturnType<typeof vi.fn>;
   let onSyncingChange: ReturnType<typeof vi.fn>;
   let onCommandError: ReturnType<typeof vi.fn>;
+  let onCommandBusy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     runInFlight = false;
@@ -25,6 +26,7 @@ describe('agentCommandScheduler', () => {
     runAgent = vi.fn(async () => undefined);
     onSyncingChange = vi.fn();
     onCommandError = vi.fn();
+    onCommandBusy = vi.fn();
   });
 
   const createScheduler = (options?: {
@@ -45,6 +47,7 @@ describe('agentCommandScheduler', () => {
       isAgentRunning: (value) => value.isRunning === true,
       onSyncingChange,
       onCommandError,
+      onCommandBusy,
       syncReplayDelayMs: options?.syncReplayDelayMs ?? 25,
       syncBusyMaxRetries: options?.syncBusyMaxRetries ?? 2,
     });
@@ -97,7 +100,9 @@ describe('agentCommandScheduler', () => {
       await vi.advanceTimersByTimeAsync(20);
 
       expect(runAgent).toHaveBeenCalledTimes(2);
-      expect(onCommandError).toHaveBeenCalledTimes(1);
+      expect(onCommandBusy).toHaveBeenCalledTimes(1);
+      expect(onCommandBusy).toHaveBeenCalledWith('sync', expect.any(Error));
+      expect(onCommandError).not.toHaveBeenCalled();
       expect(onSyncingChange).toHaveBeenLastCalledWith(false);
     } finally {
       scheduler.dispose();
@@ -113,6 +118,39 @@ describe('agentCommandScheduler', () => {
 
     expect(accepted).toBe(false);
     expect(runAgent).not.toHaveBeenCalled();
+    expect(agent?.addMessage).not.toHaveBeenCalled();
+
+    scheduler.dispose();
+  });
+
+  it('normalizes busy failures for non-sync commands via onCommandBusy', async () => {
+    runAgent = vi.fn(async () => {
+      throw new Error('run already active');
+    });
+    const scheduler = createScheduler();
+
+    scheduler.dispatch('hire');
+    await Promise.resolve();
+
+    expect(onCommandBusy).toHaveBeenCalledTimes(1);
+    expect(onCommandBusy).toHaveBeenCalledWith('hire', expect.any(Error));
+    expect(onCommandError).not.toHaveBeenCalled();
+
+    scheduler.dispose();
+  });
+
+  it('dispatches custom runs through the same scheduler gating path', async () => {
+    const scheduler = createScheduler();
+    const runCustom = vi.fn(async () => undefined);
+
+    const accepted = scheduler.dispatchCustom({
+      command: 'resume',
+      run: runCustom,
+    });
+    await Promise.resolve();
+
+    expect(accepted).toBe(true);
+    expect(runCustom).toHaveBeenCalledTimes(1);
     expect(agent?.addMessage).not.toHaveBeenCalled();
 
     scheduler.dispose();

@@ -134,6 +134,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         events={[]}
         settings={agent.settings}
         onSettingsChange={() => undefined}
+        onSettingsSave={() => undefined}
       />
     );
   }
@@ -194,6 +195,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       events={agent.events}
       settings={agent.settings}
       onSettingsChange={agent.updateSettings}
+      onSettingsSave={agent.saveSettings}
     />
   );
 }
