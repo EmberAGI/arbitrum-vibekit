@@ -534,7 +534,7 @@ function IconGroup({
 
   return (
     <div className="min-w-0">
-      <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{title}</div>
+      <div className="text-[11px] font-mono text-gray-500 tracking-wide mb-1">{title}</div>
       <div className="flex items-center min-h-6">
         <div className="flex items-center -space-x-2">
           {displayItems.map((item) =>
@@ -584,7 +584,7 @@ function FeaturedStat({
 }) {
   return (
     <div>
-      <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">{label}</div>
+      <div className="text-[10px] font-mono text-gray-500 tracking-wide mb-0.5">{label}</div>
       {!isLoaded ? (
         <Skeleton className="h-5 w-14" />
       ) : value !== null ? (

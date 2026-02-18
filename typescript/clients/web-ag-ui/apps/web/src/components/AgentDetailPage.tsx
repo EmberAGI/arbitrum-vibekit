@@ -609,7 +609,7 @@ export function AgentDetailPage({
     );
 
     return (
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="agent-detail-page flex-1 overflow-y-auto p-8">
         <div className="max-w-[1200px] mx-auto">
           {popups}
           {/* Breadcrumb */}
@@ -719,7 +719,7 @@ export function AgentDetailPage({
                   {!isSummaryCollapsed && (
                     <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                        <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
                           Agent Income
                         </div>
                         <LoadingValue
@@ -730,7 +730,7 @@ export function AgentDetailPage({
                         />
                       </div>
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                        <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
                           AUM
                         </div>
                         <LoadingValue
@@ -741,7 +741,7 @@ export function AgentDetailPage({
                         />
                       </div>
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                        <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
                           Total Users
                         </div>
                         <LoadingValue
@@ -752,7 +752,7 @@ export function AgentDetailPage({
                         />
                       </div>
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                        <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
                           APY
                         </div>
                         <LoadingValue
@@ -845,7 +845,7 @@ export function AgentDetailPage({
                     <div className="mt-auto">
                       <div className="grid grid-cols-2 gap-4 pt-6 mt-6 border-t border-white/10">
                         <div className="pr-4">
-                          <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
                             Your Assets
                           </div>
                           <LoadingValue
@@ -856,7 +856,7 @@ export function AgentDetailPage({
                           />
                         </div>
                         <div className="pl-4 border-l border-white/10">
-                          <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
                             Your PnL
                           </div>
                           <LoadingValue
@@ -907,7 +907,7 @@ export function AgentDetailPage({
 
   // Render pre-hire state layout (original)
   return (
-    <div className="flex-1 overflow-y-auto p-8">
+    <div className="agent-detail-page flex-1 overflow-y-auto p-8">
       <div className="max-w-[1200px] mx-auto">
         {popups}
         {/* Breadcrumb */}
@@ -955,7 +955,7 @@ export function AgentDetailPage({
 
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
                 <div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                  <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
                     Agent Income
                   </div>
                   {!hasLoadedView ? (
@@ -967,7 +967,7 @@ export function AgentDetailPage({
                   )}
                 </div>
                 <div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                  <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
                     AUM
                   </div>
                   {!hasLoadedView ? (
@@ -979,7 +979,7 @@ export function AgentDetailPage({
                   )}
                 </div>
                 <div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                  <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
                     Total Users
                   </div>
                   {!hasLoadedView ? (
@@ -991,7 +991,7 @@ export function AgentDetailPage({
                   )}
                 </div>
                 <div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                  <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
                     APY
                   </div>
                   {!hasLoadedView ? (
@@ -1242,6 +1242,14 @@ function TransactionHistoryTab({
   protocolIconUri,
   protocolLabel,
 }: TransactionHistoryTabProps) {
+  const formatEventTypeLabel = (type: string) =>
+    type
+      .split('-')
+      .map((segment) =>
+        segment.length > 0 ? `${segment.charAt(0).toUpperCase()}${segment.slice(1)}` : segment,
+      )
+      .join(' ');
+
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
@@ -1260,7 +1268,7 @@ function TransactionHistoryTab({
         <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs text-gray-500 uppercase tracking-wide">Current Task</span>
+              <span className="text-xs text-gray-500 tracking-wide">Current Task</span>
               <p className="text-white font-medium">{taskId.slice(0, 12)}...</p>
             </div>
             <span
@@ -1280,7 +1288,7 @@ function TransactionHistoryTab({
 
       {telemetry.length > 0 && (
         <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Latest Activity</div>
+          <div className="text-xs text-gray-500 tracking-wide mb-2">Latest Activity</div>
           <div className="space-y-2">
             {telemetry.slice(-3).reverse().map((t, i) => (
               <div
@@ -1315,7 +1323,9 @@ function TransactionHistoryTab({
                   }`}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
+                  <div className="text-xs text-gray-500 tracking-wide">
+                    {formatEventTypeLabel(event.type)}
+                  </div>
                   <div className="text-sm text-white mt-1">
                     {event.type === 'status' && event.message}
                     {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
@@ -1335,7 +1345,7 @@ function TransactionHistoryTab({
       <div className="space-y-4">
         {activitySummary}
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8">
-          <div className="text-[12px] uppercase tracking-[0.14em] text-white/60 mb-2">
+          <div className="text-[12px] tracking-[0.14em] text-white/60 mb-2">
             Transaction History
           </div>
           <div className="text-white text-lg font-semibold mb-1">No transactions yet</div>
@@ -1353,7 +1363,7 @@ function TransactionHistoryTab({
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
         <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-6">
           <div>
-            <div className="text-[12px] uppercase tracking-[0.14em] text-white/60">
+            <div className="text-[12px] tracking-[0.14em] text-white/60">
               Transaction History
             </div>
             <div className="text-sm text-gray-400 mt-1">
@@ -1365,7 +1375,7 @@ function TransactionHistoryTab({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px]">
             <thead className="bg-white/[0.02]">
-              <tr className="text-[11px] uppercase tracking-[0.14em] text-white/60 border-b border-white/10">
+              <tr className="text-[11px] tracking-[0.14em] text-white/60 border-b border-white/10">
                 <th className="text-left font-medium px-5 py-3">Transaction</th>
                 <th className="text-left font-medium px-5 py-3">Date &amp; time</th>
                 <th className="text-left font-medium px-5 py-3">Protocol</th>
@@ -2523,7 +2533,7 @@ interface StatBoxProps {
 function StatBox({ label, value, valueColor = 'text-white', isLoaded }: StatBoxProps) {
   return (
     <div>
-      <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</div>
+      <div className="text-xs text-gray-500 tracking-wide mb-1">{label}</div>
       {!isLoaded ? (
         <Skeleton className="h-6 w-20" />
       ) : value !== null ? (
@@ -2545,7 +2555,7 @@ function TagColumn({ title, items, getIconUri }: TagColumnProps) {
   if (items.length === 0) {
     return (
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">{title}</div>
+        <div className="text-xs text-gray-500 tracking-wide mb-2">{title}</div>
         <div className="text-gray-600 text-sm">—</div>
       </div>
     );
@@ -2553,7 +2563,7 @@ function TagColumn({ title, items, getIconUri }: TagColumnProps) {
 
   return (
     <div>
-      <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">{title}</div>
+      <div className="text-xs text-gray-500 tracking-wide mb-2">{title}</div>
       <div className="space-y-1.5">
         {items.slice(0, 3).map((item) => {
           const iconUri = getIconUri(item);
@@ -2613,7 +2623,7 @@ function PointsColumn({ metrics }: PointsColumnProps) {
   if (!hasAnyMetric) {
     return (
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Points</div>
+        <div className="text-xs text-gray-500 tracking-wide mb-2">Points</div>
         <div className="text-gray-600 text-sm">—</div>
       </div>
     );
@@ -2621,7 +2631,7 @@ function PointsColumn({ metrics }: PointsColumnProps) {
 
   return (
     <div>
-      <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Points</div>
+      <div className="text-xs text-gray-500 tracking-wide mb-2">Points</div>
       <div className="space-y-1.5">
         {metrics.iteration !== undefined && (
           <div className="flex items-center gap-2">
@@ -2795,7 +2805,7 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
         <h3 className="text-lg font-semibold text-white mb-4">Your Performance</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">APY</div>
             <div className="text-2xl font-bold text-teal-400">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -2806,7 +2816,7 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">AUM</div>
             <div className="text-2xl font-bold text-white">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -2817,7 +2827,7 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Earned Income</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Earned Income</div>
             <div className="text-2xl font-bold text-white">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -2837,11 +2847,11 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
         <h3 className="text-lg font-semibold text-white mb-4">Your Position</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Pool</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Pool</div>
             <div className="text-white font-medium">{poolName}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Position Size</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -2852,13 +2862,13 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Opened</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Opened</div>
             <div className="text-white font-medium">
               {formatDuration(latestSnapshot?.positionOpenedAt, latestSnapshot?.timestamp)}
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Fees (USD)</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Fees (USD)</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -2870,7 +2880,7 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Token Amounts</div>
+          <div className="text-xs text-gray-500 tracking-wide mb-2">Token Amounts</div>
           {positionTokens.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {positionTokens.map((token) => (
@@ -2920,15 +2930,15 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
           <h3 className="text-lg font-semibold text-white mb-4">Latest Cycle</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
+              <div className="text-xs text-gray-500 tracking-wide mb-1">Cycle</div>
               <div className="text-white font-medium">{fullMetrics.latestCycle.cycle}</div>
             </div>
             <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
+              <div className="text-xs text-gray-500 tracking-wide mb-1">Action</div>
               <div className="text-white font-medium">{fullMetrics.latestCycle.action}</div>
             </div>
             <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Mid Price</div>
+              <div className="text-xs text-gray-500 tracking-wide mb-1">Mid Price</div>
               <div className="text-white font-medium">
                 <LoadingValue
                   isLoaded={hasLoadedView}
@@ -2939,7 +2949,7 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
               </div>
             </div>
             <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Timestamp</div>
+              <div className="text-xs text-gray-500 tracking-wide mb-1">Timestamp</div>
               <div className="text-white font-medium">
                 {formatDate(fullMetrics.latestCycle.timestamp)}
               </div>
@@ -2947,7 +2957,7 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
           </div>
           {fullMetrics.latestCycle.reason && (
             <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reason</div>
+              <div className="text-xs text-gray-500 tracking-wide mb-1">Reason</div>
               <div className="text-gray-300 text-sm">{fullMetrics.latestCycle.reason}</div>
             </div>
           )}
@@ -3065,7 +3075,7 @@ function GmxAlloraMetricsTab({
         <h3 className="text-lg font-semibold text-white mb-4">Strategy Performance</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">APY</div>
             <div className="text-2xl font-bold text-teal-400">
               {metrics.apy !== undefined
                 ? `${metrics.apy.toFixed(1)}%`
@@ -3075,7 +3085,7 @@ function GmxAlloraMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">AUM</div>
             <div className="text-2xl font-bold text-white">
               {metrics.aumUsd !== undefined
                 ? formatUsd(metrics.aumUsd)
@@ -3085,13 +3095,13 @@ function GmxAlloraMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Agent Income</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Agent Income</div>
             <div className="text-2xl font-bold text-white">
               {profile.agentIncome !== undefined ? formatUsd(profile.agentIncome) : '—'}
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PnL</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">PnL</div>
             <div className="text-2xl font-bold text-white">
               {metrics.lifetimePnlUsd !== undefined ? formatUsd(metrics.lifetimePnlUsd) : '—'}
             </div>
@@ -3116,19 +3126,19 @@ function GmxAlloraMetricsTab({
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Action</div>
             <div className="text-white font-medium">{latestCycle?.action ?? '—'}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Market</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Market</div>
             <div className="text-white font-medium">{marketLabel}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Side</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Position Side</div>
             <div className="text-white font-medium">{sideLabel}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Executed At</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Executed At</div>
             <div className="text-white font-medium">
               {formatDate(latestTransaction?.timestamp ?? latestCycle?.timestamp)}
             </div>
@@ -3140,7 +3150,7 @@ function GmxAlloraMetricsTab({
           </div>
         ) : null}
         <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Transaction Hashes</div>
+          <div className="text-xs text-gray-500 tracking-wide mb-2">Transaction Hashes</div>
           {executionTxHashes.length > 0 ? (
             <div className="space-y-2">
               {executionTxHashes.map((txHash) => (
@@ -3165,21 +3175,21 @@ function GmxAlloraMetricsTab({
         <h3 className="text-lg font-semibold text-white mb-4">Perp Position + Allora Signal</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Position Size</div>
             <div className="text-white font-medium">{formatUsd(latestSnapshot?.totalUsd)}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Leverage</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Leverage</div>
             <div className="text-white font-medium">
               {displayedLeverage !== undefined ? `${displayedLeverage.toFixed(1)}x` : '—'}
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Notional</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Notional</div>
             <div className="text-white font-medium">{formatUsd(displayedNotionalUsd)}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Signal Confidence</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Signal Confidence</div>
             <div className="text-white font-medium">
               {latestPrediction?.confidence !== undefined
                 ? `${(latestPrediction.confidence * 100).toFixed(1)}%`
@@ -3189,19 +3199,19 @@ function GmxAlloraMetricsTab({
         </div>
         <div className="mt-4 pt-4 border-t border-[#2a2a2a] grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Cycle</div>
             <div className="text-white font-medium">{metrics.iteration ?? '—'}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycles Since Trade</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Cycles Since Trade</div>
             <div className="text-white font-medium">{metrics.cyclesSinceRebalance ?? '—'}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Stale Signal Cycles</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Stale Signal Cycles</div>
             <div className="text-white font-medium">{metrics.staleCycles ?? '—'}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Decision Threshold</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Decision Threshold</div>
             <div className="text-white font-medium">
               {latestDecisionMetrics?.decisionThreshold !== undefined
                 ? `${(latestDecisionMetrics.decisionThreshold * 100).toFixed(1)}%`
@@ -3286,15 +3296,15 @@ function PendleMetricsTab({
         <h3 className="text-lg font-semibold text-white mb-4">Strategy</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Target YT</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Target YT</div>
             <div className="text-white font-medium">{strategy?.ytSymbol ?? '—'}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Underlying</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Underlying</div>
             <div className="text-white font-medium">{strategy?.underlyingSymbol ?? '—'}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Current APY</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Current APY</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -3305,7 +3315,7 @@ function PendleMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Contribution</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Contribution</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -3322,11 +3332,11 @@ function PendleMetricsTab({
         </div>
         <div className="mt-4 pt-4 border-t border-[#2a2a2a] grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Maturity</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Maturity</div>
             <div className="text-white font-medium">{strategy?.maturity ?? '—'}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Best APY</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Best APY</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -3337,7 +3347,7 @@ function PendleMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Delta</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Delta</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -3348,7 +3358,7 @@ function PendleMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Funding Token</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Funding Token</div>
             <div className="text-white font-medium">
               {strategy?.fundingTokenAddress ? strategy.fundingTokenAddress.slice(0, 10) + '…' : '—'}
             </div>
@@ -3357,11 +3367,11 @@ function PendleMetricsTab({
 
         {apyDetails.length > 0 && (
           <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">APY Details</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-2">APY Details</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {apyDetails.map((entry) => (
                   <div key={entry.label}>
-                    <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{entry.label}</div>
+                    <div className="text-[11px] text-gray-500 tracking-wide mb-1">{entry.label}</div>
                     <div className="text-white font-medium">
                       <LoadingValue
                         isLoaded={hasLoadedView}
@@ -3381,7 +3391,7 @@ function PendleMetricsTab({
         <h3 className="text-lg font-semibold text-white mb-4">Position</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PT</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">PT</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -3402,7 +3412,7 @@ function PendleMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">YT</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">YT</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -3423,7 +3433,7 @@ function PendleMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Implied Yield</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Implied Yield</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -3434,7 +3444,7 @@ function PendleMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Value</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Position Value</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -3445,7 +3455,7 @@ function PendleMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Net PnL</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">Net PnL</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -3465,7 +3475,7 @@ function PendleMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">APY</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -3476,7 +3486,7 @@ function PendleMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-xs text-gray-500 tracking-wide mb-1">AUM</div>
             <div className="text-white font-medium">
               <LoadingValue
                 isLoaded={hasLoadedView}
@@ -3488,7 +3498,7 @@ function PendleMetricsTab({
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Claimable Rewards</div>
+          <div className="text-xs text-gray-500 tracking-wide mb-2">Claimable Rewards</div>
           {rewardLines.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {rewardLines.map((reward) => (
@@ -3536,15 +3546,15 @@ function PendleMetricsTab({
           <h3 className="text-lg font-semibold text-white mb-4">Latest Cycle</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
+              <div className="text-xs text-gray-500 tracking-wide mb-1">Cycle</div>
               <div className="text-white font-medium">{latestCycle.cycle}</div>
             </div>
             <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
+              <div className="text-xs text-gray-500 tracking-wide mb-1">Action</div>
               <div className="text-white font-medium">{latestCycle.action}</div>
             </div>
             <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+              <div className="text-xs text-gray-500 tracking-wide mb-1">APY</div>
               <div className="text-white font-medium">
                 <LoadingValue
                   isLoaded={hasLoadedView}
@@ -3555,13 +3565,13 @@ function PendleMetricsTab({
               </div>
             </div>
             <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Timestamp</div>
+              <div className="text-xs text-gray-500 tracking-wide mb-1">Timestamp</div>
               <div className="text-white font-medium">{formatDate(latestCycle.timestamp)}</div>
             </div>
           </div>
           {latestCycle.reason && (
             <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reason</div>
+              <div className="text-xs text-gray-500 tracking-wide mb-1">Reason</div>
               <div className="text-gray-300 text-sm">{latestCycle.reason}</div>
             </div>
           )}
@@ -3584,7 +3594,7 @@ function MetricCard({ label, value, isLoaded, icon }: MetricCardProps) {
     <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
       <div className="flex items-center gap-2 mb-2">
         {icon}
-        <span className="text-xs text-gray-500 uppercase tracking-wide">{label}</span>
+        <span className="text-xs text-gray-500 tracking-wide">{label}</span>
       </div>
       <div className="text-xl font-semibold text-white">
         <LoadingValue

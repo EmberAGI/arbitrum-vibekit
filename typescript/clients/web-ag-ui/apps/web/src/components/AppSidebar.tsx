@@ -310,7 +310,7 @@ export function AppSidebar() {
           />
           <div className="flex items-center gap-2">
             <Image src="/ember-name.svg" alt="Ember" width={76} height={15} className="h-[15px] w-auto" />
-            <span className="text-[10px] font-medium text-[#A7A7B2] px-1.5 py-0.5 bg-[#15161b] border border-[#2A2B32] rounded-[5px]">
+            <span className="text-[10px] font-mono font-medium text-[#A7A7B2] px-1.5 py-0.5 bg-[#15161b] border border-[#2A2B32] rounded-[5px]">
               AI
             </span>
           </div>
@@ -321,7 +321,7 @@ export function AppSidebar() {
       <div className="flex-1 overflow-y-auto p-4">
         {/* Platform Section */}
         <div className="mb-6">
-          <div className="text-[11px] font-medium text-[#6F7280] uppercase tracking-[0.12em] px-2 mb-3">
+          <div className="text-[11px] font-mono font-medium text-[#6F7280] tracking-[0.12em] px-2 mb-3">
             Platform
           </div>
           <div className="space-y-1">
@@ -407,7 +407,7 @@ export function AppSidebar() {
 
         {/* Agent Activity Section */}
         <div>
-          <div className="text-[11px] font-medium text-[#6F7280] uppercase tracking-[0.12em] px-2 mb-3">
+          <div className="text-[11px] font-mono font-medium text-[#6F7280] tracking-[0.12em] px-2 mb-3">
             Agent Activity
           </div>
 
@@ -665,7 +665,7 @@ function ActivitySection({
           {icon}
           <span className={`text-sm ${!hasAgents ? 'text-[#666A77]' : 'text-[#C4C6D1]'}`}>{title}</span>
           <span
-            className={`text-[11px] px-2 py-0.5 rounded-full border ${
+            className={`text-[11px] font-mono px-2 py-0.5 rounded-full border ${
               hasAgents ? `${badgeColor} border-current/20` : 'bg-[#181920] text-[#666A77] border-[#2A2C35]'
             }`}
           >
