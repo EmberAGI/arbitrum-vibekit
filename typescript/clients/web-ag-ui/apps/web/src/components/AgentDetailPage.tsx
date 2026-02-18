@@ -334,6 +334,7 @@ export function AgentDetailPage({
       ) : null}
     </>
   );
+  const latestTelemetryItem = telemetry.length > 0 ? telemetry[telemetry.length - 1] : null;
 
   const displayChains = useMemo(() => {
     const out: string[] = [];
@@ -650,6 +651,15 @@ export function AgentDetailPage({
                       <Skeleton className="h-10 w-full rounded-[999px]" />
                     )}
                   </div>
+
+                  {isHired && latestTelemetryItem && (
+                    <div className="mt-3 text-center text-[11px] font-mono">
+                      <span className="inline-block text-transparent bg-clip-text latest-activity-gradient bg-[linear-gradient(90deg,#93c5fd_0%,#f59e0b_50%,#f97316_100%)]">
+                        Latest activity: Cycle {latestTelemetryItem.cycle} •{' '}
+                        {latestTelemetryItem.action}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
                     <div>
@@ -2008,15 +2018,8 @@ function AgentBlockersTab({
         </div>
       )}
 
-      {/* Set up agent section */}
-      <div>
-        <h2 className="text-xl font-semibold text-white mb-2">Set up agent</h2>
-        <p className="text-gray-400 text-sm mb-6">
-          Get this agent started working on your wallet in a few steps, delegate assets and set
-          your preferences.
-        </p>
-
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
+      {/* Setup form and steps */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
           {/* Form Area */}
           <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
             {showPendleSetupForm ? (
@@ -2422,7 +2425,6 @@ function AgentBlockersTab({
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
-      </div>
     </div>
   );
 }

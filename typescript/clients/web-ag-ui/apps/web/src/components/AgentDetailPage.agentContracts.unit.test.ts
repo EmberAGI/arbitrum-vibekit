@@ -140,6 +140,19 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Your PnL');
   });
 
+  it.each(AGENTS)('renders latest activity plaintext under CTA for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      telemetry: [{ cycle: 7, action: 'rebalance', timestamp: '2026-02-15T12:00:00.000Z' }],
+    });
+
+    expect(html).toContain('Latest activity:');
+    expect(html).toContain('Cycle 7');
+    expect(html).toContain('rebalance');
+  });
+
   it.each(AGENTS)('uses Activity + Settings and policies tabs for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,

@@ -618,7 +618,6 @@ describe('AgentDetailPage internals: blockers variants', () => {
         executionError: undefined,
         delegationsBypassActive: false,
         onboarding: undefined,
-        telemetry: [],
         settings: { amount: 100 },
         onSettingsChange: () => {},
       }),
@@ -626,6 +625,7 @@ describe('AgentDetailPage internals: blockers variants', () => {
 
     expect(html).toContain('Waiting for agent');
     expect(html).toContain('No active task. The agent may need to be started.');
-    expect(html).toContain('Set up agent');
+    expect(html).not.toContain('Set up agent');
+    expect(html).not.toContain('Get this agent started working on your wallet');
   });
 });
