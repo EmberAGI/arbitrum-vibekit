@@ -1,5 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
+import type { TaskState } from 'agent-workflow-core';
 
 import { fetchAlloraInference, type AlloraInference } from '../../clients/allora.js';
 import type { PerpetualPosition, TransactionPlan } from '../../clients/onchainActions.js';
@@ -35,7 +36,6 @@ import {
   type ClmmEvent,
   type GmxLatestSnapshot,
   type ClmmState,
-  type TaskState,
   type ClmmUpdate,
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';

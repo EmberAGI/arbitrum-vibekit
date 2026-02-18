@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AGENT_COMMANDS,
+  TASK_STATES,
   extractCommandFromMessages,
   isTaskActiveState,
   isTaskTerminalState,
@@ -29,5 +31,20 @@ describe('taskLifecycle', () => {
   it('returns null for unsupported or malformed commands', () => {
     expect(extractCommandFromMessages([{ content: '{"command":"oops"}' }])).toBeNull();
     expect(extractCommandFromMessages([{ content: '{not-json' }])).toBeNull();
+  });
+
+  it('exports canonical command and task-state vocabularies', () => {
+    expect(AGENT_COMMANDS).toEqual(['hire', 'fire', 'cycle', 'sync']);
+    expect(TASK_STATES).toEqual([
+      'submitted',
+      'working',
+      'input-required',
+      'completed',
+      'canceled',
+      'failed',
+      'rejected',
+      'auth-required',
+      'unknown',
+    ]);
   });
 });

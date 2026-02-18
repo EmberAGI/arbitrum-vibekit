@@ -1,7 +1,12 @@
 import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
 import { Annotation } from '@langchain/langgraph';
-import { isTaskActiveState, isTaskTerminalState } from 'agent-workflow-core';
+import {
+  isTaskActiveState,
+  isTaskTerminalState,
+  type AgentCommand,
+  type TaskState,
+} from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 
 import {
@@ -80,17 +85,6 @@ export type ClmmMetrics = {
   iteration: number;
   latestCycle?: RebalanceTelemetry;
 };
-
-export type TaskState =
-  | 'submitted'
-  | 'working'
-  | 'input-required'
-  | 'completed'
-  | 'canceled'
-  | 'failed'
-  | 'rejected'
-  | 'auth-required'
-  | 'unknown';
 
 export type TaskStatus = {
   state: TaskState;
@@ -183,7 +177,7 @@ export type OnboardingState = {
 };
 
 type ClmmViewState = {
-  command?: string;
+  command?: AgentCommand;
   task?: Task;
   poolArtifact?: Artifact;
   operatorInput?: OperatorConfigInput;
