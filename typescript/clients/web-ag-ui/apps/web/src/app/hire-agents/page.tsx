@@ -91,6 +91,7 @@ export default function HireAgentsRoute() {
       id: config.id,
       rank: config.featuredRank,
       name: config.name,
+      description: config.description,
       creator: config.creator,
       creatorVerified: config.creatorVerified,
       rating: undefined, // Real rating not available

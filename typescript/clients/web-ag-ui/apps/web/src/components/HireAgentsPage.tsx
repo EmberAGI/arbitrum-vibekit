@@ -59,6 +59,7 @@ export interface FeaturedAgent {
   id: string;
   rank?: number;
   name: string;
+  description?: string;
   creator?: string;
   creatorVerified?: boolean;
   rating?: number;
@@ -191,14 +192,17 @@ export function HireAgentsPage({
               <div className="absolute inset-0 opacity-50 bg-[radial-gradient(circle_at_70%_60%,rgba(236,72,153,0.10),transparent_60%)]" />
               <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-black/60" />
             </div>
-            <div className="relative flex items-center justify-between gap-6 p-5">
-              <div className="flex items-center gap-5 min-w-0">
-                <div className="w-24 h-24 rounded-2xl bg-black/25 border border-white/10 flex items-center justify-center overflow-hidden">
-                  <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-                    <div className="w-8 h-8 rounded-full bg-[color:var(--hire-accent)]/70 blur-[0.2px]" />
-                  </div>
+            <div className="relative flex items-stretch justify-between gap-6 pr-5">
+              <div className="flex items-stretch min-w-0">
+                <div className="w-[308px] self-stretch shrink-0">
+                  <img
+                    src="/hire-publish-agent.png"
+                    alt="Publish agent illustration"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 py-5 pl-5">
                   <h2 className="text-lg font-semibold text-white mb-1">
                     Publish your agent for hire
                   </h2>
@@ -207,15 +211,17 @@ export function HireAgentsPage({
                   </p>
                 </div>
               </div>
-              <button
-                className={[
-                  'shrink-0',
-                  CTA_SIZE_MD,
-                  'bg-[color:var(--hire-accent)] hover:bg-[color:var(--hire-accent-hover)] text-white transition-colors',
-                ].join(' ')}
-              >
-                Publish
-              </button>
+              <div className="shrink-0 py-5 flex items-center">
+                <button
+                  className={[
+                    'shrink-0',
+                    CTA_SIZE_MD,
+                    'bg-[color:var(--hire-accent)] hover:bg-[color:var(--hire-accent-hover)] text-white transition-colors',
+                  ].join(' ')}
+                >
+                  Publish
+                </button>
+              </div>
             </div>
           </div>
 
@@ -427,6 +433,11 @@ function FeaturedAgentCard({
         <h3 className="text-[17px] leading-[1.2] font-semibold text-white mb-2.5">
           {agent.name}
         </h3>
+        {agent.description ? (
+          <p className="text-[12px] leading-5 text-gray-400 mb-3">
+            {agent.description}
+          </p>
+        ) : null}
 
         <div className="flex items-start gap-4">
           {/* Large circular avatar */}

@@ -24,6 +24,70 @@ vi.mock('../hooks/useOnchainActionsIconMaps', () => {
 import { HireAgentsPage } from './HireAgentsPage';
 
 describe('HireAgentsPage (top cards)', () => {
+  it('renders publish CTA illustration from a public asset', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html).toContain('src="/hire-publish-agent.png"');
+    expect(html).toContain('alt="Publish agent illustration"');
+  });
+
+  it('lays out publish CTA image flush to the left edge with no top/bottom padding', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html).toContain('class="relative flex items-stretch justify-between gap-6 pr-5"');
+    expect(html).toContain('class="w-[308px] self-stretch shrink-0"');
+  });
+
+  it('renders featured agent bio text when provided', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-pendle',
+            name: 'Pendle Yield',
+            creator: 'Ember AI Team',
+            description: 'Rotates into higher-yield Pendle markets as conditions change.',
+            status: 'for_hire',
+            isLoaded: true,
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('Rotates into higher-yield Pendle markets as conditions change.');
+  });
+
+  it('uses the shared Ember team logo in the byline and omits the extra built-by badge', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-clmm',
+            name: 'Camelot CLMM',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('src="/ember-by-tag-logo.png"');
+    expect(html).not.toContain('Built by Ember AI');
+  });
+
   it('shows labeled chain/protocol/token icon groups and stats, with overflow indicator for tokens', () => {
     const html = renderToStaticMarkup(
       React.createElement(HireAgentsPage, {
