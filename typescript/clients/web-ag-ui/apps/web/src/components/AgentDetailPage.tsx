@@ -335,6 +335,34 @@ export function AgentDetailPage({
     </>
   );
   const latestTelemetryItem = telemetry.length > 0 ? telemetry[telemetry.length - 1] : null;
+  const hasActivityArtifact = events.some((event) => event.type === 'artifact');
+  const latestStatusMessage = (() => {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event.type !== 'status') continue;
+      const message = event.message.trim();
+      if (message.length > 0) return message;
+    }
+    return null;
+  })();
+  const latestStreamMessage = (() => {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event.type === 'artifact') {
+        return `Artifact: ${event.artifact?.type ?? event.artifact?.artifactId ?? 'unknown'}`;
+      }
+      if (event.type === 'dispatch-response') {
+        return `Response with ${event.parts?.length ?? 0} parts`;
+      }
+    }
+    return null;
+  })();
+  const latestActivityLine = hasActivityArtifact
+    ? (latestStatusMessage ??
+      latestStreamMessage ??
+      (latestTelemetryItem ? `Cycle ${latestTelemetryItem.cycle} • ${latestTelemetryItem.action}` : null) ??
+      'Please finish onboarding')
+    : 'Please finish onboarding';
 
   const displayChains = useMemo(() => {
     const out: string[] = [];
@@ -652,11 +680,10 @@ export function AgentDetailPage({
                     )}
                   </div>
 
-                  {isHired && latestTelemetryItem && (
+                  {isHired && (
                     <div className="mt-3 text-center text-[11px] font-mono">
                       <span className="inline-block text-transparent bg-clip-text latest-activity-gradient bg-[linear-gradient(90deg,#93c5fd_0%,#f59e0b_50%,#f97316_100%)]">
-                        Latest activity: Cycle {latestTelemetryItem.cycle} •{' '}
-                        {latestTelemetryItem.action}
+                        {latestActivityLine}
                       </span>
                     </div>
                   )}
