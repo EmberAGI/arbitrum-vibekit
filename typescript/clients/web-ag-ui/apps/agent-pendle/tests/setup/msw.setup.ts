@@ -6,10 +6,15 @@ import { handlers } from '../mocks/handlers/index.js';
 export const server = setupServer(...handlers);
 
 beforeAll(() => {
+  const langGraphBaseUrl = (process.env['LANGGRAPH_DEPLOYMENT_URL'] ?? 'http://127.0.0.1:8125').replace(
+    /\/$/,
+    '',
+  );
+
   server.listen({
     onUnhandledRequest: (request, print) => {
       const url = request.url;
-      if (url.includes('localhost:8125')) {
+      if (url.startsWith(langGraphBaseUrl)) {
         return;
       }
       print.error();
