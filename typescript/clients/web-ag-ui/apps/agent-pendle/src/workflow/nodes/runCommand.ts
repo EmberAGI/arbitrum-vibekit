@@ -1,18 +1,19 @@
-import { extractCommandFromMessages, type AgentCommand } from 'agent-workflow-core';
+import {
+  extractCommandFromMessages,
+  resolveCommandTargetForBootstrappedFlow,
+  resolveRunCommandForView,
+  type AgentCommand,
+  type CommandRoutingTarget,
+} from 'agent-workflow-core';
 
 import { type ClmmState } from '../context.js';
 
 type CommandTarget =
-  | 'hireCommand'
-  | 'fireCommand'
-  | 'runCycleCommand'
+  | CommandRoutingTarget
   | 'collectSetupInput'
   | 'collectFundingTokenInput'
   | 'collectDelegations'
-  | 'prepareOperator'
-  | 'bootstrap'
-  | 'syncState'
-  | '__end__';
+  | 'prepareOperator';
 
 export function extractCommand(messages: ClmmState['messages']): AgentCommand | null {
   return extractCommandFromMessages(messages);
@@ -20,8 +21,10 @@ export function extractCommand(messages: ClmmState['messages']): AgentCommand | 
 
 export function runCommandNode(state: ClmmState): ClmmState {
   const parsedCommand = extractCommand(state.messages);
-  const nextCommand =
-    parsedCommand === 'sync' ? state.view.command : parsedCommand ?? state.view.command;
+  const nextCommand = resolveRunCommandForView({
+    parsedCommand,
+    currentViewCommand: state.view.command,
+  });
   return {
     ...state,
     view: {
@@ -61,14 +64,8 @@ export function resolveCommandTarget({ messages, private: priv, view }: ClmmStat
     return 'runCycleCommand';
   }
 
-  switch (resolvedCommand) {
-    case 'hire':
-      return 'hireCommand';
-    case 'fire':
-      return 'fireCommand';
-    case 'sync':
-      return priv.bootstrapped ? 'syncState' : 'bootstrap';
-    default:
-      return '__end__';
-  }
+  return resolveCommandTargetForBootstrappedFlow({
+    resolvedCommand,
+    bootstrapped: priv.bootstrapped,
+  });
 }
