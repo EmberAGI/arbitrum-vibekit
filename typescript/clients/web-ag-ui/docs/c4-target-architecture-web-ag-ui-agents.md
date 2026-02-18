@@ -108,7 +108,7 @@ Explicit non-goal container:
   - Removes split-brain between stream state and sync endpoint state.
 
 - `AgentCommandBus`:
-  - Sends `hire`, `sync`, `fire`, interrupt responses via AG-UI `run` payloads only.
+  - Sends `hire`, `sync`, `fire`, interrupt responses, and client mutation intents via AG-UI `run` payloads only.
   - No out-of-band command mutation.
 
 - `AgentCommandScheduler` (new):
@@ -202,6 +202,24 @@ sequenceDiagram
   end
 ```
 
+### 6.4 Client state mutation through run
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Web
+  participant Runtime as /api/copilotkit
+  participant Agent
+
+  User->>Web: Trigger save/sync
+  Web->>Web: set local agent state/messages
+  Web->>Runtime: run(agentId, threadId, input.state/messages)
+  Runtime->>Agent: apply run input state/messages, execute run
+  Agent-->>Runtime: AG-UI state/message events + terminal event
+  Runtime-->>Web: streamed events
+  Web->>Web: mark sync complete only after projected confirmation
+```
+
 ## 7. Data contracts
 
 ### 7.1 Canonical contracts (target)
@@ -214,6 +232,8 @@ sequenceDiagram
 
 - Backing thread state is internal to agent runtime.
 - UI projections are derived from AG-UI events, not direct thread reads.
+- Client-to-agent state mutation uses AG-UI `run` input (`state`/`messages`), not `connect`.
+- `connect` is attach/replay for projection continuity, not a write path.
 - Unknown contract version must fail safe with explicit telemetry.
 
 ## 8. Operational invariants
@@ -221,13 +241,14 @@ sequenceDiagram
 1. Long-lived detail streams: maximum 1 per browser session focus context.
 2. Sidebar polling cadence: default 15s, bounded concurrency.
 3. No direct web calls to `/threads`, `/runs`, or `/state`.
-4. Focused `connect` is long-lived state authority when present; otherwise active `run` stream is temporary authority.
-5. Local run-in-flight gating is advisory; server busy responses are authoritative for global concurrency.
-6. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
-7. `fire` is preemptive and must attempt abort/detach before dispatch.
-8. Every run has one terminal state event.
-9. On page blur/unmount, stream teardown is deterministic.
-10. Invariant details and implementation guidance are specified in `docs/ag-ui-client-runtime-invariants.md`.
+4. Client-to-agent state mutation is written through AG-UI `run` input; `connect` is attach/replay only.
+5. Focused `connect` is long-lived state authority when present; otherwise active `run` stream is temporary authority.
+6. Local run-in-flight gating is advisory; server busy responses are authoritative for global concurrency.
+7. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
+8. `fire` is preemptive and must attempt abort/detach before dispatch.
+9. Every run has one terminal state event.
+10. On page blur/unmount, stream teardown is deterministic.
+11. Invariant details and implementation guidance are specified in `docs/ag-ui-client-runtime-invariants.md`.
 
 ## 9. Migration plan (from current state)
 

@@ -121,6 +121,7 @@ interface AgentDetailPageProps {
   // Settings
   settings?: AgentSettings;
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
+  onSettingsSave?: (updates: Partial<AgentSettings>) => void;
 }
 
 type TabType = 'blockers' | 'metrics' | 'transactions' | 'settings' | 'chat';
@@ -286,6 +287,7 @@ export function AgentDetailPage({
   events = [],
   settings,
   onSettingsChange,
+  onSettingsSave,
 }: AgentDetailPageProps) {
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (isHired ? 'blockers' : 'metrics'),
@@ -570,7 +572,12 @@ export function AgentDetailPage({
         )}
 
         {resolvedTab === 'settings' && (
-          <SettingsTab settings={settings} onSettingsChange={onSettingsChange} />
+          <SettingsTab
+            settings={settings}
+            onSettingsChange={onSettingsChange}
+            onSettingsSave={onSettingsSave}
+            isSyncing={isSyncing === true}
+          />
         )}
       </>
     );
@@ -2361,14 +2368,15 @@ function PointsColumn({ metrics }: PointsColumnProps) {
 interface SettingsTabProps {
   settings?: AgentSettings;
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
+  onSettingsSave?: (updates: Partial<AgentSettings>) => void;
+  isSyncing?: boolean;
 }
 
-function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
+function SettingsTab({ settings, onSettingsChange, onSettingsSave, isSyncing }: SettingsTabProps) {
   const [localAmount, setLocalAmount] = useState(settings?.amount?.toString() ?? '');
-  const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = () => {
-    if (!onSettingsChange) return;
+    if (!onSettingsChange && !onSettingsSave) return;
 
     const trimmedAmount = localAmount.trim();
     const parsedAmount =
@@ -2377,12 +2385,14 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
       return;
     }
 
-    setIsSaving(true);
     if (trimmedAmount === '') {
       setLocalAmount(`${MIN_BASE_CONTRIBUTION_USD}`);
     }
-    onSettingsChange({ amount: parsedAmount });
-    setTimeout(() => setIsSaving(false), 1000);
+    if (onSettingsSave) {
+      onSettingsSave({ amount: parsedAmount });
+      return;
+    }
+    onSettingsChange?.({ amount: parsedAmount });
   };
 
   return (
@@ -2406,10 +2416,10 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
             />
             <button
               onClick={handleSave}
-              disabled={isSaving || !onSettingsChange}
+              disabled={isSyncing || (!onSettingsChange && !onSettingsSave)}
               className="px-6 py-3 rounded-lg bg-[#fd6731] hover:bg-[#e55a28] text-white font-medium transition-colors disabled:opacity-60"
             >
-              {isSaving ? 'Saving...' : 'Save'}
+              {isSyncing ? 'Syncing...' : 'Save'}
             </button>
           </div>
           {settings?.amount !== undefined && (

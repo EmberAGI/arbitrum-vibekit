@@ -3,6 +3,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AgentSubscriber } from '@ag-ui/client';
 
 import { useAgentConnection } from './useAgentConnection';
 import { __resetAgentStreamCoordinatorForTests } from '../utils/agentStreamCoordinator';
@@ -12,9 +13,10 @@ type TestAgent = {
   state: Record<string, unknown>;
   addMessage: ReturnType<typeof vi.fn>;
   setState: ReturnType<typeof vi.fn>;
-  subscribe: ReturnType<typeof vi.fn>;
+  subscribe: (subscriber: AgentSubscriber) => { unsubscribe: () => void };
   detachActiveRun: ReturnType<typeof vi.fn>;
   connectAgent: ReturnType<typeof vi.fn>;
+  runAgent?: ReturnType<typeof vi.fn>;
 };
 
 const mocks = vi.hoisted(() => {
@@ -92,6 +94,18 @@ function TestHarness({ agentId }: { agentId: string }) {
   return <div data-testid="agent-connection-harness" />;
 }
 
+function CapturingHarness({
+  agentId,
+  onSnapshot,
+}: {
+  agentId: string;
+  onSnapshot: (value: ReturnType<typeof useAgentConnection>) => void;
+}) {
+  const value = useAgentConnection(agentId);
+  onSnapshot(value);
+  return <div data-testid="agent-connection-harness" />;
+}
+
 async function flushEffects(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
@@ -145,5 +159,68 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(mocks.connectAgent).not.toHaveBeenCalled();
+  });
+
+  it('saveSettings mutates local state and dispatches sync through AG-UI run', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue).not.toBeNull();
+
+    latestValue?.saveSettings({ amount: 250 });
+    await flushEffects();
+
+    expect(mocks.agent.setState).toHaveBeenCalled();
+    expect(mocks.agent.addMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'user',
+        content: JSON.stringify({ command: 'sync' }),
+      }),
+    );
+    expect(mocks.runAgent).toHaveBeenCalledWith({ agent: mocks.agent });
+  });
+
+  it('ignores stale run lifecycle events that do not match the active thread', async () => {
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(subscriber).toBeDefined();
+    mocks.agent.setState.mockClear();
+
+    subscriber?.onRunInitialized?.({
+      state: { view: { command: 'cycle' } },
+      input: { threadId: 'stale-thread' },
+    });
+    await flushEffects();
+    expect(mocks.agent.setState).not.toHaveBeenCalled();
+
+    subscriber?.onRunInitialized?.({
+      state: { view: { command: 'cycle' } },
+      input: { threadId: 'thread-1' },
+    });
+    await flushEffects();
+    expect(mocks.agent.setState).toHaveBeenCalledTimes(1);
   });
 });

@@ -110,8 +110,9 @@ export interface UseAgentConnectionResult {
       | DelegationSigningResponse,
   ) => void;
 
-  // Settings management: updates local state then syncs to backend
+  // Settings management
   updateSettings: (updates: Partial<AgentSettings>) => void;
+  saveSettings: (updates: Partial<AgentSettings>) => void;
 }
 
 export function useAgentConnection(agentId: string): UseAgentConnectionResult {
@@ -258,19 +259,40 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       return undefined;
     }
 
-    const clearRunFlag = () => {
+    const getInputThreadId = (payload: unknown): string | null => {
+      if (typeof payload !== 'object' || payload === null) return null;
+      if (!('input' in payload)) return null;
+      const input = (payload as { input?: unknown }).input;
+      if (typeof input !== 'object' || input === null) return null;
+      if (!('threadId' in input)) return null;
+      const threadIdValue = (input as { threadId?: unknown }).threadId;
+      return typeof threadIdValue === 'string' ? threadIdValue : null;
+    };
+
+    const isCurrentThreadEvent = (payload: unknown): boolean => {
+      const inputThreadId = getInputThreadId(payload);
+      const currentThreadId = threadIdRef.current;
+      if (!inputThreadId || !currentThreadId) return true;
+      return inputThreadId === currentThreadId;
+    };
+
+    const clearRunFlag = (payload?: unknown) => {
+      if (!isCurrentThreadEvent(payload)) return;
       commandSchedulerRef.current?.handleRunTerminal();
     };
 
     const subscription = agent.subscribe({
-      onRunStartedEvent: () => {
+      onRunStartedEvent: (payload) => {
+        if (!isCurrentThreadEvent(payload)) return;
         runInFlightRef.current = true;
       },
-      onRunFinishedEvent: clearRunFlag,
-      onRunErrorEvent: clearRunFlag,
-      onRunFailed: clearRunFlag,
-      onRunFinalized: clearRunFlag,
-      onRunInitialized: ({ state }) => {
+      onRunFinishedEvent: (payload) => clearRunFlag(payload),
+      onRunErrorEvent: (payload) => clearRunFlag(payload),
+      onRunFailed: (payload) => clearRunFlag(payload),
+      onRunFinalized: (payload) => clearRunFlag(payload),
+      onRunInitialized: (payload) => {
+        if (!isCurrentThreadEvent(payload)) return;
+        const state = payload.state;
         if (hasStateValues(state)) {
           agent.setState(state);
           return;
@@ -282,7 +304,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
         agent.setState(initialAgentState);
       },
-      onMessagesSnapshotEvent: () => {
+      onMessagesSnapshotEvent: (payload) => {
+        if (!isCurrentThreadEvent(payload)) return;
         messagesSnapshotRef.current = true;
       },
     });
@@ -317,8 +340,19 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           isSyncing,
         });
       },
-      onCommandError: (_command, error) => {
+      onCommandBusy: (command, error) => {
+        const detail = error instanceof Error ? error.message : String(error);
+        setUiError(`Agent run is busy while processing '${command}'. Please retry in a moment.`);
+        console.warn('[useAgentConnection] Busy command dispatch', {
+          command,
+          threadId: threadIdRef.current,
+          detail,
+        });
+      },
+      onCommandError: (command, error) => {
         console.error('Agent run failed', error);
+        const detail = error instanceof Error ? error.message : String(error);
+        setUiError(`Agent command '${command}' failed: ${detail}`);
       },
     });
 
@@ -501,13 +535,19 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const runSync = useCallback(() => {
     setUiError(null);
-    void dispatchCommand('sync', { allowSyncCoalesce: true });
+    const accepted = dispatchCommand('sync', { allowSyncCoalesce: true });
+    if (!accepted) {
+      setUiError('Unable to queue sync right now. Please retry.');
+    }
   }, [dispatchCommand]);
 
   const runHire = useCallback(() => {
     if (!isHired && !isHiring) {
       setUiError(null);
-      if (!runCommand('hire')) return;
+      if (!runCommand('hire')) {
+        setUiError('Unable to start hire while another run is active.');
+        return;
+      }
 
       // Optimistically flip the UI into the hired/onboarding layout immediately after the user
       // initiates the hire command. Otherwise we can briefly render the pre-hire layout until the
@@ -624,49 +664,67 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         return;
       }
 
-      runInFlightRef.current = true;
-      void resumeInterruptViaAgent({
-        agent: agentRef.current,
-        resumePayload: serializedInput,
-      })
-        .then((resumed) => {
-          if (!resumed) {
-            runInFlightRef.current = false;
-            setUiError('Unable to submit onboarding input right now. Please retry.');
-            return;
-          }
+      const scheduler = commandSchedulerRef.current;
+      if (!scheduler) {
+        setUiError('Unable to submit onboarding input right now. Please retry.');
+        return;
+      }
 
+      const accepted = scheduler.dispatchCustom({
+        command: 'resume',
+        run: async (currentAgent) => {
+          const resumed = await resumeInterruptViaAgent({
+            agent: currentAgent as Parameters<typeof resumeInterruptViaAgent>[0]['agent'],
+            resumePayload: serializedInput,
+          });
+          if (!resumed) {
+            throw new Error('Unable to submit onboarding input right now. Please retry.');
+          }
           scheduleCycleAfterInterruptResolution({
             interruptType,
             runCommand,
           });
-        })
-        .catch((error: unknown) => {
-          runInFlightRef.current = false;
-          const message = error instanceof Error ? error.message : String(error);
-          console.error('[useAgentConnection.resolveInterrupt] Failed to resume interrupt', {
-            threadId,
-            agentId,
-            error: message,
-          });
-          setUiError(message);
-        });
+        },
+      });
+
+      if (!accepted) {
+        setUiError('Unable to submit onboarding input right now. Please retry.');
+        return;
+      }
     },
-    [activeInterrupt, agentId, canResolve, effectiveActiveInterrupt?.type, resolve, runCommand, threadId],
+    [activeInterrupt, canResolve, effectiveActiveInterrupt?.type, resolve, runCommand],
   );
 
-  // Settings sync pattern: update local state only (no automatic sync to avoid 409)
+  // Local settings mutation helper; caller decides whether to enqueue a sync run.
   const updateSettings = useCallback(
     (updates: Partial<AgentSettings>) => {
-      agent.setState({
-        ...currentState,
+      const currentAgent = agentRef.current;
+      if (!currentAgent) return;
+
+      const nextState =
+        hasStateValues(currentAgent.state) ? (currentAgent.state as AgentState) : initialAgentState;
+
+      currentAgent.setState({
+        ...nextState,
         settings: {
-          ...(currentState.settings ?? defaultSettings),
+          ...(nextState.settings ?? defaultSettings),
           ...updates,
         },
       });
     },
-    [agent, currentState],
+    [hasStateValues],
+  );
+
+  const saveSettings = useCallback(
+    (updates: Partial<AgentSettings>) => {
+      setUiError(null);
+      updateSettings(updates);
+      const accepted = dispatchCommand('sync', { allowSyncCoalesce: true });
+      if (!accepted) {
+        setUiError('Unable to sync settings right now. Please retry.');
+      }
+    },
+    [dispatchCommand, updateSettings],
   );
 
   return {
@@ -695,5 +753,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     runSync,
     resolveInterrupt,
     updateSettings,
+    saveSettings,
   };
 }

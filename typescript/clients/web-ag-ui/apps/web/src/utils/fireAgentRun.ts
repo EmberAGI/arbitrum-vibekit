@@ -31,6 +31,9 @@ const startFireRun = async <TAgent extends AgentLike>(
     }
 
     runInFlightRef.current = false;
+    if (isBusyRunError(error)) {
+      throw new Error('Agent run is still active. Please retry in a moment.');
+    }
     throw error;
   }
 };

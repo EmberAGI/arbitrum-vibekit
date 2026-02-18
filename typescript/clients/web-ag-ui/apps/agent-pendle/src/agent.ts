@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
+import { isLangGraphBusyStatus } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
@@ -217,7 +218,7 @@ async function updateCycleState(
       as_node: 'runCommand',
     }),
   });
-  if (response.status === 409 || response.status === 422) {
+  if (isLangGraphBusyStatus(response.status)) {
     const payloadText = await response.text();
     console.info(`[cron] Cycle state update rejected; thread busy (thread=${threadId})`, {
       detail: payloadText,
@@ -255,7 +256,7 @@ async function createRun(params: {
     body,
   });
 
-  if (response.status === 422) {
+  if (isLangGraphBusyStatus(response.status)) {
     const payloadText = await response.text();
     console.info(`[cron] Run rejected; thread busy (thread=${params.threadId})`, { detail: payloadText });
     return undefined;
