@@ -157,13 +157,13 @@ html {
 
 @keyframes latestActivitySweep {
   0% {
-    background-position: 180% 50%;
+    transform: translateX(-120%);
   }
-  66.4% {
-    background-position: -180% 50%;
+  78% {
+    transform: translateX(120%);
   }
   100% {
-    background-position: -180% 50%;
+    transform: translateX(120%);
   }
 }
 
@@ -176,21 +176,26 @@ html {
 }
 
 .latest-activity-indicator {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
   color: #ffffff;
-  background-image: linear-gradient(
-    90deg,
-    #ffffff 0%,
-    #ffffff 46%,
-    var(--ember-bg) 50%,
-    #ffffff 54%,
-    #ffffff 100%
-  );
-  background-size: 320% 100%;
-  background-position: 180% 50%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: latestActivitySweep 3.52s linear infinite;
+}
+
+.latest-activity-indicator::after {
+  content: attr(data-activity-text);
+  position: absolute;
+  inset: 0;
+  display: block;
+  color: var(--ember-card);
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  clip-path: inset(0 48.75% 0 48.75%);
+  white-space: pre;
+  pointer-events: none;
+  will-change: transform;
+  animation: latestActivitySweep 3.4s linear infinite;
 }
 
 /* Staggered animation delays */

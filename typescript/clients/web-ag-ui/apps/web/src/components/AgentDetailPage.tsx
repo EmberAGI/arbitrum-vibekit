@@ -712,7 +712,10 @@ export function AgentDetailPage({
 
                   {isHired && (
                     <div className="mt-3 text-center text-[11px] font-mono">
-                      <span className="inline-block text-white latest-activity-indicator">
+                      <span
+                        className="inline-block text-white latest-activity-indicator"
+                        data-activity-text={latestActivityLine}
+                      >
                         {latestActivityLine}
                       </span>
                     </div>
