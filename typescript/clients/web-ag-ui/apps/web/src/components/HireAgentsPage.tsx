@@ -430,17 +430,7 @@ function FeaturedAgentCard({
 
       {/* Main content: Name and avatar */}
       <div className="px-4 pb-4">
-        <h3 className="text-[17px] leading-[1.2] font-semibold text-white mb-2.5">
-          {agent.name}
-        </h3>
-        {agent.description ? (
-          <p className="text-[12px] leading-5 text-gray-400 mb-3">
-            {agent.description}
-          </p>
-        ) : null}
-
-        <div className="flex items-start gap-4">
-          {/* Large circular avatar */}
+        <div className="flex items-start gap-4 mb-3">
           <div className="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 bg-black/30 flex items-center justify-center">
             {avatarUri ? (
               <img
@@ -456,7 +446,6 @@ function FeaturedAgentCard({
             )}
           </div>
 
-          {/* Icon groups to the right of the avatar */}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-3">
               <div className="grid grid-cols-3 gap-3 flex-1">
@@ -474,8 +463,7 @@ function FeaturedAgentCard({
                 />
               </div>
 
-          {/* Trend badge */}
-          {hasTrend ? (
+              {hasTrend ? (
                 <div className="flex items-center gap-1.5 bg-[color:var(--hire-accent-soft)] px-2.5 py-1 rounded-full mt-5">
                   <Flame className="w-4 h-4 text-[color:var(--hire-accent)]" />
                   <span className="text-sm font-semibold text-[color:var(--hire-accent)]">
@@ -486,6 +474,15 @@ function FeaturedAgentCard({
             </div>
           </div>
         </div>
+
+        <h3 className="text-[17px] leading-[1.2] font-semibold text-white mb-2">
+          {agent.name}
+        </h3>
+        {agent.description ? (
+          <p className="text-[12px] leading-5 text-gray-400">
+            {agent.description}
+          </p>
+        ) : null}
       </div>
 
       {/* Stats footer */}

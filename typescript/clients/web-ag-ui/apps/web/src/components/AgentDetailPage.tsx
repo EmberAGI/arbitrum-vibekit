@@ -300,6 +300,11 @@ export function AgentDetailPage({
     Boolean(activeInterrupt) ||
     taskStatus === 'input-required' ||
     isPendleOnboardingInFlight;
+  const lifecycleState: 'not_hired' | 'onboarding' | 'hired' = !isHired
+    ? 'not_hired'
+    : isOnboardingActive
+      ? 'onboarding'
+      : 'hired';
   const forceBlockersTab = isOnboardingActive;
   const selectTab = useCallback((tab: TabType) => {
     setHasUserSelectedTab(true);
@@ -544,24 +549,23 @@ export function AgentDetailPage({
       <>
         {resolvedTab === 'blockers' && (
           <>
-            <AgentBlockersTab
-              agentId={agentId}
-              activeInterrupt={activeInterrupt}
-              allowedPools={allowedPools}
-              onInterruptSubmit={onInterruptSubmit}
-              taskId={taskId}
-              taskStatus={taskStatus}
-              haltReason={haltReason}
-              executionError={executionError}
-              delegationsBypassActive={delegationsBypassActive}
-              onboarding={onboarding}
-              settings={settings}
-              onSettingsChange={onSettingsChange}
-            />
-            {!isOnboardingActive && (
-              <div className="mt-6">
-                <SettingsTab settings={settings} onSettingsChange={onSettingsChange} />
-              </div>
+            {isOnboardingActive ? (
+              <AgentBlockersTab
+                agentId={agentId}
+                activeInterrupt={activeInterrupt}
+                allowedPools={allowedPools}
+                onInterruptSubmit={onInterruptSubmit}
+                taskId={taskId}
+                taskStatus={taskStatus}
+                haltReason={haltReason}
+                executionError={executionError}
+                delegationsBypassActive={delegationsBypassActive}
+                onboarding={onboarding}
+                settings={settings}
+                onSettingsChange={onSettingsChange}
+              />
+            ) : (
+              <SettingsTab settings={settings} onSettingsChange={onSettingsChange} />
             )}
           </>
         )}
@@ -647,7 +651,26 @@ export function AgentDetailPage({
                   </div>
 
                   <div className="flex justify-center">
-                    {isHired ? (
+                    {!hasLoadedView ? (
+                      <Skeleton className="h-10 w-full rounded-[999px]" />
+                    ) : lifecycleState === 'onboarding' ? (
+                      <div className="relative w-full inline-flex h-10 items-stretch overflow-hidden rounded-[999px] bg-[#2a1537] ring-1 ring-purple-500/35">
+                        <div className="relative z-10 flex flex-1 min-w-0 items-center gap-2 px-3 text-[13px] font-medium text-purple-100 overflow-hidden">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full bg-purple-400 shadow-[0_0_0_4px_rgba(192,132,252,0.16)]"
+                            aria-hidden="true"
+                          />
+                          <span>Onboarding in progress</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => selectTab('blockers')}
+                          className="relative z-10 flex flex-[0_0_92px] items-center justify-center px-3 h-full text-[13px] font-medium text-white border-l border-emerald-300/30 bg-gradient-to-b from-emerald-500 to-emerald-600"
+                        >
+                          Pay
+                        </button>
+                      </div>
+                    ) : lifecycleState === 'hired' ? (
                       <div
                         className={`group relative w-full inline-flex h-10 items-stretch overflow-hidden rounded-[999px] bg-[#2a2a2a] ring-1 ring-white/10 transition-[background-color,box-shadow,border-color] duration-300 ease-out hover:ring-white/20 hover:shadow-[0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.06)] group-hover:bg-gradient-to-r group-hover:from-[#ff2a00] group-hover:to-[#fd6731] group-hover:ring-[#fd6731]/30 group-hover:shadow-[0_16px_55px_rgba(255,42,0,0.28),0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.10)] ${
                           isFiring ? 'opacity-90' : ''
@@ -677,7 +700,19 @@ export function AgentDetailPage({
                         </button>
                       </div>
                     ) : (
-                      <Skeleton className="h-10 w-full rounded-[999px]" />
+                      <button
+                        onClick={onHire}
+                        disabled={isHiring}
+                        className={[
+                          CTA_SIZE_MD_FULL,
+                          isHiring
+                            ? 'bg-purple-500/50 text-white cursor-wait'
+                            : 'bg-purple-500 hover:bg-purple-600 text-white shadow-[0_10px_30px_rgba(168,85,247,0.25)]',
+                          'transition-[background-color,box-shadow] duration-200',
+                        ].join(' ')}
+                      >
+                        {isHiring ? 'Hiring...' : 'Hire'}
+                      </button>
                     )}
                   </div>
 

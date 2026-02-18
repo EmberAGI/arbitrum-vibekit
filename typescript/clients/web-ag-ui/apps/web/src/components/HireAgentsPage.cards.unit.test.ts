@@ -65,7 +65,12 @@ describe('HireAgentsPage (top cards)', () => {
       }),
     );
 
+    expect(html.indexOf('by')).toBeLessThan(html.indexOf('Chains'));
+    expect(html.indexOf('Chains')).toBeLessThan(html.indexOf('Pendle Yield'));
     expect(html).toContain('Rotates into higher-yield Pendle markets as conditions change.');
+    expect(html.indexOf('Pendle Yield')).toBeLessThan(
+      html.indexOf('Rotates into higher-yield Pendle markets as conditions change.'),
+    );
   });
 
   it('uses the shared Ember team logo in the byline and omits the extra built-by badge', () => {
@@ -116,6 +121,9 @@ describe('HireAgentsPage (top cards)', () => {
     expect(html).toContain('Chains');
     expect(html).toContain('Protocols');
     expect(html).toContain('Tokens');
+    expect(html.indexOf('Chains')).toBeLessThan(html.indexOf('Protocols'));
+    expect(html.indexOf('Protocols')).toBeLessThan(html.indexOf('Tokens'));
+    expect(html).toContain('class="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 bg-black/30 flex items-center justify-center"');
 
     // Stats section.
     expect(html).toContain('AUM');
