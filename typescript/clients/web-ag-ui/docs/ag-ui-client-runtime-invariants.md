@@ -43,8 +43,8 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - Multiple ingress channels are valid (`connect`, `run`, polling), but authority is single-owner per agent at any moment.
    - Active detail-page agent: `connect` stream is authoritative for continuous projection.
    - Non-active-detail agents: polling snapshots are authoritative for sidebar projection.
-   - If neither `connect` nor fresh poll data is available, active `run` stream is temporary authority for that command lifecycle.
-   - All ingress channels must flow through one reducer/projection path with ownership/epoch gating (no split write paths).
+   - If neither `connect` nor poll data is available, active `run` stream is temporary authority for that command lifecycle.
+   - All ingress channels must honor one authority gate and one projection contract (no split write paths).
 
 5. Local gating is advisory:
    - Client-side in-flight flags prevent accidental double-submit from one UI instance.
@@ -79,7 +79,8 @@ These rules complement the C4 target architecture and make runtime behavior dete
   - other commands: explicit policy (reject-on-busy or constrained retry)
 - central `AgentProjectionReducer`:
   - dedupe by run/event identity
-  - enforce per-agent ownership token/epoch checks for stale stream/poll cleanup
+  - enforce per-agent source ownership gates (`detail-connect` vs `poll`)
+  - optional hardening: add ownership token/epoch checks for stale stream/poll cleanup
 
 ## 5. Open Design Decisions
 

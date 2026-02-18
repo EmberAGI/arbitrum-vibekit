@@ -8,15 +8,13 @@ export const TASK_STATES = [
   'completed',
   'canceled',
   'failed',
-  'rejected',
   'auth-required',
-  'unknown',
 ] as const;
 export type TaskState = (typeof TASK_STATES)[number];
 
 const AGENT_COMMAND_SET = new Set<string>(AGENT_COMMANDS);
 
-const TERMINAL_TASK_STATES = new Set<TaskState>(['completed', 'failed', 'canceled', 'rejected', 'unknown']);
+const TERMINAL_TASK_STATES = new Set<TaskState>(['completed', 'failed', 'canceled']);
 
 const ACTIVE_TASK_STATES = new Set<TaskState>(['submitted', 'working', 'input-required', 'auth-required']);
 

@@ -423,7 +423,7 @@ export const collectDelegationsNode = async (
   if (parsed.data.outcome === 'rejected') {
     const { task, statusEvent } = buildTaskStatus(
       awaitingInput.task,
-      'rejected',
+      'failed',
       'Delegation signing was rejected. The agent will not proceed.',
     );
     await copilotkitEmitState(config, {

@@ -73,7 +73,7 @@ const waitForTerminalStatus = async (params: {
   timeoutMs?: number;
 }) => {
   const timeout = params.timeoutMs ?? 45_000;
-  const terminal = new Set(['completed', 'success', 'failed', 'error', 'cancelled']);
+  const terminal = new Set(['completed', 'success', 'failed', 'error', 'canceled']);
   const started = Date.now();
   let status = await fetchRunStatus(params.baseUrl, params.threadId, params.runId);
   while (!status || !terminal.has(status)) {

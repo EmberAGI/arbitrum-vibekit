@@ -9,7 +9,7 @@ const DELEGATION_CONTEXT_LABELS: Record<string, string> = {
   'agent-gmx-allora': 'GMX perps execution',
 };
 
-const TERMINAL_TASK_STATES = new Set(['completed', 'failed', 'canceled', 'rejected']);
+const TERMINAL_TASK_STATES = new Set(['completed', 'failed', 'canceled']);
 
 export function resolveDelegationContextLabel(agentId: string): string {
   return DELEGATION_CONTEXT_LABELS[agentId] ?? 'liquidity management';
