@@ -160,16 +160,16 @@ export function useOnchainActionsIconMaps(params: {
   const [chainIconsLoaded, setChainIconsLoaded] = useState<boolean>(() => chainIconByNameCache !== null);
 
   useEffect(() => {
-    let cancelled = false;
+    let canceled = false;
 
     const run = async () => {
       try {
         const nextChainIconByName = await loadChainIconByName();
-        if (cancelled) return;
+        if (canceled) return;
         setChainIconByName(nextChainIconByName);
         setChainIconsLoaded(true);
       } catch {
-        if (cancelled) return;
+        if (canceled) return;
         setChainIconsLoaded(true);
       }
     };
@@ -177,12 +177,12 @@ export function useOnchainActionsIconMaps(params: {
     void run();
 
     return () => {
-      cancelled = true;
+      canceled = true;
     };
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    let canceled = false;
     const { tokenIconBySymbol: next, missingSymbolKeys: missing } = buildTokenIconResolutionSnapshot({
       requestedSymbolKeys,
     });
@@ -192,7 +192,7 @@ export function useOnchainActionsIconMaps(params: {
     if (missing.length === 0) {
       setTokenIconsLoaded(true);
       return () => {
-        cancelled = true;
+        canceled = true;
       };
     }
 
@@ -214,18 +214,18 @@ export function useOnchainActionsIconMaps(params: {
 
     void promise
       .then(() => {
-        if (cancelled) return;
+        if (canceled) return;
         const refreshed = buildRefreshedTokenIconMap({ requestedSymbolKeys });
         setTokenIconBySymbol(refreshed);
         setTokenIconsLoaded(true);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (canceled) return;
         setTokenIconsLoaded(true);
       });
 
     return () => {
-      cancelled = true;
+      canceled = true;
     };
   }, [requestedSymbolKeys]);
 

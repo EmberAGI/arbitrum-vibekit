@@ -35,8 +35,9 @@ describe('task state helpers', () => {
     expect(isTaskTerminal('completed')).toBe(true);
     expect(isTaskTerminal('failed')).toBe(true);
     expect(isTaskTerminal('canceled')).toBe(true);
-    expect(isTaskTerminal('rejected')).toBe(true);
-    expect(isTaskTerminal('unknown')).toBe(true);
+    expect(isTaskTerminal('not-a-task-state' as never)).toBe(false);
+    expect(isTaskTerminal('rejected')).toBe(false);
+    expect(isTaskTerminal('unknown')).toBe(false);
   });
 
   it('identifies active states', () => {

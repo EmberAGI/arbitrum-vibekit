@@ -25,7 +25,7 @@ Current code references that motivate this:
 3. List/status updates are bounded polling and protocol-compliant.
 4. All agents publish one versioned `ThreadView` contract.
 5. Agent command and task transitions are governed by a shared state machine library, not per-agent drift.
-6. One projection reducer is the source of truth for UI state, with per-agent ownership gates across `connect`/`run`/poll ingress.
+6. One authority gate and shared projection contract are the source of truth for UI state across `connect`/`run`/poll ingress.
 
 ## 3. C4 Level 1: System Context
 
@@ -104,10 +104,11 @@ Explicit non-goal container:
   - Writes normalized status to shared projection store.
 
 - `AgentProjectionReducer`:
-  - Target: single reducer from AG-UI events to `ThreadViewProjection` for both sidebar and detail.
+  - Target: shared projection contract from AG-UI events to `ThreadViewProjection` for both sidebar and detail.
   - Supports multiple ingress channels (`connect`, `run`, polling) with single-owner authority per agent.
   - Active detail-page agent is owned by `connect`; non-active-detail agents are owned by polling snapshots.
-  - Applies ownership epoch checks and drops stale/non-owner updates.
+  - Applies source-ownership checks and drops non-owner updates.
+  - Optional hardening: ownership epoch checks for stale update suppression.
   - Removes split-brain between stream state and sync endpoint state.
 
 - `AgentCommandBus`:
@@ -255,7 +256,7 @@ sequenceDiagram
 6. Local run-in-flight gating is advisory; server busy responses are authoritative for global concurrency.
 7. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
 8. `fire` is the only preemptive stop command: issue `stop`, detach local stream, wait terminal/timeout, then dispatch `fire`.
-9. Every run has one terminal state event.
+9. Terminal run handling is idempotent: client converges on one terminal outcome even if terminal callbacks are duplicated.
 10. On detail-page route leave/unmount, stream teardown is deterministic.
 11. Invariant details and implementation guidance are specified in `docs/ag-ui-client-runtime-invariants.md`.
 

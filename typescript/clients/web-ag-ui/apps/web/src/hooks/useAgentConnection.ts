@@ -494,7 +494,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     const ownerId = streamOwnerIdRef.current;
     if (!ownerId) return;
 
-    let cancelled = false;
+    let canceled = false;
     const connectSeq = connectSeqRef.current + 1;
     connectSeqRef.current = connectSeq;
 
@@ -503,7 +503,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       if (!currentAgent) return;
 
       await acquireAgentStreamOwner(ownerId);
-      if (cancelled) return;
+      if (canceled) return;
 
       currentAgent.threadId = threadId;
       lastConnectedThreadRef.current = threadId;
@@ -527,7 +527,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     void connectOnly();
 
     return () => {
-      cancelled = true;
+      canceled = true;
       logConnectEvent('effect-cleanup', {
         agentId,
         seq: connectSeq,

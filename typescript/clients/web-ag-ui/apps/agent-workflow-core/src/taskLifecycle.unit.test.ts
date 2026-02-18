@@ -13,6 +13,10 @@ describe('taskLifecycle', () => {
   it('recognizes terminal and active task states', () => {
     expect(isTaskTerminalState('completed')).toBe(true);
     expect(isTaskTerminalState('failed')).toBe(true);
+    expect(isTaskTerminalState('canceled')).toBe(true);
+    expect(isTaskTerminalState('not-a-task-state')).toBe(false);
+    expect(isTaskTerminalState('rejected')).toBe(false);
+    expect(isTaskTerminalState('unknown')).toBe(false);
     expect(isTaskTerminalState('working')).toBe(false);
 
     expect(isTaskActiveState('submitted')).toBe(true);
@@ -55,9 +59,7 @@ describe('taskLifecycle', () => {
       'completed',
       'canceled',
       'failed',
-      'rejected',
       'auth-required',
-      'unknown',
     ]);
   });
 });

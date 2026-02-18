@@ -8,9 +8,7 @@ export type TaskState =
   | 'completed'
   | 'canceled'
   | 'failed'
-  | 'rejected'
-  | 'auth-required'
-  | 'unknown';
+  | 'auth-required';
 
 export interface TaskStatus {
   state: TaskState;

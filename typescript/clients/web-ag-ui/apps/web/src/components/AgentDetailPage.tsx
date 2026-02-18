@@ -1363,8 +1363,7 @@ function AgentBlockersTab({
   const [fundingTokenAddress, setFundingTokenAddress] = useState('');
   const [isSigningDelegations, setIsSigningDelegations] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isTerminalTask =
-    taskStatus === 'failed' || taskStatus === 'canceled' || taskStatus === 'rejected';
+  const isTerminalTask = taskStatus === 'failed' || taskStatus === 'canceled';
   const showBlockingError = Boolean(haltReason || executionError) && isTerminalTask;
   const setupSteps = useMemo(
     () =>
