@@ -290,6 +290,9 @@ Completed:
 - Detail connection ownership is enforced via `AgentStreamCoordinator`.
 - Sidebar polling now enforces explicit bounded concurrency (`NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT`).
 - Shared `TaskState`/`AgentCommand` vocabulary is exported from `agent-workflow-core` and adopted by `apps/agent*` workflow contexts.
+- Shared lifecycle reducers now live in `agent-workflow-core` and are adopted across `apps/agent*`:
+  - `resolveSummaryTaskStatus` (summary terminal-state policy),
+  - `resolveRunCommandForView` + `resolveCommandTargetForBootstrappedFlow` (baseline command routing policy).
 - Agent setup-step branching logic is extracted from `AgentDetailPage` into `apps/web/src/components/agentSetupSteps.ts`.
 - Web command scheduling now uses a dedicated `AgentCommandScheduler` (`apps/web/src/utils/agentCommandScheduler.ts`) with bounded busy-retry handling for `sync` and coalescing intent semantics.
 - Integration coverage now verifies key lifecycle invariants:
@@ -299,5 +302,5 @@ Completed:
 
 Remaining gaps:
 
-- Shared `agent-workflow-core` still does not own a canonical onboarding/task state-machine implementation; lifecycle routing continues to diverge per agent.
+- Shared `agent-workflow-core` still does not own a full canonical onboarding state-machine implementation; onboarding routing still diverges per agent.
 - `AgentDetailPage` still contains non-metrics agent-specific blockers/onboarding flow branching and should be further decomposed toward a composition-shell role.

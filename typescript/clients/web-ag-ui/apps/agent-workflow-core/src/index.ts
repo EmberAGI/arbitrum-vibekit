@@ -7,3 +7,13 @@ export {
   type AgentCommand,
   type TaskState,
 } from './taskLifecycle.js';
+export {
+  resolveSummaryTaskStatus,
+  type ResolveSummaryTaskStatusInput,
+  type ResolvedSummaryTaskStatus,
+} from './summaryTaskResolution.js';
+export {
+  resolveCommandTargetForBootstrappedFlow,
+  resolveRunCommandForView,
+  type CommandRoutingTarget,
+} from './commandRouting.js';

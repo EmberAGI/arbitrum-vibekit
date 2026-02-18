@@ -55,6 +55,10 @@ import { CursorListTooltip } from './ui/CursorListTooltip';
 import { CTA_SIZE_MD, CTA_SIZE_MD_FULL } from './ui/cta';
 import { signDelegationWithFallback } from '../utils/delegationSigning';
 import { GmxAlloraMetricsTab, MetricsTab, PendleMetricsTab } from './AgentMetricsTabs';
+import {
+  resolveDelegationContextLabel,
+  resolveOnboardingActive,
+} from './agentBlockersBehavior';
 import { resolveSetupSteps } from './agentSetupSteps';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
@@ -288,20 +292,13 @@ export function AgentDetailPage({
   const [hasUserSelectedTab, setHasUserSelectedTab] = useState(false);
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
   const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
-  const isTaskTerminal =
-    taskStatus === 'completed' ||
-    taskStatus === 'failed' ||
-    taskStatus === 'canceled' ||
-    taskStatus === 'rejected';
-  const isPendleOnboardingInFlight =
-    agentId === 'agent-pendle' &&
-    currentCommand === 'hire' &&
-    setupComplete !== true &&
-    !isTaskTerminal;
-  const isOnboardingActive =
-    Boolean(activeInterrupt) ||
-    taskStatus === 'input-required' ||
-    isPendleOnboardingInFlight;
+  const isOnboardingActive = resolveOnboardingActive({
+    agentId,
+    activeInterruptPresent: Boolean(activeInterrupt),
+    taskStatus,
+    currentCommand,
+    setupComplete,
+  });
   const forceBlockersTab = isOnboardingActive;
   const selectTab = useCallback((tab: TabType) => {
     setHasUserSelectedTab(true);
@@ -1344,14 +1341,8 @@ function AgentBlockersTab({
   const walletBypassAddress =
     (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS : undefined)?.trim() ||
     '0x0000000000000000000000000000000000000000';
-  const isPendleAgent = agentId === 'agent-pendle';
-  const isGmxAlloraAgent = agentId === 'agent-gmx-allora';
   const delegationsBypassEnv = 'DELEGATIONS_BYPASS';
-  const delegationContextLabel = isPendleAgent
-    ? 'Pendle execution'
-    : isGmxAlloraAgent
-      ? 'GMX perps execution'
-      : 'liquidity management';
+  const delegationContextLabel = resolveDelegationContextLabel(agentId);
   const connectedWalletAddress =
     privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
 
