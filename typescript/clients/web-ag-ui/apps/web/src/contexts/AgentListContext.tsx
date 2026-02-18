@@ -156,6 +156,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
           createRuntimeAgent: ({ agentId: runtimeAgentId, threadId: runtimeThreadId }) =>
             new ProxiedCopilotRuntimeAgent({
               runtimeUrl: '/api/copilotkit',
+              transport: 'single',
               agentId: runtimeAgentId,
               threadId: runtimeThreadId,
             }),
