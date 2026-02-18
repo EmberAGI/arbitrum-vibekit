@@ -280,6 +280,9 @@ Completed:
 - Sidebar polling now enforces explicit bounded concurrency (`NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT`).
 - Shared `TaskState`/`AgentCommand` vocabulary is exported from `agent-workflow-core` and adopted by `apps/agent*` workflow contexts.
 - Agent setup-step branching logic is extracted from `AgentDetailPage` into `apps/web/src/components/agentSetupSteps.ts`.
+- Integration coverage now verifies key lifecycle invariants:
+  - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-focused polling fan-out and periodic no-overlap behavior.
+  - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts focused detail connect and deterministic detach on unmount.
 
 Remaining gaps:
 
