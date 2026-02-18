@@ -2,7 +2,7 @@
 
 import { Star, MoreHorizontal, ChevronDown } from 'lucide-react';
 import { Skeleton } from '../ui/Skeleton';
-import { proxyIconUri } from '../../utils/iconResolution';
+import { iconMonogram, proxyIconUri } from '../../utils/iconResolution';
 import { CreatorIdentity } from '../ui/CreatorIdentity';
 
 export interface AgentTableItem {
@@ -27,10 +27,9 @@ interface AgentsTableProps {
   agents: AgentTableItem[];
   onAgentClick: (agentId: string) => void;
   onAgentAction: (agentId: string) => void;
-  iconsLoaded: boolean;
 }
 
-export function AgentsTable({ agents, onAgentClick, onAgentAction, iconsLoaded }: AgentsTableProps) {
+export function AgentsTable({ agents, onAgentClick, onAgentAction }: AgentsTableProps) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
       <table className="agent-table text-sm">
@@ -56,7 +55,6 @@ export function AgentsTable({ agents, onAgentClick, onAgentAction, iconsLoaded }
             <AgentRow
               key={agent.id}
               agent={agent}
-              iconsLoaded={iconsLoaded}
               onClick={() => onAgentClick(agent.id)}
               onAction={() => onAgentAction(agent.id)}
             />
@@ -69,12 +67,11 @@ export function AgentsTable({ agents, onAgentClick, onAgentAction, iconsLoaded }
 
 interface AgentRowProps {
   agent: AgentTableItem;
-  iconsLoaded: boolean;
   onClick: () => void;
   onAction: () => void;
 }
 
-function AgentRow({ agent, iconsLoaded, onClick, onAction }: AgentRowProps) {
+function AgentRow({ agent, onClick, onAction }: AgentRowProps) {
   return (
     <tr className="hover:bg-white/5 transition-colors cursor-pointer" onClick={onClick}>
       <td className="text-center">
@@ -82,21 +79,21 @@ function AgentRow({ agent, iconsLoaded, onClick, onAction }: AgentRowProps) {
       </td>
       <td>
         <div className="flex items-center gap-3">
-          {!iconsLoaded ? (
-            <Skeleton className="h-10 w-10 rounded-full" />
-          ) : (
-            <div className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden bg-black/30 ring-1 ring-white/10">
-              {agent.iconUri ? (
-                <img
-                  src={proxyIconUri(agent.iconUri)}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className="h-full w-full object-contain p-[2px]"
-                />
-              ) : null}
-            </div>
-          )}
+          <div className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden bg-black/30 ring-1 ring-white/10">
+            {agent.iconUri ? (
+              <img
+                src={proxyIconUri(agent.iconUri)}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-contain p-[2px]"
+              />
+            ) : (
+              <span className="text-xs font-semibold text-white/80" aria-hidden="true">
+                {iconMonogram(agent.name)}
+              </span>
+            )}
+          </div>
           <div>
             <div className="flex items-center gap-2">
               {agent.isActive && <span className="w-2 h-2 rounded-full bg-teal-400" />}

@@ -58,21 +58,25 @@ async function loadTokenIcons(params: { symbolKeys: string[] }): Promise<void> {
   const symbolKeys = params.symbolKeys;
   if (symbolKeys.length === 0) return;
 
-  const url = new URL('/api/coingecko/token-icons', window.location.origin);
-  for (const symbolKey of symbolKeys) url.searchParams.append('symbols', symbolKey);
+  try {
+    const url = new URL('/api/coingecko/token-icons', window.location.origin);
+    for (const symbolKey of symbolKeys) url.searchParams.append('symbols', symbolKey);
 
-  const response = await fetch(url.toString());
-  if (!response.ok) return;
+    const response = await fetch(url.toString());
+    if (!response.ok) return;
 
-  const payload = (await response.json()) as { icons?: Record<string, string>; missing?: string[] };
-  const icons = payload.icons ?? {};
+    const payload = (await response.json()) as { icons?: Record<string, string>; missing?: string[] };
+    const icons = payload.icons ?? {};
 
-  for (const symbolKey of symbolKeys) {
-    const iconUri = icons[symbolKey];
-    tokenIconCache.set(symbolKey, {
-      expiresAt: Date.now() + TOKEN_CACHE_TTL_MS,
-      uri: typeof iconUri === 'string' && iconUri.length > 0 ? iconUri : null,
-    });
+    for (const symbolKey of symbolKeys) {
+      const iconUri = icons[symbolKey];
+      tokenIconCache.set(symbolKey, {
+        expiresAt: Date.now() + TOKEN_CACHE_TTL_MS,
+        uri: typeof iconUri === 'string' && iconUri.length > 0 ? iconUri : null,
+      });
+    }
+  } catch {
+    // Keep existing static/cached icons if remote lookup fails.
   }
 }
 
@@ -208,12 +212,17 @@ export function useOnchainActionsIconMaps(params: {
 
     if (!existing) tokenLoadPromises.set(missingKey, promise);
 
-    void promise.then(() => {
-      if (cancelled) return;
-      const refreshed = buildRefreshedTokenIconMap({ requestedSymbolKeys });
-      setTokenIconBySymbol(refreshed);
-      setTokenIconsLoaded(true);
-    });
+    void promise
+      .then(() => {
+        if (cancelled) return;
+        const refreshed = buildRefreshedTokenIconMap({ requestedSymbolKeys });
+        setTokenIconBySymbol(refreshed);
+        setTokenIconsLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTokenIconsLoaded(true);
+      });
 
     return () => {
       cancelled = true;

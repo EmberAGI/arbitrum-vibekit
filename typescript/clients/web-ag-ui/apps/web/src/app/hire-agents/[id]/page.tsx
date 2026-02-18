@@ -35,7 +35,24 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const agent = useAgent();
   const activeAgentId = agent.config.id;
   const routeAgentId = id;
-  const selectedAgentId = activeAgentId === routeAgentId ? routeAgentId : activeAgentId;
+  const routeHasRegisteredAgent = isRegisteredAgentId(routeAgentId);
+  const selectedAgentId = routeHasRegisteredAgent ? routeAgentId : activeAgentId;
+  const selectedConfig = getAgentConfig(selectedAgentId);
+  const selectedProfile = {
+    ...agent.profile,
+    chains:
+      agent.profile.chains && agent.profile.chains.length > 0
+        ? agent.profile.chains
+        : selectedConfig.chains ?? [],
+    protocols:
+      agent.profile.protocols && agent.profile.protocols.length > 0
+        ? agent.profile.protocols
+        : selectedConfig.protocols ?? [],
+    tokens:
+      agent.profile.tokens && agent.profile.tokens.length > 0
+        ? agent.profile.tokens
+        : selectedConfig.tokens ?? [],
+  };
 
   const handleBack = () => {
     router.push('/hire-agents');
@@ -51,7 +68,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const uiPreviewTab = uiPreviewEnabled ? parseUiPreviewTab(searchParams.get('__tab')) : null;
 
   if (uiPreviewState) {
-    const previewAgentId = isRegisteredAgentId(routeAgentId) ? routeAgentId : selectedAgentId;
+    const previewAgentId = routeHasRegisteredAgent ? routeAgentId : selectedAgentId;
     const config = getAgentConfig(previewAgentId);
 
     const isHired = uiPreviewState !== 'prehire';
@@ -111,6 +128,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         executionError={undefined}
         delegationsBypassActive={false}
         onboarding={onboarding}
+        setupComplete={false}
         transactions={[]}
         telemetry={[]}
         events={[]}
@@ -123,20 +141,20 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   return (
     <AgentDetailPage
       agentId={selectedAgentId}
-      agentName={agent.config.name}
-      agentDescription={agent.config.description}
-      creatorName={agent.config.creator}
-      creatorVerified={agent.config.creatorVerified}
+      agentName={selectedConfig.name}
+      agentDescription={selectedConfig.description}
+      creatorName={selectedConfig.creator}
+      creatorVerified={selectedConfig.creatorVerified}
       rank={1}
       rating={5}
       profile={{
-        agentIncome: agent.profile.agentIncome,
-        aum: agent.profile.aum,
-        totalUsers: agent.profile.totalUsers,
-        apy: agent.profile.apy,
-        chains: agent.profile.chains ?? [],
-        protocols: agent.profile.protocols ?? [],
-        tokens: agent.profile.tokens ?? [],
+        agentIncome: selectedProfile.agentIncome,
+        aum: selectedProfile.aum,
+        totalUsers: selectedProfile.totalUsers,
+        apy: selectedProfile.apy,
+        chains: selectedProfile.chains,
+        protocols: selectedProfile.protocols,
+        tokens: selectedProfile.tokens,
       }}
       metrics={{
         iteration: agent.metrics.iteration,
@@ -162,7 +180,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         onSync={agent.runSync}
       onBack={handleBack}
       activeInterrupt={agent.activeInterrupt}
-      allowedPools={agent.profile.allowedPools ?? []}
+      allowedPools={selectedProfile.allowedPools ?? []}
       onInterruptSubmit={agent.resolveInterrupt}
       taskId={agent.view.task?.id}
       taskStatus={agent.view.task?.taskStatus?.state}
@@ -170,6 +188,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       executionError={agent.view.executionError}
       delegationsBypassActive={agent.view.delegationsBypassActive}
       onboarding={agent.view.onboarding}
+      setupComplete={agent.view.setupComplete}
       transactions={agent.transactionHistory}
       telemetry={agent.activity.telemetry}
       events={agent.events}

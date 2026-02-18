@@ -22,6 +22,7 @@ const ThreadStateSchema = z
       .object({
         command: z.string().optional(),
         onboarding: z.record(z.unknown()).optional(),
+        setupComplete: z.boolean().optional(),
         delegationsBypassActive: z.boolean().optional(),
         profile: z.record(z.unknown()).optional(),
         metrics: z.record(z.unknown()).optional(),
@@ -149,6 +150,51 @@ function threadHasPendingInterrupts(payload: unknown): boolean {
   });
 }
 
+function extractFirstPendingInterrupt(payload: unknown): unknown | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const tasks = payload['tasks'];
+  if (!Array.isArray(tasks)) {
+    return null;
+  }
+
+  for (let index = tasks.length - 1; index >= 0; index -= 1) {
+    const task = tasks[index];
+    if (!isRecord(task)) {
+      continue;
+    }
+    const interrupts = task['interrupts'];
+    if (!Array.isArray(interrupts) || interrupts.length === 0) {
+      continue;
+    }
+
+    for (let interruptIndex = interrupts.length - 1; interruptIndex >= 0; interruptIndex -= 1) {
+      const candidate = interrupts[interruptIndex];
+      if (!isRecord(candidate)) {
+        continue;
+      }
+      if (!Object.prototype.hasOwnProperty.call(candidate, 'value')) {
+        continue;
+      }
+
+      const rawValue = candidate['value'];
+      if (typeof rawValue === 'string') {
+        try {
+          return JSON.parse(rawValue) as unknown;
+        } catch {
+          return rawValue;
+        }
+      }
+
+      return rawValue;
+    }
+  }
+
+  return null;
+}
+
 async function fetchThreadStatePayload(baseUrl: string, threadId: string): Promise<unknown | null> {
   const response = await fetch(`${baseUrl}/threads/${threadId}/state`);
   if (response.status === 404) {
@@ -251,20 +297,28 @@ async function waitForRunCompletion(baseUrl: string, threadId: string, runId: st
   console.warn('[agent-sync] Run did not complete before timeout', { threadId, runId });
 }
 
-async function fetchViewState(baseUrl: string, threadId: string): Promise<ThreadState | null> {
-  const { values } = await fetchThreadStateValues(baseUrl, threadId);
+async function fetchViewState(baseUrl: string, threadId: string): Promise<{
+  state: ThreadState | null;
+  hasInterrupts: boolean;
+  pendingInterrupt: unknown | null;
+}> {
+  const { payload, values, hasInterrupts } = await fetchThreadStateValues(baseUrl, threadId);
+  const pendingInterrupt = extractFirstPendingInterrupt(payload);
+
   if (!values) {
-    return null;
+    return { state: null, hasInterrupts, pendingInterrupt };
   }
+
   const parsed = ThreadStateSchema.safeParse(values);
   if (!parsed.success) {
     console.warn('[agent-sync] Unable to parse thread state', {
       threadId,
       error: parsed.error.message,
     });
-    return null;
+    return { state: null, hasInterrupts, pendingInterrupt };
   }
-  return parsed.data;
+
+  return { state: parsed.data, hasInterrupts, pendingInterrupt };
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -317,7 +371,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    const state = await fetchViewState(baseUrl, threadId);
+    const { state, hasInterrupts, pendingInterrupt } = await fetchViewState(baseUrl, threadId);
 
     const task = state?.view?.task;
     const taskId = task?.id ?? null;
@@ -336,7 +390,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         taskState === 'failed' ||
         taskState === 'input-required' ||
         (Array.isArray(transactionHistory) && transactionHistory.length > 0) ||
-        Boolean(initialState.hasInterrupts))
+        Boolean(hasInterrupts))
     ) {
       const lastTxHash = Array.isArray(transactionHistory)
         ? (transactionHistory.at(-1) as { txHash?: unknown } | undefined)?.txHash
@@ -348,7 +402,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         taskStateRaw: taskState,
         taskState: derivedTaskState,
         taskMessage,
-        hasInterrupts: initialState.hasInterrupts,
+        hasInterrupts,
         transactionCount: Array.isArray(transactionHistory) ? transactionHistory.length : null,
         lastTxHash: typeof lastTxHash === 'string' ? lastTxHash : null,
       });
@@ -359,11 +413,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         agentId: parsed.data.agentId,
         command,
         onboarding: state?.view?.onboarding ?? null,
+        setupComplete: state?.view?.setupComplete ?? null,
         delegationsBypassActive: state?.view?.delegationsBypassActive ?? null,
         profile: state?.view?.profile ?? null,
         metrics: state?.view?.metrics ?? null,
         activity: state?.view?.activity ?? null,
         transactionHistory,
+        hasInterrupts,
+        pendingInterrupt,
         task: task ?? null,
         taskId,
         taskState: derivedTaskState,

@@ -165,4 +165,16 @@ describe('useOnchainActionsIconMaps internals', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(__useOnchainActionsIconMapsTestOnly.getCachedTokenIconUri('GMX')).toBeUndefined();
   });
+
+  it('swallows token icon fetch errors so loading state can recover', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('network down'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      __useOnchainActionsIconMapsTestOnly.loadTokenIcons({ symbolKeys: ['GMX'] }),
+    ).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(__useOnchainActionsIconMapsTestOnly.getCachedTokenIconUri('GMX')).toBeUndefined();
+  });
 });

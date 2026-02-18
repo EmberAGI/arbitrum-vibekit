@@ -166,6 +166,15 @@ export type PendleFundWalletRequestInterrupt = {
   whitelistSymbols?: string[];
 };
 
+export type GmxFundWalletRequestInterrupt = {
+  type: 'gmx-fund-wallet-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+  artifactId?: string;
+  walletAddress?: `0x${string}`;
+  requiredCollateralSymbol?: string;
+};
+
 export type GmxSetupRequestInterrupt = {
   type: 'gmx-setup-request';
   message: string;
@@ -217,6 +226,7 @@ export type AgentInterrupt =
   | OperatorConfigRequestInterrupt
   | PendleSetupRequestInterrupt
   | PendleFundWalletRequestInterrupt
+  | GmxFundWalletRequestInterrupt
   | GmxSetupRequestInterrupt
   | FundingTokenRequestInterrupt
   | DelegationSigningRequestInterrupt;
@@ -355,6 +365,7 @@ export interface AgentView {
   command?: string;
   task?: Task;
   onboarding?: OnboardingState;
+  setupComplete?: boolean;
   poolArtifact?: Artifact;
   operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput;
   fundingTokenInput?: FundingTokenInput;
@@ -440,6 +451,7 @@ export const defaultActivity: AgentViewActivity = {
 export const defaultView: AgentView = {
   command: undefined,
   task: undefined,
+  setupComplete: undefined,
   poolArtifact: undefined,
   operatorInput: undefined,
   selectedPool: undefined,

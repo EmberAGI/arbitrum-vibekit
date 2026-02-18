@@ -1,6 +1,18 @@
 import { useLangGraphInterrupt } from '@copilotkit/react-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+const normalizeInterruptEventValue = (eventValue: unknown): unknown => {
+  if (typeof eventValue !== 'string') {
+    return eventValue;
+  }
+
+  try {
+    return JSON.parse(eventValue) as unknown;
+  } catch {
+    return eventValue;
+  }
+};
+
 /**
  * Wrapper around CopilotKit's useLangGraphInterrupt for custom UI rendering.
  *
@@ -20,6 +32,7 @@ export function useLangGraphInterruptCustomUI<T>(options: {
   enabled: (eventValue: unknown) => eventValue is T;
 }): {
   activeInterrupt: T | null;
+  canResolve: () => boolean;
   resolve: (value: string) => void;
   dismiss: () => void;
 } {
@@ -69,10 +82,11 @@ export function useLangGraphInterruptCustomUI<T>(options: {
 
   useLangGraphInterrupt<T>({
     enabled: ({ eventValue }) => {
-      const isMatch = options.enabled(eventValue);
+      const normalizedEventValue = normalizeInterruptEventValue(eventValue);
+      const isMatch = options.enabled(normalizedEventValue);
       if (!isMatch) return false;
 
-      const key = interruptKey(eventValue);
+      const key = interruptKey(normalizedEventValue);
       if (key && key === lastResolvedKeyRef.current) {
         return false;
       }
@@ -82,7 +96,7 @@ export function useLangGraphInterruptCustomUI<T>(options: {
         return true;
       }
 
-      pendingInterruptRef.current = eventValue;
+      pendingInterruptRef.current = normalizedEventValue;
       if (!pendingScheduleRef.current) {
         pendingScheduleRef.current = true;
         setTimeout(() => {
@@ -105,6 +119,7 @@ export function useLangGraphInterruptCustomUI<T>(options: {
       if (resolveRef.current) {
         resolveRef.current(value);
       }
+      resolveRef.current = null;
       setActiveInterrupt(null);
       pendingInterruptRef.current = null;
     },
@@ -118,5 +133,7 @@ export function useLangGraphInterruptCustomUI<T>(options: {
     resolveRef.current = null;
   }, [interruptKey]);
 
-  return { activeInterrupt, resolve, dismiss };
+  const canResolve = useCallback(() => resolveRef.current !== null, []);
+
+  return { activeInterrupt, canResolve, resolve, dismiss };
 }

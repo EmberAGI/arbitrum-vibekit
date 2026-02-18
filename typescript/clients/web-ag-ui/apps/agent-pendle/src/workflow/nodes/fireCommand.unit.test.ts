@@ -255,6 +255,51 @@ describe('fireCommandNode', () => {
     expect(emittedMessages).toContain('Unwind: planned 0 transaction(s)');
   });
 
+  it('uses extended position lookup retries when a setup transaction exists', async () => {
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+    const state = baseState();
+    state.view.operatorConfig = {
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      executionWalletAddress: '0x0000000000000000000000000000000000000001',
+      baseContributionUsd: 10,
+      fundingTokenAddress: '0x0000000000000000000000000000000000000002',
+      targetYieldToken: {
+        marketAddress: '0x0000000000000000000000000000000000000003',
+        ptAddress: '0x0000000000000000000000000000000000000004',
+        ytAddress: '0x0000000000000000000000000000000000000005',
+        ptSymbol: 'PT',
+        ytSymbol: 'YT',
+        underlyingSymbol: 'USDai',
+        apy: 1,
+        maturity: '2030-01-01',
+      },
+    };
+    state.view.transactionHistory = [
+      {
+        cycle: 0,
+        action: 'setup',
+        txHash: '0xsetup',
+        status: 'success',
+        reason: 'Initial deposit',
+        timestamp: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+
+    resolvePendleTxExecutionModeMock.mockReturnValue('plan');
+    resolvePendleChainIdsMock.mockReturnValue(['42161']);
+    executeUnwindMock.mockResolvedValue({ txHashes: [], positionCount: 0, transactionCount: 0 });
+
+    await fireCommandNode(state, {});
+
+    expect(executeUnwindMock).toHaveBeenCalledTimes(1);
+    expect(executeUnwindMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        positionLookupAttempts: 20,
+        positionLookupDelayMs: 3000,
+      }),
+    );
+  });
+
   it('records unwind tx hashes in transactionHistory', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));

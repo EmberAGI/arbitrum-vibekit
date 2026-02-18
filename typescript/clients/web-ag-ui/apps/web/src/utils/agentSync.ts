@@ -17,12 +17,15 @@ const SyncResponseSchema = z.object({
 
   command: z.string().nullable().optional(),
   onboarding: OnboardingStateSchema.nullable().optional(),
+  setupComplete: z.boolean().nullable().optional(),
   delegationsBypassActive: z.boolean().nullable().optional(),
 
   profile: z.record(z.unknown()).nullable().optional(),
   metrics: z.record(z.unknown()).nullable().optional(),
   activity: z.record(z.unknown()).nullable().optional(),
   transactionHistory: z.array(z.unknown()).nullable().optional(),
+  hasInterrupts: z.boolean().optional(),
+  pendingInterrupt: z.unknown().nullable().optional(),
 
   task: z.record(z.unknown()).nullable().optional(),
   haltReason: z.string().nullable().optional(),
@@ -49,15 +52,27 @@ export function applyAgentSyncToState(prevState: AgentState, sync: AgentSyncResp
       ...prevView,
       command: (sync.command ?? undefined) ?? prevView.command,
       onboarding: (sync.onboarding ?? undefined) ?? prevView.onboarding,
+      setupComplete: (sync.setupComplete ?? undefined) ?? prevView.setupComplete,
       delegationsBypassActive:
         (sync.delegationsBypassActive ?? undefined) ?? prevView.delegationsBypassActive,
       profile: nextProfile as typeof prevView.profile,
       metrics: nextMetrics as typeof prevView.metrics,
       activity: nextActivity as typeof prevView.activity,
       transactionHistory: nextTransactionHistory as typeof prevView.transactionHistory,
-      task: (sync.task ?? undefined) ? (sync.task as unknown as typeof prevView.task) : prevView.task,
-      haltReason: (sync.haltReason ?? undefined) ?? prevView.haltReason,
-      executionError: (sync.executionError ?? undefined) ?? prevView.executionError,
+      task:
+        sync.task === null
+          ? undefined
+          : sync.task
+            ? (sync.task as unknown as typeof prevView.task)
+            : prevView.task,
+      haltReason:
+        sync.haltReason === null
+          ? undefined
+          : (sync.haltReason ?? undefined) ?? prevView.haltReason,
+      executionError:
+        sync.executionError === null
+          ? undefined
+          : (sync.executionError ?? undefined) ?? prevView.executionError,
     },
   };
 }

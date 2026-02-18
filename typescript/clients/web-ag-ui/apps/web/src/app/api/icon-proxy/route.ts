@@ -7,6 +7,8 @@ const ALLOWED_HOSTS = new Set([
   'assets.coingecko.com',
   // Some token metadata uses GitHub-hosted SVGs.
   'raw.githubusercontent.com',
+  // Coingecko may return token images from this CDN.
+  'ugc.production.linktr.ee',
 ]);
 
 function parseUpstreamUrl(requestUrl: string): URL | null {
@@ -62,4 +64,3 @@ export async function GET(request: Request) {
     },
   });
 }
-

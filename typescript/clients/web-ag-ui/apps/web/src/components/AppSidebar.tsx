@@ -23,7 +23,7 @@ import { useAgent } from '@/contexts/AgentContext';
 import { useAgentList } from '@/contexts/AgentListContext';
 import { getAllAgents } from '@/config/agents';
 import type { TaskState } from '@/types/agent';
-import { deriveTaskStateForUi } from '@/utils/deriveTaskStateForUi';
+import { resolveSidebarTaskState } from '@/utils/resolveSidebarTaskState';
 import { collectUniqueChainNames, collectUniqueTokenSymbols } from '@/utils/agentCollections';
 import { PROTOCOL_TOKEN_FALLBACK } from '@/constants/protocolTokenFallback';
 import {
@@ -76,7 +76,7 @@ export function AppSidebar() {
   const agent = useAgent();
   const { agents: listAgents } = useAgentList();
 
-  const agentConfigs = getAllAgents();
+  const agentConfigs = useMemo(() => getAllAgents(), []);
   const isInactiveRuntime = agent.config.id === 'inactive-agent';
   const runtimeAgentId = isInactiveRuntime ? null : agent.config.id;
   const runtimeTaskId = agent.view.task?.id;
@@ -84,7 +84,6 @@ export function AppSidebar() {
   const runtimeCommand = agent.view.command;
   const runtimeHaltReason = agent.view.haltReason;
   const runtimeExecutionError = agent.view.executionError;
-  const runtimeNeedsInput = Boolean(agent.activeInterrupt);
   const runtimeTaskMessage = (() => {
     const message = agent.view.task?.taskStatus?.message;
     if (typeof message !== 'object' || message === null) return undefined;
@@ -104,11 +103,12 @@ export function AppSidebar() {
       ? {
           ...listEntry,
           taskId: runtimeTaskId,
-          taskState: (deriveTaskStateForUi({
-            command: runtimeCommand,
-            taskState: runtimeTaskState ?? null,
-            taskMessage: runtimeTaskMessage ?? null,
-          }) ?? undefined) as TaskState | undefined,
+          taskState: resolveSidebarTaskState({
+            listTaskState: listEntry?.taskState,
+            runtimeTaskState,
+            runtimeCommand,
+            runtimeTaskMessage,
+          }),
           command: runtimeCommand,
           taskMessage: runtimeTaskMessage,
           haltReason: runtimeHaltReason,
@@ -122,7 +122,7 @@ export function AppSidebar() {
     }
 
     const taskId = entry.taskId ?? config.id;
-    const needsInput = taskState === 'input-required' && runtimeNeedsInput;
+    const needsInput = taskState === 'input-required';
     const hasError = taskState === 'failed';
     const isBlocked = needsInput || hasError;
     const isCompleted = taskState === 'completed' || taskState === 'canceled';

@@ -31,16 +31,28 @@ import { extractCommand, resolveCommandTarget, runCommandNode } from './workflow
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
+import { resolveNextOnboardingNode } from './workflow/onboardingRouting.js';
 import { saveBootstrapContext } from './workflow/store.js';
 
 /**
  * Routes after bootstrap based on the original command.
  * - sync: go to syncState (just return state after bootstrap)
- * - hire/cycle: continue to listPools for full setup flow
+ * - hire/cycle: resume from the next missing onboarding requirement
  */
-function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
+function resolvePostBootstrap(
+  state: ClmmState,
+):
+  | 'listPools'
+  | 'collectOperatorInput'
+  | 'collectFundingTokenInput'
+  | 'collectDelegations'
+  | 'prepareOperator'
+  | 'syncState' {
   const command = extractCommand(state.messages) ?? state.view.command;
-  return command === 'sync' ? 'syncState' : 'listPools';
+  if (command === 'sync') {
+    return 'syncState';
+  }
+  return resolveNextOnboardingNode(state);
 }
 
 const store = new InMemoryStore();

@@ -106,6 +106,7 @@ interface AgentDetailPageProps {
   executionError?: string;
   delegationsBypassActive?: boolean;
   onboarding?: OnboardingState;
+  setupComplete?: boolean;
   // Activity data
   transactions?: Transaction[];
   telemetry?: TelemetryItem[];
@@ -272,6 +273,7 @@ export function AgentDetailPage({
   executionError,
   delegationsBypassActive,
   onboarding,
+  setupComplete,
   transactions = [],
   telemetry = [],
   events = [],
@@ -284,19 +286,21 @@ export function AgentDetailPage({
   const [hasUserSelectedTab, setHasUserSelectedTab] = useState(false);
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
   const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
-  const isOnboardingActive = onboarding?.step !== undefined;
-  const isOnboardingInterrupt =
-    activeInterrupt?.type === 'operator-config-request' ||
-    activeInterrupt?.type === 'pendle-setup-request' ||
-    activeInterrupt?.type === 'pendle-fund-wallet-request' ||
-    activeInterrupt?.type === 'gmx-setup-request' ||
-    activeInterrupt?.type === 'clmm-funding-token-request' ||
-    activeInterrupt?.type === 'pendle-funding-token-request' ||
-    activeInterrupt?.type === 'gmx-funding-token-request' ||
-    activeInterrupt?.type === 'clmm-delegation-signing-request' ||
-    activeInterrupt?.type === 'pendle-delegation-signing-request' ||
-    activeInterrupt?.type === 'gmx-delegation-signing-request';
-  const forceBlockersTab = Boolean(activeInterrupt) || isOnboardingActive;
+  const isTaskTerminal =
+    taskStatus === 'completed' ||
+    taskStatus === 'failed' ||
+    taskStatus === 'canceled' ||
+    taskStatus === 'rejected';
+  const isPendleOnboardingInFlight =
+    agentId === 'agent-pendle' &&
+    currentCommand === 'hire' &&
+    setupComplete !== true &&
+    !isTaskTerminal;
+  const isOnboardingActive =
+    Boolean(activeInterrupt) ||
+    taskStatus === 'input-required' ||
+    isPendleOnboardingInFlight;
+  const forceBlockersTab = isOnboardingActive;
   const selectTab = useCallback((tab: TabType) => {
     setHasUserSelectedTab(true);
     setActiveTab(tab);
@@ -305,7 +309,7 @@ export function AgentDetailPage({
   const resolvedTab: TabType = forceBlockersTab
     ? 'blockers'
     : !hasUserSelectedTab && isHired
-      ? 'blockers'
+      ? 'metrics'
       : activeTab;
 
   const blockingErrorMessage = (haltReason || executionError || null) as string | null;
@@ -409,7 +413,7 @@ export function AgentDetailPage({
     return out;
   }, [displayProtocols, displayTokens]);
 
-  const { chainIconByName, tokenIconBySymbol, isLoaded: iconsLoaded } = useOnchainActionsIconMaps({
+  const { chainIconByName, tokenIconBySymbol } = useOnchainActionsIconMaps({
     chainNames: profile.chains ?? [],
     tokenSymbols: desiredTokenSymbols,
   });
@@ -549,7 +553,6 @@ export function AgentDetailPage({
         {resolvedTab === 'transactions' && (
           <TransactionHistoryTab
             transactions={transactions}
-            iconsLoaded={iconsLoaded}
             chainIconUri={displayChains.length > 0 ? chainIconByName[normalizeNameKey(displayChains[0])] ?? null : null}
             protocolLabel={
               profile.protocols && profile.protocols.length > 0 ? profile.protocols[0] : null
@@ -600,20 +603,20 @@ export function AgentDetailPage({
             <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-stretch">
                 {/* Left summary card (Figma onboarding) */}
                 <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
-                  {!iconsLoaded ? (
-                    <Skeleton className="h-[220px] w-[220px] rounded-full mb-6 mx-auto" />
-                  ) : (
-                    <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
-                      {agentAvatarUri ? (
-                        <img
-                          src={proxyIconUri(agentAvatarUri)}
-                          alt=""
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : null}
-                    </div>
-                  )}
+                  <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
+                    {agentAvatarUri ? (
+                      <img
+                        src={proxyIconUri(agentAvatarUri)}
+                        alt=""
+                        decoding="async"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-4xl font-semibold text-white/75" aria-hidden="true">
+                        {iconMonogram(agentName)}
+                      </span>
+                    )}
+                  </div>
 
                   <div className="flex justify-center">
                     {isHired ? (
@@ -794,13 +797,11 @@ export function AgentDetailPage({
                     <TagColumn
                       title="Chains"
                       items={displayChains}
-                      iconsLoaded={iconsLoaded}
                       getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
                     />
                     <TagColumn
                       title="Protocols"
                       items={displayProtocols}
-                      iconsLoaded={iconsLoaded}
                       getIconUri={(protocol) => {
                         const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
                         if (!fallback) return null;
@@ -810,7 +811,6 @@ export function AgentDetailPage({
                     <TagColumn
                       title="Tokens"
                       items={displayTokens}
-                      iconsLoaded={iconsLoaded}
                       getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
                     />
                     <PointsColumn metrics={metrics} />
@@ -846,20 +846,20 @@ export function AgentDetailPage({
           {/* Left Column - Agent Card */}
           <div className="h-full">
             <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
-              {!iconsLoaded ? (
-                <Skeleton className="h-[220px] w-[220px] rounded-full mb-6 mx-auto" />
-              ) : (
-                <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
-                  {agentAvatarUri ? (
-                    <img
-                      src={agentAvatarUri}
-                      alt=""
-                      decoding="async"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : null}
-                </div>
-              )}
+              <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
+                {agentAvatarUri ? (
+                  <img
+                    src={proxyIconUri(agentAvatarUri)}
+                    alt=""
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="text-4xl font-semibold text-white/75" aria-hidden="true">
+                    {iconMonogram(agentName)}
+                  </span>
+                )}
+              </div>
 
               <button
                 onClick={onHire}
@@ -1001,13 +1001,11 @@ export function AgentDetailPage({
                 <TagColumn
                   title="Chains"
                   items={displayChains}
-                  iconsLoaded={iconsLoaded}
                   getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
                 />
                 <TagColumn
                   title="Protocols"
                   items={displayProtocols}
-                  iconsLoaded={iconsLoaded}
                   getIconUri={(protocol) => {
                     const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
                     if (!fallback) return null;
@@ -1017,7 +1015,6 @@ export function AgentDetailPage({
                 <TagColumn
                   title="Tokens"
                   items={displayTokens}
-                  iconsLoaded={iconsLoaded}
                   getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
                 />
                 <PointsColumn metrics={metrics} />
@@ -1148,7 +1145,6 @@ function TabButton({ active, onClick, children, disabled, highlight }: TabButton
 // Transaction History Tab Component
 interface TransactionHistoryTabProps {
   transactions: Transaction[];
-  iconsLoaded: boolean;
   chainIconUri: string | null;
   protocolIconUri: string | null;
   protocolLabel: string | null;
@@ -1156,7 +1152,6 @@ interface TransactionHistoryTabProps {
 
 function TransactionHistoryTab({
   transactions,
-  iconsLoaded,
   chainIconUri,
   protocolIconUri,
   protocolLabel,
@@ -1233,7 +1228,7 @@ function TransactionHistoryTab({
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="flex items-center -space-x-2 flex-shrink-0">
-                          {iconsLoaded && chainIconUri ? (
+                          {chainIconUri ? (
                             <img
                               src={proxyIconUri(chainIconUri)}
                               alt=""
@@ -1244,7 +1239,7 @@ function TransactionHistoryTab({
                           ) : (
                             <div className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12]" />
                           )}
-                          {iconsLoaded && protocolIconUri ? (
+                          {protocolIconUri ? (
                             <img
                               src={proxyIconUri(protocolIconUri)}
                               alt=""
@@ -1317,22 +1312,182 @@ interface AgentBlockersTabProps {
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
 }
 
-const SETUP_STEPS = [
-  {
-    id: 1,
-    name: 'Agent Preferences',
-    description:
-      'Define boundaries and ensure compatibility with your strategy. You can update permissions after deployment.',
+type SetupStep = {
+  id: number;
+  name: string;
+  description: string;
+};
+
+type SetupStepKind = 'setup' | 'funding' | 'delegation' | 'fund-wallet';
+
+const isFundingInterruptType = (type: AgentInterrupt['type'] | undefined): boolean =>
+  type === 'clmm-funding-token-request' ||
+  type === 'pendle-funding-token-request' ||
+  type === 'gmx-funding-token-request';
+
+const isDelegationInterruptType = (type: AgentInterrupt['type'] | undefined): boolean =>
+  type === 'clmm-delegation-signing-request' ||
+  type === 'pendle-delegation-signing-request' ||
+  type === 'gmx-delegation-signing-request';
+
+const resolveSetupStepKinds = (params: {
+  totalSteps?: number;
+  interruptType?: AgentInterrupt['type'];
+  delegationsBypassActive?: boolean;
+  onboardingStep?: number;
+  onboardingKey?: string;
+}): SetupStepKind[] => {
+  const resolvedTotalSteps =
+    typeof params.totalSteps === 'number' && Number.isFinite(params.totalSteps)
+      ? Math.max(1, Math.floor(params.totalSteps))
+      : params.interruptType === 'gmx-fund-wallet-request'
+        ? 4
+        : 3;
+
+  const stepKinds: SetupStepKind[] = (() => {
+    if (resolvedTotalSteps === 1) {
+      return ['setup'];
+    }
+
+    if (resolvedTotalSteps === 2) {
+      if (params.delegationsBypassActive === true) {
+        return ['setup', 'funding'];
+      }
+      if (isDelegationInterruptType(params.interruptType)) {
+        return ['setup', 'delegation'];
+      }
+      return ['setup', 'funding'];
+    }
+
+    if (resolvedTotalSteps === 3) {
+      return ['setup', 'funding', 'delegation'];
+    }
+
+    return [
+      'setup',
+      'funding',
+      'delegation',
+      ...Array.from(
+        { length: resolvedTotalSteps - 3 },
+        (): SetupStepKind => 'fund-wallet',
+      ),
+    ];
+  })();
+
+  if (
+    typeof params.onboardingStep === 'number' &&
+    Number.isFinite(params.onboardingStep) &&
+    params.onboardingStep > 0 &&
+    params.onboardingStep <= resolvedTotalSteps &&
+    params.onboardingKey === 'fund-wallet'
+  ) {
+    stepKinds[params.onboardingStep - 1] = 'fund-wallet';
+  }
+
+  return stepKinds;
+};
+
+const BASE_SETUP_STEP_COPY: Record<
+  'default' | 'pendle' | 'gmx',
+  Record<SetupStepKind, Omit<SetupStep, 'id'>>
+> = {
+  default: {
+    setup: {
+      name: 'Agent Preferences',
+      description: 'Provide strategy inputs so the agent can initialize your configuration.',
+    },
+    funding: {
+      name: 'Funding Token',
+      description: 'Choose the starting asset used to fund agent actions.',
+    },
+    delegation: {
+      name: 'Signing Policies',
+      description: 'Review and sign delegations required for execution.',
+    },
+    'fund-wallet': {
+      name: 'Fund Wallet',
+      description: 'Add required funds, then continue to retry execution.',
+    },
   },
-  {
-    id: 2,
-    name: 'Allowed Assets & Protocols',
-    description: 'Select which assets and protocols the agent can interact with.',
+  pendle: {
+    setup: {
+      name: 'Funding Amount',
+      description: 'Set deployment amount and wallet context for Pendle.',
+    },
+    funding: {
+      name: 'Funding Token',
+      description: 'Select the starting stablecoin (may be auto-selected from existing position).',
+    },
+    delegation: {
+      name: 'Delegation Signing',
+      description: 'Approve permissions needed to manage the Pendle position.',
+    },
+    'fund-wallet': {
+      name: 'Fund Wallet',
+      description: 'Fund the wallet with an eligible stablecoin before continuing.',
+    },
   },
-  { id: 3, name: 'Signing Policies', description: 'Configure transaction signing requirements.' },
-  { id: 4, name: 'Claims & Unwinds', description: 'Set up claim and unwind procedures.' },
-  { id: 5, name: 'Summary', description: 'Review and confirm your settings.' },
-];
+  gmx: {
+    setup: {
+      name: 'Strategy Config',
+      description: 'Select market and allocation for the GMX strategy.',
+    },
+    funding: {
+      name: 'Funding Token',
+      description: 'Choose the funding token used for position management.',
+    },
+    delegation: {
+      name: 'Delegation Signing',
+      description: 'Approve execution permissions for GMX operations.',
+    },
+    'fund-wallet': {
+      name: 'Fund Wallet',
+      description: 'Add GMX collateral + Arbitrum ETH gas before retrying.',
+    },
+  },
+};
+
+function resolveSetupSteps(params: {
+  agentId: string;
+  totalSteps?: number;
+  onboardingStep?: number;
+  onboardingKey?: string;
+  interruptType?: AgentInterrupt['type'];
+  delegationsBypassActive?: boolean;
+}): SetupStep[] {
+  const copyKey =
+    params.agentId === 'agent-pendle'
+      ? 'pendle'
+      : params.agentId === 'agent-gmx-allora'
+        ? 'gmx'
+        : 'default';
+  const baseSteps = BASE_SETUP_STEP_COPY[copyKey];
+  const resolvedTotalSteps =
+    typeof params.totalSteps === 'number' && Number.isFinite(params.totalSteps)
+      ? Math.max(1, Math.floor(params.totalSteps))
+      : params.interruptType === 'gmx-fund-wallet-request'
+        ? 4
+        : 3;
+  const resolvedStepKinds = resolveSetupStepKinds({
+    totalSteps: resolvedTotalSteps,
+    onboardingStep: params.onboardingStep,
+    onboardingKey: params.onboardingKey,
+    interruptType: params.interruptType,
+    delegationsBypassActive: params.delegationsBypassActive,
+  });
+
+  return Array.from({ length: resolvedTotalSteps }, (_, index) => {
+    const stepNumber = index + 1;
+    const stepKind = resolvedStepKinds[index];
+    const baseStep = stepKind ? baseSteps[stepKind] : undefined;
+    return {
+      id: stepNumber,
+      name: baseStep?.name ?? `Step ${stepNumber}`,
+      description:
+        baseStep?.description ?? 'Follow the next agent prompt to continue onboarding.',
+    };
+  });
+}
 
 function AgentBlockersTab({
   agentId,
@@ -1387,6 +1542,30 @@ function AgentBlockersTab({
   const isTerminalTask =
     taskStatus === 'failed' || taskStatus === 'canceled' || taskStatus === 'rejected';
   const showBlockingError = Boolean(haltReason || executionError) && isTerminalTask;
+  const setupSteps = useMemo(
+    () =>
+      resolveSetupSteps({
+        agentId,
+        totalSteps: onboarding?.totalSteps,
+        onboardingStep: onboarding?.step,
+        onboardingKey: onboarding?.key,
+        interruptType: activeInterrupt?.type,
+        delegationsBypassActive,
+      }),
+    [
+      agentId,
+      onboarding?.totalSteps,
+      onboarding?.step,
+      onboarding?.key,
+      activeInterrupt?.type,
+      delegationsBypassActive,
+    ],
+  );
+  const maxSetupStep = setupSteps.length;
+  const clampStep = useCallback(
+    (value: number) => Math.max(1, Math.min(value, maxSetupStep)),
+    [maxSetupStep],
+  );
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
   const uniqueAllowedPools: Pool[] = [];
@@ -1458,7 +1637,7 @@ function AgentBlockersTab({
       walletAddress: operatorWalletAddress as `0x${string}`,
       baseContributionUsd: baseContributionNumber,
     });
-    setCurrentStep(2);
+    setCurrentStep(clampStep(2));
   };
 
   const handlePendleSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -1509,7 +1688,7 @@ function AgentBlockersTab({
       walletAddress: operatorWalletAddress as `0x${string}`,
       baseContributionUsd: baseContributionNumber,
     });
-    setCurrentStep(2);
+    setCurrentStep(clampStep(2));
   };
 
   const handleGmxSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -1566,7 +1745,7 @@ function AgentBlockersTab({
       baseContributionUsd: baseContributionNumber,
       targetMarket,
     });
-    setCurrentStep(2);
+    setCurrentStep(clampStep(2));
   };
 
   const formatDate = (timestamp?: string) => {
@@ -1585,6 +1764,7 @@ function AgentBlockersTab({
   const showOperatorConfigForm = activeInterrupt?.type === 'operator-config-request';
   const showPendleSetupForm = activeInterrupt?.type === 'pendle-setup-request';
   const showPendleFundWalletForm = activeInterrupt?.type === 'pendle-fund-wallet-request';
+  const showGmxFundWalletForm = activeInterrupt?.type === 'gmx-fund-wallet-request';
   const showGmxSetupForm = activeInterrupt?.type === 'gmx-setup-request';
   const showFundingTokenForm =
     activeInterrupt?.type === 'clmm-funding-token-request' ||
@@ -1595,31 +1775,42 @@ function AgentBlockersTab({
     activeInterrupt?.type === 'pendle-delegation-signing-request' ||
     activeInterrupt?.type === 'gmx-delegation-signing-request';
 
-  // Sync currentStep with the interrupt type when it changes
-  useEffect(() => {
-    if (showOperatorConfigForm || showPendleSetupForm || showPendleFundWalletForm || showGmxSetupForm) {
-      setCurrentStep(1);
-    } else if (showFundingTokenForm) {
-      setCurrentStep(2);
-    } else if (showDelegationSigningForm) {
-      setCurrentStep(3);
+  const interruptStep = useMemo(() => {
+    if (showOperatorConfigForm || showPendleSetupForm || showGmxSetupForm) {
+      return 1;
     }
+    if (showPendleFundWalletForm || showFundingTokenForm) {
+      return 2;
+    }
+    if (showGmxFundWalletForm) {
+      return maxSetupStep;
+    }
+    if (showDelegationSigningForm) {
+      return 3;
+    }
+    return null;
   }, [
     showOperatorConfigForm,
     showPendleSetupForm,
     showPendleFundWalletForm,
+    showGmxFundWalletForm,
     showGmxSetupForm,
     showFundingTokenForm,
     showDelegationSigningForm,
+    maxSetupStep,
   ]);
 
-  // Also sync from onboarding.step if provided by the agent
+  // Agent-provided onboarding metadata is authoritative when present.
   useEffect(() => {
     const nextStep = onboarding?.step;
     if (typeof nextStep === 'number' && Number.isFinite(nextStep) && nextStep > 0) {
-      setCurrentStep(nextStep);
+      setCurrentStep(clampStep(nextStep));
+      return;
     }
-  }, [onboarding?.step]);
+    if (interruptStep !== null) {
+      setCurrentStep(clampStep(interruptStep));
+    }
+  }, [clampStep, interruptStep, onboarding?.step]);
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
@@ -1658,7 +1849,7 @@ function AgentBlockersTab({
       return;
     }
 
-    setCurrentStep(3);
+    setCurrentStep(clampStep(3));
     onInterruptSubmit?.({
       fundingTokenAddress: fundingTokenAddress as `0x${string}`,
     });
@@ -1666,7 +1857,7 @@ function AgentBlockersTab({
 
   const handleRejectDelegations = () => {
     setError(null);
-    setCurrentStep(5);
+    setCurrentStep(maxSetupStep);
     onInterruptSubmit?.({ outcome: 'rejected' });
   };
 
@@ -1729,7 +1920,7 @@ function AgentBlockersTab({
       }
 
       const response: DelegationSigningResponse = { outcome: 'signed', signedDelegations };
-      setCurrentStep(5);
+      setCurrentStep(maxSetupStep);
       onInterruptSubmit?.(response);
     } catch (signError: unknown) {
       const message =
@@ -1891,6 +2082,42 @@ function AgentBlockersTab({
                     </li>
                     <li>
                       Wallet: {(activeInterrupt as unknown as { walletAddress?: string }).walletAddress || connectedWalletAddress || 'Unknown'}
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onInterruptSubmit?.({ acknowledged: true })}
+                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            ) : showGmxFundWalletForm ? (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-4">Fund Wallet</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
+                <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4 mb-6">
+                  <div className="text-yellow-300 text-sm font-medium mb-2">What to do</div>
+                  <ul className="space-y-1 text-yellow-200 text-xs">
+                    <li>
+                      Add enough{' '}
+                      {(activeInterrupt as unknown as { requiredCollateralSymbol?: string })
+                        .requiredCollateralSymbol || 'USDC'}{' '}
+                      on Arbitrum for GMX collateral.
+                    </li>
+                    <li>Add a small amount of Arbitrum ETH for execution gas fees.</li>
+                    <li>
+                      Wallet:{' '}
+                      {(activeInterrupt as unknown as { walletAddress?: string }).walletAddress ||
+                        connectedWalletAddress ||
+                        'Unknown'}
                     </li>
                   </ul>
                 </div>
@@ -2155,7 +2382,7 @@ function AgentBlockersTab({
 
           {/* Steps Sidebar */}
           <div className="space-y-2">
-            {SETUP_STEPS.map((step) => (
+            {setupSteps.map((step) => (
               <div
                 key={step.id}
                 className={`flex items-start gap-3 p-3 rounded-xl transition-colors ${
@@ -2228,11 +2455,10 @@ function StatBox({ label, value, valueColor = 'text-white', isLoaded }: StatBoxP
 interface TagColumnProps {
   title: string;
   items: string[];
-  iconsLoaded: boolean;
   getIconUri: (item: string) => string | null;
 }
 
-function TagColumn({ title, items, iconsLoaded, getIconUri }: TagColumnProps) {
+function TagColumn({ title, items, getIconUri }: TagColumnProps) {
   if (items.length === 0) {
     return (
       <div>
@@ -2250,9 +2476,7 @@ function TagColumn({ title, items, iconsLoaded, getIconUri }: TagColumnProps) {
           const iconUri = getIconUri(item);
           return (
             <div key={item} className="flex items-center gap-2">
-              {!iconsLoaded ? (
-                <Skeleton className="h-4 w-4 rounded-full" />
-              ) : iconUri ? (
+              {iconUri ? (
                 <img
                   src={proxyIconUri(iconUri)}
                   alt=""
@@ -2277,7 +2501,7 @@ function TagColumn({ title, items, iconsLoaded, getIconUri }: TagColumnProps) {
             title={`${title} (more)`}
             items={items.slice(3).map((label) => ({
               label,
-              iconUri: iconsLoaded ? getIconUri(label) : null,
+              iconUri: getIconUri(label),
             }))}
           >
             <div className="inline-flex items-center gap-1.5 text-xs text-gray-400 select-none cursor-default">
@@ -2751,16 +2975,29 @@ function GmxAlloraMetricsTab({
 
   const executionOk = getBooleanField(latestExecutionData, 'ok');
   const executionError = getStringField(latestExecutionData, 'error');
+  const executionResultStatusRaw = getStringField(latestExecutionData, 'status');
+  const executionResultStatus =
+    executionResultStatusRaw === 'confirmed' ||
+    executionResultStatusRaw === 'failed' ||
+    executionResultStatusRaw === 'blocked'
+      ? executionResultStatusRaw
+      : undefined;
   const executionStatus =
-    executionOk === true
+    executionResultStatus === 'blocked'
+      ? 'pending'
+      : executionResultStatus === 'confirmed'
       ? 'confirmed'
-      : executionOk === false
+      : executionResultStatus === 'failed'
         ? 'failed'
-        : latestTransaction?.status === 'success'
+        : executionOk === true
           ? 'confirmed'
-          : latestTransaction?.status === 'failed'
+          : executionOk === false
             ? 'failed'
-            : 'pending';
+            : latestTransaction?.status === 'success'
+              ? 'confirmed'
+              : latestTransaction?.status === 'failed'
+                ? 'failed'
+                : 'pending';
 
   const marketLabel = latestCycle?.marketSymbol ?? formatPoolPair(fullMetrics?.lastSnapshot);
   const sideLabel = latestCycle?.side ? latestCycle.side.toUpperCase() : '—';

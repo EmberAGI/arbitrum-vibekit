@@ -224,6 +224,97 @@ describe('executeUnwind', () => {
     expect(onchainActionsClient.createTokenizedYieldSellPt).not.toHaveBeenCalled();
   });
 
+  it('retries position lookup and proceeds when a position appears on a subsequent attempt', async () => {
+    const onchainActionsClient = {
+      listTokenizedYieldMarkets: vi.fn().mockResolvedValue([
+        {
+          marketIdentifier: { chainId: '42161', address: '0xmarket' },
+          expiry: '2999-01-01',
+          details: {},
+          ptToken: {
+            tokenUid: { chainId: '42161', address: '0xpt' },
+            name: 'PT',
+            symbol: 'PT',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+          ytToken: {
+            tokenUid: { chainId: '42161', address: '0xyt' },
+            name: 'YT',
+            symbol: 'YT',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+          underlyingToken: {
+            tokenUid: { chainId: '42161', address: '0xunderlying' },
+            name: 'USDai',
+            symbol: 'USDai',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+        },
+      ]),
+      listTokenizedYieldPositions: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            marketIdentifier: { chainId: '42161', address: '0xmarket' },
+            pt: {
+              token: {
+                tokenUid: { chainId: '42161', address: '0xpt' },
+                name: 'PT',
+                symbol: 'PT',
+                isNative: false,
+                decimals: 18,
+                iconUri: undefined,
+                isVetted: true,
+              },
+              exactAmount: '0',
+            },
+            yt: {
+              token: {
+                tokenUid: { chainId: '42161', address: '0xyt' },
+                name: 'YT',
+                symbol: 'YT',
+                isNative: false,
+                decimals: 18,
+                iconUri: undefined,
+                isVetted: true,
+              },
+              exactAmount: '0',
+              claimableRewards: [],
+            },
+          },
+        ]),
+      createTokenizedYieldClaimRewards: vi.fn(),
+      createTokenizedYieldRedeemPt: vi.fn(),
+      createTokenizedYieldSellPt: vi.fn(),
+    };
+
+    const result = await executeUnwind({
+      onchainActionsClient,
+      txExecutionMode: 'plan',
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      chainIds: ['42161'],
+      positionLookupAttempts: 3,
+      positionLookupDelayMs: 0,
+    });
+
+    expect(onchainActionsClient.listTokenizedYieldPositions).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({
+      txHashes: [],
+      positionCount: 1,
+      transactionCount: 0,
+    });
+  });
+
   it('retries planning a claim step up to 2 times before succeeding', async () => {
     const onchainActionsClient = {
       listTokenizedYieldMarkets: vi.fn().mockResolvedValue([]),

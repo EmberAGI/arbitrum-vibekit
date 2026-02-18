@@ -28,6 +28,16 @@ import { buildPendleLatestSnapshot, buildPendleLatestSnapshotFromOnchain } from 
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
+const FULL_ONBOARDING_TOTAL_STEPS = 3;
+const DELEGATION_APPROVAL_MESSAGE = 'Waiting for delegation approval to continue onboarding.';
+
+const resolveOnboardingTotalSteps = (state: ClmmState): number => {
+  const configuredTotalSteps = state.view.onboarding?.totalSteps;
+  return typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
+    ? configuredTotalSteps
+    : FULL_ONBOARDING_TOTAL_STEPS;
+};
+
 const resolveFundingAmount = (amountUsd: number, decimals: number): string => {
   if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
     throw new Error(`Invalid funding amount: ${amountUsd}`);
@@ -51,23 +61,23 @@ export const prepareOperatorNode = async (
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   const { operatorInput } = state.view;
   if (!operatorInput) {
-    const failureMessage = 'ERROR: Setup input missing';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const totalSteps = resolveOnboardingTotalSteps(state);
+    const message = 'Awaiting funding amount to continue onboarding.';
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
+    const pendingView = {
+      ...state.view,
+      task,
+      onboarding: { step: 1, totalSteps },
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    };
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: pendingView,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
-        },
+        view: pendingView,
       },
-      goto: 'summarize',
+      goto: 'collectSetupInput',
     });
   }
 
@@ -75,23 +85,23 @@ export const prepareOperatorNode = async (
 
   const fundingTokenInput = state.view.fundingTokenInput;
   if (!fundingTokenInput) {
-    const failureMessage = 'ERROR: Funding token input missing before strategy setup';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const totalSteps = resolveOnboardingTotalSteps(state);
+    const message = 'Awaiting funding-token selection to continue onboarding.';
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
+    const pendingView = {
+      ...state.view,
+      task,
+      onboarding: { step: 2, totalSteps },
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    };
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: pendingView,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
-        },
+        view: pendingView,
       },
-      goto: 'summarize',
+      goto: 'collectFundingTokenInput',
     });
   }
 
@@ -102,22 +112,20 @@ export const prepareOperatorNode = async (
 
   const delegationsBypassActive = state.view.delegationsBypassActive === true;
   if (!delegationsBypassActive && !state.view.delegationBundle) {
-    const message = 'Delegation signature required. Please approve the required permissions to continue.';
+    const message = DELEGATION_APPROVAL_MESSAGE;
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
+    const pendingView = {
+      ...state.view,
+      task,
+      onboarding: state.view.onboarding,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    };
     await copilotkitEmitState(config, {
-      view: {
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        onboarding: state.view.onboarding,
-      },
+      view: pendingView,
     });
     return new Command({
       update: {
-        view: {
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          onboarding: state.view.onboarding,
-        },
+        view: pendingView,
       },
       goto: 'collectDelegations',
     });

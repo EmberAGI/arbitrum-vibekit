@@ -256,7 +256,6 @@ export function HireAgentsPage({
                       key={agent.id}
                       agent={agent}
                       index={index}
-                      iconsLoaded={iconsLoaded}
                       chainItems={chainItems}
                       protocolItems={protocolItems}
                       tokenItems={tokenItems}
@@ -321,7 +320,6 @@ export function HireAgentsPage({
 
           {/* Agents Table */}
           <AgentsTable
-            iconsLoaded={iconsLoaded}
             agents={paginatedAgents.map((agent, index) => ({
               id: agent.id,
               rank: agent.rank ?? index + 1,
@@ -360,7 +358,6 @@ export function HireAgentsPage({
 
 function FeaturedAgentCard({
   agent,
-  iconsLoaded,
   chainItems,
   protocolItems,
   tokenItems,
@@ -369,7 +366,6 @@ function FeaturedAgentCard({
 }: {
   agent: FeaturedAgent;
   index: number;
-  iconsLoaded: boolean;
   chainItems: { label: string; iconUri: string | null }[];
   protocolItems: { label: string; iconUri: string | null }[];
   tokenItems: { label: string; iconUri: string | null }[];
@@ -434,20 +430,20 @@ function FeaturedAgentCard({
 
         <div className="flex items-start gap-4">
           {/* Large circular avatar */}
-          {!iconsLoaded ? (
-            <Skeleton className="h-[72px] w-[72px] rounded-full ring-1 ring-white/10" />
-          ) : (
-             <div className="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 bg-black/30">
-               {avatarUri ? (
-                 <img
-                   src={proxyIconUri(avatarUri)}
-                   alt=""
-                   decoding="async"
-                   className="h-full w-full object-cover"
-                 />
-               ) : null}
-              </div>
-          )}
+          <div className="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 bg-black/30 flex items-center justify-center">
+            {avatarUri ? (
+              <img
+                src={proxyIconUri(avatarUri)}
+                alt=""
+                decoding="async"
+                className="h-full w-full object-contain p-2"
+              />
+            ) : (
+              <span className="text-lg font-semibold text-white/75" aria-hidden="true">
+                {iconMonogram(agent.name)}
+              </span>
+            )}
+          </div>
 
           {/* Icon groups to the right of the avatar */}
           <div className="flex-1 min-w-0">

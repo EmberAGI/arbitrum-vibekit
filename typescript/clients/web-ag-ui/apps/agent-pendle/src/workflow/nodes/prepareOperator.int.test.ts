@@ -659,7 +659,7 @@ describe('prepareOperatorNode', () => {
     expect(update.view?.setupComplete).toBe(true);
   });
 
-  it('fails when funding token input is missing', async () => {
+  it('reroutes to funding token collection when funding token input is missing', async () => {
     const state: ClmmState = {
       messages: [],
       copilotkit: { actions: [], context: [] },
@@ -712,10 +712,24 @@ describe('prepareOperatorNode', () => {
     };
 
     const result = await prepareOperatorNode(state, {});
-    const update = (result as { update?: ClmmUpdate }).update;
-    const haltReason = update?.view?.haltReason ?? '';
+    const commandResult = result as {
+      goto?: string | string[];
+      update?: ClmmUpdate;
+    };
+    const update = commandResult.update;
+    const nextTaskState = update?.view?.task?.taskStatus?.state;
 
-    expect(haltReason).toContain('Funding token input missing');
+    expect(nextTaskState).toBe('input-required');
+    expect(commandResult.goto).toEqual(expect.arrayContaining(['collectFundingTokenInput']));
+    expect(update?.view?.haltReason).toBeUndefined();
+    expect(
+      update?.view?.operatorInput as { walletAddress?: string; baseContributionUsd?: number } | undefined,
+    ).toEqual(
+      expect.objectContaining({
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        baseContributionUsd: 10,
+      }),
+    );
   });
 
   it('fails when delegation bundle is missing and bypass is disabled', async () => {
@@ -775,7 +789,24 @@ describe('prepareOperatorNode', () => {
     const result = await prepareOperatorNode(state, {});
     const update = (result as { update?: ClmmUpdate }).update;
     const nextTaskState = update?.view?.task?.taskStatus?.state;
+    const nextTaskMessage = update?.view?.task?.taskStatus?.message?.content;
 
     expect(nextTaskState).toBe('input-required');
+    expect(nextTaskMessage).toBe('Waiting for delegation approval to continue onboarding.');
+    expect(
+      update?.view?.operatorInput as { walletAddress?: string; baseContributionUsd?: number } | undefined,
+    ).toEqual(
+      expect.objectContaining({
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        baseContributionUsd: 10,
+      }),
+    );
+    expect(
+      update?.view?.fundingTokenInput as { fundingTokenAddress?: string } | undefined,
+    ).toEqual(
+      expect.objectContaining({
+        fundingTokenAddress: '0xusdc',
+      }),
+    );
   });
 });

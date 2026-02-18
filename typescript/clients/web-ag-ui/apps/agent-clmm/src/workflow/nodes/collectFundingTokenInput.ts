@@ -23,8 +23,33 @@ import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
+const FULL_ONBOARDING_TOTAL_STEPS = 3;
+const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
+
+const buildOnboarding = (params: {
+  step: number;
+  delegationsBypassActive: boolean;
+  skipFundingStep?: boolean;
+}): OnboardingState => ({
+  step: params.step,
+  totalSteps:
+    params.skipFundingStep || params.delegationsBypassActive
+      ? REDUCED_ONBOARDING_TOTAL_STEPS
+      : FULL_ONBOARDING_TOTAL_STEPS,
+});
+
+const resolveFundingResumeOnboarding = (state: ClmmState): OnboardingState => {
+  const configuredTotalSteps = state.view.onboarding?.totalSteps;
+  const fallbackTotalSteps =
+    state.view.delegationsBypassActive === true
+      ? REDUCED_ONBOARDING_TOTAL_STEPS
+      : FULL_ONBOARDING_TOTAL_STEPS;
+  const totalSteps =
+    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
+      ? configuredTotalSteps
+      : fallbackTotalSteps;
+  const step = totalSteps <= 2 ? 2 : 3;
+  return { step, totalSteps };
 };
 
 function uniqByAddress<T extends { address: `0x${string}` }>(items: readonly T[]): T[] {
@@ -86,24 +111,17 @@ export const collectFundingTokenInputNode = async (
 
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
-    const failureMessage = 'ERROR: Operator input missing before funding-token step';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
-    });
-    return new Command({
-      update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: [] },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+    logInfo('collectFundingTokenInput: operator input missing; rerouting to collectOperatorInput');
+    return new Command({ goto: 'collectOperatorInput' });
+  }
+
+  if (state.view.fundingTokenInput) {
+    logInfo('collectFundingTokenInput: funding token already present; skipping step');
+    return {
+      view: {
+        onboarding: resolveFundingResumeOnboarding(state),
       },
-      goto: 'summarize',
-    });
+    };
   }
 
   if (state.view.delegationsBypassActive === true) {
@@ -177,7 +195,7 @@ export const collectFundingTokenInputNode = async (
     return {
       view: {
         selectedPool,
-        onboarding: { ...ONBOARDING, step: 3 },
+        onboarding: buildOnboarding({ step: 2, delegationsBypassActive, skipFundingStep: true }),
         task,
         activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
       },
@@ -224,7 +242,7 @@ export const collectFundingTokenInputNode = async (
     return {
       view: {
         selectedPool,
-        onboarding: { ...ONBOARDING, step: 3 },
+        onboarding: buildOnboarding({ step: 2, delegationsBypassActive, skipFundingStep: true }),
       },
     };
   }
@@ -333,14 +351,31 @@ export const collectFundingTokenInputNode = async (
     'input-required',
     'Awaiting funding-token selection to plan required swaps.',
   );
-  await copilotkitEmitState(config, {
-    view: {
-      onboarding: { ...ONBOARDING, step: 2 },
-      task: awaitingInput.task,
-      activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
-      selectedPool,
-    },
-  });
+  const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
+  const pendingView = {
+    onboarding: buildOnboarding({ step: 2, delegationsBypassActive }),
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
+    selectedPool,
+  };
+  const currentTaskState = state.view.task?.taskStatus?.state;
+  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
+  const shouldPersistPendingState =
+    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  if (hasRunnableConfig && shouldPersistPendingState) {
+    const mergedView = { ...state.view, ...pendingView };
+    state.view = mergedView;
+    await copilotkitEmitState(config, {
+      view: mergedView,
+    });
+    return new Command({
+      update: {
+        view: mergedView,
+      },
+      goto: 'collectFundingTokenInput',
+    });
+  }
 
   logInfo('collectFundingTokenInput: calling interrupt() - awaiting funding token selection', {
     candidateCount: optionBalances.length,
@@ -421,7 +456,10 @@ export const collectFundingTokenInputNode = async (
     view: {
       selectedPool,
       fundingTokenInput: input,
-      onboarding: { ...ONBOARDING, step: 3 },
+      onboarding: buildOnboarding({
+        step: delegationsBypassActive ? 2 : 3,
+        delegationsBypassActive,
+      }),
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     },

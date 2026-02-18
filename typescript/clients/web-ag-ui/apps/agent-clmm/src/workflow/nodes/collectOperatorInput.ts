@@ -14,8 +14,26 @@ import {
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
+const FULL_ONBOARDING_TOTAL_STEPS = 3;
+const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
+
+const resolveOnboardingTotalSteps = (state: ClmmState): number =>
+  state.view.delegationsBypassActive === true
+    ? REDUCED_ONBOARDING_TOTAL_STEPS
+    : FULL_ONBOARDING_TOTAL_STEPS;
+
+const buildOnboarding = (state: ClmmState, step: number): OnboardingState => ({
+  step,
+  totalSteps: resolveOnboardingTotalSteps(state),
+});
+
+const resolveOperatorResumeStep = (state: ClmmState): number => {
+  const configuredTotalSteps = state.view.onboarding?.totalSteps;
+  const totalSteps =
+    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
+      ? configuredTotalSteps
+      : resolveOnboardingTotalSteps(state);
+  return state.view.fundingTokenInput ? (totalSteps <= 2 ? 2 : 3) : 2;
 };
 
 export const collectOperatorInputNode = async (
@@ -23,6 +41,15 @@ export const collectOperatorInputNode = async (
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   logInfo('collectOperatorInput: entering node', { hasPoolArtifact: !!state.view.poolArtifact });
+
+  if (state.view.operatorInput) {
+    logInfo('collectOperatorInput: operator input already present; skipping step');
+    return {
+      view: {
+        onboarding: buildOnboarding(state, resolveOperatorResumeStep(state)),
+      },
+    };
+  }
 
   if (!state.view.poolArtifact) {
     const failureMessage = 'ERROR: Pool artifact missing before operator input';
@@ -67,14 +94,30 @@ export const collectOperatorInputNode = async (
     'input-required',
     'Awaiting operator configuration to continue CLMM setup.',
   );
-
-  await copilotkitEmitState(config, {
-    view: {
-      onboarding: { ...ONBOARDING, step: 1 },
-      task: awaitingInput.task,
-      activity: { events: [awaitingInput.statusEvent], telemetry: [] },
-    },
-  });
+  const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
+  const pendingView = {
+    onboarding: buildOnboarding(state, 1),
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry: [] },
+  };
+  const currentTaskState = state.view.task?.taskStatus?.state;
+  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
+  const shouldPersistPendingState =
+    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  if (hasRunnableConfig && shouldPersistPendingState) {
+    const mergedView = { ...state.view, ...pendingView };
+    state.view = mergedView;
+    await copilotkitEmitState(config, {
+      view: mergedView,
+    });
+    return new Command({
+      update: {
+        view: mergedView,
+      },
+      goto: 'collectOperatorInput',
+    });
+  }
 
   logInfo('collectOperatorInput: calling interrupt() - graph should pause here');
   const incoming: unknown = await interrupt(request);
@@ -133,7 +176,7 @@ export const collectOperatorInputNode = async (
   return {
     view: {
       operatorInput: parsed.data,
-      onboarding: { ...ONBOARDING, step: 2 },
+      onboarding: buildOnboarding(state, 2),
       task,
       activity: { events: [statusEvent], telemetry: [] },
     },

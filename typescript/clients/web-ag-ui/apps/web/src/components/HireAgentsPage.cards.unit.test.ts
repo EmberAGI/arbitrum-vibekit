@@ -61,9 +61,9 @@ describe('HireAgentsPage (top cards)', () => {
 
     // Token icons render and clamp.
     // We show 2 icons plus an in-row ellipsis "icon" to avoid clipping in narrow featured cards.
-    expect(html).toContain(encodeURIComponent('https://icons.test/eth.png'));
-    expect(html).toContain(encodeURIComponent('https://icons.test/usdc.png'));
-    expect(html).not.toContain(encodeURIComponent('https://icons.test/weth.png'));
+    expect(html).toContain('https://icons.test/eth.png');
+    expect(html).toContain('https://icons.test/usdc.png');
+    expect(html).not.toContain('https://icons.test/weth.png');
     expect(html).toContain('…');
     expect(html).not.toContain('+2');
   });

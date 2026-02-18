@@ -58,7 +58,25 @@ describe('buildExecutionPlanArtifact', () => {
     });
 
     expect(artifact.artifactId).toBe('gmx-allora-execution-result');
-    expect(artifact.parts[1]?.data).toMatchObject({ action: 'long', ok: true });
+    expect(artifact.parts[1]?.data).toMatchObject({
+      action: 'long',
+      ok: true,
+      status: 'confirmed',
+    });
+  });
+
+  it('supports blocked execution status for retry-required cycles', () => {
+    const artifact = buildExecutionResultArtifact({
+      action: 'long',
+      ok: false,
+      status: 'blocked',
+    });
+
+    expect(artifact.parts[1]?.data).toMatchObject({
+      action: 'long',
+      ok: false,
+      status: 'blocked',
+    });
   });
 
   it('includes a stable plan placeholder when transactions are unavailable', () => {
