@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSubscriber } from '@ag-ui/client';
 
 import { useAgentConnection } from './useAgentConnection';
+import type { AgentInterrupt } from '../types/agent';
 import { __resetAgentStreamCoordinatorForTests } from '../utils/agentStreamCoordinator';
 
 type TestAgent = {
@@ -50,6 +51,11 @@ const mocks = vi.hoisted(() => {
     agent: createAgent(),
     connectAgent: vi.fn(async () => undefined),
     runAgent: vi.fn(async () => undefined),
+    interruptState: {
+      activeInterrupt: null as AgentInterrupt | null,
+      canResolve: false,
+      resolve: vi.fn(),
+    },
     reset() {
       this.runtimeStatus = this.runtimeStatuses.Connected;
       this.threadId = 'thread-1';
@@ -58,6 +64,9 @@ const mocks = vi.hoisted(() => {
       this.connectAgent.mockImplementation(async () => undefined);
       this.runAgent.mockReset();
       this.runAgent.mockImplementation(async () => undefined);
+      this.interruptState.activeInterrupt = null;
+      this.interruptState.canResolve = false;
+      this.interruptState.resolve.mockReset();
     },
   };
 });
@@ -83,9 +92,9 @@ vi.mock('@copilotkit/react-core', () => ({
 
 vi.mock('../app/hooks/useLangGraphInterruptCustomUI', () => ({
   useLangGraphInterruptCustomUI: () => ({
-    activeInterrupt: null,
-    canResolve: () => false,
-    resolve: vi.fn(),
+    activeInterrupt: mocks.interruptState.activeInterrupt,
+    canResolve: () => mocks.interruptState.canResolve,
+    resolve: mocks.interruptState.resolve,
   }),
 }));
 
@@ -222,5 +231,185 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
     expect(mocks.agent.setState).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps local run ownership gated until active-thread terminal events are observed', async () => {
+    let subscriber: AgentSubscriber | undefined;
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onRunStartedEvent?.({ input: { threadId: 'thread-1' } });
+    await flushEffects();
+
+    latestValue?.runHire();
+    await flushEffects();
+    expect(latestValue?.uiError).toBe('Unable to start hire while another run is active.');
+
+    subscriber?.onRunFinishedEvent?.({ input: { threadId: 'stale-thread' } });
+    await flushEffects();
+
+    latestValue?.runHire();
+    await flushEffects();
+    expect(latestValue?.uiError).toBe('Unable to start hire while another run is active.');
+
+    subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
+    await flushEffects();
+
+    mocks.agent.addMessage.mockClear();
+    latestValue?.runHire();
+    await flushEffects();
+
+    expect(mocks.agent.addMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'user',
+        content: JSON.stringify({ command: 'hire' }),
+      }),
+    );
+  });
+
+  it('surfaces busy UI state when saveSettings sync dispatch is rejected as busy', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    vi.useFakeTimers();
+    mocks.runAgent.mockRejectedValue(new Error('run already active'));
+
+    try {
+      await act(async () => {
+        root.render(
+          <CapturingHarness
+            agentId="agent-clmm"
+            onSnapshot={(value) => {
+              latestValue = value;
+            }}
+          />,
+        );
+      });
+      await flushEffects();
+
+      latestValue?.saveSettings({ amount: 321 });
+      await flushEffects();
+      await vi.advanceTimersByTimeAsync(2_500);
+      await flushEffects();
+
+      expect(latestValue?.uiError).toContain("busy while processing 'sync'");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('surfaces busy UI state when hire command is rejected as busy', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    mocks.runAgent.mockRejectedValueOnce(new Error('run already active'));
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.runHire();
+    await flushEffects();
+    await flushEffects();
+
+    expect(latestValue?.uiError).toContain("busy while processing 'hire'");
+  });
+
+  it('resolves interrupt fallback through agent.runAgent when stream resolver is unavailable', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.interruptState.activeInterrupt = {
+      type: 'operator-config-request',
+      message: 'Provide setup',
+    };
+    mocks.interruptState.canResolve = false;
+    const resumeRun = vi.fn(async () => undefined);
+    mocks.agent.runAgent = resumeRun;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.resolveInterrupt({
+      poolAddress: '0x0000000000000000000000000000000000000001',
+      walletAddress: '0x0000000000000000000000000000000000000002',
+      baseContributionUsd: 100,
+    });
+    await flushEffects();
+
+    expect(resumeRun).toHaveBeenCalledWith({
+      forwardedProps: {
+        command: {
+          resume: JSON.stringify({
+            poolAddress: '0x0000000000000000000000000000000000000001',
+            walletAddress: '0x0000000000000000000000000000000000000002',
+            baseContributionUsd: 100,
+          }),
+        },
+      },
+    });
+    expect(latestValue?.uiError).toBeNull();
+  });
+
+  it('surfaces an error when interrupt fallback cannot resume through agent.runAgent', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.interruptState.activeInterrupt = {
+      type: 'operator-config-request',
+      message: 'Provide setup',
+    };
+    mocks.interruptState.canResolve = false;
+    delete mocks.agent.runAgent;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.resolveInterrupt({
+      poolAddress: '0x0000000000000000000000000000000000000001',
+      walletAddress: '0x0000000000000000000000000000000000000002',
+      baseContributionUsd: 100,
+    });
+    await flushEffects();
+
+    expect(latestValue?.uiError).toContain("Agent command 'resume' failed");
   });
 });
