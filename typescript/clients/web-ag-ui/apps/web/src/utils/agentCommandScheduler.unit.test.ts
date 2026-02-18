@@ -185,4 +185,22 @@ describe('agentCommandScheduler', () => {
 
     scheduler.dispose();
   });
+
+  it('allows fire custom dispatch to preempt while a run is already in flight', async () => {
+    runInFlight = true;
+    const scheduler = createScheduler();
+    const runFire = vi.fn(async () => undefined);
+
+    const accepted = scheduler.dispatchCustom({
+      command: 'fire',
+      allowPreemptive: true,
+      run: runFire,
+    });
+    await Promise.resolve();
+
+    expect(accepted).toBe(true);
+    expect(runFire).toHaveBeenCalledTimes(1);
+
+    scheduler.dispose();
+  });
 });

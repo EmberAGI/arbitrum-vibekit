@@ -25,7 +25,8 @@ These rules complement the C4 target architecture and make runtime behavior dete
 ## 3. Invariants
 
 1. AG-UI-only boundary:
-   - Web communicates with agents only through AG-UI semantics (`connect`, `run`, `stop`) via `/api/copilotkit`.
+   - Web communicates with agents only through AG-UI `connect`/`run` flows via `/api/copilotkit`.
+   - `stop` is allowed only as a `fire` preemption control.
    - No direct web calls to LangGraph `/threads`, `/runs`, or `/state`.
 
 2. State write path:
@@ -57,8 +58,9 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - If replay hits busy, keep pending and retry with bounded policy.
 
 8. `fire` command policy (preemptive):
-   - `fire` is an escape hatch and must preempt current run attempts.
-   - Client attempts abort/detach first, then dispatches `fire`.
+   - `fire` is an escape hatch and the only command allowed to preempt active backend execution.
+   - Client issues AG-UI stop preemption first, then detaches local stream ownership.
+   - Client waits for terminal acknowledgment or bounded timeout before dispatching `fire`.
    - `fire` may use bounded retry for short server finalization windows.
 
 9. Confirmation semantics:

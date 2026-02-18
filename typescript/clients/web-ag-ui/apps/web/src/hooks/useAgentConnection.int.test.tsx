@@ -51,6 +51,7 @@ const mocks = vi.hoisted(() => {
     agent: createAgent(),
     connectAgent: vi.fn(async () => undefined),
     runAgent: vi.fn(async () => undefined),
+    stopAgent: vi.fn(() => undefined),
     interruptState: {
       activeInterrupt: null as AgentInterrupt | null,
       canResolve: false,
@@ -64,6 +65,8 @@ const mocks = vi.hoisted(() => {
       this.connectAgent.mockImplementation(async () => undefined);
       this.runAgent.mockReset();
       this.runAgent.mockImplementation(async () => undefined);
+      this.stopAgent.mockReset();
+      this.stopAgent.mockImplementation(() => undefined);
       this.interruptState.activeInterrupt = null;
       this.interruptState.canResolve = false;
       this.interruptState.resolve.mockReset();
@@ -81,6 +84,7 @@ vi.mock('@copilotkit/react-core/v2', () => ({
       runtimeConnectionStatus: mocks.runtimeStatus,
       connectAgent: mocks.connectAgent,
       runAgent: mocks.runAgent,
+      stopAgent: mocks.stopAgent,
     },
   }),
 }));
@@ -396,6 +400,50 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(latestValue?.uiError).toContain("busy while processing 'hire'");
+  });
+
+  it('preempts active run ownership via stopAgent before dispatching fire', async () => {
+    let subscriber: AgentSubscriber | undefined;
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onRunStartedEvent?.({ input: { threadId: 'thread-1' } });
+    await flushEffects();
+
+    latestValue?.runFire();
+    await flushEffects();
+
+    expect(mocks.stopAgent).toHaveBeenCalledWith({ agent: mocks.agent });
+    expect(mocks.agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
+    await new Promise<void>((resolve) => setTimeout(resolve, 80));
+    await flushEffects();
+    await flushEffects();
+
+    expect(mocks.agent.addMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'user',
+        content: JSON.stringify({ command: 'fire' }),
+      }),
+    );
   });
 
   it('resolves interrupt fallback through agent.runAgent when stream resolver is unavailable', async () => {

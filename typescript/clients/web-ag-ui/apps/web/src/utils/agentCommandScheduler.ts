@@ -22,6 +22,7 @@ export interface AgentCommandScheduler<TAgent extends SchedulableAgent> {
   ): boolean;
   dispatchCustom(params: {
     command: string;
+    allowPreemptive?: boolean;
     run: (agent: TAgent) => Promise<unknown>;
   }): boolean;
   handleRunTerminal(): void;
@@ -74,6 +75,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
       allowSyncCoalesce?: boolean;
       isReplayAttempt?: boolean;
       messagePayload?: Record<string, unknown>;
+      allowPreemptive?: boolean;
     };
     beforeRun?: (agent: TAgent) => void;
   }): boolean => {
@@ -91,7 +93,11 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
         refreshSyncing();
         return true;
       }
-      return false;
+      if (options?.allowPreemptive) {
+        // `fire` is preemptive by policy and may run while local in-flight ownership is set.
+      } else {
+        return false;
+      }
     }
 
     params.setRunInFlight(true);
@@ -175,10 +181,14 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
 
   const dispatchCustom = (customRunParams: {
     command: string;
+    allowPreemptive?: boolean;
     run: (agent: TAgent) => Promise<unknown>;
   }): boolean => {
     return dispatchRun({
       command: customRunParams.command,
+      options: {
+        allowPreemptive: customRunParams.allowPreemptive,
+      },
       run: customRunParams.run,
     });
   };

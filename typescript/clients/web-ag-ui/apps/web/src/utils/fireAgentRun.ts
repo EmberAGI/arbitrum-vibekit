@@ -3,7 +3,6 @@ import { isAgentRunning, isBusyRunError } from './runConcurrency';
 
 type AgentLike = {
   addMessage: (message: { id: string; role: 'user'; content: string }) => void;
-  abortRun?: () => void;
   detachActiveRun?: () => Promise<void> | void;
   isRunning?: boolean | (() => boolean);
 };
@@ -12,8 +11,26 @@ type BoolRef = { current: boolean };
 
 const FIRE_RUN_MAX_RETRIES = 5;
 const FIRE_RUN_RETRY_DELAY_MS = 150;
+const FIRE_PREEMPT_WAIT_MS = 1_500;
+const FIRE_PREEMPT_POLL_MS = 50;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const waitForPreemptedRun = async <TAgent extends AgentLike>(params: {
+  agent: TAgent;
+  runInFlightRef: BoolRef;
+  maxWaitMs: number;
+  pollMs: number;
+}): Promise<void> => {
+  let elapsedMs = 0;
+  while (elapsedMs < params.maxWaitMs) {
+    if (!params.runInFlightRef.current && !isAgentRunning(params.agent)) {
+      return;
+    }
+    await sleep(params.pollMs);
+    elapsedMs += params.pollMs;
+  }
+};
 
 const startFireRun = async <TAgent extends AgentLike>(
   runAgent: (agent: TAgent) => Promise<unknown>,
@@ -41,13 +58,17 @@ const startFireRun = async <TAgent extends AgentLike>(
 export async function fireAgentRun<TAgent extends AgentLike>(params: {
   agent: TAgent | null;
   runAgent: (agent: TAgent) => Promise<unknown>;
+  preemptActiveRun?: (agent: TAgent) => Promise<void> | void;
   threadId: string | undefined;
   runInFlightRef: BoolRef;
   createId: typeof uuidv7;
   onError?: (message: string) => void;
+  preemptWaitMs?: number;
+  preemptPollMs?: number;
 }): Promise<boolean> {
   const { agent, threadId, runInFlightRef } = params;
   if (!agent || !threadId) return false;
+  const canPreempt = typeof params.preemptActiveRun === 'function';
 
   const uiRunInFlight = runInFlightRef.current;
   const backendRunLikelyActive = isAgentRunning(agent);
@@ -55,17 +76,37 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
   // If an onboarding run is currently blocked at an interrupt, the hook-level guard
   // prevents new commands. `fire` is special: it must always work as an escape hatch.
   if (uiRunInFlight) {
-    try {
-      agent.abortRun?.();
-    } finally {
-      await Promise.resolve(agent.detachActiveRun?.()).catch(() => {
-        // best-effort; ignore
-      });
-    }
-  } else if (backendRunLikelyActive) {
+    await Promise.resolve(params.preemptActiveRun?.(agent)).catch(() => {
+      // best-effort; ignore
+    });
     await Promise.resolve(agent.detachActiveRun?.()).catch(() => {
       // best-effort; ignore
     });
+
+    if (canPreempt) {
+      await waitForPreemptedRun({
+        agent,
+        runInFlightRef,
+        maxWaitMs: params.preemptWaitMs ?? FIRE_PREEMPT_WAIT_MS,
+        pollMs: params.preemptPollMs ?? FIRE_PREEMPT_POLL_MS,
+      });
+    }
+  } else if (backendRunLikelyActive) {
+    await Promise.resolve(params.preemptActiveRun?.(agent)).catch(() => {
+      // best-effort; ignore
+    });
+    await Promise.resolve(agent.detachActiveRun?.()).catch(() => {
+      // best-effort; ignore
+    });
+
+    if (canPreempt) {
+      await waitForPreemptedRun({
+        agent,
+        runInFlightRef,
+        maxWaitMs: params.preemptWaitMs ?? FIRE_PREEMPT_WAIT_MS,
+        pollMs: params.preemptPollMs ?? FIRE_PREEMPT_POLL_MS,
+      });
+    }
   }
 
   // Keep `runInFlightRef` true: we are immediately starting a new run.

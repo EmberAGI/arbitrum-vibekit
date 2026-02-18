@@ -10,6 +10,7 @@ import {
 import { v7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
 import { getAgentConfig, type AgentConfig } from '../config/agents';
+import { projectDetailStateFromPayload } from '../contexts/agentProjection';
 import {
   type AgentState,
   type AgentView,
@@ -340,12 +341,13 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             clientMutationId: null,
           });
         }
-        if (hasStateValues(state)) {
-          agent.setState(state);
+        const projectedState = projectDetailStateFromPayload(state);
+        if (projectedState) {
+          agent.setState(projectedState);
           return;
         }
 
-        if (hasStateValues(agent.state)) {
+        if (projectDetailStateFromPayload(agent.state)) {
           return;
         }
 
@@ -661,42 +663,66 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       });
     }
 
-    const currentAgent = agentRef.current;
-    void fireAgentRun({
-      agent: currentAgent,
-      runAgent: async (value) =>
-        copilotkit.runAgent({ agent: value } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
-      threadId,
-      runInFlightRef,
-      createId: v7,
-      onError: (message) => {
-        setUiError(message);
-        setIsFiring(false);
+    const revertOptimisticFireCommand = () => {
+      const current = agentRef.current;
+      if (!current) return;
+      const currentState =
+        hasStateValues(current.state) ? (current.state as AgentState) : initialAgentState;
+      const view = currentState.view ?? defaultView;
+      if (view.command === 'fire') {
+        current.setState({
+          ...currentState,
+          view: {
+            ...view,
+            command: previousCommand,
+          },
+        });
+      }
+    };
 
-        // If the fire run failed to start, revert the optimistic command update so the UI
-        // stays in the hired state without getting "stuck" on a fire command.
-        const current = agentRef.current;
-        if (!current) return;
-        const currentState =
-          hasStateValues(current.state) ? (current.state as AgentState) : initialAgentState;
-        const view = currentState.view ?? defaultView;
-        if (view.command === 'fire') {
-          current.setState({
-            ...currentState,
-            view: {
-              ...view,
-              command: previousCommand,
-            },
-          });
+    const scheduler = commandSchedulerRef.current;
+    if (!scheduler) {
+      setUiError('Unable to submit fire command right now. Please retry.');
+      setIsFiring(false);
+      revertOptimisticFireCommand();
+      return;
+    }
+
+    const accepted = scheduler.dispatchCustom({
+      command: 'fire',
+      allowPreemptive: true,
+      run: async (value) => {
+        const ok = await fireAgentRun({
+          agent: value,
+          runAgent: async (current) =>
+            copilotkit.runAgent({ agent: current } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+          preemptActiveRun: async (current) => copilotkit.stopAgent({ agent: current }),
+          threadId,
+          runInFlightRef,
+          createId: v7,
+          onError: (message) => {
+            setUiError(message);
+            setIsFiring(false);
+            revertOptimisticFireCommand();
+          },
+        });
+
+        if (!ok) {
+          setUiError('Unable to submit fire command right now. Please retry.');
+          setIsFiring(false);
+          revertOptimisticFireCommand();
         }
       },
-    }).then((ok) => {
-      if (!ok) {
-        setIsFiring(false);
-        return;
-      }
-      setTimeout(() => setIsFiring(false), 3000);
     });
+
+    if (!accepted) {
+      setUiError('Unable to submit fire command while another command is active.');
+      setIsFiring(false);
+      revertOptimisticFireCommand();
+      return;
+    }
+
+    setTimeout(() => setIsFiring(false), 3000);
   }, [copilotkit, hasStateValues, isFiring, threadId]);
 
   const clearUiError = useCallback(() => setUiError(null), []);
