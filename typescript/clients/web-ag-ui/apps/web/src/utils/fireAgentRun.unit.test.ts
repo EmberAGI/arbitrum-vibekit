@@ -20,7 +20,6 @@ describe('fireAgentRun', () => {
     const ok = await fireAgentRun({
       agent,
       runAgent: async (value) => copilotkit.runAgent({ agent: value }),
-      abortActiveBackendRun: async () => calls.push('abortActiveBackendRun'),
       threadId: 'thread-1',
       runInFlightRef,
       createId: () => 'msg-1',
@@ -35,7 +34,6 @@ describe('fireAgentRun', () => {
     expect(calls).toEqual([
       'abortRun',
       'detachActiveRun',
-      'abortActiveBackendRun',
       'addMessage',
       'runAgent',
     ]);
@@ -61,7 +59,6 @@ describe('fireAgentRun', () => {
       const ok = await fireAgentRun({
         agent,
         runAgent: async (value) => copilotkit.runAgent({ agent: value }),
-        abortActiveBackendRun: async () => undefined,
         threadId: 'thread-1',
         runInFlightRef,
         createId: () => 'msg-1',
@@ -98,7 +95,6 @@ describe('fireAgentRun', () => {
     const ok = await fireAgentRun({
       agent,
       runAgent: async (value) => copilotkit.runAgent({ agent: value }),
-      abortActiveBackendRun: async () => undefined,
       threadId: 'thread-1',
       runInFlightRef,
       createId: () => 'msg-1',
@@ -115,7 +111,7 @@ describe('fireAgentRun', () => {
     expect(copilotkit.runAgent).toHaveBeenCalledTimes(1);
   });
 
-  it('attempts to abort the active backend run after a busy error (cron/external run protection)', async () => {
+  it('retries on busy errors after detaching active run via AG-UI agent lifecycle', async () => {
     vi.useFakeTimers();
 
     const calls: string[] = [];
@@ -134,14 +130,12 @@ describe('fireAgentRun', () => {
         )
         .mockResolvedValueOnce(undefined),
     };
-    const abortActiveBackendRun = vi.fn(async () => calls.push('abortActiveBackendRun'));
     const runInFlightRef = { current: false };
 
     try {
       const ok = await fireAgentRun({
         agent,
         runAgent: async (value) => copilotkit.runAgent({ agent: value }),
-        abortActiveBackendRun,
         threadId: 'thread-1',
         runInFlightRef,
         createId: () => 'msg-1',
@@ -151,15 +145,12 @@ describe('fireAgentRun', () => {
       expect(agent.abortRun).not.toHaveBeenCalled();
       expect(agent.detachActiveRun).toHaveBeenCalledTimes(1);
       expect(agent.addMessage).toHaveBeenCalledTimes(1);
-      expect(abortActiveBackendRun).toHaveBeenCalledTimes(1);
       expect(calls[0]).toBe('detachActiveRun');
-      expect(calls[1]).toBe('abortActiveBackendRun');
-      expect(calls[2]).toBe('addMessage');
+      expect(calls[1]).toBe('addMessage');
 
       await vi.advanceTimersByTimeAsync(200);
 
       expect(copilotkit.runAgent).toHaveBeenCalledTimes(2);
-      expect(abortActiveBackendRun).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
@@ -173,7 +164,6 @@ describe('fireAgentRun', () => {
     const ok = await fireAgentRun({
       agent,
       runAgent: async (value) => copilotkit.runAgent({ agent: value }),
-      abortActiveBackendRun: async () => undefined,
       threadId: undefined,
       runInFlightRef,
       createId: () => 'msg-1',

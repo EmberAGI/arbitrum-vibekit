@@ -1,5 +1,5 @@
 import type { AgentSubscriber } from '@ag-ui/client';
-import type { AgentState, TaskState } from '../types/agent';
+import type { AgentState } from '../types/agent';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { projectAgentListUpdate } from './agentListProjection';
 import type { AgentListEntry } from './agentListTypes';
@@ -19,8 +19,6 @@ type PollRuntimeAgentFactory = (params: {
   threadId: string;
 }) => AgentListPollingRuntimeAgent;
 
-const TERMINAL_TASK_STATES = new Set<TaskState>(['completed', 'failed', 'canceled', 'rejected']);
-
 function isAgentState(value: unknown): value is AgentState {
   if (typeof value !== 'object' || value === null) return false;
   return 'view' in value;
@@ -36,18 +34,7 @@ export function selectAgentIdsForPolling(params: {
   agents: Record<string, AgentListEntry>;
   activeAgentId: string | null;
 }): string[] {
-  return params.agentIds.filter((agentId) => {
-    if (params.activeAgentId && params.activeAgentId === agentId) {
-      return false;
-    }
-
-    const taskState = params.agents[agentId]?.taskState;
-    if (!taskState) {
-      return false;
-    }
-
-    return !TERMINAL_TASK_STATES.has(taskState);
-  });
+  return params.agentIds.filter((agentId) => !(params.activeAgentId && params.activeAgentId === agentId));
 }
 
 export async function pollAgentListUpdateViaAgUi(params: {

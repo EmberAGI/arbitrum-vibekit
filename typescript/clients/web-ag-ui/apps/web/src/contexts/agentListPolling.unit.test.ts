@@ -14,7 +14,7 @@ describe('agentListPolling', () => {
     vi.useRealTimers();
   });
 
-  it('selects only non-terminal non-focused agents for periodic polling', () => {
+  it('selects all non-focused agents for periodic polling', () => {
     const agents: Record<string, AgentListEntry> = {
       'agent-clmm': { synced: true, taskState: 'working' },
       'agent-pendle': { synced: true, taskState: 'completed' },
@@ -27,7 +27,23 @@ describe('agentListPolling', () => {
       activeAgentId: 'agent-gmx-allora',
     });
 
-    expect(selected).toEqual(['agent-clmm']);
+    expect(selected).toEqual(['agent-clmm', 'agent-pendle']);
+  });
+
+  it('includes agents that do not have task state yet', () => {
+    const agents: Record<string, AgentListEntry> = {
+      'agent-clmm': { synced: false },
+      'agent-pendle': { synced: true, taskState: 'completed' },
+      'agent-gmx-allora': { synced: true, taskState: 'working' },
+    };
+
+    const selected = selectAgentIdsForPolling({
+      agentIds: ['agent-clmm', 'agent-pendle', 'agent-gmx-allora'],
+      agents,
+      activeAgentId: 'agent-gmx-allora',
+    });
+
+    expect(selected).toEqual(['agent-clmm', 'agent-pendle']);
   });
 
   it('uses 15 seconds as the default polling interval', () => {
