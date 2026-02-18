@@ -18,7 +18,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
 
 - `Detail-page connect`: long-lived detail-page stream started via AG-UI `connect` while that agent detail page is active.
 - `Run stream`: AG-UI stream created by `run` command execution.
-- `Polling snapshot`: short-lived AG-UI polling update used for agents whose detail page is not currently active.
+- `Polling snapshot`: short-lived projection update produced by a one-shot AG-UI poll `run` for agents whose detail page is not currently active.
 - `Busy`: server rejects a run because an active run already exists (e.g., 409/422 or equivalent busy message).
 - `Authority`: source of truth used to update client projection state.
 - `Client mutation intent`: web-side state/message change to be applied on agent via the next AG-UI `run` input.
@@ -36,37 +36,42 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - Practical client pattern: update local agent state/message model, then dispatch `run`.
 
 3. Stream ownership:
-   - At most one long-lived detail-page `connect` stream globally while an agent detail page is active.
+   - At most one long-lived detail-page `connect` stream per web client runtime instance (for example, a browser tab) while an agent detail page is active.
    - Navigating away from the agent detail page (or unmount) must deterministically detach that stream.
 
-4. State authority:
+4. Polling execution path:
+   - Non-active-detail polling must use one-shot AG-UI `run` invocations.
+   - Polling must not keep a persistent `connect` loop alive.
+   - Poll runs should terminate quickly after emitting the latest projection.
+
+5. State authority:
    - Multiple ingress channels are valid (`connect`, `run`, polling), but authority is single-owner per agent at any moment.
    - Active detail-page agent: `connect` stream is authoritative for continuous projection.
-   - Non-active-detail agents: polling snapshots are authoritative for sidebar projection.
+   - Non-active-detail agents: polling snapshots projected from one-shot poll `run` are authoritative for sidebar projection.
    - If neither `connect` nor poll data is available, active `run` stream is temporary authority for that command lifecycle.
    - All ingress channels must honor one authority gate and one projection contract (no split write paths).
 
-5. Local gating is advisory:
+6. Local gating is advisory:
    - Client-side in-flight flags prevent accidental double-submit from one UI instance.
    - They are not global truth because agent runs may start externally.
 
-6. Busy response is authoritative:
+7. Busy response is authoritative:
    - Server busy is normalized to a deterministic concurrency outcome (not an unknown failure).
    - Client transitions to observe/retry policy instead of dead-ending.
 
-7. `sync` command policy (coalescing intent):
+8. `sync` command policy (coalescing intent):
    - `sync` represents “latest desired mutation/state refresh intent,” not an unbounded queue item.
    - Keep a single pending `sync` intent per `agentId+threadId` (last-write-wins).
    - If current run is active, defer dispatch; replay once terminal state is observed.
    - If replay hits busy, keep pending and retry with bounded policy.
 
-8. `fire` command policy (preemptive):
+9. `fire` command policy (preemptive):
    - `fire` is an escape hatch and the only command allowed to preempt active backend execution.
    - Client issues AG-UI stop preemption first, then detaches local stream ownership.
    - Client waits for terminal acknowledgment or bounded timeout before dispatching `fire`.
    - `fire` may use bounded retry for short server finalization windows.
 
-9. Confirmation semantics:
+10. Confirmation semantics:
    - “Saved/synced” UX should complete only when AG-UI state confirms application (e.g., task state, version, or acknowledged projection).
    - Current handshake: client sends `clientMutationId` in `sync` command payload; agent projects `view.lastAppliedClientMutationId`; UI clears pending sync only when ids match.
    - Optimistic UI is allowed but must reconcile against streamed state.
@@ -77,6 +82,9 @@ These rules complement the C4 target architecture and make runtime behavior dete
   - `fire`: preemptive lane
   - `sync`: coalescing lane (single pending intent)
   - other commands: explicit policy (reject-on-busy or constrained retry)
+- `AgentStatusPoller`:
+  - dispatch one-shot poll `run` per non-active-detail agent on configured cadence
+  - avoid persistent `connect` ownership in polling codepaths
 - central `AgentProjectionReducer`:
   - dedupe by run/event identity
   - enforce per-agent source ownership gates (`detail-connect` vs `poll`)

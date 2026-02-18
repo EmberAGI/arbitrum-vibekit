@@ -67,6 +67,7 @@ describe('agentListPolling', () => {
   it('projects state snapshot into list update and detaches the short-lived stream', async () => {
     const unsubscribe = vi.fn();
     const detachActiveRun = vi.fn().mockResolvedValue(undefined);
+    const addMessage = vi.fn();
 
     let stateSubscriber: AgentSubscriber | null = null;
 
@@ -75,7 +76,8 @@ describe('agentListPolling', () => {
         stateSubscriber = subscriber;
         return { unsubscribe };
       }),
-      connectAgent: vi.fn(async () => {
+      addMessage,
+      runAgent: vi.fn(async () => {
         const snapshotState: AgentState = {
           settings: {},
           view: {
@@ -107,6 +109,7 @@ describe('agentListPolling', () => {
           },
         } as never);
       }),
+      connectAgent: vi.fn(async () => undefined),
       detachActiveRun,
     };
 
@@ -124,7 +127,15 @@ describe('agentListPolling', () => {
       taskState: 'working',
       taskMessage: 'Cycling',
     });
-    expect(runtimeAgent.connectAgent).toHaveBeenCalledTimes(1);
+    expect(addMessage).toHaveBeenCalledTimes(1);
+    expect(addMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'user',
+        content: JSON.stringify({ command: 'sync' }),
+      }),
+    );
+    expect(runtimeAgent.runAgent).toHaveBeenCalledTimes(1);
+    expect(runtimeAgent.connectAgent).not.toHaveBeenCalled();
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
@@ -136,7 +147,8 @@ describe('agentListPolling', () => {
 
     const runtimeAgent = {
       subscribe: vi.fn(() => ({ unsubscribe })),
-      connectAgent: vi.fn(async () => undefined),
+      addMessage: vi.fn(),
+      runAgent: vi.fn(async () => undefined),
       detachActiveRun,
     };
 
@@ -149,6 +161,31 @@ describe('agentListPolling', () => {
 
     await vi.advanceTimersByTimeAsync(110);
     const update = await promise;
+
+    expect(update).toBeNull();
+    expect(detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null and still detaches stream when poll run rejects', async () => {
+    const unsubscribe = vi.fn();
+    const detachActiveRun = vi.fn().mockResolvedValue(undefined);
+
+    const runtimeAgent = {
+      subscribe: vi.fn(() => ({ unsubscribe })),
+      addMessage: vi.fn(),
+      runAgent: vi.fn(async () => {
+        throw new Error('poll failed');
+      }),
+      detachActiveRun,
+    };
+
+    const update = await pollAgentListUpdateViaAgUi({
+      agentId: 'agent-clmm',
+      threadId: 'thread-1',
+      timeoutMs: 100,
+      createRuntimeAgent: () => runtimeAgent,
+    });
 
     expect(update).toBeNull();
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
