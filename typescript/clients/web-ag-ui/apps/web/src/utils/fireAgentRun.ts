@@ -60,33 +60,17 @@ const isAgentRunning = (agent: AgentLike): boolean => {
 
 const startFireRun = async <TAgent extends AgentLike>(
   runAgent: (agent: TAgent) => Promise<unknown>,
-  abortActiveBackendRun: (() => Promise<void>) | undefined,
   agent: TAgent,
   runInFlightRef: BoolRef,
   attempt = 0,
-  hasCancelledBackendRun = false,
 ): Promise<void> => {
   try {
     await runAgent(agent);
     return;
   } catch (error) {
-    const shouldCancel = isBusyRunError(error) && !hasCancelledBackendRun && abortActiveBackendRun;
-    if (shouldCancel) {
-      await abortActiveBackendRun?.().catch(() => {
-        // best-effort; ignore
-      });
-    }
-
     if (isBusyRunError(error) && attempt < FIRE_RUN_MAX_RETRIES - 1) {
       await sleep(FIRE_RUN_RETRY_DELAY_MS);
-      return startFireRun(
-        runAgent,
-        abortActiveBackendRun,
-        agent,
-        runInFlightRef,
-        attempt + 1,
-        hasCancelledBackendRun || Boolean(shouldCancel),
-      );
+      return startFireRun(runAgent, agent, runInFlightRef, attempt + 1);
     }
 
     runInFlightRef.current = false;
@@ -97,7 +81,6 @@ const startFireRun = async <TAgent extends AgentLike>(
 export async function fireAgentRun<TAgent extends AgentLike>(params: {
   agent: TAgent | null;
   runAgent: (agent: TAgent) => Promise<unknown>;
-  abortActiveBackendRun?: () => Promise<void>;
   threadId: string | undefined;
   runInFlightRef: BoolRef;
   createId: typeof uuidv7;
@@ -128,18 +111,6 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
   // Keep `runInFlightRef` true: we are immediately starting a new run.
   runInFlightRef.current = true;
 
-  // Best-effort: if a cron/external run is currently holding the thread lock,
-  // cancel it so `fire` can start immediately (better UX than waiting).
-  let backendAbortAttemptSucceeded = false;
-  if (params.abortActiveBackendRun) {
-    try {
-      await params.abortActiveBackendRun();
-      backendAbortAttemptSucceeded = true;
-    } catch {
-      // best-effort; ignore
-    }
-  }
-
   agent.addMessage({
     id: params.createId(),
     role: 'user',
@@ -147,14 +118,7 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
   });
 
   // Fire-and-forget with short retry if the runtime is still finalizing a previous run.
-  void startFireRun(
-    params.runAgent,
-    params.abortActiveBackendRun,
-    agent,
-    runInFlightRef,
-    0,
-    backendAbortAttemptSucceeded,
-  ).catch((error: unknown) => {
+  void startFireRun(params.runAgent, agent, runInFlightRef, 0).catch((error: unknown) => {
     runInFlightRef.current = false;
     const message = error instanceof Error ? error.message : String(error);
     console.error('[fireAgentRun] Failed to start fire run', { threadId, error: message });
