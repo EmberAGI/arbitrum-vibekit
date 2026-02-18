@@ -165,6 +165,30 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
   });
 
   it.each(AGENTS)(
+    'moves personal metrics into metadata row and keeps left summary metrics focused for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+        currentCommand: 'cycle',
+      });
+
+      expect(html).toContain('>Hide details<');
+      expect(html).toContain('grid grid-cols-2 gap-4 pt-6 mt-6 border-t border-white/10');
+      expect(html).toContain('Your Assets');
+      expect(html).toContain('Your PnL');
+
+      const leftMetricsGrid = html.match(
+        /<div class="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">([\s\S]*?)<\/div><\/div><div class="pt-2 h-full flex flex-col">/,
+      )?.[1];
+      expect(leftMetricsGrid).toBeDefined();
+      expect(leftMetricsGrid).not.toContain('Your Assets');
+      expect(leftMetricsGrid).not.toContain('Your PnL');
+    },
+  );
+
+  it.each(AGENTS)(
     'renders onboarding lifecycle CTA as single Onboarding button for $name',
     ({ id, name }) => {
       const onboardingInterrupt =

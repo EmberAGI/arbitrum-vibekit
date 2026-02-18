@@ -283,6 +283,7 @@ export function AgentDetailPage({
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (isHired ? 'blockers' : 'metrics'),
   );
+  const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false);
   const [hasUserSelectedTab, setHasUserSelectedTab] = useState(Boolean(initialTab));
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
   const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
@@ -715,76 +716,54 @@ export function AgentDetailPage({
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        Agent Income
+                  {!isSummaryCollapsed && (
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
+                      <div>
+                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          Agent Income
+                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-24"
+                          loadedClassName="text-lg font-semibold text-white"
+                          value={formatCurrency(profile.agentIncome)}
+                        />
                       </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-24"
-                        loadedClassName="text-lg font-semibold text-white"
-                        value={formatCurrency(profile.agentIncome)}
-                      />
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        AUM
+                      <div>
+                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          AUM
+                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-24"
+                          loadedClassName="text-lg font-semibold text-white"
+                          value={formatCurrency(profile.aum)}
+                        />
                       </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-24"
-                        loadedClassName="text-lg font-semibold text-white"
-                        value={formatCurrency(profile.aum)}
-                      />
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        Total Users
+                      <div>
+                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          Total Users
+                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-20"
+                          loadedClassName="text-lg font-semibold text-white"
+                          value={formatNumber(profile.totalUsers)}
+                        />
                       </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-20"
-                        loadedClassName="text-lg font-semibold text-white"
-                        value={formatNumber(profile.totalUsers)}
-                      />
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        APY
+                      <div>
+                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          APY
+                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-16"
+                          loadedClassName="text-lg font-semibold text-teal-400"
+                          value={formatPercent(profile.apy)}
+                        />
                       </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-16"
-                        loadedClassName="text-lg font-semibold text-teal-400"
-                        value={formatPercent(profile.apy)}
-                      />
                     </div>
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        Your Assets
-                      </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-24"
-                        loadedClassName="text-lg font-semibold text-white"
-                        value={formatCurrency(fullMetrics?.latestSnapshot?.totalUsd)}
-                      />
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        Your PnL
-                      </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-24"
-                        loadedClassName={`text-lg font-semibold ${
-                          (metrics.lifetimePnlUsd ?? 0) >= 0 ? 'text-teal-400' : 'text-red-400'
-                        }`}
-                        value={formatSignedCurrency(metrics.lifetimePnlUsd)}
-                      />
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Right header (no surrounding card) */}
@@ -815,7 +794,7 @@ export function AgentDetailPage({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       <a
                         href={AGENT_X_URL}
                         target="_blank"
@@ -845,6 +824,13 @@ export function AgentDetailPage({
                       >
                         <Github className="w-4 h-4" />
                       </a>
+                      <button
+                        type="button"
+                        onClick={() => setIsSummaryCollapsed((previous) => !previous)}
+                        className="px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-xs font-medium text-gray-300 hover:text-white hover:bg-white/[0.08] transition-colors"
+                      >
+                        {isSummaryCollapsed ? 'Show details' : 'Hide details'}
+                      </button>
                     </div>
                   </div>
 
@@ -855,28 +841,58 @@ export function AgentDetailPage({
                     <p className="text-gray-500 text-sm italic">No description available</p>
                   )}
 
-                  <div className="grid grid-cols-4 gap-4 mt-auto pt-6 border-t border-white/10">
-                    <TagColumn
-                      title="Chains"
-                      items={displayChains}
-                      getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
-                    />
-                    <TagColumn
-                      title="Protocols"
-                      items={displayProtocols}
-                      getIconUri={(protocol) => {
-                        const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
-                        if (!fallback) return null;
-                        return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
-                      }}
-                    />
-                    <TagColumn
-                      title="Tokens"
-                      items={displayTokens}
-                      getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
-                    />
-                    <PointsColumn metrics={metrics} />
-                  </div>
+                  {!isSummaryCollapsed && (
+                    <div className="mt-auto">
+                      <div className="grid grid-cols-2 gap-4 pt-6 mt-6 border-t border-white/10">
+                        <div className="pr-4">
+                          <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                            Your Assets
+                          </div>
+                          <LoadingValue
+                            isLoaded={hasLoadedView}
+                            skeletonClassName="h-6 w-24"
+                            loadedClassName="text-lg font-semibold text-white"
+                            value={formatCurrency(fullMetrics?.latestSnapshot?.totalUsd)}
+                          />
+                        </div>
+                        <div className="pl-4 border-l border-white/10">
+                          <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                            Your PnL
+                          </div>
+                          <LoadingValue
+                            isLoaded={hasLoadedView}
+                            skeletonClassName="h-6 w-24"
+                            loadedClassName={`text-lg font-semibold ${
+                              (metrics.lifetimePnlUsd ?? 0) >= 0 ? 'text-teal-400' : 'text-red-400'
+                            }`}
+                            value={formatSignedCurrency(metrics.lifetimePnlUsd)}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-white/10">
+                        <TagColumn
+                          title="Chains"
+                          items={displayChains}
+                          getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
+                        />
+                        <TagColumn
+                          title="Protocols"
+                          items={displayProtocols}
+                          getIconUri={(protocol) => {
+                            const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+                            if (!fallback) return null;
+                            return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
+                          }}
+                        />
+                        <TagColumn
+                          title="Tokens"
+                          items={displayTokens}
+                          getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
+                        />
+                        <PointsColumn metrics={metrics} />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
