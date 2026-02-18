@@ -164,27 +164,48 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Your PnL');
   });
 
-  it.each(AGENTS)('renders onboarding lifecycle CTA as Pay for $name', ({ id, name }) => {
-    const onboardingInterrupt =
-      id === 'agent-pendle'
-        ? { type: 'pendle-setup-request' as const, message: 'configure pendle' }
-        : id === 'agent-gmx-allora'
-          ? { type: 'gmx-setup-request' as const, message: 'configure gmx' }
-          : { type: 'operator-config-request' as const, message: 'configure clmm' };
+  it.each(AGENTS)(
+    'renders onboarding lifecycle CTA as single Onboarding button for $name',
+    ({ id, name }) => {
+      const onboardingInterrupt =
+        id === 'agent-pendle'
+          ? { type: 'pendle-setup-request' as const, message: 'configure pendle' }
+          : id === 'agent-gmx-allora'
+            ? { type: 'gmx-setup-request' as const, message: 'configure gmx' }
+            : { type: 'operator-config-request' as const, message: 'configure clmm' };
 
-    const html = renderAgentDetail({
-      agentId: id,
-      agentName: name,
-      isHired: true,
-      currentCommand: 'hire',
-      taskStatus: 'input-required',
-      activeInterrupt: onboardingInterrupt,
-    });
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+        currentCommand: 'hire',
+        taskStatus: 'input-required',
+        activeInterrupt: onboardingInterrupt,
+      });
 
-    expect(html).toContain('Onboarding in progress');
-    expect(html).toContain('>Pay<');
-    expect(html).not.toContain('>Fire<');
-  });
+      expect(html).toContain('>Onboarding<');
+      expect(html).not.toContain('Onboarding in progress');
+      expect(html).not.toContain('>Pay<');
+      expect(html).not.toContain('>Fire<');
+    },
+  );
+
+  it.each(AGENTS)(
+    'removes onboarding waiting/helper copy while setup is active for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+        currentCommand: 'hire',
+        taskStatus: 'input-required',
+      });
+
+      expect(html).not.toContain('Waiting for agent');
+      expect(html).not.toContain('The agent will prompt you when it needs configuration input.');
+      expect(html).not.toContain('How Policies Work');
+    },
+  );
 
   it.each(AGENTS)('renders latest activity plaintext under CTA for $name', ({ id, name }) => {
     const html = renderAgentDetail({

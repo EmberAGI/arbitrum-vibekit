@@ -651,8 +651,9 @@ describe('AgentDetailPage internals: blockers variants', () => {
       }),
     );
 
-    expect(html).toContain('Waiting for agent');
-    expect(html).toContain('No active task. The agent may need to be started.');
+    expect(html).toContain('⏳');
+    expect(html).not.toContain('Waiting for agent');
+    expect(html).not.toContain('No active task. The agent may need to be started.');
     expect(html).not.toContain('Set up agent');
     expect(html).not.toContain('Get this agent started working on your wallet');
   });
