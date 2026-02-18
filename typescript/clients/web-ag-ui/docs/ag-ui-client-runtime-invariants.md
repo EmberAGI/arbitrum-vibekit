@@ -73,7 +73,8 @@ These rules complement the C4 target architecture and make runtime behavior dete
 
 1. Confirmation payload:
    - Prefer explicit `settingsVersion`/mutation acknowledgment in projected view to mark `sync` completion.
-2. Retry backoff:
-   - Define bounded retries and delay strategy for busy replay to avoid churn.
+2. Retry backoff tuning:
+   - Current implementation uses bounded `sync` replay retries (`3`) and replay delay (`500ms`) in `apps/web/src/utils/agentCommandScheduler.ts`.
+   - Remaining decision is whether these should become environment-tunable policy values.
 3. Telemetry:
    - Emit metrics for busy events, replay count, dropped stale events, and command latency.

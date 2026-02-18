@@ -34,6 +34,7 @@ import {
   initialAgentState,
 } from '../types/agent';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
+import { createAgentCommandScheduler } from '../utils/agentCommandScheduler';
 import {
   acquireAgentStreamOwner,
   registerAgentStreamOwner,
@@ -44,6 +45,7 @@ import { fireAgentRun } from '../utils/fireAgentRun';
 import { resumeInterruptViaAgent } from '../utils/interruptResolution';
 import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 import { canonicalizeChainLabel } from '../utils/iconResolution';
+import { isAgentRunning, isBusyRunError } from '../utils/runConcurrency';
 import {
   isAgentInterrupt,
   selectActiveInterrupt,
@@ -113,14 +115,26 @@ export interface UseAgentConnectionResult {
 }
 
 export function useAgentConnection(agentId: string): UseAgentConnectionResult {
+  type HookAgent = NonNullable<ReturnType<typeof useAgent>['agent']>;
+
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncingState, setSyncingState] = useState<{
+    threadId: string | undefined;
+    isSyncing: boolean;
+  }>({
+    threadId: undefined,
+    isSyncing: false,
+  });
   const [uiError, setUiError] = useState<string | null>(null);
   const lastConnectedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
+  const threadIdRef = useRef<string | undefined>(undefined);
   const messagesSnapshotRef = useRef(false);
   const runInFlightRef = useRef(false);
+  const commandSchedulerRef = useRef<ReturnType<typeof createAgentCommandScheduler<HookAgent>> | null>(
+    null,
+  );
   const connectSeqRef = useRef(0);
   const agentDebugIdsRef = useRef(new WeakMap<object, number>());
   const nextAgentDebugIdRef = useRef(1);
@@ -170,30 +184,15 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [debugConnect],
   );
 
-  // Simple command runner - no queuing, just run the command
-  const runCommand = useCallback(
-    (command: string) => {
-      if (!agent || !threadId) return false;
-      if (runInFlightRef.current) return false;
+  const dispatchCommand = useCallback((command: string, options?: { allowSyncCoalesce?: boolean }) => {
+    const scheduler = commandSchedulerRef.current;
+    if (!scheduler) {
+      return false;
+    }
+    return scheduler.dispatch(command, options);
+  }, []);
 
-      runInFlightRef.current = true;
-
-      const message = {
-        id: v7(),
-        role: 'user' as const,
-        content: JSON.stringify({ command }),
-      };
-
-      agent.addMessage(message);
-      void copilotkit.runAgent({ agent }).catch((error) => {
-        runInFlightRef.current = false;
-        console.error('Agent run failed', error);
-      });
-
-      return true;
-    },
-    [agent, copilotkit, threadId],
-  );
+  const runCommand = useCallback((command: string) => dispatchCommand(command), [dispatchCommand]);
 
   const hasStateValues = useCallback((value: unknown): value is AgentState => {
     return Boolean(
@@ -260,7 +259,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     }
 
     const clearRunFlag = () => {
-      runInFlightRef.current = false;
+      commandSchedulerRef.current?.handleRunTerminal();
     };
 
     const subscription = agent.subscribe({
@@ -295,6 +294,42 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   useEffect(() => {
     agentRef.current = agent ?? null;
   }, [agent]);
+
+  useEffect(() => {
+    threadIdRef.current = threadId;
+  }, [threadId]);
+
+  useEffect(() => {
+    const scheduler = createAgentCommandScheduler<HookAgent>({
+      getAgent: () => agentRef.current as HookAgent | null,
+      getThreadId: () => threadIdRef.current,
+      getRunInFlight: () => runInFlightRef.current,
+      setRunInFlight: (next) => {
+        runInFlightRef.current = next;
+      },
+      runAgent: async (currentAgent) => copilotkit.runAgent({ agent: currentAgent }),
+      createId: v7,
+      isBusyRunError,
+      isAgentRunning,
+      onSyncingChange: (isSyncing) => {
+        setSyncingState({
+          threadId: threadIdRef.current,
+          isSyncing,
+        });
+      },
+      onCommandError: (_command, error) => {
+        console.error('Agent run failed', error);
+      },
+    });
+
+    commandSchedulerRef.current = scheduler;
+    return () => {
+      scheduler.dispose();
+      if (commandSchedulerRef.current === scheduler) {
+        commandSchedulerRef.current = null;
+      }
+    };
+  }, [copilotkit]);
 
   useEffect(() => {
     const ownerId = streamOwnerIdRef.current;
@@ -332,6 +367,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   useEffect(() => {
     runInFlightRef.current = false;
     lastConnectedThreadRef.current = null;
+    commandSchedulerRef.current?.reset();
   }, [threadId]);
 
   useEffect(() => {
@@ -405,6 +441,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const transactionHistory = view.transactionHistory ?? [];
   const events = activity.events ?? [];
   const settings = currentState.settings ?? defaultSettings;
+  const isSyncing = syncingState.threadId === threadId ? syncingState.isSyncing : false;
 
   const mergeUniqueStrings = (params: {
     primary: string[];
@@ -463,10 +500,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const hasLoadedView = !needsSync(currentState);
 
   const runSync = useCallback(() => {
-    if (!runCommand('sync')) return;
-    setIsSyncing(true);
-    setTimeout(() => setIsSyncing(false), 2000);
-  }, [runCommand]);
+    setUiError(null);
+    void dispatchCommand('sync', { allowSyncCoalesce: true });
+  }, [dispatchCommand]);
 
   const runHire = useCallback(() => {
     if (!isHired && !isHiring) {

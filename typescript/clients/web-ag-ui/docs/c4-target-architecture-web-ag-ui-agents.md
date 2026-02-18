@@ -291,12 +291,13 @@ Completed:
 - Sidebar polling now enforces explicit bounded concurrency (`NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT`).
 - Shared `TaskState`/`AgentCommand` vocabulary is exported from `agent-workflow-core` and adopted by `apps/agent*` workflow contexts.
 - Agent setup-step branching logic is extracted from `AgentDetailPage` into `apps/web/src/components/agentSetupSteps.ts`.
+- Web command scheduling now uses a dedicated `AgentCommandScheduler` (`apps/web/src/utils/agentCommandScheduler.ts`) with bounded busy-retry handling for `sync` and coalescing intent semantics.
 - Integration coverage now verifies key lifecycle invariants:
   - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-focused polling fan-out and periodic no-overlap behavior.
   - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts focused detail connect and deterministic detach on unmount.
+  - `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts `sync` coalescing, terminal replay, bounded busy retries, and non-sync in-flight rejection.
 
 Remaining gaps:
 
 - Shared `agent-workflow-core` still does not own a canonical onboarding/task state-machine implementation; lifecycle routing continues to diverge per agent.
 - `AgentDetailPage` still contains non-metrics agent-specific blockers/onboarding flow branching and should be further decomposed toward a composition-shell role.
-- Web command scheduling still lacks a dedicated `AgentCommandScheduler` implementation for explicit `sync` coalescing and unified busy handling across non-`fire` commands.
