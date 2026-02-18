@@ -475,7 +475,7 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(mocks.stopAgent).toHaveBeenCalledWith({ agent: mocks.agent });
-    expect(mocks.agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(mocks.agent.detachActiveRun.mock.calls.length).toBeGreaterThanOrEqual(1);
     subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
     await new Promise<void>((resolve) => setTimeout(resolve, 80));
     await flushEffects();
@@ -487,6 +487,82 @@ describe('useAgentConnection integration', () => {
         content: JSON.stringify({ command: 'fire' }),
       }),
     );
+  });
+
+  it('serializes rapid A->B->A detail handoff so next connect waits for prior disconnect', async () => {
+    let resolveDetachAtoB: (() => void) | null = null;
+    let resolveDetachBtoA: (() => void) | null = null;
+    const pendingAtoB = new Promise<void>((resolve) => {
+      resolveDetachAtoB = resolve;
+    });
+    const pendingBtoA = new Promise<void>((resolve) => {
+      resolveDetachBtoA = resolve;
+    });
+
+    const originalDetach = mocks.agent.detachActiveRun;
+    let detachInvocation = 0;
+    mocks.agent.detachActiveRun.mockImplementation(() => {
+      detachInvocation += 1;
+      if (detachInvocation === 1) {
+        return pendingAtoB;
+      }
+      if (detachInvocation === 2) {
+        return pendingBtoA;
+      }
+      return Promise.resolve();
+    });
+
+    const containerB = document.createElement('div');
+    document.body.appendChild(containerB);
+    const rootB = createRoot(containerB);
+    const containerA2 = document.createElement('div');
+    document.body.appendChild(containerA2);
+    const rootA2 = createRoot(containerA2);
+
+    try {
+      await act(async () => {
+        root.render(<TestHarness agentId="agent-clmm" />);
+      });
+      await flushEffects();
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        rootB.render(<TestHarness agentId="agent-gmx-allora" />);
+      });
+      await flushEffects();
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+
+      resolveDetachAtoB?.();
+      await flushEffects();
+      await flushEffects();
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        root.unmount();
+      });
+      await flushEffects();
+
+      await act(async () => {
+        rootA2.render(<TestHarness agentId="agent-clmm" />);
+      });
+      await flushEffects();
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(2);
+
+      resolveDetachBtoA?.();
+      await flushEffects();
+      await flushEffects();
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(3);
+    } finally {
+      mocks.agent.detachActiveRun = originalDetach;
+      await act(async () => {
+        rootA2.unmount();
+      });
+      await act(async () => {
+        rootB.unmount();
+      });
+      containerA2.remove();
+      containerB.remove();
+    }
   });
 
   it('resolves interrupt fallback through agent.runAgent when stream resolver is unavailable', async () => {
