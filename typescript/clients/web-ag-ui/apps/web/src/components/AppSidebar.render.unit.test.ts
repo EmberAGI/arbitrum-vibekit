@@ -116,4 +116,14 @@ describe('AppSidebar', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
     expect(html).toContain('lucide-bot');
   });
+
+  it('uses neutral activity icons and a terminal icon for active agents', () => {
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+    expect(html).toContain('lucide-terminal');
+    expect(html).not.toContain('lucide-loader');
+    expect(html).not.toContain('animate-spin');
+    expect(html).not.toContain('text-red-400');
+    expect(html).not.toContain('text-teal-400');
+    expect(html).not.toContain('text-blue-400');
+  });
 });

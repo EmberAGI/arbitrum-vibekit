@@ -7,7 +7,7 @@ import {
   Bot,
   Trophy,
   AlertCircle,
-  Loader,
+  Terminal,
   CheckCircle,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -419,7 +419,7 @@ export function AppSidebar() {
             isExpanded={isBlockedExpanded}
             onToggle={() => setIsBlockedExpanded(!isBlockedExpanded)}
             badgeColor="bg-red-500/20 text-red-400"
-            icon={<AlertCircle className="w-4 h-4 text-red-400" />}
+            icon={<AlertCircle className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
             onAgentClick={handleAgentClick}
           />
@@ -432,7 +432,7 @@ export function AppSidebar() {
             isExpanded={isActiveExpanded}
             onToggle={() => setIsActiveExpanded(!isActiveExpanded)}
             badgeColor="bg-teal-500/20 text-teal-400"
-            icon={<Loader className="w-4 h-4 text-teal-400 animate-spin" />}
+            icon={<Terminal className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
             onAgentClick={handleAgentClick}
           />
@@ -445,7 +445,7 @@ export function AppSidebar() {
             isExpanded={isCompletedExpanded}
             onToggle={() => setIsCompletedExpanded(!isCompletedExpanded)}
             badgeColor="bg-blue-500/20 text-blue-400"
-            icon={<CheckCircle className="w-4 h-4 text-blue-400" />}
+            icon={<CheckCircle className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
             onAgentClick={handleAgentClick}
           />
