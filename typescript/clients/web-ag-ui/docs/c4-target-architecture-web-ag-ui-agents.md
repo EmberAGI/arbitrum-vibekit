@@ -293,7 +293,13 @@ Completed:
 - Shared lifecycle reducers now live in `agent-workflow-core` and are adopted across `apps/agent*`:
   - `resolveSummaryTaskStatus` (summary terminal-state policy),
   - `resolveRunCommandForView` + `resolveCommandTargetForBootstrappedFlow` (baseline command routing policy).
+- Shared onboarding phase state-machine now lives in `agent-workflow-core` and is adopted across agent onboarding routing paths:
+  - `resolveOnboardingPhase` + `mapOnboardingPhaseToTarget`,
+  - consumed by CLMM/GMX onboarding routing and Pendle cycle command routing.
 - Agent setup-step branching logic is extracted from `AgentDetailPage` into `apps/web/src/components/agentSetupSteps.ts`.
+- Non-metrics blockers/onboarding branch helpers are extracted from `AgentDetailPage` into focused modules:
+  - `apps/web/src/components/agentBlockersBehavior.ts`,
+  - `apps/web/src/components/agentBlockersInterrupt.ts`.
 - Web command scheduling now uses a dedicated `AgentCommandScheduler` (`apps/web/src/utils/agentCommandScheduler.ts`) with bounded busy-retry handling for `sync` and coalescing intent semantics.
 - Integration coverage now verifies key lifecycle invariants:
   - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-focused polling fan-out and periodic no-overlap behavior.
@@ -302,5 +308,4 @@ Completed:
 
 Remaining gaps:
 
-- Shared `agent-workflow-core` still does not own a full canonical onboarding state-machine implementation; onboarding routing still diverges per agent.
-- `AgentDetailPage` still contains non-metrics agent-specific blockers/onboarding flow branching and should be further decomposed toward a composition-shell role.
+- None for the scoped architecture slices in this refactor plan.

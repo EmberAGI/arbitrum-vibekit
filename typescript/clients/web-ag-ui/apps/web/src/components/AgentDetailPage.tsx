@@ -59,6 +59,7 @@ import {
   resolveDelegationContextLabel,
   resolveOnboardingActive,
 } from './agentBlockersBehavior';
+import { resolveBlockersInterruptView } from './agentBlockersInterrupt';
 import { resolveSetupSteps } from './agentSetupSteps';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
@@ -1576,45 +1577,22 @@ function AgentBlockersTab({
     });
   };
 
-  // Derive which form to show from the interrupt type (the authoritative source)
-  const showOperatorConfigForm = activeInterrupt?.type === 'operator-config-request';
-  const showPendleSetupForm = activeInterrupt?.type === 'pendle-setup-request';
-  const showPendleFundWalletForm = activeInterrupt?.type === 'pendle-fund-wallet-request';
-  const showGmxFundWalletForm = activeInterrupt?.type === 'gmx-fund-wallet-request';
-  const showGmxSetupForm = activeInterrupt?.type === 'gmx-setup-request';
-  const showFundingTokenForm =
-    activeInterrupt?.type === 'clmm-funding-token-request' ||
-    activeInterrupt?.type === 'pendle-funding-token-request' ||
-    activeInterrupt?.type === 'gmx-funding-token-request';
-  const showDelegationSigningForm =
-    activeInterrupt?.type === 'clmm-delegation-signing-request' ||
-    activeInterrupt?.type === 'pendle-delegation-signing-request' ||
-    activeInterrupt?.type === 'gmx-delegation-signing-request';
-
-  const interruptStep = useMemo(() => {
-    if (showOperatorConfigForm || showPendleSetupForm || showGmxSetupForm) {
-      return 1;
-    }
-    if (showPendleFundWalletForm || showFundingTokenForm) {
-      return 2;
-    }
-    if (showGmxFundWalletForm) {
-      return maxSetupStep;
-    }
-    if (showDelegationSigningForm) {
-      return 3;
-    }
-    return null;
-  }, [
-    showOperatorConfigForm,
-    showPendleSetupForm,
-    showPendleFundWalletForm,
-    showGmxFundWalletForm,
-    showGmxSetupForm,
-    showFundingTokenForm,
-    showDelegationSigningForm,
-    maxSetupStep,
-  ]);
+  const blockersInterruptView = useMemo(
+    () =>
+      resolveBlockersInterruptView({
+        interruptType: activeInterrupt?.type,
+        maxSetupStep,
+      }),
+    [activeInterrupt?.type, maxSetupStep],
+  );
+  const showOperatorConfigForm = blockersInterruptView.kind === 'operator-config';
+  const showPendleSetupForm = blockersInterruptView.kind === 'pendle-setup';
+  const showPendleFundWalletForm = blockersInterruptView.kind === 'pendle-fund-wallet';
+  const showGmxFundWalletForm = blockersInterruptView.kind === 'gmx-fund-wallet';
+  const showGmxSetupForm = blockersInterruptView.kind === 'gmx-setup';
+  const showFundingTokenForm = blockersInterruptView.kind === 'funding-token';
+  const showDelegationSigningForm = blockersInterruptView.kind === 'delegation-signing';
+  const interruptStep = blockersInterruptView.interruptStep;
 
   // Agent-provided onboarding metadata is authoritative when present.
   useEffect(() => {
