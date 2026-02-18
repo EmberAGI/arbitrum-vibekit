@@ -4,7 +4,7 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronRight,
-  Users,
+  Bot,
   Trophy,
   AlertCircle,
   Loader,
@@ -297,16 +297,16 @@ export function AppSidebar() {
   const isLeaderboardActive = pathname === '/leaderboard';
 
   return (
-    <div className="flex flex-col h-full w-[260px] flex-shrink-0 bg-[#09090B] border-r border-[#242429] text-[#D1D1D1]">
+    <div className="flex flex-col h-full w-[312px] flex-shrink-0 bg-[#09090B] border-r border-[#242429] text-[#D1D1D1]">
       {/* Header */}
       <div className="px-4 py-3.5 border-b border-[#242429]">
         <div className="flex items-center gap-2.5">
           <Image
-            src="/ember-logo.svg"
+            src="/ember-sidebar-logo.png"
             alt="Ember Logo"
-            width={12}
+            width={10}
             height={16}
-            className="w-3 h-4 object-contain"
+            className="w-auto h-4 object-contain"
           />
           <div className="flex items-center gap-2">
             <Image src="/ember-name.svg" alt="Ember" width={76} height={15} className="h-[15px] w-auto" />
@@ -345,7 +345,7 @@ export function AppSidebar() {
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Users className="w-4 h-4" />
+                  <Bot className="w-4 h-4" />
                   <span className="text-sm font-medium text-[#D7D8DE]">Agents</span>
                 </div>
                 {isAgentsExpanded ? (
