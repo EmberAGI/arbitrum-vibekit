@@ -74,6 +74,7 @@ interface AgentDetailPageProps {
   profile: AgentProfile;
   metrics: AgentMetrics;
   fullMetrics?: AgentViewMetrics;
+  initialSummaryCollapsed?: boolean;
   initialTab?: TabType;
   isHired: boolean;
   isHiring: boolean;
@@ -251,6 +252,7 @@ export function AgentDetailPage({
   profile,
   metrics,
   fullMetrics,
+  initialSummaryCollapsed,
   initialTab,
   isHired,
   isHiring,
@@ -283,7 +285,7 @@ export function AgentDetailPage({
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (isHired ? 'blockers' : 'metrics'),
   );
-  const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false);
+  const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(initialSummaryCollapsed ?? false);
   const [hasUserSelectedTab, setHasUserSelectedTab] = useState(Boolean(initialTab));
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
   const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
@@ -841,34 +843,34 @@ export function AgentDetailPage({
                     <p className="text-gray-500 text-sm italic">No description available</p>
                   )}
 
-                  {!isSummaryCollapsed && (
-                    <div className="mt-auto">
-                      <div className="grid grid-cols-2 gap-4 pt-6 mt-6 border-t border-white/10">
-                        <div className="pr-4">
-                          <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
-                            Your Assets
-                          </div>
-                          <LoadingValue
-                            isLoaded={hasLoadedView}
-                            skeletonClassName="h-6 w-24"
-                            loadedClassName="text-lg font-semibold text-white"
-                            value={formatCurrency(fullMetrics?.latestSnapshot?.totalUsd)}
-                          />
+                  <div className="mt-auto">
+                    <div className="grid grid-cols-2 gap-4 pt-6 mt-6 border-t border-white/10">
+                      <div className="pr-4">
+                        <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
+                          Your Assets
                         </div>
-                        <div className="pl-4 border-l border-white/10">
-                          <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
-                            Your PnL
-                          </div>
-                          <LoadingValue
-                            isLoaded={hasLoadedView}
-                            skeletonClassName="h-6 w-24"
-                            loadedClassName={`text-lg font-semibold ${
-                              (metrics.lifetimePnlUsd ?? 0) >= 0 ? 'text-teal-400' : 'text-red-400'
-                            }`}
-                            value={formatSignedCurrency(metrics.lifetimePnlUsd)}
-                          />
-                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-24"
+                          loadedClassName="text-lg font-semibold text-white"
+                          value={formatCurrency(fullMetrics?.latestSnapshot?.totalUsd)}
+                        />
                       </div>
+                      <div className="pl-4 border-l border-white/10">
+                        <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
+                          Your PnL
+                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-24"
+                          loadedClassName={`text-lg font-semibold ${
+                            (metrics.lifetimePnlUsd ?? 0) >= 0 ? 'text-teal-400' : 'text-red-400'
+                          }`}
+                          value={formatSignedCurrency(metrics.lifetimePnlUsd)}
+                        />
+                      </div>
+                    </div>
+                    {!isSummaryCollapsed && (
                       <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-white/10">
                         <TagColumn
                           title="Chains"
@@ -891,8 +893,8 @@ export function AgentDetailPage({
                         />
                         <PointsColumn metrics={metrics} />
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
 

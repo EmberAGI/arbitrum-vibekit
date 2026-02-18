@@ -30,6 +30,7 @@ function renderAgentDetail(params: {
   agentId: AgentId;
   agentName: string;
   isHired: boolean;
+  initialSummaryCollapsed?: boolean;
   initialTab?: 'blockers' | 'metrics' | 'transactions' | 'chat';
   taskId?: string;
   taskStatus?: string;
@@ -78,6 +79,7 @@ function renderAgentDetail(params: {
         rebalanceCycles: 0,
       },
       isHired: params.isHired,
+      initialSummaryCollapsed: params.initialSummaryCollapsed,
       initialTab: params.initialTab,
       isHiring: false,
       hasLoadedView: true,
@@ -185,6 +187,23 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
       expect(leftMetricsGrid).toBeDefined();
       expect(leftMetricsGrid).not.toContain('Your Assets');
       expect(leftMetricsGrid).not.toContain('Your PnL');
+    },
+  );
+
+  it.each(AGENTS)(
+    'keeps personal metrics visible when details are collapsed for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+        currentCommand: 'cycle',
+        initialSummaryCollapsed: true,
+      });
+
+      expect(html).toContain('>Show details<');
+      expect(html).toContain('Your Assets');
+      expect(html).toContain('Your PnL');
     },
   );
 

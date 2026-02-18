@@ -84,6 +84,7 @@ interface HireAgentsPageProps {
   featuredAgents: FeaturedAgent[];
   onHireAgent?: (agentId: string) => void;
   onViewAgent?: (agentId: string) => void;
+  initialCollapsedFeaturedCardIds?: string[];
 }
 
 export function HireAgentsPage({
@@ -91,11 +92,21 @@ export function HireAgentsPage({
   featuredAgents,
   onHireAgent,
   onViewAgent,
+  initialCollapsedFeaturedCardIds,
 }: HireAgentsPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'income' | 'apy' | 'users' | 'aum'>('income');
   const [filterStatus, setFilterStatus] = useState<'all' | 'hired' | 'for_hire'>('for_hire');
   const [currentPage, setCurrentPage] = useState(1);
+  const [collapsedFeaturedCardById, setCollapsedFeaturedCardById] = useState<Record<string, true>>(() => {
+    const out: Record<string, true> = {};
+    for (const id of initialCollapsedFeaturedCardIds ?? []) {
+      if (id.trim().length > 0) {
+        out[id] = true;
+      }
+    }
+    return out;
+  });
 
   const hiredCount = agents.filter((a) => a.status === 'hired').length;
   const forHireCount = agents.filter((a) => a.status === 'for_hire').length;
@@ -266,6 +277,18 @@ export function HireAgentsPage({
                       protocolItems={protocolItems}
                       tokenItems={tokenItems}
                       avatarUri={avatarUri}
+                      isMetricsCollapsed={Boolean(collapsedFeaturedCardById[agent.id])}
+                      onToggleMetrics={() => {
+                        setCollapsedFeaturedCardById((previous) => {
+                          const next = { ...previous };
+                          if (next[agent.id]) {
+                            delete next[agent.id];
+                          } else {
+                            next[agent.id] = true;
+                          }
+                          return next;
+                        });
+                      }}
                       onClick={() => onViewAgent?.(agent.id)}
                     />
                   );
@@ -368,6 +391,8 @@ function FeaturedAgentCard({
   protocolItems,
   tokenItems,
   avatarUri,
+  isMetricsCollapsed,
+  onToggleMetrics,
   onClick,
 }: {
   agent: FeaturedAgent;
@@ -376,6 +401,8 @@ function FeaturedAgentCard({
   protocolItems: { label: string; iconUri: string | null }[];
   tokenItems: { label: string; iconUri: string | null }[];
   avatarUri: string | null;
+  isMetricsCollapsed: boolean;
+  onToggleMetrics?: () => void;
   onClick?: () => void;
 }) {
   const hasRank = agent.rank !== undefined;
@@ -386,7 +413,7 @@ function FeaturedAgentCard({
   return (
     <div
       onClick={onClick}
-      className="min-w-[340px] w-[340px] flex-shrink-0 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15 transition-colors cursor-pointer overflow-hidden"
+      className="min-w-[340px] w-[340px] h-full flex-shrink-0 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15 transition-colors cursor-pointer overflow-hidden flex flex-col"
     >
       {/* Header row: rank, stars, creator, menu */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
@@ -429,7 +456,7 @@ function FeaturedAgentCard({
       </div>
 
       {/* Main content: Name and avatar */}
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4 flex-1">
         <div className="flex items-start gap-4 mb-3">
           <div className="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 bg-black/30 flex items-center justify-center">
             {avatarUri ? (
@@ -486,34 +513,46 @@ function FeaturedAgentCard({
       </div>
 
       {/* Stats footer */}
-      <div className="grid grid-cols-4 gap-3 px-4 py-3 bg-black/20 border-t border-white/10">
-        <FeaturedStat
-          label="AUM"
-          isLoaded={agent.isLoaded}
-          value={agent.aum !== undefined ? `$${agent.aum.toLocaleString()}` : null}
-        />
-        <FeaturedStat
-          label="30d Income"
-          isLoaded={agent.isLoaded}
-          value={agent.weeklyIncome !== undefined ? `$${agent.weeklyIncome.toLocaleString()}` : null}
-        />
-        <FeaturedStat
-          label="APY"
-          isLoaded={agent.isLoaded}
-          value={agent.apy !== undefined ? `${agent.apy}%` : null}
-          valueClassName="text-teal-400"
-        />
-        <FeaturedStat
-          label="Users"
-          isLoaded={agent.isLoaded}
-          value={agent.users !== undefined ? agent.users.toLocaleString() : null}
-        />
-      </div>
+      {!isMetricsCollapsed && (
+        <div className="grid grid-cols-4 gap-3 px-4 py-3 bg-black/20 border-t border-white/10">
+          <FeaturedStat
+            label="AUM"
+            isLoaded={agent.isLoaded}
+            value={agent.aum !== undefined ? `$${agent.aum.toLocaleString()}` : null}
+          />
+          <FeaturedStat
+            label="30d Income"
+            isLoaded={agent.isLoaded}
+            value={agent.weeklyIncome !== undefined ? `$${agent.weeklyIncome.toLocaleString()}` : null}
+          />
+          <FeaturedStat
+            label="APY"
+            isLoaded={agent.isLoaded}
+            value={agent.apy !== undefined ? `${agent.apy}%` : null}
+            valueClassName="text-teal-400"
+          />
+          <FeaturedStat
+            label="Users"
+            isLoaded={agent.isLoaded}
+            value={agent.users !== undefined ? agent.users.toLocaleString() : null}
+          />
+        </div>
+      )}
 
-      {/* Expand chevron */}
-      <div className="flex justify-center py-1.5 bg-black/20 border-t border-white/10">
-        <ChevronDown className="w-4 h-4 text-gray-600" />
-      </div>
+      {/* Expand/collapse chevron */}
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleMetrics?.();
+        }}
+        aria-label={isMetricsCollapsed ? 'Expand metrics' : 'Collapse metrics'}
+        className="flex w-full justify-center py-1.5 bg-black/20 border-t border-white/10 hover:bg-black/30 transition-colors"
+      >
+        <ChevronDown
+          className={`w-4 h-4 text-gray-600 transition-transform ${isMetricsCollapsed ? 'rotate-180' : ''}`}
+        />
+      </button>
     </div>
   );
 }

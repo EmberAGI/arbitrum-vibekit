@@ -139,4 +139,30 @@ describe('HireAgentsPage (top cards)', () => {
     expect(html).toContain('…');
     expect(html).not.toContain('+2');
   });
+
+  it('supports collapsing featured-card metrics on the hire page without navigating away', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-gmx-allora',
+            name: 'GMX x Allora',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            aum: 123456,
+            weeklyIncome: 987,
+            apy: 12,
+            users: 42,
+          },
+        ],
+        initialCollapsedFeaturedCardIds: ['agent-gmx-allora'],
+      }),
+    );
+
+    expect(html).toContain('aria-label="Expand metrics"');
+    expect(html).not.toContain('30d Income');
+    expect(html).not.toContain('grid grid-cols-4 gap-3 px-4 py-3 bg-black/20 border-t border-white/10');
+  });
 });
