@@ -131,6 +131,20 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Your PnL');
   });
 
+  it.each(AGENTS)('uses Activity + Settings and policies tabs for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      currentCommand: 'cycle',
+    });
+
+    expect(html).toContain('Settings and policies');
+    expect(html).toContain('Activity');
+    expect(html).not.toContain('Agent Blockers');
+    expect(html).not.toContain('Transaction history');
+  });
+
   it.each(AGENTS)('deduplicates arbitrum chain label for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,

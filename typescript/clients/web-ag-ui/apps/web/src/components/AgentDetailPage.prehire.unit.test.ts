@@ -79,6 +79,38 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     );
   });
 
+  it('hides allocation settings panels while onboarding is in progress', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-clmm',
+        agentName: 'Camelot CLMM',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        isHired: true,
+        isHiring: false,
+        onboarding: { step: 1 },
+        taskStatus: 'input-required',
+        hasLoadedView: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).not.toContain('Allocation Settings');
+    expect(html).not.toContain('Configure the amount of funds allocated to this agent');
+    expect(html).not.toContain('Additional policy settings will be available in a future update.');
+  });
+
   it('shows metrics tab as enabled when onboarding metadata is stale but no input is required', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {

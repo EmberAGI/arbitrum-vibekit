@@ -116,7 +116,7 @@ interface AgentDetailPageProps {
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
 }
 
-type TabType = 'blockers' | 'metrics' | 'transactions' | 'settings' | 'chat';
+type TabType = 'blockers' | 'metrics' | 'transactions' | 'chat';
 
 function hashStringToSeed(value: string): number {
   // Cheap stable hash for deterministic mock series.
@@ -489,7 +489,7 @@ export function AgentDetailPage({
           onClick={() => selectTab('blockers')}
           highlight
         >
-          Agent Blockers
+          Settings and policies
         </TabButton>
         <TabButton
           active={resolvedTab === 'metrics'}
@@ -503,14 +503,7 @@ export function AgentDetailPage({
           onClick={() => selectTab('transactions')}
           disabled={isOnboardingActive}
         >
-          Transaction history
-        </TabButton>
-        <TabButton
-          active={resolvedTab === 'settings'}
-          onClick={() => selectTab('settings')}
-          disabled={isOnboardingActive}
-        >
-          Settings and policies
+          Activity
         </TabButton>
         <TabButton active={resolvedTab === 'chat'} onClick={() => {}} disabled>
           Chat
@@ -521,21 +514,28 @@ export function AgentDetailPage({
     const tabContent = (
       <>
         {resolvedTab === 'blockers' && (
-          <AgentBlockersTab
-            agentId={agentId}
-            activeInterrupt={activeInterrupt}
-            allowedPools={allowedPools}
-            onInterruptSubmit={onInterruptSubmit}
-            taskId={taskId}
-            taskStatus={taskStatus}
-            haltReason={haltReason}
-            executionError={executionError}
-            delegationsBypassActive={delegationsBypassActive}
-            onboarding={onboarding}
-            telemetry={telemetry}
-            settings={settings}
-            onSettingsChange={onSettingsChange}
-          />
+          <>
+            <AgentBlockersTab
+              agentId={agentId}
+              activeInterrupt={activeInterrupt}
+              allowedPools={allowedPools}
+              onInterruptSubmit={onInterruptSubmit}
+              taskId={taskId}
+              taskStatus={taskStatus}
+              haltReason={haltReason}
+              executionError={executionError}
+              delegationsBypassActive={delegationsBypassActive}
+              onboarding={onboarding}
+              telemetry={telemetry}
+              settings={settings}
+              onSettingsChange={onSettingsChange}
+            />
+            {!isOnboardingActive && (
+              <div className="mt-6">
+                <SettingsTab settings={settings} onSettingsChange={onSettingsChange} />
+              </div>
+            )}
+          </>
         )}
 
         {resolvedTab === 'metrics' && (
@@ -567,10 +567,6 @@ export function AgentDetailPage({
                 : null
             }
           />
-        )}
-
-        {resolvedTab === 'settings' && (
-          <SettingsTab settings={settings} onSettingsChange={onSettingsChange} />
         )}
       </>
     );
