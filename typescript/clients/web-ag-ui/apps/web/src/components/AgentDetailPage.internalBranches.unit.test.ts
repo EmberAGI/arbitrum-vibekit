@@ -597,7 +597,7 @@ describe('AgentDetailPage internals: blockers variants', () => {
       },
     );
 
-    expect(html).toContain('Strategy Config');
+    expect(html).toContain('Agent Setup');
     expect(html).toContain('Funding Token');
     expect(html).toContain('Delegation Signing');
     expect(html).toContain('Fund Wallet');
@@ -652,6 +652,8 @@ describe('AgentDetailPage internals: blockers variants', () => {
     );
 
     expect(html).toContain('⏳');
+    expect(html).toContain('Waiting for the next onboarding prompt');
+    expect(html).toContain('funding token options');
     expect(html).not.toContain('Waiting for agent');
     expect(html).not.toContain('No active task. The agent may need to be started.');
     expect(html).not.toContain('Set up agent');

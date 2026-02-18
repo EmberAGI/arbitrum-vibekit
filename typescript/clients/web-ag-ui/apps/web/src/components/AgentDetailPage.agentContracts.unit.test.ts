@@ -406,7 +406,9 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
 
     expect(html).toContain('Pendle Setup');
     expect(html).toContain('Funding Amount (USD)');
-    expect(html).toContain('Auto-selected yield');
+    expect(html).not.toContain('Auto-selected yield');
+    expect(html).not.toContain('highest-yield YT market');
+    expect(html).toContain('PT position management');
   });
 
   it('routes GMX setup interrupt to GMX Allora Setup form', () => {

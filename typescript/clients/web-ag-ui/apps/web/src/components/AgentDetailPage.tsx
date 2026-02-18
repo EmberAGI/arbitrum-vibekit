@@ -1572,7 +1572,7 @@ const BASE_SETUP_STEP_COPY: Record<
 > = {
   default: {
     setup: {
-      name: 'Agent Preferences',
+      name: 'Agent Setup',
       description: 'Provide strategy inputs so the agent can initialize your configuration.',
     },
     funding: {
@@ -1590,8 +1590,8 @@ const BASE_SETUP_STEP_COPY: Record<
   },
   pendle: {
     setup: {
-      name: 'Funding Amount',
-      description: 'Set deployment amount and wallet context for Pendle.',
+      name: 'Agent Setup',
+      description: 'Set deployment amount and wallet context for PT position management.',
     },
     funding: {
       name: 'Funding Token',
@@ -1608,7 +1608,7 @@ const BASE_SETUP_STEP_COPY: Record<
   },
   gmx: {
     setup: {
-      name: 'Strategy Config',
+      name: 'Agent Setup',
       description: 'Select market and allocation for the GMX strategy.',
     },
     funding: {
@@ -2154,16 +2154,6 @@ function AgentBlockersTab({
                       className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
                     />
                   </div>
-
-                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">Auto-selected yield</div>
-                    <p className="text-gray-400 text-xs">
-                      The agent will automatically select the highest-yield YT market and rotate when yields change.
-                    </p>
-                    <p className="text-gray-500 text-xs mt-3">
-                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
-                    </p>
-                  </div>
                 </div>
 
                 {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
@@ -2479,6 +2469,9 @@ function AgentBlockersTab({
                 <div className="text-gray-600 text-4xl" aria-hidden="true">
                   ⏳
                 </div>
+                <p className="mt-3 text-sm text-gray-400">
+                  Waiting for the next onboarding prompt (for example, funding token options).
+                </p>
               </div>
             )}
           </div>

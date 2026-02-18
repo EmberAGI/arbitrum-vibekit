@@ -289,7 +289,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
       }),
     );
 
-    expect(html).toContain('Funding Amount');
+    expect(html).toContain('Agent Setup');
     expect(html).toContain('Delegation Signing');
     expect(html).not.toContain('Funding Token');
   });
