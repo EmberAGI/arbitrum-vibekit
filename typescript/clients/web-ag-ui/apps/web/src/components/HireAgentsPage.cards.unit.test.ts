@@ -165,4 +165,40 @@ describe('HireAgentsPage (top cards)', () => {
     expect(html).not.toContain('30d Income');
     expect(html).not.toContain('grid grid-cols-4 gap-3 px-4 py-3 bg-black/20 border-t border-white/10');
   });
+
+  it('enforces a consistent featured-card height so highlighted cards stay aligned', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-gmx-allora',
+            name: 'GMX x Allora',
+            creator: 'Ember AI Team',
+            description:
+              'Uses directional and volatility signals for adaptive position sizing across market regimes.',
+            status: 'for_hire',
+            isLoaded: true,
+            aum: 123456,
+            weeklyIncome: 987,
+            apy: 12,
+            users: 42,
+          },
+          {
+            id: 'agent-pendle',
+            name: 'Pendle Yield',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            aum: 56789,
+            weeklyIncome: 654,
+            apy: 8,
+            users: 24,
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('h-[460px]');
+  });
 });

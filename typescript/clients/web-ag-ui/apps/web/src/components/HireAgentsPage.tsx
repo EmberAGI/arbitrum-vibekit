@@ -413,7 +413,7 @@ function FeaturedAgentCard({
   return (
     <div
       onClick={onClick}
-      className="min-w-[340px] w-[340px] h-full flex-shrink-0 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15 transition-colors cursor-pointer overflow-hidden flex flex-col"
+      className="min-w-[340px] w-[340px] h-[460px] flex-shrink-0 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15 transition-colors cursor-pointer overflow-hidden flex flex-col"
     >
       {/* Header row: rank, stars, creator, menu */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">

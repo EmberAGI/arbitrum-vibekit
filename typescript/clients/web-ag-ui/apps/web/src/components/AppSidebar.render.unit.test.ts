@@ -126,4 +126,11 @@ describe('AppSidebar', () => {
     expect(html).not.toContain('text-teal-400');
     expect(html).not.toContain('text-blue-400');
   });
+
+  it('uses a thin left nav indicator instead of active card backgrounds', () => {
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+    expect(html).toContain('w-px h-6 bg-[#fd6731]');
+    expect(html).not.toContain('text-white bg-[#1C1D23] border border-[#2F313B]');
+    expect(html).not.toContain('bg-[#1B1C21] border border-[#2B2D36]');
+  });
 });

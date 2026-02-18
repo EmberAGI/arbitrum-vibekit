@@ -147,6 +147,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     });
 
     expect(html).toContain('>Hire<');
+    expect(html).toContain('>Hide details<');
     expect(html).toContain('APY Change');
     expect(html).toContain('Total Users');
     expect(html).not.toContain('Agent is hired');

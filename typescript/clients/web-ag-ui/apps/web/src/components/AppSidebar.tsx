@@ -338,11 +338,7 @@ export function AppSidebar() {
             <div>
               <button
                 onClick={() => setIsAgentsExpanded(!isAgentsExpanded)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors ${
-                  isHireAgentsActive || isAcquireActive
-                    ? 'bg-[#1B1C21] border border-[#2B2D36]'
-                    : 'hover:bg-[#1B1C21]'
-                }`}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors hover:bg-[#1B1C21]"
               >
                 <div className="flex items-center gap-3">
                   <Bot className="w-4 h-4" />
@@ -361,12 +357,12 @@ export function AppSidebar() {
                     href="/hire-agents"
                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
                       isHireAgentsActive
-                        ? 'text-white bg-[#1C1D23] border border-[#2F313B]'
+                        ? 'text-white'
                         : 'text-[#9A9CAA] hover:text-white hover:bg-[#1B1C21]'
                     }`}
                   >
                     {isHireAgentsActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-[#fd6731] rounded-r" />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
                     )}
                     Hire
                   </Link>
@@ -374,12 +370,12 @@ export function AppSidebar() {
                     href="/acquire"
                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
                       isAcquireActive
-                        ? 'text-white bg-[#1C1D23] border border-[#2F313B]'
+                        ? 'text-white'
                         : 'text-[#9A9CAA] hover:text-white hover:bg-[#1B1C21]'
                     }`}
                   >
                     {isAcquireActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-[#fd6731] rounded-r" />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
                     )}
                     Acquire
                   </Link>
@@ -392,12 +388,12 @@ export function AppSidebar() {
               href="/leaderboard"
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
                 isLeaderboardActive
-                  ? 'bg-[#1B1C21] border border-[#2B2D36]'
+                  ? 'text-white'
                   : 'hover:bg-[#1B1C21]'
               }`}
             >
               {isLeaderboardActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-[#fd6731] rounded-r" />
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
               )}
               <Trophy className="w-4 h-4" />
               <span className="text-sm font-medium text-[#D7D8DE]">Leaderboard</span>

@@ -955,56 +955,58 @@ export function AgentDetailPage({
                 {isHiring ? 'Hiring...' : 'Hire'}
               </button>
 
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
-                <div>
-                  <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
-                    Agent Income
-                  </div>
-                  {!hasLoadedView ? (
-                    <Skeleton className="h-6 w-24" />
-                  ) : (
-                    <div className="text-lg font-semibold text-white">
-                      {formatCurrency(profile.agentIncome) ?? '-'}
+              {!isSummaryCollapsed && (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
+                  <div>
+                    <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
+                      Agent Income
                     </div>
-                  )}
-                </div>
-                <div>
-                  <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
-                    AUM
+                    {!hasLoadedView ? (
+                      <Skeleton className="h-6 w-24" />
+                    ) : (
+                      <div className="text-lg font-semibold text-white">
+                        {formatCurrency(profile.agentIncome) ?? '-'}
+                      </div>
+                    )}
                   </div>
-                  {!hasLoadedView ? (
-                    <Skeleton className="h-6 w-24" />
-                  ) : (
-                    <div className="text-lg font-semibold text-white">
-                      {formatCurrency(profile.aum) ?? '-'}
+                  <div>
+                    <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
+                      AUM
                     </div>
-                  )}
-                </div>
-                <div>
-                  <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
-                    Total Users
+                    {!hasLoadedView ? (
+                      <Skeleton className="h-6 w-24" />
+                    ) : (
+                      <div className="text-lg font-semibold text-white">
+                        {formatCurrency(profile.aum) ?? '-'}
+                      </div>
+                    )}
                   </div>
-                  {!hasLoadedView ? (
-                    <Skeleton className="h-6 w-20" />
-                  ) : (
-                    <div className="text-lg font-semibold text-white">
-                      {formatNumber(profile.totalUsers) ?? '-'}
+                  <div>
+                    <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
+                      Total Users
                     </div>
-                  )}
-                </div>
-                <div>
-                  <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
-                    APY
+                    {!hasLoadedView ? (
+                      <Skeleton className="h-6 w-20" />
+                    ) : (
+                      <div className="text-lg font-semibold text-white">
+                        {formatNumber(profile.totalUsers) ?? '-'}
+                      </div>
+                    )}
                   </div>
-                  {!hasLoadedView ? (
-                    <Skeleton className="h-6 w-16" />
-                  ) : (
-                    <div className="text-lg font-semibold text-teal-400">
-                      {formatPercent(profile.apy) ?? '-'}
+                  <div>
+                    <div className="text-[10px] text-white/40 tracking-[0.2em] mb-1">
+                      APY
                     </div>
-                  )}
+                    {!hasLoadedView ? (
+                      <Skeleton className="h-6 w-16" />
+                    ) : (
+                      <div className="text-lg font-semibold text-teal-400">
+                        {formatPercent(profile.apy) ?? '-'}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -1067,6 +1069,13 @@ export function AgentDetailPage({
                   >
                     <Github className="w-4 h-4" />
                   </a>
+                  <button
+                    type="button"
+                    onClick={() => setIsSummaryCollapsed((previous) => !previous)}
+                    className="px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-xs font-medium text-gray-300 hover:text-white hover:bg-white/[0.08] transition-colors"
+                  >
+                    {isSummaryCollapsed ? 'Show details' : 'Hide details'}
+                  </button>
                 </div>
               </div>
 
@@ -1077,28 +1086,30 @@ export function AgentDetailPage({
                 <p className="text-gray-500 text-sm italic">No description available</p>
               )}
 
-              <div className="grid grid-cols-4 gap-4 mt-auto pt-6 border-t border-white/10">
-                <TagColumn
-                  title="Chains"
-                  items={displayChains}
-                  getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
-                />
-                <TagColumn
-                  title="Protocols"
-                  items={displayProtocols}
-                  getIconUri={(protocol) => {
-                    const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
-                    if (!fallback) return null;
-                    return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
-                  }}
-                />
-                <TagColumn
-                  title="Tokens"
-                  items={displayTokens}
-                  getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
-                />
-                <PointsColumn metrics={metrics} />
-              </div>
+              {!isSummaryCollapsed && (
+                <div className="grid grid-cols-4 gap-4 mt-auto pt-6 border-t border-white/10">
+                  <TagColumn
+                    title="Chains"
+                    items={displayChains}
+                    getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
+                  />
+                  <TagColumn
+                    title="Protocols"
+                    items={displayProtocols}
+                    getIconUri={(protocol) => {
+                      const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+                      if (!fallback) return null;
+                      return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
+                    }}
+                  />
+                  <TagColumn
+                    title="Tokens"
+                    items={displayTokens}
+                    getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
+                  />
+                  <PointsColumn metrics={metrics} />
+                </div>
+              )}
             </div>
           </div>
         </div>

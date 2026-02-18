@@ -47,6 +47,38 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('Total Users');
   });
 
+  it('supports the summary toggle before hiring', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-clmm',
+        agentName: 'Camelot CLMM',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        initialSummaryCollapsed: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('>Show details<');
+    expect(html).not.toContain('>Chains<');
+    expect(html).not.toContain('>Protocols<');
+    expect(html).not.toContain('>Tokens<');
+  });
+
   it('renders metrics tab as disabled while onboarding is in progress', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
