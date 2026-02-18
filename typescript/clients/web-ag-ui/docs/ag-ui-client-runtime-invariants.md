@@ -18,6 +18,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
 
 - `Detail-page connect`: long-lived detail-page stream started via AG-UI `connect` while that agent detail page is active.
 - `Run stream`: AG-UI stream created by `run` command execution.
+- `Polling snapshot`: short-lived AG-UI polling update used for agents whose detail page is not currently active.
 - `Busy`: server rejects a run because an active run already exists (e.g., 409/422 or equivalent busy message).
 - `Authority`: source of truth used to update client projection state.
 - `Client mutation intent`: web-side state/message change to be applied on agent via the next AG-UI `run` input.
@@ -39,9 +40,11 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - Navigating away from the agent detail page (or unmount) must deterministically detach that stream.
 
 4. State authority:
-   - If a detail-page `connect` exists, it is authoritative for continuous state projection.
-   - If no detail-page `connect` exists, the active `run` stream is temporary authority for that command lifecycle.
-   - All events still flow through one reducer/projection path (no dual writers).
+   - Multiple ingress channels are valid (`connect`, `run`, polling), but authority is single-owner per agent at any moment.
+   - Active detail-page agent: `connect` stream is authoritative for continuous projection.
+   - Non-active-detail agents: polling snapshots are authoritative for sidebar projection.
+   - If neither `connect` nor fresh poll data is available, active `run` stream is temporary authority for that command lifecycle.
+   - All ingress channels must flow through one reducer/projection path with ownership/epoch gating (no split write paths).
 
 5. Local gating is advisory:
    - Client-side in-flight flags prevent accidental double-submit from one UI instance.
@@ -76,7 +79,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
   - other commands: explicit policy (reject-on-busy or constrained retry)
 - central `AgentProjectionReducer`:
   - dedupe by run/event identity
-  - enforce ownership token/epoch checks for stale stream cleanup
+  - enforce per-agent ownership token/epoch checks for stale stream/poll cleanup
 
 ## 5. Open Design Decisions
 

@@ -4,7 +4,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentListProvider } from './AgentListContext';
+import { AgentListProvider, useAgentList } from './AgentListContext';
 import * as agentListPolling from './agentListPolling';
 
 let pathname = '/hire-agents/agent-pendle';
@@ -56,6 +56,16 @@ async function flushEffects(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
   });
+}
+
+function CaptureAgentList({
+  onSnapshot,
+}: {
+  onSnapshot: (value: ReturnType<typeof useAgentList>) => void;
+}) {
+  const value = useAgentList();
+  onSnapshot(value);
+  return null;
 }
 
 describe('AgentListProvider integration', () => {
@@ -131,5 +141,39 @@ describe('AgentListProvider integration', () => {
       vi.advanceTimersByTime(30);
     });
     expect(pollWithConcurrencyMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('enforces per-agent source ownership for detail-connect vs poll updates', async () => {
+    let latest: ReturnType<typeof useAgentList> | null = null;
+
+    await act(async () => {
+      root.render(
+        <AgentListProvider>
+          <CaptureAgentList
+            onSnapshot={(value) => {
+              latest = value;
+            }}
+          />
+        </AgentListProvider>,
+      );
+    });
+    await flushEffects();
+
+    expect(latest).not.toBeNull();
+
+    // Active detail route is agent-pendle, so poll updates for it must be ignored.
+    latest?.upsertAgent('agent-pendle', { command: 'sync' }, 'poll');
+    await flushEffects();
+    expect(latest?.agents['agent-pendle']?.command).toBeUndefined();
+
+    // Detail-connect is authoritative for active detail agent.
+    latest?.upsertAgent('agent-pendle', { command: 'sync' }, 'detail-connect');
+    await flushEffects();
+    expect(latest?.agents['agent-pendle']?.command).toBe('sync');
+
+    // Detail-connect updates for non-active agents must be ignored.
+    latest?.upsertAgent('agent-clmm', { command: 'hire' }, 'detail-connect');
+    await flushEffects();
+    expect(latest?.agents['agent-clmm']?.command).toBeUndefined();
   });
 });

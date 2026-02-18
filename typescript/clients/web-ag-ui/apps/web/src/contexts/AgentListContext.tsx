@@ -27,10 +27,16 @@ import type { AgentListEntry } from './agentListTypes';
 
 type AgentListState = {
   agents: Record<string, AgentListEntry>;
-  upsertAgent: (agentId: string, update: Partial<AgentListEntry>) => void;
+  upsertAgent: (
+    agentId: string,
+    update: Partial<AgentListEntry>,
+    source: AgentListUpdateSource,
+  ) => void;
 };
 
 const AgentListContext = createContext<AgentListState | null>(null);
+
+export type AgentListUpdateSource = 'detail-connect' | 'poll';
 
 function buildInitialState(agentIds: string[]): Record<string, AgentListEntry> {
   return agentIds.reduce<Record<string, AgentListEntry>>((acc, agentId) => {
@@ -59,6 +65,17 @@ function resolveAgentIdFromPath(pathname: string | null): string | null {
   return isRegisteredAgentId(agentId) ? agentId : null;
 }
 
+function shouldAcceptAgentListUpdate(params: {
+  agentId: string;
+  activeAgentId: string | null;
+  source: AgentListUpdateSource;
+}): boolean {
+  if (params.source === 'detail-connect') {
+    return params.activeAgentId === params.agentId;
+  }
+  return params.activeAgentId !== params.agentId;
+}
+
 export function AgentListProvider({ children }: { children: ReactNode }) {
   const agentIds = useMemo(() => getAllAgents().map((agent) => agent.id), []);
   const pathname = usePathname();
@@ -76,7 +93,14 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
   const inFlightRef = useRef(new Set<string>());
   const periodicPollInFlightRef = useRef(false);
 
-  const upsertAgent = useCallback((agentId: string, update: Partial<AgentListEntry>) => {
+  const upsertAgent = useCallback((
+    agentId: string,
+    update: Partial<AgentListEntry>,
+    source: AgentListUpdateSource,
+  ) => {
+    if (!shouldAcceptAgentListUpdate({ agentId, activeAgentId, source })) {
+      return;
+    }
     setState((prev) => {
       const baseAgents = prev.walletKey === walletKey ? prev.agents : buildInitialState(agentIds);
       return {
@@ -90,7 +114,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
         },
       };
     });
-  }, [agentIds, walletKey]);
+  }, [activeAgentId, agentIds, walletKey]);
 
   const agents = state.walletKey === walletKey ? state.agents : buildInitialState(agentIds);
   const agentsRef = useRef(agents);
@@ -137,10 +161,10 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
             }),
         });
 
-        upsertAgent(agentId, update ?? { synced: true });
+        upsertAgent(agentId, update ?? { synced: true }, 'poll');
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        upsertAgent(agentId, { synced: true, error: message });
+        upsertAgent(agentId, { synced: true, error: message }, 'poll');
       } finally {
         inFlightRef.current.delete(agentId);
       }
