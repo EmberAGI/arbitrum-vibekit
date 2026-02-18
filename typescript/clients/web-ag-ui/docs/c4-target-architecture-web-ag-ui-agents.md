@@ -111,6 +111,12 @@ Explicit non-goal container:
   - Sends `hire`, `sync`, `fire`, interrupt responses via AG-UI `run` payloads only.
   - No out-of-band command mutation.
 
+- `AgentCommandScheduler` (new):
+  - Enforces command concurrency policy by `agentId+threadId`.
+  - `fire` is preemptive (abort/detach then dispatch).
+  - `sync` uses coalescing intent policy (single pending intent, last-write-wins).
+  - Normalizes server busy responses into deterministic observe/retry behavior.
+
 - `AgentMetricsRendererRegistry` (new):
   - Resolves a per-agent metrics renderer by `agentId` (e.g., CLMM, GMX Allora, Pendle).
   - Keeps shared frame chrome (tabs/cards/loading/error) in one place.
@@ -215,8 +221,13 @@ sequenceDiagram
 1. Long-lived detail streams: maximum 1 per browser session focus context.
 2. Sidebar polling cadence: default 15s, bounded concurrency.
 3. No direct web calls to `/threads`, `/runs`, or `/state`.
-4. Every run has one terminal state event.
-5. On page blur/unmount, stream teardown is deterministic.
+4. Focused `connect` is long-lived state authority when present; otherwise active `run` stream is temporary authority.
+5. Local run-in-flight gating is advisory; server busy responses are authoritative for global concurrency.
+6. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
+7. `fire` is preemptive and must attempt abort/detach before dispatch.
+8. Every run has one terminal state event.
+9. On page blur/unmount, stream teardown is deterministic.
+10. Invariant details and implementation guidance are specified in `docs/ag-ui-client-runtime-invariants.md`.
 
 ## 9. Migration plan (from current state)
 
@@ -288,3 +299,4 @@ Remaining gaps:
 
 - Shared `agent-workflow-core` still does not own a canonical onboarding/task state-machine implementation; lifecycle routing continues to diverge per agent.
 - `AgentDetailPage` still contains non-metrics agent-specific blockers/onboarding flow branching and should be further decomposed toward a composition-shell role.
+- Web command scheduling still lacks a dedicated `AgentCommandScheduler` implementation for explicit `sync` coalescing and unified busy handling across non-`fire` commands.
