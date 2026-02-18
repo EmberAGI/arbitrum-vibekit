@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@ag-ui/client": "0.0.42",
+    "@copilotkitnext/core": "0.0.33",
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

@@ -510,6 +510,9 @@ importers:
       '@ag-ui/client':
         specifier: 0.0.42
         version: 0.0.42(patch_hash=g3vb6i4qg2banxpgna3ko3w63m)
+      '@copilotkitnext/core':
+        specifier: 0.0.33
+        version: 0.0.33(patch_hash=xuedn7hxakcsv22g6465qile5e)
       '@eslint/eslintrc':
         specifier: ^3
         version: 3.3.3
