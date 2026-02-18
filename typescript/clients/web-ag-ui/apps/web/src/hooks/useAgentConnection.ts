@@ -466,6 +466,28 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   }, [threadId]);
 
   useEffect(() => {
+    if (!agent) return;
+    if (runtimeStatus === CopilotKitCoreRuntimeConnectionStatus.Connected) return;
+    if (!lastConnectedThreadRef.current) return;
+
+    const ownerId = streamOwnerIdRef.current;
+    if (ownerId) {
+      releaseAgentStreamOwner(ownerId);
+    }
+
+    logConnectEvent('runtime-disconnected-cleanup', {
+      agentId,
+      agent: getAgentDebugId(agent),
+      threadId: lastConnectedThreadRef.current,
+      runtimeStatus,
+    });
+
+    lastConnectedThreadRef.current = null;
+    messagesSnapshotRef.current = false;
+    void cleanupAgentConnection(agent);
+  }, [agent, runtimeStatus, agentId, getAgentDebugId, logConnectEvent]);
+
+  useEffect(() => {
     if (!threadId || !agent) return;
     if (runtimeStatus !== CopilotKitCoreRuntimeConnectionStatus.Connected) return;
     if (lastConnectedThreadRef.current === threadId) return;

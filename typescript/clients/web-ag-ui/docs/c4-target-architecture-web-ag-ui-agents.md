@@ -13,7 +13,7 @@ This C4 document describes the target architecture we want to converge to from t
 
 Current code references that motivate this:
 
-- `apps/web/src/hooks/useAgentConnection.ts` (focused detail stream + AG-UI command bus)
+- `apps/web/src/hooks/useAgentConnection.ts` (active-detail stream + AG-UI command bus)
 - `apps/web/src/contexts/AgentListContext.tsx` (sidebar polling cadence and fan-out behavior)
 - `apps/agent-workflow-core/src/taskLifecycle.ts` (shared command and task lifecycle helpers)
 - `patches/@ag-ui__langgraph@0.0.20.patch` (custom connect behavior)
@@ -21,7 +21,7 @@ Current code references that motivate this:
 ## 2. Architectural principles (target)
 
 1. AG-UI is the only web-to-agent protocol boundary.
-2. One long-lived stream per focused detail page; no hidden background persistent streams.
+2. One long-lived stream only while an agent detail page is active; no hidden background persistent streams.
 3. List/status updates are bounded polling and protocol-compliant.
 4. All agents publish one versioned `ThreadView` contract.
 5. Agent command and task transitions are governed by a shared state machine library, not per-agent drift.
@@ -80,7 +80,7 @@ flowchart TB
 Container responsibilities:
 
 - UI: rendering only; no LangGraph thread semantics.
-- Stream Manager: owns connect/run lifecycle, stream detach, and focus rules.
+- Stream Manager: owns connect/run lifecycle, stream detach, and detail-route activity rules.
 - Projection Store: derives sidebar/detail state from AG-UI events.
 - CopilotKit endpoint: protocol boundary and routing to agents.
 - Agent runtimes: workflow execution and state emission.
@@ -94,12 +94,12 @@ Explicit non-goal container:
 ### 5.1 Web components
 
 - `AgentStreamCoordinator` (new):
-  - Ensures only the focused agent keeps a long-lived `connect` stream.
-  - On route blur/unmount, detaches stream ownership immediately (without stopping backend runs).
+  - Ensures only the currently active detail-page agent keeps a long-lived `connect` stream.
+  - On route change away from detail page/unmount, detaches stream ownership immediately (without stopping backend runs).
   - Enforces a hard cap of active streams (target: `<= 1` long-lived detail stream).
 
 - `AgentStatusPoller` (refactored list polling):
-  - Every 15s, performs short-lived AG-UI status sync for non-focused agents.
+  - Every 15s, performs short-lived AG-UI status sync for agents whose detail page is not currently active.
   - Uses protocol-compliant calls only; no direct thread endpoints.
   - Writes normalized status to shared projection store.
 
@@ -156,7 +156,7 @@ Target factorization:
 
 ## 6. Dynamic views (sequence)
 
-### 6.1 Detail page open (focused stream)
+### 6.1 Detail page open (active stream)
 
 ```mermaid
 sequenceDiagram
@@ -190,7 +190,7 @@ sequenceDiagram
   Runtime-->>Web: detach acknowledged
 ```
 
-### 6.3 Sidebar refresh (non-focused agents)
+### 6.3 Sidebar refresh (non-active-detail agents)
 
 ```mermaid
 sequenceDiagram
@@ -199,7 +199,7 @@ sequenceDiagram
   participant Agent
 
   loop every 15s
-    Poller->>Runtime: bounded AG-UI sync call per non-focused agent
+    Poller->>Runtime: bounded AG-UI sync call per non-active-detail agent
     Runtime->>Agent: protocol-compliant fetch/stream attach
     Agent-->>Runtime: latest projection events
     Runtime-->>Poller: reduced status payload
@@ -242,7 +242,7 @@ sequenceDiagram
 
 ## 8. Operational invariants
 
-1. Long-lived detail streams: maximum 1 per browser session focus context.
+1. Long-lived detail streams: maximum 1 while an agent detail page is active.
 2. Sidebar polling cadence: default 15s, bounded concurrency.
 3. No direct web calls to `/threads`, `/runs`, or `/state`.
 4. Client-to-agent state mutation is written through AG-UI `run` input; `connect` is attach/replay only.
@@ -251,7 +251,7 @@ sequenceDiagram
 7. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
 8. `fire` is the only preemptive stop command: issue `stop`, detach local stream, wait terminal/timeout, then dispatch `fire`.
 9. Every run has one terminal state event.
-10. On page blur/unmount, stream teardown is deterministic.
+10. On detail-page route leave/unmount, stream teardown is deterministic.
 11. Invariant details and implementation guidance are specified in `docs/ag-ui-client-runtime-invariants.md`.
 
 ## 9. Migration plan (from current state)
@@ -294,7 +294,7 @@ sequenceDiagram
   `@ag-ui/langgraph@0.0.25-alpha.0` do not expose `connect` on `LangGraphAgent` in `dist/index.d.ts`.
 - Exit criteria for this exception:
   - Upstream package exposes `connect` on `LangGraphAgent` (types and runtime),
-  - Behavior parity is validated against our focus/unfocus and sidebar sync scenarios,
+  - Behavior parity is validated against detail-page open/leave and sidebar sync scenarios,
   - Local patch can be removed without regressing stream lifecycle correctness.
 
 ## 10. Success criteria for target architecture
@@ -322,13 +322,13 @@ Completed:
   - `resolveOnboardingPhase` + `mapOnboardingPhaseToTarget`,
   - consumed by CLMM/GMX onboarding routing and Pendle cycle command routing.
 - Agent setup-step branching logic is extracted from `AgentDetailPage` into `apps/web/src/components/agentSetupSteps.ts`.
-- Non-metrics blockers/onboarding branch helpers are extracted from `AgentDetailPage` into focused modules:
+- Non-metrics blockers/onboarding branch helpers are extracted from `AgentDetailPage` into specialized modules:
   - `apps/web/src/components/agentBlockersBehavior.ts`,
   - `apps/web/src/components/agentBlockersInterrupt.ts`.
 - Web command scheduling now uses a dedicated `AgentCommandScheduler` (`apps/web/src/utils/agentCommandScheduler.ts`) with bounded busy-retry handling for `sync` and coalescing intent semantics.
 - Integration coverage now verifies key lifecycle invariants:
-  - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-focused polling fan-out and periodic no-overlap behavior.
-  - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts focused detail connect and deterministic detach on unmount.
+  - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-active-detail polling fan-out and periodic no-overlap behavior.
+  - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts detail-page connect and deterministic detach on unmount.
   - `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts `sync` coalescing, terminal replay, bounded busy retries, and non-sync in-flight rejection.
   - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts sync confirmation semantics via `clientMutationId` -> `view.lastAppliedClientMutationId` handshake.
 

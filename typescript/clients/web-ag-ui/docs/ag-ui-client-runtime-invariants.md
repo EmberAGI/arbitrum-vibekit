@@ -16,7 +16,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
 
 ## 2. Terms
 
-- `Focused connect`: long-lived detail-page stream started via AG-UI `connect`.
+- `Detail-page connect`: long-lived detail-page stream started via AG-UI `connect` while that agent detail page is active.
 - `Run stream`: AG-UI stream created by `run` command execution.
 - `Busy`: server rejects a run because an active run already exists (e.g., 409/422 or equivalent busy message).
 - `Authority`: source of truth used to update client projection state.
@@ -35,12 +35,12 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - Practical client pattern: update local agent state/message model, then dispatch `run`.
 
 3. Stream ownership:
-   - At most one long-lived focused `connect` stream globally per browser focus context.
-   - Focus loss/navigation must deterministically detach the focused stream.
+   - At most one long-lived detail-page `connect` stream globally while an agent detail page is active.
+   - Navigating away from the agent detail page (or unmount) must deterministically detach that stream.
 
 4. State authority:
-   - If focused `connect` exists, it is authoritative for continuous state projection.
-   - If no focused `connect` exists, the active `run` stream is temporary authority for that command lifecycle.
+   - If a detail-page `connect` exists, it is authoritative for continuous state projection.
+   - If no detail-page `connect` exists, the active `run` stream is temporary authority for that command lifecycle.
    - All events still flow through one reducer/projection path (no dual writers).
 
 5. Local gating is advisory:

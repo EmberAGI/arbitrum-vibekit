@@ -174,6 +174,49 @@ describe('useAgentConnection integration', () => {
     expect(mocks.connectAgent).not.toHaveBeenCalled();
   });
 
+  it('detaches active detail connection when runtime transport disconnects', async () => {
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+    expect(mocks.agent.detachActiveRun).toHaveBeenCalledTimes(0);
+
+    mocks.runtimeStatus = mocks.runtimeStatuses.Disconnected;
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(mocks.agent.detachActiveRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconnects detail connection after runtime transport recovers', async () => {
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+
+    mocks.runtimeStatus = mocks.runtimeStatuses.Disconnected;
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(mocks.agent.detachActiveRun).toHaveBeenCalledTimes(1);
+
+    mocks.runtimeStatus = mocks.runtimeStatuses.Connected;
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(mocks.connectAgent).toHaveBeenCalledTimes(2);
+  });
+
   it('saveSettings mutates local state and dispatches sync through AG-UI run', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
