@@ -29,6 +29,14 @@ function renderAgentDetail(params: {
   agentId: AgentId;
   agentName: string;
   isHired: boolean;
+  initialTab?: 'blockers' | 'metrics' | 'transactions' | 'chat';
+  taskId?: string;
+  taskStatus?: string;
+  telemetry?: Array<{
+    cycle: number;
+    action: string;
+    timestamp?: string;
+  }>;
   currentCommand?: string;
   activeInterrupt?:
     | { type: 'operator-config-request'; message: string }
@@ -68,6 +76,7 @@ function renderAgentDetail(params: {
         rebalanceCycles: 0,
       },
       isHired: params.isHired,
+      initialTab: params.initialTab,
       isHiring: false,
       hasLoadedView: true,
       isFiring: false,
@@ -88,14 +97,14 @@ function renderAgentDetail(params: {
         },
       ],
       onInterruptSubmit: () => {},
-      taskId: undefined,
-      taskStatus: undefined,
+      taskId: params.taskId,
+      taskStatus: params.taskStatus,
       haltReason: undefined,
       executionError: undefined,
       delegationsBypassActive: false,
       onboarding: undefined,
       transactions: [],
-      telemetry: [],
+      telemetry: params.telemetry ?? [],
       events: [],
       settings: { amount: 100 },
       onSettingsChange: () => {},
@@ -143,6 +152,23 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Activity');
     expect(html).not.toContain('Agent Blockers');
     expect(html).not.toContain('Transaction history');
+  });
+
+  it.each(AGENTS)('renders current task + latest activity in Activity tab for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      initialTab: 'transactions',
+      taskId: 'task-1234567890',
+      taskStatus: 'working',
+      telemetry: [{ cycle: 1, action: 'sync', timestamp: '2026-02-15T12:00:00.000Z' }],
+    });
+
+    expect(html).toContain('Current Task');
+    expect(html).toContain('Latest Activity');
+    expect(html).toContain('Cycle 1');
+    expect(html).toContain('sync');
   });
 
   it.each(AGENTS)('deduplicates arbitrum chain label for $name', ({ id, name }) => {

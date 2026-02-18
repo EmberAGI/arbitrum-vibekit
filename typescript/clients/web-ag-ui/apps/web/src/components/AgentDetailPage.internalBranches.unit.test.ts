@@ -505,10 +505,6 @@ describe('AgentDetailPage internals: blockers variants', () => {
         executionError: undefined,
         delegationsBypassActive: false,
         onboarding: options?.onboarding ?? { step: 2 },
-        telemetry: [
-          { cycle: 1, action: 'cycle', timestamp: '2026-02-15T12:00:00.000Z' },
-          { cycle: 2, action: 'rebalance', timestamp: '2026-02-15T12:30:00.000Z' },
-        ],
         settings: { amount: 200 },
         onSettingsChange: () => {},
       }),
@@ -541,8 +537,8 @@ describe('AgentDetailPage internals: blockers variants', () => {
     expect(html).toContain('Select Funding Token');
     expect(html).toContain('USDC');
     expect(html).toContain('WETH');
-    expect(html).toContain('Current Task');
-    expect(html).toContain('Latest Activity');
+    expect(html).not.toContain('Current Task');
+    expect(html).not.toContain('Latest Activity');
     expect(html.indexOf('USDC')).toBeLessThan(html.indexOf('WETH'));
   });
 
