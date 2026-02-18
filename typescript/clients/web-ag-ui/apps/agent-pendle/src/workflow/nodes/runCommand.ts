@@ -66,8 +66,6 @@ export function resolveCommandTarget({ messages, private: priv, view }: ClmmStat
       return 'hireCommand';
     case 'fire':
       return 'fireCommand';
-    case 'cycle':
-      return priv.bootstrapped ? 'runCycleCommand' : 'bootstrap';
     case 'sync':
       return priv.bootstrapped ? 'syncState' : 'bootstrap';
     default:

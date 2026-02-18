@@ -29,12 +29,44 @@ export function resolveAgentListPollIntervalMs(rawValue: string | undefined): nu
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 15_000;
 }
 
+export function resolveAgentListPollMaxConcurrent(rawValue: string | undefined): number {
+  const parsed = Number(rawValue ?? 2);
+  const normalized = Number.isFinite(parsed) ? Math.floor(parsed) : 2;
+  return normalized > 0 ? normalized : 2;
+}
+
 export function selectAgentIdsForPolling(params: {
   agentIds: string[];
   agents: Record<string, AgentListEntry>;
   activeAgentId: string | null;
 }): string[] {
   return params.agentIds.filter((agentId) => !(params.activeAgentId && params.activeAgentId === agentId));
+}
+
+export async function pollAgentIdsWithConcurrency(params: {
+  agentIds: string[];
+  maxConcurrent: number;
+  pollAgent: (agentId: string) => Promise<void>;
+}): Promise<void> {
+  if (params.agentIds.length === 0) return;
+
+  const maxConcurrent = Math.max(1, Math.floor(params.maxConcurrent));
+  let nextIndex = 0;
+
+  const worker = async (): Promise<void> => {
+    while (nextIndex < params.agentIds.length) {
+      const agentId = params.agentIds[nextIndex];
+      nextIndex += 1;
+      await params.pollAgent(agentId);
+    }
+  };
+
+  const workers = Array.from(
+    { length: Math.min(maxConcurrent, params.agentIds.length) },
+    () => worker(),
+  );
+
+  await Promise.all(workers);
 }
 
 export async function pollAgentListUpdateViaAgUi(params: {

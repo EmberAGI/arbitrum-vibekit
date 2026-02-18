@@ -3,8 +3,10 @@ import type { AgentSubscriber } from '@ag-ui/client';
 
 import type { AgentState } from '../types/agent';
 import {
+  pollAgentIdsWithConcurrency,
   pollAgentListUpdateViaAgUi,
   resolveAgentListPollIntervalMs,
+  resolveAgentListPollMaxConcurrent,
   selectAgentIdsForPolling,
 } from './agentListPolling';
 import type { AgentListEntry } from './agentListTypes';
@@ -52,6 +54,14 @@ describe('agentListPolling', () => {
     expect(resolveAgentListPollIntervalMs('-2')).toBe(15_000);
     expect(resolveAgentListPollIntervalMs('garbage')).toBe(15_000);
     expect(resolveAgentListPollIntervalMs('20000')).toBe(20_000);
+  });
+
+  it('uses sane defaults for max poll concurrency', () => {
+    expect(resolveAgentListPollMaxConcurrent(undefined)).toBe(2);
+    expect(resolveAgentListPollMaxConcurrent('0')).toBe(2);
+    expect(resolveAgentListPollMaxConcurrent('-5')).toBe(2);
+    expect(resolveAgentListPollMaxConcurrent('garbage')).toBe(2);
+    expect(resolveAgentListPollMaxConcurrent('3.9')).toBe(3);
   });
 
   it('projects state snapshot into list update and detaches the short-lived stream', async () => {
@@ -143,5 +153,48 @@ describe('agentListPolling', () => {
     expect(update).toBeNull();
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs agent polls with a bounded concurrency cap', async () => {
+    const started: string[] = [];
+    const resolvers: Array<() => void> = [];
+    let active = 0;
+    let peakActive = 0;
+
+    const pollAgent = vi.fn((agentId: string) => {
+      started.push(agentId);
+      active += 1;
+      peakActive = Math.max(peakActive, active);
+      return new Promise<void>((resolve) => {
+        resolvers.push(() => {
+          active -= 1;
+          resolve();
+        });
+      });
+    });
+
+    const runPromise = pollAgentIdsWithConcurrency({
+      agentIds: ['agent-clmm', 'agent-pendle', 'agent-gmx-allora', 'agent-extra'],
+      maxConcurrent: 2,
+      pollAgent,
+    });
+
+    await Promise.resolve();
+    expect(started).toEqual(['agent-clmm', 'agent-pendle']);
+    expect(peakActive).toBe(2);
+
+    resolvers.shift()?.();
+    await Promise.resolve();
+    expect(started).toEqual(['agent-clmm', 'agent-pendle', 'agent-gmx-allora']);
+
+    resolvers.shift()?.();
+    await Promise.resolve();
+    expect(started).toEqual(['agent-clmm', 'agent-pendle', 'agent-gmx-allora', 'agent-extra']);
+
+    while (resolvers.length > 0) {
+      resolvers.shift()?.();
+    }
+    await runPromise;
+    expect(peakActive).toBe(2);
   });
 });

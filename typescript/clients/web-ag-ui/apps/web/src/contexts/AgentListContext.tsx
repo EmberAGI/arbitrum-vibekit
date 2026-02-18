@@ -17,8 +17,10 @@ import { getAllAgents, isRegisteredAgentId } from '../config/agents';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import { getAgentThreadId } from '../utils/agentThread';
 import {
+  pollAgentIdsWithConcurrency,
   pollAgentListUpdateViaAgUi,
   resolveAgentListPollIntervalMs,
+  resolveAgentListPollMaxConcurrent,
   selectAgentIdsForPolling,
 } from './agentListPolling';
 import type { AgentListEntry } from './agentListTypes';
@@ -72,6 +74,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
   const startedRef = useRef(false);
   const lastWalletKeyRef = useRef(walletKey);
   const inFlightRef = useRef(new Set<string>());
+  const periodicPollInFlightRef = useRef(false);
 
   const upsertAgent = useCallback((agentId: string, update: Partial<AgentListEntry>) => {
     setState((prev) => {
@@ -151,12 +154,15 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
     }
 
     startedRef.current = true;
-    for (const agentId of agentIds) {
-      if (activeAgentId && agentId === activeAgentId) {
-        continue;
-      }
-      void pollAgent(agentId);
-    }
+    const initialCandidates = agentIds.filter((agentId) => !(activeAgentId && agentId === activeAgentId));
+    const maxConcurrent = resolveAgentListPollMaxConcurrent(
+      process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT,
+    );
+    void pollAgentIdsWithConcurrency({
+      agentIds: initialCandidates,
+      maxConcurrent,
+      pollAgent,
+    });
   }, [activeAgentId, agentIds, pollAgent, walletKey]);
 
   useEffect(() => {
@@ -165,19 +171,33 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
     }
 
     const intervalMs = resolveAgentListPollIntervalMs(process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_POLL_MS);
+    const maxConcurrent = resolveAgentListPollMaxConcurrent(
+      process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT,
+    );
     const timer = window.setInterval(() => {
+      if (periodicPollInFlightRef.current) {
+        return;
+      }
       const candidates = selectAgentIdsForPolling({
         agentIds,
         agents: agentsRef.current,
         activeAgentId,
       });
 
-      for (const candidate of candidates) {
-        void pollAgent(candidate);
-      }
+      periodicPollInFlightRef.current = true;
+      void pollAgentIdsWithConcurrency({
+        agentIds: candidates,
+        maxConcurrent,
+        pollAgent,
+      }).finally(() => {
+        periodicPollInFlightRef.current = false;
+      });
     }, intervalMs);
 
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      periodicPollInFlightRef.current = false;
+    };
   }, [activeAgentId, agentIds, pollAgent, walletKey]);
 
   const value = useMemo(() => ({ agents, upsertAgent }), [agents, upsertAgent]);

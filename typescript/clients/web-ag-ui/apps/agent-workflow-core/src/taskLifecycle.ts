@@ -1,22 +1,24 @@
 export const AGENT_COMMANDS = ['hire', 'fire', 'cycle', 'sync'] as const;
 export type AgentCommand = (typeof AGENT_COMMANDS)[number];
 
-const AGENT_COMMAND_SET = new Set<string>(AGENT_COMMANDS);
-
-const TERMINAL_TASK_STATES = new Set<string>([
-  'completed',
-  'failed',
-  'canceled',
-  'rejected',
-  'unknown',
-]);
-
-const ACTIVE_TASK_STATES = new Set<string>([
+export const TASK_STATES = [
   'submitted',
   'working',
   'input-required',
+  'completed',
+  'canceled',
+  'failed',
+  'rejected',
   'auth-required',
-]);
+  'unknown',
+] as const;
+export type TaskState = (typeof TASK_STATES)[number];
+
+const AGENT_COMMAND_SET = new Set<string>(AGENT_COMMANDS);
+
+const TERMINAL_TASK_STATES = new Set<TaskState>(['completed', 'failed', 'canceled', 'rejected', 'unknown']);
+
+const ACTIVE_TASK_STATES = new Set<TaskState>(['submitted', 'working', 'input-required', 'auth-required']);
 
 type MessageRecord = {
   content?: unknown;
@@ -68,10 +70,10 @@ export function extractCommandFromMessages(messages: unknown): AgentCommand | nu
   }
 }
 
-export function isTaskTerminalState(state: string): boolean {
-  return TERMINAL_TASK_STATES.has(state);
+export function isTaskTerminalState(state: string | TaskState): boolean {
+  return TERMINAL_TASK_STATES.has(state as TaskState);
 }
 
-export function isTaskActiveState(state: string): boolean {
-  return ACTIVE_TASK_STATES.has(state);
+export function isTaskActiveState(state: string | TaskState): boolean {
+  return ACTIVE_TASK_STATES.has(state as TaskState);
 }

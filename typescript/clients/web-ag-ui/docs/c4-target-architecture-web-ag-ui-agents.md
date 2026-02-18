@@ -13,9 +13,9 @@ This C4 document describes the target architecture we want to converge to from t
 
 Current code references that motivate this:
 
-- `apps/web/src/hooks/useAgentConnection.ts` (detail stream + `/api/agents/sync` fallback)
-- `apps/web/src/contexts/AgentListContext.tsx` (sidebar sync polling)
-- `apps/web/src/app/api/agents/sync/route.ts` (direct `/threads/:id/state` read/write + run orchestration)
+- `apps/web/src/hooks/useAgentConnection.ts` (focused detail stream + AG-UI command bus)
+- `apps/web/src/contexts/AgentListContext.tsx` (sidebar polling cadence and fan-out behavior)
+- `apps/agent-workflow-core/src/taskLifecycle.ts` (shared command and task lifecycle helpers)
 - `patches/@ag-ui__langgraph@0.0.20.patch` (custom connect behavior)
 
 ## 2. Architectural principles (target)
@@ -268,3 +268,20 @@ sequenceDiagram
 - Hidden persistent streams are eliminated.
 - Agent apps share one state-machine contract and lifecycle rules.
 - Sidebar and detail are consistent under load and navigation churn.
+
+## 11. Convergence status (2026-02-18)
+
+Completed:
+
+- `/api/agents/sync` is removed.
+- `/api/agents/abort-active-run` is removed.
+- Web no longer calls LangGraph `/threads`/`/runs` endpoints directly.
+- Detail connection ownership is enforced via `AgentStreamCoordinator`.
+- Sidebar polling now enforces explicit bounded concurrency (`NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT`).
+- Shared `TaskState`/`AgentCommand` vocabulary is exported from `agent-workflow-core` and adopted by `apps/agent*` workflow contexts.
+- Agent setup-step branching logic is extracted from `AgentDetailPage` into `apps/web/src/components/agentSetupSteps.ts`.
+
+Remaining gaps:
+
+- Shared `agent-workflow-core` still does not own a canonical onboarding/task state-machine implementation; lifecycle routing continues to diverge per agent.
+- `AgentDetailPage` still contains non-metrics agent-specific blockers/onboarding flow branching and should be further decomposed toward a composition-shell role.
