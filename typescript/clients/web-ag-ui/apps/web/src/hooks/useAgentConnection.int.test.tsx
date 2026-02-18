@@ -191,13 +191,74 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(mocks.agent.setState).toHaveBeenCalled();
-    expect(mocks.agent.addMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role: 'user',
-        content: JSON.stringify({ command: 'sync' }),
-      }),
-    );
+    const syncMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
+      | { content?: string; role?: string }
+      | undefined;
+    const parsedMessage =
+      typeof syncMessage?.content === 'string'
+        ? (JSON.parse(syncMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+    expect(syncMessage?.role).toBe('user');
+    expect(parsedMessage?.command).toBe('sync');
+    expect(typeof parsedMessage?.clientMutationId).toBe('string');
     expect(mocks.runAgent).toHaveBeenCalledWith({ agent: mocks.agent });
+  });
+
+  it('keeps sync pending until AG-UI state confirms the applied mutation id', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.saveSettings({ amount: 250 });
+    await flushEffects();
+    expect(latestValue?.isSyncing).toBe(true);
+
+    const syncMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
+      | { content?: string }
+      | undefined;
+    const parsedMessage =
+      typeof syncMessage?.content === 'string'
+        ? (JSON.parse(syncMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+    expect(parsedMessage?.command).toBe('sync');
+    expect(typeof parsedMessage?.clientMutationId).toBe('string');
+    const clientMutationId = parsedMessage?.clientMutationId as string;
+
+    subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
+    await flushEffects();
+    expect(latestValue?.isSyncing).toBe(true);
+
+    subscriber?.onRunInitialized?.({
+      input: { threadId: 'thread-1' },
+      state: {
+        settings: { amount: 250 },
+        view: {
+          command: 'cycle',
+          lastAppliedClientMutationId: clientMutationId,
+        },
+      },
+    });
+    await flushEffects();
+    await flushEffects();
+    expect(latestValue?.isSyncing).toBe(false);
   });
 
   it('ignores stale run lifecycle events that do not match the active thread', async () => {

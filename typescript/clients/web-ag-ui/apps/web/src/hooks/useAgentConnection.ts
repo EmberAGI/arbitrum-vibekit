@@ -127,6 +127,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     threadId: undefined,
     isSyncing: false,
   });
+  const [pendingSyncMutationByThread, setPendingSyncMutationByThread] = useState<{
+    threadId: string | undefined;
+    clientMutationId: string | null;
+  }>({
+    threadId: undefined,
+    clientMutationId: null,
+  });
+  const pendingSyncMutationRef = useRef<{
+    threadId: string | undefined;
+    clientMutationId: string | null;
+  }>({
+    threadId: undefined,
+    clientMutationId: null,
+  });
   const [uiError, setUiError] = useState<string | null>(null);
   const lastConnectedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
@@ -185,13 +199,19 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [debugConnect],
   );
 
-  const dispatchCommand = useCallback((command: string, options?: { allowSyncCoalesce?: boolean }) => {
-    const scheduler = commandSchedulerRef.current;
-    if (!scheduler) {
-      return false;
-    }
-    return scheduler.dispatch(command, options);
-  }, []);
+  const dispatchCommand = useCallback(
+    (
+      command: string,
+      options?: { allowSyncCoalesce?: boolean; messagePayload?: Record<string, unknown> },
+    ) => {
+      const scheduler = commandSchedulerRef.current;
+      if (!scheduler) {
+        return false;
+      }
+      return scheduler.dispatch(command, options);
+    },
+    [],
+  );
 
   const runCommand = useCallback((command: string) => dispatchCommand(command), [dispatchCommand]);
 
@@ -202,6 +222,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       Object.keys(value as Record<string, unknown>).length > 0,
     );
   }, []);
+
+  const extractAppliedMutationId = useCallback((value: unknown): string | null => {
+    if (typeof value !== 'object' || value === null) return null;
+    if (!('view' in value)) return null;
+    const view = (value as { view?: unknown }).view;
+    if (typeof view !== 'object' || view === null) return null;
+    if (!('lastAppliedClientMutationId' in view)) return null;
+    const mutationId = (view as { lastAppliedClientMutationId?: unknown }).lastAppliedClientMutationId;
+    return typeof mutationId === 'string' && mutationId.length > 0 ? mutationId : null;
+  }, []);
+
+  useEffect(() => {
+    pendingSyncMutationRef.current = pendingSyncMutationByThread;
+  }, [pendingSyncMutationByThread]);
 
   const needsSync = useCallback((value: unknown): boolean => {
     if (!value || typeof value !== 'object') return true;
@@ -293,6 +327,19 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       onRunInitialized: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
         const state = payload.state;
+        const appliedMutationId = extractAppliedMutationId(state);
+        const pendingSyncMutation = pendingSyncMutationRef.current;
+        if (
+          appliedMutationId &&
+          pendingSyncMutation.clientMutationId !== null &&
+          pendingSyncMutation.threadId === threadIdRef.current &&
+          appliedMutationId === pendingSyncMutation.clientMutationId
+        ) {
+          setPendingSyncMutationByThread({
+            threadId: threadIdRef.current,
+            clientMutationId: null,
+          });
+        }
         if (hasStateValues(state)) {
           agent.setState(state);
           return;
@@ -311,7 +358,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     });
 
     return () => subscription.unsubscribe();
-  }, [agent, hasStateValues]);
+  }, [agent, extractAppliedMutationId, hasStateValues]);
 
   // Initial sync when thread is established - runs once per agent instance
   useEffect(() => {
@@ -342,6 +389,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       },
       onCommandBusy: (command, error) => {
         const detail = error instanceof Error ? error.message : String(error);
+        if (command === 'sync') {
+          setPendingSyncMutationByThread({
+            threadId: threadIdRef.current,
+            clientMutationId: null,
+          });
+        }
         setUiError(`Agent run is busy while processing '${command}'. Please retry in a moment.`);
         console.warn('[useAgentConnection] Busy command dispatch', {
           command,
@@ -350,6 +403,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         });
       },
       onCommandError: (command, error) => {
+        if (command === 'sync') {
+          setPendingSyncMutationByThread({
+            threadId: threadIdRef.current,
+            clientMutationId: null,
+          });
+        }
         console.error('Agent run failed', error);
         const detail = error instanceof Error ? error.message : String(error);
         setUiError(`Agent command '${command}' failed: ${detail}`);
@@ -475,7 +534,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const transactionHistory = view.transactionHistory ?? [];
   const events = activity.events ?? [];
   const settings = currentState.settings ?? defaultSettings;
-  const isSyncing = syncingState.threadId === threadId ? syncingState.isSyncing : false;
+  const syncRunPending = syncingState.threadId === threadId ? syncingState.isSyncing : false;
+  const pendingSyncMutationId =
+    pendingSyncMutationByThread.threadId === threadId
+      ? pendingSyncMutationByThread.clientMutationId
+      : null;
+  const isSyncing = syncRunPending || pendingSyncMutationId !== null;
 
   const mergeUniqueStrings = (params: {
     primary: string[];
@@ -718,13 +782,27 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const saveSettings = useCallback(
     (updates: Partial<AgentSettings>) => {
       setUiError(null);
+      const clientMutationId = v7();
+      setPendingSyncMutationByThread({
+        threadId,
+        clientMutationId,
+      });
       updateSettings(updates);
-      const accepted = dispatchCommand('sync', { allowSyncCoalesce: true });
+      const accepted = dispatchCommand('sync', {
+        allowSyncCoalesce: true,
+        messagePayload: {
+          clientMutationId,
+        },
+      });
       if (!accepted) {
+        setPendingSyncMutationByThread({
+          threadId,
+          clientMutationId: null,
+        });
         setUiError('Unable to sync settings right now. Please retry.');
       }
     },
-    [dispatchCommand, updateSettings],
+    [dispatchCommand, threadId, updateSettings],
   );
 
   return {

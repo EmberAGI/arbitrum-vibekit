@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ClmmState } from '../context.js';
 
-import { resolveCommandTarget } from './runCommand.js';
+import { resolveCommandTarget, runCommandNode } from './runCommand.js';
 
 const baseState = (): ClmmState => ({
   messages: [],
@@ -60,6 +60,21 @@ const message = (command: 'hire' | 'fire' | 'cycle' | 'sync') => ({
 });
 
 describe('resolveCommandTarget', () => {
+  it('records lastAppliedClientMutationId when sync command includes one', () => {
+    const state = baseState();
+    state.messages = [
+      {
+        id: 'msg-sync',
+        role: 'user',
+        content: JSON.stringify({ command: 'sync', clientMutationId: 'mutation-1' }),
+      },
+    ];
+
+    const next = runCommandNode(state);
+
+    expect(next.view.lastAppliedClientMutationId).toBe('mutation-1');
+  });
+
   it('routes cycle to bootstrap when not bootstrapped', () => {
     const state = baseState();
     state.messages = [message('cycle')];

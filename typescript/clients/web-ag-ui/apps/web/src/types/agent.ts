@@ -363,6 +363,7 @@ export interface AgentPrivateState {
 // View state (ClmmViewState)
 export interface AgentView {
   command?: string;
+  lastAppliedClientMutationId?: string;
   task?: Task;
   onboarding?: OnboardingState;
   setupComplete?: boolean;
@@ -450,6 +451,7 @@ export const defaultActivity: AgentViewActivity = {
 
 export const defaultView: AgentView = {
   command: undefined,
+  lastAppliedClientMutationId: undefined,
   task: undefined,
   setupComplete: undefined,
   poolArtifact: undefined,

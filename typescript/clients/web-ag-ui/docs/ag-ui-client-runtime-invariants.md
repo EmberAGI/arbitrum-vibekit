@@ -34,7 +34,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - Practical client pattern: update local agent state/message model, then dispatch `run`.
 
 3. Stream ownership:
-   - At most one long-lived focused `connect` stream per `agentId+threadId` in a browser focus context.
+   - At most one long-lived focused `connect` stream globally per browser focus context.
    - Focus loss/navigation must deterministically detach the focused stream.
 
 4. State authority:
@@ -62,7 +62,8 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - `fire` may use bounded retry for short server finalization windows.
 
 9. Confirmation semantics:
-   - “Saved/synced” UX should complete only when AG-UI state confirms application (e.g., via task state, version, or acknowledged projection).
+   - “Saved/synced” UX should complete only when AG-UI state confirms application (e.g., task state, version, or acknowledged projection).
+   - Current handshake: client sends `clientMutationId` in `sync` command payload; agent projects `view.lastAppliedClientMutationId`; UI clears pending sync only when ids match.
    - Optimistic UI is allowed but must reconcile against streamed state.
 
 ## 4. Recommended Implementation Shape
@@ -78,7 +79,8 @@ These rules complement the C4 target architecture and make runtime behavior dete
 ## 5. Open Design Decisions
 
 1. Confirmation payload:
-   - Prefer explicit `settingsVersion`/mutation acknowledgment in projected view to mark `sync` completion.
+   - `clientMutationId`/`view.lastAppliedClientMutationId` is the current explicit mutation acknowledgment path.
+   - A future `settingsVersion` contract can supersede this if agents move to versioned settings documents.
 2. Retry backoff tuning:
    - Current implementation uses bounded `sync` replay retries (`3`) and replay delay (`500ms`) in `apps/web/src/utils/agentCommandScheduler.ts`.
    - Remaining decision is whether these should become environment-tunable policy values.

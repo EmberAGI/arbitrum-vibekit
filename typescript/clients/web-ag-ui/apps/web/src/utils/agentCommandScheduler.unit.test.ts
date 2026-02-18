@@ -67,6 +67,36 @@ describe('agentCommandScheduler', () => {
     scheduler.dispose();
   });
 
+  it('replays coalesced sync using the latest message payload', async () => {
+    runInFlight = true;
+    const scheduler = createScheduler();
+
+    scheduler.dispatch('sync', {
+      allowSyncCoalesce: true,
+      messagePayload: { clientMutationId: 'm-1' },
+    });
+    scheduler.dispatch('sync', {
+      allowSyncCoalesce: true,
+      messagePayload: { clientMutationId: 'm-2' },
+    });
+
+    scheduler.handleRunTerminal();
+    await Promise.resolve();
+
+    const replayMessage = agent?.addMessage.mock.calls.at(-1)?.[0] as { content?: string } | undefined;
+    const parsedContent =
+      typeof replayMessage?.content === 'string'
+        ? (JSON.parse(replayMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+
+    expect(parsedContent).toEqual({
+      command: 'sync',
+      clientMutationId: 'm-2',
+    });
+
+    scheduler.dispose();
+  });
+
   it('replays pending sync once terminal run state is observed', async () => {
     runInFlight = true;
     const scheduler = createScheduler();
