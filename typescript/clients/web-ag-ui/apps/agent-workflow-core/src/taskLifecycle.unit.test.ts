@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_COMMANDS,
   TASK_STATES,
+  extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
   isTaskActiveState,
   isTaskTerminalState,
@@ -26,6 +27,18 @@ describe('taskLifecycle', () => {
       },
     ]);
     expect(parsed).toBe('sync');
+  });
+
+  it('extracts command envelope metadata from last message content', () => {
+    const parsed = extractCommandEnvelopeFromMessages([
+      {
+        content: JSON.stringify({ command: 'sync', clientMutationId: 'mutation-1' }),
+      },
+    ]);
+    expect(parsed).toEqual({
+      command: 'sync',
+      clientMutationId: 'mutation-1',
+    });
   });
 
   it('returns null for unsupported or malformed commands', () => {

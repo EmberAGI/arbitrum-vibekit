@@ -1,10 +1,12 @@
 export {
   AGENT_COMMANDS,
   TASK_STATES,
+  extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
   isTaskActiveState,
   isTaskTerminalState,
   type AgentCommand,
+  type CommandEnvelope,
   type TaskState,
 } from './taskLifecycle.js';
 export {

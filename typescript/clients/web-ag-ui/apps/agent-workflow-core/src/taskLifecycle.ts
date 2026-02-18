@@ -24,6 +24,11 @@ type MessageRecord = {
   content?: unknown;
 };
 
+export type CommandEnvelope = {
+  command: AgentCommand;
+  clientMutationId?: string;
+};
+
 function getLastMessageContent(messages: unknown): string | null {
   if (!messages) {
     return null;
@@ -49,7 +54,7 @@ function getLastMessageContent(messages: unknown): string | null {
   return null;
 }
 
-export function extractCommandFromMessages(messages: unknown): AgentCommand | null {
+export function extractCommandEnvelopeFromMessages(messages: unknown): CommandEnvelope | null {
   const content = getLastMessageContent(messages);
   if (!content) {
     return null;
@@ -64,10 +69,21 @@ export function extractCommandFromMessages(messages: unknown): AgentCommand | nu
     if (typeof command !== 'string' || !AGENT_COMMAND_SET.has(command)) {
       return null;
     }
-    return command as AgentCommand;
+
+    const clientMutationId = (parsed as { clientMutationId?: unknown }).clientMutationId;
+    return {
+      command: command as AgentCommand,
+      ...(typeof clientMutationId === 'string' && clientMutationId.length > 0
+        ? { clientMutationId }
+        : {}),
+    };
   } catch {
     return null;
   }
+}
+
+export function extractCommandFromMessages(messages: unknown): AgentCommand | null {
+  return extractCommandEnvelopeFromMessages(messages)?.command ?? null;
 }
 
 export function isTaskTerminalState(state: string | TaskState): boolean {

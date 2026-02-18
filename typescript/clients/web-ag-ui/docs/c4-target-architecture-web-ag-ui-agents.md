@@ -104,7 +104,8 @@ Explicit non-goal container:
   - Writes normalized status to shared projection store.
 
 - `AgentProjectionReducer`:
-  - Single reducer from AG-UI events to `ThreadViewProjection` for both sidebar and detail.
+  - Target: single reducer from AG-UI events to `ThreadViewProjection` for both sidebar and detail.
+  - Current: sidebar uses shared list projection (`projectAgentListUpdate`), while detail still reads rich `agent.state` directly.
   - Removes split-brain between stream state and sync endpoint state.
 
 - `AgentCommandBus`:
@@ -122,6 +123,7 @@ Explicit non-goal container:
   - Keeps shared frame chrome (tabs/cards/loading/error) in one place.
   - Moves agent-specific metric visuals and derived calculations into isolated components.
   - Prevents a single “god” detail component from owning all agent-specific branches.
+  - Remaining detail decomposition: blocker/setup form branching is partially extracted; `AgentDetailPage` still holds non-trivial agent-specific orchestration.
 
 ### 5.2 Runtime/server components
 
@@ -326,7 +328,9 @@ Completed:
   - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-focused polling fan-out and periodic no-overlap behavior.
   - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts focused detail connect and deterministic detach on unmount.
   - `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts `sync` coalescing, terminal replay, bounded busy retries, and non-sync in-flight rejection.
+  - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts sync confirmation semantics via `clientMutationId` -> `view.lastAppliedClientMutationId` handshake.
 
 Remaining gaps:
 
-- None for the scoped architecture slices in this refactor plan.
+- Detail/sidebar are not yet unified under one concrete reducer artifact; detail still consumes richer state directly.
+- `AgentDetailPage` is not yet a pure shell; additional blocker/setup orchestration extraction is still pending.

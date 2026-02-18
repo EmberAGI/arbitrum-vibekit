@@ -178,6 +178,7 @@ export type OnboardingState = {
 
 type ClmmViewState = {
   command?: AgentCommand;
+  lastAppliedClientMutationId?: string;
   task?: Task;
   poolArtifact?: Artifact;
   operatorInput?: OperatorConfigInput;
@@ -209,6 +210,7 @@ const defaultPrivateState = (): ClmmPrivateState => ({
 
 const defaultViewState = (): ClmmViewState => ({
   command: undefined,
+  lastAppliedClientMutationId: undefined,
   task: undefined,
   poolArtifact: undefined,
   operatorInput: undefined,
