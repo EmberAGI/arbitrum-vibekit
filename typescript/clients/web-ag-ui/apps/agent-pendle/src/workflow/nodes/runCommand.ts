@@ -1,5 +1,7 @@
 import {
   extractCommandFromMessages,
+  mapOnboardingPhaseToTarget,
+  resolveOnboardingPhase,
   resolveCommandTargetForBootstrappedFlow,
   resolveRunCommandForView,
   type AgentCommand,
@@ -45,23 +47,26 @@ export function resolveCommandTarget({ messages, private: priv, view }: ClmmStat
       return 'bootstrap';
     }
 
-    // Cycle commands can be triggered by cron / API runners or UI interactions while
-    // onboarding is still in progress. Route "cycle" into the next missing onboarding
-    // step instead of letting it hit `pollCycle` and terminal-fail.
-    if (!view.operatorInput) {
-      return 'collectSetupInput';
-    }
-    if (!view.fundingTokenInput) {
-      return 'collectFundingTokenInput';
-    }
-    if (view.delegationsBypassActive !== true && !view.delegationBundle) {
-      return 'collectDelegations';
-    }
-    if (!view.operatorConfig || view.setupComplete !== true) {
-      return 'prepareOperator';
-    }
+    const phase = resolveOnboardingPhase({
+      hasSetupInput: Boolean(view.operatorInput),
+      hasFundingTokenInput: Boolean(view.fundingTokenInput),
+      requiresDelegationSigning: view.delegationsBypassActive !== true,
+      hasDelegationBundle: Boolean(view.delegationBundle),
+      hasOperatorConfig: Boolean(view.operatorConfig),
+      requiresSetupComplete: true,
+      setupComplete: view.setupComplete === true,
+    });
 
-    return 'runCycleCommand';
+    return mapOnboardingPhaseToTarget<CommandTarget>({
+      phase,
+      targets: {
+        collectSetupInput: 'collectSetupInput',
+        collectFundingToken: 'collectFundingTokenInput',
+        collectDelegations: 'collectDelegations',
+        prepareOperator: 'prepareOperator',
+        ready: 'runCycleCommand',
+      },
+    });
   }
 
   return resolveCommandTargetForBootstrappedFlow({

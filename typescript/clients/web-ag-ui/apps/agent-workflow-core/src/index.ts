@@ -17,3 +17,9 @@ export {
   resolveRunCommandForView,
   type CommandRoutingTarget,
 } from './commandRouting.js';
+export {
+  resolveOnboardingPhase,
+  type OnboardingPhase,
+  type ResolveOnboardingPhaseInput,
+} from './onboardingStateMachine.js';
+export { mapOnboardingPhaseToTarget } from './onboardingStateMachineMappings.js';
