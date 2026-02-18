@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe('AgentDetailPage internals: metrics variants', () => {
-  it('renders the CLMM metrics layout with latest cycle and activity stream', () => {
+  it('renders the CLMM metrics layout with latest cycle data', () => {
     const fullMetrics: AgentViewMetrics = {
       iteration: 7,
       cyclesSinceRebalance: 2,
@@ -138,9 +138,6 @@ describe('AgentDetailPage internals: metrics variants', () => {
     expect(html).toContain('Token Amounts');
     expect(html).toContain('Latest Cycle');
     expect(html).toContain('spread threshold crossed');
-    expect(html).toContain('Activity Stream');
-    expect(html).toContain('Artifact: rebalance-report');
-    expect(html).toContain('Response with 1 parts');
   });
 
   it('renders GMX Allora metrics with execution status and arbiscan links', () => {
@@ -399,6 +396,37 @@ describe('AgentDetailPage internals: transaction and sidebar primitives', () => 
 
     expect(html).toContain('No transactions yet');
     expect(html).toContain('Transactions will appear here once the agent starts operating.');
+  });
+
+  it('renders activity stream in transaction history tab when events are present', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(__agentDetailPageTestOnly.TransactionHistoryTab, {
+        transactions: [],
+        events: [
+          {
+            type: 'status',
+            message: 'Delegation approvals received. Continuing onboarding.',
+            task: { id: 'task-1', taskStatus: { state: 'working' } },
+          },
+          {
+            type: 'artifact',
+            artifact: { type: 'rebalance-report' },
+          },
+          {
+            type: 'dispatch-response',
+            parts: [{ kind: 'data', data: { ok: true } }],
+          },
+        ] satisfies ClmmEvent[],
+        chainIconUri: null,
+        protocolIconUri: null,
+        protocolLabel: null,
+      }),
+    );
+
+    expect(html).toContain('Activity Stream');
+    expect(html).toContain('Delegation approvals received. Continuing onboarding.');
+    expect(html).toContain('Artifact: rebalance-report');
+    expect(html).toContain('Response with 1 parts');
   });
 
   it('renders transaction rows for success, failed, and pending statuses', () => {

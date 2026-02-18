@@ -232,6 +232,31 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('sync');
   });
 
+  it.each(AGENTS)('does not render Activity Stream panel in Metrics tab for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      initialTab: 'metrics',
+      events: [makeStatusEvent('Delegation approvals received. Continuing onboarding.')],
+    });
+
+    expect(html).not.toContain('Activity Stream');
+  });
+
+  it.each(AGENTS)('renders Activity Stream panel in Activity tab for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      initialTab: 'transactions',
+      events: [makeStatusEvent('Delegation approvals received. Continuing onboarding.')],
+    });
+
+    expect(html).toContain('Activity Stream');
+    expect(html).toContain('Delegation approvals received. Continuing onboarding.');
+  });
+
   it.each(AGENTS)('deduplicates arbitrum chain label for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,

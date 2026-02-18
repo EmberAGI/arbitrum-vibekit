@@ -584,6 +584,7 @@ export function AgentDetailPage({
             taskId={taskId}
             taskStatus={taskStatus}
             telemetry={telemetry}
+            events={events}
             chainIconUri={displayChains.length > 0 ? chainIconByName[normalizeNameKey(displayChains[0])] ?? null : null}
             protocolLabel={
               profile.protocols && profile.protocols.length > 0 ? profile.protocols[0] : null
@@ -1183,6 +1184,7 @@ interface TransactionHistoryTabProps {
   taskId?: string;
   taskStatus?: string;
   telemetry?: TelemetryItem[];
+  events?: ClmmEvent[];
   chainIconUri: string | null;
   protocolIconUri: string | null;
   protocolLabel: string | null;
@@ -1193,6 +1195,7 @@ function TransactionHistoryTab({
   taskId,
   taskStatus,
   telemetry = [],
+  events = [],
   chainIconUri,
   protocolIconUri,
   protocolLabel,
@@ -1248,6 +1251,35 @@ function TransactionHistoryTab({
                   <span className="text-gray-400">{t.action}</span>
                 </div>
                 <span className="text-xs text-gray-500">{formatDate(t.timestamp)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {events.slice(-10).reverse().map((event, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                <div
+                  className={`w-2 h-2 rounded-full mt-2 ${
+                    event.type === 'status'
+                      ? 'bg-blue-400'
+                      : event.type === 'artifact'
+                        ? 'bg-purple-400'
+                        : 'bg-gray-400'
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
+                  <div className="text-sm text-white mt-1">
+                    {event.type === 'status' && event.message}
+                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -2898,35 +2930,6 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events, transactio
         </div>
       )}
 
-      {/* Activity Stream */}
-      {events.length > 0 && (
-        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
-          <div className="space-y-3 max-h-64 overflow-y-auto">
-            {events.slice(-10).reverse().map((event, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
-                <div
-                  className={`w-2 h-2 rounded-full mt-2 ${
-                    event.type === 'status'
-                      ? 'bg-blue-400'
-                      : event.type === 'artifact'
-                        ? 'bg-purple-400'
-                        : 'bg-gray-400'
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
-                  <div className="text-sm text-white mt-1">
-                    {event.type === 'status' && event.message}
-                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
-                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -3541,34 +3544,6 @@ function PendleMetricsTab({
         </div>
       )}
 
-      {events.length > 0 && (
-        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
-          <div className="space-y-3 max-h-64 overflow-y-auto">
-            {events.slice(-10).reverse().map((event, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
-                <div
-                  className={`w-2 h-2 rounded-full mt-2 ${
-                    event.type === 'status'
-                      ? 'bg-blue-400'
-                      : event.type === 'artifact'
-                        ? 'bg-purple-400'
-                        : 'bg-gray-400'
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
-                  <div className="text-sm text-white mt-1">
-                    {event.type === 'status' && event.message}
-                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
-                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
