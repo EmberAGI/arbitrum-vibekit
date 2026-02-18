@@ -1,12 +1,6 @@
-import { z } from 'zod';
+import { extractCommandFromMessages, type AgentCommand } from 'agent-workflow-core';
 
 import { type ClmmState } from '../context.js';
-
-const commandSchema = z.object({
-  command: z.enum(['hire', 'fire', 'cycle', 'sync']),
-});
-
-type Command = z.infer<typeof commandSchema>['command'];
 
 type CommandTarget =
   | 'hireCommand'
@@ -16,40 +10,8 @@ type CommandTarget =
   | 'syncState'
   | '__end__';
 
-export function extractCommand(messages: ClmmState['messages']): Command | null {
-  if (!messages) {
-    return null;
-  }
-
-  const list = Array.isArray(messages) ? messages : [messages];
-  if (list.length === 0) {
-    return null;
-  }
-
-  const lastMessage = list[list.length - 1];
-  let content: string | undefined;
-  if (typeof lastMessage === 'string') {
-    content = lastMessage;
-  } else if (Array.isArray(lastMessage)) {
-    content = undefined;
-  } else if (typeof lastMessage === 'object' && lastMessage !== null && 'content' in lastMessage) {
-    const value = (lastMessage as { content: unknown }).content;
-    content = typeof value === 'string' ? value : undefined;
-  }
-  if (!content) {
-    return null;
-  }
-
-  try {
-    const parsed = commandSchema.safeParse(JSON.parse(content));
-    if (!parsed.success) {
-      return null;
-    }
-    return parsed.data.command;
-  } catch (unknownError) {
-    console.error('[runCommand] Failed to parse command content', unknownError);
-    return null;
-  }
+export function extractCommand(messages: ClmmState['messages']): AgentCommand | null {
+  return extractCommandFromMessages(messages);
 }
 
 export function runCommandNode(state: ClmmState): ClmmState {

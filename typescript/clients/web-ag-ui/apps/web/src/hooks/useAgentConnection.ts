@@ -33,15 +33,19 @@ import {
   defaultSettings,
   initialAgentState,
 } from '../types/agent';
-import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSync';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
+import {
+  acquireAgentStreamOwner,
+  registerAgentStreamOwner,
+  releaseAgentStreamOwner,
+  unregisterAgentStreamOwner,
+} from '../utils/agentStreamCoordinator';
 import { fireAgentRun } from '../utils/fireAgentRun';
 import { resumeInterruptViaAgent } from '../utils/interruptResolution';
 import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 import { canonicalizeChainLabel } from '../utils/iconResolution';
 import {
   isAgentInterrupt,
-  normalizeAgentInterrupt,
   selectActiveInterrupt,
 } from '../utils/interruptSelection';
 
@@ -113,15 +117,18 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [uiError, setUiError] = useState<string | null>(null);
-  const [syncPendingInterrupt, setSyncPendingInterrupt] = useState<AgentInterrupt | null>(null);
   const lastConnectedThreadRef = useRef<string | null>(null);
-  const lastSyncedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
   const messagesSnapshotRef = useRef(false);
   const runInFlightRef = useRef(false);
   const connectSeqRef = useRef(0);
   const agentDebugIdsRef = useRef(new WeakMap<object, number>());
   const nextAgentDebugIdRef = useRef(1);
+  const streamOwnerIdRef = useRef<string | null>(null);
+
+  if (streamOwnerIdRef.current == null) {
+    streamOwnerIdRef.current = v7();
+  }
 
   const config = getAgentConfig(agentId);
 
@@ -290,6 +297,26 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   }, [agent]);
 
   useEffect(() => {
+    const ownerId = streamOwnerIdRef.current;
+    if (!ownerId) return undefined;
+
+    registerAgentStreamOwner(ownerId, async () => {
+      const currentAgent = agentRef.current;
+      if (!currentAgent) return;
+      logConnectEvent('preempt-cleanup', {
+        agentId,
+        agent: getAgentDebugId(currentAgent),
+      });
+      await cleanupAgentConnection(currentAgent);
+    });
+
+    return () => {
+      releaseAgentStreamOwner(ownerId);
+      unregisterAgentStreamOwner(ownerId);
+    };
+  }, [agentId, getAgentDebugId, logConnectEvent]);
+
+  useEffect(() => {
     if (!agent) return undefined;
 
     return () => {
@@ -304,23 +331,27 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   useEffect(() => {
     runInFlightRef.current = false;
-    lastSyncedThreadRef.current = null;
     lastConnectedThreadRef.current = null;
-    setSyncPendingInterrupt(null);
   }, [threadId]);
 
   useEffect(() => {
     if (!threadId || !agent) return;
     if (runtimeStatus !== CopilotKitCoreRuntimeConnectionStatus.Connected) return;
     if (lastConnectedThreadRef.current === threadId) return;
+    const ownerId = streamOwnerIdRef.current;
+    if (!ownerId) return;
 
     let cancelled = false;
     const connectSeq = connectSeqRef.current + 1;
     connectSeqRef.current = connectSeq;
 
-    const connectOnly = () => {
+    const connectOnly = async () => {
       const currentAgent = agentRef.current;
       if (!currentAgent) return;
+
+      await acquireAgentStreamOwner(ownerId);
+      if (cancelled) return;
+
       currentAgent.threadId = threadId;
       lastConnectedThreadRef.current = threadId;
       messagesSnapshotRef.current = false;
@@ -350,6 +381,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         threadId,
         agent: getAgentDebugId(agentRef.current),
       });
+      releaseAgentStreamOwner(ownerId);
     };
   }, [
     threadId,
@@ -360,61 +392,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     getAgentDebugId,
     logConnectEvent,
   ]);
-
-  // Poll `/api/agents/sync` to pick up backend-driven state changes (cron ticks, external runs).
-  // CopilotKit connect should stream state, but this provides a deterministic fallback for the detail page.
-  useEffect(() => {
-    if (!threadId) return undefined;
-    if (!agent) return undefined;
-
-    const rawInterval = Number(process.env.NEXT_PUBLIC_AGENT_DETAIL_SYNC_POLL_MS ?? 5000);
-    const intervalMs = Number.isFinite(rawInterval) && rawInterval > 0 ? rawInterval : 5000;
-
-    let cancelled = false;
-    let inFlight = false;
-
-    const tick = async () => {
-      if (cancelled) return;
-      if (inFlight) return;
-
-      inFlight = true;
-      try {
-        const response = await fetch('/api/agents/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agentId, threadId }),
-        });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const parsed = parseAgentSyncResponse(await response.json().catch(() => null));
-        if (cancelled) {
-          return;
-        }
-        const currentAgent = agentRef.current;
-        if (!currentAgent) {
-          return;
-        }
-        const currentState =
-          hasStateValues(currentAgent.state) ? (currentAgent.state as AgentState) : initialAgentState;
-        currentAgent.setState(applyAgentSyncToState(currentState, parsed));
-        setSyncPendingInterrupt(normalizeAgentInterrupt(parsed.pendingInterrupt ?? null));
-      } catch {
-        // Silence sync errors; connect stream still drives primary updates.
-      } finally {
-        inFlight = false;
-      }
-    };
-
-    void tick();
-    const timer = window.setInterval(() => void tick(), intervalMs);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [agent, agentId, hasStateValues, threadId]);
 
   // Extract state with defaults
   const currentState =
@@ -594,7 +571,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const clearUiError = useCallback(() => setUiError(null), []);
   const effectiveActiveInterrupt = selectActiveInterrupt({
     streamInterrupt: activeInterrupt ?? null,
-    syncPendingInterrupt,
+    syncPendingInterrupt: null,
   });
 
   const resolveInterrupt = useCallback(
@@ -613,7 +590,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
       if (hasStreamInterrupt && canResolve()) {
         resolve(serializedInput);
-        setSyncPendingInterrupt(null);
         scheduleCycleAfterInterruptResolution({
           interruptType,
           runCommand,
@@ -633,7 +609,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             return;
           }
 
-          setSyncPendingInterrupt(null);
           scheduleCycleAfterInterruptResolution({
             interruptType,
             runCommand,

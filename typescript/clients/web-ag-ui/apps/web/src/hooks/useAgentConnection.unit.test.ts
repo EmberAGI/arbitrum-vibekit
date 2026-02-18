@@ -35,7 +35,7 @@ describe('interruptSelection', () => {
     expect(selectActiveInterrupt({ streamInterrupt, syncPendingInterrupt })).toEqual(streamInterrupt);
   });
 
-  it('uses sync fallback when stream interrupt is absent', () => {
+  it('does not use sync fallback when stream interrupt is absent (AG-UI only)', () => {
     const syncPendingInterrupt: AgentInterrupt = {
       type: 'clmm-delegation-signing-request',
       message: 'Sign delegations',
@@ -48,8 +48,6 @@ describe('interruptSelection', () => {
       warnings: [],
     };
 
-    expect(selectActiveInterrupt({ streamInterrupt: null, syncPendingInterrupt })).toEqual(
-      syncPendingInterrupt,
-    );
+    expect(selectActiveInterrupt({ streamInterrupt: null, syncPendingInterrupt })).toBeNull();
   });
 });
