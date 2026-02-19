@@ -8,6 +8,7 @@ describe('agentSync', () => {
     const sync = parseAgentSyncResponse({
       agentId: 'agent-pendle',
       command: 'cycle',
+      setupComplete: true,
       delegationsBypassActive: true,
       profile: { chains: ['arbitrum'] },
       metrics: { iteration: 7, cyclesSinceRebalance: 2, staleCycles: 0 },
@@ -18,6 +19,7 @@ describe('agentSync', () => {
 
     const next = applyAgentSyncToState(initialAgentState, sync);
     expect(next.view.command).toBe('cycle');
+    expect(next.view.setupComplete).toBe(true);
     expect(next.view.delegationsBypassActive).toBe(true);
     expect(next.view.profile.chains).toEqual(['arbitrum']);
     expect(next.view.metrics.iteration).toBe(7);
@@ -51,5 +53,30 @@ describe('agentSync', () => {
     expect(next.view.profile.chains).toEqual(['arbitrum']);
     expect(next.view.metrics.iteration).toBe(2);
   });
-});
 
+  it('clears task and error fields when sync explicitly returns null', () => {
+    const seeded = applyAgentSyncToState(
+      initialAgentState,
+      parseAgentSyncResponse({
+        agentId: 'agent-gmx-allora',
+        task: { id: 'task-1', taskStatus: { state: 'failed' } },
+        haltReason: 'old halt',
+        executionError: 'old error',
+      }),
+    );
+
+    const next = applyAgentSyncToState(
+      seeded,
+      parseAgentSyncResponse({
+        agentId: 'agent-gmx-allora',
+        task: null,
+        haltReason: null,
+        executionError: null,
+      }),
+    );
+
+    expect(next.view.task).toBeUndefined();
+    expect(next.view.haltReason).toBeUndefined();
+    expect(next.view.executionError).toBeUndefined();
+  });
+});

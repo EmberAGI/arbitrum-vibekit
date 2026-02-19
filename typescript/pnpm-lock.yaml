@@ -103,7 +103,7 @@ patchedDependencies:
     hash: 1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66
     path: clients/web-ag-ui/patches/@ag-ui__client@0.0.42.patch
   '@ag-ui/langgraph@0.0.20':
-    hash: f6c68213595b88a273b49d98d68eab92ab1d04412c8e3459153397cfc1a750a7
+    hash: df6390a86c8ba9e0912c76666a1ed5bc733193135b0bed5b1f78058dcf15703d
     path: clients/web-ag-ui/patches/@ag-ui__langgraph@0.0.20.patch
   '@anolilab/multi-semantic-release':
     hash: 37fb738e9aae114d5abda608fb1e11ab03b55303eff8c81490efb4dc99ef338b
@@ -17753,7 +17753,7 @@ snapshots:
       '@ag-ui/core': 0.0.42
       '@ag-ui/proto': 0.0.42
 
-  '@ag-ui/langgraph@0.0.20(patch_hash=f6c68213595b88a273b49d98d68eab92ab1d04412c8e3459153397cfc1a750a7)(@ag-ui/client@0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66))(@ag-ui/core@0.0.42)(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
+  '@ag-ui/langgraph@0.0.20(patch_hash=df6390a86c8ba9e0912c76666a1ed5bc733193135b0bed5b1f78058dcf15703d)(@ag-ui/client@0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66))(@ag-ui/core@0.0.42)(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
       '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       '@ag-ui/core': 0.0.42
@@ -19529,7 +19529,7 @@ snapshots:
     dependencies:
       '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       '@ag-ui/core': 0.0.42
-      '@ag-ui/langgraph': 0.0.20(patch_hash=f6c68213595b88a273b49d98d68eab92ab1d04412c8e3459153397cfc1a750a7)(@ag-ui/client@0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66))(@ag-ui/core@0.0.42)(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@ag-ui/langgraph': 0.0.20(patch_hash=df6390a86c8ba9e0912c76666a1ed5bc733193135b0bed5b1f78058dcf15703d)(@ag-ui/client@0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66))(@ag-ui/core@0.0.42)(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@copilotkit/shared': 1.50.1
       '@copilotkitnext/agent': 0.0.33(@cfworker/json-schema@4.1.1)(hono@4.10.4)
       '@copilotkitnext/runtime': 0.0.33(patch_hash=66fa98230fc02ceca3e4e99a7a7d7f28b1bc9461b2d31cb3987081352704e257)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))

@@ -1,4 +1,8 @@
-import type { EmberPlugin, PluginType } from './core/index.js';
+import type {
+  EmberPlugin,
+  LifecycleCapability,
+  PluginType,
+} from './core/index.js';
 
 /**
  * Registry for public Ember plugins.
@@ -6,6 +10,7 @@ import type { EmberPlugin, PluginType } from './core/index.js';
 export class PublicEmberPluginRegistry {
   private plugins: EmberPlugin<PluginType>[] = [];
   private deferredPlugins: Promise<EmberPlugin<PluginType>>[] = [];
+  private lifecycleCapabilities = new Map<string, LifecycleCapability>();
 
   /**
    * Register a new Ember plugin.
@@ -13,6 +18,10 @@ export class PublicEmberPluginRegistry {
    */
   public registerPlugin(plugin: EmberPlugin<PluginType>) {
     this.plugins.push(plugin);
+
+    if (plugin.lifecycleCapability) {
+      this.registerLifecycleCapability(plugin.lifecycleCapability);
+    }
   }
 
   /**
@@ -21,6 +30,21 @@ export class PublicEmberPluginRegistry {
    */
   public registerDeferredPlugin(pluginPromise: Promise<EmberPlugin<PluginType>>) {
     this.deferredPlugins.push(pluginPromise);
+  }
+
+  /**
+   * Register lifecycle capability metadata for a provider plugin.
+   * @param capability Lifecycle capability contract for refresh orchestration.
+   */
+  public registerLifecycleCapability(capability: LifecycleCapability) {
+    this.lifecycleCapabilities.set(capability.providerId, capability);
+  }
+
+  /**
+   * Returns all lifecycle capabilities registered in the registry.
+   */
+  public getLifecycleCapabilities(): LifecycleCapability[] {
+    return Array.from(this.lifecycleCapabilities.values());
   }
 
   /**

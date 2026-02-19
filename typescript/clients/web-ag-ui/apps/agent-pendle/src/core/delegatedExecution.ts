@@ -178,7 +178,20 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
       ...(gas ? { gas } : {}),
     });
 
+    logInfo('Delegated execution tx submitted', {
+      txIndex,
+      txHash,
+    });
+
     const receipt = await params.clients.public.waitForTransactionReceipt({ hash: txHash });
+
+    logInfo('Delegated execution tx confirmed', {
+      txIndex,
+      txHash,
+      status: receipt.status,
+      blockNumber: receipt.blockNumber ? receipt.blockNumber.toString() : undefined,
+    });
+
     txHashes.push(txHash);
     receipts.push(receipt);
     if (receipt.gasUsed !== undefined && receipt.effectiveGasPrice !== undefined) {

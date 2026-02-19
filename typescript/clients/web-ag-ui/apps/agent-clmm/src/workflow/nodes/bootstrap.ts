@@ -1,5 +1,5 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
+import type { Command } from '@langchain/langgraph';
 
 import { resolvePollIntervalMs, resolveStreamLimit } from '../../config/constants.js';
 import { logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
@@ -15,10 +15,9 @@ export const bootstrapNode = async (
 
   if (state.private.bootstrapped) {
     logInfo('Skipping bootstrap; state already initialized for thread', { threadId });
-    return new Command({
-      update: {},
-      goto: 'listPools',
-    });
+    // Return a no-op update so the graph's post-bootstrap conditional routing
+    // decides the next node from current state.
+    return {};
   }
 
   // Note: We don't store client instances in state because LangGraph's checkpointer

@@ -1,0 +1,103 @@
+import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+import { Command, interrupt } from '@langchain/langgraph';
+import { z } from 'zod';
+
+import {
+  buildTaskStatus,
+  type ClmmState,
+  type ClmmUpdate,
+  type GmxFundWalletInterrupt,
+} from '../context.js';
+
+const FundWalletAckSchema = z.object({
+  acknowledged: z.literal(true),
+});
+
+const FundWalletAckJsonSchema = z.object({
+  acknowledged: z.literal(true),
+});
+
+function buildFundWalletInterrupt(state: ClmmState): GmxFundWalletInterrupt {
+  const walletAddress = state.view.operatorConfig?.delegatorWalletAddress;
+  const requiredCollateralSymbol = state.view.selectedPool?.quoteSymbol ?? 'USDC';
+  const message =
+    state.view.task?.taskStatus.message?.content ??
+    'GMX order simulation failed. Fund the wallet, then click Continue to retry the cycle.';
+
+  return {
+    type: 'gmx-fund-wallet-request',
+    message,
+    payloadSchema: z.toJSONSchema(FundWalletAckJsonSchema),
+    artifactId: `gmx-fund-wallet-${Date.now()}`,
+    walletAddress,
+    requiredCollateralSymbol,
+  };
+}
+
+export const acknowledgeFundWalletNode = async (
+  state: ClmmState,
+  config: Parameters<typeof copilotkitEmitState>[0],
+): Promise<Command<string, ClmmUpdate>> => {
+  const pendingMessage =
+    state.view.executionError ??
+    'GMX order simulation failed. Ensure the trading wallet has enough USDC collateral and a small amount of Arbitrum ETH for execution fees. After funding, click Continue in Agent Blockers to retry immediately.';
+  const awaitingInput = buildTaskStatus(state.view.task, 'input-required', pendingMessage);
+  const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
+  const telemetry = state.view.activity?.telemetry ?? [];
+  const existingTotalSteps = state.view.onboarding?.totalSteps;
+  const onboardingTotalSteps =
+    typeof existingTotalSteps === 'number' && existingTotalSteps > 0
+      ? Math.max(existingTotalSteps, 4)
+      : 4;
+  const pendingView = {
+    onboarding: {
+      step: onboardingTotalSteps,
+      totalSteps: onboardingTotalSteps,
+      key: 'fund-wallet',
+    },
+    haltReason: '',
+    executionError: '',
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry },
+  };
+  const currentTaskState = state.view.task?.taskStatus?.state;
+  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
+  const shouldPersistPendingState =
+    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  if (hasRunnableConfig && shouldPersistPendingState) {
+    const mergedView = { ...state.view, ...pendingView };
+    state.view = mergedView;
+    await copilotkitEmitState(config, {
+      view: mergedView,
+    });
+    return new Command({
+      update: {
+        view: mergedView,
+      },
+      goto: 'acknowledgeFundWallet',
+    });
+  }
+
+  const request = buildFundWalletInterrupt(state);
+  const incoming: unknown = await interrupt(request);
+
+  let inputToParse: unknown = incoming;
+  if (typeof incoming === 'string') {
+    try {
+      inputToParse = JSON.parse(incoming);
+    } catch {
+      // ignore
+    }
+  }
+
+  const parsedAck = FundWalletAckSchema.safeParse(inputToParse);
+  if (!parsedAck.success) {
+    // Keep state unchanged and end the run; user can retry from the blocker UI.
+    return new Command({ goto: '__end__' });
+  }
+
+  // This interrupt is an "ack + retry" flow.
+  // We end here and let the UI trigger a new `cycle` run immediately.
+  return new Command({ goto: '__end__' });
+};

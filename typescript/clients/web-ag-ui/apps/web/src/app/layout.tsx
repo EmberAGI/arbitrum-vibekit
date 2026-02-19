@@ -29,14 +29,14 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="antialiased bg-[#121212] text-white dark">
+      <body className="antialiased bg-[#09090B] text-[#D1D1D1] dark">
         <ProvidersNoSSR>
           <AgentRuntimeProvider>
             <PrivyGateBanner />
             <div className="flex h-screen overflow-hidden">
               <AppSidebarNoSSR />
               <main
-                className="flex-1 overflow-y-auto bg-[#121212]"
+                className="flex-1 min-w-0 overflow-y-auto bg-[#09090B]"
                 style={{ '--copilot-kit-primary-color': themeColor } as CopilotKitCSSProperties}
               >
                 {children}

@@ -25,6 +25,10 @@ export type UnwindResult = {
   transactionCount: number;
 };
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function normalizeHexData(value: string, label: string): `0x${string}` {
   if (!value.startsWith('0x')) {
     throw new Error(`Invalid ${label}: ${value}`);
@@ -395,18 +399,38 @@ export async function executeUnwind(params: {
   nowMs?: number;
   onProgress?: (message: string) => void | Promise<void>;
   maxRetries?: number;
+  positionLookupAttempts?: number;
+  positionLookupDelayMs?: number;
 }): Promise<UnwindResult> {
   const nowMs = params.nowMs ?? Date.now();
   const maxAttempts = (params.maxRetries ?? 2) + 1;
+  const positionLookupAttempts = Math.max(1, params.positionLookupAttempts ?? 1);
+  const positionLookupDelayMs = Math.max(0, params.positionLookupDelayMs ?? 0);
   await params.onProgress?.('Unwind: fetching markets and positions');
 
-  const [markets, positions] = await Promise.all([
-    params.onchainActionsClient.listTokenizedYieldMarkets({ chainIds: params.chainIds }),
+  const markets = await params.onchainActionsClient.listTokenizedYieldMarkets({
+    chainIds: params.chainIds,
+  });
+  const readPositions = async () =>
     params.onchainActionsClient.listTokenizedYieldPositions({
       walletAddress: params.walletAddress,
       chainIds: params.chainIds,
-    }),
-  ]);
+    });
+  let positions = await readPositions();
+
+  for (
+    let lookupAttempt = 1;
+    positions.length === 0 && lookupAttempt < positionLookupAttempts;
+    lookupAttempt += 1
+  ) {
+    await params.onProgress?.(
+      `Unwind: no positions found (attempt ${lookupAttempt}/${positionLookupAttempts}); retrying position lookup`,
+    );
+    if (positionLookupDelayMs > 0) {
+      await delay(positionLookupDelayMs);
+    }
+    positions = await readPositions();
+  }
 
   if (positions.length === 0) {
     await params.onProgress?.('Unwind: no positions found');

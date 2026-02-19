@@ -9,6 +9,10 @@ import {
   resolveLangGraphDurability,
   type LangGraphDurability,
 } from './config/serviceConfig.js';
+import {
+  canStartBackgroundCycle,
+  getBackgroundCycleReadiness,
+} from './workflow/backgroundCycleReadiness.js';
 import { ClmmStateAnnotation, memory, type ClmmState } from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
@@ -24,9 +28,38 @@ import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
 
-function resolvePostBootstrap(state: ClmmState): 'collectSetupInput' | 'syncState' {
+// NOTE: We avoid depending on the ambient `fetch`/`RequestInit` typings here since CI
+// installs without a frozen lockfile and TypeScript/@types/node can drift.
+const fetchRequest = globalThis.fetch as unknown as (
+  input: string,
+  init?: unknown,
+) => Promise<Response>;
+
+function resolvePostBootstrap(
+  state: ClmmState,
+):
+  | 'collectSetupInput'
+  | 'collectFundingTokenInput'
+  | 'collectDelegations'
+  | 'prepareOperator'
+  | 'syncState' {
   const command = extractCommand(state.messages) ?? state.view.command;
-  return command === 'sync' ? 'syncState' : 'collectSetupInput';
+  if (command === 'sync') {
+    return 'syncState';
+  }
+  if (!state.view.operatorInput) {
+    return 'collectSetupInput';
+  }
+  if (!state.view.fundingTokenInput) {
+    return 'collectFundingTokenInput';
+  }
+  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
+    return 'collectDelegations';
+  }
+  if (!state.view.operatorConfig || state.view.setupComplete !== true) {
+    return 'prepareOperator';
+  }
+  return 'syncState';
 }
 
 const workflow = new StateGraph(ClmmStateAnnotation)
@@ -128,21 +161,21 @@ async function fetchThreadStateValues(
   baseUrl: string,
   threadId: string,
 ): Promise<ThreadStateValues | null> {
-  const response = await fetch(`${baseUrl}/threads/${threadId}/state`);
+  const response = await fetchRequest(`${baseUrl}/threads/${threadId}/state`);
   const payload = await parseJsonResponse(response, z.unknown());
   return extractThreadStateValues(payload);
 }
 
 async function ensureThread(baseUrl: string, threadId: string, graphId: string) {
   const metadata = { graph_id: graphId };
-  const response = await fetch(`${baseUrl}/threads`, {
+  const response = await fetchRequest(`${baseUrl}/threads`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ thread_id: threadId, if_exists: 'do_nothing', metadata }),
   });
   await parseJsonResponse(response, ThreadResponseSchema);
 
-  const patchResponse = await fetch(`${baseUrl}/threads/${threadId}`, {
+  const patchResponse = await fetchRequest(`${baseUrl}/threads/${threadId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ metadata }),
@@ -154,7 +187,7 @@ async function updateCycleState(
   baseUrl: string,
   threadId: string,
   runMessage: { id: string; role: 'user'; content: string },
-) {
+): Promise<boolean> {
   let existingView: Record<string, unknown> | null = null;
   try {
     const currentState = await fetchThreadStateValues(baseUrl, threadId);
@@ -167,8 +200,16 @@ async function updateCycleState(
     console.warn('[cron] Unable to fetch thread state before cycle update', { threadId, error: message });
   }
 
+  if (!canStartBackgroundCycle(existingView)) {
+    console.warn('[cron] Skipping cycle run; onboarding/setup is incomplete for background execution', {
+      threadId,
+      readiness: getBackgroundCycleReadiness(existingView),
+    });
+    return false;
+  }
+
   const view = existingView ? { ...existingView, command: 'cycle' } : { command: 'cycle' };
-  const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
+  const response = await fetchRequest(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -176,7 +217,15 @@ async function updateCycleState(
       as_node: 'runCommand',
     }),
   });
+  if (response.status === 409 || response.status === 422) {
+    const payloadText = await response.text();
+    console.info(`[cron] Cycle state update rejected; thread busy (thread=${threadId})`, {
+      detail: payloadText,
+    });
+    return false;
+  }
   await parseJsonResponse(response, ThreadStateUpdateResponseSchema);
+  return true;
 }
 
 async function createRun(params: {
@@ -185,20 +234,25 @@ async function createRun(params: {
   graphId: string;
   durability: LangGraphDurability;
 }): Promise<string | undefined> {
-  const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs`, {
+  const body = JSON.stringify({
+    assistant_id: params.graphId,
+    input: null,
+    config: {
+      configurable: { thread_id: params.threadId },
+      durability: params.durability,
+    },
+    metadata: { source: 'cron' },
+    stream_mode: ['events', 'values', 'messages'],
+    stream_resumable: true,
+  });
+  if (!body) {
+    throw new Error('[cron] Failed to serialize LangGraph run create request body');
+  }
+
+  const response = await fetchRequest(`${params.baseUrl}/threads/${params.threadId}/runs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      assistant_id: params.graphId,
-      input: null,
-      config: {
-        configurable: { thread_id: params.threadId },
-        durability: params.durability,
-      },
-      metadata: { source: 'cron' },
-      stream_mode: ['events', 'values', 'messages'],
-      stream_resumable: true,
-    }),
+    body,
   });
 
   if (response.status === 422) {
@@ -212,7 +266,7 @@ async function createRun(params: {
 }
 
 async function fetchRun(baseUrl: string, threadId: string, runId: string) {
-  const response = await fetch(`${baseUrl}/threads/${threadId}/runs/${runId}`);
+  const response = await fetchRequest(`${baseUrl}/threads/${threadId}/runs/${runId}`);
   return parseJsonResponse(response, RunResponseSchema);
 }
 
@@ -221,7 +275,7 @@ async function waitForRunStreamCompletion(params: {
   threadId: string;
   runId: string;
 }): Promise<RunStatus> {
-  const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs/${params.runId}/stream`, {
+  const response = await fetchRequest(`${params.baseUrl}/threads/${params.threadId}/runs/${params.runId}/stream`, {
     headers: {
       Accept: 'text/event-stream',
     },
@@ -268,7 +322,10 @@ export async function runGraphOnce(
 
   try {
     await ensureThread(baseUrl, threadId, graphId);
-    await updateCycleState(baseUrl, threadId, runMessage);
+    const stateUpdated = await updateCycleState(baseUrl, threadId, runMessage);
+    if (!stateUpdated) {
+      return;
+    }
     const runId = await createRun({ baseUrl, threadId, graphId, durability });
     if (!runId) {
       return;

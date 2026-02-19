@@ -221,6 +221,49 @@ describe('pollCycleNode (integration)', () => {
     expect(update.view?.haltReason).toContain('fetch failed');
   });
 
+  it('shows actionable guidance when GMX order simulation fails', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValueOnce([]);
+    createPerpetualLongMock.mockRejectedValueOnce(
+      new Error('Onchain actions request failed (500): {"error":"Error: Execute order simulation failed"}'),
+    );
+
+    const state = buildBaseState();
+    state.view.metrics.previousPrice = 46000;
+    const result = await pollCycleNode(state, {});
+    const command = result as { update: ClmmState; goto?: string[] };
+    const update = command.update;
+
+    expect(update.view?.haltReason).toBe('');
+    expect(update.view?.task?.taskStatus.state).toBe('input-required');
+    expect(command.goto).toContain('acknowledgeFundWallet');
+    expect(update.view?.task?.taskStatus.message?.content).toContain(
+      'GMX order simulation failed',
+    );
+    expect(update.view?.task?.taskStatus.message?.content).toContain(
+      'enough USDC collateral and a small amount of Arbitrum ETH',
+    );
+    expect(update.view?.task?.taskStatus.message?.content).toContain(
+      'click Continue in Agent Blockers',
+    );
+    expect(update.view?.task?.taskStatus.message?.content).not.toContain('{"command":"cycle"}');
+    expect(update.view?.executionError).toBe('');
+    expect(update.view?.transactionHistory).toHaveLength(0);
+
+    const executionResultArtifact = (update.view?.activity.events ?? []).find(
+      (event) => event.type === 'artifact' && event.artifact.artifactId === 'gmx-allora-execution-result',
+    )?.artifact;
+    const executionData = executionResultArtifact?.parts.find((part) => part.kind === 'data');
+    expect(executionData?.kind).toBe('data');
+    expect(executionData?.data).toMatchObject({ ok: false, status: 'blocked' });
+    expect((executionData?.data as { error?: string }).error).toBeUndefined();
+  });
+
   it('emits telemetry and execution plan artifacts on open action', async () => {
     fetchAlloraInferenceMock.mockResolvedValueOnce({
       topicId: 14,

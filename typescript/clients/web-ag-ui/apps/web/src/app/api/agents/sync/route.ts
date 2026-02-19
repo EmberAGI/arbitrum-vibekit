@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
+import { deriveTaskStateForUi } from '@/utils/deriveTaskStateForUi';
+
 const BodySchema = z.object({
   agentId: z.string().min(1),
   threadId: z.string().min(1),
@@ -20,6 +22,7 @@ const ThreadStateSchema = z
       .object({
         command: z.string().optional(),
         onboarding: z.record(z.unknown()).optional(),
+        setupComplete: z.boolean().optional(),
         delegationsBypassActive: z.boolean().optional(),
         profile: z.record(z.unknown()).optional(),
         metrics: z.record(z.unknown()).optional(),
@@ -31,6 +34,11 @@ const ThreadStateSchema = z
             taskStatus: z
               .object({
                 state: z.string().optional(),
+                message: z
+                  .object({
+                    content: z.string().optional(),
+                  })
+                  .optional(),
               })
               .optional(),
           })
@@ -80,7 +88,13 @@ function normalizeBaseUrl(value: string): string {
 async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>): Promise<T> {
   const payloadText = await response.text();
   if (!response.ok) {
-    throw new Error(`LangGraph API request failed (${response.status}): ${payloadText}`);
+    const error = new Error(`LangGraph API request failed (${response.status}): ${payloadText}`) as Error & {
+      status?: number;
+      payloadText?: string;
+    };
+    error.status = response.status;
+    error.payloadText = payloadText;
+    throw error;
   }
   const trimmed = payloadText.trim();
   const payload = trimmed.length > 0 ? (JSON.parse(trimmed) as unknown) : ({} as unknown);
@@ -134,6 +148,51 @@ function threadHasPendingInterrupts(payload: unknown): boolean {
     const interrupts = task['interrupts'];
     return Array.isArray(interrupts) && interrupts.length > 0;
   });
+}
+
+function extractFirstPendingInterrupt(payload: unknown): unknown | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const tasks = payload['tasks'];
+  if (!Array.isArray(tasks)) {
+    return null;
+  }
+
+  for (let index = tasks.length - 1; index >= 0; index -= 1) {
+    const task = tasks[index];
+    if (!isRecord(task)) {
+      continue;
+    }
+    const interrupts = task['interrupts'];
+    if (!Array.isArray(interrupts) || interrupts.length === 0) {
+      continue;
+    }
+
+    for (let interruptIndex = interrupts.length - 1; interruptIndex >= 0; interruptIndex -= 1) {
+      const candidate = interrupts[interruptIndex];
+      if (!isRecord(candidate)) {
+        continue;
+      }
+      if (!Object.prototype.hasOwnProperty.call(candidate, 'value')) {
+        continue;
+      }
+
+      const rawValue = candidate['value'];
+      if (typeof rawValue === 'string') {
+        try {
+          return JSON.parse(rawValue) as unknown;
+        } catch {
+          return rawValue;
+        }
+      }
+
+      return rawValue;
+    }
+  }
+
+  return null;
 }
 
 async function fetchThreadStatePayload(baseUrl: string, threadId: string): Promise<unknown | null> {
@@ -238,20 +297,28 @@ async function waitForRunCompletion(baseUrl: string, threadId: string, runId: st
   console.warn('[agent-sync] Run did not complete before timeout', { threadId, runId });
 }
 
-async function fetchViewState(baseUrl: string, threadId: string): Promise<ThreadState | null> {
-  const { values } = await fetchThreadStateValues(baseUrl, threadId);
+async function fetchViewState(baseUrl: string, threadId: string): Promise<{
+  state: ThreadState | null;
+  hasInterrupts: boolean;
+  pendingInterrupt: unknown | null;
+}> {
+  const { payload, values, hasInterrupts } = await fetchThreadStateValues(baseUrl, threadId);
+  const pendingInterrupt = extractFirstPendingInterrupt(payload);
+
   if (!values) {
-    return null;
+    return { state: null, hasInterrupts, pendingInterrupt };
   }
+
   const parsed = ThreadStateSchema.safeParse(values);
   if (!parsed.success) {
     console.warn('[agent-sync] Unable to parse thread state', {
       threadId,
       error: parsed.error.message,
     });
-    return null;
+    return { state: null, hasInterrupts, pendingInterrupt };
   }
-  return parsed.data;
+
+  return { state: parsed.data, hasInterrupts, pendingInterrupt };
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -289,30 +356,75 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!initialState.hasInterrupts) {
       const hasView = Boolean(initialState.values && isRecord(initialState.values['view']));
       if (!hasView) {
-        await updateSyncState(baseUrl, threadId);
-        const run = await createRun(baseUrl, threadId, runtime.graphId);
-        await waitForRunCompletion(baseUrl, threadId, run.run_id);
+        try {
+          await updateSyncState(baseUrl, threadId);
+          const run = await createRun(baseUrl, threadId, runtime.graphId);
+          await waitForRunCompletion(baseUrl, threadId, run.run_id);
+        } catch (error) {
+          const maybeLangGraphError = error as { status?: number };
+          // If the thread is already running (cron/external run), treat this as expected:
+          // we must not clobber state, and we don't want to surface a 500 in the UI.
+          if (maybeLangGraphError.status !== 409 && maybeLangGraphError.status !== 422) {
+            throw error;
+          }
+        }
       }
     }
 
-    const state = await fetchViewState(baseUrl, threadId);
+    const { state, hasInterrupts, pendingInterrupt } = await fetchViewState(baseUrl, threadId);
 
     const task = state?.view?.task;
     const taskId = task?.id ?? null;
     const hasTask = Boolean(taskId);
+    const command = state?.view?.command ?? null;
+    const taskState = hasTask ? (task?.taskStatus?.state ?? null) : null;
+    const taskMessage = hasTask ? (task?.taskStatus?.message?.content ?? null) : null;
+    const transactionHistory = state?.view?.transactionHistory ?? null;
+    const derivedTaskState = hasTask
+      ? deriveTaskStateForUi({ command, taskState, taskMessage })
+      : taskState;
+
+    if (
+      parsed.data.agentId === 'agent-pendle' &&
+      (command === 'fire' ||
+        taskState === 'failed' ||
+        taskState === 'input-required' ||
+        (Array.isArray(transactionHistory) && transactionHistory.length > 0) ||
+        Boolean(hasInterrupts))
+    ) {
+      const lastTxHash = Array.isArray(transactionHistory)
+        ? (transactionHistory.at(-1) as { txHash?: unknown } | undefined)?.txHash
+        : undefined;
+      console.info('[agent-sync-debug]', {
+        agentId: parsed.data.agentId,
+        threadId,
+        command,
+        taskStateRaw: taskState,
+        taskState: derivedTaskState,
+        taskMessage,
+        hasInterrupts,
+        transactionCount: Array.isArray(transactionHistory) ? transactionHistory.length : null,
+        lastTxHash: typeof lastTxHash === 'string' ? lastTxHash : null,
+      });
+    }
+
     return NextResponse.json(
       {
         agentId: parsed.data.agentId,
-        command: state?.view?.command ?? null,
+        command,
         onboarding: state?.view?.onboarding ?? null,
+        setupComplete: state?.view?.setupComplete ?? null,
         delegationsBypassActive: state?.view?.delegationsBypassActive ?? null,
         profile: state?.view?.profile ?? null,
         metrics: state?.view?.metrics ?? null,
         activity: state?.view?.activity ?? null,
-        transactionHistory: state?.view?.transactionHistory ?? null,
+        transactionHistory,
+        hasInterrupts,
+        pendingInterrupt,
         task: task ?? null,
         taskId,
-        taskState: hasTask ? (task?.taskStatus?.state ?? null) : null,
+        taskState: derivedTaskState,
+        taskMessage,
         haltReason: hasTask ? (state?.view?.haltReason ?? null) : null,
         executionError: hasTask ? (state?.view?.executionError ?? null) : null,
       },

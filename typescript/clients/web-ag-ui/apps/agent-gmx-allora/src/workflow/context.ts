@@ -62,7 +62,7 @@ export type ClmmActivity = {
   events: ClmmEvent[];
 };
 
-export type ClmmTransaction = {
+export type AgentTransaction = {
   cycle: number;
   action: string;
   txHash?: string;
@@ -158,6 +158,15 @@ export type FundingTokenInterrupt = {
   options: FundingTokenOption[];
 };
 
+export type GmxFundWalletInterrupt = {
+  type: 'gmx-fund-wallet-request';
+  message: string;
+  payloadSchema: Record<string, unknown>;
+  artifactId: string;
+  walletAddress?: `0x${string}`;
+  requiredCollateralSymbol?: string;
+};
+
 export type DelegationCaveat = {
   enforcer: `0x${string}`;
   terms: `0x${string}`;
@@ -226,7 +235,7 @@ type ClmmViewState = {
   profile: ClmmProfile;
   activity: ClmmActivity;
   metrics: ClmmMetrics;
-  transactionHistory: ClmmTransaction[];
+  transactionHistory: AgentTransaction[];
   delegationsBypassActive?: boolean;
 };
 

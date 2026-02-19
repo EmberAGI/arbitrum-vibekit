@@ -58,14 +58,29 @@ export const collectOperatorInputNode = async (
     'input-required',
     'Awaiting operator configuration to continue setup.',
   );
-
-  await copilotkitEmitState(config, {
-    view: {
-      onboarding: { ...ONBOARDING, step: 1 },
-      task: awaitingInput.task,
-      activity: { events: [awaitingInput.statusEvent], telemetry: [] },
-    },
-  });
+  const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
+  const pendingView = {
+    onboarding: { ...ONBOARDING, step: 1 },
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry: [] },
+  };
+  const currentTaskState = state.view.task?.taskStatus?.state;
+  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
+  const shouldPersistPendingState =
+    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  if (hasRunnableConfig && shouldPersistPendingState) {
+    state.view = { ...state.view, ...pendingView };
+    await copilotkitEmitState(config, {
+      view: pendingView,
+    });
+    return new Command({
+      update: {
+        view: pendingView,
+      },
+      goto: 'collectOperatorInput',
+    });
+  }
 
   const incoming: unknown = await interrupt(request);
 

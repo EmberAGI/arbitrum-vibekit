@@ -31,24 +31,8 @@ export const collectFundingTokenInputNode = async (
 
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
-    const failureMessage = 'ERROR: Operator input missing before funding-token step';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
-    });
-    return new Command({
-      update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: [] },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
-      },
-      goto: 'summarize',
-    });
+    logInfo('collectFundingTokenInput: operator input missing; rerouting to collectOperatorInput');
+    return new Command({ goto: 'collectOperatorInput' });
   }
 
   const selectedPool =
@@ -100,14 +84,30 @@ export const collectFundingTokenInputNode = async (
     'input-required',
     'Awaiting funding-token selection to continue onboarding.',
   );
-  await copilotkitEmitState(config, {
-    view: {
-      onboarding: { ...ONBOARDING, step: 2 },
-      task: awaitingInput.task,
-      activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
-      selectedPool,
-    },
-  });
+  const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
+  const pendingView = {
+    onboarding: { ...ONBOARDING, step: 2 },
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
+    selectedPool,
+  };
+  const currentTaskState = state.view.task?.taskStatus?.state;
+  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
+  const shouldPersistPendingState =
+    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  if (hasRunnableConfig && shouldPersistPendingState) {
+    state.view = { ...state.view, ...pendingView };
+    await copilotkitEmitState(config, {
+      view: pendingView,
+    });
+    return new Command({
+      update: {
+        view: pendingView,
+      },
+      goto: 'collectFundingTokenInput',
+    });
+  }
 
   const incoming: unknown = await interrupt(request);
 

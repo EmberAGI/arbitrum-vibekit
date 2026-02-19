@@ -36,7 +36,14 @@ import {
 import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSync';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { fireAgentRun } from '../utils/fireAgentRun';
+import { resumeInterruptViaAgent } from '../utils/interruptResolution';
 import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
+import { canonicalizeChainLabel } from '../utils/iconResolution';
+import {
+  isAgentInterrupt,
+  normalizeAgentInterrupt,
+  selectActiveInterrupt,
+} from '../utils/interruptSelection';
 
 export type {
   AgentState,
@@ -55,25 +62,14 @@ export type {
   ClmmEvent,
 };
 
-const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
-  typeof value === 'object' &&
-  value !== null &&
-  ((value as { type?: string }).type === 'operator-config-request' ||
-    (value as { type?: string }).type === 'pendle-setup-request' ||
-    (value as { type?: string }).type === 'pendle-fund-wallet-request' ||
-    (value as { type?: string }).type === 'gmx-setup-request' ||
-    (value as { type?: string }).type === 'clmm-funding-token-request' ||
-    (value as { type?: string }).type === 'pendle-funding-token-request' ||
-    (value as { type?: string }).type === 'gmx-funding-token-request' ||
-    (value as { type?: string }).type === 'clmm-delegation-signing-request' ||
-    (value as { type?: string }).type === 'pendle-delegation-signing-request' ||
-    (value as { type?: string }).type === 'gmx-delegation-signing-request');
-
 export interface UseAgentConnectionResult {
   config: AgentConfig;
   isConnected: boolean;
+  hasLoadedView: boolean;
   threadId: string | undefined;
   interruptRenderer: ReturnType<typeof useLangGraphInterruptRender>;
+  uiError: string | null;
+  clearUiError: () => void;
 
   // Full view state
   view: AgentView;
@@ -116,6 +112,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [uiError, setUiError] = useState<string | null>(null);
+  const [syncPendingInterrupt, setSyncPendingInterrupt] = useState<AgentInterrupt | null>(null);
   const lastConnectedThreadRef = useRef<string | null>(null);
   const lastSyncedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
@@ -135,7 +133,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const { threadId } = useCopilotContext();
   const runtimeStatus = copilotkit.runtimeConnectionStatus;
 
-  const { activeInterrupt, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
+  const { activeInterrupt, canResolve, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
     enabled: isAgentInterrupt,
   });
   const interruptRenderer = useLangGraphInterruptRender(agent);
@@ -204,9 +202,24 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     const view = state.view;
     if (!view) return true;
 
-    const profile = view.profile ?? defaultProfile;
+    // The backend state can arrive partially-shaped (missing array fields). Keep the UI resilient
+    // by normalizing anything that should be an array to an empty array before reading `.length`.
+    const profileRaw = view.profile ?? defaultProfile;
     const metrics = view.metrics ?? defaultMetrics;
-    const activity = view.activity ?? defaultActivity;
+    const activityRaw = view.activity ?? defaultActivity;
+    const profile: AgentViewProfile = {
+      ...profileRaw,
+      chains: Array.isArray(profileRaw.chains) ? profileRaw.chains : [],
+      protocols: Array.isArray(profileRaw.protocols) ? profileRaw.protocols : [],
+      tokens: Array.isArray(profileRaw.tokens) ? profileRaw.tokens : [],
+      pools: Array.isArray(profileRaw.pools) ? profileRaw.pools : [],
+      allowedPools: Array.isArray(profileRaw.allowedPools) ? profileRaw.allowedPools : [],
+    };
+    const activity: AgentViewActivity = {
+      ...activityRaw,
+      telemetry: Array.isArray(activityRaw.telemetry) ? activityRaw.telemetry : [],
+      events: Array.isArray(activityRaw.events) ? activityRaw.events : [],
+    };
 
     const hasProfile =
       profile.totalUsers !== undefined ||
@@ -228,7 +241,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       metrics.latestSnapshot !== undefined ||
       metrics.rebalanceCycles !== undefined;
     const hasActivity = activity.telemetry.length > 0 || activity.events.length > 0;
-    const hasHistory = view.transactionHistory.length > 0;
+    const transactionHistory = Array.isArray(view.transactionHistory) ? view.transactionHistory : [];
+    const hasHistory = transactionHistory.length > 0;
 
     return !(hasProfile || hasMetrics || hasActivity || hasHistory);
   }, []);
@@ -292,6 +306,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     runInFlightRef.current = false;
     lastSyncedThreadRef.current = null;
     lastConnectedThreadRef.current = null;
+    setSyncPendingInterrupt(null);
   }, [threadId]);
 
   useEffect(() => {
@@ -303,7 +318,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     const connectSeq = connectSeqRef.current + 1;
     connectSeqRef.current = connectSeq;
 
-    const connectAndSync = () => {
+    const connectOnly = () => {
       const currentAgent = agentRef.current;
       if (!currentAgent) return;
       currentAgent.threadId = threadId;
@@ -323,34 +338,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       void copilotkit.connectAgent({ agent: currentAgent }).catch(() => {
         // Errors are already reported via CopilotKit core subscribers.
       });
-
-      const startTime = Date.now();
-      const syncDeadline = startTime + 8000;
-      const scheduleSync = () => {
-        if (cancelled) return;
-        if (messagesSnapshotRef.current || Date.now() - startTime > 2000) {
-          const shouldSync =
-            !runInFlightRef.current &&
-            lastSyncedThreadRef.current !== threadId &&
-            needsSync(currentAgent.state);
-          if (shouldSync) {
-            if (runCommand('sync')) {
-              lastSyncedThreadRef.current = threadId;
-              return;
-            }
-            if (Date.now() < syncDeadline) {
-              setTimeout(scheduleSync, 250);
-            }
-          }
-          return;
-        }
-        setTimeout(scheduleSync, 100);
-      };
-
-      scheduleSync();
     };
 
-    void connectAndSync();
+    void connectOnly();
 
     return () => {
       cancelled = true;
@@ -366,9 +356,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     agent,
     runtimeStatus,
     copilotkit,
-    runCommand,
-    hasStateValues,
-    needsSync,
     agentId,
     getAgentDebugId,
     logConnectEvent,
@@ -389,7 +376,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     const tick = async () => {
       if (cancelled) return;
       if (inFlight) return;
-      if (runInFlightRef.current) return;
 
       inFlight = true;
       try {
@@ -404,6 +390,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         }
 
         const parsed = parseAgentSyncResponse(await response.json().catch(() => null));
+        if (cancelled) {
+          return;
+        }
         const currentAgent = agentRef.current;
         if (!currentAgent) {
           return;
@@ -411,6 +400,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         const currentState =
           hasStateValues(currentAgent.state) ? (currentAgent.state as AgentState) : initialAgentState;
         currentAgent.setState(applyAgentSyncToState(currentState, parsed));
+        setSyncPendingInterrupt(normalizeAgentInterrupt(parsed.pendingInterrupt ?? null));
       } catch {
         // Silence sync errors; connect stream still drives primary updates.
       } finally {
@@ -439,9 +429,61 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const events = activity.events ?? [];
   const settings = currentState.settings ?? defaultSettings;
 
+  const mergeUniqueStrings = (params: {
+    primary: string[];
+    secondary: string[];
+    keyFn: (value: string) => string;
+    mapFn?: (value: string) => string;
+  }): string[] => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    const push = (value: string) => {
+      const trimmed = (params.mapFn ? params.mapFn(value) : value).trim();
+      if (trimmed.length === 0) return;
+      const key = params.keyFn(trimmed);
+      if (key.length === 0) return;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(trimmed);
+    };
+
+    for (const value of params.primary) push(value);
+    for (const value of params.secondary) push(value);
+    return out;
+  };
+
+  const profileWithFallback: AgentViewProfile = {
+    ...profile,
+    chains: mergeUniqueStrings({
+      primary: profile.chains,
+      secondary: config.chains ?? [],
+      mapFn: canonicalizeChainLabel,
+      keyFn: (value) => canonicalizeChainLabel(value).toLowerCase(),
+    }),
+    protocols: mergeUniqueStrings({
+      primary: profile.protocols,
+      secondary: config.protocols ?? [],
+      keyFn: (value) => value.toLowerCase(),
+    }),
+    tokens: mergeUniqueStrings({
+      primary: profile.tokens,
+      secondary: config.tokens ?? [],
+      keyFn: (value) => value.toUpperCase(),
+    }),
+  };
+
   // Derived state
-  const isHired = view.command === 'hire' || view.command === 'run' || view.command === 'cycle';
+  const isHired =
+    view.command === 'hire' ||
+    view.command === 'run' ||
+    view.command === 'cycle' ||
+    // `fire` is still a hired agent state: the user is firing an already-hired agent.
+    // Treat it as hired so the UI does not flash back to the pre-hire layout during the fire run.
+    view.command === 'fire' ||
+    (typeof view.onboarding?.step === 'number' && Number.isFinite(view.onboarding.step));
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
+  const hasLoadedView = !needsSync(currentState);
 
   const runSync = useCallback(() => {
     if (!runCommand('sync')) return;
@@ -451,24 +493,95 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const runHire = useCallback(() => {
     if (!isHired && !isHiring) {
+      setUiError(null);
       if (!runCommand('hire')) return;
+
+      // Optimistically flip the UI into the hired/onboarding layout immediately after the user
+      // initiates the hire command. Otherwise we can briefly render the pre-hire layout until the
+      // first backend state update arrives.
+      const optimisticAgent = agentRef.current;
+      if (optimisticAgent) {
+        const currentState =
+          hasStateValues(optimisticAgent.state) ? (optimisticAgent.state as AgentState) : initialAgentState;
+        const view = currentState.view ?? defaultView;
+        optimisticAgent.setState({
+          ...currentState,
+          view: {
+            ...view,
+            command: 'hire',
+          },
+        });
+      }
+
       setIsHiring(true);
       setTimeout(() => setIsHiring(false), 5000);
     }
-  }, [runCommand, isHired, isHiring]);
+  }, [hasStateValues, isHired, isHiring, runCommand]);
 
   const runFire = useCallback(() => {
     if (isFiring) return;
 
+    setUiError(null);
     setIsFiring(true);
+    // Optimistic UI update for symmetry with hire: switch the header pill immediately.
+    const optimisticAgent = agentRef.current;
+    const previousCommand = (() => {
+      if (!optimisticAgent) return undefined;
+      const currentState =
+        hasStateValues(optimisticAgent.state) ? (optimisticAgent.state as AgentState) : initialAgentState;
+      return (currentState.view ?? defaultView).command;
+    })();
+    if (optimisticAgent) {
+      const currentState =
+        hasStateValues(optimisticAgent.state) ? (optimisticAgent.state as AgentState) : initialAgentState;
+      const view = currentState.view ?? defaultView;
+      optimisticAgent.setState({
+        ...currentState,
+        view: {
+          ...view,
+          command: 'fire',
+        },
+      });
+    }
+
     const currentAgent = agentRef.current;
     void fireAgentRun({
       agent: currentAgent,
       runAgent: async (value) =>
         copilotkit.runAgent({ agent: value } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+      abortActiveBackendRun: async () => {
+        await fetch('/api/agents/abort-active-run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId, threadId }),
+        }).catch(() => {
+          // best-effort; ignore
+        });
+      },
       threadId,
       runInFlightRef,
       createId: v7,
+      onError: (message) => {
+        setUiError(message);
+        setIsFiring(false);
+
+        // If the fire run failed to start, revert the optimistic command update so the UI
+        // stays in the hired state without getting "stuck" on a fire command.
+        const current = agentRef.current;
+        if (!current) return;
+        const currentState =
+          hasStateValues(current.state) ? (current.state as AgentState) : initialAgentState;
+        const view = currentState.view ?? defaultView;
+        if (view.command === 'fire') {
+          current.setState({
+            ...currentState,
+            view: {
+              ...view,
+              command: previousCommand,
+            },
+          });
+        }
+      },
     }).then((ok) => {
       if (!ok) {
         setIsFiring(false);
@@ -476,7 +589,13 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       }
       setTimeout(() => setIsFiring(false), 3000);
     });
-  }, [copilotkit, isFiring, threadId]);
+  }, [agentId, copilotkit, hasStateValues, isFiring, threadId]);
+
+  const clearUiError = useCallback(() => setUiError(null), []);
+  const effectiveActiveInterrupt = selectActiveInterrupt({
+    streamInterrupt: activeInterrupt ?? null,
+    syncPendingInterrupt,
+  });
 
   const resolveInterrupt = useCallback(
     (
@@ -488,13 +607,50 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         | FundingTokenInput
         | DelegationSigningResponse,
     ) => {
-      resolve(JSON.stringify(input));
-      scheduleCycleAfterInterruptResolution({
-        interruptType: activeInterrupt?.type,
-        runCommand,
-      });
+      const serializedInput = JSON.stringify(input);
+      const interruptType = effectiveActiveInterrupt?.type;
+      const hasStreamInterrupt = activeInterrupt !== null;
+
+      if (hasStreamInterrupt && canResolve()) {
+        resolve(serializedInput);
+        setSyncPendingInterrupt(null);
+        scheduleCycleAfterInterruptResolution({
+          interruptType,
+          runCommand,
+        });
+        return;
+      }
+
+      runInFlightRef.current = true;
+      void resumeInterruptViaAgent({
+        agent: agentRef.current,
+        resumePayload: serializedInput,
+      })
+        .then((resumed) => {
+          if (!resumed) {
+            runInFlightRef.current = false;
+            setUiError('Unable to submit onboarding input right now. Please retry.');
+            return;
+          }
+
+          setSyncPendingInterrupt(null);
+          scheduleCycleAfterInterruptResolution({
+            interruptType,
+            runCommand,
+          });
+        })
+        .catch((error: unknown) => {
+          runInFlightRef.current = false;
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('[useAgentConnection.resolveInterrupt] Failed to resume interrupt', {
+            threadId,
+            agentId,
+            error: message,
+          });
+          setUiError(message);
+        });
     },
-    [activeInterrupt?.type, resolve, runCommand],
+    [activeInterrupt, agentId, canResolve, effectiveActiveInterrupt?.type, resolve, runCommand, threadId],
   );
 
   // Settings sync pattern: update local state only (no automatic sync to avoid 409)
@@ -514,10 +670,13 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   return {
     config,
     isConnected: !!threadId,
+    hasLoadedView,
     threadId,
     interruptRenderer,
+    uiError,
+    clearUiError,
     view,
-    profile,
+    profile: profileWithFallback,
     metrics,
     activity,
     transactionHistory,
@@ -528,7 +687,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     isHiring,
     isFiring,
     isSyncing,
-    activeInterrupt: activeInterrupt ?? null,
+    activeInterrupt: effectiveActiveInterrupt,
     runHire,
     runFire,
     runSync,
