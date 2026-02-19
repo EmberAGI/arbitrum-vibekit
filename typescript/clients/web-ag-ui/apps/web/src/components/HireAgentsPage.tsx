@@ -413,7 +413,7 @@ function FeaturedAgentCard({
   return (
     <div
       onClick={onClick}
-      className="min-w-[340px] w-[340px] h-[460px] flex-shrink-0 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15 transition-colors cursor-pointer overflow-hidden flex flex-col"
+      className="min-w-[340px] w-[340px] h-[230px] flex-shrink-0 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15 transition-colors cursor-pointer overflow-hidden flex flex-col"
     >
       {/* Header row: rank, stars, creator, menu */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
@@ -456,7 +456,7 @@ function FeaturedAgentCard({
       </div>
 
       {/* Main content: Name and avatar */}
-      <div className="px-4 pb-4 flex-1">
+      <div className="px-4 pb-2 flex-1 min-h-0 overflow-hidden">
         <div className="flex items-start gap-4 mb-3">
           <div className="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 bg-black/30 flex items-center justify-center">
             {avatarUri ? (
@@ -502,11 +502,11 @@ function FeaturedAgentCard({
           </div>
         </div>
 
-        <h3 className="text-[17px] leading-[1.2] font-semibold text-white mb-2">
+        <h3 className="text-sm leading-4 font-semibold text-white mb-1.5">
           {agent.name}
         </h3>
         {agent.description ? (
-          <p className="text-[12px] leading-5 text-gray-400">
+          <p className="text-[11px] leading-4 text-gray-400 min-h-8 overflow-hidden text-ellipsis [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">
             {agent.description}
           </p>
         ) : null}
@@ -514,7 +514,7 @@ function FeaturedAgentCard({
 
       {/* Stats footer */}
       {!isMetricsCollapsed && (
-        <div className="grid grid-cols-4 gap-3 px-4 py-3 bg-black/20 border-t border-white/10">
+        <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-black/20 border-t border-white/10">
           <FeaturedStat
             label="AUM"
             isLoaded={agent.isLoaded}
@@ -623,13 +623,13 @@ function FeaturedStat({
 }) {
   return (
     <div>
-      <div className="text-[10px] font-mono text-gray-500 tracking-wide mb-0.5">{label}</div>
+      <div className="text-[9px] font-mono text-gray-500 tracking-wide mb-0.5">{label}</div>
       {!isLoaded ? (
-        <Skeleton className="h-5 w-14" />
+        <Skeleton className="h-4 w-10" />
       ) : value !== null ? (
-          <div className={`font-semibold text-[15px] leading-5 ${valueClassName}`}>{value}</div>
+          <div className={`font-semibold text-[12px] leading-4 ${valueClassName}`}>{value}</div>
         ) : (
-          <div className="text-gray-500 font-semibold text-[15px] leading-5">-</div>
+          <div className="text-gray-500 font-semibold text-[12px] leading-4">-</div>
         )}
     </div>
   );

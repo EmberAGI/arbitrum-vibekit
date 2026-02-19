@@ -191,7 +191,7 @@ html {
   font: inherit;
   letter-spacing: inherit;
   line-height: inherit;
-  clip-path: inset(0 48.75% 0 48.75%);
+  clip-path: inset(0 45% 0 45%);
   white-space: pre;
   pointer-events: none;
   will-change: transform;

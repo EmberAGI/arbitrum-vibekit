@@ -15,7 +15,7 @@ describe('Latest activity indicator animation', () => {
     expect(source).toContain('.latest-activity-indicator::after');
     expect(source).toContain('content: attr(data-activity-text);');
     expect(source).toContain('color: var(--ember-card);');
-    expect(source).toContain('clip-path: inset(0 48.75% 0 48.75%);');
+    expect(source).toContain('clip-path: inset(0 45% 0 45%);');
     expect(source).toContain('will-change: transform;');
     expect(source).toContain('animation: latestActivitySweep 3.4s linear infinite;');
   });

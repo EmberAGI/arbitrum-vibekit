@@ -199,6 +199,28 @@ describe('HireAgentsPage (top cards)', () => {
       }),
     );
 
-    expect(html).toContain('h-[460px]');
+    expect(html).toContain('min-w-[340px] w-[340px] h-[230px]');
+    expect(html).toContain('px-4 pb-2 flex-1 min-h-0 overflow-hidden');
+  });
+
+  it('clamps featured descriptions to two lines in compact cards', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-gmx-allora',
+            name: 'GMX x Allora',
+            creator: 'Ember AI Team',
+            description:
+              'Uses directional and volatility signals for adaptive position sizing across market regimes with automatic risk controls and fast execution.',
+            status: 'for_hire',
+            isLoaded: true,
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('[display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]');
   });
 });
