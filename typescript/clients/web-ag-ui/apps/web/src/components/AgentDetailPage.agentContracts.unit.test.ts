@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AgentDetailPage } from './AgentDetailPage';
+import type { ClmmEvent } from '../types/agent';
 
 type AgentId = 'agent-clmm' | 'agent-pendle' | 'agent-gmx-allora';
 
@@ -29,6 +30,16 @@ function renderAgentDetail(params: {
   agentId: AgentId;
   agentName: string;
   isHired: boolean;
+  initialSummaryCollapsed?: boolean;
+  initialTab?: 'blockers' | 'metrics' | 'transactions' | 'chat';
+  taskId?: string;
+  taskStatus?: string;
+  telemetry?: Array<{
+    cycle: number;
+    action: string;
+    timestamp?: string;
+  }>;
+  events?: ClmmEvent[];
   currentCommand?: string;
   activeInterrupt?:
     | { type: 'operator-config-request'; message: string }
@@ -68,6 +79,8 @@ function renderAgentDetail(params: {
         rebalanceCycles: 0,
       },
       isHired: params.isHired,
+      initialSummaryCollapsed: params.initialSummaryCollapsed,
+      initialTab: params.initialTab,
       isHiring: false,
       hasLoadedView: true,
       isFiring: false,
@@ -88,19 +101,41 @@ function renderAgentDetail(params: {
         },
       ],
       onInterruptSubmit: () => {},
-      taskId: undefined,
-      taskStatus: undefined,
+      taskId: params.taskId,
+      taskStatus: params.taskStatus,
       haltReason: undefined,
       executionError: undefined,
       delegationsBypassActive: false,
       onboarding: undefined,
       transactions: [],
-      telemetry: [],
-      events: [],
+      telemetry: params.telemetry ?? [],
+      events: params.events ?? [],
       settings: { amount: 100 },
       onSettingsChange: () => {},
     }),
   );
+}
+
+function makeStatusEvent(message: string): ClmmEvent {
+  return {
+    type: 'status',
+    message,
+    task: {
+      id: 'task-1',
+      taskStatus: {
+        state: 'working',
+      },
+    },
+  };
+}
+
+function makeArtifactEvent(type: string): ClmmEvent {
+  return {
+    type: 'artifact',
+    artifact: {
+      type,
+    },
+  };
 }
 
 describe('AgentDetailPage (cross-agent contracts)', () => {
@@ -112,6 +147,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     });
 
     expect(html).toContain('>Hire<');
+    expect(html).toContain('>Hide details<');
     expect(html).toContain('APY Change');
     expect(html).toContain('Total Users');
     expect(html).not.toContain('Agent is hired');
@@ -129,6 +165,205 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('>Fire<');
     expect(html).toContain('Your Assets');
     expect(html).toContain('Your PnL');
+  });
+
+  it.each(AGENTS)(
+    'moves personal metrics into metadata row and keeps left summary metrics focused for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+        currentCommand: 'cycle',
+      });
+
+      expect(html).toContain('>Hide details<');
+      expect(html).toContain('grid grid-cols-2 gap-4 pt-6 mt-6 border-t border-white/10');
+      expect(html).toContain('Your Assets');
+      expect(html).toContain('Your PnL');
+
+      const leftMetricsGrid = html.match(
+        /<div class="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">([\s\S]*?)<\/div><\/div><div class="pt-2 h-full flex flex-col">/,
+      )?.[1];
+      expect(leftMetricsGrid).toBeDefined();
+      expect(leftMetricsGrid).not.toContain('Your Assets');
+      expect(leftMetricsGrid).not.toContain('Your PnL');
+    },
+  );
+
+  it.each(AGENTS)(
+    'keeps personal metrics visible when details are collapsed for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+        currentCommand: 'cycle',
+        initialSummaryCollapsed: true,
+      });
+
+      expect(html).toContain('>Show details<');
+      expect(html).toContain('Your Assets');
+      expect(html).toContain('Your PnL');
+    },
+  );
+
+  it.each(AGENTS)(
+    'renders onboarding lifecycle CTA as single Onboarding button for $name',
+    ({ id, name }) => {
+      const onboardingInterrupt =
+        id === 'agent-pendle'
+          ? { type: 'pendle-setup-request' as const, message: 'configure pendle' }
+          : id === 'agent-gmx-allora'
+            ? { type: 'gmx-setup-request' as const, message: 'configure gmx' }
+            : { type: 'operator-config-request' as const, message: 'configure clmm' };
+
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+        currentCommand: 'hire',
+        taskStatus: 'input-required',
+        activeInterrupt: onboardingInterrupt,
+      });
+
+      expect(html).toContain('>Onboarding<');
+      expect(html).not.toContain('Onboarding in progress');
+      expect(html).not.toContain('>Pay<');
+      expect(html).not.toContain('>Fire<');
+    },
+  );
+
+  it.each(AGENTS)(
+    'removes onboarding waiting/helper copy while setup is active for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+        currentCommand: 'hire',
+        taskStatus: 'input-required',
+      });
+
+      expect(html).not.toContain('Waiting for agent');
+      expect(html).not.toContain('The agent will prompt you when it needs configuration input.');
+      expect(html).not.toContain('How Policies Work');
+    },
+  );
+
+  it.each(AGENTS)('renders latest activity plaintext under CTA for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      events: [
+        makeStatusEvent('Funding amount received.'),
+        makeArtifactEvent('cycle-report'),
+        makeStatusEvent('Cycle executed successfully.'),
+      ],
+      telemetry: [{ cycle: 7, action: 'rebalance', timestamp: '2026-02-15T12:00:00.000Z' }],
+    });
+
+    expect(html).toContain('Cycle executed successfully.');
+    expect(html).toContain('text-white latest-activity-indicator');
+    expect(html).not.toContain('#93c5fd');
+  });
+
+  it.each(AGENTS)('keeps latest activity plaintext visible during onboarding for $name', ({ id, name }) => {
+    const onboardingInterrupt =
+      id === 'agent-pendle'
+        ? { type: 'pendle-setup-request' as const, message: 'configure pendle' }
+        : id === 'agent-gmx-allora'
+          ? { type: 'gmx-setup-request' as const, message: 'configure gmx' }
+          : { type: 'operator-config-request' as const, message: 'configure clmm' };
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      currentCommand: 'hire',
+      activeInterrupt: onboardingInterrupt,
+      telemetry: [],
+      events: [makeStatusEvent('Awaiting funding-token selection to continue onboarding.')],
+    });
+
+    expect(html).toContain('Please finish onboarding');
+    expect(html).not.toContain('Awaiting funding-token selection to continue onboarding.');
+  });
+
+  it.each(AGENTS)('uses Activity + Settings and policies tabs for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      currentCommand: 'cycle',
+    });
+
+    expect(html).toContain('Settings and policies');
+    expect(html).toContain('Activity');
+    expect(html).not.toContain('Agent Blockers');
+    expect(html).not.toContain('Transaction history');
+  });
+
+  it.each(AGENTS)(
+    'hides onboarding panel and keeps settings/policies only in blockers tab once onboarding is complete for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+        initialTab: 'blockers',
+        currentCommand: 'cycle',
+        taskStatus: 'working',
+      });
+
+      expect(html).toContain('Allocation Settings');
+      expect(html).toContain('Policies');
+      expect(html).not.toContain('Waiting for agent');
+      expect(html).not.toContain('How Policies Work');
+      expect(html).not.toContain('lg:grid-cols-[1fr_300px]');
+    },
+  );
+
+  it.each(AGENTS)('renders current task + latest activity in Activity tab for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      initialTab: 'transactions',
+      taskId: 'task-1234567890',
+      taskStatus: 'working',
+      telemetry: [{ cycle: 1, action: 'sync', timestamp: '2026-02-15T12:00:00.000Z' }],
+    });
+
+    expect(html).toContain('Current Task');
+    expect(html).toContain('Latest Activity');
+    expect(html).toContain('Cycle 1');
+    expect(html).toContain('sync');
+  });
+
+  it.each(AGENTS)('does not render Activity Stream panel in Metrics tab for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      initialTab: 'metrics',
+      events: [makeStatusEvent('Delegation approvals received. Continuing onboarding.')],
+    });
+
+    expect(html).not.toContain('Activity Stream');
+  });
+
+  it.each(AGENTS)('renders Activity Stream panel in Activity tab for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      initialTab: 'transactions',
+      events: [makeStatusEvent('Delegation approvals received. Continuing onboarding.')],
+    });
+
+    expect(html).toContain('Activity Stream');
+    expect(html).toContain('Delegation approvals received. Continuing onboarding.');
   });
 
   it.each(AGENTS)('deduplicates arbitrum chain label for $name', ({ id, name }) => {
@@ -172,7 +407,9 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
 
     expect(html).toContain('Pendle Setup');
     expect(html).toContain('Funding Amount (USD)');
-    expect(html).toContain('Auto-selected yield');
+    expect(html).not.toContain('Auto-selected yield');
+    expect(html).not.toContain('highest-yield YT market');
+    expect(html).toContain('PT position management');
   });
 
   it('routes GMX setup interrupt to GMX Allora Setup form', () => {

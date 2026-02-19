@@ -47,6 +47,38 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('Total Users');
   });
 
+  it('supports the summary toggle before hiring', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-clmm',
+        agentName: 'Camelot CLMM',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        initialSummaryCollapsed: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('>Show details<');
+    expect(html).not.toContain('>Chains<');
+    expect(html).not.toContain('>Protocols<');
+    expect(html).not.toContain('>Tokens<');
+  });
+
   it('renders metrics tab as disabled while onboarding is in progress', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
@@ -77,6 +109,38 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toMatch(
       new RegExp('<button[^>]*disabled[^>]*>\\s*Metrics\\s*</button>'),
     );
+  });
+
+  it('hides allocation settings panels while onboarding is in progress', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-clmm',
+        agentName: 'Camelot CLMM',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        isHired: true,
+        isHiring: false,
+        onboarding: { step: 1 },
+        taskStatus: 'input-required',
+        hasLoadedView: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).not.toContain('Allocation Settings');
+    expect(html).not.toContain('Configure the amount of funds allocated to this agent');
+    expect(html).not.toContain('Additional policy settings will be available in a future update.');
   });
 
   it('shows metrics tab as enabled when onboarding metadata is stale but no input is required', () => {
@@ -257,7 +321,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
       }),
     );
 
-    expect(html).toContain('Funding Amount');
+    expect(html).toContain('Agent Setup');
     expect(html).toContain('Delegation Signing');
     expect(html).not.toContain('Funding Token');
   });

@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe('AgentDetailPage internals: metrics variants', () => {
-  it('renders the CLMM metrics layout with latest cycle and activity stream', () => {
+  it('renders the CLMM metrics layout with latest cycle data', () => {
     const fullMetrics: AgentViewMetrics = {
       iteration: 7,
       cyclesSinceRebalance: 2,
@@ -138,9 +138,6 @@ describe('AgentDetailPage internals: metrics variants', () => {
     expect(html).toContain('Token Amounts');
     expect(html).toContain('Latest Cycle');
     expect(html).toContain('spread threshold crossed');
-    expect(html).toContain('Activity Stream');
-    expect(html).toContain('Artifact: rebalance-report');
-    expect(html).toContain('Response with 1 parts');
   });
 
   it('renders GMX Allora metrics with execution status and arbiscan links', () => {
@@ -401,6 +398,37 @@ describe('AgentDetailPage internals: transaction and sidebar primitives', () => 
     expect(html).toContain('Transactions will appear here once the agent starts operating.');
   });
 
+  it('renders activity stream in transaction history tab when events are present', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(__agentDetailPageTestOnly.TransactionHistoryTab, {
+        transactions: [],
+        events: [
+          {
+            type: 'status',
+            message: 'Delegation approvals received. Continuing onboarding.',
+            task: { id: 'task-1', taskStatus: { state: 'working' } },
+          },
+          {
+            type: 'artifact',
+            artifact: { type: 'rebalance-report' },
+          },
+          {
+            type: 'dispatch-response',
+            parts: [{ kind: 'data', data: { ok: true } }],
+          },
+        ] satisfies ClmmEvent[],
+        chainIconUri: null,
+        protocolIconUri: null,
+        protocolLabel: null,
+      }),
+    );
+
+    expect(html).toContain('Activity Stream');
+    expect(html).toContain('Delegation approvals received. Continuing onboarding.');
+    expect(html).toContain('Artifact: rebalance-report');
+    expect(html).toContain('Response with 1 parts');
+  });
+
   it('renders transaction rows for success, failed, and pending statuses', () => {
     const pendingTx = {
       cycle: 3,
@@ -505,10 +533,6 @@ describe('AgentDetailPage internals: blockers variants', () => {
         executionError: undefined,
         delegationsBypassActive: false,
         onboarding: options?.onboarding ?? { step: 2 },
-        telemetry: [
-          { cycle: 1, action: 'cycle', timestamp: '2026-02-15T12:00:00.000Z' },
-          { cycle: 2, action: 'rebalance', timestamp: '2026-02-15T12:30:00.000Z' },
-        ],
         settings: { amount: 200 },
         onSettingsChange: () => {},
       }),
@@ -541,8 +565,8 @@ describe('AgentDetailPage internals: blockers variants', () => {
     expect(html).toContain('Select Funding Token');
     expect(html).toContain('USDC');
     expect(html).toContain('WETH');
-    expect(html).toContain('Current Task');
-    expect(html).toContain('Latest Activity');
+    expect(html).not.toContain('Current Task');
+    expect(html).not.toContain('Latest Activity');
     expect(html.indexOf('USDC')).toBeLessThan(html.indexOf('WETH'));
   });
 
@@ -573,7 +597,7 @@ describe('AgentDetailPage internals: blockers variants', () => {
       },
     );
 
-    expect(html).toContain('Strategy Config');
+    expect(html).toContain('Agent Setup');
     expect(html).toContain('Funding Token');
     expect(html).toContain('Delegation Signing');
     expect(html).toContain('Fund Wallet');
@@ -622,14 +646,17 @@ describe('AgentDetailPage internals: blockers variants', () => {
         executionError: undefined,
         delegationsBypassActive: false,
         onboarding: undefined,
-        telemetry: [],
         settings: { amount: 100 },
         onSettingsChange: () => {},
       }),
     );
 
-    expect(html).toContain('Waiting for agent');
-    expect(html).toContain('No active task. The agent may need to be started.');
-    expect(html).toContain('Set up agent');
+    expect(html).toContain('⏳');
+    expect(html).toContain('Waiting for the next onboarding prompt');
+    expect(html).toContain('funding token options');
+    expect(html).not.toContain('Waiting for agent');
+    expect(html).not.toContain('No active task. The agent may need to be started.');
+    expect(html).not.toContain('Set up agent');
+    expect(html).not.toContain('Get this agent started working on your wallet');
   });
 });
