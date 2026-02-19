@@ -34,7 +34,7 @@ export interface LifecycleSegmentTopology {
 /**
  * Optional plugin capability that describes lifecycle-sensitive topology.
  */
-export interface GraphLifecycleCapability {
+export interface LifecycleCapability {
   /**
    * Provider/plugin id whose topology this capability refreshes.
    */

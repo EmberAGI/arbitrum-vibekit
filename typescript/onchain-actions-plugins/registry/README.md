@@ -87,7 +87,7 @@ interface EmberPlugin<Type extends PluginType> {
   x?: string; // Twitter/X handle
   actions: ActionDefinition<AvailableActions[Type]>[]; // Available actions for this plugin type
   queries: AvailableQueries[Type]; // Data queries for this plugin type
-  lifecycleCapability?: GraphLifecycleCapability; // Optional lifecycle refresh metadata
+  lifecycleCapability?: LifecycleCapability; // Optional lifecycle refresh metadata
 }
 ```
 
@@ -283,7 +283,7 @@ an optional `lifecycleCapability` contract:
 
 ```typescript
 import type {
-  GraphLifecycleCapability,
+  LifecycleCapability,
   LifecycleSegmentTopology,
 } from '@emberai/onchain-actions-registry';
 ```

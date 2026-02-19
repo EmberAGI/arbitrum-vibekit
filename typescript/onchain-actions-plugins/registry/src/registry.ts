@@ -1,6 +1,6 @@
 import type {
   EmberPlugin,
-  GraphLifecycleCapability,
+  LifecycleCapability,
   PluginType,
 } from './core/index.js';
 
@@ -10,7 +10,7 @@ import type {
 export class PublicEmberPluginRegistry {
   private plugins: EmberPlugin<PluginType>[] = [];
   private deferredPlugins: Promise<EmberPlugin<PluginType>>[] = [];
-  private lifecycleCapabilities = new Map<string, GraphLifecycleCapability>();
+  private lifecycleCapabilities = new Map<string, LifecycleCapability>();
 
   /**
    * Register a new Ember plugin.
@@ -36,14 +36,14 @@ export class PublicEmberPluginRegistry {
    * Register lifecycle capability metadata for a provider plugin.
    * @param capability Lifecycle capability contract for refresh orchestration.
    */
-  public registerLifecycleCapability(capability: GraphLifecycleCapability) {
+  public registerLifecycleCapability(capability: LifecycleCapability) {
     this.lifecycleCapabilities.set(capability.providerId, capability);
   }
 
   /**
    * Returns all lifecycle capabilities registered in the registry.
    */
-  public getLifecycleCapabilities(): GraphLifecycleCapability[] {
+  public getLifecycleCapabilities(): LifecycleCapability[] {
     return Array.from(this.lifecycleCapabilities.values());
   }
 
