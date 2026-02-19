@@ -399,6 +399,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         }
         setUiError(`Agent run is busy while processing '${command}'. Please retry in a moment.`);
         console.warn('[useAgentConnection] Busy command dispatch', {
+          source: 'agent-command',
+          agentId,
           command,
           threadId: threadIdRef.current,
           detail,
@@ -411,8 +413,15 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             clientMutationId: null,
           });
         }
-        console.error('Agent run failed', error);
         const detail = error instanceof Error ? error.message : String(error);
+        console.error('[useAgentConnection] Agent command failed', {
+          source: 'agent-command',
+          agentId,
+          command,
+          threadId: threadIdRef.current,
+          detail,
+          error,
+        });
         setUiError(`Agent command '${command}' failed: ${detail}`);
       },
     });
@@ -424,7 +433,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         commandSchedulerRef.current = null;
       }
     };
-  }, [copilotkit]);
+  }, [agentId, copilotkit]);
 
   useEffect(() => {
     const ownerId = streamOwnerIdRef.current;

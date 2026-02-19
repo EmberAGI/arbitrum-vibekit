@@ -5,6 +5,7 @@ import type { AgentState } from '../types/agent';
 import {
   pollAgentIdsWithConcurrency,
   pollAgentListUpdateViaAgUi,
+  resolveAgentListPollBusyCooldownMs,
   resolveAgentListPollIntervalMs,
   resolveAgentListPollMaxConcurrent,
   selectAgentIdsForPolling,
@@ -48,6 +49,24 @@ describe('agentListPolling', () => {
     expect(selected).toEqual(['agent-clmm', 'agent-pendle']);
   });
 
+  it('skips agents that are still inside busy cooldown window', () => {
+    const selected = selectAgentIdsForPolling({
+      agentIds: ['agent-clmm', 'agent-pendle', 'agent-gmx-allora'],
+      agents: {
+        'agent-clmm': { synced: true },
+        'agent-pendle': { synced: true },
+        'agent-gmx-allora': { synced: true },
+      },
+      activeAgentId: null,
+      busyUntilByAgent: {
+        'agent-pendle': 5_000,
+      },
+      nowMs: 4_000,
+    });
+
+    expect(selected).toEqual(['agent-clmm', 'agent-gmx-allora']);
+  });
+
   it('uses 15 seconds as the default polling interval', () => {
     expect(resolveAgentListPollIntervalMs(undefined)).toBe(15_000);
     expect(resolveAgentListPollIntervalMs('0')).toBe(15_000);
@@ -62,6 +81,14 @@ describe('agentListPolling', () => {
     expect(resolveAgentListPollMaxConcurrent('-5')).toBe(2);
     expect(resolveAgentListPollMaxConcurrent('garbage')).toBe(2);
     expect(resolveAgentListPollMaxConcurrent('3.9')).toBe(3);
+  });
+
+  it('uses sane defaults for busy cooldown', () => {
+    expect(resolveAgentListPollBusyCooldownMs(undefined)).toBe(30_000);
+    expect(resolveAgentListPollBusyCooldownMs('0')).toBe(30_000);
+    expect(resolveAgentListPollBusyCooldownMs('-50')).toBe(30_000);
+    expect(resolveAgentListPollBusyCooldownMs('garbage')).toBe(30_000);
+    expect(resolveAgentListPollBusyCooldownMs('60000')).toBe(60_000);
   });
 
   it('projects state snapshot into list update and detaches the short-lived stream', async () => {
@@ -113,27 +140,32 @@ describe('agentListPolling', () => {
       detachActiveRun,
     };
 
-    const update = await pollAgentListUpdateViaAgUi({
+    const outcome = await pollAgentListUpdateViaAgUi({
       agentId: 'agent-clmm',
       threadId: 'thread-1',
       timeoutMs: 250,
       createRuntimeAgent: () => runtimeAgent,
     });
 
-    expect(update).toMatchObject({
+    expect(outcome.update).toMatchObject({
       synced: true,
       command: 'cycle',
       taskId: 'task-1',
       taskState: 'working',
       taskMessage: 'Cycling',
     });
+    expect(outcome.busy).toBe(false);
     expect(addMessage).toHaveBeenCalledTimes(1);
-    expect(addMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role: 'user',
-        content: JSON.stringify({ command: 'sync' }),
-      }),
-    );
+    const addMessageArg = addMessage.mock.calls[0]?.[0] as { role?: string; content?: string } | undefined;
+    expect(addMessageArg?.role).toBe('user');
+    const parsedContent =
+      typeof addMessageArg?.content === 'string'
+        ? (JSON.parse(addMessageArg.content) as { command?: string; source?: string })
+        : {};
+    expect(parsedContent).toMatchObject({
+      command: 'sync',
+      source: 'agent-list-poll',
+    });
     expect(runtimeAgent.runAgent).toHaveBeenCalledTimes(1);
     expect(runtimeAgent.connectAgent).not.toHaveBeenCalled();
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
@@ -160,11 +192,76 @@ describe('agentListPolling', () => {
     });
 
     await vi.advanceTimersByTimeAsync(110);
-    const update = await promise;
+    const outcome = await promise;
 
-    expect(update).toBeNull();
+    expect(outcome).toEqual({ update: null, busy: false });
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for run completion before resolving even when snapshot arrives early', async () => {
+    const unsubscribe = vi.fn();
+    const detachActiveRun = vi.fn().mockResolvedValue(undefined);
+    let stateSubscriber: AgentSubscriber | null = null;
+    let resolveRun: (() => void) | null = null;
+
+    const runtimeAgent = {
+      subscribe: vi.fn((subscriber: AgentSubscriber) => {
+        stateSubscriber = subscriber;
+        return { unsubscribe };
+      }),
+      addMessage: vi.fn(),
+      runAgent: vi.fn(async () => {
+        stateSubscriber?.onStateSnapshotEvent?.({
+          event: {
+            type: 'STATE_SNAPSHOT',
+            snapshot: {
+              settings: {},
+              view: {
+                command: 'sync',
+                profile: {
+                  chains: [],
+                  protocols: [],
+                  tokens: [],
+                  pools: [],
+                  allowedPools: [],
+                },
+                activity: { telemetry: [], events: [] },
+                metrics: { iteration: 0, cyclesSinceRebalance: 0, staleCycles: 0 },
+                transactionHistory: [],
+              },
+            } as AgentState,
+          },
+        } as never);
+        await new Promise<void>((resolve) => {
+          resolveRun = resolve;
+        });
+      }),
+      detachActiveRun,
+    };
+
+    let settled = false;
+    const pollPromise = pollAgentListUpdateViaAgUi({
+      agentId: 'agent-clmm',
+      threadId: 'thread-1',
+      timeoutMs: 100,
+      runCompletionTimeoutMs: 2_000,
+      createRuntimeAgent: () => runtimeAgent,
+    }).then((value) => {
+      settled = true;
+      return value;
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    resolveRun?.();
+    const outcome = await pollPromise;
+
+    expect(outcome.busy).toBe(false);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(detachActiveRun).toHaveBeenCalledTimes(1);
   });
 
   it('returns null and still detaches stream when poll run rejects', async () => {
@@ -180,14 +277,69 @@ describe('agentListPolling', () => {
       detachActiveRun,
     };
 
-    const update = await pollAgentListUpdateViaAgUi({
+    const outcome = await pollAgentListUpdateViaAgUi({
       agentId: 'agent-clmm',
       threadId: 'thread-1',
       timeoutMs: 100,
       createRuntimeAgent: () => runtimeAgent,
     });
 
-    expect(update).toBeNull();
+    expect(outcome).toEqual({ update: null, busy: false });
+    expect(detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks result as busy when poll run rejects with busy error', async () => {
+    const unsubscribe = vi.fn();
+    const detachActiveRun = vi.fn().mockResolvedValue(undefined);
+
+    const runtimeAgent = {
+      subscribe: vi.fn(() => ({ unsubscribe })),
+      addMessage: vi.fn(),
+      runAgent: vi.fn(async () => {
+        throw new Error('Thread already running');
+      }),
+      detachActiveRun,
+    };
+
+    const outcome = await pollAgentListUpdateViaAgUi({
+      agentId: 'agent-clmm',
+      threadId: 'thread-1',
+      timeoutMs: 100,
+      createRuntimeAgent: () => runtimeAgent,
+    });
+
+    expect(outcome).toEqual({ update: null, busy: true });
+    expect(detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks result as busy when run does not terminate before completion timeout', async () => {
+    vi.useFakeTimers();
+    const unsubscribe = vi.fn();
+    const detachActiveRun = vi.fn().mockResolvedValue(undefined);
+
+    const runtimeAgent = {
+      subscribe: vi.fn(() => ({ unsubscribe })),
+      addMessage: vi.fn(),
+      runAgent: vi.fn(async () => {
+        await new Promise<void>(() => undefined);
+      }),
+      detachActiveRun,
+    };
+
+    const promise = pollAgentListUpdateViaAgUi({
+      agentId: 'agent-clmm',
+      threadId: 'thread-1',
+      timeoutMs: 50,
+      runCompletionTimeoutMs: 100,
+      createRuntimeAgent: () => runtimeAgent,
+    });
+
+    await vi.advanceTimersByTimeAsync(160);
+    const outcome = await promise;
+
+    expect(outcome).toEqual({ update: null, busy: true });
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });

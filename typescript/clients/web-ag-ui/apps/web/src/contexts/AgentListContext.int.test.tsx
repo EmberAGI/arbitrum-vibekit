@@ -48,7 +48,7 @@ vi.mock('./agentListPolling', async (importOriginal) => {
   return {
     ...actual,
     pollAgentIdsWithConcurrency: vi.fn(async () => undefined),
-    pollAgentListUpdateViaAgUi: vi.fn(async () => null),
+    pollAgentListUpdateViaAgUi: vi.fn(async () => ({ update: null, busy: false })),
   };
 });
 
