@@ -1,4 +1,5 @@
 import type { ActionDefinition } from './actions/index.js';
+import type { GraphLifecycleCapability } from './lifecycle.js';
 import type { AvailableActions, AvailableQueries, PluginType } from './pluginType.js';
 
 export interface EmberPlugin<Type extends PluginType> {
@@ -34,9 +35,14 @@ export interface EmberPlugin<Type extends PluginType> {
    * The website URL for the plugin or its creator.
    */
   website?: string;
+  /**
+   * Optional lifecycle capability for topology-sensitive providers.
+   */
+  lifecycleCapability?: GraphLifecycleCapability;
 }
 
 export * from './actions/index.js';
+export * from './lifecycle.js';
 export * from './queries/index.js';
 export * from './pluginType.js';
 export * from './schemas/index.js';
