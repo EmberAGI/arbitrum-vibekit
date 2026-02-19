@@ -87,6 +87,7 @@ interface EmberPlugin<Type extends PluginType> {
   x?: string; // Twitter/X handle
   actions: ActionDefinition<AvailableActions[Type]>[]; // Available actions for this plugin type
   queries: AvailableQueries[Type]; // Data queries for this plugin type
+  lifecycleCapability?: LifecycleCapability; // Optional lifecycle refresh metadata
 }
 ```
 
@@ -274,6 +275,21 @@ const instantPlugin = {
 
 registry.registerPlugin(instantPlugin);
 ```
+
+### Lifecycle Capabilities (Optional)
+
+Plugins with topology that changes over time (for example, expiring markets) can provide
+an optional `lifecycleCapability` contract:
+
+```typescript
+import type {
+  LifecycleCapability,
+  LifecycleSegmentTopology,
+} from '@emberai/onchain-actions-registry';
+```
+
+You can either attach `lifecycleCapability` directly on the plugin object, or call
+`registry.registerLifecycleCapability(capability)` explicitly.
 
 ### Multiple Plugin Types from One Provider
 
