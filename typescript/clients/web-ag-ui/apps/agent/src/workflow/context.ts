@@ -2,6 +2,7 @@ import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
 import { Annotation } from '@langchain/langgraph';
 import {
+  createMessageHistoryReducer,
   isTaskActiveState,
   isTaskTerminalState,
   type AgentCommand,
@@ -26,13 +27,7 @@ import type {
 export type AgentMessage = CopilotKitAIMessage;
 
 type ClmmMessage = Record<string, unknown> | string;
-type ClmmMessageUpdate = ClmmMessage | ClmmMessage[];
-
-const clmmMessagesReducer = (left: ClmmMessageUpdate, right: ClmmMessageUpdate): ClmmMessage[] => {
-  const leftMessages = Array.isArray(left) ? left : [left];
-  const rightMessages = Array.isArray(right) ? right : [right];
-  return [...leftMessages, ...rightMessages];
-};
+export const clmmMessagesReducer = createMessageHistoryReducer<ClmmMessage>(resolveStateHistoryLimit);
 
 type CopilotkitState = {
   actions: Array<unknown>;
@@ -365,7 +360,7 @@ const mergeCopilotkit = (left: CopilotkitState, right?: Partial<CopilotkitState>
 });
 
 export const ClmmStateAnnotation = Annotation.Root({
-  messages: Annotation<ClmmMessage[], ClmmMessageUpdate>({
+  messages: Annotation<ClmmMessage[], ClmmMessage | ClmmMessage[]>({
     default: () => [],
     reducer: clmmMessagesReducer,
   }),

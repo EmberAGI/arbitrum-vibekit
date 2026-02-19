@@ -26,3 +26,4 @@ export {
 } from './onboardingStateMachine.js';
 export { mapOnboardingPhaseToTarget } from './onboardingStateMachineMappings.js';
 export { isLangGraphBusyStatus } from './langGraphBusyResponse.js';
+export { createMessageHistoryReducer, mergeMessageHistory } from './messageHistory.js';

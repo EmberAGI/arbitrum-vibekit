@@ -19,6 +19,7 @@ import { getAgentThreadId } from '../utils/agentThread';
 import {
   pollAgentIdsWithConcurrency,
   pollAgentListUpdateViaAgUi,
+  resolveAgentListPollBusyCooldownMs,
   resolveAgentListPollIntervalMs,
   resolveAgentListPollMaxConcurrent,
   selectAgentIdsForPolling,
@@ -92,6 +93,26 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
   const lastWalletKeyRef = useRef(walletKey);
   const inFlightRef = useRef(new Set<string>());
   const periodicPollInFlightRef = useRef(false);
+  const pollBusyUntilByAgentRef = useRef(new Map<string, number>());
+  const pollBusyCooldownMs = resolveAgentListPollBusyCooldownMs(
+    process.env.NEXT_PUBLIC_AGENT_LIST_BUSY_COOLDOWN_MS,
+  );
+
+  const pruneBusyCooldowns = useCallback((nowMs: number) => {
+    for (const [agentId, busyUntil] of pollBusyUntilByAgentRef.current.entries()) {
+      if (busyUntil <= nowMs) {
+        pollBusyUntilByAgentRef.current.delete(agentId);
+      }
+    }
+  }, []);
+
+  const busyCooldownSnapshot = useCallback((): Record<string, number> => {
+    const snapshot: Record<string, number> = {};
+    for (const [agentId, busyUntil] of pollBusyUntilByAgentRef.current.entries()) {
+      snapshot[agentId] = busyUntil;
+    }
+    return snapshot;
+  }, []);
 
   const upsertAgent = useCallback((
     agentId: string,
@@ -131,6 +152,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
     lastWalletKeyRef.current = walletKey;
     startedRef.current = false;
     inFlightRef.current.clear();
+    pollBusyUntilByAgentRef.current.clear();
   }, [walletKey]);
 
   const pollAgent = useCallback(
@@ -149,7 +171,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
 
       inFlightRef.current.add(agentId);
       try {
-        const update = await pollAgentListUpdateViaAgUi({
+        const outcome = await pollAgentListUpdateViaAgUi({
           agentId,
           threadId,
           timeoutMs: 2_500,
@@ -162,15 +184,35 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
             }),
         });
 
-        upsertAgent(agentId, update ?? { synced: true }, 'poll');
+        const nowMs = Date.now();
+        if (outcome.busy) {
+          pollBusyUntilByAgentRef.current.set(agentId, nowMs + pollBusyCooldownMs);
+          console.warn('[AgentListContext.poll] Busy run detected; applying poll cooldown', {
+            source: 'agent-list-poll',
+            agentId,
+            threadId,
+            cooldownMs: pollBusyCooldownMs,
+            busyUntilIso: new Date(nowMs + pollBusyCooldownMs).toISOString(),
+          });
+        } else {
+          pollBusyUntilByAgentRef.current.delete(agentId);
+        }
+
+        upsertAgent(agentId, outcome.update ?? { synced: true }, 'poll');
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
+        console.error('[AgentListContext.poll] Poll failed', {
+          source: 'agent-list-poll',
+          agentId,
+          threadId,
+          detail: message,
+        });
         upsertAgent(agentId, { synced: true, error: message }, 'poll');
       } finally {
         inFlightRef.current.delete(agentId);
       }
     },
-    [upsertAgent, walletKey],
+    [pollBusyCooldownMs, upsertAgent, walletKey],
   );
 
   useEffect(() => {
@@ -179,16 +221,25 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
     }
 
     startedRef.current = true;
+    const nowMs = Date.now();
+    pruneBusyCooldowns(nowMs);
     const initialCandidates = agentIds.filter((agentId) => !(activeAgentId && agentId === activeAgentId));
+    const eligibleCandidates = selectAgentIdsForPolling({
+      agentIds: initialCandidates,
+      agents: agentsRef.current,
+      activeAgentId,
+      busyUntilByAgent: busyCooldownSnapshot(),
+      nowMs,
+    });
     const maxConcurrent = resolveAgentListPollMaxConcurrent(
       process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT,
     );
     void pollAgentIdsWithConcurrency({
-      agentIds: initialCandidates,
+      agentIds: eligibleCandidates,
       maxConcurrent,
       pollAgent,
     });
-  }, [activeAgentId, agentIds, pollAgent, walletKey]);
+  }, [activeAgentId, agentIds, busyCooldownSnapshot, pollAgent, pruneBusyCooldowns, walletKey]);
 
   useEffect(() => {
     if (!walletKey) {
@@ -203,10 +254,14 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
       if (periodicPollInFlightRef.current) {
         return;
       }
+      const nowMs = Date.now();
+      pruneBusyCooldowns(nowMs);
       const candidates = selectAgentIdsForPolling({
         agentIds,
         agents: agentsRef.current,
         activeAgentId,
+        busyUntilByAgent: busyCooldownSnapshot(),
+        nowMs,
       });
 
       periodicPollInFlightRef.current = true;
@@ -223,7 +278,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
       window.clearInterval(timer);
       periodicPollInFlightRef.current = false;
     };
-  }, [activeAgentId, agentIds, pollAgent, walletKey]);
+  }, [activeAgentId, agentIds, busyCooldownSnapshot, pollAgent, pruneBusyCooldowns, walletKey]);
 
   const value = useMemo(() => ({ agents, upsertAgent }), [agents, upsertAgent]);
 
