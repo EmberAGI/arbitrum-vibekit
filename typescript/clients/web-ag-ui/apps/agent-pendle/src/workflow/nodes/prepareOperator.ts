@@ -17,6 +17,7 @@ import {
   getOnchainClients,
 } from '../clientFactory.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
   normalizeHexAddress,
@@ -87,18 +88,41 @@ export const prepareOperatorNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+  const emitMergedView = async (patch: Partial<ClmmState['view']>) => {
+    const mergedView = applyViewPatch(state, patch);
+    await copilotkitEmitState(config, {
+      view: mergedView,
+    });
+    return mergedView;
+  };
+
+  const failAndSummarize = async (
+    failureMessage: string,
+    options?: { includeExecutionError?: boolean },
+  ): Promise<Command<string, ClmmUpdate>> => {
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failureView = await emitMergedView({
+      haltReason: failureMessage,
+      executionError: options?.includeExecutionError ? failureMessage : undefined,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      task,
+    });
+    return new Command({
+      update: {
+        view: failureView,
+      },
+      goto: 'summarize',
+    });
+  };
+
   const { operatorInput } = state.view;
   if (!operatorInput) {
     const message = 'Awaiting funding amount to continue onboarding.';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
-    const pendingView = {
-      ...state.view,
+    const pendingView = await emitMergedView({
       task,
       onboarding: { step: 1, key: SETUP_STEP_KEY },
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-    };
-    await copilotkitEmitState(config, {
-      view: pendingView,
     });
     return new Command({
       update: {
@@ -114,14 +138,10 @@ export const prepareOperatorNode = async (
   if (!fundingTokenInput) {
     const message = 'Awaiting funding-token selection to continue onboarding.';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
-    const pendingView = {
-      ...state.view,
+    const pendingView = await emitMergedView({
       task,
       onboarding: { step: 2, key: FUNDING_STEP_KEY },
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-    };
-    await copilotkitEmitState(config, {
-      view: pendingView,
     });
     return new Command({
       update: {
@@ -140,14 +160,10 @@ export const prepareOperatorNode = async (
   if (!delegationsBypassActive && !state.view.delegationBundle) {
     const message = DELEGATION_APPROVAL_MESSAGE;
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
-    const pendingView = {
-      ...state.view,
+    const pendingView = await emitMergedView({
       task,
       onboarding: resolveDelegationOnboarding(state),
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-    };
-    await copilotkitEmitState(config, {
-      view: pendingView,
     });
     return new Command({
       update: {
@@ -215,46 +231,14 @@ export const prepareOperatorNode = async (
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to fetch Pendle markets: ${message}`;
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
-    });
-    return new Command({
-      update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
-        },
-      },
-      goto: 'summarize',
-    });
+    return failAndSummarize(failureMessage);
   }
 
   const bestYieldToken = eligibleYieldTokens[0];
 
   if (!bestYieldToken) {
     const failureMessage = 'ERROR: No Pendle YT markets available to select';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
-    });
-    return new Command({
-      update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
-        },
-      },
-      goto: 'summarize',
-    });
+    return failAndSummarize(failureMessage);
   }
 
   const existingMarket = existingMarketAddress
@@ -293,23 +277,7 @@ export const prepareOperatorNode = async (
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       const failureMessage = `ERROR: Delegations bypass requires a real agent wallet. ${message}`;
-      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-      await copilotkitEmitState(config, {
-        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
-      });
-      return new Command({
-        update: {
-          view: {
-            haltReason: failureMessage,
-            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-            task,
-            profile: state.view.profile,
-            transactionHistory: state.view.transactionHistory,
-            metrics: state.view.metrics,
-          },
-        },
-        goto: 'summarize',
-      });
+      return failAndSummarize(failureMessage);
     }
   }
 
@@ -339,8 +307,9 @@ export const prepareOperatorNode = async (
       ? `Delegation bypass active. Allocating into ${selectedYieldToken.ytSymbol} from agent wallet.`
       : `Delegations active. Allocating into ${selectedYieldToken.ytSymbol} from user wallet ${operatorWalletAddress}.`,
   );
-  await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+  await emitMergedView({
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
   });
 
   const events: ClmmEvent[] = [statusEvent];
@@ -369,28 +338,7 @@ export const prepareOperatorNode = async (
 
       if (!targetMarket || !fundingToken) {
         const failureMessage = 'ERROR: Missing tokenized yield data for initial deposit';
-        const { task, statusEvent: errorEvent } = buildTaskStatus(
-          state.view.task,
-          'failed',
-          failureMessage,
-        );
-        await copilotkitEmitState(config, {
-          view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
-        });
-        return new Command({
-          update: {
-            view: {
-              haltReason: failureMessage,
-              executionError: failureMessage,
-              activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
-              task,
-              profile: state.view.profile,
-              transactionHistory: state.view.transactionHistory,
-              metrics: state.view.metrics,
-            },
-          },
-          goto: 'summarize',
-        });
+        return failAndSummarize(failureMessage, { includeExecutionError: true });
       }
 
       let fundingAmount: string;
@@ -399,28 +347,7 @@ export const prepareOperatorNode = async (
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         const failureMessage = `ERROR: Unable to resolve funding amount: ${message}`;
-        const { task, statusEvent: errorEvent } = buildTaskStatus(
-          state.view.task,
-          'failed',
-          failureMessage,
-        );
-        await copilotkitEmitState(config, {
-          view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
-        });
-        return new Command({
-          update: {
-            view: {
-              haltReason: failureMessage,
-              executionError: failureMessage,
-              activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
-              task,
-              profile: state.view.profile,
-              transactionHistory: state.view.transactionHistory,
-              metrics: state.view.metrics,
-            },
-          },
-          goto: 'summarize',
-        });
+        return failAndSummarize(failureMessage, { includeExecutionError: true });
       }
 
       let walletBalances: WalletBalance[] | undefined;
@@ -464,28 +391,7 @@ export const prepareOperatorNode = async (
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           const failureMessage = `ERROR: Unable to resolve funding top-up amount: ${message}`;
-          const { task, statusEvent: errorEvent } = buildTaskStatus(
-            state.view.task,
-            'failed',
-            failureMessage,
-          );
-          await copilotkitEmitState(config, {
-            view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
-          });
-          return new Command({
-            update: {
-              view: {
-                haltReason: failureMessage,
-                executionError: failureMessage,
-                activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
-                task,
-                profile: state.view.profile,
-                transactionHistory: state.view.transactionHistory,
-                metrics: state.view.metrics,
-              },
-            },
-            goto: 'summarize',
-          });
+          return failAndSummarize(failureMessage, { includeExecutionError: true });
         }
       }
 
@@ -504,28 +410,7 @@ export const prepareOperatorNode = async (
             const requiredDisplay = formatBaseUnitsForDisplay(requiredBaseUnits, fundingToken.decimals);
             const availableDisplay = formatBaseUnitsForDisplay(availableBaseUnits, fundingToken.decimals);
             const failureMessage = `ERROR: Insufficient ${fundingToken.symbol} balance for initial deposit (required=${requiredDisplay}, available=${availableDisplay}).`;
-            const { task, statusEvent: errorEvent } = buildTaskStatus(
-              state.view.task,
-              'failed',
-              failureMessage,
-            );
-            await copilotkitEmitState(config, {
-              view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
-            });
-            return new Command({
-              update: {
-                view: {
-                  haltReason: failureMessage,
-                  executionError: failureMessage,
-                  activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
-                  task,
-                  profile: state.view.profile,
-                  transactionHistory: state.view.transactionHistory,
-                  metrics: state.view.metrics,
-                },
-              },
-              goto: 'summarize',
-            });
+            return failAndSummarize(failureMessage, { includeExecutionError: true });
           }
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : 'Unknown error';
@@ -554,28 +439,7 @@ export const prepareOperatorNode = async (
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           const failureMessage = `ERROR: Pendle initial deposit failed: ${message}`;
-          const { task, statusEvent: errorEvent } = buildTaskStatus(
-            state.view.task,
-            'failed',
-            failureMessage,
-          );
-          await copilotkitEmitState(config, {
-            view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
-          });
-          return new Command({
-            update: {
-              view: {
-                haltReason: failureMessage,
-                executionError: failureMessage,
-                activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
-                task,
-                profile: state.view.profile,
-                transactionHistory: state.view.transactionHistory,
-                metrics: state.view.metrics,
-              },
-            },
-            goto: 'summarize',
-          });
+          return failAndSummarize(failureMessage, { includeExecutionError: true });
         }
       }
     }
@@ -623,58 +487,60 @@ export const prepareOperatorNode = async (
     });
   }
 
-  return {
-    view: {
-      operatorConfig,
-      setupComplete,
-      selectedPool: selectedYieldToken,
-      metrics: {
-        lastSnapshot: selectedYieldToken,
-        previousApy: undefined,
-        cyclesSinceRebalance: 0,
-        staleCycles: 0,
-        iteration: 0,
-        latestCycle: undefined,
-        aumUsd: operatorConfig.baseContributionUsd,
-        apy: Number.isFinite(selectedYieldToken.apy) ? Number(selectedYieldToken.apy.toFixed(2)) : undefined,
-        lifetimePnlUsd: undefined,
-        pendle: {
-          marketAddress: selectedYieldToken.marketAddress,
-          ytSymbol: selectedYieldToken.ytSymbol,
-          underlyingSymbol: selectedYieldToken.underlyingSymbol,
-          maturity: selectedYieldToken.maturity,
-          baseContributionUsd: operatorConfig.baseContributionUsd,
-          fundingTokenAddress: operatorConfig.fundingTokenAddress,
-          currentApy: Number.isFinite(selectedYieldToken.apy) ? Number(selectedYieldToken.apy.toFixed(4)) : undefined,
-          bestApy: Number.isFinite(bestYieldToken.apy) ? Number(bestYieldToken.apy.toFixed(4)) : undefined,
-          apyDelta: undefined,
-          position: undefined,
-        },
-        latestSnapshot,
+  const completedView = applyViewPatch(state, {
+    operatorConfig,
+    setupComplete,
+    selectedPool: selectedYieldToken,
+    metrics: {
+      lastSnapshot: selectedYieldToken,
+      previousApy: undefined,
+      cyclesSinceRebalance: 0,
+      staleCycles: 0,
+      iteration: 0,
+      latestCycle: undefined,
+      aumUsd: operatorConfig.baseContributionUsd,
+      apy: Number.isFinite(selectedYieldToken.apy) ? Number(selectedYieldToken.apy.toFixed(2)) : undefined,
+      lifetimePnlUsd: undefined,
+      pendle: {
+        marketAddress: selectedYieldToken.marketAddress,
+        ytSymbol: selectedYieldToken.ytSymbol,
+        underlyingSymbol: selectedYieldToken.underlyingSymbol,
+        maturity: selectedYieldToken.maturity,
+        baseContributionUsd: operatorConfig.baseContributionUsd,
+        fundingTokenAddress: operatorConfig.fundingTokenAddress,
+        currentApy: Number.isFinite(selectedYieldToken.apy) ? Number(selectedYieldToken.apy.toFixed(4)) : undefined,
+        bestApy: Number.isFinite(bestYieldToken.apy) ? Number(bestYieldToken.apy.toFixed(4)) : undefined,
+        apyDelta: undefined,
+        position: undefined,
       },
-      task,
-      activity: { events, telemetry: state.view.activity.telemetry },
-      transactionHistory: transactionEntry
-        ? [...state.view.transactionHistory, transactionEntry]
-        : state.view.transactionHistory,
-      profile: {
-        ...state.view.profile,
-        aum: operatorConfig.baseContributionUsd,
-        apy: Number.isFinite(selectedYieldToken.apy) ? Number(selectedYieldToken.apy.toFixed(2)) : undefined,
-        pools: [
-          selectedYieldToken,
-          ...eligibleYieldTokens.filter(
-            (token) => token.marketAddress.toLowerCase() !== selectedYieldToken.marketAddress.toLowerCase(),
-          ),
-        ],
-        allowedPools: [
-          selectedYieldToken,
-          ...eligibleYieldTokens.filter(
-            (token) => token.marketAddress.toLowerCase() !== selectedYieldToken.marketAddress.toLowerCase(),
-          ),
-        ],
-      },
+      latestSnapshot,
     },
+    task,
+    activity: { events, telemetry: state.view.activity.telemetry },
+    transactionHistory: transactionEntry
+      ? [...state.view.transactionHistory, transactionEntry]
+      : state.view.transactionHistory,
+    profile: {
+      ...state.view.profile,
+      aum: operatorConfig.baseContributionUsd,
+      apy: Number.isFinite(selectedYieldToken.apy) ? Number(selectedYieldToken.apy.toFixed(2)) : undefined,
+      pools: [
+        selectedYieldToken,
+        ...eligibleYieldTokens.filter(
+          (token) => token.marketAddress.toLowerCase() !== selectedYieldToken.marketAddress.toLowerCase(),
+        ),
+      ],
+      allowedPools: [
+        selectedYieldToken,
+        ...eligibleYieldTokens.filter(
+          (token) => token.marketAddress.toLowerCase() !== selectedYieldToken.marketAddress.toLowerCase(),
+        ),
+      ],
+    },
+  });
+
+  return {
+    view: completedView,
     private: {
       cronScheduled: false,
     },

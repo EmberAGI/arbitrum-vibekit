@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { OperatorConfigInputSchema } from '../../domain/types.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
   type OnboardingState,
@@ -38,10 +39,11 @@ export const collectOperatorInputNode = async (
 
   if (state.view.operatorInput) {
     logInfo('collectOperatorInput: operator input already present; skipping step');
+    const resumedView = applyViewPatch(state, {
+      onboarding: resolveOperatorResumeOnboarding(state),
+    });
     return {
-      view: {
-        onboarding: resolveOperatorResumeOnboarding(state),
-      },
+      view: resumedView,
     };
   }
 
@@ -55,19 +57,24 @@ export const collectOperatorInputNode = async (
       command: state.view.command,
     });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: [] },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -100,8 +107,7 @@ export const collectOperatorInputNode = async (
     currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    const mergedView = { ...state.view, ...pendingView };
-    state.view = mergedView;
+    const mergedView = applyViewPatch(state, pendingView);
     await copilotkitEmitState(config, {
       view: mergedView,
     });
@@ -138,18 +144,23 @@ export const collectOperatorInputNode = async (
     const failureMessage = `Invalid operator input: ${issues}`;
     logInfo('collectOperatorInput: validation failed', { issues, failureMessage });
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: [] },
-        profile: state.view.profile,
-        metrics: state.view.metrics,
-        transactionHistory: state.view.transactionHistory,
-      },
+      view: haltedView,
     };
   }
 
@@ -163,16 +174,21 @@ export const collectOperatorInputNode = async (
     'working',
     'Operator configuration received. Preparing execution context.',
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: [] },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    view: workingView,
   });
 
+  const completedView = applyViewPatch(state, {
+    operatorInput: parsed.data,
+    onboarding: { step: 2, key: FUNDING_STEP_KEY },
+    task,
+    activity: { events: [statusEvent], telemetry: [] },
+  });
   return {
-    view: {
-      operatorInput: parsed.data,
-      onboarding: { step: 2, key: FUNDING_STEP_KEY },
-      task,
-      activity: { events: [statusEvent], telemetry: [] },
-    },
+    view: completedView,
   };
 };

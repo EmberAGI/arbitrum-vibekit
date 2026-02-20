@@ -34,5 +34,6 @@ export {
   type OnboardingStepState,
   type OnboardingStepStatus,
 } from './onboardingContract.js';
+export { mergeViewPatchForEmit } from './viewEmission.js';
 export { isLangGraphBusyStatus } from './langGraphBusyResponse.js';
 export { createMessageHistoryReducer, mergeMessageHistory } from './messageHistory.js';

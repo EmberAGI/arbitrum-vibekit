@@ -4,6 +4,7 @@ import { Command } from '@langchain/langgraph';
 import { resolveAgentWalletAddress } from '../../config/constants.js';
 import { type ResolvedGmxConfig } from '../../domain/types.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
   normalizeHexAddress,
@@ -23,19 +24,24 @@ export const prepareOperatorNode = async (
   if (!operatorInput) {
     const failureMessage = 'ERROR: Setup input missing';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      task,
+      profile: state.view.profile,
+      transactionHistory: state.view.transactionHistory,
+      metrics: state.view.metrics,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -45,19 +51,24 @@ export const prepareOperatorNode = async (
   if (!fundingTokenInput) {
     const failureMessage = 'ERROR: Funding token input missing before strategy setup';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      task,
+      profile: state.view.profile,
+      transactionHistory: state.view.transactionHistory,
+      metrics: state.view.metrics,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -83,7 +94,7 @@ export const prepareOperatorNode = async (
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     };
-    const mergedView = { ...state.view, ...pendingView };
+    const mergedView = applyViewPatch(state, pendingView);
     await copilotkitEmitState(config, {
       view: mergedView,
     });
@@ -100,19 +111,24 @@ export const prepareOperatorNode = async (
   if (!targetMarket) {
     const failureMessage = `ERROR: Unsupported GMX market ${operatorInput.targetMarket}`;
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      task,
+      profile: state.view.profile,
+      transactionHistory: state.view.transactionHistory,
+      metrics: state.view.metrics,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -146,29 +162,34 @@ export const prepareOperatorNode = async (
       ? `Delegation bypass active. Preparing ${targetMarket.baseSymbol} GMX strategy from agent wallet.`
       : `Delegations active. Preparing ${targetMarket.baseSymbol} GMX strategy from user wallet ${delegatorInputWalletAddress}.`,
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    view: workingView,
   });
 
   const events: ClmmEvent[] = [statusEvent];
 
-  return {
-    view: {
-      operatorConfig,
-      selectedPool: targetMarket,
-      metrics: {
-        lastSnapshot: targetMarket,
-        previousPrice: undefined,
-        cyclesSinceRebalance: 0,
-        staleCycles: 0,
-        iteration: 0,
-        latestCycle: undefined,
-      },
-      task,
-      activity: { events, telemetry: state.view.activity.telemetry },
-      transactionHistory: state.view.transactionHistory,
-      profile: state.view.profile,
+  const completedView = applyViewPatch(state, {
+    operatorConfig,
+    selectedPool: targetMarket,
+    metrics: {
+      lastSnapshot: targetMarket,
+      previousPrice: undefined,
+      cyclesSinceRebalance: 0,
+      staleCycles: 0,
+      iteration: 0,
+      latestCycle: undefined,
     },
+    task,
+    activity: { events, telemetry: state.view.activity.telemetry },
+    transactionHistory: state.view.transactionHistory,
+    profile: state.view.profile,
+  });
+  return {
+    view: completedView,
     private: {
       cronScheduled: false,
     },

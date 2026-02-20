@@ -7,6 +7,7 @@ import { selectGmxPerpetualMarket } from '../../core/marketSelection.js';
 import { type FundingTokenInput } from '../../domain/types.js';
 import { getOnchainActionsClient } from '../clientFactory.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
   normalizeHexAddress,
@@ -53,15 +54,16 @@ export const collectFundingTokenInputNode = async (
 
   if (state.view.fundingTokenInput) {
     logInfo('collectFundingTokenInput: funding token already present; skipping step');
+    const resumedView = applyViewPatch(state, {
+      onboarding:
+        state.view.delegationsBypassActive === true
+          ? { step: 2, key: FUNDING_STEP_KEY }
+          : state.view.onboarding?.key === FUNDING_STEP_KEY
+            ? { step: 3, key: DELEGATION_STEP_KEY }
+            : { step: 2, key: DELEGATION_STEP_KEY },
+    });
     return {
-      view: {
-        onboarding:
-          state.view.delegationsBypassActive === true
-            ? { step: 2, key: FUNDING_STEP_KEY }
-            : state.view.onboarding?.key === FUNDING_STEP_KEY
-              ? { step: 3, key: DELEGATION_STEP_KEY }
-              : { step: 2, key: DELEGATION_STEP_KEY },
-      },
+      view: resumedView,
     };
   }
 
@@ -70,12 +72,13 @@ export const collectFundingTokenInputNode = async (
     'working',
     'Using USDC as collateral for GMX perps.',
   );
+  const pendingView = applyViewPatch(state, {
+    onboarding: { step: 2, key: FUNDING_STEP_KEY },
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
+  });
   await copilotkitEmitState(config, {
-    view: {
-      onboarding: { step: 2, key: FUNDING_STEP_KEY },
-      task: awaitingInput.task,
-      activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
-    },
+    view: pendingView,
   });
 
   let normalizedFundingToken: `0x${string}`;
@@ -98,15 +101,20 @@ export const collectFundingTokenInputNode = async (
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to resolve USDC funding token from ${ONCHAIN_ACTIONS_API_URL}: ${message}`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      },
+      view: haltedView,
     };
   }
 
@@ -115,23 +123,28 @@ export const collectFundingTokenInputNode = async (
     'working',
     'USDC collateral selected. Preparing delegation request.',
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    view: workingView,
   });
 
   const input: FundingTokenInput = {
     fundingTokenAddress: normalizedFundingToken,
   };
 
+  const completedView = applyViewPatch(state, {
+    fundingTokenInput: input,
+    onboarding:
+      state.view.delegationsBypassActive === true
+        ? { step: 2, key: FUNDING_STEP_KEY }
+        : { step: 3, key: DELEGATION_STEP_KEY },
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+  });
   return {
-    view: {
-      fundingTokenInput: input,
-      onboarding:
-        state.view.delegationsBypassActive === true
-          ? { step: 2, key: FUNDING_STEP_KEY }
-          : { step: 3, key: DELEGATION_STEP_KEY },
-      task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-    },
+    view: completedView,
   };
 };

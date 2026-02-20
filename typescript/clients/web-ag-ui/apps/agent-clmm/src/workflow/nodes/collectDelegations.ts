@@ -25,6 +25,7 @@ import {
 } from '../../delegations/emberDelegations.js';
 import { getCamelotClient } from '../clientFactory.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
   normalizeHexAddress,
@@ -338,21 +339,23 @@ export const collectDelegationsNode = async (
         'working',
         'Delegation approvals received. Continuing onboarding.',
       );
+      const resumedView = applyViewPatch(state, {
+        delegationBundle: state.view.delegationBundle,
+        onboarding: delegationOnboarding,
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      });
       return {
-        view: {
-          delegationBundle: state.view.delegationBundle,
-          onboarding: delegationOnboarding,
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        },
+        view: resumedView,
       };
     }
 
+    const delegatedView = applyViewPatch(state, {
+      delegationBundle: state.view.delegationBundle,
+      onboarding: delegationOnboarding,
+    });
     return {
-      view: {
-        delegationBundle: state.view.delegationBundle,
-        onboarding: delegationOnboarding,
-      },
+      view: delegatedView,
     };
   }
 
@@ -395,19 +398,24 @@ export const collectDelegationsNode = async (
     const message = error instanceof Error ? error.message : String(error);
     const failureMessage = `ERROR: Unable to estimate initial token allocations for delegation planning: ${message}`;
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -589,19 +597,24 @@ export const collectDelegationsNode = async (
     const failureMessage = 'We couldn’t prepare the steps needed to continue. Please try again.';
     logInfo('collectDelegations: no planned transactions', { failureMessage });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -645,18 +658,10 @@ export const collectDelegationsNode = async (
   const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
   const shouldPersistPendingState =
     currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
-  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
-  if (hasRunnableConfig && shouldPersistPendingState) {
-    const mergedView = { ...state.view, ...pendingView };
-    state.view = mergedView;
+  if (shouldPersistPendingState) {
+    const mergedView = applyViewPatch(state, pendingView);
     await copilotkitEmitState(config, {
       view: mergedView,
-    });
-    return new Command({
-      update: {
-        view: mergedView,
-      },
-      goto: 'collectDelegations',
     });
   }
 
@@ -691,16 +696,21 @@ export const collectDelegationsNode = async (
     const failureMessage = `Invalid delegation signing response: ${issues}`;
     logInfo('collectDelegations: validation failed', { issues, failureMessage });
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      onboarding: delegationOnboarding,
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        onboarding: delegationOnboarding,
-      },
+      view: haltedView,
     };
   }
 
@@ -715,19 +725,24 @@ export const collectDelegationsNode = async (
       delegateeAddress: request.delegateeAddress,
       delegationCount: request.delegationsToSign.length,
     });
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: 'Delegation signing rejected by user.',
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: 'Delegation signing rejected by user.',
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -737,16 +752,21 @@ export const collectDelegationsNode = async (
   if (signedDelegations.length !== delegationRequest.delegationsToSign.length) {
     const failureMessage = `Delegation signing returned unexpected count (expected=${delegationRequest.delegationsToSign.length}, got=${signedDelegations.length})`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      onboarding: delegationOnboarding,
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        onboarding: delegationOnboarding,
-      },
+      view: haltedView,
     };
   }
 
@@ -759,16 +779,21 @@ export const collectDelegationsNode = async (
     if (!basesMatchUnsigned({ expected, received })) {
       const failureMessage = `Delegation signing returned a mismatched delegation at index ${index}`;
       const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+      const failedView = applyViewPatch(state, {
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      });
       await copilotkitEmitState(config, {
-        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+        view: failedView,
+      });
+      const haltedView = applyViewPatch(state, {
+        haltReason: failureMessage,
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        onboarding: delegationOnboarding,
       });
       return {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          onboarding: delegationOnboarding,
-        },
+        view: haltedView,
       };
     }
   }
@@ -793,16 +818,21 @@ export const collectDelegationsNode = async (
     'working',
     'Delegations signed. Continuing onboarding.',
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    view: workingView,
   });
 
+  const completedView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    delegationBundle,
+    onboarding: delegationOnboarding,
+  });
   return {
-    view: {
-      task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      delegationBundle,
-      onboarding: delegationOnboarding,
-    },
+    view: completedView,
   };
 };

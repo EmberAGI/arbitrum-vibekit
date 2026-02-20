@@ -5,6 +5,7 @@ import {
   createMessageHistoryReducer,
   isTaskActiveState,
   isTaskTerminalState,
+  mergeViewPatchForEmit,
   type AgentCommand,
   type OnboardingContract,
   type TaskState,
@@ -466,6 +467,15 @@ export const ClmmStateAnnotation = Annotation.Root({
 
 export type ClmmState = typeof ClmmStateAnnotation.State;
 export type ClmmUpdate = typeof ClmmStateAnnotation.Update;
+
+export const applyViewPatch = (state: ClmmState, patch: Partial<ClmmViewState>): ClmmViewState => {
+  const mergedView = mergeViewPatchForEmit({
+    currentView: state.view,
+    patchView: patch,
+  });
+  state.view = mergedView;
+  return mergedView;
+};
 
 export const memory = createCheckpointer();
 
