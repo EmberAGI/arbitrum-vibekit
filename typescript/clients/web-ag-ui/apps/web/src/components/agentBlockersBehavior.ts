@@ -21,7 +21,15 @@ export function resolveOnboardingActive(input: {
   taskStatus?: string;
   currentCommand?: string;
   setupComplete?: boolean;
+  onboardingStatus?: 'in_progress' | 'completed' | 'failed' | 'canceled';
 }): boolean {
+  if (input.onboardingStatus === 'in_progress') {
+    return true;
+  }
+  if (input.onboardingStatus === 'completed') {
+    return false;
+  }
+
   const profile = ONBOARDING_RUN_BEHAVIOR[input.agentId] ?? {
     hireRunIsOnboardingWhileSetupIncomplete: false,
   };

@@ -23,33 +23,17 @@ import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const FULL_ONBOARDING_TOTAL_STEPS = 3;
-const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
-
-const buildOnboarding = (params: {
-  step: number;
-  delegationsBypassActive: boolean;
-  skipFundingStep?: boolean;
-}): OnboardingState => ({
-  step: params.step,
-  totalSteps:
-    params.skipFundingStep || params.delegationsBypassActive
-      ? REDUCED_ONBOARDING_TOTAL_STEPS
-      : FULL_ONBOARDING_TOTAL_STEPS,
-});
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 const resolveFundingResumeOnboarding = (state: ClmmState): OnboardingState => {
-  const configuredTotalSteps = state.view.onboarding?.totalSteps;
-  const fallbackTotalSteps =
-    state.view.delegationsBypassActive === true
-      ? REDUCED_ONBOARDING_TOTAL_STEPS
-      : FULL_ONBOARDING_TOTAL_STEPS;
-  const totalSteps =
-    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
-      ? configuredTotalSteps
-      : fallbackTotalSteps;
-  const step = totalSteps <= 2 ? 2 : 3;
-  return { step, totalSteps };
+  if (state.view.delegationsBypassActive === true) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  if (state.view.onboarding?.key === DELEGATION_STEP_KEY && state.view.onboarding.step === 2) {
+    return state.view.onboarding;
+  }
+  return { step: 3, key: DELEGATION_STEP_KEY };
 };
 
 function uniqByAddress<T extends { address: `0x${string}` }>(items: readonly T[]): T[] {
@@ -195,7 +179,7 @@ export const collectFundingTokenInputNode = async (
     return {
       view: {
         selectedPool,
-        onboarding: buildOnboarding({ step: 2, delegationsBypassActive, skipFundingStep: true }),
+        onboarding: { step: 2, key: DELEGATION_STEP_KEY },
         task,
         activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
       },
@@ -242,7 +226,7 @@ export const collectFundingTokenInputNode = async (
     return {
       view: {
         selectedPool,
-        onboarding: buildOnboarding({ step: 2, delegationsBypassActive, skipFundingStep: true }),
+        onboarding: { step: 2, key: DELEGATION_STEP_KEY },
       },
     };
   }
@@ -353,7 +337,7 @@ export const collectFundingTokenInputNode = async (
   );
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
   const pendingView = {
-    onboarding: buildOnboarding({ step: 2, delegationsBypassActive }),
+    onboarding: { step: 2, key: FUNDING_STEP_KEY },
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
     selectedPool,
@@ -456,10 +440,10 @@ export const collectFundingTokenInputNode = async (
     view: {
       selectedPool,
       fundingTokenInput: input,
-      onboarding: buildOnboarding({
-        step: delegationsBypassActive ? 2 : 3,
-        delegationsBypassActive,
-      }),
+      onboarding:
+        delegationsBypassActive === true
+          ? { step: 2, key: FUNDING_STEP_KEY }
+          : { step: 3, key: DELEGATION_STEP_KEY },
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     },

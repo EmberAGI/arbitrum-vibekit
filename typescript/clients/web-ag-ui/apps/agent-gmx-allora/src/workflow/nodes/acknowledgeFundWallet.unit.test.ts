@@ -49,7 +49,7 @@ describe('acknowledgeFundWalletNode', () => {
       update?: {
         view?: {
           task?: { taskStatus?: { state?: string; message?: { content?: string } } };
-          onboarding?: { step?: number; totalSteps?: number; key?: string };
+          onboarding?: { step?: number; key?: string };
           haltReason?: string;
           executionError?: string;
         };
@@ -65,7 +65,6 @@ describe('acknowledgeFundWalletNode', () => {
     );
     expect(commandResult.update?.view?.onboarding).toEqual({
       step: 4,
-      totalSteps: 4,
       key: 'fund-wallet',
     });
     expect(commandResult.update?.view?.haltReason).toBe('');

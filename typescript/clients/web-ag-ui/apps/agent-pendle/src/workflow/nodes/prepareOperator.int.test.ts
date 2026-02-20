@@ -1433,7 +1433,10 @@ describe('prepareOperatorNode', () => {
           walletAddress: '0x0000000000000000000000000000000000000001',
           baseContributionUsd: 10,
         },
-        onboarding: undefined,
+        onboarding: {
+          step: 2,
+          key: 'funding-token',
+        },
         fundingTokenInput: {
           fundingTokenAddress: '0xusdc',
         },
@@ -1474,6 +1477,10 @@ describe('prepareOperatorNode', () => {
 
     expect(nextTaskState).toBe('input-required');
     expect(nextTaskMessage).toBe('Waiting for delegation approval to continue onboarding.');
+    expect(update?.view?.onboarding).toEqual({
+      step: 3,
+      key: 'delegation-signing',
+    });
     expect(
       update?.view?.operatorInput as { walletAddress?: string; baseContributionUsd?: number } | undefined,
     ).toEqual(

@@ -235,7 +235,7 @@ describe('collectFundingTokenInputNode', () => {
     expect(result).toMatchObject({
       view: {
         fundingTokenInput: { fundingTokenAddress: '0xusdc' },
-        onboarding: { step: 3, totalSteps: 3 },
+        onboarding: { step: 3, key: 'delegation-signing' },
       },
     });
   });
@@ -401,7 +401,7 @@ describe('collectFundingTokenInputNode', () => {
       view: {
         fundingTokenInput: { fundingTokenAddress: UNDERLYING_ADDRESS },
         selectedPool: { marketAddress: MARKET_ADDRESS, underlyingSymbol: 'sUSDai' },
-        onboarding: { step: 2, totalSteps: 2 },
+        onboarding: { step: 2, key: 'delegation-signing' },
       },
     });
   });

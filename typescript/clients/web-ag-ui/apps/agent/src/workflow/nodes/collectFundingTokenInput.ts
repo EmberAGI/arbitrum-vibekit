@@ -16,9 +16,8 @@ import { MOCK_FUNDING_TOKENS } from '../mockData.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
-};
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 export const collectFundingTokenInputNode = async (
   state: ClmmState,
@@ -67,7 +66,7 @@ export const collectFundingTokenInputNode = async (
       view: {
         selectedPool,
         fundingTokenInput: state.view.fundingTokenInput,
-        onboarding: { ...ONBOARDING, step: 3 },
+        onboarding: { step: 2, key: FUNDING_STEP_KEY },
       },
     };
   }
@@ -86,7 +85,7 @@ export const collectFundingTokenInputNode = async (
   );
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
   const pendingView = {
-    onboarding: { ...ONBOARDING, step: 2 },
+    onboarding: { step: 2, key: FUNDING_STEP_KEY },
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
     selectedPool,
@@ -176,7 +175,7 @@ export const collectFundingTokenInputNode = async (
     view: {
       selectedPool,
       fundingTokenInput: input,
-      onboarding: { ...ONBOARDING, step: 3 },
+      onboarding: { step: 3, key: DELEGATION_STEP_KEY },
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     },

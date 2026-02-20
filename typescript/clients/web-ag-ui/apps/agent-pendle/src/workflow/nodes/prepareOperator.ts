@@ -29,15 +29,15 @@ import { buildPendleLatestSnapshot, buildPendleLatestSnapshotFromOnchain } from 
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const FULL_ONBOARDING_TOTAL_STEPS = 3;
 const DELEGATION_APPROVAL_MESSAGE = 'Waiting for delegation approval to continue onboarding.';
+const SETUP_STEP_KEY = 'funding-amount' as const;
+const FUNDING_STEP_KEY = 'funding-token' as const;
+const DELEGATION_STEP_KEY = 'delegation-signing' as const;
 
-const resolveOnboardingTotalSteps = (state: ClmmState): number => {
-  const configuredTotalSteps = state.view.onboarding?.totalSteps;
-  return typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
-    ? configuredTotalSteps
-    : FULL_ONBOARDING_TOTAL_STEPS;
-};
+const resolveDelegationOnboarding = (state: ClmmState): { step: number; key: string } => ({
+  step: state.view.onboarding?.key === FUNDING_STEP_KEY ? 3 : 2,
+  key: DELEGATION_STEP_KEY,
+});
 
 const resolveFundingAmount = (amountUsd: number, decimals: number): string => {
   if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
@@ -89,13 +89,12 @@ export const prepareOperatorNode = async (
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   const { operatorInput } = state.view;
   if (!operatorInput) {
-    const totalSteps = resolveOnboardingTotalSteps(state);
     const message = 'Awaiting funding amount to continue onboarding.';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
     const pendingView = {
       ...state.view,
       task,
-      onboarding: { step: 1, totalSteps },
+      onboarding: { step: 1, key: SETUP_STEP_KEY },
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     };
     await copilotkitEmitState(config, {
@@ -113,13 +112,12 @@ export const prepareOperatorNode = async (
 
   const fundingTokenInput = state.view.fundingTokenInput;
   if (!fundingTokenInput) {
-    const totalSteps = resolveOnboardingTotalSteps(state);
     const message = 'Awaiting funding-token selection to continue onboarding.';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
     const pendingView = {
       ...state.view,
       task,
-      onboarding: { step: 2, totalSteps },
+      onboarding: { step: 2, key: FUNDING_STEP_KEY },
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     };
     await copilotkitEmitState(config, {
@@ -145,7 +143,7 @@ export const prepareOperatorNode = async (
     const pendingView = {
       ...state.view,
       task,
-      onboarding: state.view.onboarding,
+      onboarding: resolveDelegationOnboarding(state),
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     };
     await copilotkitEmitState(config, {

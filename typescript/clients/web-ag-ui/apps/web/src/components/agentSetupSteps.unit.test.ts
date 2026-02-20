@@ -3,37 +3,50 @@ import { describe, expect, it } from 'vitest';
 import { resolveSetupSteps } from './agentSetupSteps';
 
 describe('agentSetupSteps', () => {
-  it('uses Pendle-specific setup copy by agent id', () => {
+  it('returns no setup steps when onboarding flow metadata is absent', () => {
+    const steps = resolveSetupSteps({});
+    expect(steps).toEqual([]);
+  });
+
+  it('maps setup steps from the agent-provided onboarding flow', () => {
     const steps = resolveSetupSteps({
-      agentId: 'agent-pendle',
-      totalSteps: 3,
+      onboardingFlow: {
+        status: 'in_progress',
+        revision: 2,
+        activeStepId: 'delegation-signing',
+        steps: [
+          {
+            id: 'funding-amount',
+            title: 'Funding Amount',
+            description: 'Set allocation',
+            status: 'completed',
+          },
+          {
+            id: 'delegation-signing',
+            title: 'Delegation Signing',
+            description: 'Sign policies',
+            status: 'active',
+          },
+        ],
+      },
     });
 
-    expect(steps.map((step) => step.name)).toEqual([
-      'Funding Amount',
-      'Funding Token',
-      'Delegation Signing',
+    expect(steps).toEqual([
+      { id: 1, name: 'Funding Amount', description: 'Set allocation' },
+      { id: 2, name: 'Delegation Signing', description: 'Sign policies' },
     ]);
   });
 
-  it('defaults GMX fund-wallet flow to four steps when interrupt requires wallet funding', () => {
+  it('uses default helper text when an onboarding flow step omits description', () => {
     const steps = resolveSetupSteps({
-      agentId: 'agent-gmx-allora',
-      interruptType: 'gmx-fund-wallet-request',
+      onboardingFlow: {
+        status: 'in_progress',
+        revision: 1,
+        activeStepId: 'setup',
+        steps: [{ id: 'setup', title: 'Setup', status: 'active' }],
+      },
     });
 
-    expect(steps).toHaveLength(4);
-    expect(steps[3]?.name).toBe('Fund Wallet');
-  });
-
-  it('overrides the onboarding step kind to fund-wallet when onboarding key says so', () => {
-    const steps = resolveSetupSteps({
-      agentId: 'agent-clmm',
-      totalSteps: 3,
-      onboardingStep: 2,
-      onboardingKey: 'fund-wallet',
-    });
-
-    expect(steps[1]?.name).toBe('Fund Wallet');
+    expect(steps[0]?.description).toBe('Follow the next agent prompt to continue onboarding.');
   });
 });

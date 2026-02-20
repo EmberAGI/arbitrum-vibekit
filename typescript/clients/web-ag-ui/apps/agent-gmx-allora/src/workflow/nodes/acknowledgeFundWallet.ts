@@ -44,15 +44,10 @@ export const acknowledgeFundWalletNode = async (
   const awaitingInput = buildTaskStatus(state.view.task, 'input-required', pendingMessage);
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
   const telemetry = state.view.activity?.telemetry ?? [];
-  const existingTotalSteps = state.view.onboarding?.totalSteps;
-  const onboardingTotalSteps =
-    typeof existingTotalSteps === 'number' && existingTotalSteps > 0
-      ? Math.max(existingTotalSteps, 4)
-      : 4;
+  const onboardingStep = Math.max(state.view.onboarding?.step ?? 4, 4);
   const pendingView = {
     onboarding: {
-      step: onboardingTotalSteps,
-      totalSteps: onboardingTotalSteps,
+      step: onboardingStep,
       key: 'fund-wallet',
     },
     haltReason: '',

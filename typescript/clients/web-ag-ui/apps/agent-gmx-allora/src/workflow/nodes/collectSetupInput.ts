@@ -12,26 +12,20 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 
-const FULL_ONBOARDING_TOTAL_STEPS = 3;
-const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
+const SETUP_STEP_KEY: OnboardingState['key'] = 'setup';
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
-const resolveOnboardingTotalSteps = (state: ClmmState): number =>
-  state.view.delegationsBypassActive === true
-    ? REDUCED_ONBOARDING_TOTAL_STEPS
-    : FULL_ONBOARDING_TOTAL_STEPS;
-
-const buildOnboarding = (state: ClmmState, step: number): OnboardingState => ({
-  step,
-  totalSteps: resolveOnboardingTotalSteps(state),
-});
-
-const resolveSetupResumeStep = (state: ClmmState): number => {
-  const configuredTotalSteps = state.view.onboarding?.totalSteps;
-  const totalSteps =
-    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
-      ? configuredTotalSteps
-      : resolveOnboardingTotalSteps(state);
-  return state.view.fundingTokenInput ? (totalSteps <= 2 ? 2 : 3) : 2;
+const resolveSetupResumeOnboarding = (state: ClmmState): OnboardingState => {
+  if (!state.view.fundingTokenInput) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  if (state.view.delegationsBypassActive === true) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  return state.view.onboarding?.key === FUNDING_STEP_KEY
+    ? { step: 3, key: DELEGATION_STEP_KEY }
+    : { step: 2, key: DELEGATION_STEP_KEY };
 };
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -46,7 +40,7 @@ export const collectSetupInputNode = async (
     logInfo('collectSetupInput: setup input already present; skipping step');
     return {
       view: {
-        onboarding: buildOnboarding(state, resolveSetupResumeStep(state)),
+        onboarding: resolveSetupResumeOnboarding(state),
       },
     };
   }
@@ -64,7 +58,7 @@ export const collectSetupInputNode = async (
   );
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
   const pendingView = {
-    onboarding: buildOnboarding(state, 1),
+    onboarding: { step: 1, key: SETUP_STEP_KEY },
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: [] },
   };
@@ -139,7 +133,7 @@ export const collectSetupInputNode = async (
   return {
     view: {
       operatorInput: normalized,
-      onboarding: buildOnboarding(state, 2),
+      onboarding: { step: 2, key: FUNDING_STEP_KEY },
       task,
       activity: { events: [statusEvent], telemetry: [] },
     },

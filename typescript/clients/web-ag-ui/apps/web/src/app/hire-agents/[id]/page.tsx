@@ -73,7 +73,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
 
     const isHired = uiPreviewState !== 'prehire';
     const onboarding: OnboardingState | undefined =
-      uiPreviewState === 'onboarding' ? { step: 2, totalSteps: 5, key: 'setup-agent' } : undefined;
+      uiPreviewState === 'onboarding' ? { step: 2, key: 'setup-agent' } : undefined;
 
     const currentCommand =
       uiPreviewState === 'prehire' ? undefined : uiPreviewState === 'onboarding' ? 'hire' : 'cycle';
@@ -128,6 +128,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         executionError={undefined}
         delegationsBypassActive={false}
         onboarding={onboarding}
+        onboardingFlow={undefined}
         setupComplete={false}
         transactions={[]}
         telemetry={[]}
@@ -189,6 +190,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       executionError={agent.view.executionError}
       delegationsBypassActive={agent.view.delegationsBypassActive}
       onboarding={agent.view.onboarding}
+      onboardingFlow={agent.view.onboardingFlow}
       setupComplete={agent.view.setupComplete}
       transactions={agent.transactionHistory}
       telemetry={agent.activity.telemetry}

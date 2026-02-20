@@ -633,6 +633,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     // `fire` is still a hired agent state: the user is firing an already-hired agent.
     // Treat it as hired so the UI does not flash back to the pre-hire layout during the fire run.
     view.command === 'fire' ||
+    view.onboardingFlow?.status === 'in_progress' ||
     (typeof view.onboarding?.step === 'number' && Number.isFinite(view.onboarding.step));
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
   const hasLoadedView = !needsSync(currentState);

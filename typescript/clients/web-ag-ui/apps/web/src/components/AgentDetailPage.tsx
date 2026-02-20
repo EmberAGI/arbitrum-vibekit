@@ -21,6 +21,7 @@ import type {
   AgentSettings,
   AgentViewMetrics,
   FundingTokenOption,
+  OnboardingFlow,
   OnboardingState,
   Pool,
   PendleMarket,
@@ -113,6 +114,7 @@ interface AgentDetailPageProps {
   executionError?: string;
   delegationsBypassActive?: boolean;
   onboarding?: OnboardingState;
+  onboardingFlow?: OnboardingFlow;
   setupComplete?: boolean;
   // Activity data
   transactions?: Transaction[];
@@ -281,6 +283,7 @@ export function AgentDetailPage({
   executionError,
   delegationsBypassActive,
   onboarding,
+  onboardingFlow,
   setupComplete,
   transactions = [],
   telemetry = [],
@@ -301,6 +304,7 @@ export function AgentDetailPage({
     taskStatus,
     currentCommand,
     setupComplete,
+    onboardingStatus: onboardingFlow?.status,
   });
   const forceBlockersTab = isOnboardingActive;
   const selectTab = useCallback((tab: TabType) => {
@@ -534,6 +538,7 @@ export function AgentDetailPage({
             executionError={executionError}
             delegationsBypassActive={delegationsBypassActive}
             onboarding={onboarding}
+            onboardingFlow={onboardingFlow}
             telemetry={telemetry}
             settings={settings}
             onSettingsChange={onSettingsChange}
@@ -1314,6 +1319,7 @@ interface AgentBlockersTabProps {
   executionError?: string;
   delegationsBypassActive?: boolean;
   onboarding?: OnboardingState;
+  onboardingFlow?: OnboardingFlow;
   telemetry?: TelemetryItem[];
   settings?: AgentSettings;
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
@@ -1330,6 +1336,7 @@ function AgentBlockersTab({
   executionError,
   delegationsBypassActive,
   onboarding,
+  onboardingFlow,
   telemetry = [],
   settings,
   onSettingsChange,
@@ -1368,20 +1375,10 @@ function AgentBlockersTab({
   const setupSteps = useMemo(
     () =>
       resolveSetupSteps({
-        agentId,
-        totalSteps: onboarding?.totalSteps,
-        onboardingStep: onboarding?.step,
-        onboardingKey: onboarding?.key,
-        interruptType: activeInterrupt?.type,
-        delegationsBypassActive,
+        onboardingFlow,
       }),
     [
-      agentId,
-      onboarding?.totalSteps,
-      onboarding?.step,
-      onboarding?.key,
-      activeInterrupt?.type,
-      delegationsBypassActive,
+      onboardingFlow,
     ],
   );
   const maxSetupStep = setupSteps.length;
@@ -1599,9 +1596,21 @@ function AgentBlockersTab({
   const showFundingTokenForm = blockersInterruptView.kind === 'funding-token';
   const showDelegationSigningForm = blockersInterruptView.kind === 'delegation-signing';
   const interruptStep = blockersInterruptView.interruptStep;
+  const onboardingFlowStep = useMemo(() => {
+    if (!onboardingFlow) return null;
+    const activeIndex =
+      onboardingFlow.activeStepId
+        ? onboardingFlow.steps.findIndex((step) => step.id === onboardingFlow.activeStepId)
+        : onboardingFlow.steps.findIndex((step) => step.status === 'active');
+    return activeIndex >= 0 ? activeIndex + 1 : null;
+  }, [onboardingFlow]);
 
   // Agent-provided onboarding metadata is authoritative when present.
   useEffect(() => {
+    if (onboardingFlowStep !== null) {
+      setCurrentStep(clampStep(onboardingFlowStep));
+      return;
+    }
     const nextStep = onboarding?.step;
     if (typeof nextStep === 'number' && Number.isFinite(nextStep) && nextStep > 0) {
       setCurrentStep(clampStep(nextStep));
@@ -1610,7 +1619,7 @@ function AgentBlockersTab({
     if (interruptStep !== null) {
       setCurrentStep(clampStep(interruptStep));
     }
-  }, [clampStep, interruptStep, onboarding?.step]);
+  }, [clampStep, interruptStep, onboarding?.step, onboardingFlowStep]);
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {

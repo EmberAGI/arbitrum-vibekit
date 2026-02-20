@@ -46,6 +46,7 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
       view: {
         delegationsBypassActive: false,
         delegationBundle: undefined,
+        onboarding: { step: 2, key: 'funding-token' },
         operatorInput: {
           walletAddress: '0x1111111111111111111111111111111111111111',
           usdcAllocation: 100,
@@ -66,13 +67,13 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
       update?: {
         view?: {
           task?: { taskStatus?: { state?: string } };
-          onboarding?: { step?: number; totalSteps?: number };
+          onboarding?: { step?: number; key?: string };
         };
       };
     };
 
     expect(commandResult.goto).toContain('collectDelegations');
     expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.onboarding).toEqual({ step: 3, totalSteps: 3 });
+    expect(commandResult.update?.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
   });
 });

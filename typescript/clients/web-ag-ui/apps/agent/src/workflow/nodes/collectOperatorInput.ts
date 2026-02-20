@@ -6,7 +6,6 @@ import { OperatorConfigInputSchema } from '../../domain/types.js';
 import {
   buildTaskStatus,
   logInfo,
-  type OnboardingState,
   type ClmmState,
   type OperatorInterrupt,
   type ClmmUpdate,
@@ -14,9 +13,8 @@ import {
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
-};
+const SETUP_STEP_KEY = 'setup' as const;
+const FUNDING_STEP_KEY = 'funding-token' as const;
 
 export const collectOperatorInputNode = async (
   state: ClmmState,
@@ -60,7 +58,7 @@ export const collectOperatorInputNode = async (
   );
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
   const pendingView = {
-    onboarding: { ...ONBOARDING, step: 1 },
+    onboarding: { step: 1, key: SETUP_STEP_KEY },
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: [] },
   };
@@ -125,7 +123,7 @@ export const collectOperatorInputNode = async (
   return {
     view: {
       operatorInput: parsed.data,
-      onboarding: { ...ONBOARDING, step: 2 },
+      onboarding: { step: 2, key: FUNDING_STEP_KEY },
       task,
       activity: { events: [statusEvent], telemetry: [] },
     },

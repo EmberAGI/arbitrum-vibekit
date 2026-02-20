@@ -49,6 +49,18 @@ describe('agentBlockersInterrupt', () => {
     });
   });
 
+  it('maps delegation-signing interrupts to step 2 when setup flow is reduced', () => {
+    expect(
+      resolveBlockersInterruptView({
+        interruptType: 'pendle-delegation-signing-request',
+        maxSetupStep: 2,
+      }),
+    ).toEqual({
+      kind: 'delegation-signing',
+      interruptStep: 2,
+    });
+  });
+
   it('returns none when no known interrupt is active', () => {
     expect(resolveBlockersInterruptView({ interruptType: null, maxSetupStep: 4 })).toEqual({
       kind: 'none',

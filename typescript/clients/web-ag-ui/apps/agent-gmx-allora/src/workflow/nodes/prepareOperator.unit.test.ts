@@ -40,7 +40,7 @@ describe('prepareOperatorNode', () => {
         },
         delegationsBypassActive: false,
         delegationBundle: undefined,
-        onboarding: { step: 2, totalSteps: 3 },
+        onboarding: { step: 2, key: 'funding-token' },
         task: { id: 'task-1', taskStatus: { state: 'working' } },
         activity: { telemetry: [], events: [] },
         profile: {},
@@ -61,7 +61,7 @@ describe('prepareOperatorNode', () => {
               message?: { content?: string };
             };
           };
-          onboarding?: { step?: number; totalSteps?: number };
+          onboarding?: { step?: number; key?: string };
         };
       };
     };
@@ -71,6 +71,6 @@ describe('prepareOperatorNode', () => {
     expect(commandResult.update?.view?.task?.taskStatus?.message?.content).toBe(
       'Waiting for delegation approval to continue onboarding.',
     );
-    expect(commandResult.update?.view?.onboarding).toEqual({ step: 3, totalSteps: 3 });
+    expect(commandResult.update?.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
   });
 });
