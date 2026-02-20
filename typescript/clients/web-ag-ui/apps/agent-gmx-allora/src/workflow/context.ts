@@ -6,6 +6,7 @@ import {
   isTaskActiveState,
   isTaskTerminalState,
   type AgentCommand,
+  type OnboardingContract,
   type TaskState,
 } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
@@ -23,6 +24,8 @@ import type {
   GmxSetupInput,
   ResolvedGmxConfig,
 } from '../domain/types.js';
+
+import { deriveGmxOnboardingFlow } from './onboardingFlow.js';
 
 export type AgentMessage = CopilotKitAIMessage;
 
@@ -206,7 +209,6 @@ export type DelegationSigningInterrupt = {
 
 export type OnboardingState = {
   step: number;
-  totalSteps?: number;
   key?: string;
 };
 
@@ -217,6 +219,7 @@ type ClmmViewState = {
   poolArtifact?: Artifact;
   operatorInput?: GmxSetupInput;
   onboarding?: OnboardingState;
+  onboardingFlow?: OnboardingContract;
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: GmxMarket;
   operatorConfig?: ResolvedGmxConfig;
@@ -249,6 +252,7 @@ const defaultViewState = (): ClmmViewState => ({
   poolArtifact: undefined,
   operatorInput: undefined,
   onboarding: undefined,
+  onboardingFlow: undefined,
   fundingTokenInput: undefined,
   selectedPool: undefined,
   operatorConfig: undefined,
@@ -342,6 +346,17 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
   if (!right) {
     return left;
   }
+  const nextTask = right.task ?? left.task;
+  const nextOnboarding = right.onboarding ?? left.onboarding;
+  const nextOperatorConfig = right.operatorConfig ?? left.operatorConfig;
+  const nextDelegationsBypassActive = right.delegationsBypassActive ?? left.delegationsBypassActive;
+  const nextOnboardingFlow = deriveGmxOnboardingFlow({
+    onboarding: nextOnboarding,
+    previous: left.onboardingFlow,
+    setupComplete: Boolean(nextOperatorConfig),
+    taskState: nextTask?.taskStatus?.state,
+    delegationsBypassActive: nextDelegationsBypassActive === true,
+  });
 
   const nextTelemetry = limitHistory(
     mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry),
@@ -396,17 +411,18 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     ...left,
     ...right,
     command: right.command ?? left.command,
-    task: right.task ?? left.task,
+    task: nextTask,
     poolArtifact: right.poolArtifact ?? left.poolArtifact,
     operatorInput: right.operatorInput ?? left.operatorInput,
-    onboarding: right.onboarding ?? left.onboarding,
+    onboarding: nextOnboarding,
+    onboardingFlow: nextOnboardingFlow,
     fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
     selectedPool: right.selectedPool ?? left.selectedPool,
-    operatorConfig: right.operatorConfig ?? left.operatorConfig,
+    operatorConfig: nextOperatorConfig,
     delegationBundle: right.delegationBundle ?? left.delegationBundle,
     haltReason: right.haltReason ?? left.haltReason,
     executionError: right.executionError ?? left.executionError,
-    delegationsBypassActive: right.delegationsBypassActive ?? left.delegationsBypassActive,
+    delegationsBypassActive: nextDelegationsBypassActive,
     profile: nextProfile,
     activity: {
       telemetry: nextTelemetry,

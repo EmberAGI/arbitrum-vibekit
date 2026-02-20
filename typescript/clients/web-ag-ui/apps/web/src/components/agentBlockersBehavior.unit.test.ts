@@ -55,4 +55,30 @@ describe('agentBlockersBehavior', () => {
       }),
     ).toBe(true);
   });
+
+  it('keeps onboarding active when lifecycle is explicitly in progress', () => {
+    expect(
+      resolveOnboardingActive({
+        agentId: 'agent-pendle',
+        activeInterruptPresent: false,
+        taskStatus: 'working',
+        currentCommand: 'cycle',
+        setupComplete: false,
+        onboardingStatus: 'in_progress',
+      }),
+    ).toBe(true);
+  });
+
+  it('does not force onboarding when lifecycle is explicitly completed', () => {
+    expect(
+      resolveOnboardingActive({
+        agentId: 'agent-pendle',
+        activeInterruptPresent: false,
+        taskStatus: 'working',
+        currentCommand: 'cycle',
+        setupComplete: true,
+        onboardingStatus: 'completed',
+      }),
+    ).toBe(false);
+  });
 });

@@ -271,9 +271,27 @@ export type DelegationSigningResponse =
 // Onboarding state
 export type OnboardingState = {
   step: number;
-  totalSteps?: number;
   key?: string;
 };
+
+export type OnboardingStatus = 'in_progress' | 'completed' | 'failed' | 'canceled';
+
+export type OnboardingStepStatus = 'pending' | 'active' | 'completed' | 'skipped' | 'failed';
+
+export interface OnboardingStepState {
+  id: string;
+  title: string;
+  description?: string;
+  status: OnboardingStepStatus;
+}
+
+export interface OnboardingFlow {
+  status: OnboardingStatus;
+  revision: number;
+  key?: string;
+  activeStepId?: string;
+  steps: OnboardingStepState[];
+}
 
 // Profile types (ClmmProfile)
 export interface AgentViewProfile {
@@ -364,6 +382,7 @@ export interface AgentView {
   lastAppliedClientMutationId?: string;
   task?: Task;
   onboarding?: OnboardingState;
+  onboardingFlow?: OnboardingFlow;
   setupComplete?: boolean;
   poolArtifact?: Artifact;
   operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput;
@@ -451,6 +470,8 @@ export const defaultView: AgentView = {
   command: undefined,
   lastAppliedClientMutationId: undefined,
   task: undefined,
+  onboarding: undefined,
+  onboardingFlow: undefined,
   setupComplete: undefined,
   poolArtifact: undefined,
   operatorInput: undefined,

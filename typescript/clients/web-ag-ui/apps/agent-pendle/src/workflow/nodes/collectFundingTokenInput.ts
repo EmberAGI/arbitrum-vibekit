@@ -20,24 +20,17 @@ import {
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const FULL_ONBOARDING_TOTAL_STEPS = 3;
-const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
-
-const buildOnboarding = (
-  step: number,
-  totalSteps: number = FULL_ONBOARDING_TOTAL_STEPS,
-): OnboardingState => ({
-  step,
-  totalSteps,
-});
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 const resolveFundingOnboarding = (state: ClmmState): OnboardingState => {
-  const configuredTotalSteps = state.view.onboarding?.totalSteps;
-  const totalSteps =
-    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
-      ? configuredTotalSteps
-      : FULL_ONBOARDING_TOTAL_STEPS;
-  return buildOnboarding(totalSteps <= 2 ? 2 : 3, totalSteps);
+  if (state.view.delegationsBypassActive === true) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  if (state.view.onboarding?.key === DELEGATION_STEP_KEY && state.view.onboarding.step === 2) {
+    return state.view.onboarding;
+  }
+  return { step: 3, key: DELEGATION_STEP_KEY };
 };
 
 const FundWalletAckSchema = z.object({
@@ -104,7 +97,7 @@ export const collectFundingTokenInputNode = async (
           view: {
             fundingTokenInput: input,
             selectedPool: toYieldToken(matchedMarket),
-            onboarding: buildOnboarding(2, REDUCED_ONBOARDING_TOTAL_STEPS),
+            onboarding: { step: 2, key: DELEGATION_STEP_KEY },
             task,
             activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
           },
@@ -164,7 +157,7 @@ export const collectFundingTokenInputNode = async (
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
     const awaitingMessage = task.taskStatus.message?.content;
     const pendingView = {
-      onboarding: buildOnboarding(2),
+      onboarding: { step: 2, key: FUNDING_STEP_KEY },
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     };
@@ -223,7 +216,7 @@ export const collectFundingTokenInputNode = async (
   );
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
   const pendingView = {
-    onboarding: buildOnboarding(2),
+    onboarding: { step: 2, key: FUNDING_STEP_KEY },
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
   };
@@ -324,7 +317,7 @@ export const collectFundingTokenInputNode = async (
   return {
     view: {
       fundingTokenInput: input,
-      onboarding: buildOnboarding(3),
+      onboarding: { step: 3, key: DELEGATION_STEP_KEY },
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     },

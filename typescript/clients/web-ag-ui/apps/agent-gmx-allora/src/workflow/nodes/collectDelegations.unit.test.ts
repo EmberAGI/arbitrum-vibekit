@@ -10,16 +10,16 @@ describe('collectDelegationsNode', () => {
       view: {
         delegationsBypassActive: true,
         delegationBundle: undefined,
-        onboarding: { step: 2, totalSteps: 2 },
+        onboarding: { step: 2, key: 'funding-token' },
       },
     } as unknown as ClmmState;
 
     const result = await collectDelegationsNode(state, {});
 
     expect('view' in result).toBe(true);
-    const onboarding = (result as { view: { onboarding?: { step: number; totalSteps?: number } } }).view
+    const onboarding = (result as { view: { onboarding?: { step: number; key?: string } } }).view
       .onboarding;
-    expect(onboarding).toEqual({ step: 2, totalSteps: 2 });
+    expect(onboarding).toEqual({ step: 2, key: 'funding-token' });
   });
 
   it('advances task state after delegation bundle is present', async () => {

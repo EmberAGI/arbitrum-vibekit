@@ -12,20 +12,17 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 
-const FULL_ONBOARDING_TOTAL_STEPS = 3;
-
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: FULL_ONBOARDING_TOTAL_STEPS,
-};
+const SETUP_STEP_KEY: OnboardingState['key'] = 'funding-amount';
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 const resolveResumeOnboarding = (state: ClmmState): OnboardingState => {
-  const configuredTotalSteps = state.view.onboarding?.totalSteps;
-  const totalSteps =
-    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
-      ? configuredTotalSteps
-      : FULL_ONBOARDING_TOTAL_STEPS;
-  const step = state.view.fundingTokenInput ? (totalSteps <= 2 ? 2 : 3) : 2;
-  return { ...ONBOARDING, step, totalSteps };
+  if (!state.view.fundingTokenInput) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  return state.view.onboarding?.key === FUNDING_STEP_KEY
+    ? { step: 3, key: DELEGATION_STEP_KEY }
+    : { step: 2, key: DELEGATION_STEP_KEY };
 };
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -59,7 +56,7 @@ export const collectSetupInputNode = async (
   );
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
   const pendingView = {
-    onboarding: { ...ONBOARDING, step: 1 },
+    onboarding: { step: 1, key: SETUP_STEP_KEY },
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: [] },
   };
@@ -128,7 +125,7 @@ export const collectSetupInputNode = async (
   return {
     view: {
       operatorInput: parsed.data,
-      onboarding: { ...ONBOARDING, step: 2 },
+      onboarding: { step: 2, key: FUNDING_STEP_KEY },
       task,
       activity: { events: [statusEvent], telemetry: [] },
     },

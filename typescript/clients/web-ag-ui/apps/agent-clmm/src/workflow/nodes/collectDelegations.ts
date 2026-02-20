@@ -41,16 +41,20 @@ import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const FULL_ONBOARDING_TOTAL_STEPS = 3;
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 const resolveDelegationOnboarding = (state: ClmmState): OnboardingState => {
-  const configuredTotalSteps = state.view.onboarding?.totalSteps;
-  const totalSteps =
-    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
-      ? configuredTotalSteps
-      : FULL_ONBOARDING_TOTAL_STEPS;
-  const step = totalSteps <= 2 ? 2 : 3;
-  return { step, totalSteps };
+  if (state.view.delegationsBypassActive === true) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  if (state.view.onboarding?.key === FUNDING_STEP_KEY) {
+    return { step: 3, key: DELEGATION_STEP_KEY };
+  }
+  if (state.view.onboarding?.key === DELEGATION_STEP_KEY) {
+    return state.view.onboarding;
+  }
+  return { step: 2, key: DELEGATION_STEP_KEY };
 };
 
 const MAX_UINT256 = 2n ** 256n - 1n;

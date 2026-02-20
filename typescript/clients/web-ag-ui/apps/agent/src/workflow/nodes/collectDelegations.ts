@@ -25,9 +25,8 @@ import {
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
-};
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 const HexSchema = z
   .string()
@@ -99,7 +98,7 @@ export const collectDelegationsNode = async (
     return {
       view: {
         delegationsBypassActive: true,
-        onboarding: { ...ONBOARDING, step: 3 },
+        onboarding: { step: 2, key: FUNDING_STEP_KEY },
       },
     };
   }
@@ -114,7 +113,7 @@ export const collectDelegationsNode = async (
       return {
         view: {
           delegationBundle: state.view.delegationBundle,
-          onboarding: { ...ONBOARDING, step: 3 },
+          onboarding: { step: 3, key: DELEGATION_STEP_KEY },
           task,
           activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
         },
@@ -124,7 +123,7 @@ export const collectDelegationsNode = async (
     return {
       view: {
         delegationBundle: state.view.delegationBundle,
-        onboarding: { ...ONBOARDING, step: 3 },
+        onboarding: { step: 3, key: DELEGATION_STEP_KEY },
       },
     };
   }
@@ -165,7 +164,7 @@ export const collectDelegationsNode = async (
   );
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
   const pendingView = {
-    onboarding: { ...ONBOARDING, step: 3 },
+    onboarding: { step: 3, key: DELEGATION_STEP_KEY },
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
   };
@@ -211,7 +210,7 @@ export const collectDelegationsNode = async (
         haltReason: failureMessage,
         task,
         activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        onboarding: { ...ONBOARDING, step: 3 },
+        onboarding: { step: 3, key: DELEGATION_STEP_KEY },
       },
     };
   }
@@ -267,7 +266,7 @@ export const collectDelegationsNode = async (
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
       delegationBundle,
-      onboarding: { ...ONBOARDING, step: 3 },
+      onboarding: { step: 3, key: DELEGATION_STEP_KEY },
     },
   };
 };

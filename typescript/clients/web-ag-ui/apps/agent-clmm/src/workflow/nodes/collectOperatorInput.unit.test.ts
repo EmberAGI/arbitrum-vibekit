@@ -48,13 +48,13 @@ describe('collectOperatorInputNode', () => {
       update?: {
         view?: {
           task?: { taskStatus?: { state?: string } };
-          onboarding?: { step?: number; totalSteps?: number };
+          onboarding?: { step?: number; key?: string };
         };
       };
     };
 
     expect(commandResult.goto).toContain('collectOperatorInput');
     expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.onboarding).toEqual({ step: 1, totalSteps: 3 });
+    expect(commandResult.update?.view?.onboarding).toEqual({ step: 1, key: 'setup' });
   });
 });

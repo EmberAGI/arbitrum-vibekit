@@ -77,14 +77,9 @@ export const prepareOperatorNode = async (
   if (!delegationsBypassActive && !state.view.delegationBundle) {
     const message = 'Waiting for delegation approval to continue onboarding.';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
-    const configuredTotalSteps = state.view.onboarding?.totalSteps;
-    const totalSteps =
-      typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
-        ? configuredTotalSteps
-        : 3;
-    const onboardingStep = totalSteps <= 2 ? 2 : 3;
+    const onboardingStep = state.view.onboarding?.key === 'funding-token' ? 3 : 2;
     const pendingView = {
-      onboarding: { step: onboardingStep, totalSteps },
+      onboarding: { step: onboardingStep, key: 'delegation-signing' as const },
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     };

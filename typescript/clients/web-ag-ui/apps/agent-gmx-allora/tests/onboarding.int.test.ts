@@ -196,7 +196,7 @@ describe('GMX Allora onboarding (integration)', () => {
     const update = await collectDelegationsNode(state, {});
 
     expect(interruptMock).not.toHaveBeenCalled();
-    expect(update.view?.onboarding?.step).toBe(3);
+    expect(update.view?.onboarding).toEqual({ step: 2, key: 'funding-token' });
   });
 
   it('omits testing warning in production-mode delegation requests', async () => {

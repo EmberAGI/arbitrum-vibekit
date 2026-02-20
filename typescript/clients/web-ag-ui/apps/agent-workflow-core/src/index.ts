@@ -25,5 +25,14 @@ export {
   type ResolveOnboardingPhaseInput,
 } from './onboardingStateMachine.js';
 export { mapOnboardingPhaseToTarget } from './onboardingStateMachineMappings.js';
+export {
+  buildOnboardingContractFromLegacyStep,
+  finalizeOnboardingContract,
+  type OnboardingContract,
+  type OnboardingStatus,
+  type OnboardingStepDefinition,
+  type OnboardingStepState,
+  type OnboardingStepStatus,
+} from './onboardingContract.js';
 export { isLangGraphBusyStatus } from './langGraphBusyResponse.js';
 export { createMessageHistoryReducer, mergeMessageHistory } from './messageHistory.js';
