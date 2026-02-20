@@ -51,6 +51,9 @@ export async function createCamelotAccountingSnapshot(params: {
     chainId: ARBITRUM_CHAIN_ID,
     camelotClient: params.camelotClient,
     flowLog: params.flowLog ?? params.state.view.accounting.flowLog,
+    managedPoolAddresses: params.state.view.selectedPool
+      ? [params.state.view.selectedPool.address]
+      : undefined,
     transactionHash: params.transactionHash,
     threadId: params.threadId,
     cycle: params.cycle,

@@ -106,20 +106,27 @@ function parseTimestamp(value: string | undefined): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-function extractManagedPools(flowLog: FlowLogEvent[] | undefined): Set<string> | null {
-  if (!flowLog) {
-    return null;
-  }
+function extractManagedPools(params: {
+  flowLog?: FlowLogEvent[];
+  managedPoolAddresses?: Array<`0x${string}`>;
+}): Set<string> | null {
   const pools = new Set<string>();
-  for (const event of flowLog) {
-    if (event.protocolId && event.protocolId !== CAMELOT_PROTOCOL_ID) {
-      continue;
-    }
-    if (event.poolAddress) {
-      pools.add(event.poolAddress.toLowerCase());
+  if (params.flowLog) {
+    for (const event of params.flowLog) {
+      if (event.protocolId && event.protocolId !== CAMELOT_PROTOCOL_ID) {
+        continue;
+      }
+      if (event.poolAddress) {
+        pools.add(event.poolAddress.toLowerCase());
+      }
     }
   }
-  return pools;
+  if (pools.size === 0 && params.managedPoolAddresses) {
+    for (const poolAddress of params.managedPoolAddresses) {
+      pools.add(poolAddress.toLowerCase());
+    }
+  }
+  return pools.size > 0 ? pools : null;
 }
 
 function computeFeesApy(params: {
@@ -186,11 +193,15 @@ export async function createCamelotNavSnapshot(params: {
   chainId: number;
   camelotClient: EmberCamelotClient;
   flowLog?: FlowLogEvent[];
+  managedPoolAddresses?: Array<`0x${string}`>;
   transactionHash?: `0x${string}`;
   threadId?: string;
   cycle?: number;
 }): Promise<NavSnapshot> {
-  const managedPools = extractManagedPools(params.flowLog);
+  const managedPools = extractManagedPools({
+    flowLog: params.flowLog,
+    managedPoolAddresses: params.managedPoolAddresses,
+  });
   const snapshotTimestamp = new Date().toISOString();
   const allPositions = await params.camelotClient.getWalletPositions(
     params.walletAddress,
@@ -199,11 +210,9 @@ export async function createCamelotNavSnapshot(params: {
   const positions =
     managedPools === null
       ? allPositions
-      : managedPools.size === 0
-        ? []
-        : allPositions.filter((position) =>
-            managedPools.has(position.poolAddress.toLowerCase()),
-          );
+      : allPositions.filter((position) =>
+          managedPools.has(position.poolAddress.toLowerCase()),
+        );
 
   if (positions.length === 0) {
     return {
