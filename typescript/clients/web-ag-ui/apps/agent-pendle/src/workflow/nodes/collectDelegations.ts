@@ -46,6 +46,7 @@ const PENDLE_FULL_LIFECYCLE_SELECTORS = {
   buyPt: '0xc81f847a',
   sellPt: '0x594a88cc',
   redeemPt: '0x47f1de22',
+  redeemPtPostExpiry: '0xf06a07a0',
   claimRewards: '0x0741a803',
 } as const;
 

@@ -47,6 +47,15 @@ function formatDelta(value: number): number {
   return Number(value.toFixed(2));
 }
 
+function parsePositiveBigInt(value: string): bigint {
+  try {
+    const parsed = BigInt(value);
+    return parsed > 0n ? parsed : 0n;
+  } catch {
+    return 0n;
+  }
+}
+
 function isMaturedMarket(maturity: string): boolean {
   const parsed = Date.parse(maturity);
   if (Number.isNaN(parsed)) {
@@ -327,30 +336,71 @@ export const pollCycleNode = async (
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      const failureMessage =
-        action === 'rollover'
-          ? `ERROR: Pendle rollover execution failed: ${message}`
-          : action === 'compound'
-            ? `ERROR: Pendle compound execution failed: ${message}`
-            : `ERROR: Pendle rebalance execution failed: ${message}`;
-      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-      await copilotkitEmitState(config, {
-        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
-      });
-      return new Command({
-        update: {
-          view: {
-            haltReason: failureMessage,
-            executionError: failureMessage,
-            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-            metrics: state.view.metrics,
-            task,
-            profile: state.view.profile,
-            transactionHistory: state.view.transactionHistory,
+      const normalizedMessage = message.toLowerCase();
+      let recoveredFromSettledRollover = false;
+      if (action === 'rollover' && normalizedMessage.includes('transfer amount exceeds balance')) {
+        try {
+          const refreshedPositions = await onchainActionsClient.listTokenizedYieldPositions({
+            walletAddress: operatorConfig.walletAddress,
+            chainIds: resolvePendleChainIds(),
+          });
+          const refreshedSourcePosition = refreshedPositions.find(
+            (entry) =>
+              entry.marketIdentifier.address.toLowerCase() ===
+              selectedMarket.marketAddress.toLowerCase(),
+          );
+          const refreshedSourcePtAmount = parsePositiveBigInt(
+            refreshedSourcePosition?.pt.exactAmount ?? '0',
+          );
+
+          if (refreshedSourcePtAmount === 0n) {
+            recoveredFromSettledRollover = true;
+            positions = refreshedPositions;
+            action = 'hold';
+            reason =
+              'Source PT balance already cleared; rollover appears already settled.';
+            logInfo('Rollover insufficient-balance revert treated as settled', {
+              sourceMarketAddress: selectedMarket.marketAddress,
+            });
+          }
+        } catch (refreshError: unknown) {
+          const refreshMessage =
+            refreshError instanceof Error ? refreshError.message : String(refreshError);
+          logInfo('Unable to reconcile rollover insufficient-balance revert', {
+            sourceMarketAddress: selectedMarket.marketAddress,
+            error: refreshMessage,
+          });
+        }
+      }
+
+      if (recoveredFromSettledRollover) {
+        // Continue the cycle as a hold update when the source PT position has already been fully redeemed.
+      } else {
+        const failureMessage =
+          action === 'rollover'
+            ? `ERROR: Pendle rollover execution failed: ${message}`
+            : action === 'compound'
+              ? `ERROR: Pendle compound execution failed: ${message}`
+              : `ERROR: Pendle rebalance execution failed: ${message}`;
+        const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+        await copilotkitEmitState(config, {
+          view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+        });
+        return new Command({
+          update: {
+            view: {
+              haltReason: failureMessage,
+              executionError: failureMessage,
+              activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+              metrics: state.view.metrics,
+              task,
+              profile: state.view.profile,
+              transactionHistory: state.view.transactionHistory,
+            },
           },
-        },
-        goto: 'summarize',
-      });
+          goto: 'summarize',
+        });
+      }
     }
   }
 
