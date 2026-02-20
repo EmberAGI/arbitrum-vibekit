@@ -40,4 +40,31 @@ describe('viewEmission', () => {
     expect(merged.task?.taskStatus?.state).toBe('working');
     expect(Array.isArray(merged.activity?.telemetry)).toBe(true);
   });
+
+  it('applies invariant merge callback when provided', () => {
+    type TestView = {
+      onboarding?: { step: number; key?: string };
+      onboardingFlow?: { activeStepId?: string };
+    };
+
+    const merged = mergeViewPatchForEmit<TestView>({
+      currentView: {
+        onboarding: { step: 2, key: 'funding-token' },
+        onboardingFlow: { activeStepId: 'funding-token' },
+      },
+      patchView: {
+        onboarding: { step: 3, key: 'delegation-signing' },
+      },
+      mergeWithInvariants: (currentView, patchView) => ({
+        ...currentView,
+        ...patchView,
+        onboardingFlow: {
+          activeStepId: patchView.onboarding?.key,
+        },
+      }),
+    });
+
+    expect(merged.onboarding?.key).toBe('delegation-signing');
+    expect(merged.onboardingFlow?.activeStepId).toBe('delegation-signing');
+  });
 });

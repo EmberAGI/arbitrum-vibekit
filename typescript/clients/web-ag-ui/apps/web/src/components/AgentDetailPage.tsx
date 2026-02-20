@@ -13,7 +13,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { formatUnits } from 'viem';
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useMemo, useState, type FormEvent } from 'react';
 import type {
   AgentProfile,
   AgentMetrics,
@@ -61,6 +61,7 @@ import {
   resolveOnboardingActive,
 } from './agentBlockersBehavior';
 import { resolveBlockersInterruptView } from './agentBlockersInterrupt';
+import { resolveCurrentSetupStep } from './agentCurrentSetupStep';
 import { resolveSetupSteps } from './agentSetupSteps';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
@@ -1361,7 +1362,6 @@ function AgentBlockersTab({
   const connectedWalletAddress =
     privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
 
-  const [currentStep, setCurrentStep] = useState(1);
   const [poolAddress, setPoolAddress] = useState('');
   const [baseContributionUsd, setBaseContributionUsd] = useState(
     settings?.amount?.toString() ?? '',
@@ -1382,10 +1382,11 @@ function AgentBlockersTab({
     ],
   );
   const maxSetupStep = setupSteps.length;
-  const clampStep = useCallback(
-    (value: number) => Math.max(1, Math.min(value, maxSetupStep)),
-    [maxSetupStep],
-  );
+  const currentStep = resolveCurrentSetupStep({
+    maxSetupStep,
+    onboardingFlow,
+    onboarding,
+  });
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
   const uniqueAllowedPools: Pool[] = [];
@@ -1457,7 +1458,6 @@ function AgentBlockersTab({
       walletAddress: operatorWalletAddress as `0x${string}`,
       baseContributionUsd: baseContributionNumber,
     });
-    setCurrentStep(clampStep(2));
   };
 
   const handlePendleSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -1508,7 +1508,6 @@ function AgentBlockersTab({
       walletAddress: operatorWalletAddress as `0x${string}`,
       baseContributionUsd: baseContributionNumber,
     });
-    setCurrentStep(clampStep(2));
   };
 
   const handleGmxSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -1565,7 +1564,6 @@ function AgentBlockersTab({
       baseContributionUsd: baseContributionNumber,
       targetMarket,
     });
-    setCurrentStep(clampStep(2));
   };
 
   const formatDate = (timestamp?: string) => {
@@ -1595,31 +1593,6 @@ function AgentBlockersTab({
   const showGmxSetupForm = blockersInterruptView.kind === 'gmx-setup';
   const showFundingTokenForm = blockersInterruptView.kind === 'funding-token';
   const showDelegationSigningForm = blockersInterruptView.kind === 'delegation-signing';
-  const interruptStep = blockersInterruptView.interruptStep;
-  const onboardingFlowStep = useMemo(() => {
-    if (!onboardingFlow) return null;
-    const activeIndex =
-      onboardingFlow.activeStepId
-        ? onboardingFlow.steps.findIndex((step) => step.id === onboardingFlow.activeStepId)
-        : onboardingFlow.steps.findIndex((step) => step.status === 'active');
-    return activeIndex >= 0 ? activeIndex + 1 : null;
-  }, [onboardingFlow]);
-
-  // Agent-provided onboarding metadata is authoritative when present.
-  useEffect(() => {
-    if (onboardingFlowStep !== null) {
-      setCurrentStep(clampStep(onboardingFlowStep));
-      return;
-    }
-    const nextStep = onboarding?.step;
-    if (typeof nextStep === 'number' && Number.isFinite(nextStep) && nextStep > 0) {
-      setCurrentStep(clampStep(nextStep));
-      return;
-    }
-    if (interruptStep !== null) {
-      setCurrentStep(clampStep(interruptStep));
-    }
-  }, [clampStep, interruptStep, onboarding?.step, onboardingFlowStep]);
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
@@ -1658,7 +1631,6 @@ function AgentBlockersTab({
       return;
     }
 
-    setCurrentStep(clampStep(3));
     onInterruptSubmit?.({
       fundingTokenAddress: fundingTokenAddress as `0x${string}`,
     });
@@ -1666,7 +1638,6 @@ function AgentBlockersTab({
 
   const handleRejectDelegations = () => {
     setError(null);
-    setCurrentStep(maxSetupStep);
     onInterruptSubmit?.({ outcome: 'rejected' });
   };
 
@@ -1729,7 +1700,6 @@ function AgentBlockersTab({
       }
 
       const response: DelegationSigningResponse = { outcome: 'signed', signedDelegations };
-      setCurrentStep(maxSetupStep);
       onInterruptSubmit?.(response);
     } catch (signError: unknown) {
       const message =

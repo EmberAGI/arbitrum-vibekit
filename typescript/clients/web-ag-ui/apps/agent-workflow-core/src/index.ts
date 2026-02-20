@@ -35,5 +35,6 @@ export {
   type OnboardingStepStatus,
 } from './onboardingContract.js';
 export { mergeViewPatchForEmit } from './viewEmission.js';
+export { projectCycleCommandView, shouldPersistInputRequiredCheckpoint } from './viewInvariants.js';
 export { isLangGraphBusyStatus } from './langGraphBusyResponse.js';
 export { createMessageHistoryReducer, mergeMessageHistory } from './messageHistory.js';
