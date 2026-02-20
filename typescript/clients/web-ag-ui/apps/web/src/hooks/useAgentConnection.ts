@@ -341,7 +341,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             clientMutationId: null,
           });
         }
-        const projectedState = projectDetailStateFromPayload(state);
+        const previousState = hasStateValues(agent.state) ? (agent.state as AgentState) : null;
+        const projectedState = projectDetailStateFromPayload(state, previousState);
         if (projectedState) {
           agent.setState(projectedState);
           return;
@@ -654,76 +655,21 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         return;
       }
 
-      // Optimistically flip the UI into the hired/onboarding layout immediately after the user
-      // initiates the hire command. Otherwise we can briefly render the pre-hire layout until the
-      // first backend state update arrives.
-      const optimisticAgent = agentRef.current;
-      if (optimisticAgent) {
-        const currentState =
-          hasStateValues(optimisticAgent.state) ? (optimisticAgent.state as AgentState) : initialAgentState;
-        const view = currentState.view ?? defaultView;
-        optimisticAgent.setState({
-          ...currentState,
-          view: {
-            ...view,
-            command: 'hire',
-          },
-        });
-      }
-
       setIsHiring(true);
       setTimeout(() => setIsHiring(false), 5000);
     }
-  }, [hasStateValues, isHired, isHiring, runCommand]);
+  }, [isHired, isHiring, runCommand]);
 
   const runFire = useCallback(() => {
     if (isFiring) return;
 
     setUiError(null);
     setIsFiring(true);
-    // Optimistic UI update for symmetry with hire: switch the header pill immediately.
-    const optimisticAgent = agentRef.current;
-    const previousCommand = (() => {
-      if (!optimisticAgent) return undefined;
-      const currentState =
-        hasStateValues(optimisticAgent.state) ? (optimisticAgent.state as AgentState) : initialAgentState;
-      return (currentState.view ?? defaultView).command;
-    })();
-    if (optimisticAgent) {
-      const currentState =
-        hasStateValues(optimisticAgent.state) ? (optimisticAgent.state as AgentState) : initialAgentState;
-      const view = currentState.view ?? defaultView;
-      optimisticAgent.setState({
-        ...currentState,
-        view: {
-          ...view,
-          command: 'fire',
-        },
-      });
-    }
-
-    const revertOptimisticFireCommand = () => {
-      const current = agentRef.current;
-      if (!current) return;
-      const currentState =
-        hasStateValues(current.state) ? (current.state as AgentState) : initialAgentState;
-      const view = currentState.view ?? defaultView;
-      if (view.command === 'fire') {
-        current.setState({
-          ...currentState,
-          view: {
-            ...view,
-            command: previousCommand,
-          },
-        });
-      }
-    };
 
     const scheduler = commandSchedulerRef.current;
     if (!scheduler) {
       setUiError('Unable to submit fire command right now. Please retry.');
       setIsFiring(false);
-      revertOptimisticFireCommand();
       return;
     }
 
@@ -742,14 +688,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           onError: (message) => {
             setUiError(message);
             setIsFiring(false);
-            revertOptimisticFireCommand();
           },
         });
 
         if (!ok) {
           setUiError('Unable to submit fire command right now. Please retry.');
           setIsFiring(false);
-          revertOptimisticFireCommand();
         }
       },
     });
@@ -757,12 +701,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     if (!accepted) {
       setUiError('Unable to submit fire command while another command is active.');
       setIsFiring(false);
-      revertOptimisticFireCommand();
       return;
     }
 
     setTimeout(() => setIsFiring(false), 3000);
-  }, [copilotkit, hasStateValues, isFiring, threadId]);
+  }, [copilotkit, isFiring, threadId]);
 
   const clearUiError = useCallback(() => setUiError(null), []);
   const effectiveActiveInterrupt = selectActiveInterrupt({
