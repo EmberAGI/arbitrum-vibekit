@@ -497,6 +497,10 @@ export const applyViewPatch = (state: ClmmState, patch: Partial<ClmmViewState>):
   const mergedView = mergeViewPatchForEmit({
     currentView: state.view,
     patchView: patch,
+    mergeWithInvariants: (currentView, patchView) => {
+      const hydratedCurrentView = mergeViewState(defaultViewState(), currentView);
+      return mergeViewState(hydratedCurrentView, patchView);
+    },
   });
   state.view = mergedView;
   return mergedView;

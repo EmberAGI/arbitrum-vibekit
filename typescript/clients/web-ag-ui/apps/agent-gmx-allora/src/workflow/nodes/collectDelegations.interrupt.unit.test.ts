@@ -35,7 +35,59 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
     process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = previousAgentWallet;
   });
 
-  it('emits input-required state and interrupts in the same run when runnable config exists', async () => {
+  it('persists input-required checkpoint and re-enters before interrupt when runnable config exists', async () => {
+    interruptMock.mockReset();
+    copilotkitEmitStateMock.mockReset();
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+    process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = '0x2222222222222222222222222222222222222222';
+
+    const state = {
+      private: { mode: 'debug' },
+      view: {
+        delegationsBypassActive: false,
+        delegationBundle: undefined,
+        onboarding: { step: 2, key: 'funding-token' },
+        onboardingFlow: {
+          status: 'in_progress',
+          revision: 3,
+          activeStepId: 'funding-token',
+          steps: [
+            { id: 'setup', title: 'Strategy Config', status: 'completed' },
+            { id: 'funding-token', title: 'Funding Token', status: 'active' },
+            { id: 'delegation-signing', title: 'Delegation Signing', status: 'pending' },
+          ],
+        },
+        operatorInput: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          usdcAllocation: 100,
+          targetMarket: 'ETH',
+        },
+        task: { id: 'task-1', taskStatus: { state: 'submitted' } },
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectDelegationsNode(state, { configurable: { thread_id: 'thread-1' } });
+
+    expect(interruptMock).not.toHaveBeenCalled();
+    expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
+    const commandResult = result as {
+      goto?: string[];
+      update?: {
+        view?: {
+          task?: { taskStatus?: { state?: string } };
+          onboarding?: { step?: number; key?: string };
+          onboardingFlow?: { activeStepId?: string };
+        };
+      };
+    };
+    expect(commandResult.goto).toContain('collectDelegations');
+    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
+    expect(commandResult.update?.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(commandResult.update?.view?.onboardingFlow?.activeStepId).toBe('delegation-signing');
+  });
+
+  it('does not emit another pending checkpoint when delegation step is already persisted', async () => {
     interruptMock.mockReset();
     copilotkitEmitStateMock.mockReset();
     copilotkitEmitStateMock.mockResolvedValue(undefined);
@@ -43,7 +95,8 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
       if (!request || typeof request !== 'object' || !('delegationsToSign' in request)) {
         throw new Error('Unexpected interrupt payload');
       }
-      const delegationsToSign = (request as { delegationsToSign: Array<Record<string, unknown>> }).delegationsToSign;
+      const delegationsToSign = (request as { delegationsToSign: Array<Record<string, unknown>> })
+        .delegationsToSign;
       const first = delegationsToSign[0];
       if (!first || typeof first !== 'object') {
         throw new Error('No delegation requested');
@@ -62,13 +115,31 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
       view: {
         delegationsBypassActive: false,
         delegationBundle: undefined,
-        onboarding: { step: 2, key: 'funding-token' },
+        onboarding: { step: 3, key: 'delegation-signing' },
+        onboardingFlow: {
+          status: 'in_progress',
+          revision: 4,
+          activeStepId: 'delegation-signing',
+          steps: [
+            { id: 'setup', title: 'Strategy Config', status: 'completed' },
+            { id: 'funding-token', title: 'Funding Token', status: 'completed' },
+            { id: 'delegation-signing', title: 'Delegation Signing', status: 'active' },
+          ],
+        },
         operatorInput: {
           walletAddress: '0x1111111111111111111111111111111111111111',
           usdcAllocation: 100,
           targetMarket: 'ETH',
         },
-        task: { id: 'task-1', taskStatus: { state: 'submitted' } },
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              content: 'Waiting for delegation approval to continue onboarding.',
+            },
+          },
+        },
         activity: { telemetry: [], events: [] },
       },
     } as unknown as ClmmState;
@@ -76,7 +147,7 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
     const result = await collectDelegationsNode(state, { configurable: { thread_id: 'thread-1' } });
 
     expect(interruptMock).toHaveBeenCalledTimes(1);
-    expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(2);
+    expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
     expect('view' in result).toBe(true);
     const view = (result as {
       view: {
@@ -89,4 +160,5 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
     expect(view.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
     expect(view.delegationBundle).toBeTruthy();
   });
+
 });

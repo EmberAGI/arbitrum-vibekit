@@ -26,7 +26,11 @@ const mergeNestedValue = (currentValue: unknown, patchValue: unknown): unknown =
 export const mergeViewPatchForEmit = <TView extends ViewRecord>(params: {
   currentView: TView;
   patchView: Partial<TView>;
+  mergeWithInvariants?: (currentView: TView, patchView: Partial<TView>) => TView;
 }): TView => {
+  if (params.mergeWithInvariants) {
+    return params.mergeWithInvariants(params.currentView, params.patchView);
+  }
   const merged = mergeNestedValue(params.currentView, params.patchView);
   return merged as TView;
 };

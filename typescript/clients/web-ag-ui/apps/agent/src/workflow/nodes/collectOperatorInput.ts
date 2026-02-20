@@ -1,5 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
+import { shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
 import { z } from 'zod';
 
 import { OperatorConfigInputSchema } from '../../domain/types.js';
@@ -68,10 +69,13 @@ export const collectOperatorInputNode = async (
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: [] },
   };
-  const currentTaskState = state.view.task?.taskStatus?.state;
-  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
-  const shouldPersistPendingState =
-    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
+    currentTaskState: state.view.task?.taskStatus?.state,
+    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+    currentOnboardingKey: state.view.onboarding?.key,
+    nextOnboardingKey: pendingView.onboarding.key,
+    nextTaskMessage: awaitingMessage,
+  });
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
   if (hasRunnableConfig && shouldPersistPendingState) {
     const mergedView = applyViewPatch(state, pendingView);

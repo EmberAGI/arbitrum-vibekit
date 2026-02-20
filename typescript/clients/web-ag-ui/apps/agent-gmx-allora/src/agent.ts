@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
-import { isLangGraphBusyStatus } from 'agent-workflow-core';
+import { isLangGraphBusyStatus, projectCycleCommandView } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
@@ -187,7 +187,7 @@ async function updateCycleState(
     });
   }
 
-  const view = existingView ? { ...existingView, command: 'cycle' } : { command: 'cycle' };
+  const view = projectCycleCommandView(existingView);
   const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

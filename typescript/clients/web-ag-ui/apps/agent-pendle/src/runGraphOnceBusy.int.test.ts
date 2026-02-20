@@ -130,4 +130,74 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
     expect(runCreateCalls).toHaveLength(1);
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
+
+  it('normalizes stale onboarding input-required task state when projecting cycle command to thread state', async () => {
+    const fetchMock = vi.fn((input: string | URL | Request, init?: unknown) => {
+      const url = getUrl(input);
+      const method = getMethod(init);
+
+      if (url.endsWith('/threads') && method === 'POST') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1') && method === 'PATCH') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
+        return jsonResponse({
+          values: {
+            view: {
+              command: 'hire',
+              operatorInput: {},
+              fundingTokenInput: {},
+              delegationsBypassActive: true,
+              operatorConfig: {},
+              setupComplete: true,
+              onboardingFlow: {
+                status: 'completed',
+                revision: 5,
+                steps: [
+                  { id: 'funding-token', title: 'Funding Token', status: 'completed' },
+                  { id: 'delegation-signing', title: 'Delegation Signing', status: 'completed' },
+                ],
+              },
+              task: {
+                id: 'task-1',
+                taskStatus: {
+                  state: 'input-required',
+                  message: { content: 'Waiting for delegation approval to continue onboarding.' },
+                },
+              },
+            },
+          },
+        });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
+        if (!init || typeof init !== 'object' || !('body' in init)) {
+          throw new Error('Missing request body');
+        }
+        const bodyText = (init as { body?: unknown }).body;
+        if (typeof bodyText !== 'string') {
+          throw new Error('Expected string request body');
+        }
+        const body = JSON.parse(bodyText) as {
+          values?: { view?: { task?: { taskStatus?: { state?: string } } } };
+        };
+        expect(body.values?.view?.task?.taskStatus?.state).toBe('working');
+        return jsonResponse({ checkpoint_id: 'cp-1' });
+      }
+      if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {
+        return new Response('busy', { status: 422 });
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    vi.resetModules();
+    const { runGraphOnce } = await import('./agent.js');
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(runGraphOnce('thread-1')).resolves.toBeUndefined();
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
 });

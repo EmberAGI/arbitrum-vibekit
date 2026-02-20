@@ -57,4 +57,44 @@ describe('collectOperatorInputNode', () => {
     expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
     expect(commandResult.update?.view?.onboarding).toEqual({ step: 1, key: 'setup' });
   });
+
+  it('persists pending checkpoint when onboarding key changes despite unchanged input-required task message', async () => {
+    interruptMock.mockReset();
+    copilotkitEmitStateMock.mockReset();
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      view: {
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              content: 'Awaiting operator configuration to continue CLMM setup.',
+            },
+          },
+        },
+        onboarding: { step: 2, key: 'funding-token' },
+        activity: { telemetry: [], events: [] },
+        poolArtifact: { artifactId: 'camelot-pools', kind: 'table', title: 'Pools', items: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectOperatorInputNode(state, { configurable: { thread_id: 'thread-1' } });
+
+    expect(interruptMock).not.toHaveBeenCalled();
+    expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
+    const commandResult = result as unknown as {
+      goto?: string[];
+      update?: {
+        view?: {
+          onboarding?: { step?: number; key?: string };
+          task?: { taskStatus?: { state?: string } };
+        };
+      };
+    };
+    expect(commandResult.goto).toContain('collectOperatorInput');
+    expect(commandResult.update?.view?.onboarding).toEqual({ step: 1, key: 'setup' });
+    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
+  });
 });

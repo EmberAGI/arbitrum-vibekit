@@ -1,5 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
+import { shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
 import { decodeFunctionData, encodeFunctionData, erc20Abi, parseUnits } from 'viem';
 import { z } from 'zod';
 
@@ -654,10 +655,13 @@ export const collectDelegationsNode = async (
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
   };
-  const currentTaskState = state.view.task?.taskStatus?.state;
-  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
-  const shouldPersistPendingState =
-    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
+    currentTaskState: state.view.task?.taskStatus?.state,
+    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+    currentOnboardingKey: state.view.onboarding?.key,
+    nextOnboardingKey: pendingView.onboarding.key,
+    nextTaskMessage: awaitingMessage,
+  });
   if (shouldPersistPendingState) {
     const mergedView = applyViewPatch(state, pendingView);
     await copilotkitEmitState(config, {
