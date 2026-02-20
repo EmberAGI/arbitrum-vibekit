@@ -44,12 +44,17 @@ function cloneInitialState(): AgentState {
   };
 }
 
-export function projectDetailStateFromPayload(payload: unknown): AgentState | null {
-  if (!isRecord(payload)) return null;
-  if (Object.keys(payload).length === 0) return null;
-
-  const incoming = payload as Partial<AgentState>;
-  const projected = cloneInitialState();
+function mergeStatePayload(projected: AgentState, incoming: Partial<AgentState>): AgentState {
+  const incomingView = isRecord(incoming.view) ? (incoming.view as Partial<AgentView>) : {};
+  const incomingProfile = isRecord(incomingView.profile)
+    ? incomingView.profile
+    : ({} as Partial<AgentView['profile']>);
+  const incomingActivity = isRecord(incomingView.activity)
+    ? incomingView.activity
+    : ({} as Partial<AgentView['activity']>);
+  const incomingMetrics = isRecord(incomingView.metrics)
+    ? incomingView.metrics
+    : ({} as Partial<AgentView['metrics']>);
 
   projected.messages = Array.isArray(incoming.messages) ? incoming.messages : projected.messages;
 
@@ -66,17 +71,6 @@ export function projectDetailStateFromPayload(payload: unknown): AgentState | nu
       ...incoming.settings,
     };
   }
-
-  const incomingView = isRecord(incoming.view) ? (incoming.view as Partial<AgentView>) : {};
-  const incomingProfile = isRecord(incomingView.profile)
-    ? incomingView.profile
-    : ({} as Partial<AgentView['profile']>);
-  const incomingActivity = isRecord(incomingView.activity)
-    ? incomingView.activity
-    : ({} as Partial<AgentView['activity']>);
-  const incomingMetrics = isRecord(incomingView.metrics)
-    ? incomingView.metrics
-    : ({} as Partial<AgentView['metrics']>);
 
   projected.view = {
     ...projected.view,
@@ -119,6 +113,23 @@ export function projectDetailStateFromPayload(payload: unknown): AgentState | nu
       : projected.view.transactionHistory,
   };
 
+  return projected;
+}
+
+export function projectDetailStateFromPayload(
+  payload: unknown,
+  previousState?: AgentState | null,
+): AgentState | null {
+  if (!isRecord(payload)) return null;
+  if (Object.keys(payload).length === 0) return null;
+
+  const projected = cloneInitialState();
+
+  if (previousState && isRecord(previousState) && Object.keys(previousState).length > 0) {
+    mergeStatePayload(projected, previousState as Partial<AgentState>);
+  }
+
+  mergeStatePayload(projected, payload as Partial<AgentState>);
   return projected;
 }
 

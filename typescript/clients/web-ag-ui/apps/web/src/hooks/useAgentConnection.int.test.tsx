@@ -445,6 +445,56 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.uiError).toContain("busy while processing 'hire'");
   });
 
+  it('does not optimistically mutate runtime state when dispatching hire', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    mocks.agent.setState.mockClear();
+    latestValue?.runHire();
+    await flushEffects();
+
+    expect(mocks.agent.addMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'user',
+        content: JSON.stringify({ command: 'hire' }),
+      }),
+    );
+    expect(mocks.agent.setState).not.toHaveBeenCalled();
+  });
+
+  it('does not optimistically mutate runtime state when dispatching fire', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    mocks.agent.setState.mockClear();
+    latestValue?.runFire();
+    await flushEffects();
+    await flushEffects();
+    expect(mocks.agent.setState).not.toHaveBeenCalled();
+  });
+
   it('preempts active run ownership via stopAgent before dispatching fire', async () => {
     let subscriber: AgentSubscriber | undefined;
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
