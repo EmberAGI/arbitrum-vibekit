@@ -29,6 +29,7 @@ const token = (symbol: string) => ({
 
 describe('onchain actions schemas', () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -177,6 +178,36 @@ describe('onchain actions schemas', () => {
     expect(balances).toHaveLength(2);
     expect(balances[0]?.symbol).toBe('USDai');
     expect(balances[1]?.symbol).toBe('USDC');
+  });
+
+  it('reuses cached GET responses for repeated token listing requests', async () => {
+    let now = 1_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+    const fetchMock = vi.fn(() =>
+      new Response(
+        JSON.stringify({
+          tokens: [token('USDC')],
+          cursor: null,
+          currentPage: 1,
+          totalPages: 1,
+          totalItems: 1,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new OnchainActionsClient('https://api.example.test');
+
+    await client.listTokens({ chainIds: ['42161'] });
+    await client.listTokens({ chainIds: ['42161'] });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    now += 31_000;
+    await client.listTokens({ chainIds: ['42161'] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('throws a request error when the API responds with failure', async () => {

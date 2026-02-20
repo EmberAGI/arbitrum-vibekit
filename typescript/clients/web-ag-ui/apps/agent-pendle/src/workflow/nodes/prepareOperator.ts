@@ -1,7 +1,8 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
-import { parseUnits } from 'viem';
+import { formatUnits, parseUnits } from 'viem';
 
+import type { TokenizedYieldMarket, WalletBalance } from '../../clients/onchainActions.js';
 import {
   resolvePendleChainIds,
   resolvePendleSmokeMode,
@@ -51,6 +52,33 @@ const resolveFundingAmount = (amountUsd: number, decimals: number): string => {
     throw new Error(`Resolved funding amount is too small: ${amountUsd}`);
   }
   return baseUnits.toString();
+};
+
+const formatBaseUnitsForDisplay = (amountBaseUnits: bigint, decimals: number): string => {
+  const formatted = formatUnits(amountBaseUnits, decimals);
+  const normalized = formatted.replace(/(?:\.0+|(\.\d+?)0+)$/u, '$1');
+  return normalized.length > 0 ? normalized : '0';
+};
+
+const isMarketMatured = (expiry: string): boolean => {
+  const parsed = Date.parse(expiry);
+  if (Number.isNaN(parsed)) {
+    return false;
+  }
+  return parsed <= Date.now();
+};
+
+const parseUsdAmount = (balance: WalletBalance, fallbackDecimals: number): number => {
+  if (typeof balance.valueUsd === 'number' && Number.isFinite(balance.valueUsd)) {
+    return Math.max(0, balance.valueUsd);
+  }
+  const decimals = balance.decimals ?? fallbackDecimals;
+  try {
+    const tokenAmount = Number(formatUnits(BigInt(balance.amount), decimals));
+    return Number.isFinite(tokenAmount) && tokenAmount > 0 ? tokenAmount : 0;
+  } catch {
+    return 0;
+  }
 };
 
 const SMOKE_SETUP_TX_HASH = `0x${'0'.repeat(64)}` as const;
@@ -157,12 +185,18 @@ export const prepareOperatorNode = async (
         walletAddress: operatorWalletAddress,
         chainIds,
       });
-      const positionMarketAddress = positions[0]?.marketIdentifier.address;
+      const preferredPosition =
+        positions.find((position) => {
+          const matchedMarket = markets.find(
+            (market) =>
+              market.marketIdentifier.address.toLowerCase() ===
+              position.marketIdentifier.address.toLowerCase(),
+          );
+          return Boolean(matchedMarket && !isMarketMatured(matchedMarket.expiry));
+        }) ?? positions[0];
+      const positionMarketAddress = preferredPosition?.marketIdentifier.address;
       if (positionMarketAddress) {
-        existingPosition = positions.find(
-          (position) =>
-            position.marketIdentifier.address.toLowerCase() === positionMarketAddress.toLowerCase(),
-        );
+        existingPosition = preferredPosition;
         const matchedMarket = markets.find(
           (market) => market.marketIdentifier.address.toLowerCase() === positionMarketAddress.toLowerCase(),
         );
@@ -225,17 +259,21 @@ export const prepareOperatorNode = async (
     });
   }
 
+  const existingMarket = existingMarketAddress
+    ? tokenizedMarkets.find(
+        (market) =>
+          market.marketIdentifier.address.toLowerCase() === existingMarketAddress.toLowerCase(),
+      )
+    : undefined;
+  const shouldPreferExistingMarket = Boolean(existingMarket && !isMarketMatured(existingMarket.expiry));
   const selectedYieldToken =
     state.view.selectedPool ??
-    (existingMarketAddress
+    (shouldPreferExistingMarket && existingMarketAddress
       ? eligibleYieldTokens.find(
           (token) => token.marketAddress.toLowerCase() === existingMarketAddress.toLowerCase(),
         ) ??
         (() => {
-          const matched = tokenizedMarkets.find(
-            (market) =>
-              market.marketIdentifier.address.toLowerCase() === existingMarketAddress?.toLowerCase(),
-          );
+          const matched = existingMarket;
           return matched ? toYieldToken(matched) : undefined;
         })()
       : undefined) ??
@@ -387,45 +425,160 @@ export const prepareOperatorNode = async (
         });
       }
 
+      let walletBalances: WalletBalance[] | undefined;
       try {
-        const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
-        const execution = await executeInitialDeposit({
-          onchainActionsClient,
-          clients,
-          txExecutionMode,
-          delegationBundle: delegationsBypassActive ? undefined : state.view.delegationBundle,
-          walletAddress: operatorConfig.executionWalletAddress,
-          fundingToken,
-          targetMarket,
-          fundingAmount,
-        });
-        setupTxHash = execution.lastTxHash;
-        setupComplete = true;
+        walletBalances = await onchainActionsClient.listWalletBalances(operatorWalletAddress);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        const failureMessage = `ERROR: Pendle initial deposit failed: ${message}`;
-        const { task, statusEvent: errorEvent } = buildTaskStatus(
-          state.view.task,
-          'failed',
-          failureMessage,
-        );
-        await copilotkitEmitState(config, {
-          view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
+        logInfo('Unable to load wallet balances before initial deposit planning; proceeding without PT-liquidity adjustment', {
+          error: message,
         });
-        return new Command({
-          update: {
-            view: {
-              haltReason: failureMessage,
-              executionError: failureMessage,
-              activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
-              task,
-              profile: state.view.profile,
-              transactionHistory: state.view.transactionHistory,
-              metrics: state.view.metrics,
+      }
+
+      const expiredMarketsByPtAddress = new Map<string, TokenizedYieldMarket>();
+      for (const market of tokenizedMarkets) {
+        if (isMarketMatured(market.expiry)) {
+          expiredMarketsByPtAddress.set(market.ptToken.tokenUid.address.toLowerCase(), market);
+        }
+      }
+
+      let expiredPtLiquidityUsd = 0;
+      if (walletBalances) {
+        for (const balance of walletBalances) {
+          const matchedExpiredMarket = expiredMarketsByPtAddress.get(balance.tokenUid.address.toLowerCase());
+          if (!matchedExpiredMarket) {
+            continue;
+          }
+          expiredPtLiquidityUsd += parseUsdAmount(balance, matchedExpiredMarket.ptToken.decimals);
+        }
+      }
+
+      const adjustedFundingUsd = Math.max(0, operatorConfig.baseContributionUsd - expiredPtLiquidityUsd);
+      if (adjustedFundingUsd <= 0) {
+        logInfo('Expired PT liquidity satisfies onboarding target; skipping initial deposit top-up', {
+          targetUsd: operatorConfig.baseContributionUsd,
+          expiredPtLiquidityUsd: Number(expiredPtLiquidityUsd.toFixed(6)),
+        });
+        setupComplete = true;
+      } else {
+        try {
+          fundingAmount = resolveFundingAmount(adjustedFundingUsd, fundingToken.decimals);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          const failureMessage = `ERROR: Unable to resolve funding top-up amount: ${message}`;
+          const { task, statusEvent: errorEvent } = buildTaskStatus(
+            state.view.task,
+            'failed',
+            failureMessage,
+          );
+          await copilotkitEmitState(config, {
+            view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
+          });
+          return new Command({
+            update: {
+              view: {
+                haltReason: failureMessage,
+                executionError: failureMessage,
+                activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
+                task,
+                profile: state.view.profile,
+                transactionHistory: state.view.transactionHistory,
+                metrics: state.view.metrics,
+              },
             },
-          },
-          goto: 'summarize',
-        });
+            goto: 'summarize',
+          });
+        }
+      }
+
+      if (!setupComplete && txExecutionMode === 'execute') {
+        try {
+          const fetchedWalletBalances =
+            walletBalances ?? (await onchainActionsClient.listWalletBalances(operatorWalletAddress));
+          const selectedFundingTokenBalance = fetchedWalletBalances.find(
+            (balance) =>
+              balance.tokenUid.address.toLowerCase() ===
+              operatorConfig.fundingTokenAddress.toLowerCase(),
+          );
+          const requiredBaseUnits = BigInt(fundingAmount);
+          const availableBaseUnits = selectedFundingTokenBalance ? BigInt(selectedFundingTokenBalance.amount) : 0n;
+          if (availableBaseUnits < requiredBaseUnits) {
+            const requiredDisplay = formatBaseUnitsForDisplay(requiredBaseUnits, fundingToken.decimals);
+            const availableDisplay = formatBaseUnitsForDisplay(availableBaseUnits, fundingToken.decimals);
+            const failureMessage = `ERROR: Insufficient ${fundingToken.symbol} balance for initial deposit (required=${requiredDisplay}, available=${availableDisplay}).`;
+            const { task, statusEvent: errorEvent } = buildTaskStatus(
+              state.view.task,
+              'failed',
+              failureMessage,
+            );
+            await copilotkitEmitState(config, {
+              view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
+            });
+            return new Command({
+              update: {
+                view: {
+                  haltReason: failureMessage,
+                  executionError: failureMessage,
+                  activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
+                  task,
+                  profile: state.view.profile,
+                  transactionHistory: state.view.transactionHistory,
+                  metrics: state.view.metrics,
+                },
+              },
+              goto: 'summarize',
+            });
+          }
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          logInfo('Unable to validate funding token balance before initial deposit; proceeding to execution', {
+            token: fundingToken.symbol,
+            error: message,
+          });
+        }
+      }
+
+      if (!setupComplete) {
+        try {
+          const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
+          const execution = await executeInitialDeposit({
+            onchainActionsClient,
+            clients,
+            txExecutionMode,
+            delegationBundle: delegationsBypassActive ? undefined : state.view.delegationBundle,
+            walletAddress: operatorConfig.executionWalletAddress,
+            fundingToken,
+            targetMarket,
+            fundingAmount,
+          });
+          setupTxHash = execution.lastTxHash;
+          setupComplete = true;
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          const failureMessage = `ERROR: Pendle initial deposit failed: ${message}`;
+          const { task, statusEvent: errorEvent } = buildTaskStatus(
+            state.view.task,
+            'failed',
+            failureMessage,
+          );
+          await copilotkitEmitState(config, {
+            view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
+          });
+          return new Command({
+            update: {
+              view: {
+                haltReason: failureMessage,
+                executionError: failureMessage,
+                activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
+                task,
+                profile: state.view.profile,
+                transactionHistory: state.view.transactionHistory,
+                metrics: state.view.metrics,
+              },
+            },
+            goto: 'summarize',
+          });
+        }
       }
     }
   }

@@ -1,15 +1,14 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
 import { createDelegation, getDeleGatorEnvironment } from '@metamask/delegation-toolkit';
-import { parseUnits } from 'viem';
 import { z } from 'zod';
 
+import type { Token, TokenizedYieldMarket } from '../../clients/onchainActions.js';
 import {
   ARBITRUM_CHAIN_ID,
   resolvePendleChainIds,
   resolveStablecoinWhitelist,
 } from '../../config/constants.js';
-import { buildEligibleYieldTokens } from '../../core/pendleMarkets.js';
 import { getAgentWalletAddress, getOnchainActionsClient } from '../clientFactory.js';
 import {
   buildTaskStatus,
@@ -39,6 +38,16 @@ const resolveDelegationOnboarding = (state: ClmmState): OnboardingState => {
 };
 
 const ERC20_APPROVE_SELECTOR = '0x095ea7b3' as const;
+const PENDLE_ROUTER_TARGET_BY_CHAIN: Record<number, `0x${string}`> = {
+  [ARBITRUM_CHAIN_ID]: '0x888888888889758f76e7103c6cbf23abbf58f946',
+};
+
+const PENDLE_FULL_LIFECYCLE_SELECTORS = {
+  buyPt: '0xc81f847a',
+  sellPt: '0x594a88cc',
+  redeemPt: '0x47f1de22',
+  claimRewards: '0x0741a803',
+} as const;
 
 const HexSchema = z
   .string()
@@ -96,6 +105,77 @@ const DelegationSigningResponseJsonSchema = z.union([
     outcome: z.literal('rejected'),
   }),
 ]);
+
+type FunctionIntent = {
+  target: `0x${string}`;
+  selector: `0x${string}`;
+};
+
+const intentKey = (intent: FunctionIntent): string =>
+  `${intent.target.toLowerCase()}:${intent.selector.toLowerCase()}`;
+
+const resolvePendleRouterTarget = (chainId: number): `0x${string}` => {
+  const target = PENDLE_ROUTER_TARGET_BY_CHAIN[chainId];
+  if (!target) {
+    throw new Error(`No Pendle router target configured for chain ${chainId}`);
+  }
+  return target;
+};
+
+const appendUniqueIntent = (unique: Map<string, FunctionIntent>, intent: FunctionIntent): void => {
+  unique.set(intentKey(intent), intent);
+};
+
+const buildFullLifecycleDelegationIntents = (params: {
+  markets: readonly TokenizedYieldMarket[];
+  tokens: readonly Token[];
+  fundingTokenAddress: `0x${string}`;
+}): DelegationIntentSummary[] => {
+  const unique = new Map<string, FunctionIntent>();
+  const routerTarget = resolvePendleRouterTarget(ARBITRUM_CHAIN_ID);
+
+  for (const selector of Object.values(PENDLE_FULL_LIFECYCLE_SELECTORS)) {
+    appendUniqueIntent(unique, { target: routerTarget, selector });
+  }
+
+  const stablecoinSymbols = new Set(resolveStablecoinWhitelist().map((symbol) => symbol.toLowerCase()));
+  const stablecoinTargets = params.tokens
+    .filter((token) => stablecoinSymbols.has(token.symbol.toLowerCase()))
+    .map((token) => normalizeHexAddress(token.tokenUid.address, 'stablecoin token address'));
+  for (const target of stablecoinTargets) {
+    appendUniqueIntent(unique, { target, selector: ERC20_APPROVE_SELECTOR });
+  }
+
+  appendUniqueIntent(unique, {
+    target: params.fundingTokenAddress,
+    selector: ERC20_APPROVE_SELECTOR,
+  });
+
+  for (const market of params.markets) {
+    const ptTokenAddress = normalizeHexAddress(market.ptToken.tokenUid.address, 'pt token address');
+    appendUniqueIntent(unique, { target: ptTokenAddress, selector: ERC20_APPROVE_SELECTOR });
+  }
+
+  const routerSelectorSet = new Set(
+    [...unique.values()]
+      .filter((intent) => intent.target.toLowerCase() === routerTarget.toLowerCase())
+      .map((intent) => intent.selector.toLowerCase()),
+  );
+  const missingCapabilities = Object.entries(PENDLE_FULL_LIFECYCLE_SELECTORS).flatMap(([capability, selector]) =>
+    routerSelectorSet.has(selector.toLowerCase()) ? [] : [capability],
+  );
+  if (missingCapabilities.length > 0) {
+    throw new Error(
+      `Missing required delegation capabilities: ${missingCapabilities.join(', ')}`,
+    );
+  }
+
+  return [...unique.values()].map((intent) => ({
+    target: intent.target,
+    selector: intent.selector,
+    allowedCalldata: [],
+  }));
+};
 
 export const collectDelegationsNode = async (
   state: ClmmState,
@@ -201,102 +281,19 @@ export const collectDelegationsNode = async (
       onchainActionsClient.listTokenizedYieldMarkets({ chainIds }),
       onchainActionsClient.listTokens({ chainIds }),
     ]);
-
-    const eligible = buildEligibleYieldTokens({
-      markets,
-      supportedTokens: tokens,
-      whitelistSymbols: resolveStablecoinWhitelist(),
-    });
-    const selectedMarketAddress =
-      eligible[0]?.marketAddress ??
-      markets[0]?.marketIdentifier.address;
-    const selectedMarket = selectedMarketAddress
-      ? markets.find((market) => market.marketIdentifier.address.toLowerCase() === selectedMarketAddress.toLowerCase()) ??
-        markets[0]
-      : markets[0];
-    if (!selectedMarket) {
+    if (markets.length === 0) {
       throw new Error('No tokenized yield markets available for delegation planning');
     }
 
-    const stablecoinSymbols = new Set(resolveStablecoinWhitelist().map((symbol) => symbol.toLowerCase()));
-    const stablecoinTargets = tokens
-      .filter((token) => stablecoinSymbols.has(token.symbol.toLowerCase()))
-      .map((token) => normalizeHexAddress(token.tokenUid.address, 'stablecoin token address'));
-
-    const sampleWallet = delegatorAddress;
-    const chainId = selectedMarket.marketIdentifier.chainId;
-    // Use a realistic, non-dust amount; Pendle routing rejects tiny swaps/quotes.
-    const baseContributionUsd =
-      typeof operatorInput.baseContributionUsd === 'number' && Number.isFinite(operatorInput.baseContributionUsd)
-        ? operatorInput.baseContributionUsd
-        : 10;
-
-    // Collect a representative set of transaction targets+selectors that the agent will use,
-    // but generate *one* delegation signature that covers all of them.
     const fundingTokenAddress = normalizeHexAddress(
       fundingTokenInput.fundingTokenAddress,
       'funding token address',
     );
-    const fundingToken = tokens.find(
-      (token) => token.tokenUid.address.toLowerCase() === fundingTokenAddress.toLowerCase(),
-    );
-    const sampleAmount = parseUnits(baseContributionUsd.toString(), fundingToken?.decimals ?? 18).toString();
-    const onePtBaseUnits = parseUnits('1', selectedMarket.ptToken.decimals).toString();
-
-    const plans = await Promise.all([
-      onchainActionsClient.createTokenizedYieldBuyPt({
-        walletAddress: sampleWallet,
-        marketAddress: selectedMarket.marketIdentifier.address,
-        inputTokenUid: { chainId, address: fundingTokenAddress },
-        amount: sampleAmount,
-        slippage: '0.01',
-      }),
-      onchainActionsClient.createTokenizedYieldSellPt({
-        walletAddress: sampleWallet,
-        ptTokenUid: selectedMarket.ptToken.tokenUid,
-        amount: onePtBaseUnits,
-        slippage: '0.01',
-      }),
-      onchainActionsClient.createTokenizedYieldRedeemPt({
-        walletAddress: sampleWallet,
-        ptTokenUid: selectedMarket.ptToken.tokenUid,
-        amount: onePtBaseUnits,
-      }),
-      onchainActionsClient.createTokenizedYieldClaimRewards({
-        walletAddress: sampleWallet,
-        ytTokenUid: selectedMarket.ytToken.tokenUid,
-      }),
-    ]);
-
-    const plannedTransactions = plans.flatMap((plan) => plan.transactions);
-    const plannedIntents = plannedTransactions
-      .map((tx) => ({
-        target: normalizeHexAddress(tx.to, 'planned transaction target'),
-        selector: tx.data.slice(0, 10).toLowerCase() as `0x${string}`,
-      }))
-      // Keep approvals: unwinds/rebalances frequently require approving PT (and other) tokens,
-      // and filtering these out causes delegated execution to fail at runtime.
-
-    const intentKey = (intent: { target: `0x${string}`; selector: `0x${string}` }) =>
-      `${intent.target.toLowerCase()}:${intent.selector.toLowerCase()}`;
-    const unique = new Map<string, { target: `0x${string}`; selector: `0x${string}` }>();
-    for (const intent of plannedIntents) {
-      unique.set(intentKey(intent), intent);
-    }
-
-    // Stablecoin approvals (covers funding token changes and rebalancing flows without re-signing).
-    for (const tokenAddress of stablecoinTargets) {
-      unique.set(intentKey({ target: tokenAddress, selector: ERC20_APPROVE_SELECTOR }), {
-        target: tokenAddress,
-        selector: ERC20_APPROVE_SELECTOR,
-      });
-    }
-
-    delegationIntents = [...unique.values()].map((intent) => ({
-      target: intent.target,
-      selector: intent.selector,
-      allowedCalldata: [],
-    }));
+    delegationIntents = buildFullLifecycleDelegationIntents({
+      markets,
+      tokens,
+      fundingTokenAddress,
+    });
 
     if (delegationIntents.length === 0) {
       throw new Error('No delegation intents generated for Pendle');
