@@ -320,6 +320,43 @@ export const collectFundingTokenInputNode = async (
     return a.symbol.localeCompare(b.symbol);
   });
 
+  const poolTokenAddresses = new Set([
+    selectedPool.token0.address.toLowerCase(),
+    selectedPool.token1.address.toLowerCase(),
+  ]);
+  const autoSelectedFundingToken = availableOptions.find((option) =>
+    poolTokenAddresses.has(option.address.toLowerCase()),
+  );
+  if (autoSelectedFundingToken) {
+    const { task, statusEvent } = buildTaskStatus(
+      state.view.task,
+      'working',
+      `Auto-selected ${autoSelectedFundingToken.symbol} as the funding token based on current pool-token holdings.`,
+    );
+    const autoSelectedView = applyViewPatch(state, {
+      selectedPool,
+      fundingTokenInput: { fundingTokenAddress: autoSelectedFundingToken.address },
+      onboarding:
+        delegationsBypassActive === true
+          ? { step: 2, key: FUNDING_STEP_KEY }
+          : { step: 3, key: DELEGATION_STEP_KEY },
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
+    logInfo('collectFundingTokenInput: auto-selected funding token from pool token holdings', {
+      fundingTokenAddress: autoSelectedFundingToken.address,
+      fundingTokenSymbol: autoSelectedFundingToken.symbol,
+      optionCount: availableOptions.length,
+      onboardingStep: autoSelectedView.onboarding?.step,
+    });
+    await copilotkitEmitState(config, {
+      view: autoSelectedView,
+    });
+    return {
+      view: autoSelectedView,
+    };
+  }
+
   if (availableOptions.length === 0) {
     const walletLabel = delegationsBypassActive ? 'agent wallet' : 'wallet';
     const failureMessage = `No funding tokens available in the ${walletLabel} on Arbitrum. Fund the ${walletLabel} with tokens to continue.`;

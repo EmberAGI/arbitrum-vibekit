@@ -11,14 +11,18 @@ export type OnboardingNodeTarget =
   | 'syncState';
 
 export function resolveNextOnboardingNode(state: ClmmState): OnboardingNodeTarget {
+  const hasOperatorConfig = Boolean(state.view.operatorConfig);
+  const hasFundingTokenRequirementSatisfied =
+    Boolean(state.view.fundingTokenInput) || hasOperatorConfig;
+
   const phase = resolveOnboardingPhase({
     requiresPoolCatalog: true,
     hasPoolCatalog: Boolean(state.view.poolArtifact),
     hasSetupInput: Boolean(state.view.operatorInput),
-    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
+    hasFundingTokenInput: hasFundingTokenRequirementSatisfied,
     requiresDelegationSigning: state.view.delegationsBypassActive !== true,
     hasDelegationBundle: Boolean(state.view.delegationBundle),
-    hasOperatorConfig: Boolean(state.view.operatorConfig),
+    hasOperatorConfig,
   });
 
   return mapOnboardingPhaseToTarget<OnboardingNodeTarget>({
