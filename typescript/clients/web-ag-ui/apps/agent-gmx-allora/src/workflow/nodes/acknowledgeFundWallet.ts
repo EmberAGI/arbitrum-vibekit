@@ -3,6 +3,7 @@ import { Command, interrupt } from '@langchain/langgraph';
 import { z } from 'zod';
 
 import {
+  applyViewPatch,
   buildTaskStatus,
   type ClmmState,
   type ClmmUpdate,
@@ -61,8 +62,7 @@ export const acknowledgeFundWalletNode = async (
     currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    const mergedView = { ...state.view, ...pendingView };
-    state.view = mergedView;
+    const mergedView = applyViewPatch(state, pendingView);
     await copilotkitEmitState(config, {
       view: mergedView,
     });

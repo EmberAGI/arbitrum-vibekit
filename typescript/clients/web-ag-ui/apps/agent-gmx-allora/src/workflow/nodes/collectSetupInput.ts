@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { GmxSetupInputSchema } from '../../domain/types.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
   type OnboardingState,
@@ -38,10 +39,11 @@ export const collectSetupInputNode = async (
 
   if (state.view.operatorInput) {
     logInfo('collectSetupInput: setup input already present; skipping step');
+    const resumedView = applyViewPatch(state, {
+      onboarding: resolveSetupResumeOnboarding(state),
+    });
     return {
-      view: {
-        onboarding: resolveSetupResumeOnboarding(state),
-      },
+      view: resumedView,
     };
   }
 
@@ -68,8 +70,7 @@ export const collectSetupInputNode = async (
     currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    const mergedView = { ...state.view, ...pendingView };
-    state.view = mergedView;
+    const mergedView = applyViewPatch(state, pendingView);
     await copilotkitEmitState(config, {
       view: mergedView,
     });
@@ -97,18 +98,23 @@ export const collectSetupInputNode = async (
     const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
     const failureMessage = `Invalid setup input: ${issues}`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: [] },
-        profile: state.view.profile,
-        metrics: state.view.metrics,
-        transactionHistory: state.view.transactionHistory,
-      },
+      view: haltedView,
     };
   }
 
@@ -126,16 +132,21 @@ export const collectSetupInputNode = async (
     'working',
     'Market and USDC allocation received. Preparing funding token options.',
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: [] },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    view: workingView,
   });
 
+  const completedView = applyViewPatch(state, {
+    operatorInput: normalized,
+    onboarding: { step: 2, key: FUNDING_STEP_KEY },
+    task,
+    activity: { events: [statusEvent], telemetry: [] },
+  });
   return {
-    view: {
-      operatorInput: normalized,
-      onboarding: { step: 2, key: FUNDING_STEP_KEY },
-      task,
-      activity: { events: [statusEvent], telemetry: [] },
-    },
+    view: completedView,
   };
 };

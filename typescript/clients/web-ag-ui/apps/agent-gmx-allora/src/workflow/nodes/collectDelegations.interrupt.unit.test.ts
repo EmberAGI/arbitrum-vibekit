@@ -35,10 +35,26 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
     process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = previousAgentWallet;
   });
 
-  it('persists input-required state before interrupting when runnable config exists', async () => {
+  it('emits input-required state and interrupts in the same run when runnable config exists', async () => {
     interruptMock.mockReset();
     copilotkitEmitStateMock.mockReset();
     copilotkitEmitStateMock.mockResolvedValue(undefined);
+    interruptMock.mockImplementation((request: unknown) => {
+      if (!request || typeof request !== 'object' || !('delegationsToSign' in request)) {
+        throw new Error('Unexpected interrupt payload');
+      }
+      const delegationsToSign = (request as { delegationsToSign: Array<Record<string, unknown>> }).delegationsToSign;
+      const first = delegationsToSign[0];
+      if (!first || typeof first !== 'object') {
+        throw new Error('No delegation requested');
+      }
+      return Promise.resolve(
+        JSON.stringify({
+          outcome: 'signed',
+          signedDelegations: [{ ...first, signature: '0x01' }],
+        }),
+      );
+    });
     process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = '0x2222222222222222222222222222222222222222';
 
     const state = {
@@ -59,21 +75,18 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
 
     const result = await collectDelegationsNode(state, { configurable: { thread_id: 'thread-1' } });
 
-    expect(interruptMock).not.toHaveBeenCalled();
-    expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
-
-    const commandResult = result as unknown as {
-      goto?: string[];
-      update?: {
-        view?: {
-          task?: { taskStatus?: { state?: string } };
-          onboarding?: { step?: number; key?: string };
-        };
+    expect(interruptMock).toHaveBeenCalledTimes(1);
+    expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(2);
+    expect('view' in result).toBe(true);
+    const view = (result as {
+      view: {
+        task?: { taskStatus?: { state?: string } };
+        onboarding?: { step?: number; key?: string };
+        delegationBundle?: unknown;
       };
-    };
-
-    expect(commandResult.goto).toContain('collectDelegations');
-    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    }).view;
+    expect(view.task?.taskStatus?.state).toBe('working');
+    expect(view.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(view.delegationBundle).toBeTruthy();
   });
 });

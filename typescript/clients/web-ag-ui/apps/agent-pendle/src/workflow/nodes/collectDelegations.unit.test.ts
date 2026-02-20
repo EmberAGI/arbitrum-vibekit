@@ -54,7 +54,7 @@ describe('collectDelegationsNode', () => {
     getOnchainActionsClientMock.mockReset();
   });
 
-  it('persists input-required state before requesting delegation signatures', async () => {
+  it('emits input-required state and requests delegation signatures in the same run', async () => {
     const usdaiToken: Token = {
       tokenUid: { chainId: '42161', address: '0x0a1a1a107e45b7ced86833863f482bc5f4ed82ef' },
       name: 'USDai',
@@ -130,6 +130,22 @@ describe('collectDelegationsNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     getAgentWalletAddressMock.mockReturnValue('0x0000000000000000000000000000000000000002');
     getOnchainActionsClientMock.mockReturnValue(onchainActionsClient);
+    interruptMock.mockImplementation((request: unknown) => {
+      if (!request || typeof request !== 'object' || !('delegationsToSign' in request)) {
+        throw new Error('Unexpected interrupt payload');
+      }
+      const delegationsToSign = (request as { delegationsToSign: Array<Record<string, unknown>> }).delegationsToSign;
+      const first = delegationsToSign[0];
+      if (!first || typeof first !== 'object') {
+        throw new Error('No delegation requested');
+      }
+      return Promise.resolve(
+        JSON.stringify({
+          outcome: 'signed',
+          signedDelegations: [{ ...first, signature: '0x01' }],
+        }),
+      );
+    });
 
     const state = {
       view: {
@@ -153,25 +169,12 @@ describe('collectDelegationsNode', () => {
 
     const result = await collectDelegationsNode(state, { configurable: { thread_id: 'thread-1' } });
 
-    expect(interruptMock).not.toHaveBeenCalled();
-    expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
-    const commandResult = result as unknown as { goto?: string[]; update?: { view?: { task?: { taskStatus?: { state?: string } } } } };
-    expect(commandResult.goto).toContain('collectDelegations');
-    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(
-      commandResult.update?.view?.operatorInput as { walletAddress?: string } | undefined,
-    ).toEqual(
-      expect.objectContaining({
-        walletAddress: '0x0000000000000000000000000000000000000001',
-      }),
-    );
-    expect(
-      commandResult.update?.view?.fundingTokenInput as { fundingTokenAddress?: string } | undefined,
-    ).toEqual(
-      expect.objectContaining({
-        fundingTokenAddress: '0x0a1a1a107e45b7ced86833863f482bc5f4ed82ef',
-      }),
-    );
+    expect(interruptMock).toHaveBeenCalledTimes(1);
+    expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(2);
+    expect('view' in result).toBe(true);
+    const view = (result as { view: { task?: { taskStatus?: { state?: string } }; delegationBundle?: unknown } }).view;
+    expect(view.task?.taskStatus?.state).toBe('working');
+    expect(view.delegationBundle).toBeTruthy();
   });
 
   it('preserves reduced onboarding totals when delegation becomes the final step', async () => {

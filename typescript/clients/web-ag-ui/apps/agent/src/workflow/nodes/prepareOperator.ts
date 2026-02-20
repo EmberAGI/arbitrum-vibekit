@@ -4,6 +4,7 @@ import { Command } from '@langchain/langgraph';
 import { resolveTickBandwidthBps } from '../../config/constants.js';
 import { type ResolvedOperatorConfig } from '../../domain/types.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
   normalizeHexAddress,
@@ -23,19 +24,24 @@ export const prepareOperatorNode = async (
   if (!operatorInput) {
     const failureMessage = 'ERROR: Operator input missing';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      task,
+      profile: state.view.profile,
+      transactionHistory: state.view.transactionHistory,
+      metrics: state.view.metrics,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -52,19 +58,24 @@ export const prepareOperatorNode = async (
   if (!selectedPool) {
     const failureMessage = `ERROR: Pool ${selectedPoolAddress} not available during operator setup`;
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      task,
+      profile: state.view.profile,
+      transactionHistory: state.view.transactionHistory,
+      metrics: state.view.metrics,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -75,19 +86,24 @@ export const prepareOperatorNode = async (
     const failureMessage =
       'ERROR: Delegation bundle missing. Complete delegation signing before continuing.';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      task,
+      profile: state.view.profile,
+      transactionHistory: state.view.transactionHistory,
+      metrics: state.view.metrics,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -113,29 +129,34 @@ export const prepareOperatorNode = async (
       ? `Delegation bypass active. Managing ${selectedPool.token0.symbol}/${selectedPool.token1.symbol} from agent wallet.`
       : `Delegations active. Managing ${selectedPool.token0.symbol}/${selectedPool.token1.symbol} from user wallet ${operatorWalletAddress}.`,
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    view: workingView,
   });
 
   const events: ClmmEvent[] = [statusEvent];
 
-  return {
-    view: {
-      operatorConfig,
-      selectedPool,
-      metrics: {
-        lastSnapshot: selectedPool,
-        previousPrice: undefined,
-        cyclesSinceRebalance: 0,
-        staleCycles: 0,
-        iteration: 0,
-        latestCycle: undefined,
-      },
-      task,
-      activity: { events, telemetry: state.view.activity.telemetry },
-      transactionHistory: state.view.transactionHistory,
-      profile: state.view.profile,
+  const completedView = applyViewPatch(state, {
+    operatorConfig,
+    selectedPool,
+    metrics: {
+      lastSnapshot: selectedPool,
+      previousPrice: undefined,
+      cyclesSinceRebalance: 0,
+      staleCycles: 0,
+      iteration: 0,
+      latestCycle: undefined,
     },
+    task,
+    activity: { events, telemetry: state.view.activity.telemetry },
+    transactionHistory: state.view.transactionHistory,
+    profile: state.view.profile,
+  });
+  return {
+    view: completedView,
     private: {
       cronScheduled: false,
     },

@@ -240,6 +240,106 @@ describe('collectFundingTokenInputNode', () => {
     });
   });
 
+  it('emits a merged view snapshot that preserves command identity during onboarding', async () => {
+    process.env.PENDLE_STABLECOIN_WHITELIST = 'USDai,USDC';
+    const fetchMock = vi.fn((input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/wallet/balances/')) {
+        return new Response(
+          JSON.stringify({
+            balances: [
+              {
+                tokenUid: { chainId: '42161', address: '0xusdai' },
+                amount: '100',
+                symbol: 'USDai',
+                valueUsd: 100,
+                decimals: 18,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { interrupt } = await import('@langchain/langgraph');
+    vi.mocked(interrupt).mockImplementation(() =>
+      JSON.stringify({ fundingTokenAddress: '0xusdai' }),
+    );
+
+    const { copilotkitEmitState } = await import('@copilotkit/sdk-js/langgraph');
+    vi.mocked(copilotkitEmitState).mockReset();
+    vi.mocked(copilotkitEmitState).mockResolvedValue(undefined);
+
+    const state: ClmmState = {
+      messages: [],
+      copilotkit: { actions: [], context: [] },
+      settings: { amount: undefined },
+      private: {
+        mode: undefined,
+        pollIntervalMs: 5_000,
+        streamLimit: -1,
+        cronScheduled: false,
+        bootstrapped: true,
+      },
+      view: {
+        command: 'hire',
+        task: undefined,
+        poolArtifact: undefined,
+        operatorInput: {
+          walletAddress: '0x0000000000000000000000000000000000000001',
+          baseContributionUsd: 10,
+        },
+        onboarding: { step: 2, key: 'funding-token' },
+        fundingTokenInput: undefined,
+        selectedPool: undefined,
+        operatorConfig: undefined,
+        delegationBundle: undefined,
+        haltReason: undefined,
+        executionError: undefined,
+        delegationsBypassActive: true,
+        profile: {
+          agentIncome: undefined,
+          aum: undefined,
+          totalUsers: undefined,
+          apy: undefined,
+          chains: [],
+          protocols: [],
+          tokens: [],
+          pools: [],
+          allowedPools: [],
+        },
+        activity: { telemetry: [], events: [] },
+        metrics: {
+          lastSnapshot: undefined,
+          previousApy: undefined,
+          cyclesSinceRebalance: 0,
+          staleCycles: 0,
+          iteration: 0,
+          latestCycle: undefined,
+        },
+        transactionHistory: [],
+      },
+    };
+
+    await collectFundingTokenInputNode(state, {});
+
+    const emittedView = (
+      vi.mocked(copilotkitEmitState).mock.calls.at(-1)?.[1] as
+        | { view?: { command?: string; onboarding?: { step: number; key?: string } } }
+        | undefined
+    )?.view;
+    expect(emittedView?.command).toBe('hire');
+    expect(emittedView?.onboarding).toEqual({ step: 2, key: 'funding-token' });
+  });
+
   it('auto-selects the funding token when the wallet already has a Pendle position', async () => {
     const MARKET_ADDRESS = '0x00000000000000000000000000000000000000aa';
     const PT_ADDRESS = '0x00000000000000000000000000000000000000bb';
