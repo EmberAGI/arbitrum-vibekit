@@ -264,6 +264,111 @@ describe('agentListPolling', () => {
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
   });
 
+  it('returns the latest snapshot update observed during a run', async () => {
+    const unsubscribe = vi.fn();
+    const detachActiveRun = vi.fn().mockResolvedValue(undefined);
+    let stateSubscriber: AgentSubscriber | null = null;
+    let resolveRun: (() => void) | null = null;
+
+    const runtimeAgent = {
+      subscribe: vi.fn((subscriber: AgentSubscriber) => {
+        stateSubscriber = subscriber;
+        return { unsubscribe };
+      }),
+      addMessage: vi.fn(),
+      runAgent: vi.fn(async () => {
+        stateSubscriber?.onStateSnapshotEvent?.({
+          event: {
+            type: 'STATE_SNAPSHOT',
+            snapshot: {
+              settings: {},
+              view: {
+                command: 'hire',
+                profile: {
+                  chains: [],
+                  protocols: [],
+                  tokens: [],
+                  pools: [],
+                  allowedPools: [],
+                },
+                activity: { telemetry: [], events: [] },
+                metrics: { iteration: 0, cyclesSinceRebalance: 0, staleCycles: 0 },
+                task: {
+                  id: 'task-setup',
+                  taskStatus: {
+                    state: 'input-required',
+                    message: { content: 'Waiting for delegation approval to continue onboarding.' },
+                  },
+                },
+                transactionHistory: [],
+              },
+            } as AgentState,
+          },
+        } as never);
+
+        await Promise.resolve();
+
+        stateSubscriber?.onStateSnapshotEvent?.({
+          event: {
+            type: 'STATE_SNAPSHOT',
+            snapshot: {
+              settings: {},
+              view: {
+                command: 'cycle',
+                profile: {
+                  chains: [],
+                  protocols: [],
+                  tokens: [],
+                  pools: [],
+                  allowedPools: [],
+                },
+                activity: { telemetry: [], events: [] },
+                metrics: { iteration: 1, cyclesSinceRebalance: 1, staleCycles: 0 },
+                task: {
+                  id: 'task-cycle',
+                  taskStatus: {
+                    state: 'working',
+                    message: { content: 'Executing cycle' },
+                  },
+                },
+                transactionHistory: [],
+              },
+            } as AgentState,
+          },
+        } as never);
+
+        await new Promise<void>((resolve) => {
+          resolveRun = resolve;
+        });
+      }),
+      detachActiveRun,
+    };
+
+    const pollPromise = pollAgentListUpdateViaAgUi({
+      agentId: 'agent-gmx-allora',
+      threadId: 'thread-gmx',
+      timeoutMs: 250,
+      runCompletionTimeoutMs: 2_000,
+      createRuntimeAgent: () => runtimeAgent,
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    resolveRun?.();
+
+    const outcome = await pollPromise;
+
+    expect(outcome.busy).toBe(false);
+    expect(outcome.update).toMatchObject({
+      command: 'cycle',
+      taskId: 'task-cycle',
+      taskState: 'working',
+      taskMessage: 'Executing cycle',
+    });
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(detachActiveRun).toHaveBeenCalledTimes(1);
+  });
+
   it('returns null and still detaches stream when poll run rejects', async () => {
     const unsubscribe = vi.fn();
     const detachActiveRun = vi.fn().mockResolvedValue(undefined);

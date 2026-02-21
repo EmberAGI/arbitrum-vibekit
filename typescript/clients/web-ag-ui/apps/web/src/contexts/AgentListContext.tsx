@@ -15,7 +15,7 @@ import { ProxiedCopilotRuntimeAgent } from '@copilotkit/react-core/v2';
 
 import { getAllAgents, isRegisteredAgentId } from '../config/agents';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
-import { getAgentThreadId } from '../utils/agentThread';
+import { getAgentThreadId, resolveAgentThreadWalletAddress } from '../utils/agentThread';
 import {
   pollAgentIdsWithConcurrency,
   pollAgentListUpdateViaAgUi,
@@ -81,7 +81,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
   const agentIds = useMemo(() => getAllAgents().map((agent) => agent.id), []);
   const pathname = usePathname();
   const { privyWallet } = usePrivyWalletClient();
-  const walletKey = privyWallet?.address?.trim().toLowerCase() ?? null;
+  const walletKey = resolveAgentThreadWalletAddress(privyWallet?.address);
   const activeAgentId = useMemo(() => resolveAgentIdFromPath(pathname), [pathname]);
   const [state, setState] = useState<{ walletKey: string | null; agents: Record<string, AgentListEntry> }>(
     () => ({
@@ -97,6 +97,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
   const pollBusyCooldownMs = resolveAgentListPollBusyCooldownMs(
     process.env.NEXT_PUBLIC_AGENT_LIST_BUSY_COOLDOWN_MS,
   );
+  const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
 
   const pruneBusyCooldowns = useCallback((nowMs: number) => {
     for (const [agentId, busyUntil] of pollBusyUntilByAgentRef.current.entries()) {
@@ -198,6 +199,16 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
           pollBusyUntilByAgentRef.current.delete(agentId);
         }
 
+        if (debugStatus) {
+          console.debug('[AgentListContext.poll] update', {
+            source: 'agent-list-poll',
+            agentId,
+            threadId,
+            busy: outcome.busy,
+            update: outcome.update,
+          });
+        }
+
         upsertAgent(agentId, outcome.update ?? { synced: true }, 'poll');
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -212,7 +223,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
         inFlightRef.current.delete(agentId);
       }
     },
-    [pollBusyCooldownMs, upsertAgent, walletKey],
+    [debugStatus, pollBusyCooldownMs, upsertAgent, walletKey],
   );
 
   useEffect(() => {

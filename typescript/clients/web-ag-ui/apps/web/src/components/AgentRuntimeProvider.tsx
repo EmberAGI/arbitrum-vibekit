@@ -10,12 +10,13 @@ import { AgentProvider, InactiveAgentProvider, useAgent } from '../contexts/Agen
 import { projectAgentListUpdate } from '../contexts/agentListProjection';
 import { useAgentList } from '../contexts/AgentListContext';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
-import { getAgentThreadId } from '../utils/agentThread';
+import { getAgentThreadId, resolveAgentThreadWalletAddress } from '../utils/agentThread';
 
 function AgentListRuntimeBridge() {
   const agent = useAgent();
   const { upsertAgent } = useAgentList();
   const lastSnapshotRef = useRef<string | null>(null);
+  const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
 
   const { view, config } = agent;
   const agentId = config.id;
@@ -37,8 +38,30 @@ function AgentListRuntimeBridge() {
     }
     lastSnapshotRef.current = snapshotKey;
 
+    if (debugStatus) {
+      console.debug('[AgentListRuntimeBridge] upsert detail-connect', {
+        agentId,
+        command: update.command,
+        taskId: update.taskId,
+        taskState: update.taskState,
+        taskMessage: update.taskMessage,
+        haltReason: update.haltReason,
+        executionError: update.executionError,
+      });
+    }
+
     upsertAgent(agentId, update, 'detail-connect');
-  }, [agentId, upsertAgent, view.command, view.executionError, view.haltReason, view.metrics, view.profile, view.task]);
+  }, [
+    agentId,
+    debugStatus,
+    upsertAgent,
+    view.command,
+    view.executionError,
+    view.haltReason,
+    view.metrics,
+    view.profile,
+    view.task,
+  ]);
 
   return null;
 }
@@ -68,11 +91,13 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
     return null;
   }, [pathname]);
 
+  const threadWalletAddress = resolveAgentThreadWalletAddress(privyWallet?.address);
+
   if (!agentId) {
     return <InactiveAgentProvider>{children}</InactiveAgentProvider>;
   }
 
-  const threadId = getAgentThreadId(agentId, privyWallet?.address);
+  const threadId = getAgentThreadId(agentId, threadWalletAddress);
 
   if (!threadId) {
     return <InactiveAgentProvider>{children}</InactiveAgentProvider>;

@@ -314,8 +314,16 @@ export const pollCycleNode = async (
         },
       },
       goto: 'summarize',
-    });
+      });
   }
+
+  logInfo('pollCycle: executing cycle with configured strategy', {
+    hasOperatorConfig: Boolean(operatorConfig),
+    hasSelectedPool: Boolean(selectedPool),
+    onboardingStatus: state.view.onboardingFlow?.status,
+    currentTaskState: state.view.task?.taskStatus?.state,
+    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+  });
 
   const iteration = (state.view.metrics.iteration ?? 0) + 1;
   const topicKey = resolveTopicKey(selectedPool.baseSymbol);

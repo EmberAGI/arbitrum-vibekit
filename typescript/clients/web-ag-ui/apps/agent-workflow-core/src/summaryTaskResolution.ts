@@ -5,6 +5,7 @@ export interface ResolveSummaryTaskStatusInput {
   currentTaskState?: TaskState | string | null;
   currentTaskMessage?: string | null;
   staleDelegationWaitCleared?: boolean;
+  onboardingComplete?: boolean;
   activeSummaryMessage: string;
   onboardingCompleteMessage: string;
 }
@@ -12,6 +13,20 @@ export interface ResolveSummaryTaskStatusInput {
 export interface ResolvedSummaryTaskStatus {
   state: TaskState;
   message: string;
+}
+
+function isLikelyStaleOnboardingWaitMessage(message: string | null | undefined): boolean {
+  const normalized = `${message ?? ''}`.toLowerCase();
+  if (normalized.length === 0) {
+    return false;
+  }
+
+  return (
+    normalized.includes('continue onboarding') ||
+    normalized.includes('delegation approval') ||
+    normalized.includes('onboarding input') ||
+    normalized.includes('onboarding prerequisite')
+  );
 }
 
 export function resolveSummaryTaskStatus(
@@ -25,6 +40,17 @@ export function resolveSummaryTaskStatus(
   }
 
   if (input.staleDelegationWaitCleared) {
+    return {
+      state: 'working',
+      message: input.onboardingCompleteMessage,
+    };
+  }
+
+  if (
+    input.onboardingComplete === true &&
+    input.currentTaskState === 'input-required' &&
+    isLikelyStaleOnboardingWaitMessage(input.currentTaskMessage)
+  ) {
     return {
       state: 'working',
       message: input.onboardingCompleteMessage,

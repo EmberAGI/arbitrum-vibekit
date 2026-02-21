@@ -121,6 +121,7 @@ export async function pollAgentListUpdateViaAgUi(params: {
   let pollBusy = false;
   const runCompletionTimeoutMs = params.runCompletionTimeoutMs ?? 30_000;
   let runCompleted = false;
+  let latestProjectedUpdate: Partial<AgentListEntry> | null = null;
 
   const settle = (value: Partial<AgentListEntry> | null) => {
     if (settled) return;
@@ -131,19 +132,21 @@ export async function pollAgentListUpdateViaAgUi(params: {
     resolvePoll?.(value);
   };
 
+  const captureProjectedUpdate = (statePayload: unknown) => {
+    const projectedState = projectDetailStateFromPayload(statePayload);
+    if (!projectedState) {
+      return;
+    }
+    latestProjectedUpdate = projectAgentListUpdateFromState(projectedState);
+    settle(latestProjectedUpdate);
+  };
+
   const subscriber: AgentSubscriber = {
     onRunInitialized: ({ state }) => {
-      const projectedState = projectDetailStateFromPayload(state);
-      if (projectedState) {
-        settle(projectAgentListUpdateFromState(projectedState));
-      }
+      captureProjectedUpdate(state);
     },
     onStateSnapshotEvent: ({ event }) => {
-      const snapshot = event.snapshot;
-      const projectedState = projectDetailStateFromPayload(snapshot);
-      if (projectedState) {
-        settle(projectAgentListUpdateFromState(projectedState));
-      }
+      captureProjectedUpdate(event.snapshot);
     },
     onRunErrorEvent: (payload) => {
       const message = payload.event.message;
@@ -213,5 +216,5 @@ export async function pollAgentListUpdateViaAgUi(params: {
   }
   await cleanupAgentConnection(runtimeAgent);
   subscription.unsubscribe();
-  return { update: result, busy: pollBusy };
+  return { update: latestProjectedUpdate ?? result, busy: pollBusy };
 }

@@ -47,4 +47,23 @@ describe('resolveSidebarTaskState', () => {
       }),
     ).toBe('working');
   });
+
+  it('falls back to list state by default when runtime state is missing', () => {
+    expect(
+      resolveSidebarTaskState({
+        listTaskState: 'input-required',
+        runtimeTaskState: undefined,
+      }),
+    ).toBe('input-required');
+  });
+
+  it('can suppress list fallback when runtime source is authoritative', () => {
+    expect(
+      resolveSidebarTaskState({
+        listTaskState: 'input-required',
+        runtimeTaskState: undefined,
+        fallbackToListWhenRuntimeMissing: false,
+      }),
+    ).toBeUndefined();
+  });
 });

@@ -39,6 +39,7 @@ vi.mock('../config/agents', () => ({
 }));
 
 vi.mock('../utils/agentThread', () => ({
+  resolveAgentThreadWalletAddress: (walletKey: string | null | undefined) => walletKey ?? null,
   getAgentThreadId: (agentId: string, walletKey: string | null | undefined) =>
     walletKey ? `${agentId}:${walletKey}` : null,
 }));

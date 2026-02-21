@@ -86,6 +86,13 @@ export const prepareOperatorNode = async (
     : normalizeHexAddress(operatorInput.walletAddress, 'delegator wallet address');
   const delegatorInputWalletAddress = delegationsBypassActive ? undefined : delegatorWalletAddress;
   if (!delegationsBypassActive && !state.view.delegationBundle) {
+    logInfo('prepareOperator: waiting for delegation bundle before strategy setup', {
+      delegationsBypassActive,
+      hasOperatorInput: Boolean(operatorInput),
+      hasFundingTokenInput: Boolean(fundingTokenInput),
+      onboardingKey: state.view.onboarding?.key,
+      onboardingStep: state.view.onboarding?.step,
+    });
     const message = 'Waiting for delegation approval to continue onboarding.';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
     const onboardingStep = state.view.onboarding?.key === 'funding-token' ? 3 : 2;
