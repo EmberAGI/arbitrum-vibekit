@@ -2,7 +2,7 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { resolveSummaryTaskStatus } from 'agent-workflow-core';
 
 import { buildSummaryArtifact } from '../artifacts.js';
-import { buildTaskStatus, type ClmmState, type ClmmUpdate } from '../context.js';
+import { buildTaskStatus, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -23,8 +23,18 @@ export const summarizeNode = async (
     currentTaskState,
     currentTaskMessage,
     staleDelegationWaitCleared: shouldClearStaleDelegationWait,
+    onboardingComplete: state.view.onboardingFlow?.status === 'completed',
     activeSummaryMessage: 'GMX Allora cycle summarized.',
     onboardingCompleteMessage: 'Onboarding complete. GMX Allora strategy is active.',
+  });
+  logInfo('summarize: resolved task status', {
+    previousTaskState: currentTaskState,
+    previousTaskMessage: currentTaskMessage,
+    onboardingStatus: state.view.onboardingFlow?.status,
+    hasOperatorConfig: Boolean(state.view.operatorConfig),
+    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    finalState,
+    finalMessage,
   });
 
   const { task, statusEvent: completion } = buildTaskStatus(

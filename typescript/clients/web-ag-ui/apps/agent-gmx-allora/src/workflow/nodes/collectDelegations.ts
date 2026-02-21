@@ -114,6 +114,10 @@ export const collectDelegationsNode = async (
   });
 
   if (state.view.delegationsBypassActive === true) {
+    logInfo('collectDelegations: bypass active, skipping delegation collection', {
+      onboardingStep: delegationOnboarding.step,
+      onboardingKey: delegationOnboarding.key,
+    });
     const bypassView = applyViewPatch(state, {
       delegationsBypassActive: true,
       onboarding: delegationOnboarding,
@@ -124,6 +128,12 @@ export const collectDelegationsNode = async (
   }
 
   if (state.view.delegationBundle) {
+    logInfo('collectDelegations: delegation bundle already present', {
+      onboardingStep: delegationOnboarding.step,
+      onboardingKey: delegationOnboarding.key,
+      currentTaskState: state.view.task?.taskStatus?.state,
+      currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+    });
     if (state.view.task?.taskStatus.state === 'input-required') {
       const { task, statusEvent } = buildTaskStatus(
         state.view.task,

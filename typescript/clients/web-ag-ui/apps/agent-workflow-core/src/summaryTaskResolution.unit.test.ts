@@ -31,6 +31,36 @@ describe('resolveSummaryTaskStatus', () => {
     });
   });
 
+  it('clears stale onboarding pause input-required state after onboarding completion', () => {
+    expect(
+      resolveSummaryTaskStatus({
+        currentTaskState: 'input-required',
+        currentTaskMessage: 'Cycle paused until onboarding input is complete.',
+        onboardingComplete: true,
+        activeSummaryMessage: 'cycle summarized',
+        onboardingCompleteMessage: 'Onboarding complete. Strategy is active.',
+      }),
+    ).toEqual({
+      state: 'working',
+      message: 'Onboarding complete. Strategy is active.',
+    });
+  });
+
+  it('does not clear non-onboarding input-required state after onboarding completion', () => {
+    expect(
+      resolveSummaryTaskStatus({
+        currentTaskState: 'input-required',
+        currentTaskMessage: 'Trade paused: wallet balance too low to execute plan.',
+        onboardingComplete: true,
+        activeSummaryMessage: 'cycle summarized',
+        onboardingCompleteMessage: 'Onboarding complete. Strategy is active.',
+      }),
+    ).toEqual({
+      state: 'input-required',
+      message: 'Trade paused: wallet balance too low to execute plan.',
+    });
+  });
+
   it('preserves non-working task state/message when already terminal-like', () => {
     expect(
       resolveSummaryTaskStatus({

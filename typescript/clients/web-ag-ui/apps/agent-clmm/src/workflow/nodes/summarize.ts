@@ -27,6 +27,7 @@ export const summarizeNode = async (
     currentTaskState,
     currentTaskMessage,
     staleDelegationWaitCleared: shouldClearStaleDelegationWait,
+    onboardingComplete: state.view.onboardingFlow?.status === 'completed',
     activeSummaryMessage: 'CLMM cycle summarized.',
     onboardingCompleteMessage: 'Onboarding complete. CLMM strategy is active.',
   });

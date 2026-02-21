@@ -341,6 +341,191 @@ describe('useAgentConnection integration', () => {
     expect(mocks.agent.setState).toHaveBeenCalledTimes(1);
   });
 
+  it('applies state snapshot events after run init to avoid stale task status', async () => {
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-gmx-allora" />);
+    });
+    await flushEffects();
+
+    expect(subscriber).toBeDefined();
+    mocks.agent.setState.mockClear();
+
+    subscriber?.onRunInitialized?.({
+      state: {
+        view: {
+          task: {
+            id: 'task-1',
+            taskStatus: {
+              state: 'input-required',
+              message: { content: 'Waiting for delegation approval to continue onboarding.' },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1' },
+    });
+    await flushEffects();
+    expect(mocks.agent.setState).toHaveBeenCalledTimes(1);
+
+    subscriber?.onStateSnapshotEvent?.({
+      event: {
+        snapshot: {
+          view: {
+            task: {
+              id: 'task-1',
+              taskStatus: {
+                state: 'working',
+                message: { content: 'Onboarding complete. GMX Allora strategy is active.' },
+              },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1' },
+    });
+    await flushEffects();
+
+    expect(mocks.agent.setState).toHaveBeenCalledTimes(2);
+    const latestState = mocks.agent.setState.mock.calls.at(-1)?.[0] as
+      | { view?: { task?: { taskStatus?: { state?: string } } } }
+      | undefined;
+    expect(latestState?.view?.task?.taskStatus?.state).toBe('working');
+  });
+
+  it('ignores stale run-id snapshots that arrive after a newer run state', async () => {
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-gmx-allora" />);
+    });
+    await flushEffects();
+
+    expect(subscriber).toBeDefined();
+    mocks.agent.setState.mockClear();
+
+    subscriber?.onRunInitialized?.({
+      state: {
+        view: {
+          task: {
+            id: 'task-new',
+            taskStatus: {
+              state: 'working',
+              message: { content: 'Onboarding complete. GMX Allora strategy is active.' },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1', runId: 'run-new' },
+    });
+    await flushEffects();
+    expect(mocks.agent.setState).toHaveBeenCalledTimes(1);
+
+    subscriber?.onStateSnapshotEvent?.({
+      event: {
+        snapshot: {
+          view: {
+            task: {
+              id: 'task-old',
+              taskStatus: {
+                state: 'input-required',
+                message: { content: 'Waiting for delegation approval to continue onboarding.' },
+              },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1', runId: 'run-old' },
+    });
+    await flushEffects();
+
+    expect(mocks.agent.setState).toHaveBeenCalledTimes(1);
+    const latestState = mocks.agent.setState.mock.calls.at(-1)?.[0] as
+      | { view?: { task?: { taskStatus?: { state?: string } } } }
+      | undefined;
+    expect(latestState?.view?.task?.taskStatus?.state).toBe('working');
+  });
+
+  it('ignores stale onboarding input-required snapshots without run-id after completion state is applied', async () => {
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-gmx-allora" />);
+    });
+    await flushEffects();
+
+    expect(subscriber).toBeDefined();
+    mocks.agent.setState.mockClear();
+
+    subscriber?.onRunInitialized?.({
+      state: {
+        view: {
+          onboardingFlow: {
+            status: 'completed',
+            revision: 4,
+            steps: [],
+          },
+          task: {
+            id: 'task-new',
+            taskStatus: {
+              state: 'working',
+              message: { content: 'Onboarding complete. GMX Allora strategy is active.' },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1', runId: 'run-new' },
+    });
+    await flushEffects();
+    expect(mocks.agent.setState).toHaveBeenCalledTimes(1);
+
+    subscriber?.onStateSnapshotEvent?.({
+      event: {
+        snapshot: {
+          view: {
+            task: {
+              id: 'task-old',
+              taskStatus: {
+                state: 'input-required',
+                message: { content: 'Cycle paused until onboarding input is complete.' },
+              },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1' },
+    });
+    await flushEffects();
+
+    expect(mocks.agent.setState).toHaveBeenCalledTimes(1);
+    const latestState = mocks.agent.setState.mock.calls.at(-1)?.[0] as
+      | { view?: { task?: { taskStatus?: { state?: string } } } }
+      | undefined;
+    expect(latestState?.view?.task?.taskStatus?.state).toBe('working');
+  });
+
   it('keeps local run ownership gated until active-thread terminal events are observed', async () => {
     let subscriber: AgentSubscriber | undefined;
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;

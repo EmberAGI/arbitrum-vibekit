@@ -116,6 +116,47 @@ export interface UseAgentConnectionResult {
   saveSettings: (updates: Partial<AgentSettings>) => void;
 }
 
+function extractTaskMessage(task: AgentState['view']['task'] | undefined): string | null {
+  const message = task?.taskStatus?.message;
+  if (typeof message !== 'object' || message === null) return null;
+  if (!('content' in message)) return null;
+  const content = (message as { content?: unknown }).content;
+  return typeof content === 'string' && content.length > 0 ? content : null;
+}
+
+function isLikelyStaleOnboardingTaskMessage(message: string | null): boolean {
+  const normalized = `${message ?? ''}`.toLowerCase();
+  if (normalized.length === 0) return false;
+  return (
+    normalized.includes('onboarding') ||
+    normalized.includes('delegation approval') ||
+    normalized.includes('market + allocation')
+  );
+}
+
+function shouldIgnoreStaleOnboardingTaskRegression(params: {
+  previousState: AgentState | null;
+  nextState: AgentState;
+}): boolean {
+  const previousState = params.previousState;
+  if (!previousState) return false;
+
+  const previousTaskState = previousState.view?.task?.taskStatus?.state;
+  const nextTaskState = params.nextState.view?.task?.taskStatus?.state;
+  if (!previousTaskState || previousTaskState === 'input-required') return false;
+  if (nextTaskState !== 'input-required') return false;
+
+  const onboardingCompletionObserved =
+    previousState.view?.onboardingFlow?.status === 'completed' ||
+    params.nextState.view?.onboardingFlow?.status === 'completed' ||
+    Boolean(previousState.view?.operatorConfig) ||
+    Boolean(params.nextState.view?.operatorConfig);
+  if (!onboardingCompletionObserved) return false;
+
+  const nextTaskMessage = extractTaskMessage(params.nextState.view?.task);
+  return isLikelyStaleOnboardingTaskMessage(nextTaskMessage);
+}
+
 export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   type HookAgent = NonNullable<ReturnType<typeof useAgent>['agent']>;
 
@@ -146,6 +187,13 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const lastConnectedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
   const threadIdRef = useRef<string | undefined>(undefined);
+  const activeRunRef = useRef<{
+    threadId: string | undefined;
+    runId: string | null;
+  }>({
+    threadId: undefined,
+    runId: null,
+  });
   const messagesSnapshotRef = useRef(false);
   const runInFlightRef = useRef(false);
   const commandSchedulerRef = useRef<ReturnType<typeof createAgentCommandScheduler<HookAgent>> | null>(
@@ -304,6 +352,35 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       return typeof threadIdValue === 'string' ? threadIdValue : null;
     };
 
+    const getInputRunId = (payload: unknown): string | null => {
+      if (typeof payload !== 'object' || payload === null) return null;
+      if ('input' in payload) {
+        const input = (payload as { input?: unknown }).input;
+        if (typeof input === 'object' && input !== null) {
+          if ('runId' in input) {
+            const runIdValue = (input as { runId?: unknown }).runId;
+            if (typeof runIdValue === 'string') return runIdValue;
+          }
+          if ('run_id' in input) {
+            const runIdValue = (input as { run_id?: unknown }).run_id;
+            if (typeof runIdValue === 'string') return runIdValue;
+          }
+        }
+      }
+      if (!('event' in payload)) return null;
+      const event = (payload as { event?: unknown }).event;
+      if (typeof event !== 'object' || event === null) return null;
+      if ('runId' in event) {
+        const runIdValue = (event as { runId?: unknown }).runId;
+        if (typeof runIdValue === 'string') return runIdValue;
+      }
+      if ('run_id' in event) {
+        const runIdValue = (event as { run_id?: unknown }).run_id;
+        if (typeof runIdValue === 'string') return runIdValue;
+      }
+      return null;
+    };
+
     const isCurrentThreadEvent = (payload: unknown): boolean => {
       const inputThreadId = getInputThreadId(payload);
       const currentThreadId = threadIdRef.current;
@@ -311,14 +388,111 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       return inputThreadId === currentThreadId;
     };
 
+    const rememberActiveRun = (payload: unknown) => {
+      const runId = getInputRunId(payload);
+      const currentThreadId = threadIdRef.current;
+      if (!runId || !currentThreadId) return;
+      activeRunRef.current = {
+        threadId: currentThreadId,
+        runId,
+      };
+    };
+
+    const isCurrentRunEvent = (payload: unknown): boolean => {
+      if (!isCurrentThreadEvent(payload)) return false;
+      const currentThreadId = threadIdRef.current;
+      const runId = getInputRunId(payload);
+      if (!runId || !currentThreadId) return true;
+      const activeRun = activeRunRef.current;
+      if (activeRun.threadId !== currentThreadId || !activeRun.runId) {
+        return true;
+      }
+      return activeRun.runId === runId;
+    };
+
+    const shouldApplyRunScopedState = (payload: unknown): boolean => {
+      if (!isCurrentThreadEvent(payload)) return false;
+      const currentThreadId = threadIdRef.current;
+      const runId = getInputRunId(payload);
+      if (!runId || !currentThreadId) return true;
+      const activeRun = activeRunRef.current;
+      if (activeRun.threadId !== currentThreadId || !activeRun.runId) {
+        rememberActiveRun(payload);
+        return true;
+      }
+      return activeRun.runId === runId;
+    };
+
     const clearRunFlag = (payload?: unknown) => {
-      if (!isCurrentThreadEvent(payload)) return;
+      if (!isCurrentRunEvent(payload)) return;
       commandSchedulerRef.current?.handleRunTerminal();
+    };
+
+    const applyProjectedState = (statePayload: unknown) => {
+      const appliedMutationId = extractAppliedMutationId(statePayload);
+      const pendingSyncMutation = pendingSyncMutationRef.current;
+      if (
+        appliedMutationId &&
+        pendingSyncMutation.clientMutationId !== null &&
+        pendingSyncMutation.threadId === threadIdRef.current &&
+        appliedMutationId === pendingSyncMutation.clientMutationId
+      ) {
+        setPendingSyncMutationByThread({
+          threadId: threadIdRef.current,
+          clientMutationId: null,
+        });
+      }
+      const previousState = hasStateValues(agent.state) ? (agent.state as AgentState) : null;
+      const projectedState = projectDetailStateFromPayload(statePayload, previousState);
+      if (projectedState) {
+        if (shouldIgnoreStaleOnboardingTaskRegression({ previousState, nextState: projectedState })) {
+          logConnectEvent('state-regression-ignored', {
+            agentId,
+            threadId: threadIdRef.current,
+            previousTaskState: previousState?.view?.task?.taskStatus?.state,
+            previousTaskMessage: extractTaskMessage(previousState?.view?.task),
+            nextTaskState: projectedState.view?.task?.taskStatus?.state,
+            nextTaskMessage: extractTaskMessage(projectedState.view?.task),
+            previousOnboardingStatus: previousState?.view?.onboardingFlow?.status,
+            nextOnboardingStatus: projectedState.view?.onboardingFlow?.status,
+            previousHasOperatorConfig: Boolean(previousState?.view?.operatorConfig),
+            nextHasOperatorConfig: Boolean(projectedState.view?.operatorConfig),
+          });
+          return;
+        }
+
+        logConnectEvent('state-applied', {
+          agentId,
+          threadId: threadIdRef.current,
+          previousTaskState: previousState?.view?.task?.taskStatus?.state,
+          nextTaskState: projectedState.view?.task?.taskStatus?.state,
+          previousOnboardingStatus: previousState?.view?.onboardingFlow?.status,
+          nextOnboardingStatus: projectedState.view?.onboardingFlow?.status,
+        });
+        agent.setState(projectedState);
+        return;
+      }
+
+      if (projectDetailStateFromPayload(agent.state)) {
+        return;
+      }
+
+      agent.setState(initialAgentState);
+    };
+
+    const extractSnapshotState = (payload: unknown): unknown => {
+      if (typeof payload !== 'object' || payload === null) return null;
+      if (!('event' in payload)) return null;
+      const event = (payload as { event?: unknown }).event;
+      if (typeof event !== 'object' || event === null) return null;
+      if (!('snapshot' in event)) return null;
+      return (event as { snapshot?: unknown }).snapshot ?? null;
     };
 
     const subscription = agent.subscribe({
       onRunStartedEvent: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
+        rememberActiveRun(payload);
         runInFlightRef.current = true;
       },
       onRunFinishedEvent: (payload) => clearRunFlag(payload),
@@ -326,33 +500,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       onRunFailed: (payload) => clearRunFlag(payload),
       onRunFinalized: (payload) => clearRunFlag(payload),
       onRunInitialized: (payload) => {
-        if (!isCurrentThreadEvent(payload)) return;
-        const state = payload.state;
-        const appliedMutationId = extractAppliedMutationId(state);
-        const pendingSyncMutation = pendingSyncMutationRef.current;
-        if (
-          appliedMutationId &&
-          pendingSyncMutation.clientMutationId !== null &&
-          pendingSyncMutation.threadId === threadIdRef.current &&
-          appliedMutationId === pendingSyncMutation.clientMutationId
-        ) {
-          setPendingSyncMutationByThread({
-            threadId: threadIdRef.current,
-            clientMutationId: null,
-          });
-        }
-        const previousState = hasStateValues(agent.state) ? (agent.state as AgentState) : null;
-        const projectedState = projectDetailStateFromPayload(state, previousState);
-        if (projectedState) {
-          agent.setState(projectedState);
-          return;
-        }
-
-        if (projectDetailStateFromPayload(agent.state)) {
-          return;
-        }
-
-        agent.setState(initialAgentState);
+        if (!shouldApplyRunScopedState(payload)) return;
+        rememberActiveRun(payload);
+        applyProjectedState(payload.state);
+      },
+      onStateSnapshotEvent: (payload) => {
+        if (!shouldApplyRunScopedState(payload)) return;
+        rememberActiveRun(payload);
+        const snapshotState = extractSnapshotState(payload);
+        if (!snapshotState) return;
+        applyProjectedState(snapshotState);
       },
       onMessagesSnapshotEvent: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
@@ -361,7 +518,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     });
 
     return () => subscription.unsubscribe();
-  }, [agent, extractAppliedMutationId, hasStateValues]);
+  }, [agent, agentId, extractAppliedMutationId, hasStateValues, logConnectEvent]);
 
   // Initial sync when thread is established - runs once per agent instance
   useEffect(() => {
@@ -480,6 +637,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   useEffect(() => {
     runInFlightRef.current = false;
     lastConnectedThreadRef.current = null;
+    activeRunRef.current = { threadId, runId: null };
     commandSchedulerRef.current?.reset();
   }, [threadId]);
 

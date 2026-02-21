@@ -6,12 +6,21 @@ export function resolveSidebarTaskState(params: {
   runtimeTaskState?: TaskState;
   runtimeCommand?: string | null;
   runtimeTaskMessage?: string | null;
+  fallbackToListWhenRuntimeMissing?: boolean;
 }): TaskState | undefined {
   const runtimeTaskState = deriveTaskStateForUi({
     command: params.runtimeCommand,
     taskState: params.runtimeTaskState ?? null,
     taskMessage: params.runtimeTaskMessage ?? null,
-  }) as TaskState | undefined;
+  }) as TaskState | null | undefined;
 
-  return runtimeTaskState ?? params.listTaskState;
+  if (runtimeTaskState != null) {
+    return runtimeTaskState;
+  }
+
+  if (params.fallbackToListWhenRuntimeMissing === false) {
+    return undefined;
+  }
+
+  return params.listTaskState;
 }
