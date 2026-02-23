@@ -46,6 +46,71 @@ function resolvePostBootstrap(
   return command === 'sync' ? 'syncState' : resolveNextOnboardingNode(state);
 }
 
+function resolvePostRunCycle(
+  state: ClmmState,
+):
+  | 'pollCycle'
+  | 'collectSetupInput'
+  | 'collectFundingTokenInput'
+  | 'collectDelegations'
+  | 'prepareOperator' {
+  const nextOnboardingNode = resolveNextOnboardingNode(state);
+  return nextOnboardingNode === 'syncState' ? 'pollCycle' : nextOnboardingNode;
+}
+
+function resolvePostFundingTokenInput(state: ClmmState): 'collectSetupInput' | 'collectDelegations' {
+  return state.view.operatorInput ? 'collectDelegations' : 'collectSetupInput';
+}
+
+function resolvePostPrepareOperator(state: ClmmState): 'collectDelegations' | 'pollCycle' | 'summarize' {
+  if (state.view.operatorConfig && state.view.selectedPool) {
+    return 'pollCycle';
+  }
+
+  if (state.view.haltReason) {
+    return 'summarize';
+  }
+
+  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
+    return 'collectDelegations';
+  }
+
+  return 'summarize';
+}
+
+function resolvePostCollectDelegations(state: ClmmState): 'collectSetupInput' | 'prepareOperator' | 'summarize' {
+  if (!state.view.operatorInput) {
+    return 'collectSetupInput';
+  }
+
+  if (state.view.haltReason) {
+    return 'summarize';
+  }
+
+  return 'prepareOperator';
+}
+
+function resolvePostPollCycle(
+  state: ClmmState,
+):
+  | 'collectSetupInput'
+  | 'collectFundingTokenInput'
+  | 'collectDelegations'
+  | 'prepareOperator'
+  | 'acknowledgeFundWallet'
+  | 'summarize' {
+  if (!state.view.operatorConfig || !state.view.selectedPool) {
+    const nextOnboardingNode = resolveNextOnboardingNode(state);
+    return nextOnboardingNode === 'syncState' ? 'summarize' : nextOnboardingNode;
+  }
+
+  const taskState = state.view.task?.taskStatus?.state;
+  const taskMessage = state.view.task?.taskStatus?.message?.content ?? '';
+  const requiresFundingAcknowledgement =
+    taskState === 'input-required' && taskMessage.includes('GMX order simulation failed');
+  return requiresFundingAcknowledgement ? 'acknowledgeFundWallet' : 'summarize';
+}
+
 const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('runCommand', runCommandNode)
   .addNode('hireCommand', hireCommandNode)
@@ -57,21 +122,21 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('collectFundingTokenInput', collectFundingTokenInputNode)
   .addNode('collectDelegations', collectDelegationsNode)
   .addNode('prepareOperator', prepareOperatorNode)
-  .addNode('pollCycle', pollCycleNode, { ends: ['summarize', 'acknowledgeFundWallet'] })
+  .addNode('pollCycle', pollCycleNode)
   .addNode('acknowledgeFundWallet', acknowledgeFundWalletNode)
   .addNode('summarize', summarizeNode)
   .addEdge(START, 'runCommand')
   .addConditionalEdges('runCommand', resolveCommandTarget)
   .addEdge('hireCommand', 'bootstrap')
   .addEdge('fireCommand', END)
-  .addEdge('runCycleCommand', 'pollCycle')
+  .addConditionalEdges('runCycleCommand', resolvePostRunCycle)
   .addEdge('syncState', END)
   .addConditionalEdges('bootstrap', resolvePostBootstrap)
   .addEdge('collectSetupInput', 'collectFundingTokenInput')
-  .addEdge('collectFundingTokenInput', 'collectDelegations')
-  .addEdge('collectDelegations', 'prepareOperator')
-  .addEdge('prepareOperator', 'pollCycle')
-  .addEdge('pollCycle', 'summarize')
+  .addConditionalEdges('collectFundingTokenInput', resolvePostFundingTokenInput)
+  .addConditionalEdges('collectDelegations', resolvePostCollectDelegations)
+  .addConditionalEdges('prepareOperator', resolvePostPrepareOperator)
+  .addConditionalEdges('pollCycle', resolvePostPollCycle)
   .addEdge('acknowledgeFundWallet', END)
   .addEdge('summarize', END);
 

@@ -6,6 +6,23 @@ import { ONCHAIN_ACTIONS_API_URL } from '../src/config/constants.js';
 import type { ClmmState } from '../src/workflow/context.js';
 import { pollCycleNode } from '../src/workflow/nodes/pollCycle.js';
 
+type PollCycleUpdate = {
+  view?: ClmmState['view'];
+  private?: ClmmState['private'];
+};
+
+function extractPollCycleUpdate(result: unknown): PollCycleUpdate {
+  if (
+    typeof result === 'object' &&
+    result !== null &&
+    'update' in result &&
+    typeof (result as { update?: unknown }).update === 'object'
+  ) {
+    return (result as { update: PollCycleUpdate }).update;
+  }
+  return result as PollCycleUpdate;
+}
+
 const {
   copilotkitEmitStateMock,
   fetchAlloraInferenceMock,
@@ -191,7 +208,7 @@ describe('pollCycleNode (integration)', () => {
     state.view.metrics.previousPrice = 47000;
 
     const result = await pollCycleNode(state, {});
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
 
     expect(update.view?.haltReason).toBeUndefined();
     expect(update.view?.metrics.staleCycles).toBe(1);
@@ -213,7 +230,7 @@ describe('pollCycleNode (integration)', () => {
 
     const state = buildBaseState();
     const result = await pollCycleNode(state, {});
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
 
     expect(update.view?.haltReason).toContain(
       `ERROR: Failed to fetch GMX markets/positions from ${ONCHAIN_ACTIONS_API_URL}`,
@@ -236,12 +253,10 @@ describe('pollCycleNode (integration)', () => {
     const state = buildBaseState();
     state.view.metrics.previousPrice = 46000;
     const result = await pollCycleNode(state, {});
-    const command = result as { update: ClmmState; goto?: string[] };
-    const update = command.update;
+    const update = extractPollCycleUpdate(result);
 
     expect(update.view?.haltReason).toBe('');
     expect(update.view?.task?.taskStatus.state).toBe('input-required');
-    expect(command.goto).toContain('acknowledgeFundWallet');
     expect(update.view?.task?.taskStatus.message?.content).toContain(
       'GMX order simulation failed',
     );
@@ -278,7 +293,7 @@ describe('pollCycleNode (integration)', () => {
     state.view.metrics.previousPrice = 46000;
     const result = await pollCycleNode(state, {});
 
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
     const events = update.view?.activity.events ?? [];
     const artifactIds = events
       .filter((event) => event.type === 'artifact')
@@ -367,8 +382,7 @@ describe('pollCycleNode (integration)', () => {
     firstState.view.metrics.assumedPositionSide = 'long';
     const firstResult = await pollCycleNode(firstState, {});
 
-    const firstUpdate = (firstResult as { update: { view?: { metrics?: ClmmState['view']['metrics'] } } })
-      .update;
+    const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
     secondState.view.metrics = {
@@ -404,8 +418,7 @@ describe('pollCycleNode (integration)', () => {
     firstState.view.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
 
-    const firstUpdate = (firstResult as { update: { view?: { metrics?: ClmmState['view']['metrics'] } } })
-      .update;
+    const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
     secondState.view.metrics = {
@@ -443,8 +456,7 @@ describe('pollCycleNode (integration)', () => {
     firstState.view.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
 
-    const firstUpdate = (firstResult as { update: { view?: { metrics?: ClmmState['view']['metrics'] } } })
-      .update;
+    const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
     secondState.view.metrics = {
@@ -478,7 +490,7 @@ describe('pollCycleNode (integration)', () => {
     const firstState = buildBaseState();
     firstState.view.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
-    const firstUpdate = (firstResult as { update: ClmmState }).update;
+    const firstUpdate = extractPollCycleUpdate(firstResult);
     const firstSnapshot = firstUpdate.view?.metrics.latestSnapshot;
     expect(firstSnapshot?.totalUsd).toBeGreaterThan(0);
 
@@ -492,7 +504,7 @@ describe('pollCycleNode (integration)', () => {
     secondState.view.metrics.previousPrice = firstUpdate.view?.metrics.previousPrice;
 
     const secondResult = await pollCycleNode(secondState, {});
-    const secondUpdate = (secondResult as { update: ClmmState }).update;
+    const secondUpdate = extractPollCycleUpdate(secondResult);
 
     expect(secondUpdate.view?.metrics.latestSnapshot?.totalUsd).toBe(firstSnapshot?.totalUsd);
   });
@@ -546,7 +558,7 @@ describe('pollCycleNode (integration)', () => {
     state.view.metrics.assumedPositionSide = 'long';
 
     const result = await pollCycleNode(state, {});
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
 
     // When we assume the position is already open and the signal stays bullish,
     // we should not keep planning repeated opens.
@@ -607,7 +619,7 @@ describe('pollCycleNode (integration)', () => {
     state.view.metrics.assumedPositionSide = 'long';
 
     const result = await pollCycleNode(state, {});
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
     const snapshot = update.view?.metrics.latestSnapshot;
 
     expect(createPerpetualLongMock).not.toHaveBeenCalled();
@@ -628,7 +640,7 @@ describe('pollCycleNode (integration)', () => {
     const state = buildBaseState();
     const result = await pollCycleNode(state, {});
 
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
     expect(update.view?.haltReason).toContain('No GMX');
   });
 
@@ -678,7 +690,7 @@ describe('pollCycleNode (integration)', () => {
     const state = buildBaseState();
     const result = await pollCycleNode(state, {});
 
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
     const latestCycle = update.view?.metrics.latestCycle;
 
     expect(latestCycle?.action).toBe('hold');

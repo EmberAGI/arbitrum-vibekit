@@ -1,7 +1,7 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command, interrupt } from '@langchain/langgraph';
+import { type Command, interrupt } from '@langchain/langgraph';
 import { getDeleGatorEnvironment } from '@metamask/delegation-toolkit';
-import { shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
+import { buildInterruptPauseTransition, shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
 import { z } from 'zod';
 
 import {
@@ -21,6 +21,7 @@ import {
   type OnboardingState,
   type SignedDelegation,
 } from '../context.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 import {
   DELEGATION_DESCRIPTIONS,
   DELEGATION_INTENTS,
@@ -163,7 +164,7 @@ export const collectDelegationsNode = async (
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
     logInfo('collectDelegations: setup input missing; rerouting to collectSetupInput');
-    return new Command({ goto: 'collectSetupInput' });
+    return {};
   }
 
   const delegatorAddress = normalizeHexAddress(
@@ -213,11 +214,12 @@ export const collectDelegationsNode = async (
     await copilotkitEmitState(config, {
       view: mergedView,
     });
-    return new Command({
+    return buildInterruptPauseTransition({
+      node: 'collectDelegations',
       update: {
         view: mergedView,
       },
-      goto: 'collectDelegations',
+      createCommand: createLangGraphCommand,
     });
   }
   if (shouldPersistPendingState) {
@@ -282,12 +284,9 @@ export const collectDelegationsNode = async (
       metrics: state.view.metrics,
       transactionHistory: state.view.transactionHistory,
     });
-    return new Command({
-      update: {
-        view: haltedView,
-      },
-      goto: 'summarize',
-    });
+    return {
+      view: haltedView,
+    };
   }
 
   const signedDelegations = parsed.data.signedDelegations as unknown as SignedDelegation[];

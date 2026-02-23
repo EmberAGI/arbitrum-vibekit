@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it } from 'vitest';
 
 import type { ClmmState } from '../context.js';
@@ -5,6 +7,11 @@ import type { ClmmState } from '../context.js';
 import { collectDelegationsNode } from './collectDelegations.js';
 
 describe('collectDelegationsNode', () => {
+  it('uses state-driven/core-helper routing and avoids direct Command construction', async () => {
+    const source = await readFile(new URL('./collectDelegations.ts', import.meta.url), 'utf8');
+    expect(source.includes('new Command(')).toBe(false);
+  });
+
   it('preserves reduced onboarding totals when delegation step is skipped', async () => {
     const state = {
       view: {
@@ -49,5 +56,18 @@ describe('collectDelegationsNode', () => {
       .view;
     expect(view.task?.taskStatus?.state).toBe('working');
     expect(view.task?.taskStatus?.message?.content).toBe('Delegation approvals received. Continuing onboarding.');
+  });
+
+  it('returns state-only update when setup input is missing', async () => {
+    const state = {
+      view: {
+        delegationsBypassActive: false,
+        delegationBundle: undefined,
+        operatorInput: undefined,
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectDelegationsNode(state, {});
+    expect(result).toEqual({});
   });
 });

@@ -1,5 +1,4 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
 
 import { buildTaskStatus, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
 import { resolveNextOnboardingNode } from '../onboardingRouting.js';
@@ -9,7 +8,7 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 export const runCycleCommandNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
-): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+): Promise<ClmmUpdate> => {
   const nextOnboardingNode = resolveNextOnboardingNode(state);
   if (nextOnboardingNode !== 'syncState') {
     logInfo('runCycleCommand: onboarding incomplete; deferring cycle run', {
@@ -19,9 +18,7 @@ export const runCycleCommandNode = async (
       hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
       hasDelegationBundle: Boolean(state.view.delegationBundle),
     });
-    return new Command({
-      goto: nextOnboardingNode,
-    });
+    return {};
   }
 
   const { task, statusEvent } = buildTaskStatus(

@@ -1,5 +1,4 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
 import type { TaskState } from 'agent-workflow-core';
 
 import { fetchAlloraInference, type AlloraInference } from '../../clients/allora.js';
@@ -261,7 +260,7 @@ function buildLatestSnapshot(params: {
 export const pollCycleNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
-): Promise<Command<string, ClmmUpdate>> => {
+): Promise<ClmmUpdate> => {
   const { operatorConfig, selectedPool } = state.view;
 
   if (!operatorConfig || !selectedPool) {
@@ -289,12 +288,9 @@ export const pollCycleNode = async (
       await copilotkitEmitState(config, {
         view: mergedView,
       });
-      return new Command({
-        update: {
-          view: mergedView,
-        },
-        goto: nextOnboardingNode,
-      });
+      return {
+        view: mergedView,
+      };
     }
 
     const failureMessage = 'ERROR: Polling node missing GMX strategy configuration';
@@ -302,19 +298,16 @@ export const pollCycleNode = async (
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
     });
-    return new Command({
-      update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: state.view.metrics,
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-        },
+    return {
+      view: {
+        haltReason: failureMessage,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        metrics: state.view.metrics,
+        task,
+        profile: state.view.profile,
+        transactionHistory: state.view.transactionHistory,
       },
-      goto: 'summarize',
-      });
+    };
   }
 
   logInfo('pollCycle: executing cycle with configured strategy', {
@@ -364,19 +357,16 @@ export const pollCycleNode = async (
           activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
         },
       });
-      return new Command({
-        update: {
-          view: {
-            haltReason: failureMessage,
-            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-            metrics: { ...state.view.metrics, staleCycles, iteration },
-            task,
-            profile: state.view.profile,
-            transactionHistory: state.view.transactionHistory,
-          },
+      return {
+        view: {
+          haltReason: failureMessage,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          metrics: { ...state.view.metrics, staleCycles, iteration },
+          task,
+          profile: state.view.profile,
+          transactionHistory: state.view.transactionHistory,
         },
-        goto: 'summarize',
-      });
+      };
     }
 
     // Transient failures should not brick the agent; skip trades and retry on the next cycle.
@@ -389,19 +379,16 @@ export const pollCycleNode = async (
           activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
         },
       });
-      return new Command({
-        update: {
-          view: {
-            haltReason: failureMessage,
-            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-            metrics: { ...state.view.metrics, staleCycles, iteration },
-            task,
-            profile: state.view.profile,
-            transactionHistory: state.view.transactionHistory,
-          },
+      return {
+        view: {
+          haltReason: failureMessage,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          metrics: { ...state.view.metrics, staleCycles, iteration },
+          task,
+          profile: state.view.profile,
+          transactionHistory: state.view.transactionHistory,
         },
-        goto: 'summarize',
-      });
+      };
     }
 
     const warningMessage = `WARNING: Allora prediction unavailable (attempt ${staleCycles}/${ALLORA_STALE_CYCLE_LIMIT}); skipping trades this cycle.`;
@@ -412,18 +399,15 @@ export const pollCycleNode = async (
         activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
       },
     });
-    return new Command({
-      update: {
-        view: {
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: { ...state.view.metrics, staleCycles, iteration },
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-        },
+    return {
+      view: {
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        metrics: { ...state.view.metrics, staleCycles, iteration },
+        task,
+        profile: state.view.profile,
+        transactionHistory: state.view.transactionHistory,
       },
-      goto: 'summarize',
-    });
+    };
   }
 
   let gmxMarketAddress: string;
@@ -454,19 +438,16 @@ export const pollCycleNode = async (
           activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
         },
       });
-      return new Command({
-        update: {
-          view: {
-            haltReason: failureMessage,
-            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-            metrics: state.view.metrics,
-            task,
-            profile: state.view.profile,
-            transactionHistory: state.view.transactionHistory,
-          },
+      return {
+        view: {
+          haltReason: failureMessage,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          metrics: state.view.metrics,
+          task,
+          profile: state.view.profile,
+          transactionHistory: state.view.transactionHistory,
         },
-        goto: 'summarize',
-      });
+      };
     }
 
     gmxMarketAddress = selectedMarket.marketToken.address;
@@ -478,19 +459,16 @@ export const pollCycleNode = async (
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
     });
-    return new Command({
-      update: {
-        view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: state.view.metrics,
-          task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-        },
+    return {
+      view: {
+        haltReason: failureMessage,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        metrics: state.view.metrics,
+        task,
+        profile: state.view.profile,
+        transactionHistory: state.view.transactionHistory,
       },
-      goto: 'summarize',
-    });
+    };
   }
 
   const previousCycle = state.view.metrics.latestCycle;
@@ -806,52 +784,47 @@ export const pollCycleNode = async (
     agentIncome: Number((baseIncome + incomeDelta).toFixed(2)),
   };
 
-  return new Command({
-    update: {
-      view: {
-        metrics: {
-          lastSnapshot: selectedPool,
-          previousPrice: prediction.predictedPrice,
-          cyclesSinceRebalance: approvalOnlyExecution
-            ? (state.view.metrics.cyclesSinceRebalance ?? 0) + 1
-            : nextCyclesSinceTrade,
-          staleCycles: state.view.metrics.staleCycles ?? 0,
-          iteration,
-          latestCycle,
-          aumUsd: latestSnapshot.totalUsd,
-          apy: state.view.metrics.apy ?? state.view.profile.apy,
-          lifetimePnlUsd,
-          latestSnapshot,
-          assumedPositionSide: nextAssumedPositionSide,
-          lastInferenceSnapshotKey: inferenceSnapshotKey,
-          lastTradedInferenceSnapshotKey:
-            hasCompletedTradeEffect && inferenceSnapshotKey
-              ? inferenceSnapshotKey
-              : state.view.metrics.lastTradedInferenceSnapshotKey,
-        },
-        task,
-        activity: {
-          telemetry: [latestCycle],
-          events: executionPlanEvent
-            ? executionResultEvent
-              ? [telemetryEvent, executionPlanEvent, executionResultEvent, statusEvent]
-              : [telemetryEvent, executionPlanEvent, statusEvent]
-            : [telemetryEvent, statusEvent],
-        },
-        transactionHistory: transactionEntry
-          ? [...state.view.transactionHistory, transactionEntry]
-          : state.view.transactionHistory,
-        profile: nextProfile,
-        selectedPool,
-        haltReason: '',
-        executionError: executionFailure?.requiresFundingAcknowledgement
-          ? ''
-          : executionFailure?.detail,
+  return {
+    view: {
+      metrics: {
+        lastSnapshot: selectedPool,
+        previousPrice: prediction.predictedPrice,
+        cyclesSinceRebalance: approvalOnlyExecution
+          ? (state.view.metrics.cyclesSinceRebalance ?? 0) + 1
+          : nextCyclesSinceTrade,
+        staleCycles: state.view.metrics.staleCycles ?? 0,
+        iteration,
+        latestCycle,
+        aumUsd: latestSnapshot.totalUsd,
+        apy: state.view.metrics.apy ?? state.view.profile.apy,
+        lifetimePnlUsd,
+        latestSnapshot,
+        assumedPositionSide: nextAssumedPositionSide,
+        lastInferenceSnapshotKey: inferenceSnapshotKey,
+        lastTradedInferenceSnapshotKey:
+          hasCompletedTradeEffect && inferenceSnapshotKey
+            ? inferenceSnapshotKey
+            : state.view.metrics.lastTradedInferenceSnapshotKey,
       },
-      private: {
-        cronScheduled,
+      task,
+      activity: {
+        telemetry: [latestCycle],
+        events: executionPlanEvent
+          ? executionResultEvent
+            ? [telemetryEvent, executionPlanEvent, executionResultEvent, statusEvent]
+            : [telemetryEvent, executionPlanEvent, statusEvent]
+          : [telemetryEvent, statusEvent],
       },
+      transactionHistory: transactionEntry
+        ? [...state.view.transactionHistory, transactionEntry]
+        : state.view.transactionHistory,
+      profile: nextProfile,
+      selectedPool,
+      haltReason: '',
+      executionError: executionFailure?.requiresFundingAcknowledgement ? '' : executionFailure?.detail,
     },
-    goto: executionFailure?.requiresFundingAcknowledgement ? 'acknowledgeFundWallet' : 'summarize',
-  });
+    private: {
+      cronScheduled,
+    },
+  };
 };

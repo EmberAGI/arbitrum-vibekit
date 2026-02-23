@@ -1,5 +1,4 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
 
 import { resolveAgentWalletAddress } from '../../config/constants.js';
 import { type ResolvedGmxConfig } from '../../domain/types.js';
@@ -19,7 +18,7 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 export const prepareOperatorNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
-): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+): Promise<ClmmUpdate> => {
   const { operatorInput } = state.view;
   if (!operatorInput) {
     const failureMessage = 'ERROR: Setup input missing';
@@ -39,12 +38,9 @@ export const prepareOperatorNode = async (
       transactionHistory: state.view.transactionHistory,
       metrics: state.view.metrics,
     });
-    return new Command({
-      update: {
-        view: haltedView,
-      },
-      goto: 'summarize',
-    });
+    return {
+      view: haltedView,
+    };
   }
 
   const fundingTokenInput = state.view.fundingTokenInput;
@@ -66,12 +62,9 @@ export const prepareOperatorNode = async (
       transactionHistory: state.view.transactionHistory,
       metrics: state.view.metrics,
     });
-    return new Command({
-      update: {
-        view: haltedView,
-      },
-      goto: 'summarize',
-    });
+    return {
+      view: haltedView,
+    };
   }
 
   const fundingTokenAddress = normalizeHexAddress(
@@ -105,12 +98,9 @@ export const prepareOperatorNode = async (
     await copilotkitEmitState(config, {
       view: mergedView,
     });
-    return new Command({
-      update: {
-        view: mergedView,
-      },
-      goto: 'collectDelegations',
-    });
+    return {
+      view: mergedView,
+    };
   }
 
   const targetMarket = MARKETS.find((market) => market.baseSymbol === operatorInput.targetMarket);
@@ -133,12 +123,9 @@ export const prepareOperatorNode = async (
       transactionHistory: state.view.transactionHistory,
       metrics: state.view.metrics,
     });
-    return new Command({
-      update: {
-        view: haltedView,
-      },
-      goto: 'summarize',
-    });
+    return {
+      view: haltedView,
+    };
   }
 
   const delegateeWalletAddress = agentWalletAddress;

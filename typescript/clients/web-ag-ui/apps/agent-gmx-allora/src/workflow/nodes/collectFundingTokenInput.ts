@@ -1,5 +1,4 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
 
 import type { PerpetualMarket } from '../../clients/onchainActions.js';
 import { ARBITRUM_CHAIN_ID, ONCHAIN_ACTIONS_API_URL } from '../../config/constants.js';
@@ -40,7 +39,7 @@ function resolveUsdcTokenAddressFromMarket(market: PerpetualMarket): `0x${string
 export const collectFundingTokenInputNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
-): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+): Promise<ClmmUpdate> => {
   logInfo('collectFundingTokenInput: entering node', {
     hasOperatorInput: Boolean(state.view.operatorInput),
     onboardingStep: state.view.onboarding?.step,
@@ -49,7 +48,7 @@ export const collectFundingTokenInputNode = async (
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
     logInfo('collectFundingTokenInput: setup input missing; rerouting to collectSetupInput');
-    return new Command({ goto: 'collectSetupInput' });
+    return {};
   }
 
   if (state.view.fundingTokenInput) {

@@ -1,6 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command, interrupt } from '@langchain/langgraph';
-import { shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
+import { interrupt, type Command } from '@langchain/langgraph';
+import { buildInterruptPauseTransition, shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
 import { z } from 'zod';
 
 import { GmxSetupInputSchema } from '../../domain/types.js';
@@ -13,6 +13,7 @@ import {
   type GmxSetupInterrupt,
   type ClmmUpdate,
 } from '../context.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 
 const SETUP_STEP_KEY: OnboardingState['key'] = 'setup';
 const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
@@ -78,11 +79,12 @@ export const collectSetupInputNode = async (
     await copilotkitEmitState(config, {
       view: mergedView,
     });
-    return new Command({
+    return buildInterruptPauseTransition({
+      node: 'collectSetupInput',
       update: {
         view: mergedView,
       },
-      goto: 'collectSetupInput',
+      createCommand: createLangGraphCommand,
     });
   }
 

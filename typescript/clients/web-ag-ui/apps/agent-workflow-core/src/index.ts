@@ -38,3 +38,4 @@ export { mergeViewPatchForEmit } from './viewEmission.js';
 export { projectCycleCommandView, shouldPersistInputRequiredCheckpoint } from './viewInvariants.js';
 export { isLangGraphBusyStatus } from './langGraphBusyResponse.js';
 export { createMessageHistoryReducer, mergeMessageHistory } from './messageHistory.js';
+export { buildInterruptPauseTransition, buildTerminalTransition } from './transitionCommands.js';

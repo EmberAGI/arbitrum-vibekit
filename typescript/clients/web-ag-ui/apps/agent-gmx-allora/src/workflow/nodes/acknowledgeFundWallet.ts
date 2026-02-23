@@ -1,6 +1,10 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command, interrupt } from '@langchain/langgraph';
-import { shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
+import { type Command, interrupt } from '@langchain/langgraph';
+import {
+  buildInterruptPauseTransition,
+  buildTerminalTransition,
+  shouldPersistInputRequiredCheckpoint,
+} from 'agent-workflow-core';
 import { z } from 'zod';
 
 import {
@@ -10,6 +14,7 @@ import {
   type ClmmUpdate,
   type GmxFundWalletInterrupt,
 } from '../context.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 
 const FundWalletAckSchema = z.object({
   acknowledged: z.literal(true),
@@ -70,11 +75,12 @@ export const acknowledgeFundWalletNode = async (
     await copilotkitEmitState(config, {
       view: mergedView,
     });
-    return new Command({
+    return buildInterruptPauseTransition({
+      node: 'acknowledgeFundWallet',
       update: {
         view: mergedView,
       },
-      goto: 'acknowledgeFundWallet',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -93,10 +99,14 @@ export const acknowledgeFundWalletNode = async (
   const parsedAck = FundWalletAckSchema.safeParse(inputToParse);
   if (!parsedAck.success) {
     // Keep state unchanged and end the run; user can retry from the blocker UI.
-    return new Command({ goto: '__end__' });
+    return buildTerminalTransition({
+      createCommand: createLangGraphCommand,
+    });
   }
 
   // This interrupt is an "ack + retry" flow.
   // We end here and let the UI trigger a new `cycle` run immediately.
-  return new Command({ goto: '__end__' });
+  return buildTerminalTransition({
+    createCommand: createLangGraphCommand,
+  });
 };
