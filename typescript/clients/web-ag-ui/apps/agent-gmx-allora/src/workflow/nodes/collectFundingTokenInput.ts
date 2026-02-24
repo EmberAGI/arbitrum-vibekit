@@ -9,6 +9,7 @@ import {
   applyViewPatch,
   buildTaskStatus,
   logInfo,
+  logWarn,
   normalizeHexAddress,
   type ClmmState,
   type ClmmUpdate,
@@ -44,6 +45,13 @@ export const collectFundingTokenInputNode = async (
     hasOperatorInput: Boolean(state.view.operatorInput),
     onboardingStep: state.view.onboarding?.step,
   });
+  logWarn('collectFundingTokenInput: node entered', {
+    hasOperatorInput: Boolean(state.view.operatorInput),
+    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
+    onboardingStatus: state.view.onboardingFlow?.status,
+    onboardingStep: state.view.onboarding?.step,
+    onboardingKey: state.view.onboarding?.key,
+  });
 
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
@@ -53,6 +61,13 @@ export const collectFundingTokenInputNode = async (
 
   if (state.view.fundingTokenInput) {
     logInfo('collectFundingTokenInput: funding token already present; skipping step');
+    logWarn('collectFundingTokenInput: skipping funding token collection', {
+      reason: 'funding-token-already-present-in-view',
+      fundingTokenAddress: state.view.fundingTokenInput.fundingTokenAddress,
+      onboardingStatus: state.view.onboardingFlow?.status,
+      onboardingStep: state.view.onboarding?.step,
+      onboardingKey: state.view.onboarding?.key,
+    });
     const resumedView = applyViewPatch(state, {
       onboarding:
         state.view.delegationsBypassActive === true

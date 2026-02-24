@@ -31,6 +31,8 @@ import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js'
 import {
   buildTaskStatus,
   logInfo,
+  logPauseSnapshot,
+  logWarn,
   normalizeHexAddress,
   type ClmmEvent,
   type GmxLatestSnapshot,
@@ -42,13 +44,22 @@ import { executePerpetualPlan } from '../execution.js';
 import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
-type Configurable = { configurable?: { thread_id?: string } };
+type Configurable = {
+  configurable?: {
+    thread_id?: string;
+    checkpoint_id?: string;
+    checkpoint_ns?: string;
+  };
+};
 
 const DECISION_THRESHOLD = 0.62;
 const CONNECT_DELAY_MS = 2500;
 const CONNECT_DELAY_STEPS = 3;
 const ALLORA_STALE_CYCLE_LIMIT = 3;
 const ERC20_APPROVE_SELECTOR = '0x095ea7b3';
+const POSITION_SYNC_GUARD_WINDOW_MS = 90_000;
+
+type PositionSyncGuard = NonNullable<ClmmState['view']['metrics']['pendingPositionSync']>;
 
 function shouldDelayIteration(iteration: number): boolean {
   return iteration % 3 === 0;
@@ -157,6 +168,19 @@ function isApprovalOnlyTransactions(transactions: TransactionPlan[] | undefined)
   return transactions.every((tx) => getCallSelector(tx.data) === ERC20_APPROVE_SELECTOR);
 }
 
+function resolveActivePositionSyncGuard(
+  guard: ClmmState['view']['metrics']['pendingPositionSync'],
+  nowEpochMs: number,
+): PositionSyncGuard | undefined {
+  if (!guard) {
+    return undefined;
+  }
+  if (guard.expiresAtEpochMs <= nowEpochMs) {
+    return undefined;
+  }
+  return guard;
+}
+
 type ExecutionFailureSummary = {
   taskState: TaskState;
   statusMessage: string;
@@ -261,6 +285,10 @@ export const pollCycleNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
+  const runtimeConfig = (config as Configurable).configurable;
+  const runtimeThreadId = runtimeConfig?.thread_id;
+  const runtimeCheckpointId = runtimeConfig?.checkpoint_id;
+  const runtimeCheckpointNamespace = runtimeConfig?.checkpoint_ns;
   const { operatorConfig, selectedPool } = state.view;
 
   if (!operatorConfig || !selectedPool) {
@@ -288,6 +316,17 @@ export const pollCycleNode = async (
       await copilotkitEmitState(config, {
         view: mergedView,
       });
+      if (needsUserInput) {
+        logPauseSnapshot({
+          node: 'pollCycle',
+          reason: 'onboarding prerequisites incomplete',
+          view: mergedView,
+          metadata: {
+            pauseMechanism: 'state-wait',
+            nextOnboardingNode,
+          },
+        });
+      }
       return {
         view: mergedView,
       };
@@ -311,6 +350,9 @@ export const pollCycleNode = async (
   }
 
   logInfo('pollCycle: executing cycle with configured strategy', {
+    threadId: runtimeThreadId,
+    checkpointId: runtimeCheckpointId,
+    checkpointNamespace: runtimeCheckpointNamespace,
     hasOperatorConfig: Boolean(operatorConfig),
     hasSelectedPool: Boolean(selectedPool),
     onboardingStatus: state.view.onboardingFlow?.status,
@@ -473,15 +515,52 @@ export const pollCycleNode = async (
 
   const previousCycle = state.view.metrics.latestCycle;
   const assumedPositionSide = state.view.metrics.assumedPositionSide;
+  const nowEpochMs = Date.now();
+  const activePositionSyncGuard = resolveActivePositionSyncGuard(
+    state.view.metrics.pendingPositionSync,
+    nowEpochMs,
+  );
   const normalizedTargetMarket = gmxMarketAddress.toLowerCase();
   const currentMarketPosition = positions.find(
     (position) => position.marketAddress.toLowerCase() === normalizedTargetMarket,
   );
+  logWarn('pollCycle: market position snapshot before decision', {
+    threadId: runtimeThreadId,
+    checkpointId: runtimeCheckpointId,
+    checkpointNamespace: runtimeCheckpointNamespace,
+    iteration,
+    targetMarketAddress: normalizedTargetMarket,
+    totalPositions: positions.length,
+    matchedMarketPosition: Boolean(currentMarketPosition),
+    matchedPositionSide: currentMarketPosition?.positionSide,
+    matchedPositionSizeUsd: currentMarketPosition?.sizeInUsd,
+    matchedPositionPnl: currentMarketPosition?.pnl,
+    assumedPositionSide,
+    activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
+    activePositionSyncGuardSourceAction: activePositionSyncGuard?.sourceAction,
+    activePositionSyncGuardExpiresAtEpochMs: activePositionSyncGuard?.expiresAtEpochMs,
+  });
   const currentPositionSide = currentMarketPosition?.positionSide;
-  const previousOpenSide = previousCycle?.action === 'open' ? previousCycle.side : undefined;
-
-  const decisionPreviousSide = currentPositionSide ?? assumedPositionSide ?? previousOpenSide;
-  const decisionPreviousAction = decisionPreviousSide ? 'open' : previousCycle?.action;
+  // Only treat a prior position as open when it is backed by onchain state
+  // (current position) or explicit local assumption from a successful prior trade.
+  // Never infer open state from previous cycle telemetry alone.
+  const decisionPreviousSide =
+    currentPositionSide ?? assumedPositionSide ?? activePositionSyncGuard?.expectedSide;
+  const decisionPreviousAction = decisionPreviousSide ? 'open' : undefined;
+  logWarn('pollCycle: decision context resolved', {
+    threadId: runtimeThreadId,
+    checkpointId: runtimeCheckpointId,
+    checkpointNamespace: runtimeCheckpointNamespace,
+    iteration,
+    currentPositionSide,
+    assumedPositionSide,
+    previousCycleAction: previousCycle?.action,
+    previousCycleSide: previousCycle?.side,
+    activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
+    activePositionSyncGuardSourceAction: activePositionSyncGuard?.sourceAction,
+    decisionPreviousAction,
+    decisionPreviousSide,
+  });
   const { telemetry, nextCyclesSinceTrade: initialCyclesSinceTrade } = buildCycleTelemetry({
     prediction,
     decisionThreshold: DECISION_THRESHOLD,
@@ -529,7 +608,7 @@ export const pollCycleNode = async (
     Boolean(inferenceSnapshotKey) &&
     state.view.metrics.lastTradedInferenceSnapshotKey === inferenceSnapshotKey;
 
-  const adjustedTelemetry = skipTradeForUnchangedInference
+  let adjustedTelemetry = skipTradeForUnchangedInference
     ? {
         ...exposureAdjusted,
         action: 'hold' as const,
@@ -541,9 +620,47 @@ export const pollCycleNode = async (
       }
     : exposureAdjusted;
 
-  const executionPlan = skipTradeForUnchangedInference
+  let executionPlan = skipTradeForUnchangedInference
     ? ({ action: 'none' } as const)
     : plannedExecutionPlan;
+  const shouldDeferTradeForPositionSync =
+    Boolean(activePositionSyncGuard) &&
+    !currentMarketPosition &&
+    executionPlan.action !== 'none';
+  if (shouldDeferTradeForPositionSync) {
+    const sourceTxHash = activePositionSyncGuard?.sourceTxHash;
+    const sourceAction = activePositionSyncGuard?.sourceAction;
+    adjustedTelemetry = {
+      ...adjustedTelemetry,
+      action: 'hold',
+      side: undefined,
+      leverage: undefined,
+      sizeUsd: undefined,
+      txHash: undefined,
+      reason: sourceTxHash
+        ? `Awaiting GMX position index sync after ${sourceAction} tx ${sourceTxHash.slice(0, 10)}... before next trade decision.`
+        : `Awaiting GMX position index sync after ${sourceAction} action before next trade decision.`,
+    };
+    executionPlan = { action: 'none' } as const;
+  }
+  logWarn('pollCycle: decision and execution plan resolved', {
+    threadId: runtimeThreadId,
+    checkpointId: runtimeCheckpointId,
+    checkpointNamespace: runtimeCheckpointNamespace,
+    iteration,
+    adjustedAction: adjustedTelemetry.action,
+    adjustedReason: adjustedTelemetry.reason,
+    decisionSide: adjustedTelemetry.side,
+    decisionSizeUsd: adjustedTelemetry.sizeUsd,
+    executionPlanAction: executionPlan.action,
+    skipTradeForUnchangedInference,
+    deferredForPositionSync: shouldDeferTradeForPositionSync,
+    activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
+    activePositionSyncGuardSourceAction: activePositionSyncGuard?.sourceAction,
+    inferenceSnapshotKey,
+    lastTradedInferenceSnapshotKey: state.view.metrics.lastTradedInferenceSnapshotKey,
+    txExecutionMode: resolveGmxAlloraTxExecutionMode(),
+  });
 
   const nextCyclesSinceTrade =
     adjustedTelemetry.action === 'hold' && telemetry.action === 'open'
@@ -584,6 +701,30 @@ export const pollCycleNode = async (
 
   const txExecutionMode = resolveGmxAlloraTxExecutionMode();
   const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
+  if (executionPlan.action === 'none') {
+    logWarn('pollCycle: execution plan is none; no order simulation/execution will be attempted', {
+      threadId: runtimeThreadId,
+      checkpointId: runtimeCheckpointId,
+      checkpointNamespace: runtimeCheckpointNamespace,
+      iteration,
+      adjustedAction: adjustedTelemetry.action,
+      adjustedReason: adjustedTelemetry.reason,
+      txExecutionMode,
+    });
+  } else {
+    logWarn('pollCycle: invoking executePerpetualPlan', {
+      threadId: runtimeThreadId,
+      checkpointId: runtimeCheckpointId,
+      checkpointNamespace: runtimeCheckpointNamespace,
+      iteration,
+      executionPlanAction: executionPlan.action,
+      txExecutionMode,
+      delegationsBypassActive: state.view.delegationsBypassActive === true,
+      hasDelegationBundle: Boolean(state.view.delegationBundle),
+      delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+      delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+    });
+  }
   const executionResult = await executePerpetualPlan({
     client: onchainActionsClient,
     clients,
@@ -593,6 +734,17 @@ export const pollCycleNode = async (
     delegationBundle: state.view.delegationBundle,
     delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
     delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+  });
+  logWarn('pollCycle: executePerpetualPlan resolved', {
+    threadId: runtimeThreadId,
+    checkpointId: runtimeCheckpointId,
+    checkpointNamespace: runtimeCheckpointNamespace,
+    iteration,
+    action: executionResult.action,
+    ok: executionResult.ok,
+    txHash: executionResult.lastTxHash,
+    txHashes: executionResult.txHashes,
+    error: executionResult.ok ? undefined : executionResult.error,
   });
   const approvalOnlyExecution =
     executionResult.ok &&
@@ -660,12 +812,17 @@ export const pollCycleNode = async (
       : executionResult.ok && (executionPlan.action === 'long' || executionPlan.action === 'short')
         ? adjustedTelemetry.sizeUsd
         : undefined;
+  const normalizedFallbackSizeUsd =
+    fallbackSizeUsd ??
+    // Positions fetch already succeeded for this cycle. If target-market position is absent,
+    // clear stale snapshot exposure instead of carrying forward previous non-zero totals.
+    (positionAfterExecution ? undefined : 0);
 
   const latestSnapshot = buildLatestSnapshot({
     marketAddress: normalizeHexAddress(gmxMarketAddress, 'market address'),
     timestamp: latestCycle.timestamp,
     position: positionAfterExecution,
-    fallbackSizeUsd,
+    fallbackSizeUsd: normalizedFallbackSizeUsd,
     fallbackLeverage:
       executionResult.ok && (executionPlan.action === 'long' || executionPlan.action === 'short')
         ? latestCycle.leverage
@@ -685,9 +842,60 @@ export const pollCycleNode = async (
       ? 0
       : state.view.metrics.lifetimePnlUsd;
 
+  const nextPendingPositionSync: PositionSyncGuard | undefined = (():
+    | PositionSyncGuard
+    | undefined => {
+    const activeGuardWithoutPosition = activePositionSyncGuard && !positionAfterExecution;
+    if (!executionResult.ok || executionPlan.action === 'none' || approvalOnlyExecution) {
+      return activeGuardWithoutPosition ? activePositionSyncGuard : undefined;
+    }
+    if (executionPlan.action === 'close') {
+      if (!positionAfterExecution) {
+        return undefined;
+      }
+      return {
+        expectedSide: undefined,
+        sourceAction: 'close' as const,
+        sourceIteration: iteration,
+        sourceTxHash: executionResult.lastTxHash,
+        expiresAtEpochMs: nowEpochMs + POSITION_SYNC_GUARD_WINDOW_MS,
+      };
+    }
+
+    if (executionPlan.action === 'long' || executionPlan.action === 'short') {
+      const expectedSide = executionPlan.action;
+      if (positionAfterExecution?.positionSide === expectedSide) {
+        return undefined;
+      }
+      return {
+        expectedSide,
+        sourceAction: executionPlan.action,
+        sourceIteration: iteration,
+        sourceTxHash: executionResult.lastTxHash,
+        expiresAtEpochMs: nowEpochMs + POSITION_SYNC_GUARD_WINDOW_MS,
+      };
+    }
+    return activeGuardWithoutPosition ? activePositionSyncGuard : undefined;
+  })();
+  if (nextPendingPositionSync) {
+    logWarn('pollCycle: position sync guard active', {
+      threadId: runtimeThreadId,
+      checkpointId: runtimeCheckpointId,
+      checkpointNamespace: runtimeCheckpointNamespace,
+      iteration,
+      expectedSide: nextPendingPositionSync.expectedSide,
+      sourceAction: nextPendingPositionSync.sourceAction,
+      sourceIteration: nextPendingPositionSync.sourceIteration,
+      sourceTxHash: nextPendingPositionSync.sourceTxHash,
+      expiresAtEpochMs: nextPendingPositionSync.expiresAtEpochMs,
+      matchedMarketPositionAfterExecution: Boolean(positionAfterExecution),
+      matchedPositionSideAfterExecution: positionAfterExecution?.positionSide,
+    });
+  }
+
   const nextAssumedPositionSide = (() => {
     if (!executionResult.ok) {
-      return assumedPositionSide;
+      return currentPositionSide ?? assumedPositionSide ?? activePositionSyncGuard?.expectedSide;
     }
     if (approvalOnlyExecution) {
       return assumedPositionSide;
@@ -707,7 +915,7 @@ export const pollCycleNode = async (
     if (positionAfterExecution?.positionSide) {
       return positionAfterExecution.positionSide;
     }
-    return assumedPositionSide;
+    return currentPositionSide ?? assumedPositionSide ?? nextPendingPositionSync?.expectedSide;
   })();
   const executionPlanEvent: ClmmEvent | undefined =
     executionPlan.action === 'none'
@@ -718,6 +926,26 @@ export const pollCycleNode = async (
           append: true,
         };
   const requiresFundingAcknowledgement = executionFailure?.requiresFundingAcknowledgement === true;
+  if (requiresFundingAcknowledgement) {
+    logWarn('pollCycle: execution blocked; funding acknowledgement required', {
+      threadId: runtimeThreadId,
+      checkpointId: runtimeCheckpointId,
+      checkpointNamespace: runtimeCheckpointNamespace,
+      iteration,
+      detail: executionFailure?.detail,
+      rawError: executionResult.error,
+      taskState: executionFailure?.taskState,
+      plannedAction: executionPlan.action,
+      decisionAction: latestCycle.action,
+      decisionReason: latestCycle.reason,
+      targetMarketAddress: normalizedTargetMarket,
+      matchedMarketPosition: Boolean(currentMarketPosition),
+      matchedMarketPositionSide: currentMarketPosition?.positionSide,
+      matchedMarketPositionSizeUsd: currentMarketPosition?.sizeInUsd,
+      assumedPositionSide,
+      activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
+    });
+  }
   const executionResultEvent: ClmmEvent | undefined =
     executionPlan.action === 'none'
       ? undefined
@@ -749,11 +977,14 @@ export const pollCycleNode = async (
   };
 
   let cronScheduled = state.private.cronScheduled;
-  const threadId = (config as Configurable).configurable?.thread_id;
-  if (threadId && !cronScheduled) {
+  if (runtimeThreadId && !cronScheduled) {
     const intervalMs = state.private.pollIntervalMs ?? resolvePollIntervalMs();
-    ensureCronForThread(threadId, intervalMs);
-    logInfo('Cron scheduled after first GMX cycle', { threadId });
+    ensureCronForThread(runtimeThreadId, intervalMs);
+    logInfo('Cron scheduled after first GMX cycle', {
+      threadId: runtimeThreadId,
+      checkpointId: runtimeCheckpointId,
+      checkpointNamespace: runtimeCheckpointNamespace,
+    });
     cronScheduled = true;
   }
 
@@ -805,6 +1036,7 @@ export const pollCycleNode = async (
           hasCompletedTradeEffect && inferenceSnapshotKey
             ? inferenceSnapshotKey
             : state.view.metrics.lastTradedInferenceSnapshotKey,
+        pendingPositionSync: nextPendingPositionSync,
       },
       task,
       activity: {
@@ -821,7 +1053,7 @@ export const pollCycleNode = async (
       profile: nextProfile,
       selectedPool,
       haltReason: '',
-      executionError: executionFailure?.requiresFundingAcknowledgement ? '' : executionFailure?.detail,
+      executionError: executionFailure?.detail ?? '',
     },
     private: {
       cronScheduled,

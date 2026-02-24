@@ -6,6 +6,8 @@ import {
   applyViewPatch,
   buildTaskStatus,
   logInfo,
+  logPauseSnapshot,
+  logWarn,
   normalizeHexAddress,
   type ClmmEvent,
   type ClmmState,
@@ -19,6 +21,15 @@ export const prepareOperatorNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
+  logWarn('prepareOperator: node entered', {
+    onboardingStatus: state.view.onboardingFlow?.status,
+    onboardingStep: state.view.onboarding?.step,
+    onboardingKey: state.view.onboarding?.key,
+    hasOperatorInput: Boolean(state.view.operatorInput),
+    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
+    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    hasOperatorConfig: Boolean(state.view.operatorConfig),
+  });
   const { operatorInput } = state.view;
   if (!operatorInput) {
     const failureMessage = 'ERROR: Setup input missing';
@@ -79,6 +90,12 @@ export const prepareOperatorNode = async (
     : normalizeHexAddress(operatorInput.walletAddress, 'delegator wallet address');
   const delegatorInputWalletAddress = delegationsBypassActive ? undefined : delegatorWalletAddress;
   if (!delegationsBypassActive && !state.view.delegationBundle) {
+    logWarn('prepareOperator: cannot build operator config yet; delegation bundle missing', {
+      delegationsBypassActive,
+      hasDelegationBundle: false,
+      onboardingStep: state.view.onboarding?.step,
+      onboardingKey: state.view.onboarding?.key,
+    });
     logInfo('prepareOperator: waiting for delegation bundle before strategy setup', {
       delegationsBypassActive,
       hasOperatorInput: Boolean(operatorInput),
@@ -95,6 +112,14 @@ export const prepareOperatorNode = async (
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     };
     const mergedView = applyViewPatch(state, pendingView);
+    logPauseSnapshot({
+      node: 'prepareOperator',
+      reason: 'awaiting delegation bundle before strategy setup',
+      view: mergedView,
+      metadata: {
+        pauseMechanism: 'state-wait',
+      },
+    });
     await copilotkitEmitState(config, {
       view: mergedView,
     });

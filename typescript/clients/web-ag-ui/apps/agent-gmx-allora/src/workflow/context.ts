@@ -6,6 +6,7 @@ import {
   isTaskActiveState,
   isTaskTerminalState,
   mergeViewPatchForEmit,
+  normalizeLegacyOnboardingState,
   type AgentCommand,
   type OnboardingContract,
   type TaskState,
@@ -114,6 +115,14 @@ export type ClmmMetrics = {
   // Fingerprint of the last successful trade action. Used to prevent duplicate actions
   // when inference metrics have not changed.
   lastTradedInferenceSnapshotKey?: string;
+  // Short-lived guard after successful execution while position index data catches up.
+  pendingPositionSync?: {
+    expectedSide?: 'long' | 'short';
+    sourceAction: 'long' | 'short' | 'close';
+    sourceIteration: number;
+    sourceTxHash?: string;
+    expiresAtEpochMs: number;
+  };
 };
 
 export type TaskStatus = {
@@ -290,6 +299,7 @@ const defaultViewState = (): ClmmViewState => ({
     assumedPositionSide: undefined,
     lastInferenceSnapshotKey: undefined,
     lastTradedInferenceSnapshotKey: undefined,
+    pendingPositionSync: undefined,
   },
   transactionHistory: [],
 });
@@ -358,6 +368,10 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     taskState: nextTask?.taskStatus?.state,
     delegationsBypassActive: nextDelegationsBypassActive === true,
   });
+  const normalizedOnboarding = normalizeLegacyOnboardingState({
+    onboarding: nextOnboarding,
+    onboardingFlow: nextOnboardingFlow,
+  });
 
   const nextTelemetry = limitHistory(
     mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry),
@@ -388,6 +402,9 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     Object.prototype.hasOwnProperty.call(rightMetrics, 'assumedPositionSide');
   const hasLatestSnapshotUpdate =
     rightMetrics !== undefined && Object.prototype.hasOwnProperty.call(rightMetrics, 'latestSnapshot');
+  const hasPendingPositionSyncUpdate =
+    rightMetrics !== undefined &&
+    Object.prototype.hasOwnProperty.call(rightMetrics, 'pendingPositionSync');
   const nextMetrics: ClmmMetrics = {
     lastSnapshot: rightMetrics?.lastSnapshot ?? left.metrics.lastSnapshot,
     previousPrice: rightMetrics?.previousPrice ?? left.metrics.previousPrice,
@@ -406,6 +423,9 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
       rightMetrics?.lastInferenceSnapshotKey ?? left.metrics.lastInferenceSnapshotKey,
     lastTradedInferenceSnapshotKey:
       rightMetrics?.lastTradedInferenceSnapshotKey ?? left.metrics.lastTradedInferenceSnapshotKey,
+    pendingPositionSync: hasPendingPositionSyncUpdate
+      ? rightMetrics?.pendingPositionSync
+      : left.metrics.pendingPositionSync,
   };
 
   return {
@@ -415,7 +435,7 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     task: nextTask,
     poolArtifact: right.poolArtifact ?? left.poolArtifact,
     operatorInput: right.operatorInput ?? left.operatorInput,
-    onboarding: nextOnboarding,
+    onboarding: normalizedOnboarding,
     onboardingFlow: nextOnboardingFlow,
     fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
     selectedPool: right.selectedPool ?? left.selectedPool,
@@ -517,9 +537,45 @@ export function buildTaskStatus(
 
 export type LogOptions = {
   detailed?: boolean;
+  force?: boolean;
 };
 
+type AgentLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
+
+const LOG_LEVEL_WEIGHT: Record<AgentLogLevel, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+  silent: 50,
+};
+
+function resolveAgentLogLevel(): AgentLogLevel {
+  const raw =
+    process.env['GMX_ALLORA_LOG_LEVEL'] ?? process.env['AGENT_LOG_LEVEL'] ?? process.env['LOG_LEVEL'];
+  switch (raw) {
+    case 'debug':
+    case 'info':
+    case 'warn':
+    case 'error':
+    case 'silent':
+      return raw;
+    default:
+      return 'info';
+  }
+}
+
+function shouldLog(level: AgentLogLevel, options?: LogOptions): boolean {
+  if (options?.force) {
+    return true;
+  }
+  return LOG_LEVEL_WEIGHT[resolveAgentLogLevel()] <= LOG_LEVEL_WEIGHT[level];
+}
+
 export function logInfo(message: string, metadata?: Record<string, unknown>, options?: LogOptions) {
+  if (!shouldLog('info', options)) {
+    return;
+  }
   const timestamp = new Date().toISOString();
   const prefix = `[GmxAllora][${timestamp}]`;
   if (metadata && Object.keys(metadata).length > 0) {
@@ -533,6 +589,57 @@ export function logInfo(message: string, metadata?: Record<string, unknown>, opt
     return;
   }
   console.info(`${prefix} ${message}`);
+}
+
+export function logWarn(message: string, metadata?: Record<string, unknown>) {
+  if (!shouldLog('warn')) {
+    return;
+  }
+  const timestamp = new Date().toISOString();
+  const prefix = `[GmxAllora][${timestamp}]`;
+  if (metadata && Object.keys(metadata).length > 0) {
+    console.warn(`${prefix} ${message}`, metadata);
+    return;
+  }
+  console.warn(`${prefix} ${message}`);
+}
+
+export function logPauseSnapshot(params: {
+  node: string;
+  reason: string;
+  view: ClmmState['view'];
+  metadata?: Record<string, unknown>;
+}) {
+  const taskMessage = params.view.task?.taskStatus?.message?.content;
+  const latestEvent = params.view.activity?.events.at(-1);
+  const rawLatestEventType =
+    latestEvent && typeof latestEvent === 'object' && 'type' in latestEvent
+      ? (latestEvent as { type?: unknown }).type
+      : undefined;
+  const latestEventType =
+    typeof rawLatestEventType === 'string' ||
+    typeof rawLatestEventType === 'number' ||
+    typeof rawLatestEventType === 'boolean'
+      ? `${rawLatestEventType}`
+      : undefined;
+
+  logWarn(`${params.node}: pause snapshot`, {
+    reason: params.reason,
+    command: params.view.command,
+    taskState: params.view.task?.taskStatus?.state,
+    taskMessage,
+    onboardingStatus: params.view.onboardingFlow?.status,
+    onboardingStep: params.view.onboarding?.step,
+    onboardingKey: params.view.onboarding?.key,
+    hasOperatorInput: Boolean(params.view.operatorInput),
+    hasFundingTokenInput: Boolean(params.view.fundingTokenInput),
+    hasDelegationBundle: Boolean(params.view.delegationBundle),
+    hasOperatorConfig: Boolean(params.view.operatorConfig),
+    hasSelectedPool: Boolean(params.view.selectedPool),
+    delegationsBypassActive: params.view.delegationsBypassActive === true,
+    latestEventType,
+    ...(params.metadata ?? {}),
+  });
 }
 
 export function normalizeHexAddress(value: string, label: string): `0x${string}` {

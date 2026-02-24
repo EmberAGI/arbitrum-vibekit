@@ -13,6 +13,8 @@ import {
   applyViewPatch,
   buildTaskStatus,
   logInfo,
+  logPauseSnapshot,
+  logWarn,
   normalizeHexAddress,
   type ClmmState,
   type ClmmUpdate,
@@ -113,6 +115,15 @@ export const collectDelegationsNode = async (
     delegationsBypassActive: state.view.delegationsBypassActive === true,
     hasDelegationBundle: Boolean(state.view.delegationBundle),
   });
+  logWarn('collectDelegations: node entered', {
+    onboardingStatus: state.view.onboardingFlow?.status,
+    onboardingStep: state.view.onboarding?.step,
+    onboardingKey: state.view.onboarding?.key,
+    delegationsBypassActive: state.view.delegationsBypassActive === true,
+    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    hasOperatorInput: Boolean(state.view.operatorInput),
+    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
+  });
 
   if (state.view.delegationsBypassActive === true) {
     logInfo('collectDelegations: bypass active, skipping delegation collection', {
@@ -209,8 +220,17 @@ export const collectDelegationsNode = async (
     nextTaskMessage: awaitingMessage,
   });
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  const pauseSnapshotView = applyViewPatch(state, pendingView);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    const mergedView = applyViewPatch(state, pendingView);
+    const mergedView = pauseSnapshotView;
+    logPauseSnapshot({
+      node: 'collectDelegations',
+      reason: 'awaiting delegation signing',
+      view: mergedView,
+      metadata: {
+        pauseMechanism: 'checkpoint-and-interrupt',
+      },
+    });
     await copilotkitEmitState(config, {
       view: mergedView,
     });
@@ -223,11 +243,20 @@ export const collectDelegationsNode = async (
     });
   }
   if (shouldPersistPendingState) {
-    const mergedView = applyViewPatch(state, pendingView);
+    const mergedView = pauseSnapshotView;
     await copilotkitEmitState(config, {
       view: mergedView,
     });
   }
+  logPauseSnapshot({
+    node: 'collectDelegations',
+    reason: 'awaiting delegation signing',
+    view: pauseSnapshotView,
+    metadata: {
+      pauseMechanism: 'interrupt',
+      checkpointPersisted: shouldPersistPendingState,
+    },
+  });
 
   const incoming: unknown = await interrupt(request);
 

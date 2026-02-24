@@ -8,6 +8,8 @@ import {
   applyViewPatch,
   buildTaskStatus,
   logInfo,
+  logWarn,
+  logPauseSnapshot,
   type OnboardingState,
   type ClmmState,
   type GmxSetupInterrupt,
@@ -38,9 +40,20 @@ export const collectSetupInputNode = async (
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   logInfo('collectSetupInput: entering node');
+  logWarn('collectSetupInput: node entered', {
+    hasOperatorInput: Boolean(state.view.operatorInput),
+    onboardingStatus: state.view.onboardingFlow?.status,
+    onboardingStep: state.view.onboarding?.step,
+    onboardingKey: state.view.onboarding?.key,
+  });
 
   if (state.view.operatorInput) {
     logInfo('collectSetupInput: setup input already present; skipping step');
+    logWarn('collectSetupInput: setup already present; skipping interrupt', {
+      walletAddress: state.view.operatorInput.walletAddress,
+      targetMarket: state.view.operatorInput.targetMarket,
+      usdcAllocation: state.view.operatorInput.usdcAllocation,
+    });
     const resumedView = applyViewPatch(state, {
       onboarding: resolveSetupResumeOnboarding(state),
     });
@@ -74,8 +87,17 @@ export const collectSetupInputNode = async (
     nextTaskMessage: awaitingMessage,
   });
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  const pauseSnapshotView = applyViewPatch(state, pendingView);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    const mergedView = applyViewPatch(state, pendingView);
+    const mergedView = pauseSnapshotView;
+    logPauseSnapshot({
+      node: 'collectSetupInput',
+      reason: 'awaiting setup input',
+      view: mergedView,
+      metadata: {
+        pauseMechanism: 'checkpoint-and-interrupt',
+      },
+    });
     await copilotkitEmitState(config, {
       view: mergedView,
     });
@@ -87,6 +109,14 @@ export const collectSetupInputNode = async (
       createCommand: createLangGraphCommand,
     });
   }
+  logPauseSnapshot({
+    node: 'collectSetupInput',
+    reason: 'awaiting setup input',
+    view: pauseSnapshotView,
+    metadata: {
+      pauseMechanism: 'interrupt',
+    },
+  });
 
   const incoming: unknown = await interrupt(request);
 

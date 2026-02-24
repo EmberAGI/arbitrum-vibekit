@@ -11,7 +11,7 @@ import {
   type LangGraphDurability,
 } from './config/serviceConfig.js';
 import { setupAgentLocalE2EMocksIfNeeded } from './e2e/agentLocalMocks.js';
-import { ClmmStateAnnotation, memory, type ClmmState } from './workflow/context.js';
+import { ClmmStateAnnotation, logWarn, memory, type ClmmState } from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
 import { acknowledgeFundWalletNode } from './workflow/nodes/acknowledgeFundWallet.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
@@ -34,6 +34,17 @@ import { resolveNextOnboardingNode } from './workflow/onboardingRouting.js';
 
 await setupAgentLocalE2EMocksIfNeeded();
 
+function logRouteDecision(
+  node: string,
+  target: string,
+  metadata?: Record<string, unknown>,
+): void {
+  logWarn(`${node}: resolved next node`, {
+    target,
+    ...(metadata ?? {}),
+  });
+}
+
 function resolvePostBootstrap(
   state: ClmmState,
 ):
@@ -43,7 +54,18 @@ function resolvePostBootstrap(
   | 'prepareOperator'
   | 'syncState' {
   const command = extractCommand(state.messages) ?? state.view.command;
-  return command === 'sync' ? 'syncState' : resolveNextOnboardingNode(state);
+  const target = command === 'sync' ? 'syncState' : resolveNextOnboardingNode(state);
+  logRouteDecision('bootstrap', target, {
+    command,
+    onboardingStatus: state.view.onboardingFlow?.status,
+    onboardingStep: state.view.onboarding?.step,
+    onboardingKey: state.view.onboarding?.key,
+    hasOperatorInput: Boolean(state.view.operatorInput),
+    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
+    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    hasOperatorConfig: Boolean(state.view.operatorConfig),
+  });
+  return target;
 }
 
 function resolvePostRunCycle(
@@ -55,38 +77,94 @@ function resolvePostRunCycle(
   | 'collectDelegations'
   | 'prepareOperator' {
   const nextOnboardingNode = resolveNextOnboardingNode(state);
-  return nextOnboardingNode === 'syncState' ? 'pollCycle' : nextOnboardingNode;
+  const target = nextOnboardingNode === 'syncState' ? 'pollCycle' : nextOnboardingNode;
+  logRouteDecision('runCycleCommand', target, {
+    onboardingStatus: state.view.onboardingFlow?.status,
+    onboardingStep: state.view.onboarding?.step,
+    onboardingKey: state.view.onboarding?.key,
+    hasOperatorConfig: Boolean(state.view.operatorConfig),
+    hasSelectedPool: Boolean(state.view.selectedPool),
+  });
+  return target;
 }
 
 function resolvePostFundingTokenInput(state: ClmmState): 'collectSetupInput' | 'collectDelegations' {
-  return state.view.operatorInput ? 'collectDelegations' : 'collectSetupInput';
+  const target = state.view.operatorInput ? 'collectDelegations' : 'collectSetupInput';
+  logRouteDecision('collectFundingTokenInput', target, {
+    hasOperatorInput: Boolean(state.view.operatorInput),
+    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
+    onboardingStep: state.view.onboarding?.step,
+    onboardingKey: state.view.onboarding?.key,
+  });
+  return target;
 }
 
 function resolvePostPrepareOperator(state: ClmmState): 'collectDelegations' | 'pollCycle' | 'summarize' {
+  let target: 'collectDelegations' | 'pollCycle' | 'summarize';
   if (state.view.operatorConfig && state.view.selectedPool) {
-    return 'pollCycle';
+    target = 'pollCycle';
+    logRouteDecision('prepareOperator', target, {
+      reason: 'operator-config-ready',
+      hasOperatorConfig: true,
+      hasSelectedPool: true,
+    });
+    return target;
   }
 
   if (state.view.haltReason) {
-    return 'summarize';
+    target = 'summarize';
+    logRouteDecision('prepareOperator', target, {
+      reason: 'halt-reason-present',
+      haltReason: state.view.haltReason,
+    });
+    return target;
   }
 
   if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
-    return 'collectDelegations';
+    target = 'collectDelegations';
+    logRouteDecision('prepareOperator', target, {
+      reason: 'delegation-bundle-missing',
+      delegationsBypassActive: false,
+      hasDelegationBundle: false,
+    });
+    return target;
   }
 
-  return 'summarize';
+  target = 'summarize';
+  logRouteDecision('prepareOperator', target, {
+    reason: 'fallback',
+    delegationsBypassActive: state.view.delegationsBypassActive === true,
+    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    hasOperatorConfig: Boolean(state.view.operatorConfig),
+    hasSelectedPool: Boolean(state.view.selectedPool),
+  });
+  return target;
 }
 
 function resolvePostCollectDelegations(state: ClmmState): 'collectSetupInput' | 'prepareOperator' | 'summarize' {
   if (!state.view.operatorInput) {
+    logRouteDecision('collectDelegations', 'collectSetupInput', {
+      reason: 'operator-input-missing',
+      onboardingStep: state.view.onboarding?.step,
+      onboardingKey: state.view.onboarding?.key,
+    });
     return 'collectSetupInput';
   }
 
   if (state.view.haltReason) {
+    logRouteDecision('collectDelegations', 'summarize', {
+      reason: 'halt-reason-present',
+      haltReason: state.view.haltReason,
+    });
     return 'summarize';
   }
 
+  logRouteDecision('collectDelegations', 'prepareOperator', {
+    reason: 'delegation-step-complete',
+    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    onboardingStep: state.view.onboarding?.step,
+    onboardingKey: state.view.onboarding?.key,
+  });
   return 'prepareOperator';
 }
 
@@ -101,14 +179,35 @@ function resolvePostPollCycle(
   | 'summarize' {
   if (!state.view.operatorConfig || !state.view.selectedPool) {
     const nextOnboardingNode = resolveNextOnboardingNode(state);
-    return nextOnboardingNode === 'syncState' ? 'summarize' : nextOnboardingNode;
+    const target = nextOnboardingNode === 'syncState' ? 'summarize' : nextOnboardingNode;
+    logRouteDecision('pollCycle', target, {
+      reason: 'operator-config-incomplete',
+      hasOperatorConfig: Boolean(state.view.operatorConfig),
+      hasSelectedPool: Boolean(state.view.selectedPool),
+      onboardingStatus: state.view.onboardingFlow?.status,
+      onboardingStep: state.view.onboarding?.step,
+      onboardingKey: state.view.onboarding?.key,
+    });
+    return target;
   }
 
   const taskState = state.view.task?.taskStatus?.state;
   const taskMessage = state.view.task?.taskStatus?.message?.content ?? '';
+  const executionError = state.view.executionError ?? '';
+  const normalizedExecutionError = executionError.toLowerCase();
   const requiresFundingAcknowledgement =
-    taskState === 'input-required' && taskMessage.includes('GMX order simulation failed');
-  return requiresFundingAcknowledgement ? 'acknowledgeFundWallet' : 'summarize';
+    taskState === 'input-required' &&
+    (taskMessage.includes('GMX order simulation failed') ||
+      normalizedExecutionError.includes('execute order simulation failed'));
+  const target = requiresFundingAcknowledgement ? 'acknowledgeFundWallet' : 'summarize';
+  logRouteDecision('pollCycle', target, {
+    reason: requiresFundingAcknowledgement ? 'funding-ack-required' : 'cycle-complete',
+    taskState,
+    taskMessage,
+    executionError,
+    onboardingStatus: state.view.onboardingFlow?.status,
+  });
+  return target;
 }
 
 const workflow = new StateGraph(ClmmStateAnnotation)
