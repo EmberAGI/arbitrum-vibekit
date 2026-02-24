@@ -28,6 +28,8 @@ export { mapOnboardingPhaseToTarget } from './onboardingStateMachineMappings.js'
 export {
   buildOnboardingContractFromLegacyStep,
   finalizeOnboardingContract,
+  normalizeLegacyOnboardingState,
+  type LegacyOnboardingState,
   type OnboardingContract,
   type OnboardingStatus,
   type OnboardingStepDefinition,

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOnboardingContractFromLegacyStep,
   finalizeOnboardingContract,
+  normalizeLegacyOnboardingState,
 } from './onboardingContract.js';
 
 describe('onboardingContract', () => {
@@ -56,5 +57,23 @@ describe('onboardingContract', () => {
     expect(completed.status).toBe('completed');
     expect(completed.activeStepId).toBeUndefined();
     expect(completed.steps.every((step) => step.status === 'completed')).toBe(true);
+  });
+
+  it('clears legacy onboarding state once contract is terminal', () => {
+    const normalized = normalizeLegacyOnboardingState({
+      onboarding: { step: 4, key: 'fund-wallet' },
+      onboardingFlow: { status: 'completed' },
+    });
+
+    expect(normalized).toBeUndefined();
+  });
+
+  it('preserves legacy onboarding state while contract is in progress', () => {
+    const normalized = normalizeLegacyOnboardingState({
+      onboarding: { step: 2, key: 'funding-token' },
+      onboardingFlow: { status: 'in_progress' },
+    });
+
+    expect(normalized).toEqual({ step: 2, key: 'funding-token' });
   });
 });

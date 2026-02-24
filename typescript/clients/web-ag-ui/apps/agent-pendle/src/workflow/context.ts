@@ -6,6 +6,7 @@ import {
   isTaskActiveState,
   isTaskTerminalState,
   mergeViewPatchForEmit,
+  normalizeLegacyOnboardingState,
   type AgentCommand,
   type OnboardingContract,
   type TaskState,
@@ -397,6 +398,10 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     taskState: nextTask?.taskStatus?.state,
     delegationsBypassActive: nextDelegationsBypassActive === true,
   });
+  const normalizedOnboarding = normalizeLegacyOnboardingState({
+    onboarding: nextOnboarding,
+    onboardingFlow: nextOnboardingFlow,
+  });
 
   const nextTelemetry = limitHistory(
     mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry),
@@ -442,7 +447,7 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     task: nextTask,
     poolArtifact: right.poolArtifact ?? left.poolArtifact,
     operatorInput: right.operatorInput ?? left.operatorInput,
-    onboarding: nextOnboarding,
+    onboarding: normalizedOnboarding,
     onboardingFlow: nextOnboardingFlow,
     fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
     selectedPool: right.selectedPool ?? left.selectedPool,
@@ -542,9 +547,45 @@ export function buildTaskStatus(
 
 export type LogOptions = {
   detailed?: boolean;
+  force?: boolean;
 };
 
+type AgentLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
+
+const LOG_LEVEL_WEIGHT: Record<AgentLogLevel, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+  silent: 50,
+};
+
+function resolveAgentLogLevel(): AgentLogLevel {
+  const raw =
+    process.env['PENDLE_LOG_LEVEL'] ?? process.env['AGENT_LOG_LEVEL'] ?? process.env['LOG_LEVEL'];
+  switch (raw) {
+    case 'debug':
+    case 'info':
+    case 'warn':
+    case 'error':
+    case 'silent':
+      return raw;
+    default:
+      return 'info';
+  }
+}
+
+function shouldLogInfo(options?: LogOptions): boolean {
+  if (options?.force) {
+    return true;
+  }
+  return LOG_LEVEL_WEIGHT[resolveAgentLogLevel()] <= LOG_LEVEL_WEIGHT.info;
+}
+
 export function logInfo(message: string, metadata?: Record<string, unknown>, options?: LogOptions) {
+  if (!shouldLogInfo(options)) {
+    return;
+  }
   const timestamp = new Date().toISOString();
   const prefix = `[Pendle][${timestamp}]`;
   if (metadata && Object.keys(metadata).length > 0) {

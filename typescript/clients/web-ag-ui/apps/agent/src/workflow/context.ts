@@ -6,6 +6,7 @@ import {
   isTaskActiveState,
   isTaskTerminalState,
   mergeViewPatchForEmit,
+  normalizeLegacyOnboardingState,
   type AgentCommand,
   type OnboardingContract,
   type TaskState,
@@ -312,6 +313,10 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     taskState: nextTask?.taskStatus?.state,
     delegationsBypassActive: nextDelegationsBypassActive === true,
   });
+  const normalizedOnboarding = normalizeLegacyOnboardingState({
+    onboarding: nextOnboarding,
+    onboardingFlow: nextOnboardingFlow,
+  });
 
   const nextTelemetry = limitHistory(
     mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry),
@@ -352,7 +357,7 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     task: nextTask,
     poolArtifact: right.poolArtifact ?? left.poolArtifact,
     operatorInput: right.operatorInput ?? left.operatorInput,
-    onboarding: nextOnboarding,
+    onboarding: normalizedOnboarding,
     onboardingFlow: nextOnboardingFlow,
     fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
     selectedPool: right.selectedPool ?? left.selectedPool,

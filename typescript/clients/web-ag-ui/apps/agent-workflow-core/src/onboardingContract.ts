@@ -20,6 +20,11 @@ export type OnboardingContract = {
   steps: OnboardingStepState[];
 };
 
+export type LegacyOnboardingState = {
+  step: number;
+  key?: string;
+};
+
 const assertUniqueStepIds = (definitions: readonly OnboardingStepDefinition[]): void => {
   const uniqueIds = new Set<string>();
   for (const definition of definitions) {
@@ -79,3 +84,18 @@ export const finalizeOnboardingContract = (
     status: status === 'completed' ? 'completed' : step.status === 'failed' ? 'failed' : 'pending',
   })),
 });
+
+export const normalizeLegacyOnboardingState = (params: {
+  onboarding?: LegacyOnboardingState;
+  onboardingFlow?: Pick<OnboardingContract, 'status'>;
+}): LegacyOnboardingState | undefined => {
+  const onboarding = params.onboarding;
+  if (!onboarding) {
+    return undefined;
+  }
+  const flowStatus = params.onboardingFlow?.status;
+  if (flowStatus === 'completed' || flowStatus === 'failed' || flowStatus === 'canceled') {
+    return undefined;
+  }
+  return onboarding;
+};

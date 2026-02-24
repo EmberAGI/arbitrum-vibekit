@@ -27,36 +27,37 @@ const REDUCED_WITH_FUNDING: readonly OnboardingStepDefinition[] = [
   { id: 'funding-token', title: 'Funding Token' },
 ];
 
-const FUND_WALLET_STEP: OnboardingStepDefinition = { id: 'fund-wallet', title: 'Fund Wallet' };
-
 const resolveStepDefinitions = (params: {
-  onboarding?: LegacyOnboardingState;
   onboardingKey?: string;
   onboardingStep: number;
   delegationsBypassActive: boolean;
 }): readonly OnboardingStepDefinition[] => {
-  const steps: OnboardingStepDefinition[] =
-    params.delegationsBypassActive
-      ? [...REDUCED_WITH_FUNDING]
-      : params.onboardingKey === 'delegation-signing' && params.onboardingStep <= 2
-        ? [...REDUCED_WITH_DELEGATION]
-      : [...BASE_STEPS];
+  if (params.delegationsBypassActive) {
+    return REDUCED_WITH_FUNDING;
+  }
+  if (params.onboardingKey === 'delegation-signing' && params.onboardingStep <= 2) {
+    return REDUCED_WITH_DELEGATION;
+  }
+  return BASE_STEPS;
+};
 
-  const needsFundWalletStep =
-    params.onboardingKey === 'fund-wallet' || params.onboardingStep >= 4;
-  if (needsFundWalletStep && params.onboardingStep > steps.length) {
-    const extrasNeeded = params.onboardingStep - steps.length;
-    for (let index = 0; index < extrasNeeded; index += 1) {
-      steps.push({ id: `extra-${index + 1}`, title: `Step ${steps.length + 1}` });
-    }
+const resolveCanonicalOnboardingKey = (params: {
+  onboarding: LegacyOnboardingState;
+  stepDefinitions: readonly OnboardingStepDefinition[];
+}): string | undefined => {
+  const { key } = params.onboarding;
+  if (!key || params.stepDefinitions.length === 0) {
+    return key;
+  }
+  if (params.stepDefinitions.some((definition) => definition.id === key)) {
+    return key;
   }
 
-  if (needsFundWalletStep) {
-    const walletStepIndex = Math.max(0, Math.min(steps.length - 1, params.onboardingStep - 1));
-    steps[walletStepIndex] = FUND_WALLET_STEP;
-  }
-
-  return steps;
+  const clampedIndex = Math.max(
+    0,
+    Math.min(params.stepDefinitions.length - 1, Math.floor(Math.max(params.onboarding.step, 1)) - 1),
+  );
+  return params.stepDefinitions[clampedIndex]?.id;
 };
 
 const finalizeForTaskState = (params: {
@@ -94,16 +95,20 @@ export const deriveGmxOnboardingFlow = (params: {
     });
   }
 
+  const stepDefinitions = resolveStepDefinitions({
+    onboardingKey: params.onboarding.key,
+    onboardingStep: params.onboarding.step,
+    delegationsBypassActive: params.delegationsBypassActive,
+  });
+
   const flow = buildOnboardingContractFromLegacyStep({
     status: 'in_progress',
     step: params.onboarding.step,
-    key: params.onboarding.key,
-    stepDefinitions: resolveStepDefinitions({
+    key: resolveCanonicalOnboardingKey({
       onboarding: params.onboarding,
-      onboardingKey: params.onboarding.key,
-      onboardingStep: params.onboarding.step,
-      delegationsBypassActive: params.delegationsBypassActive,
+      stepDefinitions,
     }),
+    stepDefinitions,
     revision: (params.previous?.revision ?? 0) + 1,
   });
 

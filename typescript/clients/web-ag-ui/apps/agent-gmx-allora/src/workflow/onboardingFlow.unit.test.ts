@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveGmxOnboardingFlow } from './onboardingFlow.js';
 
 describe('deriveGmxOnboardingFlow', () => {
-  it('adds fund-wallet step for 4-step flow', () => {
+  it('does not add a synthetic fund-wallet onboarding step', () => {
     const flow = deriveGmxOnboardingFlow({
       onboarding: { step: 4, key: 'fund-wallet' },
       previous: undefined,
@@ -16,8 +16,8 @@ describe('deriveGmxOnboardingFlow', () => {
       'setup',
       'funding-token',
       'delegation-signing',
-      'fund-wallet',
     ]);
-    expect(flow?.activeStepId).toBe('fund-wallet');
+    expect(flow?.activeStepId).toBe('delegation-signing');
+    expect(flow?.key).toBe('delegation-signing');
   });
 });
