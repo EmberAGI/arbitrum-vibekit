@@ -116,6 +116,10 @@ const BaseUnitAmountSchema = z.preprocess((value) => {
   return value;
 }, z.bigint());
 
+const Base10IntegerStringSchema = z
+  .string()
+  .regex(/^\d+$/u, 'Must be a base-10 integer string');
+
 // Definition for plugin with mapped entities already in place
 export const CreatePerpetualsPositionRequestSchema = z.object({
   amount: BaseUnitAmountSchema,
@@ -170,18 +174,175 @@ export type GetPerpetualsMarketsOrdersResponse = z.infer<
   typeof GetPerpetualsMarketsOrdersResponseSchema
 >;
 
-export const ClosePerpetualsOrdersRequestSchema = z.object({
-  walletAddress: z.string().describe("User's wallet address"),
-  key: z.string(),
+export const CreatePerpetualsIncreaseQuoteRequestSchema = z.object({
+  walletAddress: z.string(),
+  providerName: z.string(),
+  chainId: z.string(),
+  marketAddress: z.string(),
+  collateralTokenAddress: z.string(),
+  side: PositionSideSchema,
+  collateralDeltaAmount: Base10IntegerStringSchema,
+  sizeDeltaUsd: Base10IntegerStringSchema,
+  slippageBps: Base10IntegerStringSchema,
+});
+export type CreatePerpetualsIncreaseQuoteRequest = z.infer<
+  typeof CreatePerpetualsIncreaseQuoteRequestSchema
+>;
+
+export const CreatePerpetualsIncreasePlanRequestSchema =
+  CreatePerpetualsIncreaseQuoteRequestSchema;
+export type CreatePerpetualsIncreasePlanRequest = z.infer<
+  typeof CreatePerpetualsIncreasePlanRequestSchema
+>;
+
+const PerpetualDecreaseRequestBaseSchema = z.object({
+  walletAddress: z.string(),
+  providerName: z.string(),
+  chainId: z.string(),
+  marketAddress: z.string(),
+  collateralTokenAddress: z.string(),
+  side: PositionSideSchema,
 });
 
-export type ClosePerpetualsOrdersRequest = z.infer<typeof ClosePerpetualsOrdersRequestSchema>;
+const PerpetualDecreaseFullRequestSchema = PerpetualDecreaseRequestBaseSchema.extend({
+  mode: z.literal('full'),
+  full: z.object({
+    slippageBps: Base10IntegerStringSchema,
+  }),
+});
 
-export const ClosePerpetualsOrdersResponseSchema = z.object({
+const PerpetualDecreasePartialRequestSchema = PerpetualDecreaseRequestBaseSchema.extend({
+  mode: z.literal('partial'),
+  partial: z.object({
+    sizeDeltaUsd: Base10IntegerStringSchema,
+    slippageBps: Base10IntegerStringSchema,
+  }),
+});
+
+export const CreatePerpetualsDecreaseQuoteRequestSchema = z.discriminatedUnion('mode', [
+  PerpetualDecreaseFullRequestSchema,
+  PerpetualDecreasePartialRequestSchema,
+]);
+export type CreatePerpetualsDecreaseQuoteRequest = z.infer<
+  typeof CreatePerpetualsDecreaseQuoteRequestSchema
+>;
+
+export const CreatePerpetualsDecreasePlanRequestSchema =
+  CreatePerpetualsDecreaseQuoteRequestSchema;
+export type CreatePerpetualsDecreasePlanRequest = z.infer<
+  typeof CreatePerpetualsDecreasePlanRequestSchema
+>;
+
+export const CreatePerpetualsOrderCancelPlanRequestSchema = z.object({
+  walletAddress: z.string(),
+  providerName: z.string(),
+  chainId: z.string(),
+  orderKey: z.string(),
+});
+export type CreatePerpetualsOrderCancelPlanRequest = z.infer<
+  typeof CreatePerpetualsOrderCancelPlanRequestSchema
+>;
+
+export const GetPerpetualLifecycleRequestSchema = z.object({
+  providerName: z.string(),
+  chainId: z.string(),
+  txHash: z.string(),
+  orderKey: z.string().optional(),
+  walletAddress: z.string().optional(),
+});
+export type GetPerpetualLifecycleRequest = z.infer<typeof GetPerpetualLifecycleRequestSchema>;
+
+export const PerpetualNumericPrecisionSchema = z.object({
+  tokenDecimals: z.number().int().nonnegative(),
+  priceDecimals: z.number().int().nonnegative(),
+  usdDecimals: z.number().int().nonnegative(),
+});
+export type PerpetualNumericPrecision = z.infer<typeof PerpetualNumericPrecisionSchema>;
+
+export const PerpetualQuoteResponseSchema = z.object({
+  asOf: z.string(),
+  ttlMs: z.number().int().nonnegative(),
+  precision: PerpetualNumericPrecisionSchema,
+  pricing: z.object({
+    markPrice: Base10IntegerStringSchema,
+    acceptablePrice: Base10IntegerStringSchema,
+    slippageBps: Base10IntegerStringSchema,
+    priceImpactDeltaUsd: Base10IntegerStringSchema,
+  }),
+  fees: z.object({
+    positionFeeUsd: Base10IntegerStringSchema,
+    borrowingFeeUsd: Base10IntegerStringSchema,
+    fundingFeeUsd: Base10IntegerStringSchema,
+  }),
+  warnings: z.array(z.string()),
+});
+export type PerpetualQuoteResponse = z.infer<typeof PerpetualQuoteResponseSchema>;
+
+export const PerpetualPlanResponseSchema = z.object({
+  asOf: z.string(),
+  precision: PerpetualNumericPrecisionSchema,
   transactions: z.array(TransactionPlanSchema),
+  normalizedValues: z.record(z.string(), Base10IntegerStringSchema),
+});
+export type PerpetualPlanResponse = z.infer<typeof PerpetualPlanResponseSchema>;
+
+export const CreatePerpetualsIncreaseQuoteResponseSchema = PerpetualQuoteResponseSchema;
+export type CreatePerpetualsIncreaseQuoteResponse = z.infer<
+  typeof CreatePerpetualsIncreaseQuoteResponseSchema
+>;
+
+export const CreatePerpetualsIncreasePlanResponseSchema = PerpetualPlanResponseSchema;
+export type CreatePerpetualsIncreasePlanResponse = z.infer<
+  typeof CreatePerpetualsIncreasePlanResponseSchema
+>;
+
+export const CreatePerpetualsDecreaseQuoteResponseSchema = PerpetualQuoteResponseSchema;
+export type CreatePerpetualsDecreaseQuoteResponse = z.infer<
+  typeof CreatePerpetualsDecreaseQuoteResponseSchema
+>;
+
+export const CreatePerpetualsDecreasePlanResponseSchema = PerpetualPlanResponseSchema;
+export type CreatePerpetualsDecreasePlanResponse = z.infer<
+  typeof CreatePerpetualsDecreasePlanResponseSchema
+>;
+
+export const CreatePerpetualsOrderCancelPlanResponseSchema = PerpetualPlanResponseSchema;
+export type CreatePerpetualsOrderCancelPlanResponse = z.infer<
+  typeof CreatePerpetualsOrderCancelPlanResponseSchema
+>;
+
+const PerpetualLifecycleDisambiguationResponseSchema = z.object({
+  providerName: z.string(),
+  chainId: z.string(),
+  txHash: z.string(),
+  needsDisambiguation: z.literal(true),
+  candidateOrderKeys: z.array(z.string()).min(1),
+  asOf: z.string(),
 });
 
-export type ClosePerpetualsOrdersResponse = z.infer<typeof ClosePerpetualsOrdersResponseSchema>;
+const PerpetualLifecycleResolvedResponseSchema = z.object({
+  providerName: z.string(),
+  chainId: z.string(),
+  txHash: z.string(),
+  needsDisambiguation: z.literal(false).optional(),
+  orderKey: z.string(),
+  status: z.enum(['pending', 'executed', 'cancelled', 'failed', 'unknown']),
+  reason: z.string().optional(),
+  reasonBytes: z.string().optional(),
+  requestedPrice: Base10IntegerStringSchema.optional(),
+  observedPrice: Base10IntegerStringSchema.optional(),
+  createTxHash: z.string().optional(),
+  executionTxHash: z.string().optional(),
+  cancellationTxHash: z.string().optional(),
+  precision: PerpetualNumericPrecisionSchema,
+  asOf: z.string(),
+});
+
+export const GetPerpetualLifecycleResponseSchema = z.union([
+  PerpetualLifecycleDisambiguationResponseSchema,
+  PerpetualLifecycleResolvedResponseSchema,
+]);
+export type GetPerpetualLifecycleResponse = z.infer<typeof GetPerpetualLifecycleResponseSchema>;
 
 export const GetPerpetualsMarketsRequestSchema = z.object({
   chainIds: z.array(z.string()),
