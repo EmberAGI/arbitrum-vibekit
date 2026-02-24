@@ -5,6 +5,7 @@ import {
 } from '@copilotkit/runtime';
 import { LangGraphAgent } from '@copilotkit/runtime/langgraph';
 import { NextRequest } from 'next/server';
+import { installCopilotRuntimeDebugFilter } from '../../../utils/copilotRuntimeDebugFilter';
 
 // 1. You can use any service adapter here for multi-agent support. We use
 //    the empty adapter since we're only using one agent.
@@ -14,6 +15,12 @@ const CLMM_AGENT_NAME = 'agent-clmm';
 const PENDLE_AGENT_NAME = 'agent-pendle';
 const GMX_ALLORA_AGENT_NAME = 'agent-gmx-allora';
 const STARTER_AGENT_NAME = 'starterAgent';
+const shouldLogCopilotRuntimeDebug =
+  process.env.COPILOTKIT_RUNTIME_DEBUG === 'true' || process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
+const shouldTraceCopilotRouteConnect =
+  process.env.COPILOTKIT_ROUTE_TRACE_CONNECT === 'true' || process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
+
+installCopilotRuntimeDebugFilter({ enabled: shouldLogCopilotRuntimeDebug });
 
 // 2. Create the CopilotRuntime instance and utilize the LangGraph AG-UI
 //    integration to setup the connection.
@@ -54,6 +61,11 @@ type CopilotRouteRequestMetadata = {
 
 const shouldLogCopilotRouteRequests =
   process.env.NODE_ENV !== 'production' || process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
+const shouldLogCopilotRouteSyncPolls =
+  process.env.COPILOTKIT_ROUTE_DEBUG === 'true' || process.env.COPILOTKIT_ROUTE_LOG_SYNC === 'true';
+const shouldTraceAllRunCommands =
+  process.env.COPILOTKIT_ROUTE_TRACE_RUN_ALL === 'true' ||
+  process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -136,11 +148,21 @@ async function readCopilotRouteMetadata(req: NextRequest): Promise<CopilotRouteR
 // 3. Build a Next.js API route that handles the CopilotKit runtime requests.
 export const POST = async (req: NextRequest) => {
   const requestMetadata = await readCopilotRouteMetadata(req);
+  const isAgentListSyncPoll =
+    requestMetadata.method === 'agent/run' &&
+    requestMetadata.command === 'sync' &&
+    requestMetadata.source === 'agent-list-poll';
+  const isFireRun = requestMetadata.method === 'agent/run' && requestMetadata.command === 'fire';
+  const shouldTraceRunCommand =
+    requestMetadata.method === 'agent/run' && (isFireRun || shouldTraceAllRunCommands);
   const shouldTraceMethod =
-    requestMetadata.method === 'agent/run' ||
-    requestMetadata.method === 'agent/connect' ||
-    requestMetadata.method === 'agent/stop';
-  const shouldTraceRequest = shouldLogCopilotRouteRequests && shouldTraceMethod;
+    shouldTraceRunCommand ||
+    requestMetadata.method === 'agent/stop' ||
+    (requestMetadata.method === 'agent/connect' && shouldTraceCopilotRouteConnect);
+  const shouldTraceRequest =
+    shouldLogCopilotRouteRequests &&
+    shouldTraceMethod &&
+    (!isAgentListSyncPoll || shouldLogCopilotRouteSyncPolls);
   const startedAt = Date.now();
 
   if (shouldTraceRequest) {

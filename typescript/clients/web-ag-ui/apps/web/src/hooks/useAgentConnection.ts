@@ -42,7 +42,7 @@ import {
   releaseAgentStreamOwner,
   unregisterAgentStreamOwner,
 } from '../utils/agentStreamCoordinator';
-import { fireAgentRun } from '../utils/fireAgentRun';
+import { fireAgentRun, logFireCommandDebug } from '../utils/fireAgentRun';
 import { resumeInterruptViaAgent } from '../utils/interruptResolution';
 import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 import { canonicalizeChainLabel } from '../utils/iconResolution';
@@ -821,11 +821,18 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const runFire = useCallback(() => {
     if (isFiring) return;
 
+    logFireCommandDebug('runFire invoked', {
+      threadId,
+      runInFlight: runInFlightRef.current,
+    });
     setUiError(null);
     setIsFiring(true);
 
     const scheduler = commandSchedulerRef.current;
     if (!scheduler) {
+      logFireCommandDebug('scheduler missing', {
+        threadId,
+      });
       setUiError('Unable to submit fire command right now. Please retry.');
       setIsFiring(false);
       return;
@@ -835,6 +842,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       command: 'fire',
       allowPreemptive: true,
       run: async (value) => {
+        logFireCommandDebug('custom dispatch run start', {
+          threadId,
+          runInFlight: runInFlightRef.current,
+        });
         const ok = await fireAgentRun({
           agent: value,
           runAgent: async (current) =>
@@ -850,12 +861,24 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         });
 
         if (!ok) {
+          logFireCommandDebug('custom dispatch returned false', {
+            threadId,
+          });
           setUiError('Unable to submit fire command right now. Please retry.');
           setIsFiring(false);
+          return;
         }
+        logFireCommandDebug('custom dispatch completed', {
+          threadId,
+          runInFlight: runInFlightRef.current,
+        });
       },
     });
 
+    logFireCommandDebug('scheduler dispatch result', {
+      threadId,
+      accepted,
+    });
     if (!accepted) {
       setUiError('Unable to submit fire command while another command is active.');
       setIsFiring(false);

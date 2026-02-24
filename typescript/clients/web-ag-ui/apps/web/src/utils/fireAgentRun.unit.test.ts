@@ -3,6 +3,30 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireAgentRun } from './fireAgentRun';
 
 describe('fireAgentRun', () => {
+  it('detaches stale runtime ownership before dispatching fire when no run appears active', async () => {
+    const calls: string[] = [];
+    const agent = {
+      isRunning: false,
+      detachActiveRun: vi.fn(async () => calls.push('detachActiveRun')),
+      addMessage: vi.fn(() => calls.push('addMessage')),
+    };
+    const runInFlightRef = { current: false };
+
+    const ok = await fireAgentRun({
+      agent,
+      runAgent: async () => {
+        calls.push('runAgent');
+      },
+      threadId: 'thread-1',
+      runInFlightRef,
+      createId: () => 'msg-1',
+    });
+
+    expect(ok).toBe(true);
+    expect(agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(['detachActiveRun', 'addMessage', 'runAgent']);
+  });
+
   it('preempts the active run via stop callback, detaches, then sends the fire command', async () => {
     const calls: string[] = [];
 
