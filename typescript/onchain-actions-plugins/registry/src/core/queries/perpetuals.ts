@@ -1,6 +1,8 @@
 import type {
   GetPerpetualsMarketsOrdersRequest,
   GetPerpetualsMarketsOrdersResponse,
+  GetPerpetualLifecycleRequest,
+  GetPerpetualLifecycleResponse,
   GetPerpetualsMarketsPositionsRequest,
   GetPerpetualsMarketsPositionsResponse,
   GetPerpetualsMarketsRequest,
@@ -19,8 +21,20 @@ export type PerpetualsGetOrders = (
   request: GetPerpetualsMarketsOrdersRequest
 ) => Promise<GetPerpetualsMarketsOrdersResponse>;
 
+export type PerpetualsGetLifecycle = (
+  request: GetPerpetualLifecycleRequest
+) => Promise<GetPerpetualLifecycleResponse>;
+
+export const PerpetualsQueryKeys = [
+  'getMarkets',
+  'getPositions',
+  'getOrders',
+  'getLifecycle',
+] as const;
+
 export type PerpetualsQueries = {
   getMarkets: PerpetualsGetMarkets;
   getPositions: PerpetualsGetPositions;
   getOrders: PerpetualsGetOrders;
+  getLifecycle: PerpetualsGetLifecycle;
 };

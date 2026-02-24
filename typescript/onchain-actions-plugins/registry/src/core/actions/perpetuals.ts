@@ -1,20 +1,42 @@
 import type {
-  ClosePerpetualsOrdersRequest,
-  ClosePerpetualsOrdersResponse,
-  CreatePerpetualsPositionRequest,
-  CreatePerpetualsPositionResponse,
+  CreatePerpetualsDecreasePlanRequest,
+  CreatePerpetualsDecreasePlanResponse,
+  CreatePerpetualsDecreaseQuoteRequest,
+  CreatePerpetualsDecreaseQuoteResponse,
+  CreatePerpetualsIncreasePlanRequest,
+  CreatePerpetualsIncreasePlanResponse,
+  CreatePerpetualsIncreaseQuoteRequest,
+  CreatePerpetualsIncreaseQuoteResponse,
+  CreatePerpetualsOrderCancelPlanRequest,
+  CreatePerpetualsOrderCancelPlanResponse,
 } from '../schemas/perpetuals.js';
 
-export type PerpetualsCreateShortPositionCallback = (
-  request: CreatePerpetualsPositionRequest
-) => Promise<CreatePerpetualsPositionResponse>;
+export type PerpetualsIncreaseQuoteCallback = (
+  request: CreatePerpetualsIncreaseQuoteRequest
+) => Promise<CreatePerpetualsIncreaseQuoteResponse>;
 
-export type PerpetualsCreateLongPositionCallback = (
-  request: CreatePerpetualsPositionRequest
-) => Promise<CreatePerpetualsPositionResponse>;
+export type PerpetualsIncreasePlanCallback = (
+  request: CreatePerpetualsIncreasePlanRequest
+) => Promise<CreatePerpetualsIncreasePlanResponse>;
 
-export type PerpetualsCloseOrdersCallback = (
-  request: ClosePerpetualsOrdersRequest
-) => Promise<ClosePerpetualsOrdersResponse>;
+export type PerpetualsDecreaseQuoteCallback = (
+  request: CreatePerpetualsDecreaseQuoteRequest
+) => Promise<CreatePerpetualsDecreaseQuoteResponse>;
 
-export type PerpetualsActions = 'perpetuals-short' | 'perpetuals-long' | 'perpetuals-close';
+export type PerpetualsDecreasePlanCallback = (
+  request: CreatePerpetualsDecreasePlanRequest
+) => Promise<CreatePerpetualsDecreasePlanResponse>;
+
+export type PerpetualsOrderCancelPlanCallback = (
+  request: CreatePerpetualsOrderCancelPlanRequest
+) => Promise<CreatePerpetualsOrderCancelPlanResponse>;
+
+export const PerpetualsActionTypes = [
+  'perpetuals-increase-quote',
+  'perpetuals-increase-plan',
+  'perpetuals-decrease-quote',
+  'perpetuals-decrease-plan',
+  'perpetuals-orders-cancel-plan',
+] as const;
+
+export type PerpetualsActions = (typeof PerpetualsActionTypes)[number];

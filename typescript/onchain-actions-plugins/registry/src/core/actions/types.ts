@@ -12,9 +12,11 @@ import type {
 } from './liquidity.js';
 import type {
   PerpetualsActions,
-  PerpetualsCloseOrdersCallback,
-  PerpetualsCreateLongPositionCallback,
-  PerpetualsCreateShortPositionCallback,
+  PerpetualsDecreasePlanCallback,
+  PerpetualsDecreaseQuoteCallback,
+  PerpetualsIncreasePlanCallback,
+  PerpetualsIncreaseQuoteCallback,
+  PerpetualsOrderCancelPlanCallback,
 } from './perpetuals.js';
 import type { SwapActionCallback, SwapActions } from './swap.js';
 import type {
@@ -49,9 +51,11 @@ type CallbacksRecord = {
   'lending-withdraw': LendingWithdrawCallback;
   'liquidity-supply': LiquiditySupplyCallback;
   'liquidity-withdraw': LiquidityWithdrawCallback;
-  'perpetuals-short': PerpetualsCreateShortPositionCallback;
-  'perpetuals-long': PerpetualsCreateLongPositionCallback;
-  'perpetuals-close': PerpetualsCloseOrdersCallback;
+  'perpetuals-increase-quote': PerpetualsIncreaseQuoteCallback;
+  'perpetuals-increase-plan': PerpetualsIncreasePlanCallback;
+  'perpetuals-decrease-quote': PerpetualsDecreaseQuoteCallback;
+  'perpetuals-decrease-plan': PerpetualsDecreasePlanCallback;
+  'perpetuals-orders-cancel-plan': PerpetualsOrderCancelPlanCallback;
   'tokenizedYield-mintPtAndYt': TokenizedYieldMintPtAndYtCallback;
   'tokenizedYield-buyPt': TokenizedYieldBuyPtCallback;
   'tokenizedYield-buyYt': TokenizedYieldBuyYtCallback;
