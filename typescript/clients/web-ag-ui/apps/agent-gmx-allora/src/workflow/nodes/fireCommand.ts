@@ -44,6 +44,8 @@ type ReceiptLogLike = {
   topics: readonly string[];
   data: string;
   transactionHash: string | null;
+  blockNumber?: bigint | null;
+  logIndex?: number | bigint | null;
 };
 type TransactionReceiptLike = {
   blockNumber: bigint;
@@ -167,11 +169,21 @@ async function resolveCloseOrderLifecycle(params: {
       toBlock: 'latest',
       topics: [GMX_EVENT_LOG2_TOPIC as HexValue, [GMX_ORDER_EXECUTED_TOPIC as HexValue, GMX_ORDER_CANCELLED_TOPIC as HexValue], orderKey],
     });
-    if (logs.length === 0) {
+
+    const matchingLifecycleLogs = logs.filter((log) => {
+      const topic0 = normalizeHex(log.topics[0]);
+      const topic1 = normalizeHex(log.topics[1]);
+      const topic2 = normalizeHex(log.topics[2]);
+      const isLifecycleTopic =
+        topic1 === GMX_ORDER_EXECUTED_TOPIC || topic1 === GMX_ORDER_CANCELLED_TOPIC;
+      return topic0 === GMX_EVENT_LOG2_TOPIC && isLifecycleTopic && topic2 === normalizeHex(orderKey);
+    });
+
+    if (matchingLifecycleLogs.length === 0) {
       continue;
     }
 
-    const latest = logs.at(-1);
+    const latest = matchingLifecycleLogs.at(-1);
     if (!latest) {
       continue;
     }
@@ -194,6 +206,9 @@ async function resolveCloseOrderLifecycle(params: {
     }
   }
 
+  if (params.orderKeys.length > 0) {
+    return { status: 'unknown', orderKey: params.orderKeys[0] };
+  }
   return { status: 'unknown' };
 }
 
@@ -507,6 +522,7 @@ export const fireCommandNode = async (
 
   let closeConfirmedOnchain = false;
   let closeConfirmationError: string | undefined;
+  let postCloseTotalPositions = 0;
   let postCloseMatchedMarketPosition = false;
   let postCloseMatchedPositionSide: PerpetualPosition['positionSide'] | undefined;
   let postCloseMatchedPositionSizeUsd: string | undefined;
@@ -529,6 +545,12 @@ export const fireCommandNode = async (
           receipt: closeSubmissionReceipt,
           delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
         });
+        if (closeOrderKeys.length > 0) {
+          closeOrderLifecycle = {
+            status: 'unknown',
+            orderKey: closeOrderKeys[0],
+          };
+        }
         logWarn('fireCommand: close submission receipt inspected for order lifecycle', {
           threadId,
           checkpointId,
@@ -556,6 +578,7 @@ export const fireCommandNode = async (
           walletAddress: operatorConfig.delegatorWalletAddress,
           chainIds: [ARBITRUM_CHAIN_ID.toString()],
         });
+        postCloseTotalPositions = postClosePositions.length;
         const postClosePosition = postClosePositions.find(
           (position) => position.marketAddress.toLowerCase() === normalizedMarket,
         );
@@ -563,24 +586,6 @@ export const fireCommandNode = async (
         postCloseMatchedPositionSide = postClosePosition?.positionSide;
         postCloseMatchedPositionSizeUsd = postClosePosition?.sizeInUsd;
         closeConfirmedOnchain = !hasOpenPosition(postClosePosition);
-        logWarn('fireCommand: post-close position verification snapshot', {
-          threadId,
-          checkpointId,
-          checkpointNamespace,
-          attempt,
-          maxVerificationAttempts,
-          verificationIntervalMs,
-          targetMarketAddress: normalizedMarket,
-          totalPositions: postClosePositions.length,
-          matchedMarketPosition: postCloseMatchedMarketPosition,
-          matchedPositionSide: postCloseMatchedPositionSide,
-          matchedPositionSizeUsd: postCloseMatchedPositionSizeUsd,
-          closeConfirmedOnchain,
-          closeOrderLifecycleStatus: closeOrderLifecycle.status,
-          closeOrderLifecycleOrderKey: closeOrderLifecycle.orderKey,
-          closeOrderLifecycleTxHash: closeOrderLifecycle.txHash,
-          closeOrderLifecycleReason: closeOrderLifecycle.cancelReason,
-        });
       } catch (error: unknown) {
         closeConfirmationError = error instanceof Error ? error.message : String(error);
         logWarn('fireCommand: post-close position verification failed', {
@@ -631,6 +636,25 @@ export const fireCommandNode = async (
           });
         }
       }
+
+      logWarn('fireCommand: post-close position verification snapshot', {
+        threadId,
+        checkpointId,
+        checkpointNamespace,
+        attempt,
+        maxVerificationAttempts,
+        verificationIntervalMs,
+        targetMarketAddress: normalizedMarket,
+        totalPositions: postCloseTotalPositions,
+        matchedMarketPosition: postCloseMatchedMarketPosition,
+        matchedPositionSide: postCloseMatchedPositionSide,
+        matchedPositionSizeUsd: postCloseMatchedPositionSizeUsd,
+        closeConfirmedOnchain,
+        closeOrderLifecycleStatus: closeOrderLifecycle.status,
+        closeOrderLifecycleOrderKey: closeOrderLifecycle.orderKey,
+        closeOrderLifecycleTxHash: closeOrderLifecycle.txHash,
+        closeOrderLifecycleReason: closeOrderLifecycle.cancelReason,
+      });
 
       if (closeOrderLifecycle.status === 'cancelled') {
         closeConfirmationError = closeOrderLifecycle.cancelReason
