@@ -400,6 +400,38 @@ describe('pollCycleNode (integration)', () => {
   });
 
   it('allows a second trade when inference metrics change', async () => {
+    const openLongPosition: PerpetualPosition = {
+      chainId: '42161',
+      key: '0xpos-open-long',
+      contractKey: '0xposition-open-long',
+      account: '0xwallet',
+      marketAddress: '0xmarket',
+      sizeInUsd: '16000000000000000000000000000000',
+      sizeInTokens: '0.01',
+      collateralAmount: '50',
+      pendingBorrowingFeesUsd: '0',
+      increasedAtTime: '0',
+      decreasedAtTime: '0',
+      positionSide: 'long',
+      isLong: true,
+      fundingFeeAmount: '0',
+      claimableLongTokenAmount: '0',
+      claimableShortTokenAmount: '0',
+      isOpening: false,
+      pnl: '0',
+      positionFeeAmount: '0',
+      traderDiscountAmount: '0',
+      uiFeeAmount: '0',
+      collateralToken: {
+        tokenUid: { chainId: '42161', address: '0xusdc' },
+        name: 'USD Coin',
+        symbol: 'USDC',
+        isNative: false,
+        decimals: 6,
+        iconUri: null,
+        isVetted: true,
+      },
+    };
     fetchAlloraInferenceMock
       .mockResolvedValueOnce({
         topicId: 14,
@@ -412,7 +444,13 @@ describe('pollCycleNode (integration)', () => {
         confidenceIntervalValues: [44000, 44500, 45000, 45500, 46000],
       });
     listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
-    listPerpetualPositionsMock.mockResolvedValue([]);
+    listPerpetualPositionsMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([openLongPosition])
+      .mockResolvedValueOnce([openLongPosition])
+      .mockResolvedValueOnce([]);
+    createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
+    createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
 
     const firstState = buildBaseState();
     firstState.view.metrics.previousPrice = 46000;
@@ -471,7 +509,7 @@ describe('pollCycleNode (integration)', () => {
     expect(createPerpetualLongMock).toHaveBeenCalledTimes(2);
   });
 
-  it('preserves the last known position snapshot when no fresh position snapshot is available', async () => {
+  it('clears stale position snapshot when no fresh position snapshot is available', async () => {
     fetchAlloraInferenceMock
       .mockResolvedValueOnce({
         topicId: 14,
@@ -506,7 +544,7 @@ describe('pollCycleNode (integration)', () => {
     const secondResult = await pollCycleNode(secondState, {});
     const secondUpdate = extractPollCycleUpdate(secondResult);
 
-    expect(secondUpdate.view?.metrics.latestSnapshot?.totalUsd).toBe(firstSnapshot?.totalUsd);
+    expect(secondUpdate.view?.metrics.latestSnapshot?.totalUsd).toBe(0);
   });
 
   it('executes reduce plans via onchain-actions reduce endpoint when position exists', async () => {

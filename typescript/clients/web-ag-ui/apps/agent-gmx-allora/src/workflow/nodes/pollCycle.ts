@@ -1053,7 +1053,9 @@ export const pollCycleNode = async (
       profile: nextProfile,
       selectedPool,
       haltReason: '',
-      executionError: executionFailure?.detail ?? '',
+      executionError: executionFailure?.requiresFundingAcknowledgement
+        ? ''
+        : executionFailure?.detail ?? '',
     },
     private: {
       cronScheduled,
