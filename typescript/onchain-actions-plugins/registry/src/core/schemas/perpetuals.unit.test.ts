@@ -6,6 +6,8 @@ import {
   CreatePerpetualsOrderCancelPlanRequestSchema,
   GetPerpetualLifecycleRequestSchema,
   PerpetualQuoteResponseSchema,
+  SubmitPerpetualsTransactionRequestSchema,
+  SubmitPerpetualsTransactionResponseSchema,
 } from './perpetuals.js';
 import * as perpetualSchemas from './perpetuals.js';
 
@@ -197,5 +199,45 @@ describe('PerpetualQuoteResponseSchema', () => {
 describe('legacy perpetual core schema removal', () => {
   it('does not export close-order request schema', () => {
     expect(perpetualSchemas.ClosePerpetualsOrdersRequestSchema).toBeUndefined();
+  });
+});
+
+describe('SubmitPerpetualsTransaction schemas', () => {
+  it('validates request signed tx shape', () => {
+    const valid = SubmitPerpetualsTransactionRequestSchema.safeParse({
+      providerName: 'gmx',
+      chainId: '42161',
+      signedTx: '0xdeadbeef',
+    });
+
+    const invalid = SubmitPerpetualsTransactionRequestSchema.safeParse({
+      providerName: 'gmx',
+      chainId: '42161',
+      signedTx: 'deadbeef',
+    });
+
+    expect(valid.success).toBe(true);
+    expect(invalid.success).toBe(false);
+  });
+
+  it('requires canonical response fields and allows tracking metadata', () => {
+    const valid = SubmitPerpetualsTransactionResponseSchema.safeParse({
+      providerName: 'gmx',
+      chainId: '42161',
+      txHash: '0xtxhash',
+      orderKey: '0xorder',
+      walletAddress: '0xwallet',
+      submittedAtBlock: '123456',
+      asOf: '2026-02-25T00:00:00.000Z',
+    });
+
+    const invalid = SubmitPerpetualsTransactionResponseSchema.safeParse({
+      providerName: 'gmx',
+      chainId: '42161',
+      asOf: '2026-02-25T00:00:00.000Z',
+    });
+
+    expect(valid.success).toBe(true);
+    expect(invalid.success).toBe(false);
   });
 });
