@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-import { PositionSideSchema } from '../core/schemas/perpetuals.js';
+import {
+  CreatePerpetualsDecreasePlanRequestSchema as CoreCreatePerpetualsDecreasePlanRequestSchema,
+  CreatePerpetualsDecreaseQuoteRequestSchema as CoreCreatePerpetualsDecreaseQuoteRequestSchema,
+  PositionSideSchema,
+} from '../core/schemas/perpetuals.js';
 
 import {
   PaginatedPossibleResultsRequestSchema,
@@ -27,6 +31,18 @@ export const PerpetualsCreatePositionRequestSchema = z.object({
 });
 export type PerpetualsCreatePositionRequest = z.infer<
   typeof PerpetualsCreatePositionRequestSchema
+>;
+
+export const CreatePerpetualsDecreaseQuoteRequestSchema =
+  CoreCreatePerpetualsDecreaseQuoteRequestSchema;
+export type CreatePerpetualsDecreaseQuoteRequest = z.infer<
+  typeof CreatePerpetualsDecreaseQuoteRequestSchema
+>;
+
+export const CreatePerpetualsDecreasePlanRequestSchema =
+  CoreCreatePerpetualsDecreasePlanRequestSchema;
+export type CreatePerpetualsDecreasePlanRequest = z.infer<
+  typeof CreatePerpetualsDecreasePlanRequestSchema
 >;
 
 export const PerpetualsPositionPromptSchema = PerpetualsCreatePositionRequestSchema.pick({
