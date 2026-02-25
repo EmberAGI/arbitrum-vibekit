@@ -10,7 +10,7 @@ import {
 import * as perpetualSchemas from './perpetuals.js';
 
 describe('CreatePerpetualsDecreaseQuoteRequestSchema', () => {
-  it('requires sizeDeltaUsd for partial mode', () => {
+  it('requires sizeDeltaUsd for nested partial decrease mode', () => {
     const validPartial = CreatePerpetualsDecreaseQuoteRequestSchema.safeParse({
       walletAddress: '0xabc',
       providerName: 'gmx',
@@ -18,8 +18,8 @@ describe('CreatePerpetualsDecreaseQuoteRequestSchema', () => {
       marketAddress: '0xmarket',
       collateralTokenAddress: '0xcollateral',
       side: 'long',
-      mode: 'partial',
-      partial: {
+      decrease: {
+        mode: 'partial',
         sizeDeltaUsd: '100000000',
         slippageBps: '100',
       },
@@ -32,14 +32,45 @@ describe('CreatePerpetualsDecreaseQuoteRequestSchema', () => {
       marketAddress: '0xmarket',
       collateralTokenAddress: '0xcollateral',
       side: 'long',
-      mode: 'partial',
-      partial: {
+      decrease: {
+        mode: 'partial',
         slippageBps: '100',
       },
     });
 
     expect(validPartial.success).toBe(true);
     expect(invalidPartial.success).toBe(false);
+  });
+
+  it('accepts nested full mode and rejects legacy top-level mode payload', () => {
+    const validFull = CreatePerpetualsDecreaseQuoteRequestSchema.safeParse({
+      walletAddress: '0xabc',
+      providerName: 'gmx',
+      chainId: '42161',
+      marketAddress: '0xmarket',
+      collateralTokenAddress: '0xcollateral',
+      side: 'short',
+      decrease: {
+        mode: 'full',
+        slippageBps: '100',
+      },
+    });
+
+    const legacyTopLevel = CreatePerpetualsDecreaseQuoteRequestSchema.safeParse({
+      walletAddress: '0xabc',
+      providerName: 'gmx',
+      chainId: '42161',
+      marketAddress: '0xmarket',
+      collateralTokenAddress: '0xcollateral',
+      side: 'short',
+      mode: 'full',
+      full: {
+        slippageBps: '100',
+      },
+    });
+
+    expect(validFull.success).toBe(true);
+    expect(legacyTopLevel.success).toBe(false);
   });
 });
 

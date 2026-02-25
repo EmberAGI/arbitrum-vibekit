@@ -236,6 +236,14 @@ export namespace EndpointInterfaces {
     perpetuals.PerpetualsCreatePositionRequestSchema;
   export type PerpetualsCreatePositionRequest =
     perpetuals.PerpetualsCreatePositionRequest;
+  export const CreatePerpetualsDecreaseQuoteRequestSchema =
+    perpetuals.CreatePerpetualsDecreaseQuoteRequestSchema;
+  export type CreatePerpetualsDecreaseQuoteRequest =
+    perpetuals.CreatePerpetualsDecreaseQuoteRequest;
+  export const CreatePerpetualsDecreasePlanRequestSchema =
+    perpetuals.CreatePerpetualsDecreasePlanRequestSchema;
+  export type CreatePerpetualsDecreasePlanRequest =
+    perpetuals.CreatePerpetualsDecreasePlanRequest;
   export const PerpetualsPositionPromptSchema =
     perpetuals.PerpetualsPositionPromptSchema;
   export const PossiblePerpetualPositionsRequestSchema =
