@@ -311,6 +311,28 @@ export type CreatePerpetualsOrderCancelPlanResponse = z.infer<
   typeof CreatePerpetualsOrderCancelPlanResponseSchema
 >;
 
+export const SubmitPerpetualsTransactionRequestSchema = z.object({
+  providerName: z.string(),
+  chainId: z.string(),
+  signedTx: z.string().regex(/^0x[0-9a-fA-F]+$/u),
+});
+export type SubmitPerpetualsTransactionRequest = z.infer<
+  typeof SubmitPerpetualsTransactionRequestSchema
+>;
+
+export const SubmitPerpetualsTransactionResponseSchema = z.object({
+  providerName: z.string(),
+  chainId: z.string(),
+  txHash: z.string(),
+  orderKey: z.string().optional(),
+  walletAddress: z.string().optional(),
+  submittedAtBlock: z.string().optional(),
+  asOf: z.string(),
+});
+export type SubmitPerpetualsTransactionResponse = z.infer<
+  typeof SubmitPerpetualsTransactionResponseSchema
+>;
+
 const PerpetualLifecycleDisambiguationResponseSchema = z.object({
   providerName: z.string(),
   chainId: z.string(),

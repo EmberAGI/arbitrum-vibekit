@@ -62,3 +62,42 @@ describe('perpetual endpoint decrease request schemas', () => {
     expect(planSchema.safeParse(legacyRequest).success).toBe(false);
   });
 });
+
+describe('perpetual endpoint submit transaction schemas', () => {
+  it('exports submit request/response schemas', () => {
+    const submitRequestSchema = getSchemaExport(
+      'SubmitPerpetualsTransactionRequestSchema',
+    );
+    const submitResponseSchema = getSchemaExport(
+      'SubmitPerpetualsTransactionResponseSchema',
+    );
+
+    const validRequest = submitRequestSchema.safeParse({
+      providerName: 'gmx',
+      chainId: '42161',
+      signedTx: '0xdeadbeef',
+    });
+    const invalidRequest = submitRequestSchema.safeParse({
+      providerName: 'gmx',
+      chainId: '42161',
+      signedTx: 'deadbeef',
+    });
+
+    const validResponse = submitResponseSchema.safeParse({
+      providerName: 'gmx',
+      chainId: '42161',
+      txHash: '0xtxhash',
+      asOf: '2026-02-25T00:00:00.000Z',
+    });
+    const invalidResponse = submitResponseSchema.safeParse({
+      providerName: 'gmx',
+      chainId: '42161',
+      asOf: '2026-02-25T00:00:00.000Z',
+    });
+
+    expect(validRequest.success).toBe(true);
+    expect(invalidRequest.success).toBe(false);
+    expect(validResponse.success).toBe(true);
+    expect(invalidResponse.success).toBe(false);
+  });
+});
