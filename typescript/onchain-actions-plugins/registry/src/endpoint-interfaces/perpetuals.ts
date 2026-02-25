@@ -4,6 +4,8 @@ import {
   CreatePerpetualsDecreasePlanRequestSchema as CoreCreatePerpetualsDecreasePlanRequestSchema,
   CreatePerpetualsDecreaseQuoteRequestSchema as CoreCreatePerpetualsDecreaseQuoteRequestSchema,
   PositionSideSchema,
+  SubmitPerpetualsTransactionRequestSchema as CoreSubmitPerpetualsTransactionRequestSchema,
+  SubmitPerpetualsTransactionResponseSchema as CoreSubmitPerpetualsTransactionResponseSchema,
 } from '../core/schemas/perpetuals.js';
 
 import {
@@ -43,6 +45,18 @@ export const CreatePerpetualsDecreasePlanRequestSchema =
   CoreCreatePerpetualsDecreasePlanRequestSchema;
 export type CreatePerpetualsDecreasePlanRequest = z.infer<
   typeof CreatePerpetualsDecreasePlanRequestSchema
+>;
+
+export const SubmitPerpetualsTransactionRequestSchema =
+  CoreSubmitPerpetualsTransactionRequestSchema;
+export type SubmitPerpetualsTransactionRequest = z.infer<
+  typeof SubmitPerpetualsTransactionRequestSchema
+>;
+
+export const SubmitPerpetualsTransactionResponseSchema =
+  CoreSubmitPerpetualsTransactionResponseSchema;
+export type SubmitPerpetualsTransactionResponse = z.infer<
+  typeof SubmitPerpetualsTransactionResponseSchema
 >;
 
 export const PerpetualsPositionPromptSchema = PerpetualsCreatePositionRequestSchema.pick({
