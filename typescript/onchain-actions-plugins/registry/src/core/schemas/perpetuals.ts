@@ -204,25 +204,25 @@ const PerpetualDecreaseRequestBaseSchema = z.object({
   side: PositionSideSchema,
 });
 
-const PerpetualDecreaseFullRequestSchema = PerpetualDecreaseRequestBaseSchema.extend({
+const PerpetualDecreaseFullSchema = z.object({
   mode: z.literal('full'),
-  full: z.object({
-    slippageBps: Base10IntegerStringSchema,
-  }),
+  slippageBps: Base10IntegerStringSchema,
 });
 
-const PerpetualDecreasePartialRequestSchema = PerpetualDecreaseRequestBaseSchema.extend({
+const PerpetualDecreasePartialSchema = z.object({
   mode: z.literal('partial'),
-  partial: z.object({
-    sizeDeltaUsd: Base10IntegerStringSchema,
-    slippageBps: Base10IntegerStringSchema,
-  }),
+  sizeDeltaUsd: Base10IntegerStringSchema,
+  slippageBps: Base10IntegerStringSchema,
 });
 
-export const CreatePerpetualsDecreaseQuoteRequestSchema = z.discriminatedUnion('mode', [
-  PerpetualDecreaseFullRequestSchema,
-  PerpetualDecreasePartialRequestSchema,
+const PerpetualDecreaseSchema = z.discriminatedUnion('mode', [
+  PerpetualDecreaseFullSchema,
+  PerpetualDecreasePartialSchema,
 ]);
+
+export const CreatePerpetualsDecreaseQuoteRequestSchema = PerpetualDecreaseRequestBaseSchema.extend({
+  decrease: PerpetualDecreaseSchema,
+});
 export type CreatePerpetualsDecreaseQuoteRequest = z.infer<
   typeof CreatePerpetualsDecreaseQuoteRequestSchema
 >;
