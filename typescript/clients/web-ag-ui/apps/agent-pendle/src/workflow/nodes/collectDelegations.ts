@@ -1,17 +1,18 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
 import { createDelegation, getDeleGatorEnvironment } from '@metamask/delegation-toolkit';
-import { parseUnits } from 'viem';
+import { shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
 import { z } from 'zod';
 
+import type { Token, TokenizedYieldMarket } from '../../clients/onchainActions.js';
 import {
   ARBITRUM_CHAIN_ID,
   resolvePendleChainIds,
   resolveStablecoinWhitelist,
 } from '../../config/constants.js';
-import { buildEligibleYieldTokens } from '../../core/pendleMarkets.js';
 import { getAgentWalletAddress, getOnchainActionsClient } from '../clientFactory.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
   normalizeHexAddress,
@@ -26,19 +27,34 @@ import {
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const FULL_ONBOARDING_TOTAL_STEPS = 3;
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 const resolveDelegationOnboarding = (state: ClmmState): OnboardingState => {
-  const configuredTotalSteps = state.view.onboarding?.totalSteps;
-  const totalSteps =
-    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
-      ? configuredTotalSteps
-      : FULL_ONBOARDING_TOTAL_STEPS;
-  const step = totalSteps <= 2 ? 2 : 3;
-  return { step, totalSteps };
+  if (state.view.delegationsBypassActive === true) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  if (state.view.onboarding?.key === FUNDING_STEP_KEY) {
+    return { step: 3, key: DELEGATION_STEP_KEY };
+  }
+  if (state.view.onboarding?.key === DELEGATION_STEP_KEY) {
+    return state.view.onboarding;
+  }
+  return { step: 2, key: DELEGATION_STEP_KEY };
 };
 
 const ERC20_APPROVE_SELECTOR = '0x095ea7b3' as const;
+const PENDLE_ROUTER_TARGET_BY_CHAIN: Record<number, `0x${string}`> = {
+  [ARBITRUM_CHAIN_ID]: '0x888888888889758f76e7103c6cbf23abbf58f946',
+};
+
+const PENDLE_FULL_LIFECYCLE_SELECTORS = {
+  buyPt: '0xc81f847a',
+  sellPt: '0x594a88cc',
+  redeemPt: '0x47f1de22',
+  redeemPtPostExpiry: '0xf06a07a0',
+  claimRewards: '0x0741a803',
+} as const;
 
 const HexSchema = z
   .string()
@@ -97,6 +113,77 @@ const DelegationSigningResponseJsonSchema = z.union([
   }),
 ]);
 
+type FunctionIntent = {
+  target: `0x${string}`;
+  selector: `0x${string}`;
+};
+
+const intentKey = (intent: FunctionIntent): string =>
+  `${intent.target.toLowerCase()}:${intent.selector.toLowerCase()}`;
+
+const resolvePendleRouterTarget = (chainId: number): `0x${string}` => {
+  const target = PENDLE_ROUTER_TARGET_BY_CHAIN[chainId];
+  if (!target) {
+    throw new Error(`No Pendle router target configured for chain ${chainId}`);
+  }
+  return target;
+};
+
+const appendUniqueIntent = (unique: Map<string, FunctionIntent>, intent: FunctionIntent): void => {
+  unique.set(intentKey(intent), intent);
+};
+
+const buildFullLifecycleDelegationIntents = (params: {
+  markets: readonly TokenizedYieldMarket[];
+  tokens: readonly Token[];
+  fundingTokenAddress: `0x${string}`;
+}): DelegationIntentSummary[] => {
+  const unique = new Map<string, FunctionIntent>();
+  const routerTarget = resolvePendleRouterTarget(ARBITRUM_CHAIN_ID);
+
+  for (const selector of Object.values(PENDLE_FULL_LIFECYCLE_SELECTORS)) {
+    appendUniqueIntent(unique, { target: routerTarget, selector });
+  }
+
+  const stablecoinSymbols = new Set(resolveStablecoinWhitelist().map((symbol) => symbol.toLowerCase()));
+  const stablecoinTargets = params.tokens
+    .filter((token) => stablecoinSymbols.has(token.symbol.toLowerCase()))
+    .map((token) => normalizeHexAddress(token.tokenUid.address, 'stablecoin token address'));
+  for (const target of stablecoinTargets) {
+    appendUniqueIntent(unique, { target, selector: ERC20_APPROVE_SELECTOR });
+  }
+
+  appendUniqueIntent(unique, {
+    target: params.fundingTokenAddress,
+    selector: ERC20_APPROVE_SELECTOR,
+  });
+
+  for (const market of params.markets) {
+    const ptTokenAddress = normalizeHexAddress(market.ptToken.tokenUid.address, 'pt token address');
+    appendUniqueIntent(unique, { target: ptTokenAddress, selector: ERC20_APPROVE_SELECTOR });
+  }
+
+  const routerSelectorSet = new Set(
+    [...unique.values()]
+      .filter((intent) => intent.target.toLowerCase() === routerTarget.toLowerCase())
+      .map((intent) => intent.selector.toLowerCase()),
+  );
+  const missingCapabilities = Object.entries(PENDLE_FULL_LIFECYCLE_SELECTORS).flatMap(([capability, selector]) =>
+    routerSelectorSet.has(selector.toLowerCase()) ? [] : [capability],
+  );
+  if (missingCapabilities.length > 0) {
+    throw new Error(
+      `Missing required delegation capabilities: ${missingCapabilities.join(', ')}`,
+    );
+  }
+
+  return [...unique.values()].map((intent) => ({
+    target: intent.target,
+    selector: intent.selector,
+    allowedCalldata: [],
+  }));
+};
+
 export const collectDelegationsNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
@@ -108,11 +195,12 @@ export const collectDelegationsNode = async (
   });
 
   if (state.view.delegationsBypassActive === true) {
+    const bypassView = applyViewPatch(state, {
+      delegationsBypassActive: true,
+      onboarding: delegationOnboarding,
+    });
     return {
-      view: {
-        delegationsBypassActive: true,
-        onboarding: delegationOnboarding,
-      },
+      view: bypassView,
     };
   }
 
@@ -123,21 +211,23 @@ export const collectDelegationsNode = async (
         'working',
         'Delegation approvals received. Continuing onboarding.',
       );
+      const resumedView = applyViewPatch(state, {
+        delegationBundle: state.view.delegationBundle,
+        onboarding: delegationOnboarding,
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      });
       return {
-        view: {
-          delegationBundle: state.view.delegationBundle,
-          onboarding: delegationOnboarding,
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        },
+        view: resumedView,
       };
     }
 
+    const delegatedView = applyViewPatch(state, {
+      delegationBundle: state.view.delegationBundle,
+      onboarding: delegationOnboarding,
+    });
     return {
-      view: {
-        delegationBundle: state.view.delegationBundle,
-        onboarding: delegationOnboarding,
-      },
+      view: delegatedView,
     };
   }
 
@@ -160,19 +250,24 @@ export const collectDelegationsNode = async (
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Unable to resolve agent wallet address: ${message}`;
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -201,102 +296,19 @@ export const collectDelegationsNode = async (
       onchainActionsClient.listTokenizedYieldMarkets({ chainIds }),
       onchainActionsClient.listTokens({ chainIds }),
     ]);
-
-    const eligible = buildEligibleYieldTokens({
-      markets,
-      supportedTokens: tokens,
-      whitelistSymbols: resolveStablecoinWhitelist(),
-    });
-    const selectedMarketAddress =
-      eligible[0]?.marketAddress ??
-      markets[0]?.marketIdentifier.address;
-    const selectedMarket = selectedMarketAddress
-      ? markets.find((market) => market.marketIdentifier.address.toLowerCase() === selectedMarketAddress.toLowerCase()) ??
-        markets[0]
-      : markets[0];
-    if (!selectedMarket) {
+    if (markets.length === 0) {
       throw new Error('No tokenized yield markets available for delegation planning');
     }
 
-    const stablecoinSymbols = new Set(resolveStablecoinWhitelist().map((symbol) => symbol.toLowerCase()));
-    const stablecoinTargets = tokens
-      .filter((token) => stablecoinSymbols.has(token.symbol.toLowerCase()))
-      .map((token) => normalizeHexAddress(token.tokenUid.address, 'stablecoin token address'));
-
-    const sampleWallet = delegatorAddress;
-    const chainId = selectedMarket.marketIdentifier.chainId;
-    // Use a realistic, non-dust amount; Pendle routing rejects tiny swaps/quotes.
-    const baseContributionUsd =
-      typeof operatorInput.baseContributionUsd === 'number' && Number.isFinite(operatorInput.baseContributionUsd)
-        ? operatorInput.baseContributionUsd
-        : 10;
-
-    // Collect a representative set of transaction targets+selectors that the agent will use,
-    // but generate *one* delegation signature that covers all of them.
     const fundingTokenAddress = normalizeHexAddress(
       fundingTokenInput.fundingTokenAddress,
       'funding token address',
     );
-    const fundingToken = tokens.find(
-      (token) => token.tokenUid.address.toLowerCase() === fundingTokenAddress.toLowerCase(),
-    );
-    const sampleAmount = parseUnits(baseContributionUsd.toString(), fundingToken?.decimals ?? 18).toString();
-    const onePtBaseUnits = parseUnits('1', selectedMarket.ptToken.decimals).toString();
-
-    const plans = await Promise.all([
-      onchainActionsClient.createTokenizedYieldBuyPt({
-        walletAddress: sampleWallet,
-        marketAddress: selectedMarket.marketIdentifier.address,
-        inputTokenUid: { chainId, address: fundingTokenAddress },
-        amount: sampleAmount,
-        slippage: '0.01',
-      }),
-      onchainActionsClient.createTokenizedYieldSellPt({
-        walletAddress: sampleWallet,
-        ptTokenUid: selectedMarket.ptToken.tokenUid,
-        amount: onePtBaseUnits,
-        slippage: '0.01',
-      }),
-      onchainActionsClient.createTokenizedYieldRedeemPt({
-        walletAddress: sampleWallet,
-        ptTokenUid: selectedMarket.ptToken.tokenUid,
-        amount: onePtBaseUnits,
-      }),
-      onchainActionsClient.createTokenizedYieldClaimRewards({
-        walletAddress: sampleWallet,
-        ytTokenUid: selectedMarket.ytToken.tokenUid,
-      }),
-    ]);
-
-    const plannedTransactions = plans.flatMap((plan) => plan.transactions);
-    const plannedIntents = plannedTransactions
-      .map((tx) => ({
-        target: normalizeHexAddress(tx.to, 'planned transaction target'),
-        selector: tx.data.slice(0, 10).toLowerCase() as `0x${string}`,
-      }))
-      // Keep approvals: unwinds/rebalances frequently require approving PT (and other) tokens,
-      // and filtering these out causes delegated execution to fail at runtime.
-
-    const intentKey = (intent: { target: `0x${string}`; selector: `0x${string}` }) =>
-      `${intent.target.toLowerCase()}:${intent.selector.toLowerCase()}`;
-    const unique = new Map<string, { target: `0x${string}`; selector: `0x${string}` }>();
-    for (const intent of plannedIntents) {
-      unique.set(intentKey(intent), intent);
-    }
-
-    // Stablecoin approvals (covers funding token changes and rebalancing flows without re-signing).
-    for (const tokenAddress of stablecoinTargets) {
-      unique.set(intentKey({ target: tokenAddress, selector: ERC20_APPROVE_SELECTOR }), {
-        target: tokenAddress,
-        selector: ERC20_APPROVE_SELECTOR,
-      });
-    }
-
-    delegationIntents = [...unique.values()].map((intent) => ({
-      target: intent.target,
-      selector: intent.selector,
-      allowedCalldata: [],
-    }));
+    delegationIntents = buildFullLifecycleDelegationIntents({
+      markets,
+      tokens,
+      fundingTokenAddress,
+    });
 
     if (delegationIntents.length === 0) {
       throw new Error('No delegation intents generated for Pendle');
@@ -330,20 +342,25 @@ export const collectDelegationsNode = async (
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Unable to prepare delegation request: ${message}`;
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      onboarding: delegationOnboarding,
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          onboarding: delegationOnboarding,
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -366,22 +383,17 @@ export const collectDelegationsNode = async (
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
   };
-  const currentTaskState = state.view.task?.taskStatus?.state;
-  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
-  const shouldPersistPendingState =
-    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
-  const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
-  if (hasRunnableConfig && shouldPersistPendingState) {
-    const mergedView = { ...state.view, ...pendingView };
-    state.view = mergedView;
+  const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
+    currentTaskState: state.view.task?.taskStatus?.state,
+    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+    currentOnboardingKey: state.view.onboarding?.key,
+    nextOnboardingKey: pendingView.onboarding.key,
+    nextTaskMessage: awaitingMessage,
+  });
+  if (shouldPersistPendingState) {
+    const mergedView = applyViewPatch(state, pendingView);
     await copilotkitEmitState(config, {
       view: mergedView,
-    });
-    return new Command({
-      update: {
-        view: mergedView,
-      },
-      goto: 'collectDelegations',
     });
   }
 
@@ -401,20 +413,25 @@ export const collectDelegationsNode = async (
     const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
     const failureMessage = `Invalid delegation signing response: ${issues}`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      onboarding: delegationOnboarding,
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          onboarding: delegationOnboarding,
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -423,22 +440,27 @@ export const collectDelegationsNode = async (
   if (parsed.data.outcome === 'rejected') {
     const { task, statusEvent } = buildTaskStatus(
       awaitingInput.task,
-      'rejected',
+      'failed',
       'Delegation signing was rejected. The agent will not proceed.',
     );
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: 'Delegation signing rejected by user.',
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: 'Delegation signing rejected by user.',
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -448,20 +470,25 @@ export const collectDelegationsNode = async (
   if (signedDelegations.length !== 1) {
     const failureMessage = `Delegation signing returned unexpected count (expected=1, got=${signedDelegations.length})`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      onboarding: delegationOnboarding,
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          onboarding: delegationOnboarding,
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -483,16 +510,21 @@ export const collectDelegationsNode = async (
     'working',
     'Delegations signed. Continuing onboarding.',
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    view: workingView,
   });
 
+  const completedView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    delegationBundle,
+    onboarding: delegationOnboarding,
+  });
   return {
-    view: {
-      task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      delegationBundle,
-      onboarding: delegationOnboarding,
-    },
+    view: completedView,
   };
 };

@@ -9,7 +9,7 @@ export interface AgentConfig {
   creatorVerified: boolean;
   avatar: string;
   avatarBg: string;
-  // Static metadata used for pre-auth and degraded modes (before /api/agents/sync has data).
+  // Static metadata used for pre-auth and degraded modes before runtime stream data arrives.
   chains?: string[];
   protocols?: string[];
   tokens?: string[];

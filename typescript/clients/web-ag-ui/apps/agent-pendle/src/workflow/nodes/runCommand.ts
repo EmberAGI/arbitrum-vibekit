@@ -1,70 +1,50 @@
-import { z } from 'zod';
+import {
+  extractCommandEnvelopeFromMessages,
+  extractCommandFromMessages,
+  mapOnboardingPhaseToTarget,
+  resolveOnboardingPhase,
+  resolveCommandTargetForBootstrappedFlow,
+  resolveRunCommandForView,
+  type AgentCommand,
+  type CommandEnvelope,
+  type CommandRoutingTarget,
+} from 'agent-workflow-core';
 
 import { type ClmmState } from '../context.js';
 
-const commandSchema = z.object({
-  command: z.enum(['hire', 'fire', 'cycle', 'sync']),
-});
-
-type Command = z.infer<typeof commandSchema>['command'];
-
 type CommandTarget =
-  | 'hireCommand'
-  | 'fireCommand'
-  | 'runCycleCommand'
+  | CommandRoutingTarget
   | 'collectSetupInput'
   | 'collectFundingTokenInput'
   | 'collectDelegations'
-  | 'prepareOperator'
-  | 'bootstrap'
-  | 'syncState'
-  | '__end__';
+  | 'prepareOperator';
 
-export function extractCommand(messages: ClmmState['messages']): Command | null {
-  if (!messages) {
-    return null;
-  }
+export function extractCommandEnvelope(messages: ClmmState['messages']): CommandEnvelope | null {
+  return extractCommandEnvelopeFromMessages(messages);
+}
 
-  const list = Array.isArray(messages) ? messages : [messages];
-  if (list.length === 0) {
-    return null;
-  }
-
-  const lastMessage = list[list.length - 1];
-  let content: string | undefined;
-  if (typeof lastMessage === 'string') {
-    content = lastMessage;
-  } else if (Array.isArray(lastMessage)) {
-    content = undefined;
-  } else if (typeof lastMessage === 'object' && lastMessage !== null && 'content' in lastMessage) {
-    const value = (lastMessage as { content?: unknown }).content;
-    content = typeof value === 'string' ? value : undefined;
-  }
-  if (!content) {
-    return null;
-  }
-
-  try {
-    const parsed = commandSchema.safeParse(JSON.parse(content));
-    if (!parsed.success) {
-      return null;
-    }
-    return parsed.data.command;
-  } catch (unknownError) {
-    console.error('[runCommand] Failed to parse command content', unknownError);
-    return null;
-  }
+export function extractCommand(messages: ClmmState['messages']): AgentCommand | null {
+  return extractCommandFromMessages(messages);
 }
 
 export function runCommandNode(state: ClmmState): ClmmState {
-  const parsedCommand = extractCommand(state.messages);
-  const nextCommand =
-    parsedCommand === 'sync' ? state.view.command : parsedCommand ?? state.view.command;
+  const commandEnvelope = extractCommandEnvelope(state.messages);
+  const parsedCommand = commandEnvelope?.command ?? null;
+  const nextCommand = resolveRunCommandForView({
+    parsedCommand,
+    currentViewCommand: state.view.command,
+  });
+  const lastAppliedClientMutationId =
+    parsedCommand === 'sync'
+      ? commandEnvelope?.clientMutationId ?? state.view.lastAppliedClientMutationId
+      : state.view.lastAppliedClientMutationId;
+
   return {
     ...state,
     view: {
       ...state.view,
       command: nextCommand,
+      lastAppliedClientMutationId,
     },
   };
 }
@@ -80,35 +60,30 @@ export function resolveCommandTarget({ messages, private: priv, view }: ClmmStat
       return 'bootstrap';
     }
 
-    // Cycle commands can be triggered by cron / API runners or UI interactions while
-    // onboarding is still in progress. Route "cycle" into the next missing onboarding
-    // step instead of letting it hit `pollCycle` and terminal-fail.
-    if (!view.operatorInput) {
-      return 'collectSetupInput';
-    }
-    if (!view.fundingTokenInput) {
-      return 'collectFundingTokenInput';
-    }
-    if (view.delegationsBypassActive !== true && !view.delegationBundle) {
-      return 'collectDelegations';
-    }
-    if (!view.operatorConfig || view.setupComplete !== true) {
-      return 'prepareOperator';
-    }
+    const phase = resolveOnboardingPhase({
+      hasSetupInput: Boolean(view.operatorInput),
+      hasFundingTokenInput: Boolean(view.fundingTokenInput),
+      requiresDelegationSigning: view.delegationsBypassActive !== true,
+      hasDelegationBundle: Boolean(view.delegationBundle),
+      hasOperatorConfig: Boolean(view.operatorConfig),
+      requiresSetupComplete: true,
+      setupComplete: view.setupComplete === true,
+    });
 
-    return 'runCycleCommand';
+    return mapOnboardingPhaseToTarget<CommandTarget>({
+      phase,
+      targets: {
+        collectSetupInput: 'collectSetupInput',
+        collectFundingToken: 'collectFundingTokenInput',
+        collectDelegations: 'collectDelegations',
+        prepareOperator: 'prepareOperator',
+        ready: 'runCycleCommand',
+      },
+    });
   }
 
-  switch (resolvedCommand) {
-    case 'hire':
-      return 'hireCommand';
-    case 'fire':
-      return 'fireCommand';
-    case 'cycle':
-      return priv.bootstrapped ? 'runCycleCommand' : 'bootstrap';
-    case 'sync':
-      return priv.bootstrapped ? 'syncState' : 'bootstrap';
-    default:
-      return '__end__';
-  }
+  return resolveCommandTargetForBootstrappedFlow({
+    resolvedCommand,
+    bootstrapped: priv.bootstrapped,
+  });
 }

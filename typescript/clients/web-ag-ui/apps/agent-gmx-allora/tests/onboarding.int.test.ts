@@ -196,7 +196,7 @@ describe('GMX Allora onboarding (integration)', () => {
     const update = await collectDelegationsNode(state, {});
 
     expect(interruptMock).not.toHaveBeenCalled();
-    expect(update.view?.onboarding?.step).toBe(3);
+    expect(update.view?.onboarding).toEqual({ step: 2, key: 'funding-token' });
   });
 
   it('omits testing warning in production-mode delegation requests', async () => {
@@ -234,6 +234,57 @@ describe('GMX Allora onboarding (integration)', () => {
 
     const request = interruptMock.mock.calls[0]?.[0] as { warnings?: string[] };
     expect(request.warnings).toEqual(['This delegation flow is for testing only.']);
+  });
+
+  it('persists delegation-signing checkpoint before interrupt when runnable config is present', async () => {
+    const state = buildBaseState();
+    state.view.delegationsBypassActive = false;
+    state.private.mode = 'debug';
+    state.view.onboarding = { step: 2, key: 'funding-token' };
+    state.view.operatorInput = {
+      walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      usdcAllocation: 10,
+      targetMarket: 'ETH',
+    };
+    state.view.task = { id: 'task-1', taskStatus: { state: 'submitted' } };
+
+    const firstResult = await collectDelegationsNode(state, {
+      configurable: { thread_id: 'thread-1' },
+    });
+
+    expect(interruptMock).not.toHaveBeenCalled();
+    const firstCommand = firstResult as unknown as {
+      goto?: string[];
+      update?: { view?: { onboarding?: { step?: number; key?: string }; task?: { taskStatus?: { state?: string } } } };
+    };
+    expect(firstCommand.goto).toContain('collectDelegations');
+    expect(firstCommand.update?.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(firstCommand.update?.view?.task?.taskStatus?.state).toBe('input-required');
+
+    const stateAfterCheckpoint = mergeState(state, {
+      view: firstCommand.update?.view,
+    });
+    interruptMock.mockResolvedValueOnce({
+      outcome: 'signed',
+      signedDelegations: [
+        {
+          delegate: '0x0000000000000000000000000000000000000002',
+          delegator: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          authority: '0x',
+          caveats: [],
+          salt: '0x01',
+          signature: '0x01',
+        },
+      ],
+    });
+
+    const secondResult = await collectDelegationsNode(stateAfterCheckpoint, {
+      configurable: { thread_id: 'thread-1' },
+    });
+
+    expect(interruptMock).toHaveBeenCalledTimes(1);
+    expect(secondResult.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(secondResult.view?.delegationBundle).toBeTruthy();
   });
 
   it('rejects setup input without USDC allocation', async () => {

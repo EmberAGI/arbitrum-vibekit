@@ -1,12 +1,13 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
+import { shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
 import { z } from 'zod';
 
 import { OperatorConfigInputSchema } from '../../domain/types.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
-  type OnboardingState,
   type ClmmState,
   type OperatorInterrupt,
   type ClmmUpdate,
@@ -14,9 +15,8 @@ import {
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
-  totalSteps: 3,
-};
+const SETUP_STEP_KEY = 'setup' as const;
+const FUNDING_STEP_KEY = 'funding-token' as const;
 
 export const collectOperatorInputNode = async (
   state: ClmmState,
@@ -27,19 +27,24 @@ export const collectOperatorInputNode = async (
   if (!state.view.poolArtifact) {
     const failureMessage = 'ERROR: Pool artifact missing before operator input';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: [] },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -60,23 +65,26 @@ export const collectOperatorInputNode = async (
   );
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
   const pendingView = {
-    onboarding: { ...ONBOARDING, step: 1 },
+    onboarding: { step: 1, key: SETUP_STEP_KEY },
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: [] },
   };
-  const currentTaskState = state.view.task?.taskStatus?.state;
-  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
-  const shouldPersistPendingState =
-    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
+    currentTaskState: state.view.task?.taskStatus?.state,
+    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+    currentOnboardingKey: state.view.onboarding?.key,
+    nextOnboardingKey: pendingView.onboarding.key,
+    nextTaskMessage: awaitingMessage,
+  });
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    state.view = { ...state.view, ...pendingView };
+    const mergedView = applyViewPatch(state, pendingView);
     await copilotkitEmitState(config, {
-      view: pendingView,
+      view: mergedView,
     });
     return new Command({
       update: {
-        view: pendingView,
+        view: mergedView,
       },
       goto: 'collectOperatorInput',
     });
@@ -98,18 +106,23 @@ export const collectOperatorInputNode = async (
     const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
     const failureMessage = `Invalid operator input: ${issues}`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: [] },
-        profile: state.view.profile,
-        metrics: state.view.metrics,
-        transactionHistory: state.view.transactionHistory,
-      },
+      view: haltedView,
     };
   }
 
@@ -118,16 +131,21 @@ export const collectOperatorInputNode = async (
     'working',
     'Operator configuration received. Preparing funding options.',
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: [] },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    view: workingView,
   });
 
+  const completedView = applyViewPatch(state, {
+    operatorInput: parsed.data,
+    onboarding: { step: 2, key: FUNDING_STEP_KEY },
+    task,
+    activity: { events: [statusEvent], telemetry: [] },
+  });
   return {
-    view: {
-      operatorInput: parsed.data,
-      onboarding: { ...ONBOARDING, step: 2 },
-      task,
-      activity: { events: [statusEvent], telemetry: [] },
-    },
+    view: completedView,
   };
 };

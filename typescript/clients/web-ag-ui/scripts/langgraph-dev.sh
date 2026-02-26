@@ -65,4 +65,10 @@ while true; do
   dir="$parent"
 done
 
+# Keep LangGraph server request logs quieter by default to reduce dev-console noise.
+# Developers can override per command, e.g. `LOG_LEVEL=info pnpm dev`.
+if [ -z "${LOG_LEVEL+x}" ]; then
+  export LOG_LEVEL="warn"
+fi
+
 exec npx @langchain/langgraph-cli dev --port "$PORT" --no-browser "$@"

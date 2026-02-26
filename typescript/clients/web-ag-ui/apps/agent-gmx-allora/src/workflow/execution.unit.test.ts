@@ -8,29 +8,19 @@ import { executePerpetualPlan } from './execution.js';
 
 const {
   executeTransactionMock,
-  encodePermissionContextsMock,
-  sendTransactionWithDelegationMock,
-  waitForTransactionReceiptMock,
+  redeemDelegationsAndExecuteTransactionsMock,
 } =
   vi.hoisted(() => ({
     executeTransactionMock: vi.fn(),
-    encodePermissionContextsMock: vi.fn(),
-    sendTransactionWithDelegationMock: vi.fn(),
-    waitForTransactionReceiptMock: vi.fn(),
+    redeemDelegationsAndExecuteTransactionsMock: vi.fn(),
   }));
 
 vi.mock('../core/transaction.js', () => ({
   executeTransaction: executeTransactionMock,
 }));
 
-vi.mock('@metamask/delegation-toolkit/utils', () => ({
-  encodePermissionContexts: encodePermissionContextsMock,
-}));
-
-vi.mock('@metamask/delegation-toolkit/experimental', () => ({
-  erc7710WalletActions: () => () => ({
-    sendTransactionWithDelegation: sendTransactionWithDelegationMock,
-  }),
+vi.mock('../core/delegatedExecution.js', () => ({
+  redeemDelegationsAndExecuteTransactions: redeemDelegationsAndExecuteTransactionsMock,
 }));
 
 const createPerpetualLong = vi.fn(() =>
@@ -60,9 +50,7 @@ const client = {
 describe('executePerpetualPlan', () => {
   beforeEach(() => {
     executeTransactionMock.mockReset();
-    encodePermissionContextsMock.mockReset();
-    sendTransactionWithDelegationMock.mockReset();
-    waitForTransactionReceiptMock.mockReset();
+    redeemDelegationsAndExecuteTransactionsMock.mockReset();
   });
 
   it('skips execution when plan action is none', async () => {
@@ -186,18 +174,11 @@ describe('executePerpetualPlan', () => {
   });
 
   it('submits transactions via delegation redemption when delegations are active', async () => {
-    encodePermissionContextsMock.mockReturnValue(['0xperm']);
-    sendTransactionWithDelegationMock.mockResolvedValueOnce('0xhash2');
-    waitForTransactionReceiptMock.mockResolvedValueOnce({ status: 'success' });
-    const clients = {
-      public: {
-        waitForTransactionReceipt: waitForTransactionReceiptMock,
-      },
-      wallet: {
-        account: { address: '0x00000000000000000000000000000000000000cc' },
-        chain: null,
-      },
-    } as unknown as OnchainClients;
+    redeemDelegationsAndExecuteTransactionsMock.mockResolvedValueOnce({
+      txHashes: ['0xhash2'],
+      lastTxHash: '0xhash2',
+    });
+    const clients = {} as OnchainClients;
 
     const delegationBundle: DelegationBundle = {
       chainId: 42161,
@@ -245,15 +226,20 @@ describe('executePerpetualPlan', () => {
 
     expect(result.ok).toBe(true);
     expect(executeTransactionMock).not.toHaveBeenCalled();
-    expect(sendTransactionWithDelegationMock).toHaveBeenCalledTimes(1);
-    expect(sendTransactionWithDelegationMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: '0xrouter',
-        permissionsContext: '0xperm',
-        delegationManager: delegationBundle.delegationManager,
-      }),
-    );
-    expect(waitForTransactionReceiptMock).toHaveBeenCalledWith({ hash: '0xhash2' });
+    expect(redeemDelegationsAndExecuteTransactionsMock).toHaveBeenCalledTimes(1);
+    expect(redeemDelegationsAndExecuteTransactionsMock).toHaveBeenCalledWith({
+      clients,
+      delegationBundle,
+      transactions: [
+        {
+          type: 'evm',
+          to: '0xrouter',
+          data: '0xdeadbeef',
+          chainId: '42161',
+          value: '0',
+        },
+      ],
+    });
     expect(result.txHashes).toEqual(['0xhash2']);
     expect(result.lastTxHash).toBe('0xhash2');
   });

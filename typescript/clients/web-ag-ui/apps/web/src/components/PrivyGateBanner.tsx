@@ -1,17 +1,17 @@
 'use client';
 
 import { AlertCircle } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
 import { useLogin } from '@privy-io/react-auth';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
+import { resolveAgentThreadWalletAddress } from '@/utils/agentThread';
 import { usePathname } from 'next/navigation';
 
 export function PrivyGateBanner() {
-  const { authenticated } = usePrivy();
   const { login } = useLogin();
   const { privyWallet } = usePrivyWalletClient();
   const pathname = usePathname();
-  const needsSignIn = !authenticated || !privyWallet?.address;
+  const threadWalletAddress = resolveAgentThreadWalletAddress(privyWallet?.address);
+  const needsSignIn = !threadWalletAddress;
   const isHireAgents = pathname?.startsWith('/hire-agents') ?? false;
 
   if (!needsSignIn) {

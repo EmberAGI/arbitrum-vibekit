@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ClmmState } from '../context.js';
@@ -13,7 +15,12 @@ vi.mock('@copilotkit/sdk-js/langgraph', () => ({
 }));
 
 describe('pollCycleNode', () => {
-  it('reroutes to onboarding instead of failing when strategy config is missing', async () => {
+  it('uses state-driven routing and avoids direct Command construction', async () => {
+    const source = await readFile(new URL('./pollCycle.ts', import.meta.url), 'utf8');
+    expect(source.includes('new Command(')).toBe(false);
+  });
+
+  it('returns state-only onboarding update when strategy config is missing', async () => {
     copilotkitEmitStateMock.mockReset();
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
@@ -36,23 +43,19 @@ describe('pollCycleNode', () => {
     } as unknown as ClmmState;
 
     const result = await pollCycleNode(state, {});
-    const commandResult = result as unknown as {
-      goto?: string[];
-      update?: {
-        view?: {
-          task?: {
-            taskStatus?: {
-              state?: string;
-              message?: { content?: string };
-            };
+    const updateResult = result as unknown as {
+      view?: {
+        task?: {
+          taskStatus?: {
+            state?: string;
+            message?: { content?: string };
           };
         };
       };
     };
 
-    expect(commandResult.goto).toContain('collectDelegations');
-    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.task?.taskStatus?.message?.content).toBe(
+    expect(updateResult.view?.task?.taskStatus?.state).toBe('input-required');
+    expect(updateResult.view?.task?.taskStatus?.message?.content).toBe(
       'Cycle paused until onboarding input is complete.',
     );
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);

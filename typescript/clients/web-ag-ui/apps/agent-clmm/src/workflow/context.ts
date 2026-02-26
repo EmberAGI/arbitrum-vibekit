@@ -1,6 +1,16 @@
 import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
 import { Annotation } from '@langchain/langgraph';
+import {
+  createMessageHistoryReducer,
+  isTaskActiveState,
+  isTaskTerminalState,
+  mergeViewPatchForEmit,
+  normalizeLegacyOnboardingState,
+  type AgentCommand,
+  type OnboardingContract,
+  type TaskState,
+} from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 
 import type { AccountingState } from '../accounting/types.js';
@@ -19,16 +29,12 @@ import {
   type ResolvedOperatorConfig,
 } from '../domain/types.js';
 
+import { deriveClmmOnboardingFlow } from './onboardingFlow.js';
+
 export type AgentMessage = CopilotKitAIMessage;
 
 type ClmmMessage = Record<string, unknown> | string;
-type ClmmMessageUpdate = ClmmMessage | ClmmMessage[];
-
-const clmmMessagesReducer = (left: ClmmMessageUpdate, right: ClmmMessageUpdate): ClmmMessage[] => {
-  const leftMessages = Array.isArray(left) ? left : [left];
-  const rightMessages = Array.isArray(right) ? right : [right];
-  return [...leftMessages, ...rightMessages];
-};
+export const clmmMessagesReducer = createMessageHistoryReducer<ClmmMessage>(resolveStateHistoryLimit);
 
 type CopilotkitState = {
   actions: Array<unknown>;
@@ -103,17 +109,6 @@ export type ClmmMetrics = {
 };
 
 export type ClmmAccounting = AccountingState;
-
-export type TaskState =
-  | 'submitted'
-  | 'working'
-  | 'input-required'
-  | 'completed'
-  | 'canceled'
-  | 'failed'
-  | 'rejected'
-  | 'auth-required'
-  | 'unknown';
 
 export type TaskStatus = {
   state: TaskState;
@@ -202,16 +197,17 @@ export type DelegationSigningInterrupt = {
 
 export type OnboardingState = {
   step: number;
-  totalSteps?: number;
   key?: string;
 };
 
 type ClmmViewState = {
-  command?: string;
+  command?: AgentCommand;
+  lastAppliedClientMutationId?: string;
   task?: Task;
   poolArtifact?: Artifact;
   operatorInput?: OperatorConfigInput;
   onboarding?: OnboardingState;
+  onboardingFlow?: OnboardingContract;
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: CamelotPool;
   operatorConfig?: ResolvedOperatorConfig;
@@ -241,10 +237,13 @@ const defaultPrivateState = (): ClmmPrivateState => ({
 const defaultViewState = (): ClmmViewState => ({
   // Workflow state exposed to the UI
   command: undefined,
+  lastAppliedClientMutationId: undefined,
   task: undefined,
   poolArtifact: undefined,
   operatorInput: undefined,
   onboarding: undefined,
+  onboardingFlow: undefined,
+  fundingTokenInput: undefined,
   selectedPool: undefined,
   operatorConfig: undefined,
   haltReason: undefined,
@@ -350,6 +349,21 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
   if (!right) {
     return left;
   }
+  const nextTask = right.task ?? left.task;
+  const nextOnboarding = right.onboarding ?? left.onboarding;
+  const nextOperatorConfig = right.operatorConfig ?? left.operatorConfig;
+  const nextDelegationsBypassActive = right.delegationsBypassActive ?? left.delegationsBypassActive;
+  const nextOnboardingFlow = deriveClmmOnboardingFlow({
+    onboarding: nextOnboarding,
+    previous: left.onboardingFlow,
+    setupComplete: Boolean(nextOperatorConfig),
+    taskState: nextTask?.taskStatus?.state,
+    delegationsBypassActive: nextDelegationsBypassActive === true,
+  });
+  const normalizedOnboarding = normalizeLegacyOnboardingState({
+    onboarding: nextOnboarding,
+    onboardingFlow: nextOnboardingFlow,
+  });
 
   const nextTelemetry = limitHistory(
     mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry),
@@ -416,17 +430,18 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     ...left,
     ...right,
     command: right.command ?? left.command,
-    task: right.task ?? left.task,
+    task: nextTask,
     poolArtifact: right.poolArtifact ?? left.poolArtifact,
     operatorInput: right.operatorInput ?? left.operatorInput,
-    onboarding: right.onboarding ?? left.onboarding,
+    onboarding: normalizedOnboarding,
+    onboardingFlow: nextOnboardingFlow,
     fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
     selectedPool: right.selectedPool ?? left.selectedPool,
-    operatorConfig: right.operatorConfig ?? left.operatorConfig,
+    operatorConfig: nextOperatorConfig,
     delegationBundle: right.delegationBundle ?? left.delegationBundle,
     haltReason: right.haltReason ?? left.haltReason,
     executionError: right.executionError ?? left.executionError,
-    delegationsBypassActive: right.delegationsBypassActive ?? left.delegationsBypassActive,
+    delegationsBypassActive: nextDelegationsBypassActive,
     profile: nextProfile,
     activity: {
       telemetry: nextTelemetry,
@@ -447,7 +462,7 @@ const mergeCopilotkit = (
 });
 
 export const ClmmStateAnnotation = Annotation.Root({
-  messages: Annotation<ClmmMessage[], ClmmMessageUpdate>({
+  messages: Annotation<ClmmMessage[], ClmmMessage | ClmmMessage[]>({
     default: () => [],
     reducer: clmmMessagesReducer,
   }),
@@ -471,6 +486,19 @@ export const ClmmStateAnnotation = Annotation.Root({
 
 export type ClmmState = typeof ClmmStateAnnotation.State;
 export type ClmmUpdate = typeof ClmmStateAnnotation.Update;
+
+export const applyViewPatch = (state: ClmmState, patch: Partial<ClmmViewState>): ClmmViewState => {
+  const mergedView = mergeViewPatchForEmit({
+    currentView: state.view,
+    patchView: patch,
+    mergeWithInvariants: (currentView, patchView) => {
+      const hydratedCurrentView = mergeViewState(defaultViewState(), currentView);
+      return mergeViewState(hydratedCurrentView, patchView);
+    },
+  });
+  state.view = mergedView;
+  return mergedView;
+};
 
 export const memory = createCheckpointer();
 
@@ -508,9 +536,45 @@ export function buildTaskStatus(
 
 export type LogOptions = {
   detailed?: boolean;
+  force?: boolean;
 };
 
+type AgentLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
+
+const LOG_LEVEL_WEIGHT: Record<AgentLogLevel, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+  silent: 50,
+};
+
+function resolveAgentLogLevel(): AgentLogLevel {
+  const raw =
+    process.env['CLMM_LOG_LEVEL'] ?? process.env['AGENT_LOG_LEVEL'] ?? process.env['LOG_LEVEL'];
+  switch (raw) {
+    case 'debug':
+    case 'info':
+    case 'warn':
+    case 'error':
+    case 'silent':
+      return raw;
+    default:
+      return 'info';
+  }
+}
+
+function shouldLogInfo(options?: LogOptions): boolean {
+  if (options?.force) {
+    return true;
+  }
+  return LOG_LEVEL_WEIGHT[resolveAgentLogLevel()] <= LOG_LEVEL_WEIGHT.info;
+}
+
 export function logInfo(message: string, metadata?: Record<string, unknown>, options?: LogOptions) {
+  if (!shouldLogInfo(options)) {
+    return;
+  }
   const timestamp = new Date().toISOString();
   const prefix = `[CamelotCLMM][${timestamp}]`;
   if (metadata && Object.keys(metadata).length > 0) {
@@ -533,15 +597,6 @@ export function normalizeHexAddress(value: string, label: string): `0x${string}`
   return value as `0x${string}`;
 }
 
-export const isTaskTerminal = (state: TaskState) =>
-  state === 'completed' ||
-  state === 'failed' ||
-  state === 'canceled' ||
-  state === 'rejected' ||
-  state === 'unknown';
+export const isTaskTerminal = (state: TaskState) => isTaskTerminalState(state);
 
-export const isTaskActive = (state: TaskState) =>
-  state === 'submitted' ||
-  state === 'working' ||
-  state === 'input-required' ||
-  state === 'auth-required';
+export const isTaskActive = (state: TaskState) => isTaskActiveState(state);

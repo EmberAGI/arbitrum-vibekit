@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ClmmState } from '../context.js';
@@ -24,7 +26,12 @@ describe('prepareOperatorNode', () => {
     process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = previousAgentWallet;
   });
 
-  it('reroutes to collectDelegations when delegation bundle is missing', async () => {
+  it('uses state-driven routing and avoids direct Command construction', async () => {
+    const source = await readFile(new URL('./prepareOperator.ts', import.meta.url), 'utf8');
+    expect(source.includes('new Command(')).toBe(false);
+  });
+
+  it('returns state-only update when delegation bundle is missing', async () => {
     process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = '0x3333333333333333333333333333333333333333';
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
@@ -40,7 +47,7 @@ describe('prepareOperatorNode', () => {
         },
         delegationsBypassActive: false,
         delegationBundle: undefined,
-        onboarding: { step: 2, totalSteps: 3 },
+        onboarding: { step: 2, key: 'funding-token' },
         task: { id: 'task-1', taskStatus: { state: 'working' } },
         activity: { telemetry: [], events: [] },
         profile: {},
@@ -51,26 +58,22 @@ describe('prepareOperatorNode', () => {
 
     const result = await prepareOperatorNode(state, {});
 
-    const commandResult = result as unknown as {
-      goto?: string[];
-      update?: {
-        view?: {
-          task?: {
-            taskStatus?: {
-              state?: string;
-              message?: { content?: string };
-            };
+    const updateResult = result as unknown as {
+      view?: {
+        task?: {
+          taskStatus?: {
+            state?: string;
+            message?: { content?: string };
           };
-          onboarding?: { step?: number; totalSteps?: number };
         };
+        onboarding?: { step?: number; key?: string };
       };
     };
 
-    expect(commandResult.goto).toContain('collectDelegations');
-    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.task?.taskStatus?.message?.content).toBe(
+    expect(updateResult.view?.task?.taskStatus?.state).toBe('input-required');
+    expect(updateResult.view?.task?.taskStatus?.message?.content).toBe(
       'Waiting for delegation approval to continue onboarding.',
     );
-    expect(commandResult.update?.view?.onboarding).toEqual({ step: 3, totalSteps: 3 });
+    expect(updateResult.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
   });
 });

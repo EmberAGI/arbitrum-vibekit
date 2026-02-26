@@ -1,0 +1,27 @@
+{
+  "name": "agent-workflow-core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "lint": "eslint \"src\" --ext .ts",
+    "lint:fix": "eslint \"src\" --ext .ts --fix",
+    "format": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --write",
+    "format:check": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --check",
+    "test": "pnpm test:unit",
+    "test:watch": "vitest watch --config vitest.config.unit.ts",
+    "test:unit": "vitest run --config vitest.config.unit.ts",
+    "test:ci": "pnpm test:unit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

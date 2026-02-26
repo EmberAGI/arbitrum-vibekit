@@ -1,5 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
+import { shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
 import { erc20Abi, formatUnits } from 'viem';
 import { z } from 'zod';
 
@@ -9,6 +10,7 @@ import { buildRange, deriveMidPrice } from '../../core/decision-engine.js';
 import { FundingTokenInputSchema, type FundingTokenInput } from '../../domain/types.js';
 import { getCamelotClient, getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
   normalizeHexAddress,
@@ -23,33 +25,17 @@ import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const FULL_ONBOARDING_TOTAL_STEPS = 3;
-const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
-
-const buildOnboarding = (params: {
-  step: number;
-  delegationsBypassActive: boolean;
-  skipFundingStep?: boolean;
-}): OnboardingState => ({
-  step: params.step,
-  totalSteps:
-    params.skipFundingStep || params.delegationsBypassActive
-      ? REDUCED_ONBOARDING_TOTAL_STEPS
-      : FULL_ONBOARDING_TOTAL_STEPS,
-});
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 const resolveFundingResumeOnboarding = (state: ClmmState): OnboardingState => {
-  const configuredTotalSteps = state.view.onboarding?.totalSteps;
-  const fallbackTotalSteps =
-    state.view.delegationsBypassActive === true
-      ? REDUCED_ONBOARDING_TOTAL_STEPS
-      : FULL_ONBOARDING_TOTAL_STEPS;
-  const totalSteps =
-    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
-      ? configuredTotalSteps
-      : fallbackTotalSteps;
-  const step = totalSteps <= 2 ? 2 : 3;
-  return { step, totalSteps };
+  if (state.view.delegationsBypassActive === true) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  if (state.view.onboarding?.key === DELEGATION_STEP_KEY && state.view.onboarding.step === 2) {
+    return state.view.onboarding;
+  }
+  return { step: 3, key: DELEGATION_STEP_KEY };
 };
 
 function uniqByAddress<T extends { address: `0x${string}` }>(items: readonly T[]): T[] {
@@ -117,10 +103,11 @@ export const collectFundingTokenInputNode = async (
 
   if (state.view.fundingTokenInput) {
     logInfo('collectFundingTokenInput: funding token already present; skipping step');
+    const resumedView = applyViewPatch(state, {
+      onboarding: resolveFundingResumeOnboarding(state),
+    });
     return {
-      view: {
-        onboarding: resolveFundingResumeOnboarding(state),
-      },
+      view: resumedView,
     };
   }
 
@@ -151,19 +138,24 @@ export const collectFundingTokenInputNode = async (
     const failureMessage = `ERROR: Pool ${selectedPoolAddress} not available from Ember API`;
     logInfo('collectFundingTokenInput: selected pool missing', { selectedPoolAddress, failureMessage });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return new Command({
       update: {
-        view: {
-          haltReason: failureMessage,
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
+        view: haltedView,
       },
       goto: 'summarize',
     });
@@ -189,16 +181,21 @@ export const collectFundingTokenInputNode = async (
       'working',
       `WARNING: Unable to estimate required pool token balances (${message}). Skipping funding-token selection.`,
     );
+    const warningView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: warningView,
+    });
+    const skipView = applyViewPatch(state, {
+      selectedPool,
+      onboarding: { step: 2, key: DELEGATION_STEP_KEY },
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     });
     return {
-      view: {
-        selectedPool,
-        onboarding: buildOnboarding({ step: 2, delegationsBypassActive, skipFundingStep: true }),
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      },
+      view: skipView,
     };
   }
 
@@ -239,11 +236,12 @@ export const collectFundingTokenInputNode = async (
       poolTokenUsdValue: poolTokenUsdValue.toFixed(4),
       baseContributionUsd,
     });
+    const skipView = applyViewPatch(state, {
+      selectedPool,
+      onboarding: { step: 2, key: DELEGATION_STEP_KEY },
+    });
     return {
-      view: {
-        selectedPool,
-        onboarding: buildOnboarding({ step: 2, delegationsBypassActive, skipFundingStep: true }),
-      },
+      view: skipView,
     };
   }
 
@@ -265,15 +263,20 @@ export const collectFundingTokenInputNode = async (
       error: error instanceof Error ? error.message : String(error),
     });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      },
+      view: haltedView,
     };
   }
   walletBalances = walletBalances.filter(
@@ -318,6 +321,43 @@ export const collectFundingTokenInputNode = async (
     return a.symbol.localeCompare(b.symbol);
   });
 
+  const poolTokenAddresses = new Set([
+    selectedPool.token0.address.toLowerCase(),
+    selectedPool.token1.address.toLowerCase(),
+  ]);
+  const autoSelectedFundingToken = availableOptions.find((option) =>
+    poolTokenAddresses.has(option.address.toLowerCase()),
+  );
+  if (autoSelectedFundingToken) {
+    const { task, statusEvent } = buildTaskStatus(
+      state.view.task,
+      'working',
+      `Auto-selected ${autoSelectedFundingToken.symbol} as the funding token based on current pool-token holdings.`,
+    );
+    const autoSelectedView = applyViewPatch(state, {
+      selectedPool,
+      fundingTokenInput: { fundingTokenAddress: autoSelectedFundingToken.address },
+      onboarding:
+        delegationsBypassActive === true
+          ? { step: 2, key: FUNDING_STEP_KEY }
+          : { step: 3, key: DELEGATION_STEP_KEY },
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
+    logInfo('collectFundingTokenInput: auto-selected funding token from pool token holdings', {
+      fundingTokenAddress: autoSelectedFundingToken.address,
+      fundingTokenSymbol: autoSelectedFundingToken.symbol,
+      optionCount: availableOptions.length,
+      onboardingStep: autoSelectedView.onboarding?.step,
+    });
+    await copilotkitEmitState(config, {
+      view: autoSelectedView,
+    });
+    return {
+      view: autoSelectedView,
+    };
+  }
+
   if (availableOptions.length === 0) {
     const walletLabel = delegationsBypassActive ? 'agent wallet' : 'wallet';
     const failureMessage = `No funding tokens available in the ${walletLabel} on Arbitrum. Fund the ${walletLabel} with tokens to continue.`;
@@ -326,15 +366,20 @@ export const collectFundingTokenInputNode = async (
       candidateCount: optionBalances.length,
     });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      },
+      view: haltedView,
     };
   }
 
@@ -353,19 +398,21 @@ export const collectFundingTokenInputNode = async (
   );
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
   const pendingView = {
-    onboarding: buildOnboarding({ step: 2, delegationsBypassActive }),
+    onboarding: { step: 2, key: FUNDING_STEP_KEY },
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
     selectedPool,
   };
-  const currentTaskState = state.view.task?.taskStatus?.state;
-  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
-  const shouldPersistPendingState =
-    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
+    currentTaskState: state.view.task?.taskStatus?.state,
+    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+    currentOnboardingKey: state.view.onboarding?.key,
+    nextOnboardingKey: pendingView.onboarding.key,
+    nextTaskMessage: awaitingMessage,
+  });
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    const mergedView = { ...state.view, ...pendingView };
-    state.view = mergedView;
+    const mergedView = applyViewPatch(state, pendingView);
     await copilotkitEmitState(config, {
       view: mergedView,
     });
@@ -404,15 +451,20 @@ export const collectFundingTokenInputNode = async (
     const failureMessage = `Invalid funding-token input: ${issues}`;
     logInfo('collectFundingTokenInput: validation failed', { issues, failureMessage });
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      },
+      view: haltedView,
     };
   }
 
@@ -427,15 +479,20 @@ export const collectFundingTokenInputNode = async (
     const failureMessage = `Invalid funding-token input: address ${normalizedFundingToken} not in allowed options`;
     logInfo('collectFundingTokenInput: funding token not allowed', { normalizedFundingToken, failureMessage });
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      },
+      view: haltedView,
     };
   }
 
@@ -444,24 +501,29 @@ export const collectFundingTokenInputNode = async (
     'working',
     'Funding token selected. Preparing delegation request.',
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    view: workingView,
   });
 
   const input: FundingTokenInput = {
     fundingTokenAddress: normalizedFundingToken,
   };
 
+  const completedView = applyViewPatch(state, {
+    selectedPool,
+    fundingTokenInput: input,
+    onboarding:
+      delegationsBypassActive === true
+        ? { step: 2, key: FUNDING_STEP_KEY }
+        : { step: 3, key: DELEGATION_STEP_KEY },
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+  });
   return {
-    view: {
-      selectedPool,
-      fundingTokenInput: input,
-      onboarding: buildOnboarding({
-        step: delegationsBypassActive ? 2 : 3,
-        delegationsBypassActive,
-      }),
-      task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-    },
+    view: completedView,
   };
 };

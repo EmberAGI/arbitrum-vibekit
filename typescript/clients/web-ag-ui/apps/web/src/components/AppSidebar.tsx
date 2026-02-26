@@ -40,6 +40,16 @@ export interface AgentActivity {
   timestamp?: string;
 }
 
+function isLikelyStaleOnboardingTaskMessage(message: string | undefined): boolean {
+  const normalized = `${message ?? ''}`.toLowerCase();
+  if (normalized.length === 0) return false;
+  return (
+    normalized.includes('onboarding') ||
+    normalized.includes('delegation approval') ||
+    normalized.includes('market + allocation')
+  );
+}
+
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -84,6 +94,10 @@ export function AppSidebar() {
   const runtimeCommand = agent.view.command;
   const runtimeHaltReason = agent.view.haltReason;
   const runtimeExecutionError = agent.view.executionError;
+  const runtimeHasConfiguredStrategy = Boolean(
+    agent.view.setupComplete || agent.view.operatorConfig || agent.view.delegationBundle,
+  );
+  const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
   const runtimeTaskMessage = (() => {
     const message = agent.view.task?.taskStatus?.message;
     if (typeof message !== 'object' || message === null) return undefined;
@@ -98,7 +112,7 @@ export function AppSidebar() {
 
   agentConfigs.forEach((config) => {
     const listEntry = listAgents[config.id];
-    const useRuntime = runtimeAgentId === config.id && Boolean(runtimeTaskId);
+    const useRuntime = runtimeAgentId === config.id;
     const entry = useRuntime
       ? {
           ...listEntry,
@@ -108,6 +122,7 @@ export function AppSidebar() {
             runtimeTaskState,
             runtimeCommand,
             runtimeTaskMessage,
+            fallbackToListWhenRuntimeMissing: false,
           }),
           command: runtimeCommand,
           taskMessage: runtimeTaskMessage,
@@ -116,7 +131,26 @@ export function AppSidebar() {
         }
       : listEntry;
 
-    const taskState = entry?.taskState;
+    let taskState = entry?.taskState;
+    if (!taskState && useRuntime && runtimeHasConfiguredStrategy) {
+      taskState = 'working';
+    }
+    if (
+      taskState === 'input-required' &&
+      useRuntime &&
+      runtimeHasConfiguredStrategy &&
+      isLikelyStaleOnboardingTaskMessage(runtimeTaskMessage)
+    ) {
+      taskState = 'working';
+    }
+    if (
+      taskState === 'input-required' &&
+      useRuntime &&
+      runtimeHasConfiguredStrategy &&
+      (!runtimeTaskMessage || runtimeTaskMessage.trim().length === 0)
+    ) {
+      taskState = 'working';
+    }
     if (!taskState) {
       return;
     }
@@ -126,6 +160,22 @@ export function AppSidebar() {
     const hasError = taskState === 'failed';
     const isBlocked = needsInput || hasError;
     const isCompleted = taskState === 'completed' || taskState === 'canceled';
+
+    if (debugStatus && runtimeAgentId === config.id) {
+      console.debug('[AppSidebar] runtime classification', {
+        agentId: config.id,
+        source: useRuntime ? 'runtime' : 'list',
+        runtimeTaskId,
+        runtimeTaskState,
+        runtimeCommand,
+        runtimeTaskMessage,
+        listTaskState: listEntry?.taskState,
+        resolvedTaskState: taskState,
+        runtimeHasConfiguredStrategy,
+        isBlocked,
+        isCompleted,
+      });
+    }
 
     if (isBlocked) {
       blockedAgents.push({

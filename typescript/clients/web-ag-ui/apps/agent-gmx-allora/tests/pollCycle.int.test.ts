@@ -6,6 +6,23 @@ import { ONCHAIN_ACTIONS_API_URL } from '../src/config/constants.js';
 import type { ClmmState } from '../src/workflow/context.js';
 import { pollCycleNode } from '../src/workflow/nodes/pollCycle.js';
 
+type PollCycleUpdate = {
+  view?: ClmmState['view'];
+  private?: ClmmState['private'];
+};
+
+function extractPollCycleUpdate(result: unknown): PollCycleUpdate {
+  if (
+    typeof result === 'object' &&
+    result !== null &&
+    'update' in result &&
+    typeof (result as { update?: unknown }).update === 'object'
+  ) {
+    return (result as { update: PollCycleUpdate }).update;
+  }
+  return result as PollCycleUpdate;
+}
+
 const {
   copilotkitEmitStateMock,
   fetchAlloraInferenceMock,
@@ -15,6 +32,8 @@ const {
   createPerpetualShortMock,
   createPerpetualCloseMock,
   createPerpetualReduceMock,
+  getPerpetualLifecycleMock,
+  getOnchainClientsMock,
 } = vi.hoisted(() => ({
   copilotkitEmitStateMock: vi.fn(async () => undefined),
   fetchAlloraInferenceMock: vi.fn<[], Promise<AlloraInference>>(),
@@ -24,6 +43,8 @@ const {
   createPerpetualShortMock: vi.fn<[], Promise<unknown>>(),
   createPerpetualCloseMock: vi.fn<[], Promise<unknown>>(),
   createPerpetualReduceMock: vi.fn<[], Promise<unknown>>(),
+  getPerpetualLifecycleMock: vi.fn<[], Promise<unknown>>(),
+  getOnchainClientsMock: vi.fn(),
 }));
 
 vi.mock('@copilotkit/sdk-js/langgraph', () => ({
@@ -48,8 +69,9 @@ vi.mock('../src/workflow/clientFactory.js', () => ({
     createPerpetualShort: createPerpetualShortMock,
     createPerpetualClose: createPerpetualCloseMock,
     createPerpetualReduce: createPerpetualReduceMock,
+    getPerpetualLifecycle: getPerpetualLifecycleMock,
   }),
-  getOnchainClients: vi.fn(),
+  getOnchainClients: getOnchainClientsMock,
 }));
 
 vi.mock('../src/workflow/cronScheduler.js', () => ({
@@ -181,6 +203,8 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualShortMock.mockReset();
     createPerpetualCloseMock.mockReset();
     createPerpetualReduceMock.mockReset();
+    getPerpetualLifecycleMock.mockReset();
+    getOnchainClientsMock.mockReset();
     copilotkitEmitStateMock.mockReset();
   });
 
@@ -191,7 +215,7 @@ describe('pollCycleNode (integration)', () => {
     state.view.metrics.previousPrice = 47000;
 
     const result = await pollCycleNode(state, {});
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
 
     expect(update.view?.haltReason).toBeUndefined();
     expect(update.view?.metrics.staleCycles).toBe(1);
@@ -213,7 +237,7 @@ describe('pollCycleNode (integration)', () => {
 
     const state = buildBaseState();
     const result = await pollCycleNode(state, {});
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
 
     expect(update.view?.haltReason).toContain(
       `ERROR: Failed to fetch GMX markets/positions from ${ONCHAIN_ACTIONS_API_URL}`,
@@ -236,12 +260,10 @@ describe('pollCycleNode (integration)', () => {
     const state = buildBaseState();
     state.view.metrics.previousPrice = 46000;
     const result = await pollCycleNode(state, {});
-    const command = result as { update: ClmmState; goto?: string[] };
-    const update = command.update;
+    const update = extractPollCycleUpdate(result);
 
     expect(update.view?.haltReason).toBe('');
     expect(update.view?.task?.taskStatus.state).toBe('input-required');
-    expect(command.goto).toContain('acknowledgeFundWallet');
     expect(update.view?.task?.taskStatus.message?.content).toContain(
       'GMX order simulation failed',
     );
@@ -278,7 +300,7 @@ describe('pollCycleNode (integration)', () => {
     state.view.metrics.previousPrice = 46000;
     const result = await pollCycleNode(state, {});
 
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
     const events = update.view?.activity.events ?? [];
     const artifactIds = events
       .filter((event) => event.type === 'artifact')
@@ -287,6 +309,68 @@ describe('pollCycleNode (integration)', () => {
     expect(artifactIds).toContain('gmx-allora-telemetry');
     expect(artifactIds).toContain('gmx-allora-execution-plan');
     expect(update.view?.metrics.latestSnapshot?.totalUsd).toBeGreaterThan(0);
+  });
+
+  it('fails cycle execution when perpetual lifecycle reports cancelled status for submitted open order', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValueOnce([]);
+      createPerpetualLongMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0x1', data: '0x2', value: '0', chainId: '42161' }],
+      });
+      getPerpetualLifecycleMock.mockResolvedValueOnce({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+        status: 'cancelled',
+        reason: 'OrderNotFulfillableAtAcceptablePrice',
+        precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+        asOf: '2026-01-01T00:00:00.000Z',
+      });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValue('0x1111111111111111111111111111111111111111111111111111111111111111'),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn().mockResolvedValue({
+            status: 'success',
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.view.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(getPerpetualLifecycleMock).toHaveBeenCalledWith({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      });
+      expect(update.view?.task?.taskStatus.state).toBe('working');
+      expect(update.view?.task?.taskStatus.message?.content).toContain('execution failed');
+      expect(update.view?.task?.taskStatus.message?.content).toContain('cancelled');
+      expect(update.view?.executionError).toContain('cancelled');
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
   });
 
   it('routes open long decisions to createPerpetualLong', async () => {
@@ -367,8 +451,7 @@ describe('pollCycleNode (integration)', () => {
     firstState.view.metrics.assumedPositionSide = 'long';
     const firstResult = await pollCycleNode(firstState, {});
 
-    const firstUpdate = (firstResult as { update: { view?: { metrics?: ClmmState['view']['metrics'] } } })
-      .update;
+    const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
     secondState.view.metrics = {
@@ -386,6 +469,38 @@ describe('pollCycleNode (integration)', () => {
   });
 
   it('allows a second trade when inference metrics change', async () => {
+    const openLongPosition: PerpetualPosition = {
+      chainId: '42161',
+      key: '0xpos-open-long',
+      contractKey: '0xposition-open-long',
+      account: '0xwallet',
+      marketAddress: '0xmarket',
+      sizeInUsd: '16000000000000000000000000000000',
+      sizeInTokens: '0.01',
+      collateralAmount: '50',
+      pendingBorrowingFeesUsd: '0',
+      increasedAtTime: '0',
+      decreasedAtTime: '0',
+      positionSide: 'long',
+      isLong: true,
+      fundingFeeAmount: '0',
+      claimableLongTokenAmount: '0',
+      claimableShortTokenAmount: '0',
+      isOpening: false,
+      pnl: '0',
+      positionFeeAmount: '0',
+      traderDiscountAmount: '0',
+      uiFeeAmount: '0',
+      collateralToken: {
+        tokenUid: { chainId: '42161', address: '0xusdc' },
+        name: 'USD Coin',
+        symbol: 'USDC',
+        isNative: false,
+        decimals: 6,
+        iconUri: null,
+        isVetted: true,
+      },
+    };
     fetchAlloraInferenceMock
       .mockResolvedValueOnce({
         topicId: 14,
@@ -398,14 +513,19 @@ describe('pollCycleNode (integration)', () => {
         confidenceIntervalValues: [44000, 44500, 45000, 45500, 46000],
       });
     listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
-    listPerpetualPositionsMock.mockResolvedValue([]);
+    listPerpetualPositionsMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([openLongPosition])
+      .mockResolvedValueOnce([openLongPosition])
+      .mockResolvedValueOnce([]);
+    createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
+    createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
 
     const firstState = buildBaseState();
     firstState.view.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
 
-    const firstUpdate = (firstResult as { update: { view?: { metrics?: ClmmState['view']['metrics'] } } })
-      .update;
+    const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
     secondState.view.metrics = {
@@ -443,8 +563,7 @@ describe('pollCycleNode (integration)', () => {
     firstState.view.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
 
-    const firstUpdate = (firstResult as { update: { view?: { metrics?: ClmmState['view']['metrics'] } } })
-      .update;
+    const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
     secondState.view.metrics = {
@@ -459,7 +578,7 @@ describe('pollCycleNode (integration)', () => {
     expect(createPerpetualLongMock).toHaveBeenCalledTimes(2);
   });
 
-  it('preserves the last known position snapshot when no fresh position snapshot is available', async () => {
+  it('clears stale position snapshot when no fresh position snapshot is available', async () => {
     fetchAlloraInferenceMock
       .mockResolvedValueOnce({
         topicId: 14,
@@ -478,7 +597,7 @@ describe('pollCycleNode (integration)', () => {
     const firstState = buildBaseState();
     firstState.view.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
-    const firstUpdate = (firstResult as { update: ClmmState }).update;
+    const firstUpdate = extractPollCycleUpdate(firstResult);
     const firstSnapshot = firstUpdate.view?.metrics.latestSnapshot;
     expect(firstSnapshot?.totalUsd).toBeGreaterThan(0);
 
@@ -492,9 +611,9 @@ describe('pollCycleNode (integration)', () => {
     secondState.view.metrics.previousPrice = firstUpdate.view?.metrics.previousPrice;
 
     const secondResult = await pollCycleNode(secondState, {});
-    const secondUpdate = (secondResult as { update: ClmmState }).update;
+    const secondUpdate = extractPollCycleUpdate(secondResult);
 
-    expect(secondUpdate.view?.metrics.latestSnapshot?.totalUsd).toBe(firstSnapshot?.totalUsd);
+    expect(secondUpdate.view?.metrics.latestSnapshot?.totalUsd).toBe(0);
   });
 
   it('executes reduce plans via onchain-actions reduce endpoint when position exists', async () => {
@@ -546,7 +665,7 @@ describe('pollCycleNode (integration)', () => {
     state.view.metrics.assumedPositionSide = 'long';
 
     const result = await pollCycleNode(state, {});
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
 
     // When we assume the position is already open and the signal stays bullish,
     // we should not keep planning repeated opens.
@@ -607,7 +726,7 @@ describe('pollCycleNode (integration)', () => {
     state.view.metrics.assumedPositionSide = 'long';
 
     const result = await pollCycleNode(state, {});
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
     const snapshot = update.view?.metrics.latestSnapshot;
 
     expect(createPerpetualLongMock).not.toHaveBeenCalled();
@@ -628,7 +747,7 @@ describe('pollCycleNode (integration)', () => {
     const state = buildBaseState();
     const result = await pollCycleNode(state, {});
 
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
     expect(update.view?.haltReason).toContain('No GMX');
   });
 
@@ -678,7 +797,7 @@ describe('pollCycleNode (integration)', () => {
     const state = buildBaseState();
     const result = await pollCycleNode(state, {});
 
-    const update = (result as { update: ClmmState }).update;
+    const update = extractPollCycleUpdate(result);
     const latestCycle = update.view?.metrics.latestCycle;
 
     expect(latestCycle?.action).toBe('hold');

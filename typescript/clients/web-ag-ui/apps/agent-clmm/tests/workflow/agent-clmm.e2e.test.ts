@@ -73,7 +73,7 @@ const waitForTerminalStatus = async (params: {
   timeoutMs?: number;
 }) => {
   const timeout = params.timeoutMs ?? 45_000;
-  const terminal = new Set(['completed', 'success', 'failed', 'error', 'cancelled']);
+  const terminal = new Set(['completed', 'success', 'failed', 'error', 'canceled']);
   const started = Date.now();
   let status = await fetchRunStatus(params.baseUrl, params.threadId, params.runId);
   while (!status || !terminal.has(status)) {
@@ -90,10 +90,7 @@ const baseUrl = resolveBaseUrl();
 const graphId = resolveGraphId();
 
 describe('agent-clmm e2e', () => {
-  const shouldRun = process.env['CLMM_E2E'] === 'true' && Boolean(process.env['LANGGRAPH_DEPLOYMENT_URL']);
-  const testFn = shouldRun ? it : it.skip;
-
-  testFn('runs a fire command through the LangGraph API endpoint', async () => {
+  it('runs a fire command through the LangGraph API endpoint', async () => {
     const threadId = uuidv7();
     await createThread(baseUrl, threadId);
     const runId = await createRun({ baseUrl, threadId, graphId, command: 'fire' });

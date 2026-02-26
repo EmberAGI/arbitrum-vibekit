@@ -3,7 +3,31 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireAgentRun } from './fireAgentRun';
 
 describe('fireAgentRun', () => {
-  it('force-detaches the active run then sends the fire command', async () => {
+  it('detaches stale runtime ownership before dispatching fire when no run appears active', async () => {
+    const calls: string[] = [];
+    const agent = {
+      isRunning: false,
+      detachActiveRun: vi.fn(async () => calls.push('detachActiveRun')),
+      addMessage: vi.fn(() => calls.push('addMessage')),
+    };
+    const runInFlightRef = { current: false };
+
+    const ok = await fireAgentRun({
+      agent,
+      runAgent: async () => {
+        calls.push('runAgent');
+      },
+      threadId: 'thread-1',
+      runInFlightRef,
+      createId: () => 'msg-1',
+    });
+
+    expect(ok).toBe(true);
+    expect(agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(['detachActiveRun', 'addMessage', 'runAgent']);
+  });
+
+  it('preempts the active run via stop callback, detaches, then sends the fire command', async () => {
     const calls: string[] = [];
 
     const agent = {
@@ -20,7 +44,10 @@ describe('fireAgentRun', () => {
     const ok = await fireAgentRun({
       agent,
       runAgent: async (value) => copilotkit.runAgent({ agent: value }),
-      abortActiveBackendRun: async () => calls.push('abortActiveBackendRun'),
+      preemptActiveRun: async () => {
+        calls.push('stopAgent');
+        runInFlightRef.current = false;
+      },
       threadId: 'thread-1',
       runInFlightRef,
       createId: () => 'msg-1',
@@ -28,17 +55,11 @@ describe('fireAgentRun', () => {
 
     expect(ok).toBe(true);
     expect(runInFlightRef.current).toBe(true);
-    expect(agent.abortRun).toHaveBeenCalledTimes(1);
+    expect(agent.abortRun).not.toHaveBeenCalled();
     expect(agent.detachActiveRun).toHaveBeenCalledTimes(1);
     expect(agent.addMessage).toHaveBeenCalledTimes(1);
     expect(copilotkit.runAgent).toHaveBeenCalledTimes(1);
-    expect(calls).toEqual([
-      'abortRun',
-      'detachActiveRun',
-      'abortActiveBackendRun',
-      'addMessage',
-      'runAgent',
-    ]);
+    expect(calls).toEqual(['stopAgent', 'detachActiveRun', 'addMessage', 'runAgent']);
   });
 
   it('retries run start when the runtime reports an active run, without re-adding fire message', async () => {
@@ -61,7 +82,6 @@ describe('fireAgentRun', () => {
       const ok = await fireAgentRun({
         agent,
         runAgent: async (value) => copilotkit.runAgent({ agent: value }),
-        abortActiveBackendRun: async () => undefined,
         threadId: 'thread-1',
         runInFlightRef,
         createId: () => 'msg-1',
@@ -98,7 +118,6 @@ describe('fireAgentRun', () => {
     const ok = await fireAgentRun({
       agent,
       runAgent: async (value) => copilotkit.runAgent({ agent: value }),
-      abortActiveBackendRun: async () => undefined,
       threadId: 'thread-1',
       runInFlightRef,
       createId: () => 'msg-1',
@@ -115,7 +134,7 @@ describe('fireAgentRun', () => {
     expect(copilotkit.runAgent).toHaveBeenCalledTimes(1);
   });
 
-  it('attempts to abort the active backend run after a busy error (cron/external run protection)', async () => {
+  it('retries on busy errors after detaching active run via AG-UI agent lifecycle', async () => {
     vi.useFakeTimers();
 
     const calls: string[] = [];
@@ -134,32 +153,33 @@ describe('fireAgentRun', () => {
         )
         .mockResolvedValueOnce(undefined),
     };
-    const abortActiveBackendRun = vi.fn(async () => calls.push('abortActiveBackendRun'));
     const runInFlightRef = { current: false };
 
     try {
       const ok = await fireAgentRun({
         agent,
         runAgent: async (value) => copilotkit.runAgent({ agent: value }),
-        abortActiveBackendRun,
+        preemptActiveRun: async () => {
+          calls.push('stopAgent');
+          runInFlightRef.current = false;
+        },
         threadId: 'thread-1',
         runInFlightRef,
         createId: () => 'msg-1',
+        preemptWaitMs: 0,
       });
 
       expect(ok).toBe(true);
       expect(agent.abortRun).not.toHaveBeenCalled();
       expect(agent.detachActiveRun).toHaveBeenCalledTimes(1);
       expect(agent.addMessage).toHaveBeenCalledTimes(1);
-      expect(abortActiveBackendRun).toHaveBeenCalledTimes(1);
-      expect(calls[0]).toBe('detachActiveRun');
-      expect(calls[1]).toBe('abortActiveBackendRun');
+      expect(calls[0]).toBe('stopAgent');
+      expect(calls[1]).toBe('detachActiveRun');
       expect(calls[2]).toBe('addMessage');
 
       await vi.advanceTimersByTimeAsync(200);
 
       expect(copilotkit.runAgent).toHaveBeenCalledTimes(2);
-      expect(abortActiveBackendRun).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
@@ -173,7 +193,6 @@ describe('fireAgentRun', () => {
     const ok = await fireAgentRun({
       agent,
       runAgent: async (value) => copilotkit.runAgent({ agent: value }),
-      abortActiveBackendRun: async () => undefined,
       threadId: undefined,
       runInFlightRef,
       createId: () => 'msg-1',
@@ -184,5 +203,45 @@ describe('fireAgentRun', () => {
     expect(agent.detachActiveRun).not.toHaveBeenCalled();
     expect(agent.addMessage).not.toHaveBeenCalled();
     expect(copilotkit.runAgent).not.toHaveBeenCalled();
+  });
+
+  it('waits for preemption timeout before dispatching fire when run ownership stays active', async () => {
+    vi.useFakeTimers();
+
+    const agent = {
+      isRunning: true,
+      abortRun: vi.fn(),
+      detachActiveRun: vi.fn(async () => undefined),
+      addMessage: vi.fn(),
+    };
+    const copilotkit = {
+      runAgent: vi.fn(async () => undefined),
+    };
+    const runInFlightRef = { current: true };
+
+    try {
+      const firePromise = fireAgentRun({
+        agent,
+        runAgent: async (value) => copilotkit.runAgent({ agent: value }),
+        preemptActiveRun: async () => undefined,
+        threadId: 'thread-1',
+        runInFlightRef,
+        createId: () => 'msg-1',
+        preemptWaitMs: 40,
+        preemptPollMs: 10,
+      });
+
+      await vi.advanceTimersByTimeAsync(20);
+      expect(agent.addMessage).not.toHaveBeenCalled();
+      expect(copilotkit.runAgent).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(40);
+      await firePromise;
+
+      expect(agent.addMessage).toHaveBeenCalledTimes(1);
+      expect(copilotkit.runAgent).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

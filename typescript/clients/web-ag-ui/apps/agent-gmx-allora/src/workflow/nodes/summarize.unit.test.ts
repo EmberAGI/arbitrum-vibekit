@@ -86,4 +86,39 @@ describe('summarizeNode', () => {
       'Onboarding complete. GMX Allora strategy is active.',
     );
   });
+
+  it('clears stale onboarding-pause input-required state when onboarding flow is completed', async () => {
+    copilotkitEmitStateMock.mockReset();
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      view: {
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              id: 'msg-1',
+              role: 'assistant',
+              content: 'Cycle paused until onboarding input is complete.',
+            },
+          },
+        },
+        onboardingFlow: {
+          status: 'completed',
+          steps: [],
+          revision: 7,
+        },
+        haltReason: undefined,
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await summarizeNode(state, {});
+
+    expect(result.view?.task?.taskStatus?.state).toBe('working');
+    expect(result.view?.task?.taskStatus?.message?.content).toBe(
+      'Onboarding complete. GMX Allora strategy is active.',
+    );
+  });
 });
