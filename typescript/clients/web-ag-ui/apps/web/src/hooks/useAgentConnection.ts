@@ -47,6 +47,7 @@ import { resumeInterruptViaAgent } from '../utils/interruptResolution';
 import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 import { canonicalizeChainLabel } from '../utils/iconResolution';
 import { isAgentRunning, isBusyRunError } from '../utils/runConcurrency';
+import { deriveTaskStateForUi } from '../utils/deriveTaskStateForUi';
 import {
   isAgentInterrupt,
   selectActiveInterrupt,
@@ -785,13 +786,23 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   };
 
   // Derived state
+  const effectiveTaskState = deriveTaskStateForUi({
+    command: view.command,
+    taskState: view.task?.taskStatus?.state ?? null,
+    taskMessage: extractTaskMessage(view.task),
+  });
+  const isFireTaskTerminal =
+    view.command === 'fire' &&
+    (effectiveTaskState === 'completed' ||
+      effectiveTaskState === 'canceled' ||
+      effectiveTaskState === 'failed');
   const isHired =
     view.command === 'hire' ||
     view.command === 'run' ||
     view.command === 'cycle' ||
     // `fire` is still a hired agent state: the user is firing an already-hired agent.
-    // Treat it as hired so the UI does not flash back to the pre-hire layout during the fire run.
-    view.command === 'fire' ||
+    // Once the fire task reaches a terminal state, return to the pre-hire UI.
+    (view.command === 'fire' && !isFireTaskTerminal) ||
     view.onboardingFlow?.status === 'in_progress' ||
     (typeof view.onboarding?.step === 'number' && Number.isFinite(view.onboarding.step));
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
