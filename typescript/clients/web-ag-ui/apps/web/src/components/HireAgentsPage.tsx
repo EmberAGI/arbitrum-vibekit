@@ -59,6 +59,7 @@ export interface FeaturedAgent {
   id: string;
   rank?: number;
   name: string;
+  description?: string;
   creator?: string;
   creatorVerified?: boolean;
   rating?: number;
@@ -83,6 +84,7 @@ interface HireAgentsPageProps {
   featuredAgents: FeaturedAgent[];
   onHireAgent?: (agentId: string) => void;
   onViewAgent?: (agentId: string) => void;
+  initialCollapsedFeaturedCardIds?: string[];
 }
 
 export function HireAgentsPage({
@@ -90,11 +92,21 @@ export function HireAgentsPage({
   featuredAgents,
   onHireAgent,
   onViewAgent,
+  initialCollapsedFeaturedCardIds,
 }: HireAgentsPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'income' | 'apy' | 'users' | 'aum'>('income');
   const [filterStatus, setFilterStatus] = useState<'all' | 'hired' | 'for_hire'>('for_hire');
   const [currentPage, setCurrentPage] = useState(1);
+  const [collapsedFeaturedCardById, setCollapsedFeaturedCardById] = useState<Record<string, true>>(() => {
+    const out: Record<string, true> = {};
+    for (const id of initialCollapsedFeaturedCardIds ?? []) {
+      if (id.trim().length > 0) {
+        out[id] = true;
+      }
+    }
+    return out;
+  });
 
   const hiredCount = agents.filter((a) => a.status === 'hired').length;
   const forHireCount = agents.filter((a) => a.status === 'for_hire').length;
@@ -191,14 +203,17 @@ export function HireAgentsPage({
               <div className="absolute inset-0 opacity-50 bg-[radial-gradient(circle_at_70%_60%,rgba(236,72,153,0.10),transparent_60%)]" />
               <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-black/60" />
             </div>
-            <div className="relative flex items-center justify-between gap-6 p-5">
-              <div className="flex items-center gap-5 min-w-0">
-                <div className="w-24 h-24 rounded-2xl bg-black/25 border border-white/10 flex items-center justify-center overflow-hidden">
-                  <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-                    <div className="w-8 h-8 rounded-full bg-[color:var(--hire-accent)]/70 blur-[0.2px]" />
-                  </div>
+            <div className="relative flex items-stretch justify-between gap-6 pr-5">
+              <div className="flex items-stretch min-w-0">
+                <div className="w-[308px] self-stretch shrink-0">
+                  <img
+                    src="/hire-publish-agent.png"
+                    alt="Publish agent illustration"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 py-5 pl-5">
                   <h2 className="text-lg font-semibold text-white mb-1">
                     Publish your agent for hire
                   </h2>
@@ -207,15 +222,17 @@ export function HireAgentsPage({
                   </p>
                 </div>
               </div>
-              <button
-                className={[
-                  'shrink-0',
-                  CTA_SIZE_MD,
-                  'bg-[color:var(--hire-accent)] hover:bg-[color:var(--hire-accent-hover)] text-white transition-colors',
-                ].join(' ')}
-              >
-                Publish
-              </button>
+              <div className="shrink-0 py-5 flex items-center">
+                <button
+                  className={[
+                    'shrink-0',
+                    CTA_SIZE_MD,
+                    'bg-[color:var(--hire-accent)] hover:bg-[color:var(--hire-accent-hover)] text-white transition-colors',
+                  ].join(' ')}
+                >
+                  Publish
+                </button>
+              </div>
             </div>
           </div>
 
@@ -260,6 +277,18 @@ export function HireAgentsPage({
                       protocolItems={protocolItems}
                       tokenItems={tokenItems}
                       avatarUri={avatarUri}
+                      isMetricsCollapsed={Boolean(collapsedFeaturedCardById[agent.id])}
+                      onToggleMetrics={() => {
+                        setCollapsedFeaturedCardById((previous) => {
+                          const next = { ...previous };
+                          if (next[agent.id]) {
+                            delete next[agent.id];
+                          } else {
+                            next[agent.id] = true;
+                          }
+                          return next;
+                        });
+                      }}
                       onClick={() => onViewAgent?.(agent.id)}
                     />
                   );
@@ -362,6 +391,8 @@ function FeaturedAgentCard({
   protocolItems,
   tokenItems,
   avatarUri,
+  isMetricsCollapsed,
+  onToggleMetrics,
   onClick,
 }: {
   agent: FeaturedAgent;
@@ -370,6 +401,8 @@ function FeaturedAgentCard({
   protocolItems: { label: string; iconUri: string | null }[];
   tokenItems: { label: string; iconUri: string | null }[];
   avatarUri: string | null;
+  isMetricsCollapsed: boolean;
+  onToggleMetrics?: () => void;
   onClick?: () => void;
 }) {
   const hasRank = agent.rank !== undefined;
@@ -380,7 +413,7 @@ function FeaturedAgentCard({
   return (
     <div
       onClick={onClick}
-      className="min-w-[340px] w-[340px] flex-shrink-0 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15 transition-colors cursor-pointer overflow-hidden"
+      className="min-w-[340px] w-[340px] h-[230px] flex-shrink-0 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15 transition-colors cursor-pointer overflow-hidden flex flex-col"
     >
       {/* Header row: rank, stars, creator, menu */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
@@ -423,10 +456,15 @@ function FeaturedAgentCard({
       </div>
 
       {/* Main content: Name and avatar */}
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-2 flex-1 min-h-0 overflow-hidden">
         <h3 className="text-[17px] leading-[1.2] font-semibold text-white mb-2.5">
           {agent.name}
         </h3>
+        {agent.description ? (
+          <p className="text-[11px] leading-4 text-gray-400 min-h-8 overflow-hidden text-ellipsis [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">
+            {agent.description}
+          </p>
+        ) : null}
 
         <div className="flex items-start gap-4">
           {/* Large circular avatar */}
@@ -478,34 +516,46 @@ function FeaturedAgentCard({
       </div>
 
       {/* Stats footer */}
-      <div className="grid grid-cols-4 gap-3 px-4 py-3 bg-black/20 border-t border-white/10">
-        <FeaturedStat
-          label="AUM"
-          isLoaded={agent.isLoaded}
-          value={agent.aum !== undefined ? `$${agent.aum.toLocaleString()}` : null}
-        />
-        <FeaturedStat
-          label="30d Income"
-          isLoaded={agent.isLoaded}
-          value={agent.weeklyIncome !== undefined ? `$${agent.weeklyIncome.toLocaleString()}` : null}
-        />
-        <FeaturedStat
-          label="APY"
-          isLoaded={agent.isLoaded}
-          value={agent.apy !== undefined ? `${agent.apy}%` : null}
-          valueClassName="text-teal-400"
-        />
-        <FeaturedStat
-          label="Users"
-          isLoaded={agent.isLoaded}
-          value={agent.users !== undefined ? agent.users.toLocaleString() : null}
-        />
-      </div>
+      {!isMetricsCollapsed && (
+        <div className="grid grid-cols-4 gap-3 px-4 py-3 bg-black/20 border-t border-white/10">
+          <FeaturedStat
+            label="AUM"
+            isLoaded={agent.isLoaded}
+            value={agent.aum !== undefined ? `$${agent.aum.toLocaleString()}` : null}
+          />
+          <FeaturedStat
+            label="30d Income"
+            isLoaded={agent.isLoaded}
+            value={agent.weeklyIncome !== undefined ? `$${agent.weeklyIncome.toLocaleString()}` : null}
+          />
+          <FeaturedStat
+            label="APY"
+            isLoaded={agent.isLoaded}
+            value={agent.apy !== undefined ? `${agent.apy}%` : null}
+            valueClassName="text-teal-400"
+          />
+          <FeaturedStat
+            label="Users"
+            isLoaded={agent.isLoaded}
+            value={agent.users !== undefined ? agent.users.toLocaleString() : null}
+          />
+        </div>
+      )}
 
-      {/* Expand chevron */}
-      <div className="flex justify-center py-1.5 bg-black/20 border-t border-white/10">
-        <ChevronDown className="w-4 h-4 text-gray-600" />
-      </div>
+      {/* Expand/collapse chevron */}
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleMetrics?.();
+        }}
+        aria-label={isMetricsCollapsed ? 'Expand metrics' : 'Collapse metrics'}
+        className="flex w-full justify-center py-1.5 bg-black/20 border-t border-white/10 hover:bg-black/30 transition-colors"
+      >
+        <ChevronDown
+          className={`w-4 h-4 text-gray-600 transition-transform ${isMetricsCollapsed ? 'rotate-180' : ''}`}
+        />
+      </button>
     </div>
   );
 }

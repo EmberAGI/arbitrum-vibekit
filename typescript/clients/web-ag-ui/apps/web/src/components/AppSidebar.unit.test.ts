@@ -109,4 +109,38 @@ describe('AppSidebar wallet actions', () => {
     expect(html).toContain('Manage Wallet');
     expect(html).toContain('href="/wallet"');
   });
+
+  it('uses the widened sidebar frame and refreshed logo asset', () => {
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('w-[312px]');
+    expect(html).toContain('src="/ember-sidebar-logo.png"');
+  });
+
+  it('uses simplified sidebar icons for agents and activity state', () => {
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('lucide-bot');
+    expect(html).toContain('lucide-terminal');
+    expect(html).not.toContain('lucide-loader');
+    expect(html).not.toContain('animate-spin');
+    expect(html).not.toContain('text-red-400');
+    expect(html).not.toContain('text-teal-400');
+    expect(html).not.toContain('text-blue-400');
+  });
+
+  it('uses a thin left nav indicator without active card backgrounds', () => {
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('w-px h-6 bg-[#fd6731]');
+    expect(html).not.toContain('text-white bg-[#1C1D23] border border-[#2F313B]');
+    expect(html).not.toContain('bg-[#1B1C21] border border-[#2B2D36]');
+  });
+
+  it('uses mono typography for sidebar section labels and badges', () => {
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('text-[10px] font-mono font-medium text-[#A7A7B2]');
+    expect(html).toContain('text-[11px] font-mono font-medium text-[#6F7280] tracking-[0.12em]');
+  });
 });
