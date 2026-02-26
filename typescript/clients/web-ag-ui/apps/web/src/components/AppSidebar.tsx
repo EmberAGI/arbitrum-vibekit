@@ -15,7 +15,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
-import { supportedEvmChains, getEvmChainOrDefault } from '@/config/evmChains';
+import type { Chain } from 'viem';
+import { defaultEvmChain, supportedEvmChains } from '@/config/evmChains';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
 import { useOnchainActionsIconMaps } from '@/hooks/useOnchainActionsIconMaps';
@@ -38,6 +39,14 @@ export interface AgentActivity {
   subtitle: string;
   status: 'active' | 'blocked' | 'completed';
   timestamp?: string;
+}
+
+const ETHEREUM_MAINNET_CHAIN_ID = 1;
+
+export function getWalletSelectorChains(chains: readonly Chain[]): Chain[] {
+  return chains.filter(
+    (chain) => chain.id === defaultEvmChain.id || chain.id === ETHEREUM_MAINNET_CHAIN_ID,
+  );
 }
 
 function isLikelyStaleOnboardingTaskMessage(message: string | undefined): boolean {
@@ -205,7 +214,8 @@ export function AppSidebar() {
     });
   });
 
-  const selectedChain = getEvmChainOrDefault(chainId);
+  const walletSelectorChains = useMemo(() => getWalletSelectorChains(supportedEvmChains), []);
+  const selectedChain = walletSelectorChains.find((chain) => chain.id === chainId) ?? defaultEvmChain;
   const sidebarIconGroups = useMemo(
     () =>
       agentConfigs.map((config) => {
@@ -520,7 +530,7 @@ export function AppSidebar() {
 
           {isChainMenuOpen && canSelectChain && (
             <div className="absolute bottom-full mb-2 w-full rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] overflow-hidden z-50">
-              {supportedEvmChains.map((chain) => {
+              {walletSelectorChains.map((chain) => {
                 const isSelected = chain.id === selectedChain.id;
                 return (
                   <button
@@ -584,41 +594,52 @@ export function AppSidebar() {
         ) : authenticated && privyWallet ? (
           <div
             ref={addressPopoverRef}
-            className="relative w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#252525]"
+            className="relative w-full rounded-lg bg-[#252525] px-3 py-2.5"
           >
-            <div className="w-2 h-2 rounded-full bg-green-500" />
-            <button
-              type="button"
-              onClick={() => setIsAddressPopoverOpen((prev) => !prev)}
-              className="flex-1 min-w-0 text-left text-sm font-mono truncate hover:text-white"
-              aria-haspopup="dialog"
-              aria-expanded={isAddressPopoverOpen}
-              aria-controls={addressPopoverId}
-            >
-              {formatAddress(privyWallet.address)}
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsAddressPopoverOpen((prev) => !prev)}
-              className="text-xs text-gray-300 hover:text-white"
-              aria-label={
-                isAddressPopoverOpen ? 'Hide full wallet address' : 'Show full wallet address'
-              }
-            >
-              {isAddressPopoverOpen ? (
-                <ChevronDown className="w-4 h-4 rotate-180" />
-              ) : (
-                <ChevronDown className="w-4 h-4" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="ml-auto text-xs text-gray-300 hover:text-white"
-              disabled={!ready || isWalletLoading}
-            >
-              Logout
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <button
+                type="button"
+                onClick={() => setIsAddressPopoverOpen((prev) => !prev)}
+                className="flex-1 min-w-0 text-left text-sm font-mono truncate hover:text-white"
+                aria-haspopup="dialog"
+                aria-expanded={isAddressPopoverOpen}
+                aria-controls={addressPopoverId}
+              >
+                {formatAddress(privyWallet.address)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAddressPopoverOpen((prev) => !prev)}
+                className="text-xs text-gray-300 hover:text-white"
+                aria-label={
+                  isAddressPopoverOpen ? 'Hide full wallet address' : 'Show full wallet address'
+                }
+              >
+                {isAddressPopoverOpen ? (
+                  <ChevronDown className="w-4 h-4 rotate-180" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="ml-auto text-xs text-gray-300 hover:text-white"
+                disabled={!ready || isWalletLoading}
+              >
+                Logout
+              </button>
+            </div>
+
+            <div className="mt-2 border-t border-[#2a2a2a] pt-2">
+              <Link
+                href="/wallet"
+                className="inline-flex text-xs text-[#9A9CAA] hover:text-white transition-colors"
+              >
+                Manage Wallet
+              </Link>
+            </div>
 
             {isAddressPopoverOpen && (
               <div
