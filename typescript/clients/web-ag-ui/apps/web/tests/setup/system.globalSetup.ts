@@ -165,14 +165,14 @@ async function waitForHttp(params: {
   throw new Error(`Timed out waiting for ${params.url}` + (logs ? `\nLast logs:\n${logs}` : ''));
 }
 
-async function waitForWebApiRoute(params: {
+async function waitForWebRuntimeRoute(params: {
   baseUrl: string;
   timeoutMs: number;
   child?: Child;
   childOutput?: string[];
 }): Promise<void> {
   const start = Date.now();
-  const url = `${params.baseUrl}/api/agents/sync`;
+  const url = `${params.baseUrl}/api/copilotkit`;
 
   while (Date.now() - start < params.timeoutMs) {
     if (params.child && params.child.exitCode !== null) {
@@ -184,13 +184,14 @@ async function waitForWebApiRoute(params: {
     }
 
     try {
-      // A POST with an invalid payload should yield a 400 if the route is registered.
+      // We only need to prove the runtime route is registered. Any non-404 response
+      // means Next has compiled and mounted the handler.
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({}),
       });
-      if (res.status === 400) {
+      if (res.status !== 404) {
         return;
       }
     } catch {
@@ -353,7 +354,7 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
     });
     cleanups.push(web.cleanup);
 
-    await waitForWebApiRoute({
+    await waitForWebRuntimeRoute({
       baseUrl: webBaseUrl,
       timeoutMs: 120_000,
       child: web.child,

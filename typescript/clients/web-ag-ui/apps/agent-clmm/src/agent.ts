@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, InMemoryStore, START, StateGraph } from '@langchain/langgraph';
+import { projectCycleCommandView } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { privateKeyToAccount } from 'viem/accounts';
 import { z } from 'zod';
@@ -208,7 +209,7 @@ async function updateCycleState(baseUrl: string, threadId: string, runMessage: {
     console.warn('[cron] Unable to fetch thread state before cycle update', { threadId, error: message });
   }
 
-  const view = existingView ? { ...existingView, command: 'cycle' } : { command: 'cycle' };
+  const view = projectCycleCommandView(existingView);
   const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

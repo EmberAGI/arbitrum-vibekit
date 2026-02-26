@@ -7,71 +7,61 @@ import { CopilotKit } from '@copilotkit/react-core';
 
 import { isRegisteredAgentId } from '../config/agents';
 import { AgentProvider, InactiveAgentProvider, useAgent } from '../contexts/AgentContext';
+import { projectAgentListUpdate } from '../contexts/agentListProjection';
 import { useAgentList } from '../contexts/AgentListContext';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
-import type { TaskState } from '../types/agent';
-import { getAgentThreadId } from '../utils/agentThread';
+import { getAgentThreadId, resolveAgentThreadWalletAddress } from '../utils/agentThread';
 
 function AgentListRuntimeBridge() {
   const agent = useAgent();
   const { upsertAgent } = useAgentList();
   const lastSnapshotRef = useRef<string | null>(null);
-  const lastTaskIdRef = useRef<string | undefined>(undefined);
+  const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
 
   const { view, config } = agent;
   const agentId = config.id;
-  const taskId = view.task?.id;
-  const taskState = view.task?.taskStatus?.state as TaskState | undefined;
-  const haltReason = view.haltReason;
-  const executionError = view.executionError;
 
   useEffect(() => {
     if (!agentId || agentId === 'inactive-agent') return;
 
-    const hasTask = Boolean(taskId);
-    const sanitizedTaskState = hasTask ? taskState : undefined;
-    const sanitizedHaltReason = hasTask ? haltReason : undefined;
-    const sanitizedExecutionError = hasTask ? executionError : undefined;
-
-    const snapshotKey = JSON.stringify({
-      hasTask,
-      taskId: hasTask ? taskId : undefined,
-      taskState: sanitizedTaskState,
-      haltReason: sanitizedHaltReason,
-      executionError: sanitizedExecutionError,
+    const update = projectAgentListUpdate({
+      command: view.command,
+      profile: view.profile,
+      metrics: view.metrics,
+      task: view.task,
+      haltReason: view.haltReason,
+      executionError: view.executionError,
     });
+    const snapshotKey = JSON.stringify(update);
     if (snapshotKey === lastSnapshotRef.current) {
       return;
     }
     lastSnapshotRef.current = snapshotKey;
 
-    const hadTask = Boolean(lastTaskIdRef.current);
-    const update: {
-      synced: boolean;
-      taskId?: string;
-      taskState?: TaskState;
-      haltReason?: string;
-      executionError?: string;
-    } = { synced: true };
-
-    if (hasTask) {
-      update.taskId = taskId;
-      update.taskState = sanitizedTaskState;
-      update.haltReason = sanitizedHaltReason;
-      update.executionError = sanitizedExecutionError;
-    } else {
-      update.taskId = undefined;
-      update.taskState = undefined;
-      update.haltReason = undefined;
-      update.executionError = undefined;
-    }
-    if (!hasTask && !hadTask) {
-      return;
+    if (debugStatus) {
+      console.debug('[AgentListRuntimeBridge] upsert detail-connect', {
+        agentId,
+        command: update.command,
+        taskId: update.taskId,
+        taskState: update.taskState,
+        taskMessage: update.taskMessage,
+        haltReason: update.haltReason,
+        executionError: update.executionError,
+      });
     }
 
-    upsertAgent(agentId, update);
-    lastTaskIdRef.current = hasTask ? taskId : undefined;
-  }, [agentId, taskId, taskState, haltReason, executionError, upsertAgent]);
+    upsertAgent(agentId, update, 'detail-connect');
+  }, [
+    agentId,
+    debugStatus,
+    upsertAgent,
+    view.command,
+    view.executionError,
+    view.haltReason,
+    view.metrics,
+    view.profile,
+    view.task,
+  ]);
 
   return null;
 }
@@ -101,18 +91,20 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
     return null;
   }, [pathname]);
 
+  const threadWalletAddress = resolveAgentThreadWalletAddress(privyWallet?.address);
+
   if (!agentId) {
     return <InactiveAgentProvider>{children}</InactiveAgentProvider>;
   }
 
-  const threadId = getAgentThreadId(agentId, privyWallet?.address);
+  const threadId = getAgentThreadId(agentId, threadWalletAddress);
 
   if (!threadId) {
     return <InactiveAgentProvider>{children}</InactiveAgentProvider>;
   }
 
   return (
-    <CopilotKit runtimeUrl="/api/copilotkit" agent={agentId} threadId={threadId} key={threadId}>
+    <CopilotKit runtimeUrl="/api/copilotkit" useSingleEndpoint agent={agentId} threadId={threadId} key={threadId}>
       <AgentProvider agentId={agentId}>
         <AgentListRuntimeBridge />
         {children}

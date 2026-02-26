@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
 const HTTP_TIMEOUT_MS = 60_000;
+const GMX_PERPETUALS_PROVIDER_NAME = 'GMX Perpetuals' as const;
+const DEFAULT_SLIPPAGE_BPS = '100' as const;
+const USDC_TO_GMX_USD_SCALE = 10n ** 24n;
 
 const PaginationSchema = z.object({
   cursor: z.string().nullable(),
@@ -134,6 +137,64 @@ const PerpetualActionResponseSchema = z
   .catchall(z.unknown());
 export type PerpetualActionResponse = z.infer<typeof PerpetualActionResponseSchema>;
 
+const PerpetualLifecyclePrecisionSchema = z.object({
+  tokenDecimals: z.number().int().nonnegative(),
+  priceDecimals: z.number().int().nonnegative(),
+  usdDecimals: z.number().int().nonnegative(),
+});
+
+const PerpetualQuoteResponseSchema = z.object({
+  asOf: z.string(),
+  ttlMs: z.number().int().nonnegative(),
+  precision: PerpetualLifecyclePrecisionSchema,
+  pricing: z.object({
+    markPrice: z.string(),
+    acceptablePrice: z.string(),
+    slippageBps: z.string(),
+    priceImpactDeltaUsd: z.string(),
+  }),
+  fees: z.object({
+    positionFeeUsd: z.string(),
+    borrowingFeeUsd: z.string(),
+    fundingFeeUsd: z.string(),
+  }),
+  warnings: z.array(z.string()),
+});
+type PerpetualQuoteResponse = z.infer<typeof PerpetualQuoteResponseSchema>;
+
+const PerpetualLifecycleDisambiguationResponseSchema = z.object({
+  providerName: z.string(),
+  chainId: z.string(),
+  txHash: z.string(),
+  needsDisambiguation: z.literal(true),
+  candidateOrderKeys: z.array(z.string()).min(1),
+  asOf: z.string(),
+});
+
+const PerpetualLifecycleResolvedResponseSchema = z.object({
+  providerName: z.string(),
+  chainId: z.string(),
+  txHash: z.string(),
+  needsDisambiguation: z.literal(false).optional(),
+  orderKey: z.string(),
+  status: z.enum(['pending', 'executed', 'cancelled', 'failed', 'unknown']),
+  reason: z.string().optional(),
+  reasonBytes: z.string().optional(),
+  requestedPrice: z.string().optional(),
+  observedPrice: z.string().optional(),
+  createTxHash: z.string().optional(),
+  executionTxHash: z.string().optional(),
+  cancellationTxHash: z.string().optional(),
+  precision: PerpetualLifecyclePrecisionSchema,
+  asOf: z.string(),
+});
+
+const PerpetualLifecycleResponseSchema = z.union([
+  PerpetualLifecycleDisambiguationResponseSchema,
+  PerpetualLifecycleResolvedResponseSchema,
+]);
+export type PerpetualLifecycleResponse = z.infer<typeof PerpetualLifecycleResponseSchema>;
+
 export class OnchainActionsRequestError extends Error {
   readonly status: number;
   readonly url: string;
@@ -179,8 +240,129 @@ export type PerpetualReduceRequest = {
   providerName?: string;
 };
 
+export type PerpetualLifecycleRequest = {
+  providerName: string;
+  chainId: string;
+  txHash: `0x${string}`;
+  orderKey?: string;
+  walletAddress?: `0x${string}`;
+  submittedAtBlock?: string;
+};
+
+type PerpetualIncreasePayload = {
+  walletAddress: `0x${string}`;
+  providerName: string;
+  chainId: string;
+  marketAddress: string;
+  collateralTokenAddress: string;
+  side: 'long' | 'short';
+  collateralDeltaAmount: string;
+  sizeDeltaUsd: string;
+  slippageBps: string;
+};
+
+type PerpetualDecreasePayload = {
+  walletAddress: `0x${string}`;
+  providerName: string;
+  chainId: string;
+  marketAddress: string;
+  collateralTokenAddress: string;
+  side: 'long' | 'short';
+  decrease:
+    | {
+        mode: 'full';
+        slippageBps: string;
+      }
+    | {
+        mode: 'partial';
+        sizeDeltaUsd: string;
+        slippageBps: string;
+      };
+};
+
 export class OnchainActionsClient {
   constructor(private readonly baseUrl: string) {}
+
+  private parseLeverageToBps(raw: string): bigint {
+    const value = raw.trim();
+    const match = value.match(/^(\d+)(?:\.(\d+))?$/u);
+    if (!match) {
+      throw new Error(`Invalid leverage value: ${raw}`);
+    }
+
+    const integerPart = match[1] ?? '0';
+    const fractionalPart = match[2] ?? '';
+    const paddedFraction = (fractionalPart + '0000').slice(0, 4);
+    const bps = BigInt(integerPart) * 10_000n + (paddedFraction ? BigInt(paddedFraction) : 0n);
+    if (bps <= 0n) {
+      throw new Error(`Invalid leverage value: ${raw}`);
+    }
+    return bps;
+  }
+
+  private deriveSizeDeltaUsd(params: { collateralDeltaAmount: string; leverage: string }): string {
+    const collateralDeltaAmount = BigInt(params.collateralDeltaAmount);
+    if (collateralDeltaAmount <= 0n) {
+      throw new Error('collateralDeltaAmount must be greater than zero');
+    }
+    const leverageBps = this.parseLeverageToBps(params.leverage);
+    return ((collateralDeltaAmount * USDC_TO_GMX_USD_SCALE * leverageBps) / 10_000n).toString();
+  }
+
+  private async resolvePositionByKey(params: {
+    walletAddress: `0x${string}`;
+    key: string;
+  }): Promise<PerpetualPosition> {
+    const positions = await this.listPerpetualPositions({
+      walletAddress: params.walletAddress,
+    });
+    const targetKey = params.key.toLowerCase();
+    const position = positions.find((candidate) => {
+      return (
+        candidate.key.toLowerCase() === targetKey || candidate.contractKey.toLowerCase() === targetKey
+      );
+    });
+    if (!position) {
+      throw new Error(`No perpetual position found for key ${params.key}`);
+    }
+    return position;
+  }
+
+  private async resolvePositionForClose(params: {
+    walletAddress: `0x${string}`;
+    marketAddress: string;
+    positionSide?: 'long' | 'short';
+  }): Promise<PerpetualPosition> {
+    const positions = await this.listPerpetualPositions({
+      walletAddress: params.walletAddress,
+    });
+    const targetMarket = params.marketAddress.toLowerCase();
+    const matchingPositions = positions.filter((candidate) => {
+      if (candidate.marketAddress.toLowerCase() !== targetMarket) {
+        return false;
+      }
+      if (params.positionSide && candidate.positionSide !== params.positionSide) {
+        return false;
+      }
+      return true;
+    });
+
+    if (matchingPositions.length === 0) {
+      throw new Error(
+        `No perpetual position found for market ${params.marketAddress}${params.positionSide ? ` and side ${params.positionSide}` : ''}`,
+      );
+    }
+
+    if (matchingPositions.length === 1) {
+      return matchingPositions[0];
+    }
+
+    return matchingPositions.reduce((largest, current) => {
+      const largestSize = BigInt(largest.sizeInUsd);
+      const currentSize = BigInt(current.sizeInUsd);
+      return currentSize > largestSize ? current : largest;
+    });
+  }
 
   private buildQuery(params: Record<string, string | string[] | undefined>): URLSearchParams {
     const query = new URLSearchParams();
@@ -312,32 +494,147 @@ export class OnchainActionsClient {
     );
   }
 
-  async createPerpetualLong(request: PerpetualLongRequest): Promise<PerpetualActionResponse> {
-    return this.fetchEndpoint('/perpetuals/long', PerpetualActionResponseSchema, {
+  private async quotePerpetualIncrease(payload: PerpetualIncreasePayload): Promise<PerpetualQuoteResponse> {
+    return this.fetchEndpoint('/perpetuals/increase/quote', PerpetualQuoteResponseSchema, {
       method: 'POST',
-      body: this.stringifyPayload(request),
+      body: this.stringifyPayload(payload),
+    });
+  }
+
+  private async quotePerpetualDecrease(payload: PerpetualDecreasePayload): Promise<PerpetualQuoteResponse> {
+    return this.fetchEndpoint('/perpetuals/decrease/quote', PerpetualQuoteResponseSchema, {
+      method: 'POST',
+      body: this.stringifyPayload(payload),
+    });
+  }
+
+  async createPerpetualLong(request: PerpetualLongRequest): Promise<PerpetualActionResponse> {
+    const payload: PerpetualIncreasePayload = {
+      walletAddress: request.walletAddress,
+      providerName: GMX_PERPETUALS_PROVIDER_NAME,
+      chainId: request.chainId,
+      marketAddress: request.marketAddress,
+      collateralTokenAddress: request.collateralTokenAddress,
+      side: 'long',
+      collateralDeltaAmount: request.amount,
+      sizeDeltaUsd: this.deriveSizeDeltaUsd({
+        collateralDeltaAmount: request.amount,
+        leverage: request.leverage,
+      }),
+      slippageBps: DEFAULT_SLIPPAGE_BPS,
+    };
+    const quote = await this.quotePerpetualIncrease(payload);
+    return this.fetchEndpoint('/perpetuals/increase/plan', PerpetualActionResponseSchema, {
+      method: 'POST',
+      body: this.stringifyPayload({
+        ...payload,
+        slippageBps: quote.pricing.slippageBps,
+      }),
     });
   }
 
   async createPerpetualShort(request: PerpetualShortRequest): Promise<PerpetualActionResponse> {
-    return this.fetchEndpoint('/perpetuals/short', PerpetualActionResponseSchema, {
+    const payload: PerpetualIncreasePayload = {
+      walletAddress: request.walletAddress,
+      providerName: GMX_PERPETUALS_PROVIDER_NAME,
+      chainId: request.chainId,
+      marketAddress: request.marketAddress,
+      collateralTokenAddress: request.collateralTokenAddress,
+      side: 'short',
+      collateralDeltaAmount: request.amount,
+      sizeDeltaUsd: this.deriveSizeDeltaUsd({
+        collateralDeltaAmount: request.amount,
+        leverage: request.leverage,
+      }),
+      slippageBps: DEFAULT_SLIPPAGE_BPS,
+    };
+    const quote = await this.quotePerpetualIncrease(payload);
+    return this.fetchEndpoint('/perpetuals/increase/plan', PerpetualActionResponseSchema, {
       method: 'POST',
-      body: this.stringifyPayload(request),
+      body: this.stringifyPayload({
+        ...payload,
+        slippageBps: quote.pricing.slippageBps,
+      }),
     });
   }
 
   async createPerpetualClose(request: PerpetualCloseRequest): Promise<PerpetualActionResponse> {
-    return this.fetchEndpoint('/perpetuals/close', PerpetualActionResponseSchema, {
+    const position = await this.resolvePositionForClose({
+      walletAddress: request.walletAddress,
+      marketAddress: request.marketAddress,
+      positionSide: request.positionSide,
+    });
+    const payload: PerpetualDecreasePayload = {
+      walletAddress: request.walletAddress,
+      providerName: GMX_PERPETUALS_PROVIDER_NAME,
+      chainId: position.chainId,
+      marketAddress: position.marketAddress,
+      collateralTokenAddress: position.collateralToken.tokenUid.address,
+      side: position.positionSide,
+      decrease: {
+        mode: 'full',
+        slippageBps: DEFAULT_SLIPPAGE_BPS,
+      },
+    };
+    const quote = await this.quotePerpetualDecrease(payload);
+    return this.fetchEndpoint('/perpetuals/decrease/plan', PerpetualActionResponseSchema, {
       method: 'POST',
-      body: this.stringifyPayload(request),
+      body: this.stringifyPayload({
+        ...payload,
+        decrease: {
+          ...payload.decrease,
+          slippageBps: quote.pricing.slippageBps,
+        },
+      }),
     });
   }
 
   async createPerpetualReduce(request: PerpetualReduceRequest): Promise<PerpetualActionResponse> {
-    return this.fetchEndpoint('/perpetuals/reduce', PerpetualActionResponseSchema, {
-      method: 'POST',
-      body: this.stringifyPayload(request),
+    const position = await this.resolvePositionByKey({
+      walletAddress: request.walletAddress,
+      key: request.key,
     });
+    const payload: PerpetualDecreasePayload = {
+      walletAddress: request.walletAddress,
+      providerName: request.providerName ?? GMX_PERPETUALS_PROVIDER_NAME,
+      chainId: position.chainId,
+      marketAddress: position.marketAddress,
+      collateralTokenAddress: position.collateralToken.tokenUid.address,
+      side: position.positionSide,
+      decrease: {
+        mode: 'partial',
+        sizeDeltaUsd: request.sizeDeltaUsd,
+        slippageBps: DEFAULT_SLIPPAGE_BPS,
+      },
+    };
+    const quote = await this.quotePerpetualDecrease(payload);
+    return this.fetchEndpoint('/perpetuals/decrease/plan', PerpetualActionResponseSchema, {
+      method: 'POST',
+      body: this.stringifyPayload({
+        ...payload,
+        decrease: {
+          ...payload.decrease,
+          slippageBps: quote.pricing.slippageBps,
+        },
+      }),
+    });
+  }
+
+  async getPerpetualLifecycle(
+    request: PerpetualLifecycleRequest,
+  ): Promise<PerpetualLifecycleResponse> {
+    const query = this.buildQuery({
+      providerName: request.providerName,
+      chainId: request.chainId,
+      txHash: request.txHash,
+      orderKey: request.orderKey,
+      walletAddress: request.walletAddress,
+      submittedAtBlock: request.submittedAtBlock,
+    });
+    return this.fetchEndpoint(
+      `/perpetuals/lifecycle?${query.toString()}`,
+      PerpetualLifecycleResponseSchema,
+    );
   }
 }
 

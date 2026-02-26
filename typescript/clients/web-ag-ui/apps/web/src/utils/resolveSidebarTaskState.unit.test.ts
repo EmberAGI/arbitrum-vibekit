@@ -12,22 +12,22 @@ describe('resolveSidebarTaskState', () => {
     ).toBe('working');
   });
 
-  it('keeps list input-required when runtime is stale and non-blocked', () => {
+  it('prefers runtime non-blocked state over stale list input-required', () => {
     expect(
       resolveSidebarTaskState({
         listTaskState: 'input-required',
         runtimeTaskState: 'submitted',
       }),
-    ).toBe('input-required');
+    ).toBe('submitted');
   });
 
-  it('keeps list failed when runtime is stale and non-blocked', () => {
+  it('prefers runtime non-blocked state over stale list failed', () => {
     expect(
       resolveSidebarTaskState({
         listTaskState: 'failed',
         runtimeTaskState: 'working',
       }),
-    ).toBe('failed');
+    ).toBe('working');
   });
 
   it('uses runtime state when runtime is blocked', () => {
@@ -46,5 +46,24 @@ describe('resolveSidebarTaskState', () => {
         runtimeTaskState: 'working',
       }),
     ).toBe('working');
+  });
+
+  it('falls back to list state by default when runtime state is missing', () => {
+    expect(
+      resolveSidebarTaskState({
+        listTaskState: 'input-required',
+        runtimeTaskState: undefined,
+      }),
+    ).toBe('input-required');
+  });
+
+  it('can suppress list fallback when runtime source is authoritative', () => {
+    expect(
+      resolveSidebarTaskState({
+        listTaskState: 'input-required',
+        runtimeTaskState: undefined,
+        fallbackToListWhenRuntimeMissing: false,
+      }),
+    ).toBeUndefined();
   });
 });

@@ -8,6 +8,7 @@ import type {
   AgentProfile,
   AgentViewMetrics,
   ClmmEvent,
+  OnboardingFlow,
   OnboardingState,
   Pool,
   Transaction,
@@ -491,7 +492,7 @@ describe('AgentDetailPage internals: blockers variants', () => {
 
   function renderBlockers(
     activeInterrupt: AgentInterrupt | null,
-    options?: { agentId?: string; onboarding?: OnboardingState },
+    options?: { agentId?: string; onboarding?: OnboardingState; onboardingFlow?: OnboardingFlow },
   ) {
     return renderToStaticMarkup(
       React.createElement(__agentDetailPageTestOnly.AgentBlockersTab, {
@@ -505,6 +506,7 @@ describe('AgentDetailPage internals: blockers variants', () => {
         executionError: undefined,
         delegationsBypassActive: false,
         onboarding: options?.onboarding ?? { step: 2 },
+        onboardingFlow: options?.onboardingFlow,
         telemetry: [
           { cycle: 1, action: 'cycle', timestamp: '2026-02-15T12:00:00.000Z' },
           { cycle: 2, action: 'rebalance', timestamp: '2026-02-15T12:30:00.000Z' },
@@ -569,7 +571,17 @@ describe('AgentDetailPage internals: blockers variants', () => {
       },
       {
         agentId: 'agent-gmx-allora',
-        onboarding: { step: 4, totalSteps: 4, key: 'fund-wallet' },
+        onboardingFlow: {
+          status: 'in_progress',
+          revision: 3,
+          activeStepId: 'fund-wallet',
+          steps: [
+            { id: 'gmx-setup', title: 'Strategy Config', status: 'completed' },
+            { id: 'funding-token', title: 'Funding Token', status: 'completed' },
+            { id: 'delegation-signing', title: 'Delegation Signing', status: 'completed' },
+            { id: 'fund-wallet', title: 'Fund Wallet', status: 'active' },
+          ],
+        },
       },
     );
 

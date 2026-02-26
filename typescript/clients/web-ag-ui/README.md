@@ -82,6 +82,7 @@ The LangGraph agent code is in `apps/agent/src/`.
 - [CopilotKit Documentation](https://docs.copilotkit.ai) - Explore CopilotKit's capabilities
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/) - Learn more about LangGraph and its features
 - [Next.js Documentation](https://nextjs.org/docs) - Learn about Next.js features and API
+- [C4 Target Architecture: web-ag-ui + agents (AG-UI-only)](./docs/c4-target-architecture-web-ag-ui-agents.md)
 
 ## Contributing
 

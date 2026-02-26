@@ -1,37 +1,36 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command, interrupt } from '@langchain/langgraph';
+import { interrupt, type Command } from '@langchain/langgraph';
+import { buildInterruptPauseTransition, shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
 import { z } from 'zod';
 
 import { GmxSetupInputSchema } from '../../domain/types.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
+  logWarn,
+  logPauseSnapshot,
   type OnboardingState,
   type ClmmState,
   type GmxSetupInterrupt,
   type ClmmUpdate,
 } from '../context.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 
-const FULL_ONBOARDING_TOTAL_STEPS = 3;
-const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
+const SETUP_STEP_KEY: OnboardingState['key'] = 'setup';
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
-const resolveOnboardingTotalSteps = (state: ClmmState): number =>
-  state.view.delegationsBypassActive === true
-    ? REDUCED_ONBOARDING_TOTAL_STEPS
-    : FULL_ONBOARDING_TOTAL_STEPS;
-
-const buildOnboarding = (state: ClmmState, step: number): OnboardingState => ({
-  step,
-  totalSteps: resolveOnboardingTotalSteps(state),
-});
-
-const resolveSetupResumeStep = (state: ClmmState): number => {
-  const configuredTotalSteps = state.view.onboarding?.totalSteps;
-  const totalSteps =
-    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
-      ? configuredTotalSteps
-      : resolveOnboardingTotalSteps(state);
-  return state.view.fundingTokenInput ? (totalSteps <= 2 ? 2 : 3) : 2;
+const resolveSetupResumeOnboarding = (state: ClmmState): OnboardingState => {
+  if (!state.view.fundingTokenInput) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  if (state.view.delegationsBypassActive === true) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  return state.view.onboarding?.key === FUNDING_STEP_KEY
+    ? { step: 3, key: DELEGATION_STEP_KEY }
+    : { step: 2, key: DELEGATION_STEP_KEY };
 };
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -41,13 +40,25 @@ export const collectSetupInputNode = async (
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   logInfo('collectSetupInput: entering node');
+  logWarn('collectSetupInput: node entered', {
+    hasOperatorInput: Boolean(state.view.operatorInput),
+    onboardingStatus: state.view.onboardingFlow?.status,
+    onboardingStep: state.view.onboarding?.step,
+    onboardingKey: state.view.onboarding?.key,
+  });
 
   if (state.view.operatorInput) {
     logInfo('collectSetupInput: setup input already present; skipping step');
+    logWarn('collectSetupInput: setup already present; skipping interrupt', {
+      walletAddress: state.view.operatorInput.walletAddress,
+      targetMarket: state.view.operatorInput.targetMarket,
+      usdcAllocation: state.view.operatorInput.usdcAllocation,
+    });
+    const resumedView = applyViewPatch(state, {
+      onboarding: resolveSetupResumeOnboarding(state),
+    });
     return {
-      view: {
-        onboarding: buildOnboarding(state, resolveSetupResumeStep(state)),
-      },
+      view: resumedView,
     };
   }
 
@@ -64,28 +75,48 @@ export const collectSetupInputNode = async (
   );
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
   const pendingView = {
-    onboarding: buildOnboarding(state, 1),
+    onboarding: { step: 1, key: SETUP_STEP_KEY },
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: [] },
   };
-  const currentTaskState = state.view.task?.taskStatus?.state;
-  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
-  const shouldPersistPendingState =
-    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
+    currentTaskState: state.view.task?.taskStatus?.state,
+    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+    currentOnboardingKey: state.view.onboarding?.key,
+    nextOnboardingKey: pendingView.onboarding.key,
+    nextTaskMessage: awaitingMessage,
+  });
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  const pauseSnapshotView = applyViewPatch(state, pendingView);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    const mergedView = { ...state.view, ...pendingView };
-    state.view = mergedView;
+    const mergedView = pauseSnapshotView;
+    logPauseSnapshot({
+      node: 'collectSetupInput',
+      reason: 'awaiting setup input',
+      view: mergedView,
+      metadata: {
+        pauseMechanism: 'checkpoint-and-interrupt',
+      },
+    });
     await copilotkitEmitState(config, {
       view: mergedView,
     });
-    return new Command({
+    return buildInterruptPauseTransition({
+      node: 'collectSetupInput',
       update: {
         view: mergedView,
       },
-      goto: 'collectSetupInput',
+      createCommand: createLangGraphCommand,
     });
   }
+  logPauseSnapshot({
+    node: 'collectSetupInput',
+    reason: 'awaiting setup input',
+    view: pauseSnapshotView,
+    metadata: {
+      pauseMechanism: 'interrupt',
+    },
+  });
 
   const incoming: unknown = await interrupt(request);
 
@@ -103,18 +134,23 @@ export const collectSetupInputNode = async (
     const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
     const failureMessage = `Invalid setup input: ${issues}`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: [] },
-        profile: state.view.profile,
-        metrics: state.view.metrics,
-        transactionHistory: state.view.transactionHistory,
-      },
+      view: haltedView,
     };
   }
 
@@ -132,16 +168,21 @@ export const collectSetupInputNode = async (
     'working',
     'Market and USDC allocation received. Preparing funding token options.',
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: [] },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    view: workingView,
   });
 
+  const completedView = applyViewPatch(state, {
+    operatorInput: normalized,
+    onboarding: { step: 2, key: FUNDING_STEP_KEY },
+    task,
+    activity: { events: [statusEvent], telemetry: [] },
+  });
   return {
-    view: {
-      operatorInput: normalized,
-      onboarding: buildOnboarding(state, 2),
-      task,
-      activity: { events: [statusEvent], telemetry: [] },
-    },
+    view: completedView,
   };
 };

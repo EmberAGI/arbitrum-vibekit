@@ -1,3 +1,5 @@
+import { mapOnboardingPhaseToTarget, resolveOnboardingPhase } from 'agent-workflow-core';
+
 import type { ClmmState } from './context.js';
 
 export type OnboardingNodeTarget =
@@ -9,20 +11,29 @@ export type OnboardingNodeTarget =
   | 'syncState';
 
 export function resolveNextOnboardingNode(state: ClmmState): OnboardingNodeTarget {
-  if (!state.view.poolArtifact) {
-    return 'listPools';
-  }
-  if (!state.view.operatorInput) {
-    return 'collectOperatorInput';
-  }
-  if (!state.view.fundingTokenInput) {
-    return 'collectFundingTokenInput';
-  }
-  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
-    return 'collectDelegations';
-  }
-  if (!state.view.operatorConfig) {
-    return 'prepareOperator';
-  }
-  return 'syncState';
+  const hasOperatorConfig = Boolean(state.view.operatorConfig);
+  const hasFundingTokenRequirementSatisfied =
+    Boolean(state.view.fundingTokenInput) || hasOperatorConfig;
+
+  const phase = resolveOnboardingPhase({
+    requiresPoolCatalog: true,
+    hasPoolCatalog: Boolean(state.view.poolArtifact),
+    hasSetupInput: Boolean(state.view.operatorInput),
+    hasFundingTokenInput: hasFundingTokenRequirementSatisfied,
+    requiresDelegationSigning: state.view.delegationsBypassActive !== true,
+    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    hasOperatorConfig,
+  });
+
+  return mapOnboardingPhaseToTarget<OnboardingNodeTarget>({
+    phase,
+    targets: {
+      collectPoolCatalog: 'listPools',
+      collectSetupInput: 'collectOperatorInput',
+      collectFundingToken: 'collectFundingTokenInput',
+      collectDelegations: 'collectDelegations',
+      prepareOperator: 'prepareOperator',
+      ready: 'syncState',
+    },
+  });
 }

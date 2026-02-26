@@ -39,6 +39,7 @@ const inactiveAgent: UseAgentConnectionResult = {
   runSync: () => undefined,
   resolveInterrupt: () => undefined,
   updateSettings: () => undefined,
+  saveSettings: () => undefined,
 };
 
 export function AgentProvider({

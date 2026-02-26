@@ -11,44 +11,33 @@ import {
   useState,
 } from 'react';
 import { usePathname } from 'next/navigation';
-import { z } from 'zod';
+import { ProxiedCopilotRuntimeAgent } from '@copilotkit/react-core/v2';
 
 import { getAllAgents, isRegisteredAgentId } from '../config/agents';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
-import { getAgentThreadId } from '../utils/agentThread';
-import type { AgentViewMetrics, AgentViewProfile, TaskState } from '../types/agent';
-
-type AgentListEntry = {
-  profile?: AgentViewProfile;
-  metrics?: AgentViewMetrics;
-  taskId?: string;
-  taskState?: TaskState;
-  command?: string;
-  taskMessage?: string;
-  haltReason?: string;
-  executionError?: string;
-  synced: boolean;
-  error?: string;
-};
+import { getAgentThreadId, resolveAgentThreadWalletAddress } from '../utils/agentThread';
+import {
+  pollAgentIdsWithConcurrency,
+  pollAgentListUpdateViaAgUi,
+  resolveAgentListPollBusyCooldownMs,
+  resolveAgentListPollIntervalMs,
+  resolveAgentListPollMaxConcurrent,
+  selectAgentIdsForPolling,
+} from './agentListPolling';
+import type { AgentListEntry } from './agentListTypes';
 
 type AgentListState = {
   agents: Record<string, AgentListEntry>;
-  upsertAgent: (agentId: string, update: Partial<AgentListEntry>) => void;
+  upsertAgent: (
+    agentId: string,
+    update: Partial<AgentListEntry>,
+    source: AgentListUpdateSource,
+  ) => void;
 };
 
 const AgentListContext = createContext<AgentListState | null>(null);
 
-const SyncResponseSchema = z.object({
-  agentId: z.string(),
-  command: z.string().nullable().optional(),
-  profile: z.record(z.unknown()).nullable().optional(),
-  metrics: z.record(z.unknown()).nullable().optional(),
-  taskId: z.string().nullable().optional(),
-  taskState: z.string().nullable().optional(),
-  taskMessage: z.string().nullable().optional(),
-  haltReason: z.string().nullable().optional(),
-  executionError: z.string().nullable().optional(),
-});
+export type AgentListUpdateSource = 'detail-connect' | 'poll';
 
 function buildInitialState(agentIds: string[]): Record<string, AgentListEntry> {
   return agentIds.reduce<Record<string, AgentListEntry>>((acc, agentId) => {
@@ -61,158 +50,246 @@ function resolveAgentIdFromPath(pathname: string | null): string | null {
   if (!pathname) {
     return null;
   }
+
   const segments = pathname.split('/').filter(Boolean);
   const hireIndex = segments.indexOf('hire-agents');
   if (hireIndex === -1) {
     return null;
   }
+
   const candidate = segments[hireIndex + 1];
   if (!candidate) {
     return null;
   }
+
   const agentId = decodeURIComponent(candidate);
   return isRegisteredAgentId(agentId) ? agentId : null;
+}
+
+function shouldAcceptAgentListUpdate(params: {
+  agentId: string;
+  activeAgentId: string | null;
+  source: AgentListUpdateSource;
+}): boolean {
+  if (params.source === 'detail-connect') {
+    return params.activeAgentId === params.agentId;
+  }
+  return params.activeAgentId !== params.agentId;
 }
 
 export function AgentListProvider({ children }: { children: ReactNode }) {
   const agentIds = useMemo(() => getAllAgents().map((agent) => agent.id), []);
   const pathname = usePathname();
-  const activeAgentId = useMemo(() => resolveAgentIdFromPath(pathname), [pathname]);
   const { privyWallet } = usePrivyWalletClient();
-  const privyAddress = privyWallet?.address ?? null;
-  const [agents, setAgents] = useState<Record<string, AgentListEntry>>(() =>
-    buildInitialState(agentIds),
+  const walletKey = resolveAgentThreadWalletAddress(privyWallet?.address);
+  const activeAgentId = useMemo(() => resolveAgentIdFromPath(pathname), [pathname]);
+  const [state, setState] = useState<{ walletKey: string | null; agents: Record<string, AgentListEntry> }>(
+    () => ({
+      walletKey,
+      agents: buildInitialState(agentIds),
+    }),
   );
   const startedRef = useRef(false);
-  const inFlightRef = useRef<Set<string>>(new Set());
-  const lastPrivyAddressRef = useRef<string | null>(null);
-  const agentsRef = useRef<Record<string, AgentListEntry>>(agents);
+  const lastWalletKeyRef = useRef(walletKey);
+  const inFlightRef = useRef(new Set<string>());
+  const periodicPollInFlightRef = useRef(false);
+  const pollBusyUntilByAgentRef = useRef(new Map<string, number>());
+  const pollBusyCooldownMs = resolveAgentListPollBusyCooldownMs(
+    process.env.NEXT_PUBLIC_AGENT_LIST_BUSY_COOLDOWN_MS,
+  );
+  const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
 
-  const upsertAgent = useCallback((agentId: string, update: Partial<AgentListEntry>) => {
-    setAgents((prev) => ({
-      ...prev,
-      [agentId]: {
-        ...(prev[agentId] ?? { synced: false }),
-        ...update,
-      },
-    }));
+  const pruneBusyCooldowns = useCallback((nowMs: number) => {
+    for (const [agentId, busyUntil] of pollBusyUntilByAgentRef.current.entries()) {
+      if (busyUntil <= nowMs) {
+        pollBusyUntilByAgentRef.current.delete(agentId);
+      }
+    }
   }, []);
+
+  const busyCooldownSnapshot = useCallback((): Record<string, number> => {
+    const snapshot: Record<string, number> = {};
+    for (const [agentId, busyUntil] of pollBusyUntilByAgentRef.current.entries()) {
+      snapshot[agentId] = busyUntil;
+    }
+    return snapshot;
+  }, []);
+
+  const upsertAgent = useCallback((
+    agentId: string,
+    update: Partial<AgentListEntry>,
+    source: AgentListUpdateSource,
+  ) => {
+    if (!shouldAcceptAgentListUpdate({ agentId, activeAgentId, source })) {
+      return;
+    }
+    setState((prev) => {
+      const baseAgents = prev.walletKey === walletKey ? prev.agents : buildInitialState(agentIds);
+      return {
+        walletKey,
+        agents: {
+          ...baseAgents,
+          [agentId]: {
+            ...(baseAgents[agentId] ?? { synced: false }),
+            ...update,
+          },
+        },
+      };
+    });
+  }, [activeAgentId, agentIds, walletKey]);
+
+  const agents = state.walletKey === walletKey ? state.agents : buildInitialState(agentIds);
+  const agentsRef = useRef(agents);
 
   useEffect(() => {
     agentsRef.current = agents;
   }, [agents]);
 
   useEffect(() => {
-    const normalized = privyAddress?.toLowerCase() ?? null;
-    if (normalized === lastPrivyAddressRef.current) {
+    if (lastWalletKeyRef.current === walletKey) {
       return;
     }
-    lastPrivyAddressRef.current = normalized;
-    startedRef.current = false;
-    inFlightRef.current = new Set();
-    setAgents(buildInitialState(agentIds));
-  }, [agentIds, privyAddress]);
 
-  const syncAgent = useCallback(
-    async (agentId: string, options?: { force?: boolean }) => {
-      const force = options?.force ?? false;
+    lastWalletKeyRef.current = walletKey;
+    startedRef.current = false;
+    inFlightRef.current.clear();
+    pollBusyUntilByAgentRef.current.clear();
+  }, [walletKey]);
+
+  const pollAgent = useCallback(
+    async (agentId: string) => {
+      if (!walletKey) {
+        return;
+      }
       if (inFlightRef.current.has(agentId)) {
         return;
       }
-      if (!force && agentsRef.current[agentId]?.synced) {
+
+      const threadId = getAgentThreadId(agentId, walletKey);
+      if (!threadId) {
         return;
       }
 
       inFlightRef.current.add(agentId);
-      const threadId = getAgentThreadId(agentId, privyAddress);
-      if (!threadId) {
-        inFlightRef.current.delete(agentId);
-        return;
-      }
-
       try {
-        const response = await fetch('/api/agents/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agentId, threadId }),
+        const outcome = await pollAgentListUpdateViaAgUi({
+          agentId,
+          threadId,
+          timeoutMs: 2_500,
+          createRuntimeAgent: ({ agentId: runtimeAgentId, threadId: runtimeThreadId }) =>
+            new ProxiedCopilotRuntimeAgent({
+              runtimeUrl: '/api/copilotkit',
+              transport: 'single',
+              agentId: runtimeAgentId,
+              threadId: runtimeThreadId,
+            }),
         });
 
-        if (!response.ok) {
-          const payload = await response.text();
-          throw new Error(`Sync failed (${response.status}): ${payload}`);
+        const nowMs = Date.now();
+        if (outcome.busy) {
+          pollBusyUntilByAgentRef.current.set(agentId, nowMs + pollBusyCooldownMs);
+          console.warn('[AgentListContext.poll] Busy run detected; applying poll cooldown', {
+            source: 'agent-list-poll',
+            agentId,
+            threadId,
+            cooldownMs: pollBusyCooldownMs,
+            busyUntilIso: new Date(nowMs + pollBusyCooldownMs).toISOString(),
+          });
+        } else {
+          pollBusyUntilByAgentRef.current.delete(agentId);
         }
 
-        const payload = SyncResponseSchema.safeParse(await response.json().catch(() => null));
-        if (!payload.success) {
-          throw new Error(`Sync response invalid: ${payload.error.message}`);
+        if (debugStatus) {
+          console.debug('[AgentListContext.poll] update', {
+            source: 'agent-list-poll',
+            agentId,
+            threadId,
+            busy: outcome.busy,
+            update: outcome.update,
+          });
         }
 
-        const taskId = payload.data.taskId ?? undefined;
-        const hasTask = Boolean(taskId);
-
-        upsertAgent(agentId, {
-          synced: true,
-          profile: (payload.data.profile ?? undefined) as AgentViewProfile | undefined,
-          metrics: (payload.data.metrics ?? undefined) as AgentViewMetrics | undefined,
-          command: payload.data.command ?? undefined,
-          taskId,
-          taskState: hasTask
-            ? ((payload.data.taskState ?? undefined) as TaskState | undefined)
-            : undefined,
-          taskMessage: hasTask ? (payload.data.taskMessage ?? undefined) : undefined,
-          haltReason: hasTask ? (payload.data.haltReason ?? undefined) : undefined,
-          executionError: hasTask ? (payload.data.executionError ?? undefined) : undefined,
-          error: undefined,
+        upsertAgent(agentId, outcome.update ?? { synced: true }, 'poll');
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('[AgentListContext.poll] Poll failed', {
+          source: 'agent-list-poll',
+          agentId,
+          threadId,
+          detail: message,
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[agent-list] Sync failed', { agentId, error: message });
-        upsertAgent(agentId, { synced: true, error: message });
+        upsertAgent(agentId, { synced: true, error: message }, 'poll');
       } finally {
         inFlightRef.current.delete(agentId);
       }
     },
-    [privyAddress, upsertAgent],
+    [debugStatus, pollBusyCooldownMs, upsertAgent, walletKey],
   );
 
   useEffect(() => {
-    if (startedRef.current) {
+    if (startedRef.current || !walletKey) {
       return;
     }
-    if (!privyAddress) {
-      return;
-    }
+
     startedRef.current = true;
-    agentIds.forEach((agentId) => {
-      void syncAgent(agentId);
+    const nowMs = Date.now();
+    pruneBusyCooldowns(nowMs);
+    const initialCandidates = agentIds.filter((agentId) => !(activeAgentId && agentId === activeAgentId));
+    const eligibleCandidates = selectAgentIdsForPolling({
+      agentIds: initialCandidates,
+      agents: agentsRef.current,
+      activeAgentId,
+      busyUntilByAgent: busyCooldownSnapshot(),
+      nowMs,
     });
-  }, [agentIds, privyAddress, syncAgent]);
+    const maxConcurrent = resolveAgentListPollMaxConcurrent(
+      process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT,
+    );
+    void pollAgentIdsWithConcurrency({
+      agentIds: eligibleCandidates,
+      maxConcurrent,
+      pollAgent,
+    });
+  }, [activeAgentId, agentIds, busyCooldownSnapshot, pollAgent, pruneBusyCooldowns, walletKey]);
 
   useEffect(() => {
-    const rawInterval = Number(process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_POLL_MS ?? 15000);
-    const intervalMs = Number.isFinite(rawInterval) && rawInterval > 0 ? rawInterval : 15000;
+    if (!walletKey) {
+      return undefined;
+    }
+
+    const intervalMs = resolveAgentListPollIntervalMs(process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_POLL_MS);
+    const maxConcurrent = resolveAgentListPollMaxConcurrent(
+      process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT,
+    );
     const timer = window.setInterval(() => {
-      const current = agentsRef.current;
-      Object.entries(current).forEach(([agentId, entry]) => {
-        if (activeAgentId && agentId === activeAgentId) {
-          return;
-        }
-        if (!entry.taskState) {
-          return;
-        }
-        if (
-          entry.taskState === 'completed' ||
-          entry.taskState === 'failed' ||
-          entry.taskState === 'canceled'
-        ) {
-          return;
-        }
-        void syncAgent(agentId, { force: true });
+      if (periodicPollInFlightRef.current) {
+        return;
+      }
+      const nowMs = Date.now();
+      pruneBusyCooldowns(nowMs);
+      const candidates = selectAgentIdsForPolling({
+        agentIds,
+        agents: agentsRef.current,
+        activeAgentId,
+        busyUntilByAgent: busyCooldownSnapshot(),
+        nowMs,
+      });
+
+      periodicPollInFlightRef.current = true;
+      void pollAgentIdsWithConcurrency({
+        agentIds: candidates,
+        maxConcurrent,
+        pollAgent,
+      }).finally(() => {
+        periodicPollInFlightRef.current = false;
       });
     }, intervalMs);
 
-    return () => window.clearInterval(timer);
-  }, [activeAgentId, syncAgent]);
+    return () => {
+      window.clearInterval(timer);
+      periodicPollInFlightRef.current = false;
+    };
+  }, [activeAgentId, agentIds, busyCooldownSnapshot, pollAgent, pruneBusyCooldowns, walletKey]);
 
   const value = useMemo(() => ({ agents, upsertAgent }), [agents, upsertAgent]);
 

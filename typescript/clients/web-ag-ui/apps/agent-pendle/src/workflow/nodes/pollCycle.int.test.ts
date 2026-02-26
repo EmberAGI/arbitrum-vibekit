@@ -1382,6 +1382,269 @@ describe('pollCycleNode', () => {
     expect(executeRebalanceMock).not.toHaveBeenCalled();
   });
 
+  it('treats rollover insufficient-balance errors as already-settled when refreshed source PT is empty', async () => {
+    executeRolloverMock.mockRejectedValue(
+      new Error('ERC20: transfer amount exceeds balance'),
+    );
+    let positionsCallCount = 0;
+    const fetchMock = vi.fn((input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/tokenizedYield/markets')) {
+        return new Response(
+          JSON.stringify({
+            markets: [
+              {
+                marketIdentifier: { chainId: '42161', address: '0xmarket-best' },
+                expiry: '2030-01-01',
+                details: { aggregatedApy: '6.0' },
+                ptToken: {
+                  tokenUid: { chainId: '42161', address: '0xpt-best' },
+                  name: 'PT-BEST',
+                  symbol: 'PT-BEST',
+                  isNative: false,
+                  decimals: 18,
+                  iconUri: null,
+                  isVetted: true,
+                },
+                ytToken: {
+                  tokenUid: { chainId: '42161', address: '0xyt-best' },
+                  name: 'YT-BEST',
+                  symbol: 'YT-BEST',
+                  isNative: false,
+                  decimals: 18,
+                  iconUri: null,
+                  isVetted: true,
+                },
+                underlyingToken: {
+                  tokenUid: { chainId: '42161', address: '0xusdai' },
+                  name: 'USDai',
+                  symbol: 'USDai',
+                  isNative: false,
+                  decimals: 18,
+                  iconUri: null,
+                  isVetted: true,
+                },
+              },
+              {
+                marketIdentifier: { chainId: '42161', address: '0xmarket-current' },
+                expiry: '2024-01-01',
+                details: { aggregatedApy: '5.0' },
+                ptToken: {
+                  tokenUid: { chainId: '42161', address: '0xpt-cur' },
+                  name: 'PT-CUR',
+                  symbol: 'PT-CUR',
+                  isNative: false,
+                  decimals: 18,
+                  iconUri: null,
+                  isVetted: true,
+                },
+                ytToken: {
+                  tokenUid: { chainId: '42161', address: '0xyt-cur' },
+                  name: 'YT-CUR',
+                  symbol: 'YT-CUR',
+                  isNative: false,
+                  decimals: 18,
+                  iconUri: null,
+                  isVetted: true,
+                },
+                underlyingToken: {
+                  tokenUid: { chainId: '42161', address: '0xusde' },
+                  name: 'USDe',
+                  symbol: 'USDe',
+                  isNative: false,
+                  decimals: 6,
+                  iconUri: null,
+                  isVetted: true,
+                },
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 2,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (url.includes('/tokens')) {
+        return new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: { chainId: '42161', address: '0xusdai' },
+                name: 'USDai',
+                symbol: 'USDai',
+                isNative: false,
+                decimals: 18,
+                iconUri: null,
+                isVetted: true,
+              },
+              {
+                tokenUid: { chainId: '42161', address: '0xusde' },
+                name: 'USDe',
+                symbol: 'USDe',
+                isNative: false,
+                decimals: 6,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 2,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (url.includes('/tokenizedYield/positions')) {
+        positionsCallCount += 1;
+        if (positionsCallCount === 1) {
+          return new Response(
+            JSON.stringify({
+              positions: [
+                {
+                  marketIdentifier: { chainId: '42161', address: '0xmarket-current' },
+                  pt: {
+                    token: {
+                      tokenUid: { chainId: '42161', address: '0xpt-cur' },
+                      name: 'PT-CUR',
+                      symbol: 'PT-CUR',
+                      isNative: false,
+                      decimals: 18,
+                      iconUri: null,
+                      isVetted: true,
+                    },
+                    exactAmount: '100',
+                  },
+                  yt: {
+                    token: {
+                      tokenUid: { chainId: '42161', address: '0xyt-cur' },
+                      name: 'YT-CUR',
+                      symbol: 'YT-CUR',
+                      isNative: false,
+                      decimals: 18,
+                      iconUri: null,
+                      isVetted: true,
+                    },
+                    exactAmount: '5',
+                    claimableRewards: [],
+                  },
+                },
+              ],
+              cursor: null,
+              currentPage: 1,
+              totalPages: 1,
+              totalItems: 1,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            positions: [],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 0,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const state: ClmmState = {
+      messages: [],
+      copilotkit: { actions: [], context: [] },
+      settings: { amount: undefined },
+      private: {
+        mode: undefined,
+        pollIntervalMs: 5_000,
+        streamLimit: -1,
+        cronScheduled: false,
+        bootstrapped: true,
+      },
+      view: {
+        command: 'cycle',
+        task: undefined,
+        poolArtifact: undefined,
+        operatorInput: undefined,
+        onboarding: undefined,
+        fundingTokenInput: undefined,
+        selectedPool: {
+          marketAddress: '0xmarket-current',
+          ptAddress: '0xpt-cur',
+          ytAddress: '0xyt-cur',
+          ptSymbol: 'PT-CUR',
+          ytSymbol: 'YT-CUR',
+          underlyingSymbol: 'USDe',
+          apy: 5,
+          maturity: '2024-01-01',
+        },
+        operatorConfig: {
+          walletAddress: '0x0000000000000000000000000000000000000001',
+          executionWalletAddress: '0x0000000000000000000000000000000000000001',
+          baseContributionUsd: 10,
+          fundingTokenAddress: '0xusde',
+          targetYieldToken: {
+            marketAddress: '0xmarket-current',
+            ptAddress: '0xpt-cur',
+            ytAddress: '0xyt-cur',
+            ptSymbol: 'PT-CUR',
+            ytSymbol: 'YT-CUR',
+            underlyingSymbol: 'USDe',
+            apy: 5,
+            maturity: '2024-01-01',
+          },
+        },
+        setupComplete: true,
+        delegationBundle: undefined,
+        haltReason: undefined,
+        executionError: undefined,
+        profile: {
+          agentIncome: undefined,
+          aum: undefined,
+          totalUsers: undefined,
+          apy: undefined,
+          chains: [],
+          protocols: [],
+          tokens: [],
+          pools: [],
+          allowedPools: [],
+        },
+        activity: {
+          telemetry: [],
+          events: [],
+        },
+        metrics: {
+          lastSnapshot: undefined,
+          previousApy: undefined,
+          cyclesSinceRebalance: 0,
+          staleCycles: 0,
+          iteration: 0,
+          latestCycle: undefined,
+        },
+        transactionHistory: [],
+        delegationsBypassActive: true,
+      },
+    };
+
+    const command = await pollCycleNode(state, {});
+    expect(command).toBeInstanceOf(Command);
+    const update = (command as { update?: ClmmUpdate }).update;
+    const telemetry = update?.view?.activity?.telemetry?.[0];
+    expect(update?.view?.haltReason).toBeUndefined();
+    expect(update?.view?.executionError).toBeUndefined();
+    expect(telemetry?.action).toBe('hold');
+    expect(telemetry?.reason).toContain('already settled');
+    expect(executeRolloverMock).toHaveBeenCalledTimes(1);
+    expect(positionsCallCount).toBe(2);
+  });
+
   it('compounds rewards before considering rebalances', async () => {
     executeCompoundMock.mockResolvedValue({ lastTxHash: '0xcompoundhash' });
     const fetchMock = vi.fn((input: string | URL) => {

@@ -1,6 +1,7 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command, interrupt } from '@langchain/langgraph';
+import { type Command, interrupt } from '@langchain/langgraph';
 import { getDeleGatorEnvironment } from '@metamask/delegation-toolkit';
+import { buildInterruptPauseTransition, shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
 import { z } from 'zod';
 
 import {
@@ -9,8 +10,11 @@ import {
   resolveGmxAlloraMode,
 } from '../../config/constants.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
+  logPauseSnapshot,
+  logWarn,
   normalizeHexAddress,
   type ClmmState,
   type ClmmUpdate,
@@ -19,6 +23,7 @@ import {
   type OnboardingState,
   type SignedDelegation,
 } from '../context.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 import {
   DELEGATION_DESCRIPTIONS,
   DELEGATION_INTENTS,
@@ -28,16 +33,20 @@ import {
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const FULL_ONBOARDING_TOTAL_STEPS = 3;
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 const resolveDelegationOnboarding = (state: ClmmState): OnboardingState => {
-  const configuredTotalSteps = state.view.onboarding?.totalSteps;
-  const totalSteps =
-    typeof configuredTotalSteps === 'number' && configuredTotalSteps > 0
-      ? configuredTotalSteps
-      : FULL_ONBOARDING_TOTAL_STEPS;
-  const step = totalSteps <= 2 ? 2 : 3;
-  return { step, totalSteps };
+  if (state.view.delegationsBypassActive === true) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  if (state.view.onboarding?.key === FUNDING_STEP_KEY) {
+    return { step: 3, key: DELEGATION_STEP_KEY };
+  }
+  if (state.view.onboarding?.key === DELEGATION_STEP_KEY) {
+    return state.view.onboarding;
+  }
+  return { step: 2, key: DELEGATION_STEP_KEY };
 };
 
 const HexSchema = z
@@ -97,6 +106,17 @@ const DelegationSigningResponseJsonSchema = z.union([
   }),
 ]);
 
+function normalizeDelegationSignature(signature: `0x${string}`): `0x${string}` {
+  const bytesLength = (signature.length - 2) / 2;
+  if (bytesLength === 66) {
+    const prefixByte = Number.parseInt(signature.slice(2, 4), 16);
+    if (prefixByte === 65) {
+      return `0x${signature.slice(4)}`;
+    }
+  }
+  return signature;
+}
+
 export const collectDelegationsNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
@@ -106,45 +126,67 @@ export const collectDelegationsNode = async (
     delegationsBypassActive: state.view.delegationsBypassActive === true,
     hasDelegationBundle: Boolean(state.view.delegationBundle),
   });
+  logWarn('collectDelegations: node entered', {
+    onboardingStatus: state.view.onboardingFlow?.status,
+    onboardingStep: state.view.onboarding?.step,
+    onboardingKey: state.view.onboarding?.key,
+    delegationsBypassActive: state.view.delegationsBypassActive === true,
+    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    hasOperatorInput: Boolean(state.view.operatorInput),
+    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
+  });
 
   if (state.view.delegationsBypassActive === true) {
+    logInfo('collectDelegations: bypass active, skipping delegation collection', {
+      onboardingStep: delegationOnboarding.step,
+      onboardingKey: delegationOnboarding.key,
+    });
+    const bypassView = applyViewPatch(state, {
+      delegationsBypassActive: true,
+      onboarding: delegationOnboarding,
+    });
     return {
-      view: {
-        delegationsBypassActive: true,
-        onboarding: delegationOnboarding,
-      },
+      view: bypassView,
     };
   }
 
   if (state.view.delegationBundle) {
+    logInfo('collectDelegations: delegation bundle already present', {
+      onboardingStep: delegationOnboarding.step,
+      onboardingKey: delegationOnboarding.key,
+      currentTaskState: state.view.task?.taskStatus?.state,
+      currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+    });
     if (state.view.task?.taskStatus.state === 'input-required') {
       const { task, statusEvent } = buildTaskStatus(
         state.view.task,
         'working',
         'Delegation approvals received. Continuing onboarding.',
       );
+      const resumedView = applyViewPatch(state, {
+        delegationBundle: state.view.delegationBundle,
+        onboarding: delegationOnboarding,
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      });
       return {
-        view: {
-          delegationBundle: state.view.delegationBundle,
-          onboarding: delegationOnboarding,
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        },
+        view: resumedView,
       };
     }
 
+    const delegatedView = applyViewPatch(state, {
+      delegationBundle: state.view.delegationBundle,
+      onboarding: delegationOnboarding,
+    });
     return {
-      view: {
-        delegationBundle: state.view.delegationBundle,
-        onboarding: delegationOnboarding,
-      },
+      view: delegatedView,
     };
   }
 
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
     logInfo('collectDelegations: setup input missing; rerouting to collectSetupInput');
-    return new Command({ goto: 'collectSetupInput' });
+    return {};
   }
 
   const delegatorAddress = normalizeHexAddress(
@@ -181,24 +223,51 @@ export const collectDelegationsNode = async (
     task: awaitingInput.task,
     activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
   };
-  const currentTaskState = state.view.task?.taskStatus?.state;
-  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
-  const shouldPersistPendingState =
-    currentTaskState !== 'input-required' || currentTaskMessage !== awaitingMessage;
+  const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
+    currentTaskState: state.view.task?.taskStatus?.state,
+    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+    currentOnboardingKey: state.view.onboarding?.key,
+    nextOnboardingKey: delegationOnboarding.key,
+    nextTaskMessage: awaitingMessage,
+  });
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  const pauseSnapshotView = applyViewPatch(state, pendingView);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    const mergedView = { ...state.view, ...pendingView };
-    state.view = mergedView;
+    const mergedView = pauseSnapshotView;
+    logPauseSnapshot({
+      node: 'collectDelegations',
+      reason: 'awaiting delegation signing',
+      view: mergedView,
+      metadata: {
+        pauseMechanism: 'checkpoint-and-interrupt',
+      },
+    });
     await copilotkitEmitState(config, {
       view: mergedView,
     });
-    return new Command({
+    return buildInterruptPauseTransition({
+      node: 'collectDelegations',
       update: {
         view: mergedView,
       },
-      goto: 'collectDelegations',
+      createCommand: createLangGraphCommand,
     });
   }
+  if (shouldPersistPendingState) {
+    const mergedView = pauseSnapshotView;
+    await copilotkitEmitState(config, {
+      view: mergedView,
+    });
+  }
+  logPauseSnapshot({
+    node: 'collectDelegations',
+    reason: 'awaiting delegation signing',
+    view: pauseSnapshotView,
+    metadata: {
+      pauseMechanism: 'interrupt',
+      checkpointPersisted: shouldPersistPendingState,
+    },
+  });
 
   const incoming: unknown = await interrupt(request);
 
@@ -216,44 +285,54 @@ export const collectDelegationsNode = async (
     const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
     const failureMessage = `Invalid delegation signing response: ${issues}`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      onboarding: delegationOnboarding,
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        onboarding: delegationOnboarding,
-      },
+      view: haltedView,
     };
   }
 
   if (parsed.data.outcome === 'rejected') {
     const { task, statusEvent } = buildTaskStatus(
       awaitingInput.task,
-      'rejected',
+      'failed',
       'Delegation signing was rejected. The agent will not proceed.',
     );
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
     });
-    return new Command({
-      update: {
-        view: {
-          haltReason: 'Delegation signing rejected by user.',
-          task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          profile: state.view.profile,
-          metrics: state.view.metrics,
-          transactionHistory: state.view.transactionHistory,
-        },
-      },
-      goto: 'summarize',
+    const haltedView = applyViewPatch(state, {
+      haltReason: 'Delegation signing rejected by user.',
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      profile: state.view.profile,
+      metrics: state.view.metrics,
+      transactionHistory: state.view.transactionHistory,
     });
+    return {
+      view: haltedView,
+    };
   }
 
-  const signedDelegations = parsed.data.signedDelegations as unknown as SignedDelegation[];
+  const signedDelegations = parsed.data.signedDelegations.map((delegation) => ({
+    ...delegation,
+    signature: normalizeDelegationSignature(delegation.signature),
+  })) as unknown as SignedDelegation[];
 
   const delegationBundle: DelegationBundle = {
     chainId: ARBITRUM_CHAIN_ID,
@@ -271,16 +350,21 @@ export const collectDelegationsNode = async (
     'working',
     'Delegations signed. Continuing onboarding.',
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    view: workingView,
   });
 
+  const completedView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    delegationBundle,
+    onboarding: delegationOnboarding,
+  });
   return {
-    view: {
-      task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      delegationBundle,
-      onboarding: delegationOnboarding,
-    },
+    view: completedView,
   };
 };

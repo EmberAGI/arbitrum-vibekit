@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ClmmState } from '../context.js';
@@ -25,6 +27,11 @@ vi.mock('@langchain/langgraph', async (importOriginal) => {
 });
 
 describe('collectSetupInputNode', () => {
+  it('uses core transition helpers instead of direct Command construction', async () => {
+    const source = await readFile(new URL('./collectSetupInput.ts', import.meta.url), 'utf8');
+    expect(source.includes('new Command(')).toBe(false);
+  });
+
   it('persists input-required state before interrupting when runnable config exists', async () => {
     interruptMock.mockReset();
     copilotkitEmitStateMock.mockReset();
@@ -47,13 +54,13 @@ describe('collectSetupInputNode', () => {
       update?: {
         view?: {
           task?: { taskStatus?: { state?: string } };
-          onboarding?: { step?: number; totalSteps?: number };
+          onboarding?: { step?: number; key?: string };
         };
       };
     };
 
     expect(commandResult.goto).toContain('collectSetupInput');
     expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.onboarding).toEqual({ step: 1, totalSteps: 3 });
+    expect(commandResult.update?.view?.onboarding).toEqual({ step: 1, key: 'setup' });
   });
 });

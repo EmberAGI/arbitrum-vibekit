@@ -212,6 +212,10 @@ export class OnchainActionsRequestError extends Error {
 }
 
 export class OnchainActionsClient {
+  private static readonly GET_CACHE_TTL_MS = 30_000;
+
+  private readonly getCache = new Map<string, { expiresAtMs: number; payload: unknown }>();
+
   constructor(private readonly baseUrl: string) {}
 
   private isRetryableFetchError(error: unknown): boolean {
@@ -241,6 +245,29 @@ export class OnchainActionsClient {
     return query;
   }
 
+  private isCacheableGetEndpoint(endpoint: string): boolean {
+    return endpoint.startsWith('/tokens');
+  }
+
+  private readCachedGet<T>(url: string, schema: z.ZodType<T>): T | null {
+    const cached = this.getCache.get(url);
+    if (!cached) {
+      return null;
+    }
+    if (cached.expiresAtMs <= Date.now()) {
+      this.getCache.delete(url);
+      return null;
+    }
+    return schema.parse(cached.payload);
+  }
+
+  private writeCachedGet(url: string, payload: unknown): void {
+    this.getCache.set(url, {
+      payload,
+      expiresAtMs: Date.now() + OnchainActionsClient.GET_CACHE_TTL_MS,
+    });
+  }
+
   private async fetchEndpoint<T>(
     endpoint: string,
     schema: z.ZodType<T>,
@@ -248,6 +275,13 @@ export class OnchainActionsClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const method = (init?.method ?? 'GET').toUpperCase();
+    const shouldCacheGet = method === 'GET' && this.isCacheableGetEndpoint(endpoint);
+    if (shouldCacheGet) {
+      const cached = this.readCachedGet(url, schema);
+      if (cached !== null) {
+        return cached;
+      }
+    }
     const retryAttempts = method === 'GET' ? 10 : 1;
     let lastFetchError: unknown;
 
@@ -274,7 +308,11 @@ export class OnchainActionsClient {
           });
         }
 
-        return schema.parse(await response.json());
+        const parsed = schema.parse(await response.json());
+        if (shouldCacheGet) {
+          this.writeCachedGet(url, parsed);
+        }
+        return parsed;
       } catch (error: unknown) {
         // Only retry on network-level failures. Do not retry schema parse errors or HTTP errors.
         if (

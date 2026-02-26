@@ -1,5 +1,4 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
 
 import type { PerpetualMarket } from '../../clients/onchainActions.js';
 import { ARBITRUM_CHAIN_ID, ONCHAIN_ACTIONS_API_URL } from '../../config/constants.js';
@@ -7,8 +6,10 @@ import { selectGmxPerpetualMarket } from '../../core/marketSelection.js';
 import { type FundingTokenInput } from '../../domain/types.js';
 import { getOnchainActionsClient } from '../clientFactory.js';
 import {
+  applyViewPatch,
   buildTaskStatus,
   logInfo,
+  logWarn,
   normalizeHexAddress,
   type ClmmState,
   type ClmmUpdate,
@@ -17,16 +18,8 @@ import {
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const FULL_ONBOARDING_TOTAL_STEPS = 3;
-const REDUCED_ONBOARDING_TOTAL_STEPS = 2;
-
-const buildOnboarding = (state: ClmmState, step: number): OnboardingState => ({
-  step,
-  totalSteps:
-    state.view.delegationsBypassActive === true
-      ? REDUCED_ONBOARDING_TOTAL_STEPS
-      : FULL_ONBOARDING_TOTAL_STEPS,
-});
+const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
+const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 function resolveUsdcTokenAddressFromMarket(market: PerpetualMarket): `0x${string}` {
   const longToken = market.longToken;
@@ -47,24 +40,44 @@ function resolveUsdcTokenAddressFromMarket(market: PerpetualMarket): `0x${string
 export const collectFundingTokenInputNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
-): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+): Promise<ClmmUpdate> => {
   logInfo('collectFundingTokenInput: entering node', {
     hasOperatorInput: Boolean(state.view.operatorInput),
     onboardingStep: state.view.onboarding?.step,
+  });
+  logWarn('collectFundingTokenInput: node entered', {
+    hasOperatorInput: Boolean(state.view.operatorInput),
+    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
+    onboardingStatus: state.view.onboardingFlow?.status,
+    onboardingStep: state.view.onboarding?.step,
+    onboardingKey: state.view.onboarding?.key,
   });
 
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
     logInfo('collectFundingTokenInput: setup input missing; rerouting to collectSetupInput');
-    return new Command({ goto: 'collectSetupInput' });
+    return {};
   }
 
   if (state.view.fundingTokenInput) {
     logInfo('collectFundingTokenInput: funding token already present; skipping step');
+    logWarn('collectFundingTokenInput: skipping funding token collection', {
+      reason: 'funding-token-already-present-in-view',
+      fundingTokenAddress: state.view.fundingTokenInput.fundingTokenAddress,
+      onboardingStatus: state.view.onboardingFlow?.status,
+      onboardingStep: state.view.onboarding?.step,
+      onboardingKey: state.view.onboarding?.key,
+    });
+    const resumedView = applyViewPatch(state, {
+      onboarding:
+        state.view.delegationsBypassActive === true
+          ? { step: 2, key: FUNDING_STEP_KEY }
+          : state.view.onboarding?.key === FUNDING_STEP_KEY
+            ? { step: 3, key: DELEGATION_STEP_KEY }
+            : { step: 2, key: DELEGATION_STEP_KEY },
+    });
     return {
-      view: {
-        onboarding: buildOnboarding(state, state.view.delegationsBypassActive === true ? 2 : 3),
-      },
+      view: resumedView,
     };
   }
 
@@ -73,12 +86,13 @@ export const collectFundingTokenInputNode = async (
     'working',
     'Using USDC as collateral for GMX perps.',
   );
+  const pendingView = applyViewPatch(state, {
+    onboarding: { step: 2, key: FUNDING_STEP_KEY },
+    task: awaitingInput.task,
+    activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
+  });
   await copilotkitEmitState(config, {
-    view: {
-      onboarding: buildOnboarding(state, 2),
-      task: awaitingInput.task,
-      activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
-    },
+    view: pendingView,
   });
 
   let normalizedFundingToken: `0x${string}`;
@@ -101,15 +115,20 @@ export const collectFundingTokenInputNode = async (
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to resolve USDC funding token from ${ONCHAIN_ACTIONS_API_URL}: ${message}`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    const failedView = applyViewPatch(state, {
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    });
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: failedView,
+    });
+    const haltedView = applyViewPatch(state, {
+      haltReason: failureMessage,
+      task,
+      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     });
     return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      },
+      view: haltedView,
     };
   }
 
@@ -118,20 +137,28 @@ export const collectFundingTokenInputNode = async (
     'working',
     'USDC collateral selected. Preparing delegation request.',
   );
+  const workingView = applyViewPatch(state, {
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+  });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    view: workingView,
   });
 
   const input: FundingTokenInput = {
     fundingTokenAddress: normalizedFundingToken,
   };
 
+  const completedView = applyViewPatch(state, {
+    fundingTokenInput: input,
+    onboarding:
+      state.view.delegationsBypassActive === true
+        ? { step: 2, key: FUNDING_STEP_KEY }
+        : { step: 3, key: DELEGATION_STEP_KEY },
+    task,
+    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+  });
   return {
-    view: {
-      fundingTokenInput: input,
-      onboarding: buildOnboarding(state, state.view.delegationsBypassActive === true ? 2 : 3),
-      task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-    },
+    view: completedView,
   };
 };
