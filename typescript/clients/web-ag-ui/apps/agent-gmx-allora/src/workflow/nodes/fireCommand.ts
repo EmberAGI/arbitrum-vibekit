@@ -29,37 +29,11 @@ type Configurable = {
 };
 const shouldLogFireDebug =
   process.env.GMX_FIRE_DEBUG === 'true' || resolveGmxAlloraMode() === 'debug';
+const GMX_PERPETUALS_PROVIDER_NAME = 'GMX Perpetuals' as const;
 const DEFAULT_FIRE_CLOSE_VERIFY_ATTEMPTS = 15;
 const DEFAULT_FIRE_CLOSE_VERIFY_INTERVAL_MS = 2_000;
-const GMX_EVENT_EMITTER_ADDRESS = '0xc8ee91a54287db53897056e12d9819156d3822fb';
-const GMX_EVENT_LOG2_TOPIC = '0x468a25a7ba624ceea6e540ad6f49171b52495b648417ae91bca21676d8a24dc5';
-const GMX_ORDER_CREATED_TOPIC = '0xa7427759bfd3b941f14e687e129519da3c9b0046c5b9aaa290bb1dede63753b3';
-const GMX_ORDER_CANCELLED_TOPIC = '0xc7bb288dfd646d5b6c69d5099dd75b72f9c8c09ec9d40984c8ad8182357ae4b2';
-const GMX_ORDER_EXECUTED_TOPIC = '0x680f10f06595d3d707241f604672ec4b6ae50eb82728ec2f3c65f6789e897760';
-const GMX_ORDER_NOT_FULFILLABLE_AT_ACCEPTABLE_PRICE_SELECTOR = 'e09ad0e9';
 
 type HexValue = `0x${string}`;
-type ReceiptLogLike = {
-  address: string;
-  topics: readonly string[];
-  data: string;
-  transactionHash: string | null;
-  blockNumber?: bigint | null;
-  logIndex?: number | bigint | null;
-};
-type TransactionReceiptLike = {
-  blockNumber: bigint;
-  logs: readonly ReceiptLogLike[];
-};
-type PublicClientLike = {
-  getTransactionReceipt(args: { hash: HexValue }): Promise<TransactionReceiptLike>;
-  getLogs(args: {
-    address: HexValue;
-    fromBlock: bigint;
-    toBlock: 'latest';
-    topics: readonly [HexValue, readonly HexValue[], HexValue];
-  }): Promise<readonly ReceiptLogLike[]>;
-};
 type CloseOrderLifecycle = {
   status: 'unknown' | 'executed' | 'cancelled';
   orderKey?: HexValue;
@@ -74,10 +48,6 @@ function logFireDebug(message: string, metadata?: Record<string, unknown>): void
   logInfo(message, metadata, { force: true });
 }
 
-function normalizeHex(value: string | undefined): string {
-  return value?.toLowerCase() ?? '';
-}
-
 function asHexValue(value: string): HexValue | undefined {
   if (!value.startsWith('0x')) {
     return undefined;
@@ -85,131 +55,12 @@ function asHexValue(value: string): HexValue | undefined {
   return value as HexValue;
 }
 
-function buildAddressTopic(address: `0x${string}`): HexValue {
-  const stripped = address.slice(2).toLowerCase();
-  return `0x${stripped.padStart(64, '0')}`;
-}
-
-function isPublicClientLike(value: unknown): value is PublicClientLike {
-  if (!value || typeof value !== 'object') {
+function shouldRetryFireCloseAsReduce(executionError: string | undefined): boolean {
+  if (!executionError) {
     return false;
   }
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate['getTransactionReceipt'] === 'function' &&
-    typeof candidate['getLogs'] === 'function'
-  );
-}
-
-function decodeKnownCancelReason(data: string): string | undefined {
-  const hex = data.startsWith('0x') ? data.slice(2).toLowerCase() : data.toLowerCase();
-  const selectorIndex = hex.indexOf(GMX_ORDER_NOT_FULFILLABLE_AT_ACCEPTABLE_PRICE_SELECTOR);
-  if (selectorIndex < 0) {
-    return undefined;
-  }
-
-  const argStart = selectorIndex + GMX_ORDER_NOT_FULFILLABLE_AT_ACCEPTABLE_PRICE_SELECTOR.length;
-  const acceptablePriceHex = hex.slice(argStart, argStart + 64);
-  const triggerPriceHex = hex.slice(argStart + 64, argStart + 128);
-  if (acceptablePriceHex.length !== 64 || triggerPriceHex.length !== 64) {
-    return 'OrderNotFulfillableAtAcceptablePrice';
-  }
-
-  try {
-    const acceptablePrice = BigInt(`0x${acceptablePriceHex}`);
-    const triggerPrice = BigInt(`0x${triggerPriceHex}`);
-    return `OrderNotFulfillableAtAcceptablePrice(acceptablePrice=${acceptablePrice.toString()}, triggerPrice=${triggerPrice.toString()})`;
-  } catch {
-    return 'OrderNotFulfillableAtAcceptablePrice';
-  }
-}
-
-function extractCloseOrderKeysFromReceipt(params: {
-  receipt: TransactionReceiptLike;
-  delegatorWalletAddress: `0x${string}`;
-}): HexValue[] {
-  const delegatorTopic = buildAddressTopic(params.delegatorWalletAddress);
-  const keys = new Set<HexValue>();
-
-  for (const log of params.receipt.logs) {
-    const address = normalizeHex(log.address);
-    if (address !== GMX_EVENT_EMITTER_ADDRESS) {
-      continue;
-    }
-
-    const topic0 = normalizeHex(log.topics[0]);
-    const topic1 = normalizeHex(log.topics[1]);
-    const topic2 = log.topics[2];
-    const topic3 = normalizeHex(log.topics[3]);
-    if (topic0 !== GMX_EVENT_LOG2_TOPIC || topic1 !== GMX_ORDER_CREATED_TOPIC) {
-      continue;
-    }
-    if (topic3 !== delegatorTopic) {
-      continue;
-    }
-
-    const orderKey = topic2 ? asHexValue(topic2) : undefined;
-    if (orderKey) {
-      keys.add(orderKey);
-    }
-  }
-
-  return [...keys];
-}
-
-async function resolveCloseOrderLifecycle(params: {
-  publicClient: PublicClientLike;
-  fromBlock: bigint;
-  orderKeys: readonly HexValue[];
-}): Promise<CloseOrderLifecycle> {
-  for (const orderKey of params.orderKeys) {
-    const logs = await params.publicClient.getLogs({
-      address: GMX_EVENT_EMITTER_ADDRESS as HexValue,
-      fromBlock: params.fromBlock,
-      toBlock: 'latest',
-      topics: [GMX_EVENT_LOG2_TOPIC as HexValue, [GMX_ORDER_EXECUTED_TOPIC as HexValue, GMX_ORDER_CANCELLED_TOPIC as HexValue], orderKey],
-    });
-
-    const matchingLifecycleLogs = logs.filter((log) => {
-      const topic0 = normalizeHex(log.topics[0]);
-      const topic1 = normalizeHex(log.topics[1]);
-      const topic2 = normalizeHex(log.topics[2]);
-      const isLifecycleTopic =
-        topic1 === GMX_ORDER_EXECUTED_TOPIC || topic1 === GMX_ORDER_CANCELLED_TOPIC;
-      return topic0 === GMX_EVENT_LOG2_TOPIC && isLifecycleTopic && topic2 === normalizeHex(orderKey);
-    });
-
-    if (matchingLifecycleLogs.length === 0) {
-      continue;
-    }
-
-    const latest = matchingLifecycleLogs.at(-1);
-    if (!latest) {
-      continue;
-    }
-
-    const topic1 = normalizeHex(latest.topics[1]);
-    if (topic1 === GMX_ORDER_CANCELLED_TOPIC) {
-      return {
-        status: 'cancelled',
-        orderKey,
-        txHash: latest.transactionHash ? (latest.transactionHash as HexValue) : undefined,
-        cancelReason: decodeKnownCancelReason(latest.data),
-      };
-    }
-    if (topic1 === GMX_ORDER_EXECUTED_TOPIC) {
-      return {
-        status: 'executed',
-        orderKey,
-        txHash: latest.transactionHash ? (latest.transactionHash as HexValue) : undefined,
-      };
-    }
-  }
-
-  if (params.orderKeys.length > 0) {
-    return { status: 'unknown', orderKey: params.orderKeys[0] };
-  }
-  return { status: 'unknown' };
+  const normalized = executionError.toLowerCase();
+  return normalized.includes('execution reverted');
 }
 
 function resolveFireCloseVerifyAttempts(): number {
@@ -492,7 +343,7 @@ export const fireCommandNode = async (
     }
   })();
 
-  const executionResult = await (async () => {
+  let executionResult = await (async () => {
     try {
       return await executePerpetualPlan({
         client: onchainActionsClient,
@@ -520,6 +371,69 @@ export const fireCommandNode = async (
     error: executionResult.ok ? undefined : executionResult.error,
   });
 
+  if (
+    !executionResult.ok &&
+    willExecute &&
+    shouldRetryFireCloseAsReduce(executionResult.error) &&
+    positionToClose.key &&
+    hasOpenPosition(positionToClose)
+  ) {
+    const fallbackPlan: ExecutionPlan = {
+      action: 'reduce',
+      request: {
+        walletAddress: operatorConfig.delegatorWalletAddress,
+        key: positionToClose.key,
+        sizeDeltaUsd: positionToClose.sizeInUsd,
+      },
+    };
+    logWarn('fireCommand: retrying close as full-size reduce after execution revert', {
+      threadId,
+      checkpointId,
+      checkpointNamespace,
+      closeError: executionResult.error,
+      positionKey: positionToClose.key,
+      sizeDeltaUsd: positionToClose.sizeInUsd,
+    });
+    const fallbackExecutionResult = await (async () => {
+      try {
+        return await executePerpetualPlan({
+          client: onchainActionsClient,
+          clients,
+          plan: fallbackPlan,
+          txExecutionMode,
+          delegationsBypassActive: state.view.delegationsBypassActive === true,
+          delegationBundle: state.view.delegationBundle,
+          delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+          delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+        });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { action: fallbackPlan.action, ok: false as const, error: message };
+      }
+    })();
+
+    logWarn('fireCommand: close-as-reduce fallback result', {
+      threadId,
+      checkpointId,
+      checkpointNamespace,
+      ok: fallbackExecutionResult.ok,
+      action: fallbackExecutionResult.action,
+      txHash: fallbackExecutionResult.lastTxHash,
+      txHashes: fallbackExecutionResult.txHashes,
+      error: fallbackExecutionResult.ok ? undefined : fallbackExecutionResult.error,
+    });
+
+    if (fallbackExecutionResult.ok) {
+      executionResult = fallbackExecutionResult;
+    } else {
+      executionResult = {
+        action: plan.action,
+        ok: false,
+        error: `Close execution failed (${executionResult.error ?? 'unknown'}); fallback reduce also failed (${fallbackExecutionResult.error ?? 'unknown'}).`,
+      };
+    }
+  }
+
   let closeConfirmedOnchain = false;
   let closeConfirmationError: string | undefined;
   let postCloseTotalPositions = 0;
@@ -530,47 +444,8 @@ export const fireCommandNode = async (
   const maxVerificationAttempts = resolveFireCloseVerifyAttempts();
   const verificationIntervalMs = resolveFireCloseVerifyIntervalMs();
   let closeOrderLifecycle: CloseOrderLifecycle = { status: 'unknown' };
-  let closeOrderSubmissionBlock: bigint | undefined;
-  let closeOrderKeys: HexValue[] = [];
-  const publicClient = isPublicClientLike(clients?.public) ? clients.public : undefined;
 
   if (executionResult.ok && willExecute) {
-    if (publicClient && executionResult.lastTxHash) {
-      try {
-        const closeSubmissionReceipt = await publicClient.getTransactionReceipt({
-          hash: executionResult.lastTxHash,
-        });
-        closeOrderSubmissionBlock = closeSubmissionReceipt.blockNumber;
-        closeOrderKeys = extractCloseOrderKeysFromReceipt({
-          receipt: closeSubmissionReceipt,
-          delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
-        });
-        if (closeOrderKeys.length > 0) {
-          closeOrderLifecycle = {
-            status: 'unknown',
-            orderKey: closeOrderKeys[0],
-          };
-        }
-        logWarn('fireCommand: close submission receipt inspected for order lifecycle', {
-          threadId,
-          checkpointId,
-          checkpointNamespace,
-          submissionTxHash: executionResult.lastTxHash,
-          submissionBlock: closeOrderSubmissionBlock.toString(),
-          closeOrderKeys,
-        });
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        logWarn('fireCommand: failed to inspect close submission receipt for order lifecycle', {
-          threadId,
-          checkpointId,
-          checkpointNamespace,
-          submissionTxHash: executionResult.lastTxHash,
-          error: message,
-        });
-      }
-    }
-
     for (let attempt = 1; attempt <= maxVerificationAttempts; attempt += 1) {
       verificationAttemptsCompleted = attempt;
       try {
@@ -601,33 +476,47 @@ export const fireCommandNode = async (
         break;
       }
 
-      if (
-        publicClient &&
-        closeOrderSubmissionBlock !== undefined &&
-        closeOrderKeys.length > 0 &&
-        closeOrderLifecycle.status === 'unknown'
-      ) {
+      if (executionResult.lastTxHash && closeOrderLifecycle.status === 'unknown') {
         try {
-          closeOrderLifecycle = await resolveCloseOrderLifecycle({
-            publicClient,
-            fromBlock: closeOrderSubmissionBlock,
-            orderKeys: closeOrderKeys,
+          const lifecycle = await onchainActionsClient.getPerpetualLifecycle({
+            providerName: GMX_PERPETUALS_PROVIDER_NAME,
+            chainId: ARBITRUM_CHAIN_ID.toString(),
+            txHash: executionResult.lastTxHash,
+            walletAddress: operatorConfig.delegatorWalletAddress,
           });
-          if (closeOrderLifecycle.status !== 'unknown') {
-            logWarn('fireCommand: close order lifecycle event observed', {
-              threadId,
-              checkpointId,
-              checkpointNamespace,
-              attempt,
-              closeOrderLifecycleStatus: closeOrderLifecycle.status,
-              closeOrderLifecycleOrderKey: closeOrderLifecycle.orderKey,
-              closeOrderLifecycleTxHash: closeOrderLifecycle.txHash,
-              closeOrderLifecycleReason: closeOrderLifecycle.cancelReason,
-            });
+
+          if (lifecycle.needsDisambiguation !== true) {
+            const lifecycleOrderKey = asHexValue(lifecycle.orderKey);
+            const lifecycleTxHash = asHexValue(
+              lifecycle.executionTxHash ??
+                lifecycle.cancellationTxHash ??
+                lifecycle.createTxHash ??
+                lifecycle.txHash,
+            );
+            if (lifecycle.status === 'executed') {
+              closeOrderLifecycle = {
+                status: 'executed',
+                orderKey: lifecycleOrderKey,
+                txHash: lifecycleTxHash,
+              };
+            } else if (lifecycle.status === 'cancelled' || lifecycle.status === 'failed') {
+              closeOrderLifecycle = {
+                status: 'cancelled',
+                orderKey: lifecycleOrderKey,
+                txHash: lifecycleTxHash,
+                cancelReason: lifecycle.reason,
+              };
+            } else {
+              closeOrderLifecycle = {
+                status: 'unknown',
+                orderKey: lifecycleOrderKey,
+                txHash: lifecycleTxHash,
+              };
+            }
           }
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error);
-          logWarn('fireCommand: close order lifecycle check failed', {
+          logWarn('fireCommand: close order lifecycle endpoint check failed', {
             threadId,
             checkpointId,
             checkpointNamespace,

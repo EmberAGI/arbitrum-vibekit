@@ -2,7 +2,11 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import type { TaskState } from 'agent-workflow-core';
 
 import { fetchAlloraInference, type AlloraInference } from '../../clients/allora.js';
-import type { PerpetualPosition, TransactionPlan } from '../../clients/onchainActions.js';
+import type {
+  PerpetualLifecycleResponse,
+  PerpetualPosition,
+  TransactionPlan,
+} from '../../clients/onchainActions.js';
 import {
   ALLORA_HORIZON_HOURS,
   ALLORA_TOPIC_IDS,
@@ -58,6 +62,7 @@ const CONNECT_DELAY_STEPS = 3;
 const ALLORA_STALE_CYCLE_LIMIT = 3;
 const ERC20_APPROVE_SELECTOR = '0x095ea7b3';
 const POSITION_SYNC_GUARD_WINDOW_MS = 90_000;
+const GMX_PERPETUALS_PROVIDER_NAME = 'GMX Perpetuals' as const;
 
 type PositionSyncGuard = NonNullable<ClmmState['view']['metrics']['pendingPositionSync']>;
 
@@ -215,6 +220,22 @@ function summarizeExecutionFailure(params: {
     detail: rawError,
     requiresFundingAcknowledgement: false,
   };
+}
+
+function isResolvedLifecycle(
+  lifecycle: PerpetualLifecycleResponse,
+): lifecycle is Extract<PerpetualLifecycleResponse, { orderKey: string }> {
+  return lifecycle.needsDisambiguation !== true;
+}
+
+function formatLifecycleFailureDetail(params: {
+  status: 'cancelled' | 'failed';
+  reason?: string;
+}): string {
+  if (params.reason) {
+    return `Onchain order ${params.status}: ${params.reason}`;
+  }
+  return `Onchain order ${params.status}.`;
 }
 
 function buildLatestSnapshot(params: {
@@ -750,12 +771,73 @@ export const pollCycleNode = async (
     executionResult.ok &&
     (executionPlan.action === 'long' || executionPlan.action === 'short') &&
     isApprovalOnlyTransactions(executionResult.transactions);
-  const executionFailure = executionResult.ok
-    ? undefined
-    : summarizeExecutionFailure({
-        iteration,
-        error: executionResult.error,
+  let lifecycleFailure: ExecutionFailureSummary | undefined;
+  if (
+    executionResult.ok &&
+    txExecutionMode === 'execute' &&
+    executionPlan.action !== 'none' &&
+    !approvalOnlyExecution &&
+    executionResult.lastTxHash
+  ) {
+    try {
+      const lifecycle = await onchainActionsClient.getPerpetualLifecycle({
+        providerName: GMX_PERPETUALS_PROVIDER_NAME,
+        chainId: ARBITRUM_CHAIN_ID.toString(),
+        txHash: executionResult.lastTxHash,
+        walletAddress: operatorConfig.delegatorWalletAddress,
       });
+
+      if (isResolvedLifecycle(lifecycle)) {
+        logWarn('pollCycle: perpetual lifecycle status resolved', {
+          threadId: runtimeThreadId,
+          checkpointId: runtimeCheckpointId,
+          checkpointNamespace: runtimeCheckpointNamespace,
+          iteration,
+          lifecycleStatus: lifecycle.status,
+          lifecycleOrderKey: lifecycle.orderKey,
+          lifecycleTxHash:
+            lifecycle.executionTxHash ??
+            lifecycle.cancellationTxHash ??
+            lifecycle.createTxHash ??
+            lifecycle.txHash,
+          lifecycleReason: lifecycle.reason,
+        });
+        if (lifecycle.status === 'cancelled' || lifecycle.status === 'failed') {
+          lifecycleFailure = summarizeExecutionFailure({
+            iteration,
+            error: formatLifecycleFailureDetail({
+              status: lifecycle.status,
+              reason: lifecycle.reason,
+            }),
+          });
+        }
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarn('pollCycle: perpetual lifecycle status query failed', {
+        threadId: runtimeThreadId,
+        checkpointId: runtimeCheckpointId,
+        checkpointNamespace: runtimeCheckpointNamespace,
+        iteration,
+        txHash: executionResult.lastTxHash,
+        error: message,
+      });
+      lifecycleFailure = summarizeExecutionFailure({
+        iteration,
+        error: `Unable to verify onchain order lifecycle status: ${message}`,
+      });
+    }
+  }
+
+  const executionFailure =
+    lifecycleFailure ??
+    (executionResult.ok
+      ? undefined
+      : summarizeExecutionFailure({
+          iteration,
+          error: executionResult.error,
+        }));
+  const executionCompletedSuccessfully = executionResult.ok && !executionFailure;
 
   if (executionFailure) {
     const failedStatus = buildTaskStatus(
@@ -789,7 +871,7 @@ export const pollCycleNode = async (
       : adjustedTelemetry;
 
   let positionAfterExecution = currentMarketPosition;
-  if (executionResult.ok && executionPlan.action !== 'none') {
+  if (executionCompletedSuccessfully && executionPlan.action !== 'none') {
     try {
       const refreshedPositions = await onchainActionsClient.listPerpetualPositions({
         walletAddress: operatorConfig.delegatorWalletAddress,
@@ -807,9 +889,10 @@ export const pollCycleNode = async (
   const fallbackSizeUsd =
     approvalOnlyExecution
       ? undefined
-      : executionResult.ok && executionPlan.action === 'close'
+      : executionCompletedSuccessfully && executionPlan.action === 'close'
       ? 0
-      : executionResult.ok && (executionPlan.action === 'long' || executionPlan.action === 'short')
+      : executionCompletedSuccessfully &&
+          (executionPlan.action === 'long' || executionPlan.action === 'short')
         ? adjustedTelemetry.sizeUsd
         : undefined;
   const normalizedFallbackSizeUsd =
@@ -835,10 +918,10 @@ export const pollCycleNode = async (
   });
 
   const hasCompletedTradeEffect =
-    executionResult.ok && executionPlan.action !== 'none' && !approvalOnlyExecution;
+    executionCompletedSuccessfully && executionPlan.action !== 'none' && !approvalOnlyExecution;
   const lifetimePnlUsd = positionAfterExecution
     ? parseUsdMetric(positionAfterExecution.pnl)
-    : executionResult.ok && executionPlan.action === 'close'
+    : executionCompletedSuccessfully && executionPlan.action === 'close'
       ? 0
       : state.view.metrics.lifetimePnlUsd;
 
@@ -846,7 +929,7 @@ export const pollCycleNode = async (
     | PositionSyncGuard
     | undefined => {
     const activeGuardWithoutPosition = activePositionSyncGuard && !positionAfterExecution;
-    if (!executionResult.ok || executionPlan.action === 'none' || approvalOnlyExecution) {
+    if (!executionCompletedSuccessfully || executionPlan.action === 'none' || approvalOnlyExecution) {
       return activeGuardWithoutPosition ? activePositionSyncGuard : undefined;
     }
     if (executionPlan.action === 'close') {
@@ -894,7 +977,7 @@ export const pollCycleNode = async (
   }
 
   const nextAssumedPositionSide = (() => {
-    if (!executionResult.ok) {
+    if (!executionCompletedSuccessfully) {
       return currentPositionSide ?? assumedPositionSide ?? activePositionSyncGuard?.expectedSide;
     }
     if (approvalOnlyExecution) {
@@ -957,7 +1040,7 @@ export const pollCycleNode = async (
             ok: executionResult.ok,
             status: requiresFundingAcknowledgement
               ? 'blocked'
-              : executionResult.ok
+              : executionCompletedSuccessfully
                 ? 'confirmed'
                 : 'failed',
             error: requiresFundingAcknowledgement
@@ -997,8 +1080,8 @@ export const pollCycleNode = async (
           cycle: iteration,
           action: finalAction,
           txHash: resolvedTxHash,
-          status: executionResult.ok ? ('success' as const) : ('failed' as const),
-          reason: executionResult.ok
+          status: executionCompletedSuccessfully ? ('success' as const) : ('failed' as const),
+          reason: executionCompletedSuccessfully
             ? finalReason
             : executionFailure?.detail ?? executionResult.error ?? finalReason,
           timestamp: latestCycle.timestamp,

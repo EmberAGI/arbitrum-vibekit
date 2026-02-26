@@ -137,6 +137,64 @@ const PerpetualActionResponseSchema = z
   .catchall(z.unknown());
 export type PerpetualActionResponse = z.infer<typeof PerpetualActionResponseSchema>;
 
+const PerpetualLifecyclePrecisionSchema = z.object({
+  tokenDecimals: z.number().int().nonnegative(),
+  priceDecimals: z.number().int().nonnegative(),
+  usdDecimals: z.number().int().nonnegative(),
+});
+
+const PerpetualQuoteResponseSchema = z.object({
+  asOf: z.string(),
+  ttlMs: z.number().int().nonnegative(),
+  precision: PerpetualLifecyclePrecisionSchema,
+  pricing: z.object({
+    markPrice: z.string(),
+    acceptablePrice: z.string(),
+    slippageBps: z.string(),
+    priceImpactDeltaUsd: z.string(),
+  }),
+  fees: z.object({
+    positionFeeUsd: z.string(),
+    borrowingFeeUsd: z.string(),
+    fundingFeeUsd: z.string(),
+  }),
+  warnings: z.array(z.string()),
+});
+type PerpetualQuoteResponse = z.infer<typeof PerpetualQuoteResponseSchema>;
+
+const PerpetualLifecycleDisambiguationResponseSchema = z.object({
+  providerName: z.string(),
+  chainId: z.string(),
+  txHash: z.string(),
+  needsDisambiguation: z.literal(true),
+  candidateOrderKeys: z.array(z.string()).min(1),
+  asOf: z.string(),
+});
+
+const PerpetualLifecycleResolvedResponseSchema = z.object({
+  providerName: z.string(),
+  chainId: z.string(),
+  txHash: z.string(),
+  needsDisambiguation: z.literal(false).optional(),
+  orderKey: z.string(),
+  status: z.enum(['pending', 'executed', 'cancelled', 'failed', 'unknown']),
+  reason: z.string().optional(),
+  reasonBytes: z.string().optional(),
+  requestedPrice: z.string().optional(),
+  observedPrice: z.string().optional(),
+  createTxHash: z.string().optional(),
+  executionTxHash: z.string().optional(),
+  cancellationTxHash: z.string().optional(),
+  precision: PerpetualLifecyclePrecisionSchema,
+  asOf: z.string(),
+});
+
+const PerpetualLifecycleResponseSchema = z.union([
+  PerpetualLifecycleDisambiguationResponseSchema,
+  PerpetualLifecycleResolvedResponseSchema,
+]);
+export type PerpetualLifecycleResponse = z.infer<typeof PerpetualLifecycleResponseSchema>;
+
 export class OnchainActionsRequestError extends Error {
   readonly status: number;
   readonly url: string;
@@ -180,6 +238,46 @@ export type PerpetualReduceRequest = {
   // onchain-actions expects a bigint-like decimal string (GMX USD units, 30 decimals).
   sizeDeltaUsd: string;
   providerName?: string;
+};
+
+export type PerpetualLifecycleRequest = {
+  providerName: string;
+  chainId: string;
+  txHash: `0x${string}`;
+  orderKey?: string;
+  walletAddress?: `0x${string}`;
+  submittedAtBlock?: string;
+};
+
+type PerpetualIncreasePayload = {
+  walletAddress: `0x${string}`;
+  providerName: string;
+  chainId: string;
+  marketAddress: string;
+  collateralTokenAddress: string;
+  side: 'long' | 'short';
+  collateralDeltaAmount: string;
+  sizeDeltaUsd: string;
+  slippageBps: string;
+};
+
+type PerpetualDecreasePayload = {
+  walletAddress: `0x${string}`;
+  providerName: string;
+  chainId: string;
+  marketAddress: string;
+  collateralTokenAddress: string;
+  side: 'long' | 'short';
+  decrease:
+    | {
+        mode: 'full';
+        slippageBps: string;
+      }
+    | {
+        mode: 'partial';
+        sizeDeltaUsd: string;
+        slippageBps: string;
+      };
 };
 
 export class OnchainActionsClient {
@@ -396,42 +494,66 @@ export class OnchainActionsClient {
     );
   }
 
+  private async quotePerpetualIncrease(payload: PerpetualIncreasePayload): Promise<PerpetualQuoteResponse> {
+    return this.fetchEndpoint('/perpetuals/increase/quote', PerpetualQuoteResponseSchema, {
+      method: 'POST',
+      body: this.stringifyPayload(payload),
+    });
+  }
+
+  private async quotePerpetualDecrease(payload: PerpetualDecreasePayload): Promise<PerpetualQuoteResponse> {
+    return this.fetchEndpoint('/perpetuals/decrease/quote', PerpetualQuoteResponseSchema, {
+      method: 'POST',
+      body: this.stringifyPayload(payload),
+    });
+  }
+
   async createPerpetualLong(request: PerpetualLongRequest): Promise<PerpetualActionResponse> {
+    const payload: PerpetualIncreasePayload = {
+      walletAddress: request.walletAddress,
+      providerName: GMX_PERPETUALS_PROVIDER_NAME,
+      chainId: request.chainId,
+      marketAddress: request.marketAddress,
+      collateralTokenAddress: request.collateralTokenAddress,
+      side: 'long',
+      collateralDeltaAmount: request.amount,
+      sizeDeltaUsd: this.deriveSizeDeltaUsd({
+        collateralDeltaAmount: request.amount,
+        leverage: request.leverage,
+      }),
+      slippageBps: DEFAULT_SLIPPAGE_BPS,
+    };
+    const quote = await this.quotePerpetualIncrease(payload);
     return this.fetchEndpoint('/perpetuals/increase/plan', PerpetualActionResponseSchema, {
       method: 'POST',
       body: this.stringifyPayload({
-        walletAddress: request.walletAddress,
-        providerName: GMX_PERPETUALS_PROVIDER_NAME,
-        chainId: request.chainId,
-        marketAddress: request.marketAddress,
-        collateralTokenAddress: request.collateralTokenAddress,
-        side: 'long',
-        collateralDeltaAmount: request.amount,
-        sizeDeltaUsd: this.deriveSizeDeltaUsd({
-          collateralDeltaAmount: request.amount,
-          leverage: request.leverage,
-        }),
-        slippageBps: DEFAULT_SLIPPAGE_BPS,
+        ...payload,
+        slippageBps: quote.pricing.slippageBps,
       }),
     });
   }
 
   async createPerpetualShort(request: PerpetualShortRequest): Promise<PerpetualActionResponse> {
+    const payload: PerpetualIncreasePayload = {
+      walletAddress: request.walletAddress,
+      providerName: GMX_PERPETUALS_PROVIDER_NAME,
+      chainId: request.chainId,
+      marketAddress: request.marketAddress,
+      collateralTokenAddress: request.collateralTokenAddress,
+      side: 'short',
+      collateralDeltaAmount: request.amount,
+      sizeDeltaUsd: this.deriveSizeDeltaUsd({
+        collateralDeltaAmount: request.amount,
+        leverage: request.leverage,
+      }),
+      slippageBps: DEFAULT_SLIPPAGE_BPS,
+    };
+    const quote = await this.quotePerpetualIncrease(payload);
     return this.fetchEndpoint('/perpetuals/increase/plan', PerpetualActionResponseSchema, {
       method: 'POST',
       body: this.stringifyPayload({
-        walletAddress: request.walletAddress,
-        providerName: GMX_PERPETUALS_PROVIDER_NAME,
-        chainId: request.chainId,
-        marketAddress: request.marketAddress,
-        collateralTokenAddress: request.collateralTokenAddress,
-        side: 'short',
-        collateralDeltaAmount: request.amount,
-        sizeDeltaUsd: this.deriveSizeDeltaUsd({
-          collateralDeltaAmount: request.amount,
-          leverage: request.leverage,
-        }),
-        slippageBps: DEFAULT_SLIPPAGE_BPS,
+        ...payload,
+        slippageBps: quote.pricing.slippageBps,
       }),
     });
   }
@@ -442,18 +564,26 @@ export class OnchainActionsClient {
       marketAddress: request.marketAddress,
       positionSide: request.positionSide,
     });
+    const payload: PerpetualDecreasePayload = {
+      walletAddress: request.walletAddress,
+      providerName: GMX_PERPETUALS_PROVIDER_NAME,
+      chainId: position.chainId,
+      marketAddress: position.marketAddress,
+      collateralTokenAddress: position.collateralToken.tokenUid.address,
+      side: position.positionSide,
+      decrease: {
+        mode: 'full',
+        slippageBps: DEFAULT_SLIPPAGE_BPS,
+      },
+    };
+    const quote = await this.quotePerpetualDecrease(payload);
     return this.fetchEndpoint('/perpetuals/decrease/plan', PerpetualActionResponseSchema, {
       method: 'POST',
       body: this.stringifyPayload({
-        walletAddress: request.walletAddress,
-        providerName: GMX_PERPETUALS_PROVIDER_NAME,
-        chainId: position.chainId,
-        marketAddress: position.marketAddress,
-        collateralTokenAddress: position.collateralToken.tokenUid.address,
-        side: position.positionSide,
+        ...payload,
         decrease: {
-          mode: 'full',
-          slippageBps: DEFAULT_SLIPPAGE_BPS,
+          ...payload.decrease,
+          slippageBps: quote.pricing.slippageBps,
         },
       }),
     });
@@ -464,22 +594,47 @@ export class OnchainActionsClient {
       walletAddress: request.walletAddress,
       key: request.key,
     });
+    const payload: PerpetualDecreasePayload = {
+      walletAddress: request.walletAddress,
+      providerName: request.providerName ?? GMX_PERPETUALS_PROVIDER_NAME,
+      chainId: position.chainId,
+      marketAddress: position.marketAddress,
+      collateralTokenAddress: position.collateralToken.tokenUid.address,
+      side: position.positionSide,
+      decrease: {
+        mode: 'partial',
+        sizeDeltaUsd: request.sizeDeltaUsd,
+        slippageBps: DEFAULT_SLIPPAGE_BPS,
+      },
+    };
+    const quote = await this.quotePerpetualDecrease(payload);
     return this.fetchEndpoint('/perpetuals/decrease/plan', PerpetualActionResponseSchema, {
       method: 'POST',
       body: this.stringifyPayload({
-        walletAddress: request.walletAddress,
-        providerName: request.providerName ?? GMX_PERPETUALS_PROVIDER_NAME,
-        chainId: position.chainId,
-        marketAddress: position.marketAddress,
-        collateralTokenAddress: position.collateralToken.tokenUid.address,
-        side: position.positionSide,
+        ...payload,
         decrease: {
-          mode: 'partial',
-          sizeDeltaUsd: request.sizeDeltaUsd,
-          slippageBps: DEFAULT_SLIPPAGE_BPS,
+          ...payload.decrease,
+          slippageBps: quote.pricing.slippageBps,
         },
       }),
     });
+  }
+
+  async getPerpetualLifecycle(
+    request: PerpetualLifecycleRequest,
+  ): Promise<PerpetualLifecycleResponse> {
+    const query = this.buildQuery({
+      providerName: request.providerName,
+      chainId: request.chainId,
+      txHash: request.txHash,
+      orderKey: request.orderKey,
+      walletAddress: request.walletAddress,
+      submittedAtBlock: request.submittedAtBlock,
+    });
+    return this.fetchEndpoint(
+      `/perpetuals/lifecycle?${query.toString()}`,
+      PerpetualLifecycleResponseSchema,
+    );
   }
 }
 

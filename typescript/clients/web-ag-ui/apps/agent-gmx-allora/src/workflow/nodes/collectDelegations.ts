@@ -106,6 +106,17 @@ const DelegationSigningResponseJsonSchema = z.union([
   }),
 ]);
 
+function normalizeDelegationSignature(signature: `0x${string}`): `0x${string}` {
+  const bytesLength = (signature.length - 2) / 2;
+  if (bytesLength === 66) {
+    const prefixByte = Number.parseInt(signature.slice(2, 4), 16);
+    if (prefixByte === 65) {
+      return `0x${signature.slice(4)}`;
+    }
+  }
+  return signature;
+}
+
 export const collectDelegationsNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
@@ -318,7 +329,10 @@ export const collectDelegationsNode = async (
     };
   }
 
-  const signedDelegations = parsed.data.signedDelegations as unknown as SignedDelegation[];
+  const signedDelegations = parsed.data.signedDelegations.map((delegation) => ({
+    ...delegation,
+    signature: normalizeDelegationSignature(delegation.signature),
+  })) as unknown as SignedDelegation[];
 
   const delegationBundle: DelegationBundle = {
     chainId: ARBITRUM_CHAIN_ID,

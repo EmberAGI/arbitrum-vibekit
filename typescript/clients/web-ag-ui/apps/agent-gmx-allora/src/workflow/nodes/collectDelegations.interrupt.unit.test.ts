@@ -161,4 +161,68 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
     expect(view.delegationBundle).toBeTruthy();
   });
 
+  it('normalizes 66-byte prefixed signatures before storing delegation bundle', async () => {
+    interruptMock.mockReset();
+    copilotkitEmitStateMock.mockReset();
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+    interruptMock.mockImplementation((request: unknown) => {
+      if (!request || typeof request !== 'object' || !('delegationsToSign' in request)) {
+        throw new Error('Unexpected interrupt payload');
+      }
+      const delegationsToSign = (request as { delegationsToSign: Array<Record<string, unknown>> })
+        .delegationsToSign;
+      const first = delegationsToSign[0];
+      if (!first || typeof first !== 'object') {
+        throw new Error('No delegation requested');
+      }
+      return Promise.resolve(
+        JSON.stringify({
+          outcome: 'signed',
+          signedDelegations: [{ ...first, signature: `0x41${'2'.repeat(130)}` }],
+        }),
+      );
+    });
+    process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = '0x2222222222222222222222222222222222222222';
+
+    const state = {
+      private: { mode: 'debug' },
+      view: {
+        delegationsBypassActive: false,
+        delegationBundle: undefined,
+        onboarding: { step: 3, key: 'delegation-signing' },
+        onboardingFlow: {
+          status: 'in_progress',
+          revision: 4,
+          activeStepId: 'delegation-signing',
+          steps: [
+            { id: 'setup', title: 'Strategy Config', status: 'completed' },
+            { id: 'funding-token', title: 'Funding Token', status: 'completed' },
+            { id: 'delegation-signing', title: 'Delegation Signing', status: 'active' },
+          ],
+        },
+        operatorInput: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          usdcAllocation: 100,
+          targetMarket: 'ETH',
+        },
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              content: 'Waiting for delegation approval to continue onboarding.',
+            },
+          },
+        },
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectDelegationsNode(state, { configurable: { thread_id: 'thread-1' } });
+
+    const view = (result as { view: { delegationBundle?: { delegations?: Array<{ signature: string }> } } })
+      .view;
+    const normalizedSignature = view.delegationBundle?.delegations?.[0]?.signature;
+    expect(normalizedSignature).toBe(`0x${'2'.repeat(130)}`);
+  });
 });

@@ -32,6 +32,8 @@ const {
   createPerpetualShortMock,
   createPerpetualCloseMock,
   createPerpetualReduceMock,
+  getPerpetualLifecycleMock,
+  getOnchainClientsMock,
 } = vi.hoisted(() => ({
   copilotkitEmitStateMock: vi.fn(async () => undefined),
   fetchAlloraInferenceMock: vi.fn<[], Promise<AlloraInference>>(),
@@ -41,6 +43,8 @@ const {
   createPerpetualShortMock: vi.fn<[], Promise<unknown>>(),
   createPerpetualCloseMock: vi.fn<[], Promise<unknown>>(),
   createPerpetualReduceMock: vi.fn<[], Promise<unknown>>(),
+  getPerpetualLifecycleMock: vi.fn<[], Promise<unknown>>(),
+  getOnchainClientsMock: vi.fn(),
 }));
 
 vi.mock('@copilotkit/sdk-js/langgraph', () => ({
@@ -65,8 +69,9 @@ vi.mock('../src/workflow/clientFactory.js', () => ({
     createPerpetualShort: createPerpetualShortMock,
     createPerpetualClose: createPerpetualCloseMock,
     createPerpetualReduce: createPerpetualReduceMock,
+    getPerpetualLifecycle: getPerpetualLifecycleMock,
   }),
-  getOnchainClients: vi.fn(),
+  getOnchainClients: getOnchainClientsMock,
 }));
 
 vi.mock('../src/workflow/cronScheduler.js', () => ({
@@ -198,6 +203,8 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualShortMock.mockReset();
     createPerpetualCloseMock.mockReset();
     createPerpetualReduceMock.mockReset();
+    getPerpetualLifecycleMock.mockReset();
+    getOnchainClientsMock.mockReset();
     copilotkitEmitStateMock.mockReset();
   });
 
@@ -302,6 +309,68 @@ describe('pollCycleNode (integration)', () => {
     expect(artifactIds).toContain('gmx-allora-telemetry');
     expect(artifactIds).toContain('gmx-allora-execution-plan');
     expect(update.view?.metrics.latestSnapshot?.totalUsd).toBeGreaterThan(0);
+  });
+
+  it('fails cycle execution when perpetual lifecycle reports cancelled status for submitted open order', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValueOnce([]);
+      createPerpetualLongMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0x1', data: '0x2', value: '0', chainId: '42161' }],
+      });
+      getPerpetualLifecycleMock.mockResolvedValueOnce({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+        status: 'cancelled',
+        reason: 'OrderNotFulfillableAtAcceptablePrice',
+        precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+        asOf: '2026-01-01T00:00:00.000Z',
+      });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValue('0x1111111111111111111111111111111111111111111111111111111111111111'),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn().mockResolvedValue({
+            status: 'success',
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.view.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(getPerpetualLifecycleMock).toHaveBeenCalledWith({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      });
+      expect(update.view?.task?.taskStatus.state).toBe('working');
+      expect(update.view?.task?.taskStatus.message?.content).toContain('execution failed');
+      expect(update.view?.task?.taskStatus.message?.content).toContain('cancelled');
+      expect(update.view?.executionError).toContain('cancelled');
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
   });
 
   it('routes open long decisions to createPerpetualLong', async () => {

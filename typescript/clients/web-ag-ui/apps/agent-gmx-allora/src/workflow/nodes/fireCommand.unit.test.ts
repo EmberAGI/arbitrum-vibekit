@@ -209,6 +209,15 @@ describe('fireCommandNode (GMX Allora)', () => {
         .mockResolvedValueOnce([makePosition({ wallet: delegatorWalletAddress, market: marketAddress })])
         .mockResolvedValueOnce([makePosition({ wallet: delegatorWalletAddress, market: marketAddress })])
         .mockResolvedValueOnce([makePosition({ wallet: delegatorWalletAddress, market: marketAddress })]),
+      getPerpetualLifecycle: vi.fn().mockResolvedValue({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0xabc',
+        orderKey: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        status: 'pending',
+        precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+        asOf: '2026-01-01T00:00:00.000Z',
+      }),
       createPerpetualClose: vi.fn(),
     };
 
@@ -280,6 +289,15 @@ describe('fireCommandNode (GMX Allora)', () => {
         .mockResolvedValueOnce([makePosition({ wallet: delegatorWalletAddress, market: marketAddress })])
         .mockResolvedValueOnce([makePosition({ wallet: delegatorWalletAddress, market: marketAddress })])
         .mockResolvedValueOnce([]),
+      getPerpetualLifecycle: vi.fn().mockResolvedValue({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0xdef',
+        orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+        status: 'pending',
+        precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+        asOf: '2026-01-01T00:00:00.000Z',
+      }),
       createPerpetualClose: vi.fn(),
     };
 
@@ -328,18 +346,11 @@ describe('fireCommandNode (GMX Allora)', () => {
     expect(task.taskStatus.message?.content).toContain('GMX position close confirmed.');
   });
 
-  it('surfaces keeper-side order cancellation reason when close order is cancelled onchain', async () => {
-    const delegatorWalletAddress = '0x0000000000000000000000000000000000000051' as const;
-    const delegateeWalletAddress = '0x0000000000000000000000000000000000000052' as const;
+  it('retries fire close as a full-size reduce when close execution reverts', async () => {
+    const delegatorWalletAddress = '0x0000000000000000000000000000000000000041' as const;
+    const delegateeWalletAddress = '0x0000000000000000000000000000000000000042' as const;
     const marketAddress = '0x47c031236e19d024b42f8ae6780e44a573170703' as const;
     const fundingTokenAddress = '0xaf88d065e77c8cc2239327c5edb3a432268e5831' as const;
-    const orderKey =
-      '0x3644a2310267be22ac9807d50374423e2aff25edba76a4b1ae029ee75195c57a' as const;
-    const submissionTxHash =
-      '0x7e707996b2a7eb9adba74969832c333c41afc5889b327f5a707df1c18555b3ef' as const;
-    const keeperCancelTxHash =
-      '0x7b28d8c2f552599675f50dcdad8d74c6c4c44fbdcb582af9b0b266413abc4d4c' as const;
-    const delegatorTopic = `0x${delegatorWalletAddress.slice(2).toLowerCase().padStart(64, '0')}` as const;
 
     const operatorConfig = makeResolvedConfig({
       delegatorWalletAddress,
@@ -352,44 +363,115 @@ describe('fireCommandNode (GMX Allora)', () => {
       listPerpetualPositions: vi
         .fn()
         .mockResolvedValueOnce([makePosition({ wallet: delegatorWalletAddress, market: marketAddress })])
-        .mockResolvedValueOnce([makePosition({ wallet: delegatorWalletAddress, market: marketAddress })]),
-      createPerpetualClose: vi.fn(),
-    };
-
-    const publicClient = {
-      getTransactionReceipt: vi.fn().mockResolvedValue({
-        blockNumber: 1n,
-        logs: [
-          {
-            address: '0xc8ee91a54287db53897056e12d9819156d3822fb',
-            topics: [
-              '0x468a25a7ba624ceea6e540ad6f49171b52495b648417ae91bca21676d8a24dc5',
-              '0xa7427759bfd3b941f14e687e129519da3c9b0046c5b9aaa290bb1dede63753b3',
-              orderKey,
-              delegatorTopic,
-            ],
-            data: '0x',
-            transactionHash: submissionTxHash,
-          },
-        ],
+        .mockResolvedValueOnce([]),
+      getPerpetualLifecycle: vi.fn().mockResolvedValue({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0xfeed',
+        orderKey: '0x3333333333333333333333333333333333333333333333333333333333333333',
+        status: 'executed',
+        precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+        asOf: '2026-01-01T00:00:00.000Z',
       }),
-      getLogs: vi.fn().mockResolvedValue([
-        {
-          address: '0xc8ee91a54287db53897056e12d9819156d3822fb',
-          topics: [
-            '0x468a25a7ba624ceea6e540ad6f49171b52495b648417ae91bca21676d8a24dc5',
-            '0xc7bb288dfd646d5b6c69d5099dd75b72f9c8c09ec9d40984c8ad8182357ae4b2',
-            orderKey,
-          ],
-          data: '0xe09ad0e90000000000000000000000000000000000000000021270427cb6190b38993bb000000000000000000000000000000000000000000225cc91ce77995cf591b600',
-          transactionHash: keeperCancelTxHash,
-        },
-      ]),
+      createPerpetualClose: vi.fn(),
     };
 
     resolveGmxAlloraTxExecutionModeMock.mockReturnValue('execute');
     getOnchainActionsClientMock.mockReturnValue(onchainActionsClient);
-    getOnchainClientsMock.mockReturnValue({ public: publicClient });
+    getOnchainClientsMock.mockReturnValue({});
+    executePerpetualPlanMock
+      .mockResolvedValueOnce({
+        action: 'close',
+        ok: false,
+        error: 'Execution reverted for an unknown reason.',
+      })
+      .mockResolvedValueOnce({
+        action: 'reduce',
+        ok: true,
+        transactions: [{ type: 'EVM_TX', to: '0x1', data: '0x2', value: '0', chainId: '42161' }],
+        txHashes: ['0xfeed'],
+        lastTxHash: '0xfeed',
+      });
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      view: {
+        operatorConfig,
+        delegationBundle: {
+          chainId: 42161,
+          delegationManager: '0x0000000000000000000000000000000000000043',
+          delegatorAddress: delegatorWalletAddress,
+          delegateeAddress: delegateeWalletAddress,
+          delegations: [],
+          intents: [],
+          descriptions: [],
+          warnings: [],
+        },
+        delegationsBypassActive: false,
+        task: { id: 'task-3b', taskStatus: { state: 'working' } },
+        activity: { events: [], telemetry: [] },
+        transactionHistory: [],
+        profile: { pools: [], allowedPools: [] },
+        metrics: { cyclesSinceRebalance: 0, staleCycles: 0, iteration: 0 },
+      },
+      private: {},
+      messages: [],
+    } as unknown as ClmmState;
+
+    const result = await fireCommandNode(state, {} as never);
+
+    expect(executePerpetualPlanMock).toHaveBeenCalledTimes(2);
+    const fallbackCall = executePerpetualPlanMock.mock.calls[1];
+    expect(fallbackCall).toBeDefined();
+    const fallbackArg = fallbackCall?.[0] as {
+      plan?: { action?: unknown; request?: { key?: unknown; sizeDeltaUsd?: unknown } };
+    };
+    expect(fallbackArg.plan?.action).toBe('reduce');
+    expect(fallbackArg.plan?.request?.key).toBe('pos-key');
+    expect(fallbackArg.plan?.request?.sizeDeltaUsd).toBe('100');
+
+    const task = (result as { view: { task: { taskStatus: { state: string; message?: { content?: string } } } } })
+      .view.task;
+    expect(task.taskStatus.state).toBe('completed');
+    expect(task.taskStatus.message?.content).toContain('GMX position close confirmed.');
+  });
+
+  it('surfaces lifecycle cancellation reason when close order is cancelled onchain', async () => {
+    const delegatorWalletAddress = '0x0000000000000000000000000000000000000051' as const;
+    const delegateeWalletAddress = '0x0000000000000000000000000000000000000052' as const;
+    const marketAddress = '0x47c031236e19d024b42f8ae6780e44a573170703' as const;
+    const fundingTokenAddress = '0xaf88d065e77c8cc2239327c5edb3a432268e5831' as const;
+    const submissionTxHash =
+      '0x7e707996b2a7eb9adba74969832c333c41afc5889b327f5a707df1c18555b3ef' as const;
+
+    const operatorConfig = makeResolvedConfig({
+      delegatorWalletAddress,
+      delegateeWalletAddress,
+      fundingTokenAddress,
+      marketAddress,
+    });
+
+    const onchainActionsClient = {
+      listPerpetualPositions: vi.fn().mockResolvedValue([
+        makePosition({ wallet: delegatorWalletAddress, market: marketAddress }),
+      ]),
+      getPerpetualLifecycle: vi.fn().mockResolvedValue({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: submissionTxHash,
+        orderKey: '0x3644a2310267be22ac9807d50374423e2aff25edba76a4b1ae029ee75195c57a',
+        status: 'cancelled',
+        reason:
+          'OrderNotFulfillableAtAcceptablePrice(acceptablePrice=641260815913341370137918384, triggerPrice=664666327386356031000000000)',
+        precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+        asOf: '2026-01-01T00:00:00.000Z',
+      }),
+      createPerpetualClose: vi.fn(),
+    };
+
+    resolveGmxAlloraTxExecutionModeMock.mockReturnValue('execute');
+    getOnchainActionsClientMock.mockReturnValue(onchainActionsClient);
+    getOnchainClientsMock.mockReturnValue({});
     executePerpetualPlanMock.mockResolvedValue({
       action: 'close',
       ok: true,
@@ -430,24 +512,16 @@ describe('fireCommandNode (GMX Allora)', () => {
     expect(task.taskStatus.state).toBe('failed');
     expect(task.taskStatus.message?.content).toContain('close order was cancelled onchain');
     expect(task.taskStatus.message?.content).toContain('OrderNotFulfillableAtAcceptablePrice');
-    expect(publicClient.getTransactionReceipt).toHaveBeenCalledWith({ hash: submissionTxHash });
-    expect(publicClient.getLogs).toHaveBeenCalled();
+    expect(onchainActionsClient.getPerpetualLifecycle).toHaveBeenCalled();
   });
 
-  it('detects cancelled close lifecycle even when getLogs returns noisy non-lifecycle entries', async () => {
+  it('does not inspect direct public-client logs during fire close checks', async () => {
     const delegatorWalletAddress = '0x0000000000000000000000000000000000000071' as const;
     const delegateeWalletAddress = '0x0000000000000000000000000000000000000072' as const;
     const marketAddress = '0x47c031236e19d024b42f8ae6780e44a573170703' as const;
     const fundingTokenAddress = '0xaf88d065e77c8cc2239327c5edb3a432268e5831' as const;
-    const orderKey =
-      '0x3644a2310267be22ac9807d50374423e2aff25edba76a4b1ae029ee75195c57a' as const;
     const submissionTxHash =
       '0x7e707996b2a7eb9adba74969832c333c41afc5889b327f5a707df1c18555b3ef' as const;
-    const keeperCancelTxHash =
-      '0x7b28d8c2f552599675f50dcdad8d74c6c4c44fbdcb582af9b0b266413abc4d4c' as const;
-    const noiseTxHash =
-      '0x9f1f26efb5f7b4a2d95e610d06120fe76f3b7bca4b9496d3d2f45c45a7cf5fbb' as const;
-    const delegatorTopic = `0x${delegatorWalletAddress.slice(2).toLowerCase().padStart(64, '0')}` as const;
 
     const operatorConfig = makeResolvedConfig({
       delegatorWalletAddress,
@@ -460,50 +534,23 @@ describe('fireCommandNode (GMX Allora)', () => {
       listPerpetualPositions: vi.fn().mockResolvedValue([
         makePosition({ wallet: delegatorWalletAddress, market: marketAddress }),
       ]),
+      getPerpetualLifecycle: vi.fn().mockResolvedValue({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: submissionTxHash,
+        orderKey: '0x3644a2310267be22ac9807d50374423e2aff25edba76a4b1ae029ee75195c57a',
+        status: 'cancelled',
+        reason:
+          'OrderNotFulfillableAtAcceptablePrice(acceptablePrice=641260815913341370137918384, triggerPrice=664666327386356031000000000)',
+        precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+        asOf: '2026-01-01T00:00:00.000Z',
+      }),
       createPerpetualClose: vi.fn(),
     };
 
     const publicClient = {
-      getTransactionReceipt: vi.fn().mockResolvedValue({
-        blockNumber: 1n,
-        logs: [
-          {
-            address: '0xc8ee91a54287db53897056e12d9819156d3822fb',
-            topics: [
-              '0x468a25a7ba624ceea6e540ad6f49171b52495b648417ae91bca21676d8a24dc5',
-              '0xa7427759bfd3b941f14e687e129519da3c9b0046c5b9aaa290bb1dede63753b3',
-              orderKey,
-              delegatorTopic,
-            ],
-            data: '0x',
-            transactionHash: submissionTxHash,
-          },
-        ],
-      }),
-      getLogs: vi.fn().mockResolvedValue([
-        {
-          address: '0xc8ee91a54287db53897056e12d9819156d3822fb',
-          topics: [
-            '0x468a25a7ba624ceea6e540ad6f49171b52495b648417ae91bca21676d8a24dc5',
-            '0xc7bb288dfd646d5b6c69d5099dd75b72f9c8c09ec9d40984c8ad8182357ae4b2',
-            orderKey,
-            delegatorTopic,
-          ],
-          data: '0xe09ad0e90000000000000000000000000000000000000000021270427cb6190b38993bb000000000000000000000000000000000000000000225cc91ce77995cf591b600',
-          transactionHash: keeperCancelTxHash,
-        },
-        {
-          address: '0xc8ee91a54287db53897056e12d9819156d3822fb',
-          topics: [
-            '0x468a25a7ba624ceea6e540ad6f49171b52495b648417ae91bca21676d8a24dc5',
-            '0x41c7b30afab659d385f1996d0addfa6e647694862e72378d0b43773f556cbeb2',
-            orderKey,
-            delegatorTopic,
-          ],
-          data: '0x',
-          transactionHash: noiseTxHash,
-        },
-      ]),
+      getTransactionReceipt: vi.fn().mockRejectedValue(new Error('should-not-be-called')),
+      getLogs: vi.fn().mockRejectedValue(new Error('should-not-be-called')),
     };
 
     resolveGmxAlloraTxExecutionModeMock.mockReturnValue('execute');
@@ -549,6 +596,8 @@ describe('fireCommandNode (GMX Allora)', () => {
     expect(task.taskStatus.state).toBe('failed');
     expect(task.taskStatus.message?.content).toContain('close order was cancelled onchain');
     expect(task.taskStatus.message?.content).toContain('OrderNotFulfillableAtAcceptablePrice');
-    expect(publicClient.getLogs).toHaveBeenCalled();
+    expect(onchainActionsClient.getPerpetualLifecycle).toHaveBeenCalled();
+    expect(publicClient.getTransactionReceipt).not.toHaveBeenCalled();
+    expect(publicClient.getLogs).not.toHaveBeenCalled();
   });
 });
