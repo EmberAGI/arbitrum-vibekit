@@ -51,6 +51,26 @@ All scripts use Turborepo to run tasks across the monorepo:
 - `pnpm build` - Builds all apps for production
 - `pnpm lint` - Runs linting across all apps
 
+## Traefik Auth Toggle (Production)
+
+The default `compose.yaml` deploys `demo.emberai.xyz` without Traefik auth middleware.
+
+To deploy with auth disabled (default):
+
+```bash
+docker compose --env-file traefik.env -f compose.yaml up -d --build
+```
+
+To deploy with auth enabled, include the override file:
+
+```bash
+docker compose --env-file traefik.env -f compose.yaml -f compose.auth.yaml up -d --build
+```
+
+When auth is enabled, make sure:
+- `TRAUTH_COOKIE_KEY` is set in `traefik.env`
+- `auth/users.htpasswd` exists and contains valid credentials
+
 ### Running Scripts for Individual Apps
 
 You can also run scripts for individual apps using pnpm's filter flag:

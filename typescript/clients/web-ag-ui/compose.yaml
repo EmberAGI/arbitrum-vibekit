@@ -44,14 +44,7 @@ services:
       - traefik.http.routers.demo.entrypoints=websecure
       - traefik.http.routers.demo.tls=true
       - traefik.http.routers.demo.tls.certresolver=cloudflare
-      - traefik.http.routers.demo.middlewares=site-auth@docker
       - traefik.http.services.demo.loadbalancer.server.port=3000
-      - traefik.http.middlewares.site-auth.plugin.trauth.domain=demo.emberai.xyz
-      - traefik.http.middlewares.site-auth.plugin.trauth.usersfile=/etc/traefik/users.htpasswd
-      - traefik.http.middlewares.site-auth.plugin.trauth.cookiekey=${TRAUTH_COOKIE_KEY}
-      - traefik.http.middlewares.site-auth.plugin.trauth.cookiename=trauth
-      - traefik.http.middlewares.site-auth.plugin.trauth.cookiesecure=true
-      - traefik.http.middlewares.site-auth.plugin.trauth.cookiehttponly=true
     ports:
       - "3000:3000"
     restart: unless-stopped
