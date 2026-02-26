@@ -19,15 +19,27 @@ type ScenarioState = {
 
 const HexAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/u);
 
-const OpenPositionRequestSchema = z.object({
+const IncreasePlanRequestSchema = z.object({
   walletAddress: HexAddressSchema,
   marketAddress: HexAddressSchema,
+  side: z.enum(['long', 'short']),
 });
 
-const ClosePositionRequestSchema = z.object({
+const DecreasePlanRequestSchema = z.object({
   walletAddress: HexAddressSchema,
   marketAddress: HexAddressSchema,
-  positionSide: z.enum(['long', 'short']).optional(),
+  side: z.enum(['long', 'short']),
+  decrease: z.discriminatedUnion('mode', [
+    z.object({
+      mode: z.literal('full'),
+      slippageBps: z.string(),
+    }),
+    z.object({
+      mode: z.literal('partial'),
+      sizeDeltaUsd: z.string(),
+      slippageBps: z.string(),
+    }),
+  ]),
 });
 
 const USDC_ADDRESS = '0x1111111111111111111111111111111111111111' as const;
@@ -205,36 +217,29 @@ export async function setupAgentLocalE2EMocksIfNeeded(): Promise<void> {
         const walletAddress = normalizeWalletAddress(String(params['walletAddress'] ?? ''));
         return HttpResponse.json(buildWalletBalancesPayload(walletAddress));
       }),
-      http.post('*/perpetuals/long', async ({ request }) => {
-        const parsed = OpenPositionRequestSchema.parse(await request.json());
+      http.post('*/perpetuals/increase/plan', async ({ request }) => {
+        const parsed = IncreasePlanRequestSchema.parse(await request.json());
         const walletAddress = normalizeWalletAddress(parsed.walletAddress);
         const marketAddress = normalizeWalletAddress(parsed.marketAddress);
         state.positionsByWallet.set(walletAddress, {
           walletAddress,
           marketAddress,
-          positionSide: 'long',
+          positionSide: parsed.side,
           contractKey: nextContractKey(state),
         });
         return HttpResponse.json(buildTransactionResponse());
       }),
-      http.post('*/perpetuals/short', async ({ request }) => {
-        const parsed = OpenPositionRequestSchema.parse(await request.json());
-        const walletAddress = normalizeWalletAddress(parsed.walletAddress);
-        const marketAddress = normalizeWalletAddress(parsed.marketAddress);
-        state.positionsByWallet.set(walletAddress, {
-          walletAddress,
-          marketAddress,
-          positionSide: 'short',
-          contractKey: nextContractKey(state),
-        });
-        return HttpResponse.json(buildTransactionResponse());
-      }),
-      http.post('*/perpetuals/close', async ({ request }) => {
-        const parsed = ClosePositionRequestSchema.parse(await request.json());
+      http.post('*/perpetuals/decrease/plan', async ({ request }) => {
+        const parsed = DecreasePlanRequestSchema.parse(await request.json());
         const walletAddress = normalizeWalletAddress(parsed.walletAddress);
         const marketAddress = normalizeWalletAddress(parsed.marketAddress);
         const existing = state.positionsByWallet.get(walletAddress);
-        if (existing && existing.marketAddress === marketAddress) {
+        if (
+          existing &&
+          existing.marketAddress === marketAddress &&
+          existing.positionSide === parsed.side &&
+          parsed.decrease.mode === 'full'
+        ) {
           state.positionsByWallet.delete(walletAddress);
         }
         return HttpResponse.json(buildTransactionResponse());
