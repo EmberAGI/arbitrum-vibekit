@@ -199,11 +199,11 @@ describe('agentListPolling', () => {
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
-  it('waits for run completion before resolving even when snapshot arrives early', async () => {
+  it('returns promptly after snapshot and marks busy when run does not terminate within grace period', async () => {
+    vi.useFakeTimers();
     const unsubscribe = vi.fn();
     const detachActiveRun = vi.fn().mockResolvedValue(undefined);
     let stateSubscriber: AgentSubscriber | null = null;
-    let resolveRun: (() => void) | null = null;
 
     const runtimeAgent = {
       subscribe: vi.fn((subscriber: AgentSubscriber) => {
@@ -233,9 +233,7 @@ describe('agentListPolling', () => {
             } as AgentState,
           },
         } as never);
-        await new Promise<void>((resolve) => {
-          resolveRun = resolve;
-        });
+        await new Promise<void>(() => undefined);
       }),
       detachActiveRun,
     };
@@ -245,7 +243,7 @@ describe('agentListPolling', () => {
       agentId: 'agent-clmm',
       threadId: 'thread-1',
       timeoutMs: 100,
-      runCompletionTimeoutMs: 2_000,
+      runCompletionTimeoutMs: 50,
       createRuntimeAgent: () => runtimeAgent,
     }).then((value) => {
       settled = true;
@@ -256,10 +254,73 @@ describe('agentListPolling', () => {
     await Promise.resolve();
     expect(settled).toBe(false);
 
-    resolveRun?.();
+    await vi.advanceTimersByTimeAsync(60);
     const outcome = await pollPromise;
 
-    expect(outcome.busy).toBe(false);
+    expect(outcome.busy).toBe(true);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(detachActiveRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a short default run-termination grace period after snapshot', async () => {
+    vi.useFakeTimers();
+    const unsubscribe = vi.fn();
+    const detachActiveRun = vi.fn().mockResolvedValue(undefined);
+    let stateSubscriber: AgentSubscriber | null = null;
+
+    const runtimeAgent = {
+      subscribe: vi.fn((subscriber: AgentSubscriber) => {
+        stateSubscriber = subscriber;
+        return { unsubscribe };
+      }),
+      addMessage: vi.fn(),
+      runAgent: vi.fn(async () => {
+        stateSubscriber?.onStateSnapshotEvent?.({
+          event: {
+            type: 'STATE_SNAPSHOT',
+            snapshot: {
+              settings: {},
+              view: {
+                command: 'sync',
+                profile: {
+                  chains: [],
+                  protocols: [],
+                  tokens: [],
+                  pools: [],
+                  allowedPools: [],
+                },
+                activity: { telemetry: [], events: [] },
+                metrics: { iteration: 0, cyclesSinceRebalance: 0, staleCycles: 0 },
+                transactionHistory: [],
+              },
+            } as AgentState,
+          },
+        } as never);
+        await new Promise<void>(() => undefined);
+      }),
+      detachActiveRun,
+    };
+
+    let settled = false;
+    const pollPromise = pollAgentListUpdateViaAgUi({
+      agentId: 'agent-clmm',
+      threadId: 'thread-1',
+      timeoutMs: 100,
+      createRuntimeAgent: () => runtimeAgent,
+    }).then((value) => {
+      settled = true;
+      return value;
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1_200);
+    expect(settled).toBe(true);
+
+    const outcome = await pollPromise;
+    expect(outcome.busy).toBe(true);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
   });

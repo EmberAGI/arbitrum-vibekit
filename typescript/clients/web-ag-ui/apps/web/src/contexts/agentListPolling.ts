@@ -30,6 +30,8 @@ export type AgentListPollOutcome = {
   busy: boolean;
 };
 
+const DEFAULT_RUN_COMPLETION_GRACE_MS = 1_000;
+
 function describeError(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
@@ -119,7 +121,7 @@ export async function pollAgentListUpdateViaAgUi(params: {
   let runCompletionTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
   let resolvePoll: ((value: Partial<AgentListEntry> | null) => void) | undefined;
   let pollBusy = false;
-  const runCompletionTimeoutMs = params.runCompletionTimeoutMs ?? 30_000;
+  const runCompletionTimeoutMs = params.runCompletionTimeoutMs ?? DEFAULT_RUN_COMPLETION_GRACE_MS;
   let runCompleted = false;
   let latestProjectedUpdate: Partial<AgentListEntry> | null = null;
 

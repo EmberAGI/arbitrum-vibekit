@@ -486,9 +486,9 @@ export function AgentDetailPage({
     return stars;
   };
 
-  // Render the upgraded layout immediately during hydration so we never flash the legacy
-  // pre-hire view for already-hired agents.
-  if (isHired || !hasLoadedView) {
+  // Use the upgraded layout only for hired agents. Pre-hire must remain stable even
+  // while detail sync is still loading, otherwise the Hire CTA can disappear.
+  if (isHired) {
     const tabs = (
       <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
         <TabButton

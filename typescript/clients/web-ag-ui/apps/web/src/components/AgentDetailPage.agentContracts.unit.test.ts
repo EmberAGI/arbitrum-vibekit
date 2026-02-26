@@ -29,6 +29,7 @@ function renderAgentDetail(params: {
   agentId: AgentId;
   agentName: string;
   isHired: boolean;
+  hasLoadedView?: boolean;
   currentCommand?: string;
   activeInterrupt?:
     | { type: 'operator-config-request'; message: string }
@@ -69,7 +70,7 @@ function renderAgentDetail(params: {
       },
       isHired: params.isHired,
       isHiring: false,
-      hasLoadedView: true,
+      hasLoadedView: params.hasLoadedView ?? true,
       isFiring: false,
       isSyncing: false,
       currentCommand: params.currentCommand,
@@ -104,6 +105,19 @@ function renderAgentDetail(params: {
 }
 
 describe('AgentDetailPage (cross-agent contracts)', () => {
+  it('keeps pre-hire layout visible even when detail sync has not loaded yet', () => {
+    const html = renderAgentDetail({
+      agentId: 'agent-gmx-allora',
+      agentName: 'GMX Allora Trader',
+      isHired: false,
+      hasLoadedView: false,
+    });
+
+    expect(html).toContain('>Hire<');
+    expect(html).not.toContain('Agent is hired');
+    expect(html).not.toContain('>Fire<');
+  });
+
   it.each(AGENTS)('renders shared pre-hire summary cards for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,
