@@ -104,7 +104,13 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <CopilotKit runtimeUrl="/api/copilotkit" useSingleEndpoint agent={agentId} threadId={threadId} key={threadId}>
+    <CopilotKit
+      runtimeUrl="/api/copilotkit"
+      useSingleEndpoint
+      agent={agentId}
+      threadId={threadId}
+      key={threadId}
+    >
       <AgentProvider agentId={agentId}>
         <AgentListRuntimeBridge />
         {children}

@@ -152,9 +152,12 @@ export function HireAgentsPage({
 
   const itemsPerPage = 10;
   const totalPages = Math.max(1, Math.ceil(filteredAgents.length / itemsPerPage));
+  const shouldShowPagination = filteredAgents.length > itemsPerPage;
+  const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
+
   const paginatedAgents = filteredAgents.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage,
+    (safeCurrentPage - 1) * itemsPerPage,
+    safeCurrentPage * itemsPerPage,
   );
 
   const iconDataSources = useMemo(() => [...agents, ...featuredAgents], [agents, featuredAgents]);
@@ -378,7 +381,13 @@ export function HireAgentsPage({
           />
 
           {/* Pagination */}
-          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+          {shouldShowPagination ? (
+            <Pagination
+              currentPage={safeCurrentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          ) : null}
         </div>
       </div>
     </div>
