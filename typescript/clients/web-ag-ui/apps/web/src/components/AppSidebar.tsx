@@ -4,10 +4,10 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronRight,
-  Users,
+  Bot,
   Trophy,
   AlertCircle,
-  Loader,
+  Terminal,
   CheckCircle,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -357,20 +357,20 @@ export function AppSidebar() {
   const isLeaderboardActive = pathname === '/leaderboard';
 
   return (
-    <div className="flex flex-col h-full w-[260px] flex-shrink-0 bg-[#09090B] border-r border-[#242429] text-[#D1D1D1]">
+    <div className="flex flex-col h-full w-[312px] flex-shrink-0 bg-[#09090B] border-r border-[#242429] text-[#D1D1D1]">
       {/* Header */}
       <div className="px-4 py-3.5 border-b border-[#242429]">
         <div className="flex items-center gap-2.5">
           <Image
-            src="/ember-logo.svg"
+            src="/ember-sidebar-logo.png"
             alt="Ember Logo"
-            width={12}
+            width={10}
             height={16}
-            className="w-3 h-4 object-contain"
+            className="w-auto h-4 object-contain"
           />
           <div className="flex items-center gap-2">
             <Image src="/ember-name.svg" alt="Ember" width={76} height={15} className="h-[15px] w-auto" />
-            <span className="text-[10px] font-medium text-[#A7A7B2] px-1.5 py-0.5 bg-[#15161b] border border-[#2A2B32] rounded-[5px]">
+            <span className="text-[10px] font-mono font-medium text-[#A7A7B2] px-1.5 py-0.5 bg-[#15161b] border border-[#2A2B32] rounded-[5px]">
               AI
             </span>
           </div>
@@ -381,7 +381,7 @@ export function AppSidebar() {
       <div className="flex-1 overflow-y-auto p-4">
         {/* Platform Section */}
         <div className="mb-6">
-          <div className="text-[11px] font-medium text-[#6F7280] uppercase tracking-[0.12em] px-2 mb-3">
+          <div className="text-[11px] font-mono font-medium text-[#6F7280] tracking-[0.12em] px-2 mb-3">
             Platform
           </div>
           <div className="space-y-1">
@@ -398,14 +398,10 @@ export function AppSidebar() {
             <div>
               <button
                 onClick={() => setIsAgentsExpanded(!isAgentsExpanded)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors ${
-                  isHireAgentsActive || isAcquireActive
-                    ? 'bg-[#1B1C21] border border-[#2B2D36]'
-                    : 'hover:bg-[#1B1C21]'
-                }`}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors hover:bg-[#1B1C21]"
               >
                 <div className="flex items-center gap-3">
-                  <Users className="w-4 h-4" />
+                  <Bot className="w-4 h-4" />
                   <span className="text-sm font-medium text-[#D7D8DE]">Agents</span>
                 </div>
                 {isAgentsExpanded ? (
@@ -421,12 +417,12 @@ export function AppSidebar() {
                     href="/hire-agents"
                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
                       isHireAgentsActive
-                        ? 'text-white bg-[#1C1D23] border border-[#2F313B]'
+                        ? 'text-white'
                         : 'text-[#9A9CAA] hover:text-white hover:bg-[#1B1C21]'
                     }`}
                   >
                     {isHireAgentsActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-[#fd6731] rounded-r" />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
                     )}
                     Hire
                   </Link>
@@ -434,12 +430,12 @@ export function AppSidebar() {
                     href="/acquire"
                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
                       isAcquireActive
-                        ? 'text-white bg-[#1C1D23] border border-[#2F313B]'
+                        ? 'text-white'
                         : 'text-[#9A9CAA] hover:text-white hover:bg-[#1B1C21]'
                     }`}
                   >
                     {isAcquireActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-[#fd6731] rounded-r" />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
                     )}
                     Acquire
                   </Link>
@@ -452,12 +448,12 @@ export function AppSidebar() {
               href="/leaderboard"
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
                 isLeaderboardActive
-                  ? 'bg-[#1B1C21] border border-[#2B2D36]'
+                  ? 'text-white'
                   : 'hover:bg-[#1B1C21]'
               }`}
             >
               {isLeaderboardActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-[#fd6731] rounded-r" />
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
               )}
               <Trophy className="w-4 h-4" />
               <span className="text-sm font-medium text-[#D7D8DE]">Leaderboard</span>
@@ -467,7 +463,7 @@ export function AppSidebar() {
 
         {/* Agent Activity Section */}
         <div>
-          <div className="text-[11px] font-medium text-[#6F7280] uppercase tracking-[0.12em] px-2 mb-3">
+          <div className="text-[11px] font-mono font-medium text-[#6F7280] tracking-[0.12em] px-2 mb-3">
             Agent Activity
           </div>
 
@@ -479,7 +475,7 @@ export function AppSidebar() {
             isExpanded={isBlockedExpanded}
             onToggle={() => setIsBlockedExpanded(!isBlockedExpanded)}
             badgeColor="bg-red-500/20 text-red-400"
-            icon={<AlertCircle className="w-4 h-4 text-red-400" />}
+            icon={<AlertCircle className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
             onAgentClick={handleAgentClick}
           />
@@ -492,7 +488,7 @@ export function AppSidebar() {
             isExpanded={isActiveExpanded}
             onToggle={() => setIsActiveExpanded(!isActiveExpanded)}
             badgeColor="bg-teal-500/20 text-teal-400"
-            icon={<Loader className="w-4 h-4 text-teal-400 animate-spin" />}
+            icon={<Terminal className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
             onAgentClick={handleAgentClick}
           />
@@ -505,7 +501,7 @@ export function AppSidebar() {
             isExpanded={isCompletedExpanded}
             onToggle={() => setIsCompletedExpanded(!isCompletedExpanded)}
             badgeColor="bg-blue-500/20 text-blue-400"
-            icon={<CheckCircle className="w-4 h-4 text-blue-400" />}
+            icon={<CheckCircle className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
             onAgentClick={handleAgentClick}
           />
@@ -736,7 +732,7 @@ function ActivitySection({
           {icon}
           <span className={`text-sm ${!hasAgents ? 'text-[#666A77]' : 'text-[#C4C6D1]'}`}>{title}</span>
           <span
-            className={`text-[11px] px-2 py-0.5 rounded-full border ${
+            className={`text-[11px] font-mono px-2 py-0.5 rounded-full border ${
               hasAgents ? `${badgeColor} border-current/20` : 'bg-[#181920] text-[#666A77] border-[#2A2C35]'
             }`}
           >

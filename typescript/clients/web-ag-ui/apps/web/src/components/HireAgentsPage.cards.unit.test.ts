@@ -24,6 +24,50 @@ vi.mock('../hooks/useOnchainActionsIconMaps', () => {
 import { HireAgentsPage } from './HireAgentsPage';
 
 describe('HireAgentsPage (top cards)', () => {
+  it('renders publish CTA illustration from a public asset', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html).toContain('src="/hire-publish-agent.png"');
+    expect(html).toContain('alt="Publish agent illustration"');
+  });
+
+  it('lays out the publish CTA image flush to the left edge', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html).toContain('class="relative flex items-stretch justify-between gap-6 pr-5"');
+    expect(html).toContain('class="w-[308px] self-stretch shrink-0"');
+  });
+
+  it('uses the shared Ember team logo in creator bylines', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-clmm',
+            name: 'Camelot CLMM',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('src="/ember-by-tag-logo.png"');
+    expect(html).not.toContain('Built by Ember AI');
+  });
+
   it('shows labeled chain/protocol/token icon groups and stats, with overflow indicator for tokens', () => {
     const html = renderToStaticMarkup(
       React.createElement(HireAgentsPage, {
@@ -66,5 +110,77 @@ describe('HireAgentsPage (top cards)', () => {
     expect(html).not.toContain('https://icons.test/weth.png');
     expect(html).toContain('…');
     expect(html).not.toContain('+2');
+  });
+
+  it('enforces a compact featured-card height while preserving icon sizing', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-gmx-allora',
+            name: 'GMX x Allora',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('min-w-[340px] w-[340px] h-[230px]');
+    expect(html).toContain('px-4 pb-2 flex-1 min-h-0 overflow-hidden');
+    expect(html).toContain(
+      'class="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 bg-black/30 flex items-center justify-center"',
+    );
+  });
+
+  it('clamps featured descriptions to two lines in compact cards', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-gmx-allora',
+            name: 'GMX x Allora',
+            creator: 'Ember AI Team',
+            description:
+              'Uses directional and volatility signals for adaptive position sizing across market regimes with automatic risk controls and fast execution.',
+            status: 'for_hire',
+            isLoaded: true,
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain(
+      '[display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]',
+    );
+  });
+
+  it('supports collapsing featured-card metrics without removing the expand affordance', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-gmx-allora',
+            name: 'GMX x Allora',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            aum: 123456,
+            weeklyIncome: 987,
+            apy: 12,
+            users: 42,
+          },
+        ],
+        initialCollapsedFeaturedCardIds: ['agent-gmx-allora'],
+      }),
+    );
+
+    expect(html).toContain('aria-label="Expand metrics"');
+    expect(html).not.toContain('30d Income');
+    expect(html).not.toContain('grid grid-cols-4 gap-3 px-4 py-3 bg-black/20 border-t border-white/10');
   });
 });

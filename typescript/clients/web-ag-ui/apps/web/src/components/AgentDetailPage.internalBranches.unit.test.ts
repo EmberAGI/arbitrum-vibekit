@@ -68,7 +68,7 @@ beforeEach(() => {
 });
 
 describe('AgentDetailPage internals: metrics variants', () => {
-  it('renders the CLMM metrics layout with latest cycle and activity stream', () => {
+  it('renders the CLMM metrics layout with latest cycle data', () => {
     const fullMetrics: AgentViewMetrics = {
       iteration: 7,
       cyclesSinceRebalance: 2,
@@ -139,9 +139,9 @@ describe('AgentDetailPage internals: metrics variants', () => {
     expect(html).toContain('Token Amounts');
     expect(html).toContain('Latest Cycle');
     expect(html).toContain('spread threshold crossed');
-    expect(html).toContain('Activity Stream');
-    expect(html).toContain('Artifact: rebalance-report');
-    expect(html).toContain('Response with 1 parts');
+    expect(html).not.toContain('Activity Stream');
+    expect(html).not.toContain('Artifact: rebalance-report');
+    expect(html).not.toContain('Response with 1 parts');
   });
 
   it('renders GMX Allora metrics with execution status and arbiscan links', () => {
@@ -543,8 +543,8 @@ describe('AgentDetailPage internals: blockers variants', () => {
     expect(html).toContain('Select Funding Token');
     expect(html).toContain('USDC');
     expect(html).toContain('WETH');
-    expect(html).toContain('Current Task');
-    expect(html).toContain('Latest Activity');
+    expect(html).not.toContain('Current Task');
+    expect(html).not.toContain('Latest Activity');
     expect(html.indexOf('USDC')).toBeLessThan(html.indexOf('WETH'));
   });
 
@@ -640,8 +640,12 @@ describe('AgentDetailPage internals: blockers variants', () => {
       }),
     );
 
-    expect(html).toContain('Waiting for agent');
-    expect(html).toContain('No active task. The agent may need to be started.');
-    expect(html).toContain('Set up agent');
+    expect(html).toContain('⏳');
+    expect(html).toContain('Waiting for the next onboarding prompt');
+    expect(html).toContain('funding token options');
+    expect(html).not.toContain('Waiting for agent');
+    expect(html).not.toContain('No active task. The agent may need to be started.');
+    expect(html).not.toContain('Set up agent');
+    expect(html).not.toContain('Get this agent started working on your wallet');
   });
 });

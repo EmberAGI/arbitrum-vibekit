@@ -80,7 +80,7 @@ export function CursorListTooltip(props: {
           style={{ left: pos.x, top: pos.y }}
         >
           {title ? (
-            <div className="px-3 pt-2.5 pb-2 text-[11px] uppercase tracking-[0.14em] text-white/60 border-b border-white/10">
+            <div className="px-3 pt-2.5 pb-2 text-[11px] font-mono tracking-[0.14em] text-white/60 border-b border-white/10">
               {title}
             </div>
           ) : null}

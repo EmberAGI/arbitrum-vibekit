@@ -724,6 +724,62 @@ describe('useAgentConnection integration', () => {
     );
   });
 
+  it('marks agent as not hired once fire reaches a terminal task state', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      view: {
+        command: 'fire',
+        task: {
+          id: 'task-fire',
+          taskStatus: {
+            state: 'working',
+            message: { content: 'Firing agent...' },
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-gmx-allora"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+    expect(latestValue?.isHired).toBe(true);
+
+    mocks.agent.state = {
+      view: {
+        command: 'fire',
+        task: {
+          id: 'task-fire',
+          taskStatus: {
+            state: 'completed',
+            message: { content: 'Fire completed.' },
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-gmx-allora"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+    expect(latestValue?.isHired).toBe(false);
+  });
+
   it('serializes rapid A->B->A detail handoff so next connect waits for prior disconnect', async () => {
     let resolveDetachAtoB: (() => void) | null = null;
     let resolveDetachBtoA: (() => void) | null = null;

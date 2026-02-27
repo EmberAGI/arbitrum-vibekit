@@ -6,6 +6,9 @@ import { Pagination } from './Pagination';
 
 function getPaginationButtons(props: React.ComponentProps<typeof Pagination>) {
   const tree = Pagination(props);
+  if (tree === null) {
+    return [];
+  }
   const controls = (tree.props.children as React.ReactNode[])[1] as React.ReactElement<{
     children: React.ReactNode[];
   }>;
@@ -15,6 +18,18 @@ function getPaginationButtons(props: React.ComponentProps<typeof Pagination>) {
 }
 
 describe('Pagination', () => {
+  it('does not render pagination when there is only one page', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(Pagination, {
+        currentPage: 1,
+        totalPages: 1,
+        onPageChange: () => {},
+      }),
+    );
+
+    expect(html).toBe('');
+  });
+
   it('renders pagination controls and current page text', () => {
     const html = renderToStaticMarkup(
       React.createElement(Pagination, {
@@ -77,5 +92,29 @@ describe('Pagination', () => {
     expect(onPageChange).toHaveBeenNthCalledWith(2, 4);
     expect(onPageChange).toHaveBeenNthCalledWith(3, 5);
     expect(onPageChange).toHaveBeenNthCalledWith(4, 5);
+  });
+
+  it('does not render when totalPages is invalid', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(Pagination, {
+        currentPage: 1,
+        totalPages: Number.NaN,
+        onPageChange: () => {},
+      }),
+    );
+
+    expect(html).toBe('');
+  });
+
+  it('clamps currentPage to valid boundaries', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(Pagination, {
+        currentPage: 99,
+        totalPages: 5,
+        onPageChange: () => {},
+      }),
+    );
+
+    expect(html).toContain('Page 5 of 5');
   });
 });
