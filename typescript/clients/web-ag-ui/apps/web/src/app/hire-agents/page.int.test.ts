@@ -15,6 +15,7 @@ type HireAgentsRoutePropsCapture = {
   }>;
   featuredAgents: Array<{
     id: string;
+    description?: string;
     chains: string[];
     protocols: string[];
     tokens: string[];
@@ -132,5 +133,14 @@ describe('HireAgentsRoute integration', () => {
 
     expect(pushMock).toHaveBeenNthCalledWith(1, '/hire-agents/agent-gmx-allora');
     expect(pushMock).toHaveBeenNthCalledWith(2, '/hire-agents/agent-pendle');
+  });
+
+  it('passes featured agent descriptions from config into page props', () => {
+    renderToStaticMarkup(React.createElement(HireAgentsRoute));
+
+    const props = capturedProps as HireAgentsRoutePropsCapture;
+    const pendle = props.featuredAgents.find((agent) => agent.id === 'agent-pendle');
+
+    expect(pendle?.description).toContain('highest-yielding Pendle YT markets');
   });
 });

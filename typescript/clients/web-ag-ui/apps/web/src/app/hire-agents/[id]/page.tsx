@@ -8,7 +8,7 @@ import { useAgent } from '@/contexts/AgentContext';
 import type { OnboardingState } from '@/types/agent';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
-type UiPreviewTab = 'blockers' | 'metrics' | 'transactions' | 'settings' | 'chat';
+type UiPreviewTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
 
 function parseUiPreviewState(value: string | null): UiPreviewState | null {
   if (value === 'prehire' || value === 'onboarding' || value === 'active') return value;
@@ -20,7 +20,6 @@ function parseUiPreviewTab(value: string | null): UiPreviewTab | null {
     value === 'blockers' ||
     value === 'metrics' ||
     value === 'transactions' ||
-    value === 'settings' ||
     value === 'chat'
   ) {
     return value;

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AgentDetailPage } from './AgentDetailPage';
+import type { ClmmEvent } from '../types/agent';
 
 type AgentId = 'agent-clmm' | 'agent-pendle' | 'agent-gmx-allora';
 
@@ -30,7 +31,17 @@ function renderAgentDetail(params: {
   agentName: string;
   isHired: boolean;
   hasLoadedView?: boolean;
+  initialTab?: 'blockers' | 'metrics' | 'transactions' | 'chat';
+  taskId?: string;
+  taskStatus?: string;
+  telemetry?: Array<{
+    cycle: number;
+    action: string;
+    timestamp?: string;
+  }>;
+  events?: ClmmEvent[];
   currentCommand?: string;
+  setupComplete?: boolean;
   activeInterrupt?:
     | { type: 'operator-config-request'; message: string }
     | { type: 'pendle-setup-request'; message: string }
@@ -69,6 +80,7 @@ function renderAgentDetail(params: {
         rebalanceCycles: 0,
       },
       isHired: params.isHired,
+      initialTab: params.initialTab,
       isHiring: false,
       hasLoadedView: params.hasLoadedView ?? true,
       isFiring: false,
@@ -89,15 +101,16 @@ function renderAgentDetail(params: {
         },
       ],
       onInterruptSubmit: () => {},
-      taskId: undefined,
-      taskStatus: undefined,
+      taskId: params.taskId,
+      taskStatus: params.taskStatus,
       haltReason: undefined,
       executionError: undefined,
       delegationsBypassActive: false,
       onboarding: undefined,
+      setupComplete: params.setupComplete,
       transactions: [],
-      telemetry: [],
-      events: [],
+      telemetry: params.telemetry ?? [],
+      events: params.events ?? [],
       settings: { amount: 100 },
       onSettingsChange: () => {},
     }),
@@ -145,6 +158,87 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Your PnL');
   });
 
+  it.each(AGENTS)('uses Activity + Settings and policies tabs for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      currentCommand: 'cycle',
+    });
+
+    expect(html).toContain('Settings and policies');
+    expect(html).toContain('Activity');
+    expect(html).not.toContain('Agent Blockers');
+    expect(html).not.toContain('Transaction history');
+  });
+
+  it.each(AGENTS)('renders Activity Stream panel in Activity tab for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      initialTab: 'transactions',
+      events: [
+        {
+          type: 'status',
+          message: 'Delegation approvals received. Continuing onboarding.',
+          task: { id: 'task-1', taskStatus: { state: 'working' } },
+        },
+      ],
+    });
+
+    expect(html).toContain('Activity Stream');
+    expect(html).toContain('Delegation approvals received. Continuing onboarding.');
+  });
+
+  it.each(AGENTS)('does not render Activity Stream panel in Metrics tab for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      initialTab: 'metrics',
+      events: [
+        {
+          type: 'status',
+          message: 'Delegation approvals received. Continuing onboarding.',
+          task: { id: 'task-1', taskStatus: { state: 'working' } },
+        },
+      ],
+    });
+
+    expect(html).not.toContain('Activity Stream');
+  });
+
+  it.each(AGENTS)('defaults to Activity tab while fire command is active for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+      currentCommand: 'fire',
+    });
+
+    expect(html).toContain('No transactions yet');
+  });
+
+  it.each(AGENTS)(
+    'keeps post-hire tabs visible after fire completes for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: false,
+        currentCommand: 'fire',
+        setupComplete: true,
+      });
+
+      expect(html).toContain('>Hire<');
+      expect(html).toContain('Settings and policies');
+      expect(html).toContain('Activity');
+      expect(html).toContain('No transactions yet');
+      expect(html).not.toContain('APY Change');
+    },
+  );
+
   it.each(AGENTS)('deduplicates arbitrum chain label for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,
@@ -186,7 +280,9 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
 
     expect(html).toContain('Pendle Setup');
     expect(html).toContain('Funding Amount (USD)');
-    expect(html).toContain('Auto-selected yield');
+    expect(html).not.toContain('Auto-selected yield');
+    expect(html).not.toContain('highest-yield YT market');
+    expect(html).toContain('PT position management');
   });
 
   it('routes GMX setup interrupt to GMX Allora Setup form', () => {

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Roboto, Roboto_Mono } from 'next/font/google';
 
 import type { CopilotKitCSSProperties } from '@copilotkit/react-ui';
 import { ProvidersNoSSR } from '../components/ProvidersNoSSR';
@@ -7,6 +8,20 @@ import { AgentRuntimeProvider } from '../components/AgentRuntimeProvider';
 import { PrivyGateBanner } from '../components/PrivyGateBanner';
 import './globals.css';
 import '@copilotkit/react-ui/styles.css';
+
+const roboto = Roboto({
+  subsets: ['latin'],
+  variable: '--font-roboto',
+  display: 'swap',
+  weight: ['400', '500', '700'],
+});
+
+const robotoMono = Roboto_Mono({
+  subsets: ['latin'],
+  variable: '--font-roboto-mono',
+  display: 'swap',
+  weight: ['400', '500', '700'],
+});
 
 export const metadata: Metadata = {
   title: 'Ember AI - Hire Agents',
@@ -29,7 +44,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="antialiased bg-[#09090B] text-[#D1D1D1] dark">
+      <body
+        className={`${roboto.variable} ${robotoMono.variable} antialiased bg-[#09090B] text-[#D1D1D1] dark`}
+      >
         <ProvidersNoSSR>
           <AgentRuntimeProvider>
             <PrivyGateBanner />

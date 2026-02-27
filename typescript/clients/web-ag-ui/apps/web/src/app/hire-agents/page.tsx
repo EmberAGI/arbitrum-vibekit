@@ -7,6 +7,10 @@ import { getAllAgents, getFeaturedAgents } from '@/config/agents';
 import { canonicalizeChainLabel } from '@/utils/iconResolution';
 import { mergeUniqueStrings, normalizeStringList } from '@/utils/agentCollections';
 
+const PAGINATION_QA_MOCK_COUNT = 27;
+const PAGINATION_QA_MOCKS_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_HIRE_AGENTS_PAGINATION_MOCKS === 'true';
+
 export default function HireAgentsRoute() {
   const router = useRouter();
   const { agents: agentStates } = useAgentList();
@@ -63,6 +67,40 @@ export default function HireAgentsRoute() {
     };
   });
 
+  const paginationMockAgents: Agent[] = PAGINATION_QA_MOCKS_ENABLED
+    ? Array.from({ length: PAGINATION_QA_MOCK_COUNT }, (_, index) => {
+        const ordinal = index + 1;
+        const paddedOrdinal = ordinal.toString().padStart(2, '0');
+
+        return {
+          id: `agent-mock-${paddedOrdinal}`,
+          rank: registeredAgents.length + ordinal,
+          name: `Mock Strategy ${paddedOrdinal}`,
+          creator: 'Ember QA',
+          creatorVerified: false,
+          rating: undefined,
+          weeklyIncome: 150 + ordinal * 11,
+          apy: 4 + ((ordinal * 7) % 18),
+          users: 20 + ordinal * 3,
+          aum: 12_000 + ordinal * 1_250,
+          chains: ['Arbitrum'],
+          protocols: ordinal % 2 === 0 ? ['Camelot'] : ['Pendle'],
+          tokens: ordinal % 3 === 0 ? ['USDC', 'ARB'] : ['USDC', 'WETH'],
+          points: ordinal,
+          pointsTrend: 'up',
+          trendMultiplier: `${ordinal}x`,
+          avatar: '🤖',
+          avatarBg: 'linear-gradient(135deg, #334155 0%, #0f172a 100%)',
+          status: 'for_hire',
+          isActive: false,
+          isFeatured: false,
+          isLoaded: true,
+        };
+      })
+    : [];
+
+  const agentListWithMocks = [...agentList, ...paginationMockAgents];
+
   // Build featured agents list from config, prioritizing real data when available
   const featuredAgents: FeaturedAgent[] = featuredAgentConfigs.map((config) => {
     const listState = agentStates[config.id];
@@ -91,6 +129,7 @@ export default function HireAgentsRoute() {
       id: config.id,
       rank: config.featuredRank,
       name: config.name,
+      description: config.description,
       creator: config.creator,
       creatorVerified: config.creatorVerified,
       rating: undefined, // Real rating not available
@@ -120,7 +159,7 @@ export default function HireAgentsRoute() {
 
   return (
     <HireAgentsPage
-      agents={agentList}
+      agents={agentListWithMocks}
       featuredAgents={featuredAgents}
       onHireAgent={handleHireAgent}
       onViewAgent={handleViewAgent}

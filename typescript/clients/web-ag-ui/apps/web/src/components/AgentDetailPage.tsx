@@ -127,7 +127,7 @@ interface AgentDetailPageProps {
   onSettingsSave?: (updates: Partial<AgentSettings>) => void;
 }
 
-type TabType = 'blockers' | 'metrics' | 'transactions' | 'settings' | 'chat';
+type TabType = 'blockers' | 'metrics' | 'transactions' | 'chat';
 
 function hashStringToSeed(value: string): number {
   // Cheap stable hash for deterministic mock series.
@@ -293,10 +293,13 @@ export function AgentDetailPage({
   onSettingsChange,
   onSettingsSave,
 }: AgentDetailPageProps) {
+  const hasHistoricalHireContext =
+    currentCommand === 'fire' || setupComplete === true || onboardingFlow?.status === 'completed';
+  const showPostHireLayout = isHired || hasHistoricalHireContext;
   const [activeTab, setActiveTab] = useState<TabType>(
-    initialTab ?? (isHired ? 'blockers' : 'metrics'),
+    initialTab ?? (showPostHireLayout ? 'blockers' : 'metrics'),
   );
-  const [hasUserSelectedTab, setHasUserSelectedTab] = useState(false);
+  const [hasUserSelectedTab, setHasUserSelectedTab] = useState(Boolean(initialTab));
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
   const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
   const isOnboardingActive = resolveOnboardingActive({
@@ -308,6 +311,7 @@ export function AgentDetailPage({
     onboardingStatus: onboardingFlow?.status,
   });
   const forceBlockersTab = isOnboardingActive;
+  const defaultPostHireTab: TabType = currentCommand === 'fire' ? 'transactions' : 'metrics';
   const selectTab = useCallback((tab: TabType) => {
     setHasUserSelectedTab(true);
     setActiveTab(tab);
@@ -315,8 +319,8 @@ export function AgentDetailPage({
 
   const resolvedTab: TabType = forceBlockersTab
     ? 'blockers'
-    : !hasUserSelectedTab && isHired
-      ? 'metrics'
+    : !hasUserSelectedTab && showPostHireLayout
+      ? defaultPostHireTab
       : activeTab;
 
   const blockingErrorMessage = (haltReason || executionError || null) as string | null;
@@ -488,7 +492,7 @@ export function AgentDetailPage({
 
   // Use the upgraded layout only for hired agents. Pre-hire must remain stable even
   // while detail sync is still loading, otherwise the Hire CTA can disappear.
-  if (isHired) {
+  if (showPostHireLayout) {
     const tabs = (
       <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
         <TabButton
@@ -496,7 +500,7 @@ export function AgentDetailPage({
           onClick={() => selectTab('blockers')}
           highlight
         >
-          Agent Blockers
+          Settings and policies
         </TabButton>
         <TabButton
           active={resolvedTab === 'metrics'}
@@ -510,14 +514,7 @@ export function AgentDetailPage({
           onClick={() => selectTab('transactions')}
           disabled={isOnboardingActive}
         >
-          Transaction history
-        </TabButton>
-        <TabButton
-          active={resolvedTab === 'settings'}
-          onClick={() => selectTab('settings')}
-          disabled={isOnboardingActive}
-        >
-          Settings and policies
+          Activity
         </TabButton>
         <TabButton active={resolvedTab === 'chat'} onClick={() => {}} disabled>
           Chat
@@ -528,22 +525,32 @@ export function AgentDetailPage({
     const tabContent = (
       <>
         {resolvedTab === 'blockers' && (
-          <AgentBlockersTab
-            agentId={agentId}
-            activeInterrupt={activeInterrupt}
-            allowedPools={allowedPools}
-            onInterruptSubmit={onInterruptSubmit}
-            taskId={taskId}
-            taskStatus={taskStatus}
-            haltReason={haltReason}
-            executionError={executionError}
-            delegationsBypassActive={delegationsBypassActive}
-            onboarding={onboarding}
-            onboardingFlow={onboardingFlow}
-            telemetry={telemetry}
-            settings={settings}
-            onSettingsChange={onSettingsChange}
-          />
+          <>
+            {isOnboardingActive ? (
+              <AgentBlockersTab
+                agentId={agentId}
+                activeInterrupt={activeInterrupt}
+                allowedPools={allowedPools}
+                onInterruptSubmit={onInterruptSubmit}
+                taskId={taskId}
+                taskStatus={taskStatus}
+                haltReason={haltReason}
+                executionError={executionError}
+                delegationsBypassActive={delegationsBypassActive}
+                onboarding={onboarding}
+                onboardingFlow={onboardingFlow}
+                settings={settings}
+                onSettingsChange={onSettingsChange}
+              />
+            ) : (
+              <SettingsTab
+                settings={settings}
+                onSettingsChange={onSettingsChange}
+                onSettingsSave={onSettingsSave}
+                isSyncing={isSyncing === true}
+              />
+            )}
+          </>
         )}
 
         {resolvedTab === 'metrics' && (
@@ -561,6 +568,10 @@ export function AgentDetailPage({
         {resolvedTab === 'transactions' && (
           <TransactionHistoryTab
             transactions={transactions}
+            taskId={taskId}
+            taskStatus={taskStatus}
+            telemetry={telemetry}
+            events={events}
             chainIconUri={displayChains.length > 0 ? chainIconByName[normalizeNameKey(displayChains[0])] ?? null : null}
             protocolLabel={
               profile.protocols && profile.protocols.length > 0 ? profile.protocols[0] : null
@@ -574,15 +585,6 @@ export function AgentDetailPage({
                   })()
                 : null
             }
-          />
-        )}
-
-        {resolvedTab === 'settings' && (
-          <SettingsTab
-            settings={settings}
-            onSettingsChange={onSettingsChange}
-            onSettingsSave={onSettingsSave}
-            isSyncing={isSyncing === true}
           />
         )}
       </>
@@ -662,7 +664,19 @@ export function AgentDetailPage({
                         </button>
                       </div>
                     ) : (
-                      <Skeleton className="h-10 w-full rounded-[999px]" />
+                      <button
+                        onClick={onHire}
+                        disabled={isHiring}
+                        className={[
+                          CTA_SIZE_MD_FULL,
+                          isHiring
+                            ? 'bg-purple-500/50 text-white cursor-wait'
+                            : 'bg-purple-500 hover:bg-purple-600 text-white shadow-[0_10px_30px_rgba(168,85,247,0.25)]',
+                          'transition-[background-color,box-shadow] duration-200',
+                        ].join(' ')}
+                      >
+                        {isHiring ? 'Hiring...' : 'Hire'}
+                      </button>
                     )}
                   </div>
 
@@ -1158,6 +1172,10 @@ function TabButton({ active, onClick, children, disabled, highlight }: TabButton
 // Transaction History Tab Component
 interface TransactionHistoryTabProps {
   transactions: Transaction[];
+  taskId?: string;
+  taskStatus?: string;
+  telemetry?: TelemetryItem[];
+  events?: ClmmEvent[];
   chainIconUri: string | null;
   protocolIconUri: string | null;
   protocolLabel: string | null;
@@ -1165,24 +1183,14 @@ interface TransactionHistoryTabProps {
 
 function TransactionHistoryTab({
   transactions,
+  taskId,
+  taskStatus,
+  telemetry = [],
+  events = [],
   chainIconUri,
   protocolIconUri,
   protocolLabel,
 }: TransactionHistoryTabProps) {
-  if (transactions.length === 0) {
-    return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8">
-        <div className="text-[12px] uppercase tracking-[0.14em] text-white/60 mb-2">
-          Transaction History
-        </div>
-        <div className="text-white text-lg font-semibold mb-1">No transactions yet</div>
-        <div className="text-sm text-gray-400">
-          Transactions will appear here once the agent starts operating.
-        </div>
-      </div>
-    );
-  }
-
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
@@ -1196,106 +1204,192 @@ function TransactionHistoryTab({
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-      <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-6">
-        <div>
-          <div className="text-[12px] uppercase tracking-[0.14em] text-white/60">
-            Transaction History
-          </div>
-          <div className="text-sm text-gray-400 mt-1">
-            Showing the latest {Math.min(10, transactions.length)} of {transactions.length}
+    <div className="space-y-6">
+      {taskId && (
+        <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs text-gray-500 uppercase tracking-wide">Current Task</span>
+              <p className="text-white font-medium">{taskId.slice(0, 12)}...</p>
+            </div>
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-medium ${
+                taskStatus === 'working'
+                  ? 'bg-teal-500/20 text-teal-400'
+                  : taskStatus === 'completed'
+                    ? 'bg-blue-500/20 text-blue-400'
+                    : 'bg-gray-500/20 text-gray-400'
+              }`}
+            >
+              {taskStatus || 'pending'}
+            </span>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px]">
-          <thead className="bg-white/[0.02]">
-            <tr className="text-[11px] uppercase tracking-[0.14em] text-white/60 border-b border-white/10">
-              <th className="text-left font-medium px-5 py-3">Transaction</th>
-              <th className="text-left font-medium px-5 py-3">Date &amp; time</th>
-              <th className="text-left font-medium px-5 py-3">Protocol</th>
-              <th className="text-right font-medium px-5 py-3">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/10">
-            {transactions
-              .slice(-10)
-              .reverse()
-              .map((tx, index) => {
-                const shortHash = tx.txHash ? `${tx.txHash.slice(0, 10)}…${tx.txHash.slice(-4)}` : 'pending';
-                const status = tx.status ?? 'pending';
+      {telemetry.length > 0 && (
+        <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Latest Activity</div>
+          <div className="space-y-2">
+            {telemetry.slice(-3).reverse().map((t, i) => (
+              <div
+                key={`${t.cycle}-${i}`}
+                className="flex items-center justify-between text-sm"
+              >
+                <div>
+                  <span className="text-white">Cycle {t.cycle}</span>
+                  <span className="text-gray-500 mx-2">•</span>
+                  <span className="text-gray-400">{t.action}</span>
+                </div>
+                <span className="text-xs text-gray-500">{formatDate(t.timestamp)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-                const statusPillClass =
-                  status === 'success'
-                    ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25'
-                    : status === 'failed'
-                      ? 'bg-red-500/15 text-red-300 ring-1 ring-red-500/25'
-                      : 'bg-yellow-500/15 text-yellow-200 ring-1 ring-yellow-500/25';
+      {transactions.length === 0 ? (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8">
+          <div className="text-[12px] uppercase tracking-[0.14em] text-white/60 mb-2">
+            Transaction History
+          </div>
+          <div className="text-white text-lg font-semibold mb-1">No transactions yet</div>
+          <div className="text-sm text-gray-400">
+            Transactions will appear here once the agent starts operating.
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-6">
+            <div>
+              <div className="text-[12px] uppercase tracking-[0.14em] text-white/60">
+                Transaction History
+              </div>
+              <div className="text-sm text-gray-400 mt-1">
+                Showing the latest {Math.min(10, transactions.length)} of {transactions.length}
+              </div>
+            </div>
+          </div>
 
-                return (
-                  <tr
-                    key={`${tx.cycle}-${index}`}
-                    className="hover:bg-white/[0.04] transition-colors"
-                  >
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex items-center -space-x-2 flex-shrink-0">
-                          {chainIconUri ? (
-                            <img
-                              src={proxyIconUri(chainIconUri)}
-                              alt=""
-                              loading="lazy"
-                              decoding="async"
-                              className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
-                            />
-                          ) : (
-                            <div className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12]" />
-                          )}
-                          {protocolIconUri ? (
-                            <img
-                              src={proxyIconUri(protocolIconUri)}
-                              alt=""
-                              loading="lazy"
-                              decoding="async"
-                              className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
-                            />
-                          ) : (
-                            <div className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12]" />
-                          )}
-                        </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px]">
+              <thead className="bg-white/[0.02]">
+                <tr className="text-[11px] uppercase tracking-[0.14em] text-white/60 border-b border-white/10">
+                  <th className="text-left font-medium px-5 py-3">Transaction</th>
+                  <th className="text-left font-medium px-5 py-3">Date &amp; time</th>
+                  <th className="text-left font-medium px-5 py-3">Protocol</th>
+                  <th className="text-right font-medium px-5 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {transactions
+                  .slice(-10)
+                  .reverse()
+                  .map((tx, index) => {
+                    const shortHash = tx.txHash ? `${tx.txHash.slice(0, 10)}…${tx.txHash.slice(-4)}` : 'pending';
+                    const status = tx.status ?? 'pending';
 
-                        <div className="min-w-0">
-                          <div className="text-white font-medium truncate">
-                            Cycle {tx.cycle} · {tx.action}
+                    const statusPillClass =
+                      status === 'success'
+                        ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25'
+                        : status === 'failed'
+                          ? 'bg-red-500/15 text-red-300 ring-1 ring-red-500/25'
+                          : 'bg-yellow-500/15 text-yellow-200 ring-1 ring-yellow-500/25';
+
+                    return (
+                      <tr
+                        key={`${tx.cycle}-${index}`}
+                        className="hover:bg-white/[0.04] transition-colors"
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex items-center -space-x-2 flex-shrink-0">
+                              {chainIconUri ? (
+                                <img
+                                  src={proxyIconUri(chainIconUri)}
+                                  alt=""
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
+                                />
+                              ) : (
+                                <div className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12]" />
+                              )}
+                              {protocolIconUri ? (
+                                <img
+                                  src={proxyIconUri(protocolIconUri)}
+                                  alt=""
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
+                                />
+                              ) : (
+                                <div className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12]" />
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="text-white font-medium truncate">
+                                Cycle {tx.cycle} · {tx.action}
+                              </div>
+                              <div className="text-xs text-gray-400 mt-0.5 truncate">
+                                {shortHash}
+                                {tx.reason ? ` · ${tx.reason}` : ''}
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-400 mt-0.5 truncate">
-                            {shortHash}
-                            {tx.reason ? ` · ${tx.reason}` : ''}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
+                        </td>
 
-                    <td className="px-5 py-4 text-sm text-gray-300 whitespace-nowrap">
-                      {formatDate(tx.timestamp)}
-                    </td>
+                        <td className="px-5 py-4 text-sm text-gray-300 whitespace-nowrap">
+                          {formatDate(tx.timestamp)}
+                        </td>
 
-                    <td className="px-5 py-4 text-sm text-gray-300 whitespace-nowrap">
-                      {protocolLabel ?? '—'}
-                    </td>
+                        <td className="px-5 py-4 text-sm text-gray-300 whitespace-nowrap">
+                          {protocolLabel ?? '—'}
+                        </td>
 
-                    <td className="px-5 py-4 text-right whitespace-nowrap">
-                      <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[12px] font-medium ${statusPillClass}`}>
-                        {status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-          </tbody>
-        </table>
-      </div>
+                        <td className="px-5 py-4 text-right whitespace-nowrap">
+                          <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[12px] font-medium ${statusPillClass}`}>
+                            {status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {events.slice(-10).reverse().map((event, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                <div
+                  className={`w-2 h-2 rounded-full mt-2 ${
+                    event.type === 'status'
+                      ? 'bg-blue-400'
+                      : event.type === 'artifact'
+                        ? 'bg-purple-400'
+                        : 'bg-gray-400'
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
+                  <div className="text-sm text-white mt-1">
+                    {event.type === 'status' && event.message}
+                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1321,7 +1415,6 @@ interface AgentBlockersTabProps {
   delegationsBypassActive?: boolean;
   onboarding?: OnboardingState;
   onboardingFlow?: OnboardingFlow;
-  telemetry?: TelemetryItem[];
   settings?: AgentSettings;
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
 }
@@ -1338,7 +1431,6 @@ function AgentBlockersTab({
   delegationsBypassActive,
   onboarding,
   onboardingFlow,
-  telemetry = [],
   settings,
   onSettingsChange,
 }: AgentBlockersTabProps) {
@@ -1566,18 +1658,6 @@ function AgentBlockersTab({
     });
   };
 
-  const formatDate = (timestamp?: string) => {
-    if (!timestamp) return '—';
-    const date = new Date(timestamp);
-    if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   const blockersInterruptView = useMemo(
     () =>
       resolveBlockersInterruptView({
@@ -1744,59 +1824,7 @@ function AgentBlockersTab({
         </div>
       )}
 
-      {/* Task Status */}
-      {taskId && (
-        <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs text-gray-500 uppercase tracking-wide">Current Task</span>
-              <p className="text-white font-medium">{taskId.slice(0, 12)}...</p>
-            </div>
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                taskStatus === 'working'
-                  ? 'bg-teal-500/20 text-teal-400'
-                  : taskStatus === 'completed'
-                    ? 'bg-blue-500/20 text-blue-400'
-                    : 'bg-gray-500/20 text-gray-400'
-              }`}
-            >
-              {taskStatus || 'pending'}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Latest Telemetry */}
-      {telemetry.length > 0 && (
-        <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Latest Activity</div>
-          <div className="space-y-2">
-            {telemetry.slice(-3).reverse().map((t, i) => (
-              <div
-                key={`${t.cycle}-${i}`}
-                className="flex items-center justify-between text-sm"
-              >
-                <div>
-                  <span className="text-white">Cycle {t.cycle}</span>
-                  <span className="text-gray-500 mx-2">•</span>
-                  <span className="text-gray-400">{t.action}</span>
-                </div>
-                <span className="text-xs text-gray-500">{formatDate(t.timestamp)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Set up agent section */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-2">Set up agent</h2>
-        <p className="text-gray-400 text-sm mb-6">
-          Get this agent started working on your wallet in a few steps, delegate assets and set
-          your preferences.
-        </p>
-
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
           {/* Form Area */}
           <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
@@ -1821,9 +1849,9 @@ function AgentBlockersTab({
                   </div>
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">Auto-selected yield</div>
+                    <div className="text-gray-300 text-sm font-medium mb-2">PT position management</div>
                     <p className="text-gray-400 text-xs">
-                      The agent will automatically select the highest-yield YT market and rotate when yields change.
+                      The agent configures and rebalances Pendle PT positions using your selected funding amount.
                     </p>
                     <p className="text-gray-500 text-xs mt-3">
                       Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
@@ -2142,19 +2170,10 @@ function AgentBlockersTab({
             ) : (
               <div className="text-center py-12">
                 <div className="text-gray-600 text-4xl mb-4">⏳</div>
-                <h3 className="text-lg font-medium text-white mb-2">
-                  {currentStep > 1 ? 'Processing…' : 'Waiting for agent'}
-                </h3>
+                <h3 className="text-lg font-medium text-white mb-2">Waiting for the next onboarding prompt</h3>
                 <p className="text-gray-500 text-sm">
-                  {currentStep > 1
-                    ? 'The agent is processing your last submission and will request the next input if needed.'
-                    : 'The agent will prompt you when it needs configuration input.'}
+                  The agent will request funding token options or signatures when needed.
                 </p>
-                {!taskId && (
-                  <p className="text-gray-600 text-xs mt-4">
-                    No active task. The agent may need to be started.
-                  </p>
-                )}
               </div>
             )}
           </div>
@@ -2194,14 +2213,6 @@ function AgentBlockersTab({
               </div>
             ))}
           </div>
-        </div>
-
-        {/* How Policies Work Link */}
-        <div className="mt-6">
-          <button className="text-[#fd6731] text-sm font-medium flex items-center gap-1 hover:underline">
-            How Policies Work
-            <ChevronRight className="w-4 h-4" />
-          </button>
         </div>
       </div>
     </div>

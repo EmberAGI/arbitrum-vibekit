@@ -1,0 +1,10 @@
+services:
+  web:
+    labels:
+      - traefik.http.routers.demo.middlewares=site-auth@docker
+      - traefik.http.middlewares.site-auth.plugin.trauth.domain=demo.emberai.xyz
+      - traefik.http.middlewares.site-auth.plugin.trauth.usersfile=/etc/traefik/users.htpasswd
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiekey=${TRAUTH_COOKIE_KEY}
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiename=trauth
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiesecure=true
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiehttponly=true

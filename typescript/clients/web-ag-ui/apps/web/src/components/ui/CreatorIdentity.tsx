@@ -21,7 +21,7 @@ export function CreatorIdentity({
 }: CreatorIdentityProps) {
   const emberTeam = isEmberTeam(name);
 
-  const logoSizeClass = size === 'md' ? 'h-4 w-4' : 'h-3 w-3';
+  const logoSizeClass = size === 'md' ? 'h-3.5 w-auto object-contain' : 'h-3 w-auto object-contain';
   const inlineCheckWrapClass = size === 'md' ? 'h-4 w-4' : 'h-3.5 w-3.5';
   const inlineCheckIconClass = size === 'md' ? 'h-2.5 w-2.5' : 'h-2.5 w-2.5';
   const emberWrapClass = size === 'md' ? 'h-5 w-5' : 'h-4 w-4';
@@ -31,12 +31,12 @@ export function CreatorIdentity({
       {emberTeam ? (
         <span
           className={[
-            'inline-flex items-center justify-center rounded-full ring-1 ring-white/10 bg-[#fd6731]',
+            'inline-flex items-center justify-center rounded-full ring-1 ring-black/10 bg-white',
             emberWrapClass,
           ].join(' ')}
           aria-hidden="true"
         >
-          <img src="/ember-logo.svg" alt="" className={logoSizeClass} />
+          <img src="/ember-by-tag-logo.png" alt="" className={logoSizeClass} />
         </span>
       ) : null}
 
