@@ -36,7 +36,7 @@ function getCallUrl(call: unknown[]): string {
   throw new Error('Unexpected fetch call input type');
 }
 
-const READY_VIEW = {
+const READY_THREAD = {
   operatorInput: {},
   fundingTokenInput: {},
   delegationsBypassActive: true,
@@ -67,7 +67,7 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
         return jsonResponse({ thread_id: 'thread-1' });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
-        return jsonResponse({ values: { view: READY_VIEW } });
+        return jsonResponse({ values: { thread: READY_THREAD } });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
         return new Response('busy', { status: 409 });
@@ -101,7 +101,7 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
         return jsonResponse({ thread_id: 'thread-1' });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
-        return jsonResponse({ values: { view: READY_VIEW } });
+        return jsonResponse({ values: { thread: READY_THREAD } });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
         return jsonResponse({ checkpoint_id: 'cp-1' });
@@ -145,7 +145,7 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
         return jsonResponse({
           values: {
-            view: {
+            thread: {
               command: 'hire',
               operatorInput: {},
               fundingTokenInput: {},
@@ -180,9 +180,9 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
           throw new Error('Expected string request body');
         }
         const body = JSON.parse(bodyText) as {
-          values?: { view?: { task?: { taskStatus?: { state?: string } } } };
+          values?: { thread?: { task?: { taskStatus?: { state?: string } } } };
         };
-        expect(body.values?.view?.task?.taskStatus?.state).toBe('working');
+        expect(body.values?.thread?.task?.taskStatus?.state).toBe('working');
         return jsonResponse({ checkpoint_id: 'cp-1' });
       }
       if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {

@@ -18,7 +18,7 @@ describe('summarizeNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         task: {
           id: 'task-1',
           taskStatus: {
@@ -33,10 +33,10 @@ describe('summarizeNode', () => {
 
     const result = await summarizeNode(state, {});
 
-    expect(result.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(result.view?.task?.taskStatus?.message?.content).toBe('Waiting for delegation approval.');
+    expect(result.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(result.thread?.task?.taskStatus?.message?.content).toBe('Waiting for delegation approval.');
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
-    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { view?: unknown })?.view as
+    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { thread?: unknown })?.thread as
       | {
           task?: { taskStatus?: { state?: string; message?: { content?: string } } };
         }
@@ -50,7 +50,7 @@ describe('summarizeNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         task: {
           id: 'task-1',
           taskStatus: {
@@ -71,12 +71,12 @@ describe('summarizeNode', () => {
 
     const result = await summarizeNode(state, {});
 
-    expect(result.view?.task?.taskStatus?.state).toBe('working');
-    expect(result.view?.task?.taskStatus?.message?.content).toBe(
+    expect(result.thread?.task?.taskStatus?.state).toBe('working');
+    expect(result.thread?.task?.taskStatus?.message?.content).toBe(
       'Onboarding complete. GMX Allora strategy is active.',
     );
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
-    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { view?: unknown })?.view as
+    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { thread?: unknown })?.thread as
       | {
           task?: { taskStatus?: { state?: string; message?: { content?: string } } };
         }
@@ -92,7 +92,7 @@ describe('summarizeNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         task: {
           id: 'task-1',
           taskStatus: {
@@ -116,8 +116,8 @@ describe('summarizeNode', () => {
 
     const result = await summarizeNode(state, {});
 
-    expect(result.view?.task?.taskStatus?.state).toBe('working');
-    expect(result.view?.task?.taskStatus?.message?.content).toBe(
+    expect(result.thread?.task?.taskStatus?.state).toBe('working');
+    expect(result.thread?.task?.taskStatus?.message?.content).toBe(
       'Onboarding complete. GMX Allora strategy is active.',
     );
   });

@@ -15,7 +15,7 @@ const baseState = (): ClmmState => ({
     cronScheduled: false,
     bootstrapped: false,
   },
-  view: {
+  thread: {
     command: undefined,
     task: undefined,
     poolArtifact: undefined,
@@ -72,7 +72,7 @@ describe('resolveCommandTarget', () => {
 
     const next = runCommandNode(state);
 
-    expect(next.view.lastAppliedClientMutationId).toBe('mutation-1');
+    expect(next.thread.lastAppliedClientMutationId).toBe('mutation-1');
   });
 
   it('routes cycle to bootstrap when not bootstrapped', () => {
@@ -93,7 +93,7 @@ describe('resolveCommandTarget', () => {
   it('routes cycle to collectFundingTokenInput when funding token selection is missing', () => {
     const state = baseState();
     state.private.bootstrapped = true;
-    state.view.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
+    state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
     state.messages = [message('cycle')];
 
     expect(resolveCommandTarget(state)).toBe('collectFundingTokenInput');
@@ -102,9 +102,9 @@ describe('resolveCommandTarget', () => {
   it('routes cycle to collectDelegations when delegations are required but missing', () => {
     const state = baseState();
     state.private.bootstrapped = true;
-    state.view.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
-    state.view.fundingTokenInput = { fundingTokenAddress: '0xdef' as `0x${string}` };
-    state.view.delegationsBypassActive = false;
+    state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
+    state.thread.fundingTokenInput = { fundingTokenAddress: '0xdef' as `0x${string}` };
+    state.thread.delegationsBypassActive = false;
     state.messages = [message('cycle')];
 
     expect(resolveCommandTarget(state)).toBe('collectDelegations');
@@ -113,9 +113,9 @@ describe('resolveCommandTarget', () => {
   it('routes cycle to prepareOperator when operator config is missing', () => {
     const state = baseState();
     state.private.bootstrapped = true;
-    state.view.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
-    state.view.fundingTokenInput = { fundingTokenAddress: '0xdef' as `0x${string}` };
-    state.view.delegationsBypassActive = true;
+    state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
+    state.thread.fundingTokenInput = { fundingTokenAddress: '0xdef' as `0x${string}` };
+    state.thread.delegationsBypassActive = true;
     state.messages = [message('cycle')];
 
     expect(resolveCommandTarget(state)).toBe('prepareOperator');
@@ -124,10 +124,10 @@ describe('resolveCommandTarget', () => {
   it('routes cycle to prepareOperator when setup is not complete yet', () => {
     const state = baseState();
     state.private.bootstrapped = true;
-    state.view.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
-    state.view.fundingTokenInput = { fundingTokenAddress: '0xdef' as `0x${string}` };
-    state.view.delegationsBypassActive = true;
-    state.view.operatorConfig = {
+    state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
+    state.thread.fundingTokenInput = { fundingTokenAddress: '0xdef' as `0x${string}` };
+    state.thread.delegationsBypassActive = true;
+    state.thread.operatorConfig = {
       walletAddress: '0xabc' as `0x${string}`,
       baseContributionUsd: 10,
       fundingTokenAddress: '0xdef' as `0x${string}`,
@@ -143,7 +143,7 @@ describe('resolveCommandTarget', () => {
         apy: 1,
       },
     };
-    state.view.setupComplete = false;
+    state.thread.setupComplete = false;
     state.messages = [message('cycle')];
 
     expect(resolveCommandTarget(state)).toBe('prepareOperator');
@@ -152,10 +152,10 @@ describe('resolveCommandTarget', () => {
   it('routes cycle to runCycleCommand when configured and setup complete', () => {
     const state = baseState();
     state.private.bootstrapped = true;
-    state.view.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
-    state.view.fundingTokenInput = { fundingTokenAddress: '0xdef' as `0x${string}` };
-    state.view.delegationsBypassActive = true;
-    state.view.operatorConfig = {
+    state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
+    state.thread.fundingTokenInput = { fundingTokenAddress: '0xdef' as `0x${string}` };
+    state.thread.delegationsBypassActive = true;
+    state.thread.operatorConfig = {
       walletAddress: '0xabc' as `0x${string}`,
       baseContributionUsd: 10,
       fundingTokenAddress: '0xdef' as `0x${string}`,
@@ -171,7 +171,7 @@ describe('resolveCommandTarget', () => {
         apy: 1,
       },
     };
-    state.view.setupComplete = true;
+    state.thread.setupComplete = true;
     state.messages = [message('cycle')];
 
     expect(resolveCommandTarget(state)).toBe('runCycleCommand');

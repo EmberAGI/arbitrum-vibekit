@@ -1,5 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
+import { type Command } from '@langchain/langgraph';
+import { buildNodeTransition, buildStateUpdate } from 'agent-workflow-core';
 
 import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
 import { type CamelotPool } from '../../domain/types.js';
@@ -12,6 +13,7 @@ import {
   type ClmmState,
   type ClmmUpdate,
 } from '../context.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 import { isPoolAllowed } from '../pools.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -39,22 +41,23 @@ export const listPoolsNode = async (
       error: message,
       elapsedMs: Date.now() - startedAt,
     });
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
-        view: {
+        thread: {
           haltReason: failureMessage,
           activity: { events: [statusEvent], telemetry: [] },
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
+          metrics: state.thread.metrics,
         },
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
   const mode = state.private.mode ?? 'debug';
@@ -67,22 +70,23 @@ export const listPoolsNode = async (
   });
   if (allowedPools.length === 0) {
     const failureMessage = `ERROR: No Camelot pools available for mode=${mode}`;
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
-        view: {
+        thread: {
           haltReason: failureMessage,
           activity: { events: [statusEvent], telemetry: [] },
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
+          metrics: state.thread.metrics,
         },
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -92,12 +96,12 @@ export const listPoolsNode = async (
     poolCount: Math.min(allowedPools.length, 8),
   });
   const { task, statusEvent } = buildTaskStatus(
-    state.view.task,
+    state.thread.task,
     'working',
     `Discovered ${allowedPools.length}/${pools.length} allowed Camelot pools`,
   );
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    thread: { task, activity: { events: [statusEvent], telemetry: [] } },
   });
 
   const events: ClmmEvent[] = [{ type: 'artifact', artifact: poolArtifact }, statusEvent];
@@ -106,20 +110,20 @@ export const listPoolsNode = async (
   // via the interrupt in collectOperatorInput. This ensures the cron only starts
   // once the workflow is fully configured.
 
-  return {
-    view: {
+  return buildStateUpdate({
+    thread: {
       profile: {
         pools,
         allowedPools,
       },
       poolArtifact,
       task,
-      activity: { events, telemetry: state.view.activity.telemetry },
-      transactionHistory: state.view.transactionHistory,
-      metrics: state.view.metrics,
+      activity: { events, telemetry: state.thread.activity.telemetry },
+      transactionHistory: state.thread.transactionHistory,
+      metrics: state.thread.metrics,
     },
     private: {
       mode,
     },
-  };
+  });
 };

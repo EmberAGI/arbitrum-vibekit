@@ -3,10 +3,10 @@ import {
   defaultMetrics,
   defaultProfile,
   defaultSettings,
-  defaultView,
+  defaultThreadState,
   initialAgentState,
-  type AgentState,
-  type AgentView,
+  type ThreadSnapshot,
+  type ThreadState,
 } from '../types/agent';
 import type { AgentListEntry } from './agentListTypes';
 import { projectAgentListUpdate } from './agentListProjection';
@@ -15,14 +15,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function cloneInitialState(): AgentState {
+function cloneInitialState(): ThreadSnapshot {
   return {
     ...initialAgentState,
     messages: [],
     copilotkit: { actions: [], context: [] },
     settings: { ...defaultSettings },
-    view: {
-      ...defaultView,
+    thread: {
+      ...defaultThreadState,
       profile: {
         ...defaultProfile,
         chains: [],
@@ -44,17 +44,24 @@ function cloneInitialState(): AgentState {
   };
 }
 
-function mergeStatePayload(projected: AgentState, incoming: Partial<AgentState>): AgentState {
-  const incomingView = isRecord(incoming.view) ? (incoming.view as Partial<AgentView>) : {};
-  const incomingProfile = isRecord(incomingView.profile)
-    ? incomingView.profile
-    : ({} as Partial<AgentView['profile']>);
-  const incomingActivity = isRecord(incomingView.activity)
-    ? incomingView.activity
-    : ({} as Partial<AgentView['activity']>);
-  const incomingMetrics = isRecord(incomingView.metrics)
-    ? incomingView.metrics
-    : ({} as Partial<AgentView['metrics']>);
+function mergeStatePayload(projected: ThreadSnapshot, incoming: Partial<ThreadSnapshot>): ThreadSnapshot {
+  type IncomingThreadEnvelope = Partial<ThreadSnapshot> & {
+    thread?: Partial<ThreadState>;
+  };
+  const incomingEnvelope = incoming as IncomingThreadEnvelope;
+  const incomingThreadRaw = isRecord(incomingEnvelope.thread) ? incomingEnvelope.thread : {};
+  const { command: _droppedCommand, ...incomingThread } = incomingThreadRaw as Partial<ThreadState> & {
+    command?: unknown;
+  };
+  const incomingProfile = isRecord(incomingThread.profile)
+    ? incomingThread.profile
+    : ({} as Partial<ThreadState['profile']>);
+  const incomingActivity = isRecord(incomingThread.activity)
+    ? incomingThread.activity
+    : ({} as Partial<ThreadState['activity']>);
+  const incomingMetrics = isRecord(incomingThread.metrics)
+    ? incomingThread.metrics
+    : ({} as Partial<ThreadState['metrics']>);
 
   projected.messages = Array.isArray(incoming.messages) ? incoming.messages : projected.messages;
 
@@ -72,74 +79,72 @@ function mergeStatePayload(projected: AgentState, incoming: Partial<AgentState>)
     };
   }
 
-  projected.view = {
-    ...projected.view,
-    ...incomingView,
+  projected.thread = {
+    ...projected.thread,
+    ...incomingThread,
     profile: {
-      ...projected.view.profile,
+      ...projected.thread.profile,
       ...incomingProfile,
       chains: Array.isArray(incomingProfile.chains)
         ? incomingProfile.chains
-        : projected.view.profile.chains,
+        : projected.thread.profile.chains,
       protocols: Array.isArray(incomingProfile.protocols)
         ? incomingProfile.protocols
-        : projected.view.profile.protocols,
+        : projected.thread.profile.protocols,
       tokens: Array.isArray(incomingProfile.tokens)
         ? incomingProfile.tokens
-        : projected.view.profile.tokens,
+        : projected.thread.profile.tokens,
       pools: Array.isArray(incomingProfile.pools)
         ? incomingProfile.pools
-        : projected.view.profile.pools,
+        : projected.thread.profile.pools,
       allowedPools: Array.isArray(incomingProfile.allowedPools)
         ? incomingProfile.allowedPools
-        : projected.view.profile.allowedPools,
+        : projected.thread.profile.allowedPools,
     },
     activity: {
-      ...projected.view.activity,
+      ...projected.thread.activity,
       ...incomingActivity,
       telemetry: Array.isArray(incomingActivity.telemetry)
         ? incomingActivity.telemetry
-        : projected.view.activity.telemetry,
+        : projected.thread.activity.telemetry,
       events: Array.isArray(incomingActivity.events)
         ? incomingActivity.events
-        : projected.view.activity.events,
+        : projected.thread.activity.events,
     },
     metrics: {
-      ...projected.view.metrics,
+      ...projected.thread.metrics,
       ...incomingMetrics,
     },
-    transactionHistory: Array.isArray(incomingView.transactionHistory)
-      ? incomingView.transactionHistory
-      : projected.view.transactionHistory,
+    transactionHistory: Array.isArray(incomingThread.transactionHistory)
+      ? incomingThread.transactionHistory
+      : projected.thread.transactionHistory,
   };
-
   return projected;
 }
 
 export function projectDetailStateFromPayload(
   payload: unknown,
-  previousState?: AgentState | null,
-): AgentState | null {
+  previousState?: ThreadSnapshot | null,
+): ThreadSnapshot | null {
   if (!isRecord(payload)) return null;
   if (Object.keys(payload).length === 0) return null;
 
   const projected = cloneInitialState();
 
   if (previousState && isRecord(previousState) && Object.keys(previousState).length > 0) {
-    mergeStatePayload(projected, previousState as Partial<AgentState>);
+    mergeStatePayload(projected, previousState as Partial<ThreadSnapshot>);
   }
 
-  mergeStatePayload(projected, payload as Partial<AgentState>);
+  mergeStatePayload(projected, payload as Partial<ThreadSnapshot>);
   return projected;
 }
 
-export function projectAgentListUpdateFromState(state: AgentState): Partial<AgentListEntry> {
+export function projectAgentListUpdateFromState(state: ThreadSnapshot): Partial<AgentListEntry> {
   return projectAgentListUpdate({
-    command: state.view.command,
-    profile: state.view.profile,
-    metrics: state.view.metrics,
-    task: state.view.task,
-    haltReason: state.view.haltReason,
-    executionError: state.view.executionError,
+    profile: state.thread.profile,
+    metrics: state.thread.metrics,
+    task: state.thread.task,
+    haltReason: state.thread.haltReason,
+    executionError: state.thread.executionError,
   });
 }

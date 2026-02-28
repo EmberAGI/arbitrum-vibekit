@@ -2,7 +2,6 @@ import {
   extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
   resolveCommandTargetForBootstrappedFlow,
-  resolveRunCommandForView,
   type AgentCommand,
   type CommandEnvelope,
   type CommandRoutingTarget,
@@ -23,28 +22,23 @@ export function extractCommand(messages: ClmmState['messages']): AgentCommand | 
 export function runCommandNode(state: ClmmState): ClmmState {
   const commandEnvelope = extractCommandEnvelope(state.messages);
   const parsedCommand = commandEnvelope?.command ?? null;
-  const nextCommand = resolveRunCommandForView({
-    parsedCommand,
-    currentViewCommand: state.view.command,
-  });
   const lastAppliedClientMutationId =
     parsedCommand === 'sync'
-      ? commandEnvelope?.clientMutationId ?? state.view.lastAppliedClientMutationId
-      : state.view.lastAppliedClientMutationId;
+      ? commandEnvelope?.clientMutationId ?? state.thread.lastAppliedClientMutationId
+      : state.thread.lastAppliedClientMutationId;
 
   return {
     ...state,
-    view: {
-      ...state.view,
-      command: nextCommand,
+    thread: {
+      ...state.thread,
       lastAppliedClientMutationId,
     },
   };
 }
 
-export function resolveCommandTarget({ messages, private: priv, view }: ClmmState): CommandTarget {
+export function resolveCommandTarget({ messages, private: priv }: ClmmState): CommandTarget {
   return resolveCommandTargetForBootstrappedFlow({
-    resolvedCommand: extractCommand(messages) ?? view.command,
+    resolvedCommand: extractCommand(messages),
     bootstrapped: priv.bootstrapped,
   });
 }

@@ -32,13 +32,19 @@ describe('collectSetupInputNode', () => {
     expect(source.includes('new Command(')).toBe(false);
   });
 
+  it('uses shared interrupt payload helpers instead of manual JSON parsing', async () => {
+    const source = await readFile(new URL('./collectSetupInput.ts', import.meta.url), 'utf8');
+    expect(source.includes('requestInterruptPayload(')).toBe(true);
+    expect(source.includes('JSON.parse(')).toBe(false);
+  });
+
   it('persists input-required state before interrupting when runnable config exists', async () => {
     interruptMock.mockReset();
     copilotkitEmitStateMock.mockReset();
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         task: { id: 'task-1', taskStatus: { state: 'submitted' } },
         activity: { telemetry: [], events: [] },
       },
@@ -52,7 +58,7 @@ describe('collectSetupInputNode', () => {
     const commandResult = result as unknown as {
       goto?: string[];
       update?: {
-        view?: {
+        thread?: {
           task?: { taskStatus?: { state?: string } };
           onboarding?: { step?: number; key?: string };
         };
@@ -60,7 +66,7 @@ describe('collectSetupInputNode', () => {
     };
 
     expect(commandResult.goto).toContain('collectSetupInput');
-    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.onboarding).toEqual({ step: 1, key: 'setup' });
+    expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(commandResult.update?.thread?.onboarding).toEqual({ step: 1, key: 'setup' });
   });
 });

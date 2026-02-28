@@ -163,18 +163,18 @@ describe('AgentListProvider integration', () => {
     expect(latest).not.toBeNull();
 
     // Active detail route is agent-pendle, so poll updates for it must be ignored.
-    latest?.upsertAgent('agent-pendle', { command: 'sync' }, 'poll');
+    latest?.upsertAgent('agent-pendle', { taskState: 'working' }, 'poll');
     await flushEffects();
-    expect(latest?.agents['agent-pendle']?.command).toBeUndefined();
+    expect(latest?.agents['agent-pendle']?.taskState).toBeUndefined();
 
     // Detail-connect is authoritative for active detail agent.
-    latest?.upsertAgent('agent-pendle', { command: 'sync' }, 'detail-connect');
+    latest?.upsertAgent('agent-pendle', { taskState: 'working' }, 'detail-connect');
     await flushEffects();
-    expect(latest?.agents['agent-pendle']?.command).toBe('sync');
+    expect(latest?.agents['agent-pendle']?.taskState).toBe('working');
 
     // Detail-connect updates for non-active agents must be ignored.
-    latest?.upsertAgent('agent-clmm', { command: 'hire' }, 'detail-connect');
+    latest?.upsertAgent('agent-clmm', { taskState: 'working' }, 'detail-connect');
     await flushEffects();
-    expect(latest?.agents['agent-clmm']?.command).toBeUndefined();
+    expect(latest?.agents['agent-clmm']?.taskState).toBeUndefined();
   });
 });

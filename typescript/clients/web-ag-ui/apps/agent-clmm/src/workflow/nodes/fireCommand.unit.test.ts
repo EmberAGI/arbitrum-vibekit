@@ -84,7 +84,7 @@ describe('fireCommandNode (CLMM)', () => {
     });
 
     const state = {
-      view: {
+      thread: {
         operatorConfig,
         selectedPool,
         delegationsBypassActive: true,
@@ -128,7 +128,7 @@ describe('fireCommandNode (CLMM)', () => {
     expect(firstArg.pool?.address).toBe(selectedPool.address);
     expect(appendTransactionHistoryMock).toHaveBeenCalled();
 
-    const view = (result as { view: { task?: unknown; transactionHistory?: unknown } }).view;
+    const view = (result as { thread: { task?: unknown; transactionHistory?: unknown } }).thread;
     const task = view.task as { taskStatus?: { state?: unknown } };
     expect(task.taskStatus?.state).toBe('completed');
 

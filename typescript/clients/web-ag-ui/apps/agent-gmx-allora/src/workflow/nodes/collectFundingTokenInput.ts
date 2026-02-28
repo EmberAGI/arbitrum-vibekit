@@ -6,7 +6,7 @@ import { selectGmxPerpetualMarket } from '../../core/marketSelection.js';
 import { type FundingTokenInput } from '../../domain/types.js';
 import { getOnchainActionsClient } from '../clientFactory.js';
 import {
-  applyViewPatch,
+  applyThreadPatch,
   buildTaskStatus,
   logInfo,
   logWarn,
@@ -42,57 +42,57 @@ export const collectFundingTokenInputNode = async (
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
   logInfo('collectFundingTokenInput: entering node', {
-    hasOperatorInput: Boolean(state.view.operatorInput),
-    onboardingStep: state.view.onboarding?.step,
+    hasOperatorInput: Boolean(state.thread.operatorInput),
+    onboardingStep: state.thread.onboarding?.step,
   });
   logWarn('collectFundingTokenInput: node entered', {
-    hasOperatorInput: Boolean(state.view.operatorInput),
-    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
-    onboardingStatus: state.view.onboardingFlow?.status,
-    onboardingStep: state.view.onboarding?.step,
-    onboardingKey: state.view.onboarding?.key,
+    hasOperatorInput: Boolean(state.thread.operatorInput),
+    hasFundingTokenInput: Boolean(state.thread.fundingTokenInput),
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    onboardingStep: state.thread.onboarding?.step,
+    onboardingKey: state.thread.onboarding?.key,
   });
 
-  const operatorInput = state.view.operatorInput;
+  const operatorInput = state.thread.operatorInput;
   if (!operatorInput) {
     logInfo('collectFundingTokenInput: setup input missing; rerouting to collectSetupInput');
     return {};
   }
 
-  if (state.view.fundingTokenInput) {
+  if (state.thread.fundingTokenInput) {
     logInfo('collectFundingTokenInput: funding token already present; skipping step');
     logWarn('collectFundingTokenInput: skipping funding token collection', {
       reason: 'funding-token-already-present-in-view',
-      fundingTokenAddress: state.view.fundingTokenInput.fundingTokenAddress,
-      onboardingStatus: state.view.onboardingFlow?.status,
-      onboardingStep: state.view.onboarding?.step,
-      onboardingKey: state.view.onboarding?.key,
+      fundingTokenAddress: state.thread.fundingTokenInput.fundingTokenAddress,
+      onboardingStatus: state.thread.onboardingFlow?.status,
+      onboardingStep: state.thread.onboarding?.step,
+      onboardingKey: state.thread.onboarding?.key,
     });
-    const resumedView = applyViewPatch(state, {
+    const resumedView = applyThreadPatch(state, {
       onboarding:
-        state.view.delegationsBypassActive === true
+        state.thread.delegationsBypassActive === true
           ? { step: 2, key: FUNDING_STEP_KEY }
-          : state.view.onboarding?.key === FUNDING_STEP_KEY
+          : state.thread.onboarding?.key === FUNDING_STEP_KEY
             ? { step: 3, key: DELEGATION_STEP_KEY }
             : { step: 2, key: DELEGATION_STEP_KEY },
     });
     return {
-      view: resumedView,
+      thread: resumedView,
     };
   }
 
   const awaitingInput = buildTaskStatus(
-    state.view.task,
+    state.thread.task,
     'working',
     'Using USDC as collateral for GMX perps.',
   );
-  const pendingView = applyViewPatch(state, {
+  const pendingView = applyThreadPatch(state, {
     onboarding: { step: 2, key: FUNDING_STEP_KEY },
     task: awaitingInput.task,
-    activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
+    activity: { events: [awaitingInput.statusEvent], telemetry: state.thread.activity.telemetry },
   });
   await copilotkitEmitState(config, {
-    view: pendingView,
+    thread: pendingView,
   });
 
   let normalizedFundingToken: `0x${string}`;
@@ -115,20 +115,20 @@ export const collectFundingTokenInputNode = async (
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to resolve USDC funding token from ${ONCHAIN_ACTIONS_API_URL}: ${message}`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
-    const failedView = applyViewPatch(state, {
+    const failedView = applyThreadPatch(state, {
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
     await copilotkitEmitState(config, {
-      view: failedView,
+      thread: failedView,
     });
-    const haltedView = applyViewPatch(state, {
+    const haltedView = applyThreadPatch(state, {
       haltReason: failureMessage,
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
     return {
-      view: haltedView,
+      thread: haltedView,
     };
   }
 
@@ -137,28 +137,28 @@ export const collectFundingTokenInputNode = async (
     'working',
     'USDC collateral selected. Preparing delegation request.',
   );
-  const workingView = applyViewPatch(state, {
+  const workingView = applyThreadPatch(state, {
     task,
-    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
   });
   await copilotkitEmitState(config, {
-    view: workingView,
+    thread: workingView,
   });
 
   const input: FundingTokenInput = {
     fundingTokenAddress: normalizedFundingToken,
   };
 
-  const completedView = applyViewPatch(state, {
+  const completedView = applyThreadPatch(state, {
     fundingTokenInput: input,
     onboarding:
-      state.view.delegationsBypassActive === true
+      state.thread.delegationsBypassActive === true
         ? { step: 2, key: FUNDING_STEP_KEY }
         : { step: 3, key: DELEGATION_STEP_KEY },
     task,
-    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
   });
   return {
-    view: completedView,
+    thread: completedView,
   };
 };

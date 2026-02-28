@@ -1,11 +1,11 @@
 export function deriveTaskStateForUi(params: {
-  command: string | null | undefined;
+  lifecyclePhase: string | null | undefined;
   taskState: string | null | undefined;
   taskMessage: string | null | undefined;
 }): string | null | undefined {
-  const { command, taskState, taskMessage } = params;
+  const { lifecyclePhase, taskState, taskMessage } = params;
 
-  if (command !== 'fire') {
+  if (lifecyclePhase !== 'firing') {
     return taskState;
   }
   if (taskState !== 'failed') {
@@ -20,4 +20,3 @@ export function deriveTaskStateForUi(params: {
 
   return isInterruptLike ? 'completed' : taskState;
 }
-

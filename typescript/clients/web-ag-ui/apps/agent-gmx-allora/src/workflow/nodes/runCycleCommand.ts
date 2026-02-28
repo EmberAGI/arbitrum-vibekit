@@ -24,40 +24,40 @@ export const runCycleCommandNode = async (
     threadId,
     checkpointId,
     checkpointNamespace,
-    onboardingStatus: state.view.onboardingFlow?.status,
-    onboardingStep: state.view.onboarding?.step,
-    onboardingKey: state.view.onboarding?.key,
-    taskState: state.view.task?.taskStatus?.state,
-    hasOperatorConfig: Boolean(state.view.operatorConfig),
-    hasSelectedPool: Boolean(state.view.selectedPool),
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    onboardingStep: state.thread.onboarding?.step,
+    onboardingKey: state.thread.onboarding?.key,
+    taskState: state.thread.task?.taskStatus?.state,
+    hasOperatorConfig: Boolean(state.thread.operatorConfig),
+    hasSelectedPool: Boolean(state.thread.selectedPool),
   });
   const nextOnboardingNode = resolveNextOnboardingNode(state);
   if (nextOnboardingNode !== 'syncState') {
     logInfo('runCycleCommand: onboarding incomplete; deferring cycle run', {
       nextOnboardingNode,
-      hasOperatorConfig: Boolean(state.view.operatorConfig),
-      hasSelectedPool: Boolean(state.view.selectedPool),
-      hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
-      hasDelegationBundle: Boolean(state.view.delegationBundle),
+      hasOperatorConfig: Boolean(state.thread.operatorConfig),
+      hasSelectedPool: Boolean(state.thread.selectedPool),
+      hasFundingTokenInput: Boolean(state.thread.fundingTokenInput),
+      hasDelegationBundle: Boolean(state.thread.delegationBundle),
     });
     logWarn('runCycleCommand: rerouting cycle because onboarding incomplete', {
       threadId,
       checkpointId,
       checkpointNamespace,
       nextOnboardingNode,
-      taskState: state.view.task?.taskStatus?.state,
-      taskMessage: state.view.task?.taskStatus?.message?.content,
+      taskState: state.thread.task?.taskStatus?.state,
+      taskMessage: state.thread.task?.taskStatus?.message?.content,
     });
     return {};
   }
 
   const { task, statusEvent } = buildTaskStatus(
-    state.view.task,
+    state.thread.task,
     'working',
     'Running scheduled GMX Allora cycle.',
   );
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    thread: { task, activity: { events: [statusEvent], telemetry: [] } },
   });
   logWarn('runCycleCommand: cycle task submitted for poll execution', {
     threadId,
@@ -68,9 +68,9 @@ export const runCycleCommandNode = async (
   });
 
   return {
-    view: {
+    thread: {
       task,
-      command: 'cycle',
+      lifecycle: { phase: 'active' },
       activity: { events: [statusEvent], telemetry: [] },
     },
   };

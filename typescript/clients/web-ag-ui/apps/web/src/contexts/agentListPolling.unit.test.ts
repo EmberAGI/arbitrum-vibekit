@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSubscriber } from '@ag-ui/client';
 
-import type { AgentState } from '../types/agent';
+import type { ThreadSnapshot } from '../types/agent';
 import {
   pollAgentIdsWithConcurrency,
   pollAgentListUpdateViaAgUi,
@@ -105,9 +105,9 @@ describe('agentListPolling', () => {
       }),
       addMessage,
       runAgent: vi.fn(async () => {
-        const snapshotState: AgentState = {
+        const snapshotState: ThreadSnapshot = {
           settings: {},
-          view: {
+          thread: {
             command: 'cycle',
             profile: {
               chains: ['Arbitrum'],
@@ -149,7 +149,6 @@ describe('agentListPolling', () => {
 
     expect(outcome.update).toMatchObject({
       synced: true,
-      command: 'cycle',
       taskId: 'task-1',
       taskState: 'working',
       taskMessage: 'Cycling',
@@ -217,7 +216,7 @@ describe('agentListPolling', () => {
             type: 'STATE_SNAPSHOT',
             snapshot: {
               settings: {},
-              view: {
+              thread: {
                 command: 'sync',
                 profile: {
                   chains: [],
@@ -230,7 +229,7 @@ describe('agentListPolling', () => {
                 metrics: { iteration: 0, cyclesSinceRebalance: 0, staleCycles: 0 },
                 transactionHistory: [],
               },
-            } as AgentState,
+            } as ThreadSnapshot,
           },
         } as never);
         await new Promise<void>(() => undefined);
@@ -280,7 +279,7 @@ describe('agentListPolling', () => {
             type: 'STATE_SNAPSHOT',
             snapshot: {
               settings: {},
-              view: {
+              thread: {
                 command: 'sync',
                 profile: {
                   chains: [],
@@ -293,7 +292,7 @@ describe('agentListPolling', () => {
                 metrics: { iteration: 0, cyclesSinceRebalance: 0, staleCycles: 0 },
                 transactionHistory: [],
               },
-            } as AgentState,
+            } as ThreadSnapshot,
           },
         } as never);
         await new Promise<void>(() => undefined);
@@ -343,7 +342,7 @@ describe('agentListPolling', () => {
             type: 'STATE_SNAPSHOT',
             snapshot: {
               settings: {},
-              view: {
+              thread: {
                 command: 'hire',
                 profile: {
                   chains: [],
@@ -363,7 +362,7 @@ describe('agentListPolling', () => {
                 },
                 transactionHistory: [],
               },
-            } as AgentState,
+            } as ThreadSnapshot,
           },
         } as never);
 
@@ -374,7 +373,7 @@ describe('agentListPolling', () => {
             type: 'STATE_SNAPSHOT',
             snapshot: {
               settings: {},
-              view: {
+              thread: {
                 command: 'cycle',
                 profile: {
                   chains: [],
@@ -394,7 +393,7 @@ describe('agentListPolling', () => {
                 },
                 transactionHistory: [],
               },
-            } as AgentState,
+            } as ThreadSnapshot,
           },
         } as never);
 
@@ -421,7 +420,6 @@ describe('agentListPolling', () => {
 
     expect(outcome.busy).toBe(false);
     expect(outcome.update).toMatchObject({
-      command: 'cycle',
       taskId: 'task-cycle',
       taskState: 'working',
       taskMessage: 'Executing cycle',

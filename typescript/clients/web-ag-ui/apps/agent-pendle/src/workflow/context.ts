@@ -5,11 +5,12 @@ import {
   createMessageHistoryReducer,
   isTaskActiveState,
   isTaskTerminalState,
-  mergeViewPatchForEmit,
+  mergeThreadPatchForEmit,
   normalizeLegacyOnboardingState,
-  type AgentCommand,
+  resolveThreadLifecyclePhase,
   type OnboardingContract,
   type TaskState,
+  type ThreadLifecyclePhase,
 } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 
@@ -253,8 +254,14 @@ export type OnboardingState = {
   key?: string;
 };
 
-type ClmmViewState = {
-  command?: AgentCommand;
+export type ThreadLifecycle = {
+  phase: ThreadLifecyclePhase;
+  reason?: string;
+  updatedAt?: string;
+};
+
+type ClmmThreadState = {
+  lifecycle: ThreadLifecycle;
   lastAppliedClientMutationId?: string;
   task?: Task;
   poolArtifact?: Artifact;
@@ -287,8 +294,10 @@ const defaultPrivateState = (): ClmmPrivateState => ({
   bootstrapped: false,
 });
 
-const defaultViewState = (): ClmmViewState => ({
-  command: undefined,
+const defaultThreadState = (): ClmmThreadState => ({
+  lifecycle: {
+    phase: 'prehire',
+  },
   lastAppliedClientMutationId: undefined,
   task: undefined,
   poolArtifact: undefined,
@@ -383,13 +392,15 @@ const limitHistory = <T>(items: T[], limit: number): T[] => {
   return items.slice(-limit);
 };
 
-const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): ClmmViewState => {
+const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState>): ClmmThreadState => {
   if (!right) {
     return left;
   }
   const nextTask = right.task ?? left.task;
   const nextOnboarding = right.onboarding ?? left.onboarding;
   const nextSetupComplete = right.setupComplete ?? left.setupComplete;
+  const nextOperatorConfig = right.operatorConfig ?? left.operatorConfig;
+  const nextDelegationBundle = right.delegationBundle ?? left.delegationBundle;
   const nextDelegationsBypassActive = right.delegationsBypassActive ?? left.delegationsBypassActive;
   const nextOnboardingFlow = derivePendleOnboardingFlow({
     onboarding: nextOnboarding,
@@ -439,11 +450,28 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     pendle: right.metrics?.pendle ?? left.metrics.pendle,
     latestSnapshot: right.metrics?.latestSnapshot ?? left.metrics.latestSnapshot,
   };
+  const explicitLifecyclePhase = right.lifecycle?.phase;
+  const nextLifecyclePhase = resolveThreadLifecyclePhase({
+    previousPhase: left.lifecycle?.phase,
+    taskState: nextTask?.taskStatus?.state,
+    onboardingFlowStatus: nextOnboardingFlow?.status,
+    onboardingStep: normalizedOnboarding?.step,
+    explicitLifecyclePhase,
+    setupComplete: nextSetupComplete === true,
+    hasOperatorConfig: Boolean(nextOperatorConfig),
+    hasDelegationBundle: Boolean(nextDelegationBundle),
+    fireRequested: explicitLifecyclePhase === 'firing',
+  });
+  const nextLifecycle: ThreadLifecycle = {
+    phase: nextLifecyclePhase,
+    reason: right.lifecycle?.reason ?? left.lifecycle?.reason,
+    updatedAt: right.lifecycle?.updatedAt ?? left.lifecycle?.updatedAt,
+  };
 
   return {
     ...left,
     ...right,
-    command: right.command ?? left.command,
+    lifecycle: nextLifecycle,
     task: nextTask,
     poolArtifact: right.poolArtifact ?? left.poolArtifact,
     operatorInput: right.operatorInput ?? left.operatorInput,
@@ -451,9 +479,9 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     onboardingFlow: nextOnboardingFlow,
     fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
     selectedPool: right.selectedPool ?? left.selectedPool,
-    operatorConfig: right.operatorConfig ?? left.operatorConfig,
+    operatorConfig: nextOperatorConfig,
     setupComplete: nextSetupComplete,
-    delegationBundle: right.delegationBundle ?? left.delegationBundle,
+    delegationBundle: nextDelegationBundle,
     haltReason: right.haltReason ?? left.haltReason,
     executionError: right.executionError ?? left.executionError,
     delegationsBypassActive: nextDelegationsBypassActive,
@@ -489,25 +517,25 @@ export const ClmmStateAnnotation = Annotation.Root({
     default: defaultPrivateState,
     reducer: (left, right) => mergePrivateState(left ?? defaultPrivateState(), right),
   }),
-  view: Annotation<ClmmViewState, Partial<ClmmViewState>>({
-    default: defaultViewState,
-    reducer: (left, right) => mergeViewState(left ?? defaultViewState(), right),
+  thread: Annotation<ClmmThreadState, Partial<ClmmThreadState>>({
+    default: defaultThreadState,
+    reducer: (left, right) => mergeThreadState(left ?? defaultThreadState(), right),
   }),
 });
 
 export type ClmmState = typeof ClmmStateAnnotation.State;
 export type ClmmUpdate = typeof ClmmStateAnnotation.Update;
 
-export const applyViewPatch = (state: ClmmState, patch: Partial<ClmmViewState>): ClmmViewState => {
-  const mergedView = mergeViewPatchForEmit({
-    currentView: state.view,
-    patchView: patch,
-    mergeWithInvariants: (currentView, patchView) => {
-      const hydratedCurrentView = mergeViewState(defaultViewState(), currentView);
-      return mergeViewState(hydratedCurrentView, patchView);
+export const applyThreadPatch = (state: ClmmState, patch: Partial<ClmmThreadState>): ClmmThreadState => {
+  const mergedView = mergeThreadPatchForEmit({
+    currentThread: state.thread,
+    patchThread: patch,
+    mergeWithInvariants: (currentThread, patchThread) => {
+      const hydratedCurrentView = mergeThreadState(defaultThreadState(), currentThread);
+      return mergeThreadState(hydratedCurrentView, patchThread);
     },
   });
-  state.view = mergedView;
+  state.thread = mergedView;
   return mergedView;
 };
 

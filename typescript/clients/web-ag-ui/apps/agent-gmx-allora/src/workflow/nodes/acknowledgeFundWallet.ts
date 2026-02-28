@@ -2,13 +2,14 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { type Command, interrupt } from '@langchain/langgraph';
 import {
   buildInterruptPauseTransition,
+  requestInterruptPayload,
   buildTerminalTransition,
   shouldPersistInputRequiredCheckpoint,
 } from 'agent-workflow-core';
 import { z } from 'zod';
 
 import {
-  applyViewPatch,
+  applyThreadPatch,
   buildTaskStatus,
   logWarn,
   logPauseSnapshot,
@@ -43,10 +44,10 @@ const resolveNonEmptyMessage = (value: unknown, fallback: string): string =>
   typeof value === 'string' && value.trim().length > 0 ? value : fallback;
 
 function buildFundWalletInterrupt(state: ClmmState): GmxFundWalletInterrupt {
-  const walletAddress = state.view.operatorConfig?.delegatorWalletAddress;
-  const requiredCollateralSymbol = state.view.selectedPool?.quoteSymbol ?? 'USDC';
+  const walletAddress = state.thread.operatorConfig?.delegatorWalletAddress;
+  const requiredCollateralSymbol = state.thread.selectedPool?.quoteSymbol ?? 'USDC';
   const message = resolveNonEmptyMessage(
-    state.view.task?.taskStatus.message?.content,
+    state.thread.task?.taskStatus.message?.content,
     DEFAULT_INTERRUPT_MESSAGE,
   );
 
@@ -72,18 +73,18 @@ export const acknowledgeFundWalletNode = async (
     threadId,
     checkpointId,
     checkpointNamespace,
-    command: state.view.command,
-    taskState: state.view.task?.taskStatus?.state,
-    taskMessage: state.view.task?.taskStatus?.message?.content,
-    executionError: state.view.executionError,
-    hasOperatorConfig: Boolean(state.view.operatorConfig),
-    hasDelegationBundle: Boolean(state.view.delegationBundle),
-    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
+    lifecyclePhase: state.thread.lifecycle?.phase ?? 'prehire',
+    taskState: state.thread.task?.taskStatus?.state,
+    taskMessage: state.thread.task?.taskStatus?.message?.content,
+    executionError: state.thread.executionError,
+    hasOperatorConfig: Boolean(state.thread.operatorConfig),
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
+    hasFundingTokenInput: Boolean(state.thread.fundingTokenInput),
   });
-  const pendingMessage = resolveNonEmptyMessage(state.view.executionError, DEFAULT_PENDING_MESSAGE);
-  const awaitingInput = buildTaskStatus(state.view.task, 'input-required', pendingMessage);
+  const pendingMessage = resolveNonEmptyMessage(state.thread.executionError, DEFAULT_PENDING_MESSAGE);
+  const awaitingInput = buildTaskStatus(state.thread.task, 'input-required', pendingMessage);
   const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
-  const telemetry = state.view.activity?.telemetry ?? [];
+  const telemetry = state.thread.activity?.telemetry ?? [];
   const pendingView = {
     haltReason: '',
     executionError: '',
@@ -91,20 +92,20 @@ export const acknowledgeFundWalletNode = async (
     activity: { events: [awaitingInput.statusEvent], telemetry },
   };
   const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
-    currentTaskState: state.view.task?.taskStatus?.state,
-    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
-    currentOnboardingKey: state.view.onboarding?.key,
-    nextOnboardingKey: state.view.onboarding?.key,
+    currentTaskState: state.thread.task?.taskStatus?.state,
+    currentTaskMessage: state.thread.task?.taskStatus?.message?.content,
+    currentOnboardingKey: state.thread.onboarding?.key,
+    nextOnboardingKey: state.thread.onboarding?.key,
     nextTaskMessage: awaitingMessage,
   });
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
-  const pauseSnapshotView = applyViewPatch(state, pendingView);
+  const pauseSnapshotView = applyThreadPatch(state, pendingView);
   if (hasRunnableConfig && shouldPersistPendingState) {
     const mergedView = pauseSnapshotView;
     logPauseSnapshot({
       node: 'acknowledgeFundWallet',
       reason: 'awaiting wallet funding acknowledgement',
-      view: mergedView,
+      thread: mergedView,
       metadata: {
         threadId,
         checkpointId,
@@ -113,12 +114,12 @@ export const acknowledgeFundWalletNode = async (
       },
     });
     await copilotkitEmitState(config, {
-      view: mergedView,
+      thread: mergedView,
     });
     return buildInterruptPauseTransition({
       node: 'acknowledgeFundWallet',
       update: {
-        view: mergedView,
+        thread: mergedView,
       },
       createCommand: createLangGraphCommand,
     });
@@ -126,7 +127,7 @@ export const acknowledgeFundWalletNode = async (
   logPauseSnapshot({
     node: 'acknowledgeFundWallet',
     reason: 'awaiting wallet funding acknowledgement',
-    view: pauseSnapshotView,
+    thread: pauseSnapshotView,
     metadata: {
       threadId,
       checkpointId,
@@ -136,18 +137,11 @@ export const acknowledgeFundWalletNode = async (
   });
 
   const request = buildFundWalletInterrupt(state);
-  const incoming: unknown = await interrupt(request);
-
-  let inputToParse: unknown = incoming;
-  if (typeof incoming === 'string') {
-    try {
-      inputToParse = JSON.parse(incoming);
-    } catch {
-      // ignore
-    }
-  }
-
-  const parsedAck = FundWalletAckSchema.safeParse(inputToParse);
+  const interruptResult = await requestInterruptPayload({
+    request,
+    interrupt,
+  });
+  const parsedAck = FundWalletAckSchema.safeParse(interruptResult.decoded);
   if (!parsedAck.success) {
     logWarn('acknowledgeFundWallet: invalid acknowledgement payload; ending run', {
       threadId,

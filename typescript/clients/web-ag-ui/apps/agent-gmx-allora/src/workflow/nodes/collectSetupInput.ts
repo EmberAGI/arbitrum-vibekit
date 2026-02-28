@@ -1,11 +1,15 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { interrupt, type Command } from '@langchain/langgraph';
-import { buildInterruptPauseTransition, shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
+import {
+  buildInterruptPauseTransition,
+  requestInterruptPayload,
+  shouldPersistInputRequiredCheckpoint,
+} from 'agent-workflow-core';
 import { z } from 'zod';
 
 import { GmxSetupInputSchema } from '../../domain/types.js';
 import {
-  applyViewPatch,
+  applyThreadPatch,
   buildTaskStatus,
   logInfo,
   logWarn,
@@ -22,13 +26,13 @@ const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
 const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 const resolveSetupResumeOnboarding = (state: ClmmState): OnboardingState => {
-  if (!state.view.fundingTokenInput) {
+  if (!state.thread.fundingTokenInput) {
     return { step: 2, key: FUNDING_STEP_KEY };
   }
-  if (state.view.delegationsBypassActive === true) {
+  if (state.thread.delegationsBypassActive === true) {
     return { step: 2, key: FUNDING_STEP_KEY };
   }
-  return state.view.onboarding?.key === FUNDING_STEP_KEY
+  return state.thread.onboarding?.key === FUNDING_STEP_KEY
     ? { step: 3, key: DELEGATION_STEP_KEY }
     : { step: 2, key: DELEGATION_STEP_KEY };
 };
@@ -41,24 +45,24 @@ export const collectSetupInputNode = async (
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   logInfo('collectSetupInput: entering node');
   logWarn('collectSetupInput: node entered', {
-    hasOperatorInput: Boolean(state.view.operatorInput),
-    onboardingStatus: state.view.onboardingFlow?.status,
-    onboardingStep: state.view.onboarding?.step,
-    onboardingKey: state.view.onboarding?.key,
+    hasOperatorInput: Boolean(state.thread.operatorInput),
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    onboardingStep: state.thread.onboarding?.step,
+    onboardingKey: state.thread.onboarding?.key,
   });
 
-  if (state.view.operatorInput) {
+  if (state.thread.operatorInput) {
     logInfo('collectSetupInput: setup input already present; skipping step');
     logWarn('collectSetupInput: setup already present; skipping interrupt', {
-      walletAddress: state.view.operatorInput.walletAddress,
-      targetMarket: state.view.operatorInput.targetMarket,
-      usdcAllocation: state.view.operatorInput.usdcAllocation,
+      walletAddress: state.thread.operatorInput.walletAddress,
+      targetMarket: state.thread.operatorInput.targetMarket,
+      usdcAllocation: state.thread.operatorInput.usdcAllocation,
     });
-    const resumedView = applyViewPatch(state, {
+    const resumedView = applyThreadPatch(state, {
       onboarding: resolveSetupResumeOnboarding(state),
     });
     return {
-      view: resumedView,
+      thread: resumedView,
     };
   }
 
@@ -69,7 +73,7 @@ export const collectSetupInputNode = async (
   };
 
   const awaitingInput = buildTaskStatus(
-    state.view.task,
+    state.thread.task,
     'input-required',
     'Awaiting market + allocation to continue onboarding.',
   );
@@ -80,31 +84,31 @@ export const collectSetupInputNode = async (
     activity: { events: [awaitingInput.statusEvent], telemetry: [] },
   };
   const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
-    currentTaskState: state.view.task?.taskStatus?.state,
-    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
-    currentOnboardingKey: state.view.onboarding?.key,
+    currentTaskState: state.thread.task?.taskStatus?.state,
+    currentTaskMessage: state.thread.task?.taskStatus?.message?.content,
+    currentOnboardingKey: state.thread.onboarding?.key,
     nextOnboardingKey: pendingView.onboarding.key,
     nextTaskMessage: awaitingMessage,
   });
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
-  const pauseSnapshotView = applyViewPatch(state, pendingView);
+  const pauseSnapshotView = applyThreadPatch(state, pendingView);
   if (hasRunnableConfig && shouldPersistPendingState) {
     const mergedView = pauseSnapshotView;
     logPauseSnapshot({
       node: 'collectSetupInput',
       reason: 'awaiting setup input',
-      view: mergedView,
+      thread: mergedView,
       metadata: {
         pauseMechanism: 'checkpoint-and-interrupt',
       },
     });
     await copilotkitEmitState(config, {
-      view: mergedView,
+      thread: mergedView,
     });
     return buildInterruptPauseTransition({
       node: 'collectSetupInput',
       update: {
-        view: mergedView,
+        thread: mergedView,
       },
       createCommand: createLangGraphCommand,
     });
@@ -112,45 +116,38 @@ export const collectSetupInputNode = async (
   logPauseSnapshot({
     node: 'collectSetupInput',
     reason: 'awaiting setup input',
-    view: pauseSnapshotView,
+    thread: pauseSnapshotView,
     metadata: {
       pauseMechanism: 'interrupt',
     },
   });
 
-  const incoming: unknown = await interrupt(request);
-
-  let inputToParse: unknown = incoming;
-  if (typeof incoming === 'string') {
-    try {
-      inputToParse = JSON.parse(incoming);
-    } catch {
-      // ignore
-    }
-  }
-
-  const parsed = GmxSetupInputSchema.safeParse(inputToParse);
+  const interruptResult = await requestInterruptPayload({
+    request,
+    interrupt,
+  });
+  const parsed = GmxSetupInputSchema.safeParse(interruptResult.decoded);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
     const failureMessage = `Invalid setup input: ${issues}`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
-    const failedView = applyViewPatch(state, {
+    const failedView = applyThreadPatch(state, {
       task,
       activity: { events: [statusEvent], telemetry: [] },
     });
     await copilotkitEmitState(config, {
-      view: failedView,
+      thread: failedView,
     });
-    const haltedView = applyViewPatch(state, {
+    const haltedView = applyThreadPatch(state, {
       haltReason: failureMessage,
       task,
       activity: { events: [statusEvent], telemetry: [] },
-      profile: state.view.profile,
-      metrics: state.view.metrics,
-      transactionHistory: state.view.transactionHistory,
+      profile: state.thread.profile,
+      metrics: state.thread.metrics,
+      transactionHistory: state.thread.transactionHistory,
     });
     return {
-      view: haltedView,
+      thread: haltedView,
     };
   }
 
@@ -168,21 +165,21 @@ export const collectSetupInputNode = async (
     'working',
     'Market and USDC allocation received. Preparing funding token options.',
   );
-  const workingView = applyViewPatch(state, {
+  const workingView = applyThreadPatch(state, {
     task,
     activity: { events: [statusEvent], telemetry: [] },
   });
   await copilotkitEmitState(config, {
-    view: workingView,
+    thread: workingView,
   });
 
-  const completedView = applyViewPatch(state, {
+  const completedView = applyThreadPatch(state, {
     operatorInput: normalized,
     onboarding: { step: 2, key: FUNDING_STEP_KEY },
     task,
     activity: { events: [statusEvent], telemetry: [] },
   });
   return {
-    view: completedView,
+    thread: completedView,
   };
 };

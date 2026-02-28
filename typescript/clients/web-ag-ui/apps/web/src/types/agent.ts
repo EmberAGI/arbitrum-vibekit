@@ -294,7 +294,7 @@ export interface OnboardingFlow {
 }
 
 // Profile types (ClmmProfile)
-export interface AgentViewProfile {
+export interface ThreadProfile {
   agentIncome?: number;
   aum?: number;
   totalUsers?: number;
@@ -307,13 +307,13 @@ export interface AgentViewProfile {
 }
 
 // Activity types (ClmmActivity)
-export interface AgentViewActivity {
+export interface ThreadActivity {
   telemetry: TelemetryItem[];
   events: ClmmEvent[];
 }
 
 // Metrics types (ClmmMetrics)
-export interface AgentViewMetrics {
+export interface ThreadMetrics {
   lastSnapshot?: Pool;
   previousPrice?: number;
   previousApy?: number;
@@ -376,14 +376,20 @@ export interface AgentPrivateState {
   bootstrapped: boolean;
 }
 
-// View state (ClmmViewState)
-export interface AgentView {
-  command?: string;
+export type ThreadLifecyclePhase = 'prehire' | 'onboarding' | 'active' | 'firing' | 'inactive';
+
+export interface ThreadLifecycle {
+  phase: ThreadLifecyclePhase;
+  reason?: string;
+  updatedAt?: string;
+}
+
+// Domain thread state emitted by agents
+export interface ThreadState {
+  lifecycle?: ThreadLifecycle;
   lastAppliedClientMutationId?: string;
   task?: Task;
-  onboarding?: OnboardingState;
   onboardingFlow?: OnboardingFlow;
-  setupComplete?: boolean;
   poolArtifact?: Artifact;
   operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput;
   fundingTokenInput?: FundingTokenInput;
@@ -393,14 +399,52 @@ export interface AgentView {
   haltReason?: string;
   executionError?: string;
   delegationsBypassActive?: boolean;
-  profile: AgentViewProfile;
-  activity: AgentViewActivity;
-  metrics: AgentViewMetrics;
+  profile: ThreadProfile;
+  activity: ThreadActivity;
+  metrics: ThreadMetrics;
   transactionHistory: Transaction[];
 }
 
-// Full agent state (ClmmState)
-export interface AgentState {
+export interface UiRuntimeState {
+  isConnected: boolean;
+  hasLoadedSnapshot: boolean;
+  commandInFlight: boolean;
+  syncPending: boolean;
+  pendingSyncMutationId: string | null;
+}
+
+export interface UiSelectors {
+  lifecyclePhase: ThreadLifecyclePhase | null;
+  effectiveTaskState: string | null;
+  isHired: boolean;
+  isActive: boolean;
+  isOnboardingActive: boolean;
+}
+
+// ViewModel shape consumed by React views.
+export interface UiState {
+  lifecycle?: ThreadLifecycle;
+  task?: Task;
+  onboardingFlow?: OnboardingFlow;
+  poolArtifact?: Artifact;
+  operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput;
+  fundingTokenInput?: FundingTokenInput;
+  selectedPool?: Pool;
+  operatorConfig?: unknown;
+  delegationBundle?: unknown;
+  haltReason?: string;
+  executionError?: string;
+  delegationsBypassActive?: boolean;
+  profile: ThreadProfile;
+  activity: ThreadActivity;
+  metrics: ThreadMetrics;
+  transactionHistory: Transaction[];
+  runtime: UiRuntimeState;
+  selectors: UiSelectors;
+}
+
+// AG-UI thread snapshot envelope
+export interface ThreadSnapshot {
   messages?: unknown[];
   copilotkit?: {
     actions?: unknown[];
@@ -408,7 +452,7 @@ export interface AgentState {
   };
   settings: AgentSettings;
   private?: AgentPrivateState;
-  view: AgentView;
+  thread: ThreadState;
 }
 
 // Simplified types for UI components
@@ -433,7 +477,7 @@ export interface AgentMetrics {
 }
 
 // Default values for state initialization
-export const defaultProfile: AgentViewProfile = {
+export const defaultProfile: ThreadProfile = {
   agentIncome: undefined,
   aum: undefined,
   totalUsers: undefined,
@@ -445,7 +489,7 @@ export const defaultProfile: AgentViewProfile = {
   allowedPools: [],
 };
 
-export const defaultMetrics: AgentViewMetrics = {
+export const defaultMetrics: ThreadMetrics = {
   lastSnapshot: undefined,
   previousPrice: undefined,
   previousApy: undefined,
@@ -461,18 +505,18 @@ export const defaultMetrics: AgentViewMetrics = {
   latestSnapshot: undefined,
 };
 
-export const defaultActivity: AgentViewActivity = {
+export const defaultActivity: ThreadActivity = {
   telemetry: [],
   events: [],
 };
 
-export const defaultView: AgentView = {
-  command: undefined,
+export const defaultThreadState: ThreadState = {
+  lifecycle: {
+    phase: 'prehire',
+  },
   lastAppliedClientMutationId: undefined,
   task: undefined,
-  onboarding: undefined,
   onboardingFlow: undefined,
-  setupComplete: undefined,
   poolArtifact: undefined,
   operatorInput: undefined,
   selectedPool: undefined,
@@ -486,13 +530,50 @@ export const defaultView: AgentView = {
   transactionHistory: [],
 };
 
+export const defaultUiRuntimeState: UiRuntimeState = {
+  isConnected: false,
+  hasLoadedSnapshot: false,
+  commandInFlight: false,
+  syncPending: false,
+  pendingSyncMutationId: null,
+};
+
+export const defaultUiSelectors: UiSelectors = {
+  lifecyclePhase: 'prehire',
+  effectiveTaskState: null,
+  isHired: false,
+  isActive: false,
+  isOnboardingActive: false,
+};
+
+export const defaultUiState: UiState = {
+  lifecycle: defaultThreadState.lifecycle,
+  task: defaultThreadState.task,
+  onboardingFlow: defaultThreadState.onboardingFlow,
+  poolArtifact: defaultThreadState.poolArtifact,
+  operatorInput: defaultThreadState.operatorInput,
+  fundingTokenInput: defaultThreadState.fundingTokenInput,
+  selectedPool: defaultThreadState.selectedPool,
+  operatorConfig: defaultThreadState.operatorConfig,
+  delegationBundle: defaultThreadState.delegationBundle,
+  haltReason: defaultThreadState.haltReason,
+  executionError: defaultThreadState.executionError,
+  delegationsBypassActive: defaultThreadState.delegationsBypassActive,
+  profile: defaultThreadState.profile,
+  activity: defaultThreadState.activity,
+  metrics: defaultThreadState.metrics,
+  transactionHistory: defaultThreadState.transactionHistory,
+  runtime: defaultUiRuntimeState,
+  selectors: defaultUiSelectors,
+};
+
 export const defaultSettings: AgentSettings = {
   amount: undefined,
 };
 
-export const initialAgentState: AgentState = {
+export const initialAgentState: ThreadSnapshot = {
   messages: [],
   copilotkit: { actions: [], context: [] },
   settings: defaultSettings,
-  view: defaultView,
+  thread: defaultThreadState,
 };

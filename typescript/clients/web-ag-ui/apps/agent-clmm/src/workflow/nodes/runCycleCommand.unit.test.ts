@@ -19,7 +19,7 @@ describe('runCycleCommandNode', () => {
 
   it('reroutes scheduled cycles to delegation onboarding when prerequisites are missing', async () => {
     const state = {
-      view: {
+      thread: {
         poolArtifact: { id: 'camelot-pools', generatedAt: '2026-01-01T00:00:00Z', kind: 'pool-list', payload: {} },
         operatorInput: {
           poolAddress: '0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526',
@@ -52,7 +52,7 @@ describe('runCycleCommandNode', () => {
   it('continues into cycle execution when onboarding prerequisites are already satisfied', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = {
-      view: {
+      thread: {
         poolArtifact: { id: 'camelot-pools', generatedAt: '2026-01-01T00:00:00Z', kind: 'pool-list', payload: {} },
         operatorInput: {
           poolAddress: '0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526',
@@ -90,9 +90,11 @@ describe('runCycleCommandNode', () => {
     } as unknown as ClmmState;
 
     const result = await runCycleCommandNode(state, {});
-    const view = (result as { view: { command?: string; task?: { taskStatus?: { state?: string } } } }).view;
+    const view = (result as {
+      thread: { lifecycle?: { phase?: string }; task?: { taskStatus?: { state?: string } } };
+    }).thread;
 
-    expect(view.command).toBe('cycle');
+    expect(view.lifecycle?.phase).toBe('active');
     expect(view.task?.taskStatus?.state).toBe('working');
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
   });
@@ -100,7 +102,7 @@ describe('runCycleCommandNode', () => {
   it('continues into cycle execution when operator setup is complete without a funding token selection', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = {
-      view: {
+      thread: {
         poolArtifact: { id: 'camelot-pools', generatedAt: '2026-01-01T00:00:00Z', kind: 'pool-list', payload: {} },
         operatorInput: {
           poolAddress: '0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526',
@@ -138,9 +140,11 @@ describe('runCycleCommandNode', () => {
     } as unknown as ClmmState;
 
     const result = await runCycleCommandNode(state, {});
-    const view = (result as { view: { command?: string; task?: { taskStatus?: { state?: string } } } }).view;
+    const view = (result as {
+      thread: { lifecycle?: { phase?: string }; task?: { taskStatus?: { state?: string } } };
+    }).thread;
 
-    expect(view.command).toBe('cycle');
+    expect(view.lifecycle?.phase).toBe('active');
     expect(view.task?.taskStatus?.state).toBe('working');
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
   });

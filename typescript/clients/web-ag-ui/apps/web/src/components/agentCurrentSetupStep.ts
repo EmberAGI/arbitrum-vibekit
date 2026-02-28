@@ -1,4 +1,4 @@
-import type { OnboardingFlow, OnboardingState } from '../types/agent';
+import type { OnboardingFlow } from '../types/agent';
 
 const clampStep = (step: number, maxSetupStep: number): number => {
   const upperBound = Math.max(1, maxSetupStep);
@@ -8,7 +8,6 @@ const clampStep = (step: number, maxSetupStep: number): number => {
 export function resolveCurrentSetupStep(input: {
   maxSetupStep: number;
   onboardingFlow?: OnboardingFlow;
-  onboarding?: OnboardingState;
 }): number {
   const onboardingFlow = input.onboardingFlow;
   if (onboardingFlow && Array.isArray(onboardingFlow.steps) && onboardingFlow.steps.length > 0) {
@@ -19,11 +18,6 @@ export function resolveCurrentSetupStep(input: {
     if (activeIndex >= 0) {
       return clampStep(activeIndex + 1, input.maxSetupStep);
     }
-  }
-
-  const onboardingStep = input.onboarding?.step;
-  if (typeof onboardingStep === 'number' && Number.isFinite(onboardingStep) && onboardingStep > 0) {
-    return clampStep(onboardingStep, input.maxSetupStep);
   }
 
   return 1;

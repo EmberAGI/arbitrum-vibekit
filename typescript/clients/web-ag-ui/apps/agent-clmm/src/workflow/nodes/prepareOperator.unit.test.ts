@@ -37,7 +37,7 @@ describe('prepareOperatorNode', () => {
     });
 
     const state = {
-      view: {
+      thread: {
         operatorInput: {
           poolAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           walletAddress: '0x1111111111111111111111111111111111111111',
@@ -65,7 +65,7 @@ describe('prepareOperatorNode', () => {
     const commandResult = result as unknown as {
       goto?: string[];
       update?: {
-        view?: {
+        thread?: {
           task?: {
             taskStatus?: {
               state?: string;
@@ -78,10 +78,10 @@ describe('prepareOperatorNode', () => {
     };
 
     expect(commandResult.goto).toContain('collectDelegations');
-    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.task?.taskStatus?.message?.content).toBe(
+    expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(commandResult.update?.thread?.task?.taskStatus?.message?.content).toBe(
       'Waiting for you to approve the required permissions to continue setup.',
     );
-    expect(commandResult.update?.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(commandResult.update?.thread?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
   });
 });

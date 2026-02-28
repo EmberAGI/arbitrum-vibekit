@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
-import { isLangGraphBusyStatus, projectCycleCommandView } from 'agent-workflow-core';
+import { isLangGraphBusyStatus, projectCycleCommandThread } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
@@ -44,20 +44,20 @@ function resolvePostBootstrap(
   | 'collectDelegations'
   | 'prepareOperator'
   | 'syncState' {
-  const command = extractCommand(state.messages) ?? state.view.command;
+  const command = extractCommand(state.messages);
   if (command === 'sync') {
     return 'syncState';
   }
-  if (!state.view.operatorInput) {
+  if (!state.thread.operatorInput) {
     return 'collectSetupInput';
   }
-  if (!state.view.fundingTokenInput) {
+  if (!state.thread.fundingTokenInput) {
     return 'collectFundingTokenInput';
   }
-  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
+  if (state.thread.delegationsBypassActive !== true && !state.thread.delegationBundle) {
     return 'collectDelegations';
   }
-  if (!state.view.operatorConfig || state.view.setupComplete !== true) {
+  if (!state.thread.operatorConfig || state.thread.setupComplete !== true) {
     return 'prepareOperator';
   }
   return 'syncState';
@@ -151,7 +151,7 @@ function extractThreadStateValues(payload: unknown): ThreadStateValues | null {
     return data;
   }
 
-  if (isRecord(payload['view'])) {
+  if (isRecord(payload['thread'])) {
     return payload;
   }
 
@@ -189,11 +189,11 @@ async function updateCycleState(
   threadId: string,
   runMessage: { id: string; role: 'user'; content: string },
 ): Promise<boolean> {
-  let existingView: Record<string, unknown> | null = null;
+  let existingThread: Record<string, unknown> | null = null;
   try {
     const currentState = await fetchThreadStateValues(baseUrl, threadId);
-    if (currentState && isRecord(currentState['view'])) {
-      existingView = currentState['view'];
+    if (currentState && isRecord(currentState['thread'])) {
+      existingThread = currentState['thread'];
     }
   } catch (error: unknown) {
     const message =
@@ -201,20 +201,20 @@ async function updateCycleState(
     console.warn('[cron] Unable to fetch thread state before cycle update', { threadId, error: message });
   }
 
-  if (!canStartBackgroundCycle(existingView)) {
+  if (!canStartBackgroundCycle(existingThread)) {
     console.warn('[cron] Skipping cycle run; onboarding/setup is incomplete for background execution', {
       threadId,
-      readiness: getBackgroundCycleReadiness(existingView),
+      readiness: getBackgroundCycleReadiness(existingThread),
     });
     return false;
   }
 
-  const view = projectCycleCommandView(existingView);
+  const thread = projectCycleCommandThread(existingThread);
   const response = await fetchRequest(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      values: { messages: [runMessage], view },
+      values: { messages: [runMessage], thread },
       as_node: 'runCommand',
     }),
   });

@@ -29,12 +29,12 @@ export async function createCamelotAccountingSnapshot(params: {
   state: ClmmState;
   camelotClient: EmberCamelotClient;
   trigger: NavSnapshotTrigger;
-  flowLog?: ClmmState['view']['accounting']['flowLog'];
+  flowLog?: ClmmState['thread']['accounting']['flowLog'];
   transactionHash?: `0x${string}`;
   threadId?: string;
   cycle?: number;
 }): Promise<NavSnapshot | null> {
-  const walletAddress = params.state.view.operatorConfig?.walletAddress;
+  const walletAddress = params.state.thread.operatorConfig?.walletAddress;
   if (!walletAddress) {
     return null;
   }
@@ -50,9 +50,9 @@ export async function createCamelotAccountingSnapshot(params: {
     walletAddress,
     chainId: ARBITRUM_CHAIN_ID,
     camelotClient: params.camelotClient,
-    flowLog: params.flowLog ?? params.state.view.accounting.flowLog,
-    managedPoolAddresses: params.state.view.selectedPool
-      ? [params.state.view.selectedPool.address]
+    flowLog: params.flowLog ?? params.state.thread.accounting.flowLog,
+    managedPoolAddresses: params.state.thread.selectedPool
+      ? [params.state.thread.selectedPool.address]
       : undefined,
     transactionHash: params.transactionHash,
     threadId: params.threadId,

@@ -18,7 +18,7 @@ describe('summarizeNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         task: {
           id: 'task-1',
           taskStatus: {
@@ -33,10 +33,10 @@ describe('summarizeNode', () => {
 
     const result = await summarizeNode(state, {});
 
-    expect(result.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(result.view?.task?.taskStatus?.message?.content).toBe('Waiting for delegation approval.');
+    expect(result.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(result.thread?.task?.taskStatus?.message?.content).toBe('Waiting for delegation approval.');
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
-    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { view?: unknown })?.view as
+    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { thread?: unknown })?.thread as
       | {
           task?: { taskStatus?: { state?: string; message?: { content?: string } } };
         }
@@ -50,7 +50,7 @@ describe('summarizeNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         task: {
           id: 'task-1',
           taskStatus: {
@@ -71,18 +71,50 @@ describe('summarizeNode', () => {
 
     const result = await summarizeNode(state, {});
 
-    expect(result.view?.task?.taskStatus?.state).toBe('working');
-    expect(result.view?.task?.taskStatus?.message?.content).toBe(
+    expect(result.thread?.task?.taskStatus?.state).toBe('working');
+    expect(result.thread?.task?.taskStatus?.message?.content).toBe(
       'Onboarding complete. CLMM strategy is active.',
     );
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
-    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { view?: unknown })?.view as
+    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { thread?: unknown })?.thread as
       | {
           task?: { taskStatus?: { state?: string; message?: { content?: string } } };
         }
       | undefined;
     expect(emittedView?.task?.taskStatus?.state).toBe('working');
     expect(emittedView?.task?.taskStatus?.message?.content).toBe(
+      'Onboarding complete. CLMM strategy is active.',
+    );
+  });
+
+  it('clears stale continue-setup input-required state after setup completion signals', async () => {
+    copilotkitEmitStateMock.mockReset();
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      thread: {
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              id: 'msg-1',
+              role: 'assistant',
+              content: 'Waiting for you to approve the required permissions to continue setup.',
+            },
+          },
+        },
+        operatorConfig: { walletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9' },
+        delegationBundle: { delegations: [{ signature: '0xabc' }] },
+        haltReason: undefined,
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await summarizeNode(state, {});
+
+    expect(result.thread?.task?.taskStatus?.state).toBe('working');
+    expect(result.thread?.task?.taskStatus?.message?.content).toBe(
       'Onboarding complete. CLMM strategy is active.',
     );
   });

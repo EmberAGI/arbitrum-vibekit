@@ -25,7 +25,7 @@ describe('createCamelotAccountingSnapshot', () => {
     });
 
     const state = {
-      view: {
+      thread: {
         operatorConfig: {
           walletAddress: '0x1111111111111111111111111111111111111111',
         },
@@ -57,7 +57,7 @@ describe('createCamelotAccountingSnapshot', () => {
     createCamelotNavSnapshot.mockReset();
 
     const state = {
-      view: {
+      thread: {
         operatorConfig: undefined,
         selectedPool: {
           address: '0x2222222222222222222222222222222222222222',

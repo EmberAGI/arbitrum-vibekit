@@ -5,7 +5,7 @@ import { formatUnits } from 'viem';
 import type {
   AgentMetrics,
   AgentProfile,
-  AgentViewMetrics,
+  ThreadMetrics,
   ClmmEvent,
   Transaction,
 } from '../types/agent';
@@ -35,6 +35,29 @@ function getArrayField(value: unknown, key: string): unknown[] | undefined {
   const record = asRecord(value);
   const candidate = record ? record[key] : undefined;
   return Array.isArray(candidate) ? candidate : undefined;
+}
+
+function asFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function formatPercent(value: unknown, digits: number): string | null {
+  const resolved = asFiniteNumber(value);
+  return resolved === undefined ? null : `${resolved.toFixed(digits)}%`;
+}
+
+function formatFixed(value: unknown, digits: number): string | null {
+  const resolved = asFiniteNumber(value);
+  return resolved === undefined ? null : resolved.toFixed(digits);
+}
+
+function formatUsdValue(
+  value: unknown,
+  options?: Intl.NumberFormatOptions,
+): string | null {
+  const resolved = asFiniteNumber(value);
+  if (resolved === undefined) return null;
+  return `$${resolved.toLocaleString(undefined, options)}`;
 }
 
 function getArtifactId(artifact: unknown): string | undefined {
@@ -76,7 +99,7 @@ export interface MetricsTabProps {
   agentId: string;
   profile: AgentProfile;
   metrics: AgentMetrics;
-  fullMetrics?: AgentViewMetrics;
+  fullMetrics?: ThreadMetrics;
   events: ClmmEvent[];
   transactions: Transaction[];
   hasLoadedView: boolean;
@@ -141,9 +164,10 @@ export function MetricsTab({ agentId, profile, metrics, fullMetrics, events, tra
     return `${minutes}m`;
   };
 
-  const formatTokenAmount = (token: NonNullable<AgentViewMetrics['latestSnapshot']>['positionTokens'][number]) => {
-    if (token.amount !== undefined) {
-      return token.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  const formatTokenAmount = (token: NonNullable<ThreadMetrics['latestSnapshot']>['positionTokens'][number]) => {
+    const amount = asFiniteNumber(token.amount);
+    if (amount !== undefined) {
+      return amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
     }
     if (token.amountBaseUnits) {
       return formatUnits(BigInt(token.amountBaseUnits), token.decimals);
@@ -165,37 +189,35 @@ export function MetricsTab({ agentId, profile, metrics, fullMetrics, events, tra
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
             <div className="text-2xl font-bold text-teal-400">
-              <LoadingValue
-                isLoaded={hasLoadedView}
-                skeletonClassName="h-8 w-24"
-                loadedClassName="text-teal-400"
-                value={metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : null}
-              />
-            </div>
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-8 w-24"
+                  loadedClassName="text-teal-400"
+                  value={formatPercent(metrics.apy, 1)}
+                />
+              </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
             <div className="text-2xl font-bold text-white">
-              <LoadingValue
-                isLoaded={hasLoadedView}
-                skeletonClassName="h-8 w-28"
-                loadedClassName="text-white"
-                value={metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : null}
-              />
-            </div>
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-8 w-28"
+                  loadedClassName="text-white"
+                  value={formatUsdValue(metrics.aumUsd)}
+                />
+              </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Earned Income</div>
             <div className="text-2xl font-bold text-white">
-              <LoadingValue
-                isLoaded={hasLoadedView}
-                skeletonClassName="h-8 w-28"
-                loadedClassName="text-white"
-                value={
-                  profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : null
-                }
-              />
-            </div>
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-8 w-28"
+                  loadedClassName="text-white"
+                  value={formatUsdValue(profile.agentIncome)}
+                />
+              </div>
           </div>
         </div>
       </div>
@@ -211,13 +233,13 @@ export function MetricsTab({ agentId, profile, metrics, fullMetrics, events, tra
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
             <div className="text-white font-medium">
-              <LoadingValue
-                isLoaded={hasLoadedView}
-                skeletonClassName="h-5 w-24"
-                loadedClassName="text-white font-medium"
-                value={latestSnapshot?.totalUsd !== undefined ? `$${latestSnapshot.totalUsd.toLocaleString()}` : null}
-              />
-            </div>
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-24"
+                  loadedClassName="text-white font-medium"
+                  value={formatUsdValue(latestSnapshot?.totalUsd)}
+                />
+              </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Opened</div>
@@ -228,13 +250,13 @@ export function MetricsTab({ agentId, profile, metrics, fullMetrics, events, tra
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Fees (USD)</div>
             <div className="text-white font-medium">
-              <LoadingValue
-                isLoaded={hasLoadedView}
-                skeletonClassName="h-5 w-24"
-                loadedClassName="text-white font-medium"
-                value={latestSnapshot?.feesUsd !== undefined ? `$${latestSnapshot.feesUsd.toLocaleString()}` : null}
-              />
-            </div>
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-24"
+                  loadedClassName="text-white font-medium"
+                  value={formatUsdValue(latestSnapshot?.feesUsd)}
+                />
+              </div>
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
@@ -277,7 +299,7 @@ export function MetricsTab({ agentId, profile, metrics, fullMetrics, events, tra
         <MetricCard
           label="Previous Price"
           isLoaded={hasLoadedView}
-          value={fullMetrics?.previousPrice?.toFixed(6) ?? null}
+          value={formatFixed(fullMetrics?.previousPrice, 6)}
           icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
         />
       </div>
@@ -302,7 +324,7 @@ export function MetricsTab({ agentId, profile, metrics, fullMetrics, events, tra
                   isLoaded={hasLoadedView}
                   skeletonClassName="h-5 w-24"
                   loadedClassName="text-white font-medium"
-                  value={fullMetrics.latestCycle.midPrice?.toFixed(6) ?? null}
+                  value={formatFixed(fullMetrics.latestCycle.midPrice, 6)}
                 />
               </div>
             </div>
@@ -354,9 +376,9 @@ export function GmxAlloraMetricsTab({
     });
   };
 
-  const formatUsd = (value?: number, maxFractionDigits = 2): string => {
-    if (value === undefined) return '—';
-    return `$${value.toLocaleString(undefined, { maximumFractionDigits: maxFractionDigits })}`;
+  const formatUsd = (value: unknown, maxFractionDigits = 2): string => {
+    const formatted = formatUsdValue(value, { maximumFractionDigits: maxFractionDigits });
+    return formatted ?? '—';
   };
 
   const latestCycle = fullMetrics?.latestCycle;
@@ -426,6 +448,14 @@ export function GmxAlloraMetricsTab({
 
   const displayedLeverage = latestCycle?.leverage ?? latestSnapshot?.leverage;
   const displayedNotionalUsd = latestCycle?.sizeUsd ?? latestSnapshot?.totalUsd;
+  const confidencePercent = (() => {
+    const value = asFiniteNumber(latestPrediction?.confidence);
+    return value === undefined ? null : formatPercent(value * 100, 1);
+  })();
+  const decisionThresholdPercent = (() => {
+    const value = asFiniteNumber(latestDecisionMetrics?.decisionThreshold);
+    return value === undefined ? null : formatPercent(value * 100, 1);
+  })();
 
   return (
     <div className="space-y-6">
@@ -435,33 +465,25 @@ export function GmxAlloraMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
             <div className="text-2xl font-bold text-teal-400">
-              {metrics.apy !== undefined
-                ? `${metrics.apy.toFixed(1)}%`
-                : profile.apy !== undefined
-                  ? `${profile.apy.toFixed(1)}%`
-                  : '—'}
+              {formatPercent(metrics.apy, 1) ?? formatPercent(profile.apy, 1) ?? '—'}
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
             <div className="text-2xl font-bold text-white">
-              {metrics.aumUsd !== undefined
-                ? formatUsd(metrics.aumUsd)
-                : profile.aum !== undefined
-                  ? formatUsd(profile.aum)
-                  : '—'}
+              {formatUsd(metrics.aumUsd ?? profile.aum)}
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Agent Income</div>
             <div className="text-2xl font-bold text-white">
-              {profile.agentIncome !== undefined ? formatUsd(profile.agentIncome) : '—'}
+              {formatUsd(profile.agentIncome)}
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PnL</div>
             <div className="text-2xl font-bold text-white">
-              {metrics.lifetimePnlUsd !== undefined ? formatUsd(metrics.lifetimePnlUsd) : '—'}
+              {formatUsd(metrics.lifetimePnlUsd)}
             </div>
           </div>
         </div>
@@ -539,7 +561,7 @@ export function GmxAlloraMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Leverage</div>
             <div className="text-white font-medium">
-              {displayedLeverage !== undefined ? `${displayedLeverage.toFixed(1)}x` : '—'}
+              {formatFixed(displayedLeverage, 1) ? `${formatFixed(displayedLeverage, 1)}x` : '—'}
             </div>
           </div>
           <div>
@@ -549,9 +571,7 @@ export function GmxAlloraMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Signal Confidence</div>
             <div className="text-white font-medium">
-              {latestPrediction?.confidence !== undefined
-                ? `${(latestPrediction.confidence * 100).toFixed(1)}%`
-                : '—'}
+              {confidencePercent ?? '—'}
             </div>
           </div>
         </div>
@@ -571,9 +591,7 @@ export function GmxAlloraMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Decision Threshold</div>
             <div className="text-white font-medium">
-              {latestDecisionMetrics?.decisionThreshold !== undefined
-                ? `${(latestDecisionMetrics.decisionThreshold * 100).toFixed(1)}%`
-                : '—'}
+              {decisionThresholdPercent ?? '—'}
             </div>
           </div>
         </div>
@@ -601,10 +619,8 @@ export function PendleMetricsTab({
     });
   };
 
-  const formatUsd = (value?: number) => {
-    if (value === undefined) return null;
-    return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
-  };
+  const formatUsd = (value: unknown) =>
+    formatUsdValue(value, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 
   const formatTokenAmount = (params: {
     amountBaseUnits?: string;
@@ -638,6 +654,8 @@ export function PendleMetricsTab({
 
   const rewardLines = strategy?.position?.claimableRewards ?? [];
   const impliedYieldPct = snapshot?.impliedApyPct ?? strategy?.currentApy ?? metrics.apy;
+  const netPnlUsd = asFiniteNumber(snapshot?.netPnlUsd);
+  const netPnlPct = asFiniteNumber(snapshot?.netPnlPct);
   const apyDetails = [
     { label: 'Implied', value: snapshot?.impliedApyPct },
     { label: 'Aggregated', value: snapshot?.aggregatedApyPct },
@@ -646,7 +664,7 @@ export function PendleMetricsTab({
     { label: 'Pendle', value: snapshot?.pendleApyPct },
     { label: 'YT Float', value: snapshot?.ytFloatingApyPct },
     { label: 'Max Boost', value: snapshot?.maxBoostedApyPct },
-  ].filter((entry) => entry.value !== undefined);
+  ].filter((entry) => asFiniteNumber(entry.value) !== undefined);
 
   return (
     <div className="space-y-6">
@@ -664,13 +682,13 @@ export function PendleMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Current APY</div>
             <div className="text-white font-medium">
-              <LoadingValue
-                isLoaded={hasLoadedView}
-                skeletonClassName="h-5 w-20"
-                loadedClassName="text-white font-medium"
-                value={strategy?.currentApy !== undefined ? `${strategy.currentApy.toFixed(2)}%` : null}
-              />
-            </div>
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-20"
+                  loadedClassName="text-white font-medium"
+                  value={formatPercent(strategy?.currentApy, 2)}
+                />
+              </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Contribution</div>
@@ -680,9 +698,7 @@ export function PendleMetricsTab({
                 skeletonClassName="h-5 w-24"
                 loadedClassName="text-white font-medium"
                 value={
-                  strategy?.baseContributionUsd !== undefined
-                    ? `$${strategy.baseContributionUsd.toLocaleString()}`
-                    : null
+                  formatUsdValue(strategy?.baseContributionUsd)
                 }
               />
             </div>
@@ -696,24 +712,24 @@ export function PendleMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Best APY</div>
             <div className="text-white font-medium">
-              <LoadingValue
-                isLoaded={hasLoadedView}
-                skeletonClassName="h-5 w-20"
-                loadedClassName="text-white font-medium"
-                value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : null}
-              />
-            </div>
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-20"
+                  loadedClassName="text-white font-medium"
+                  value={formatPercent(strategy?.bestApy, 2)}
+                />
+              </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Delta</div>
             <div className="text-white font-medium">
-              <LoadingValue
-                isLoaded={hasLoadedView}
-                skeletonClassName="h-5 w-20"
-                loadedClassName="text-white font-medium"
-                value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : null}
-              />
-            </div>
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-20"
+                  loadedClassName="text-white font-medium"
+                  value={formatPercent(strategy?.apyDelta, 2)}
+                />
+              </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Funding Token</div>
@@ -735,7 +751,7 @@ export function PendleMetricsTab({
                         isLoaded={hasLoadedView}
                         skeletonClassName="h-5 w-20"
                         loadedClassName="text-white font-medium"
-                        value={entry.value !== undefined ? `${entry.value.toFixed(2)}%` : null}
+                        value={formatPercent(entry.value, 2)}
                       />
                     </div>
                   </div>
@@ -793,13 +809,13 @@ export function PendleMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Implied Yield</div>
             <div className="text-white font-medium">
-              <LoadingValue
-                isLoaded={hasLoadedView}
-                skeletonClassName="h-5 w-20"
-                loadedClassName="text-white font-medium"
-                value={impliedYieldPct !== undefined ? `${impliedYieldPct.toFixed(2)}%` : null}
-              />
-            </div>
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-20"
+                  loadedClassName="text-white font-medium"
+                  value={formatPercent(impliedYieldPct, 2)}
+                />
+              </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Value</div>
@@ -820,11 +836,11 @@ export function PendleMetricsTab({
                 skeletonClassName="h-5 w-32"
                 loadedClassName="text-white font-medium"
                 value={
-                  snapshot?.netPnlUsd !== undefined ? (
+                  netPnlUsd !== undefined ? (
                     <>
-                      {formatUsd(snapshot.netPnlUsd)}
-                      {snapshot.netPnlPct !== undefined && (
-                        <span className="text-gray-400">{` (${snapshot.netPnlPct.toFixed(2)}%)`}</span>
+                      {formatUsd(netPnlUsd)}
+                      {netPnlPct !== undefined && (
+                        <span className="text-gray-400">{` (${formatFixed(netPnlPct, 2)}%)`}</span>
                       )}
                     </>
                   ) : null
@@ -835,24 +851,24 @@ export function PendleMetricsTab({
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
             <div className="text-white font-medium">
-              <LoadingValue
-                isLoaded={hasLoadedView}
-                skeletonClassName="h-5 w-20"
-                loadedClassName="text-white font-medium"
-                value={metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : null}
-              />
-            </div>
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-20"
+                  loadedClassName="text-white font-medium"
+                  value={formatPercent(metrics.apy, 2)}
+                />
+              </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
             <div className="text-white font-medium">
-              <LoadingValue
-                isLoaded={hasLoadedView}
-                skeletonClassName="h-5 w-24"
-                loadedClassName="text-white font-medium"
-                value={metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : null}
-              />
-            </div>
+                <LoadingValue
+                  isLoaded={hasLoadedView}
+                  skeletonClassName="h-5 w-24"
+                  loadedClassName="text-white font-medium"
+                  value={formatUsdValue(metrics.aumUsd)}
+                />
+              </div>
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
@@ -888,13 +904,13 @@ export function PendleMetricsTab({
         <MetricCard
           label="Best APY"
           isLoaded={hasLoadedView}
-          value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : null}
+          value={formatPercent(strategy?.bestApy, 2)}
           icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
         />
         <MetricCard
           label="APY Delta"
           isLoaded={hasLoadedView}
-          value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : null}
+          value={formatPercent(strategy?.apyDelta, 2)}
           icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
         />
       </div>
@@ -918,7 +934,7 @@ export function PendleMetricsTab({
                   isLoaded={hasLoadedView}
                   skeletonClassName="h-5 w-20"
                   loadedClassName="text-white font-medium"
-                  value={latestCycle.apy !== undefined ? `${latestCycle.apy.toFixed(2)}%` : null}
+                  value={formatPercent(latestCycle.apy, 2)}
                 />
               </div>
             </div>

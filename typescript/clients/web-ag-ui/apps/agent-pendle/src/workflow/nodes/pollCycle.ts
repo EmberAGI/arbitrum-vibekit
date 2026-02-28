@@ -87,33 +87,33 @@ export const pollCycleNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<Command<string, ClmmUpdate>> => {
-  const { operatorConfig, selectedPool } = state.view;
+  const { operatorConfig, selectedPool } = state.thread;
 
   if (!operatorConfig) {
     const message =
       'WARNING: Pendle strategy configuration missing. Complete onboarding (funding token + strategy setup) before running cycles.';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'input-required', message);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
 
     return new Command({
       update: {
-        view: {
+        thread: {
           haltReason: '',
           executionError: '',
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: state.view.metrics,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+          metrics: state.thread.metrics,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       },
       goto: '__end__',
     });
   }
 
-  const iteration = (state.view.metrics.iteration ?? 0) + 1;
+  const iteration = (state.thread.metrics.iteration ?? 0) + 1;
   const onchainActionsClient = getOnchainActionsClient();
   let eligibleMarkets = [];
   let currentMarket = selectedPool ?? operatorConfig.targetYieldToken;
@@ -151,19 +151,19 @@ export const pollCycleNode = async (
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to refresh Pendle markets: ${message}`;
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
     return new Command({
       update: {
-        view: {
+        thread: {
           haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: state.view.metrics,
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+          metrics: state.thread.metrics,
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       },
       goto: 'summarize',
@@ -173,19 +173,19 @@ export const pollCycleNode = async (
   const bestMarket = eligibleMarkets[0];
   if (!bestMarket) {
     const failureMessage = 'ERROR: No Pendle markets available during cycle';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
     return new Command({
       update: {
-        view: {
+        thread: {
           haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: state.view.metrics,
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+          metrics: state.thread.metrics,
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       },
       goto: 'summarize',
@@ -272,20 +272,20 @@ export const pollCycleNode = async (
           : action === 'compound'
             ? 'ERROR: Missing tokenized yield data needed to compound'
             : 'ERROR: Missing tokenized yield data needed to rebalance';
-      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
       await copilotkitEmitState(config, {
-        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+        thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
       });
       return new Command({
         update: {
-          view: {
+          thread: {
             haltReason: failureMessage,
             executionError: failureMessage,
-            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-            metrics: state.view.metrics,
+            activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+            metrics: state.thread.metrics,
             task,
-            profile: state.view.profile,
-            transactionHistory: state.view.transactionHistory,
+            profile: state.thread.profile,
+            transactionHistory: state.thread.transactionHistory,
           },
         },
         goto: 'summarize',
@@ -296,7 +296,7 @@ export const pollCycleNode = async (
       if (!smokeMode) {
         const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
         const delegationBundle =
-          state.view.delegationsBypassActive === true ? undefined : state.view.delegationBundle;
+          state.thread.delegationsBypassActive === true ? undefined : state.thread.delegationBundle;
         if (action === 'compound') {
           const execution = await executeCompound({
             onchainActionsClient,
@@ -382,20 +382,20 @@ export const pollCycleNode = async (
             : action === 'compound'
               ? `ERROR: Pendle compound execution failed: ${message}`
               : `ERROR: Pendle rebalance execution failed: ${message}`;
-        const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+        const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
         await copilotkitEmitState(config, {
-          view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+          thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
         });
         return new Command({
           update: {
-            view: {
+            thread: {
               haltReason: failureMessage,
               executionError: failureMessage,
-              activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-              metrics: state.view.metrics,
+              activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+              metrics: state.thread.metrics,
               task,
-              profile: state.view.profile,
-              transactionHistory: state.view.transactionHistory,
+              profile: state.thread.profile,
+              transactionHistory: state.thread.transactionHistory,
             },
           },
           goto: 'summarize',
@@ -431,14 +431,14 @@ export const pollCycleNode = async (
   const cyclesSinceRebalance =
     action === 'rebalance' || action === 'rollover'
       ? 0
-      : (state.view.metrics.cyclesSinceRebalance ?? 0) + 1;
+      : (state.thread.metrics.cyclesSinceRebalance ?? 0) + 1;
 
   const cycleStatusMessage = `[Cycle ${iteration}] ${action}: ${reason}${txHash ? ` (tx: ${txHash.slice(0, 10)}...)` : ''}`;
-  let { task, statusEvent } = buildTaskStatus(state.view.task, 'working', cycleStatusMessage);
+  let { task, statusEvent } = buildTaskStatus(state.thread.task, 'working', cycleStatusMessage);
   await copilotkitEmitState(config, {
-    view: {
+    thread: {
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       metrics: { latestCycle: cycleTelemetry },
     },
   });
@@ -451,9 +451,9 @@ export const pollCycleNode = async (
       task = updated.task;
       statusEvent = updated.statusEvent;
       await copilotkitEmitState(config, {
-        view: {
+        thread: {
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
           metrics: { latestCycle: cycleTelemetry },
         },
       });
@@ -513,8 +513,8 @@ export const pollCycleNode = async (
     ...operatorConfig,
     targetYieldToken: nextMarket,
   };
-  const positionOpenedAt = state.view.metrics.latestSnapshot?.positionOpenedAt ?? timestamp;
-  const positionOpenedTotalUsd = state.view.metrics.latestSnapshot?.positionOpenedTotalUsd;
+  const positionOpenedAt = state.thread.metrics.latestSnapshot?.positionOpenedAt ?? timestamp;
+  const positionOpenedTotalUsd = state.thread.metrics.latestSnapshot?.positionOpenedTotalUsd;
   let latestSnapshot = buildPendleLatestSnapshot({
     operatorConfig: snapshotConfig,
     totalUsd: aumUsd,
@@ -541,27 +541,27 @@ export const pollCycleNode = async (
   }
 
   const nextProfile = {
-    ...state.view.profile,
+    ...state.thread.profile,
     aum: aumUsd,
-    agentIncome: state.view.profile.agentIncome,
-    apy: Number.isFinite(nextApy) ? Number(nextApy.toFixed(2)) : state.view.profile.apy,
+    agentIncome: state.thread.profile.agentIncome,
+    apy: Number.isFinite(nextApy) ? Number(nextApy.toFixed(2)) : state.thread.profile.apy,
     pools: eligibleMarkets,
     allowedPools: eligibleMarkets,
   };
 
   return new Command({
     update: {
-      view: {
+      thread: {
         metrics: {
           lastSnapshot: nextMarket,
           previousApy: nextApy,
           cyclesSinceRebalance,
-          staleCycles: state.view.metrics.staleCycles ?? 0,
+          staleCycles: state.thread.metrics.staleCycles ?? 0,
           iteration,
           latestCycle: cycleTelemetry,
           aumUsd,
           apy: Number.isFinite(nextApy) ? Number(nextApy.toFixed(2)) : undefined,
-          lifetimePnlUsd: state.view.metrics.lifetimePnlUsd,
+          lifetimePnlUsd: state.thread.metrics.lifetimePnlUsd,
           pendle: {
             marketAddress: normalizedMarketAddress,
             ytSymbol: nextMarket.ytSymbol,
@@ -582,8 +582,8 @@ export const pollCycleNode = async (
           events: [telemetryEvent, statusEvent],
         },
         transactionHistory: transactionEntry
-          ? [...state.view.transactionHistory, transactionEntry]
-          : state.view.transactionHistory,
+          ? [...state.thread.transactionHistory, transactionEntry]
+          : state.thread.transactionHistory,
         profile: nextProfile,
         selectedPool: nextMarket,
       },

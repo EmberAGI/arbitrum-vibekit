@@ -148,7 +148,7 @@ describe('collectDelegationsNode', () => {
     });
 
     const state = {
-      view: {
+      thread: {
         delegationsBypassActive: false,
         delegationBundle: undefined,
         operatorInput: {
@@ -171,8 +171,8 @@ describe('collectDelegationsNode', () => {
 
     expect(interruptMock).toHaveBeenCalledTimes(1);
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(2);
-    expect('view' in result).toBe(true);
-    const view = (result as { view: { task?: { taskStatus?: { state?: string } }; delegationBundle?: unknown } }).view;
+    expect('thread' in result).toBe(true);
+    const view = (result as { thread: { task?: { taskStatus?: { state?: string } }; delegationBundle?: unknown } }).thread;
     expect(view.task?.taskStatus?.state).toBe('working');
     expect(view.delegationBundle).toBeTruthy();
   });
@@ -271,7 +271,7 @@ describe('collectDelegationsNode', () => {
     });
 
     const state = {
-      view: {
+      thread: {
         delegationsBypassActive: false,
         delegationBundle: undefined,
         onboarding: { step: 2, key: 'funding-token' },
@@ -306,7 +306,7 @@ describe('collectDelegationsNode', () => {
 
   it('preserves reduced onboarding totals when delegation becomes the final step', async () => {
     const state = {
-      view: {
+      thread: {
         delegationsBypassActive: true,
         delegationBundle: undefined,
         onboarding: { step: 2, key: 'funding-token' },
@@ -315,15 +315,15 @@ describe('collectDelegationsNode', () => {
 
     const result = await collectDelegationsNode(state, {});
 
-    expect('view' in result).toBe(true);
-    const onboarding = (result as { view: { onboarding?: { step: number; key?: string } } }).view
+    expect('thread' in result).toBe(true);
+    const onboarding = (result as { thread: { onboarding?: { step: number; key?: string } } }).thread
       .onboarding;
     expect(onboarding).toEqual({ step: 2, key: 'funding-token' });
   });
 
   it('advances task state after delegation bundle is present', async () => {
     const state = {
-      view: {
+      thread: {
         delegationsBypassActive: false,
         delegationBundle: {
           signedDelegations: [],
@@ -343,9 +343,9 @@ describe('collectDelegationsNode', () => {
 
     const result = await collectDelegationsNode(state, {});
 
-    expect('view' in result).toBe(true);
-    const view = (result as { view: { task?: { taskStatus?: { state?: string; message?: { content?: string } } } } })
-      .view;
+    expect('thread' in result).toBe(true);
+    const view = (result as { thread: { task?: { taskStatus?: { state?: string; message?: { content?: string } } } } })
+      .thread;
     expect(view.task?.taskStatus?.state).toBe('working');
     expect(view.task?.taskStatus?.message?.content).toBe('Delegation approvals received. Continuing onboarding.');
   });
@@ -444,7 +444,7 @@ describe('collectDelegationsNode', () => {
     });
 
     const state = {
-      view: {
+      thread: {
         delegationsBypassActive: false,
         delegationBundle: undefined,
         operatorInput: {
@@ -470,8 +470,8 @@ describe('collectDelegationsNode', () => {
     expect(interruptArg.delegationsToSign).toHaveLength(1);
     expect(interruptArg.delegationManager).not.toBe('0x0000000000000000000000000000000000000000');
 
-    expect('view' in result).toBe(true);
-    const view = (result as { view: { delegationBundle?: unknown } }).view;
+    expect('thread' in result).toBe(true);
+    const view = (result as { thread: { delegationBundle?: unknown } }).thread;
     expect(view.delegationBundle).toBeTruthy();
     const bundle = view.delegationBundle as {
       delegations: unknown[];
@@ -625,7 +625,7 @@ describe('collectDelegationsNode', () => {
     });
 
     const state = {
-      view: {
+      thread: {
         delegationsBypassActive: false,
         delegationBundle: undefined,
         operatorInput: {
@@ -646,8 +646,8 @@ describe('collectDelegationsNode', () => {
 
     const result = await collectDelegationsNode(state, {});
 
-    expect('view' in result).toBe(true);
-    const view = (result as { view: { delegationBundle?: unknown } }).view;
+    expect('thread' in result).toBe(true);
+    const view = (result as { thread: { delegationBundle?: unknown } }).thread;
     const bundle = view.delegationBundle as {
       intents: Array<{ selector: string; target: string }>;
     };
@@ -778,7 +778,7 @@ describe('collectDelegationsNode', () => {
     });
 
     const state = {
-      view: {
+      thread: {
         delegationsBypassActive: false,
         delegationBundle: undefined,
         operatorInput: {
@@ -800,8 +800,8 @@ describe('collectDelegationsNode', () => {
     const result = await collectDelegationsNode(state, {});
 
     expect(interruptMock).toHaveBeenCalledTimes(1);
-    expect('view' in result).toBe(true);
-    const view = (result as { view: { delegationBundle?: unknown } }).view;
+    expect('thread' in result).toBe(true);
+    const view = (result as { thread: { delegationBundle?: unknown } }).thread;
     const bundle = view.delegationBundle as {
       intents: Array<{ selector: string; target: string }>;
     };

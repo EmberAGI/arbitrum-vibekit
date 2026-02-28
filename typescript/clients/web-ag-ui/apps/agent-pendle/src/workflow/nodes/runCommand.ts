@@ -4,7 +4,6 @@ import {
   mapOnboardingPhaseToTarget,
   resolveOnboardingPhase,
   resolveCommandTargetForBootstrappedFlow,
-  resolveRunCommandForView,
   type AgentCommand,
   type CommandEnvelope,
   type CommandRoutingTarget,
@@ -30,27 +29,22 @@ export function extractCommand(messages: ClmmState['messages']): AgentCommand | 
 export function runCommandNode(state: ClmmState): ClmmState {
   const commandEnvelope = extractCommandEnvelope(state.messages);
   const parsedCommand = commandEnvelope?.command ?? null;
-  const nextCommand = resolveRunCommandForView({
-    parsedCommand,
-    currentViewCommand: state.view.command,
-  });
   const lastAppliedClientMutationId =
     parsedCommand === 'sync'
-      ? commandEnvelope?.clientMutationId ?? state.view.lastAppliedClientMutationId
-      : state.view.lastAppliedClientMutationId;
+      ? commandEnvelope?.clientMutationId ?? state.thread.lastAppliedClientMutationId
+      : state.thread.lastAppliedClientMutationId;
 
   return {
     ...state,
-    view: {
-      ...state.view,
-      command: nextCommand,
+    thread: {
+      ...state.thread,
       lastAppliedClientMutationId,
     },
   };
 }
 
-export function resolveCommandTarget({ messages, private: priv, view }: ClmmState): CommandTarget {
-  const resolvedCommand = extractCommand(messages) ?? view.command;
+export function resolveCommandTarget({ messages, private: priv, thread }: ClmmState): CommandTarget {
+  const resolvedCommand = extractCommand(messages);
   if (!resolvedCommand) {
     return '__end__';
   }
@@ -61,13 +55,13 @@ export function resolveCommandTarget({ messages, private: priv, view }: ClmmStat
     }
 
     const phase = resolveOnboardingPhase({
-      hasSetupInput: Boolean(view.operatorInput),
-      hasFundingTokenInput: Boolean(view.fundingTokenInput),
-      requiresDelegationSigning: view.delegationsBypassActive !== true,
-      hasDelegationBundle: Boolean(view.delegationBundle),
-      hasOperatorConfig: Boolean(view.operatorConfig),
+      hasSetupInput: Boolean(thread.operatorInput),
+      hasFundingTokenInput: Boolean(thread.fundingTokenInput),
+      requiresDelegationSigning: thread.delegationsBypassActive !== true,
+      hasDelegationBundle: Boolean(thread.delegationBundle),
+      hasOperatorConfig: Boolean(thread.operatorConfig),
       requiresSetupComplete: true,
-      setupComplete: view.setupComplete === true,
+      setupComplete: thread.setupComplete === true,
     });
 
     return mapOnboardingPhaseToTarget<CommandTarget>({

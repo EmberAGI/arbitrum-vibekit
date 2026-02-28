@@ -43,7 +43,7 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
 
     const state = {
       private: { mode: 'debug' },
-      view: {
+      thread: {
         delegationsBypassActive: false,
         delegationBundle: undefined,
         onboarding: { step: 2, key: 'funding-token' },
@@ -74,7 +74,7 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
     const commandResult = result as {
       goto?: string[];
       update?: {
-        view?: {
+        thread?: {
           task?: { taskStatus?: { state?: string } };
           onboarding?: { step?: number; key?: string };
           onboardingFlow?: { activeStepId?: string };
@@ -82,9 +82,9 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
       };
     };
     expect(commandResult.goto).toContain('collectDelegations');
-    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
-    expect(commandResult.update?.view?.onboardingFlow?.activeStepId).toBe('delegation-signing');
+    expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(commandResult.update?.thread?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(commandResult.update?.thread?.onboardingFlow?.activeStepId).toBe('delegation-signing');
   });
 
   it('does not emit another pending checkpoint when delegation step is already persisted', async () => {
@@ -112,7 +112,7 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
 
     const state = {
       private: { mode: 'debug' },
-      view: {
+      thread: {
         delegationsBypassActive: false,
         delegationBundle: undefined,
         onboarding: { step: 3, key: 'delegation-signing' },
@@ -148,14 +148,14 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
 
     expect(interruptMock).toHaveBeenCalledTimes(1);
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
-    expect('view' in result).toBe(true);
+    expect('thread' in result).toBe(true);
     const view = (result as {
-      view: {
+      thread: {
         task?: { taskStatus?: { state?: string } };
         onboarding?: { step?: number; key?: string };
         delegationBundle?: unknown;
       };
-    }).view;
+    }).thread;
     expect(view.task?.taskStatus?.state).toBe('working');
     expect(view.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
     expect(view.delegationBundle).toBeTruthy();
@@ -186,7 +186,7 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
 
     const state = {
       private: { mode: 'debug' },
-      view: {
+      thread: {
         delegationsBypassActive: false,
         delegationBundle: undefined,
         onboarding: { step: 3, key: 'delegation-signing' },
@@ -220,8 +220,8 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
 
     const result = await collectDelegationsNode(state, { configurable: { thread_id: 'thread-1' } });
 
-    const view = (result as { view: { delegationBundle?: { delegations?: Array<{ signature: string }> } } })
-      .view;
+    const view = (result as { thread: { delegationBundle?: { delegations?: Array<{ signature: string }> } } })
+      .thread;
     const normalizedSignature = view.delegationBundle?.delegations?.[0]?.signature;
     expect(normalizedSignature).toBe(`0x${'2'.repeat(130)}`);
   });

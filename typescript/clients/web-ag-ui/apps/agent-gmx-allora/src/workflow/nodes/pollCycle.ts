@@ -64,7 +64,7 @@ const ERC20_APPROVE_SELECTOR = '0x095ea7b3';
 const POSITION_SYNC_GUARD_WINDOW_MS = 90_000;
 const GMX_PERPETUALS_PROVIDER_NAME = 'GMX Perpetuals' as const;
 
-type PositionSyncGuard = NonNullable<ClmmState['view']['metrics']['pendingPositionSync']>;
+type PositionSyncGuard = NonNullable<ClmmState['thread']['metrics']['pendingPositionSync']>;
 
 function shouldDelayIteration(iteration: number): boolean {
   return iteration % 3 === 0;
@@ -174,7 +174,7 @@ function isApprovalOnlyTransactions(transactions: TransactionPlan[] | undefined)
 }
 
 function resolveActivePositionSyncGuard(
-  guard: ClmmState['view']['metrics']['pendingPositionSync'],
+  guard: ClmmState['thread']['metrics']['pendingPositionSync'],
   nowEpochMs: number,
 ): PositionSyncGuard | undefined {
   if (!guard) {
@@ -310,7 +310,7 @@ export const pollCycleNode = async (
   const runtimeThreadId = runtimeConfig?.thread_id;
   const runtimeCheckpointId = runtimeConfig?.checkpoint_id;
   const runtimeCheckpointNamespace = runtimeConfig?.checkpoint_ns;
-  const { operatorConfig, selectedPool } = state.view;
+  const { operatorConfig, selectedPool } = state.thread;
 
   if (!operatorConfig || !selectedPool) {
     const nextOnboardingNode = resolveNextOnboardingNode(state);
@@ -323,25 +323,25 @@ export const pollCycleNode = async (
       const message = needsUserInput
         ? 'Cycle paused until onboarding input is complete.'
         : 'Cycle paused while onboarding prerequisites are prepared.';
-      const { task, statusEvent } = buildTaskStatus(state.view.task, status, message);
+      const { task, statusEvent } = buildTaskStatus(state.thread.task, status, message);
       const mergedView = {
-        ...state.view,
+        ...state.thread,
         task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       };
       logInfo('pollCycle: onboarding incomplete; rerouting before polling', {
         nextOnboardingNode,
-        hasOperatorConfig: Boolean(state.view.operatorConfig),
-        hasSelectedPool: Boolean(state.view.selectedPool),
+        hasOperatorConfig: Boolean(state.thread.operatorConfig),
+        hasSelectedPool: Boolean(state.thread.selectedPool),
       });
       await copilotkitEmitState(config, {
-        view: mergedView,
+        thread: mergedView,
       });
       if (needsUserInput) {
         logPauseSnapshot({
           node: 'pollCycle',
           reason: 'onboarding prerequisites incomplete',
-          view: mergedView,
+          thread: mergedView,
           metadata: {
             pauseMechanism: 'state-wait',
             nextOnboardingNode,
@@ -349,23 +349,23 @@ export const pollCycleNode = async (
         });
       }
       return {
-        view: mergedView,
+        thread: mergedView,
       };
     }
 
     const failureMessage = 'ERROR: Polling node missing GMX strategy configuration';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
     return {
-      view: {
+      thread: {
         haltReason: failureMessage,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        metrics: state.view.metrics,
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+        metrics: state.thread.metrics,
         task,
-        profile: state.view.profile,
-        transactionHistory: state.view.transactionHistory,
+        profile: state.thread.profile,
+        transactionHistory: state.thread.transactionHistory,
       },
     };
   }
@@ -376,19 +376,19 @@ export const pollCycleNode = async (
     checkpointNamespace: runtimeCheckpointNamespace,
     hasOperatorConfig: Boolean(operatorConfig),
     hasSelectedPool: Boolean(selectedPool),
-    onboardingStatus: state.view.onboardingFlow?.status,
-    currentTaskState: state.view.task?.taskStatus?.state,
-    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    currentTaskState: state.thread.task?.taskStatus?.state,
+    currentTaskMessage: state.thread.task?.taskStatus?.message?.content,
   });
 
-  const iteration = (state.view.metrics.iteration ?? 0) + 1;
+  const iteration = (state.thread.metrics.iteration ?? 0) + 1;
   const topicKey = resolveTopicKey(selectedPool.baseSymbol);
   const topicId = ALLORA_TOPIC_IDS[topicKey];
   const topicLabel = ALLORA_TOPIC_LABELS[topicKey];
 
   let prediction: AlloraPrediction;
-  let inferenceSnapshotKey = state.view.metrics.lastInferenceSnapshotKey;
-  let staleCycles = state.view.metrics.staleCycles ?? 0;
+  let inferenceSnapshotKey = state.thread.metrics.lastInferenceSnapshotKey;
+  let staleCycles = state.thread.metrics.staleCycles ?? 0;
   try {
     const inference = await fetchAlloraInference({
       baseUrl: resolveAlloraApiBaseUrl(),
@@ -399,7 +399,7 @@ export const pollCycleNode = async (
     });
     inferenceSnapshotKey = buildInferenceSnapshotKey(inference);
     staleCycles = 0;
-    const currentPrice = state.view.metrics.previousPrice ?? inference.combinedValue;
+    const currentPrice = state.thread.metrics.previousPrice ?? inference.combinedValue;
     prediction = buildAlloraPrediction({
       inference,
       currentPrice,
@@ -413,21 +413,21 @@ export const pollCycleNode = async (
     // Auth errors are configuration errors; surface them immediately.
     if (message.includes('(401)') || message.includes('(403)')) {
       const failureMessage = `ERROR: Failed to fetch Allora prediction: ${message}`;
-      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
       await copilotkitEmitState(config, {
-        view: {
+        thread: {
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         },
       });
       return {
-        view: {
+        thread: {
           haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: { ...state.view.metrics, staleCycles, iteration },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+          metrics: { ...state.thread.metrics, staleCycles, iteration },
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       };
     }
@@ -435,40 +435,40 @@ export const pollCycleNode = async (
     // Transient failures should not brick the agent; skip trades and retry on the next cycle.
     if (staleCycles > ALLORA_STALE_CYCLE_LIMIT) {
       const failureMessage = `ERROR: Abort: Allora API unreachable for ${staleCycles} consecutive cycles (last error: ${message})`;
-      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
       await copilotkitEmitState(config, {
-        view: {
+        thread: {
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         },
       });
       return {
-        view: {
+        thread: {
           haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: { ...state.view.metrics, staleCycles, iteration },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+          metrics: { ...state.thread.metrics, staleCycles, iteration },
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       };
     }
 
     const warningMessage = `WARNING: Allora prediction unavailable (attempt ${staleCycles}/${ALLORA_STALE_CYCLE_LIMIT}); skipping trades this cycle.`;
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'working', warningMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'working', warningMessage);
     await copilotkitEmitState(config, {
-      view: {
+      thread: {
         task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       },
     });
     return {
-      view: {
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        metrics: { ...state.view.metrics, staleCycles, iteration },
+      thread: {
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+        metrics: { ...state.thread.metrics, staleCycles, iteration },
         task,
-        profile: state.view.profile,
-        transactionHistory: state.view.transactionHistory,
+        profile: state.thread.profile,
+        transactionHistory: state.thread.transactionHistory,
       },
     };
   }
@@ -494,21 +494,21 @@ export const pollCycleNode = async (
 
     if (!selectedMarket) {
       const failureMessage = `ERROR: No GMX ${selectedPool.baseSymbol}/${selectedPool.quoteSymbol} market available`;
-      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
       await copilotkitEmitState(config, {
-        view: {
+        thread: {
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         },
       });
       return {
-        view: {
+        thread: {
           haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: state.view.metrics,
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+          metrics: state.thread.metrics,
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       };
     }
@@ -518,27 +518,27 @@ export const pollCycleNode = async (
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to fetch GMX markets/positions from ${ONCHAIN_ACTIONS_API_URL}: ${message}`;
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
     return {
-      view: {
+      thread: {
         haltReason: failureMessage,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        metrics: state.view.metrics,
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+        metrics: state.thread.metrics,
         task,
-        profile: state.view.profile,
-        transactionHistory: state.view.transactionHistory,
+        profile: state.thread.profile,
+        transactionHistory: state.thread.transactionHistory,
       },
     };
   }
 
-  const previousCycle = state.view.metrics.latestCycle;
-  const assumedPositionSide = state.view.metrics.assumedPositionSide;
+  const previousCycle = state.thread.metrics.latestCycle;
+  const assumedPositionSide = state.thread.metrics.assumedPositionSide;
   const nowEpochMs = Date.now();
   const activePositionSyncGuard = resolveActivePositionSyncGuard(
-    state.view.metrics.pendingPositionSync,
+    state.thread.metrics.pendingPositionSync,
     nowEpochMs,
   );
   const normalizedTargetMarket = gmxMarketAddress.toLowerCase();
@@ -590,7 +590,7 @@ export const pollCycleNode = async (
     baseContributionUsd: operatorConfig.baseContributionUsd,
     previousAction: decisionPreviousAction,
     previousSide: decisionPreviousSide,
-    cyclesSinceTrade: state.view.metrics.cyclesSinceRebalance ?? 0,
+    cyclesSinceTrade: state.thread.metrics.cyclesSinceRebalance ?? 0,
     isFirstCycle: iteration === 1,
     iteration,
     marketSymbol: `${selectedPool.baseSymbol}/${selectedPool.quoteSymbol}`,
@@ -627,7 +627,7 @@ export const pollCycleNode = async (
   const skipTradeForUnchangedInference =
     isTradePlanAction(plannedExecutionPlan.action) &&
     Boolean(inferenceSnapshotKey) &&
-    state.view.metrics.lastTradedInferenceSnapshotKey === inferenceSnapshotKey;
+    state.thread.metrics.lastTradedInferenceSnapshotKey === inferenceSnapshotKey;
 
   let adjustedTelemetry = skipTradeForUnchangedInference
     ? {
@@ -679,13 +679,13 @@ export const pollCycleNode = async (
     activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
     activePositionSyncGuardSourceAction: activePositionSyncGuard?.sourceAction,
     inferenceSnapshotKey,
-    lastTradedInferenceSnapshotKey: state.view.metrics.lastTradedInferenceSnapshotKey,
+    lastTradedInferenceSnapshotKey: state.thread.metrics.lastTradedInferenceSnapshotKey,
     txExecutionMode: resolveGmxAlloraTxExecutionMode(),
   });
 
   const nextCyclesSinceTrade =
     adjustedTelemetry.action === 'hold' && telemetry.action === 'open'
-      ? (state.view.metrics.cyclesSinceRebalance ?? 0) + 1
+      ? (state.thread.metrics.cyclesSinceRebalance ?? 0) + 1
       : initialCyclesSinceTrade;
 
   const action = adjustedTelemetry.action;
@@ -693,11 +693,11 @@ export const pollCycleNode = async (
   const txHash = adjustedTelemetry.txHash;
 
   const cycleStatusMessage = `[Cycle ${iteration}] ${action}: ${reason}${txHash ? ` (tx: ${txHash.slice(0, 10)}...)` : ''}`;
-  let { task, statusEvent } = buildTaskStatus(state.view.task, 'working', cycleStatusMessage);
+  let { task, statusEvent } = buildTaskStatus(state.thread.task, 'working', cycleStatusMessage);
   await copilotkitEmitState(config, {
-    view: {
+    thread: {
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       metrics: { latestCycle: adjustedTelemetry },
     },
   });
@@ -710,9 +710,9 @@ export const pollCycleNode = async (
       task = updated.task;
       statusEvent = updated.statusEvent;
       await copilotkitEmitState(config, {
-        view: {
+        thread: {
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
           metrics: { latestCycle: adjustedTelemetry },
         },
       });
@@ -740,8 +740,8 @@ export const pollCycleNode = async (
       iteration,
       executionPlanAction: executionPlan.action,
       txExecutionMode,
-      delegationsBypassActive: state.view.delegationsBypassActive === true,
-      hasDelegationBundle: Boolean(state.view.delegationBundle),
+      delegationsBypassActive: state.thread.delegationsBypassActive === true,
+      hasDelegationBundle: Boolean(state.thread.delegationBundle),
       delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
       delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
     });
@@ -751,8 +751,8 @@ export const pollCycleNode = async (
     clients,
     plan: executionPlan,
     txExecutionMode,
-    delegationsBypassActive: state.view.delegationsBypassActive === true,
-    delegationBundle: state.view.delegationBundle,
+    delegationsBypassActive: state.thread.delegationsBypassActive === true,
+    delegationBundle: state.thread.delegationBundle,
     delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
     delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
   });
@@ -914,7 +914,7 @@ export const pollCycleNode = async (
       executionResult.ok && (executionPlan.action === 'long' || executionPlan.action === 'short')
         ? latestCycle.timestamp
         : undefined,
-    previous: state.view.metrics.latestSnapshot,
+    previous: state.thread.metrics.latestSnapshot,
   });
 
   const hasCompletedTradeEffect =
@@ -923,7 +923,7 @@ export const pollCycleNode = async (
     ? parseUsdMetric(positionAfterExecution.pnl)
     : executionCompletedSuccessfully && executionPlan.action === 'close'
       ? 0
-      : state.view.metrics.lifetimePnlUsd;
+      : state.thread.metrics.lifetimePnlUsd;
 
   const nextPendingPositionSync: PositionSyncGuard | undefined = (():
     | PositionSyncGuard
@@ -1088,29 +1088,29 @@ export const pollCycleNode = async (
         }
       : undefined;
 
-  const baseAum = state.view.profile.aum ?? 52_000;
-  const baseIncome = state.view.profile.agentIncome ?? 5_400;
+  const baseAum = state.thread.profile.aum ?? 52_000;
+  const baseIncome = state.thread.profile.agentIncome ?? 5_400;
   const aumDelta = finalAction === 'hold' || finalAction === 'cooldown' ? 10 : 180;
   const incomeDelta = finalAction === 'hold' || finalAction === 'cooldown' ? 1.2 : 9.5;
   const nextProfile = {
-    ...state.view.profile,
+    ...state.thread.profile,
     aum: Number((baseAum + aumDelta).toFixed(2)),
     agentIncome: Number((baseIncome + incomeDelta).toFixed(2)),
   };
 
   return {
-    view: {
+    thread: {
       metrics: {
         lastSnapshot: selectedPool,
         previousPrice: prediction.predictedPrice,
         cyclesSinceRebalance: approvalOnlyExecution
-          ? (state.view.metrics.cyclesSinceRebalance ?? 0) + 1
+          ? (state.thread.metrics.cyclesSinceRebalance ?? 0) + 1
           : nextCyclesSinceTrade,
-        staleCycles: state.view.metrics.staleCycles ?? 0,
+        staleCycles: state.thread.metrics.staleCycles ?? 0,
         iteration,
         latestCycle,
         aumUsd: latestSnapshot.totalUsd,
-        apy: state.view.metrics.apy ?? state.view.profile.apy,
+        apy: state.thread.metrics.apy ?? state.thread.profile.apy,
         lifetimePnlUsd,
         latestSnapshot,
         assumedPositionSide: nextAssumedPositionSide,
@@ -1118,7 +1118,7 @@ export const pollCycleNode = async (
         lastTradedInferenceSnapshotKey:
           hasCompletedTradeEffect && inferenceSnapshotKey
             ? inferenceSnapshotKey
-            : state.view.metrics.lastTradedInferenceSnapshotKey,
+            : state.thread.metrics.lastTradedInferenceSnapshotKey,
         pendingPositionSync: nextPendingPositionSync,
       },
       task,
@@ -1131,8 +1131,8 @@ export const pollCycleNode = async (
           : [telemetryEvent, statusEvent],
       },
       transactionHistory: transactionEntry
-        ? [...state.view.transactionHistory, transactionEntry]
-        : state.view.transactionHistory,
+        ? [...state.thread.transactionHistory, transactionEntry]
+        : state.thread.transactionHistory,
       profile: nextProfile,
       selectedPool,
       haltReason: '',

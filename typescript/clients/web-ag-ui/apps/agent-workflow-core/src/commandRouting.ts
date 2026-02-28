@@ -8,15 +8,10 @@ export type CommandRoutingTarget =
   | 'syncState'
   | '__end__';
 
-export function resolveRunCommandForView(input: {
+export function resolveRunCommandForThread(input: {
   parsedCommand: AgentCommand | null;
-  currentViewCommand: AgentCommand | undefined;
 }): AgentCommand | undefined {
-  if (input.parsedCommand === 'sync') {
-    return input.currentViewCommand;
-  }
-
-  return input.parsedCommand ?? input.currentViewCommand;
+  return input.parsedCommand ?? undefined;
 }
 
 export function resolveCommandTargetForBootstrappedFlow(input: {

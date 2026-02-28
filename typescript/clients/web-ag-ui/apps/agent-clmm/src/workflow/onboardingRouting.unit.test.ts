@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { ClmmState } from './context.js';
 import { resolveNextOnboardingNode } from './onboardingRouting.js';
 
-function createState(partialView: Partial<ClmmState['view']>): ClmmState {
+function createState(partialView: Partial<ClmmState['thread']>): ClmmState {
   return {
-    view: partialView,
+    thread: partialView,
   } as unknown as ClmmState;
 }
 

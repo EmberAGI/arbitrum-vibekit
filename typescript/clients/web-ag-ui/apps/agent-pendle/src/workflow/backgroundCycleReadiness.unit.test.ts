@@ -6,11 +6,11 @@ import {
 } from './backgroundCycleReadiness.js';
 
 describe('background cycle readiness', () => {
-  it('is not ready when no persisted view exists', () => {
+  it('is not ready when no persisted thread exists', () => {
     const readiness = getBackgroundCycleReadiness(null);
 
     expect(readiness).toEqual({
-      hasView: false,
+      hasThread: false,
       hasOperatorInput: false,
       hasFundingTokenInput: false,
       hasDelegationAccess: false,
@@ -21,7 +21,7 @@ describe('background cycle readiness', () => {
   });
 
   it('is not ready when setup is incomplete', () => {
-    const view = {
+    const thread = {
       operatorInput: { walletAddress: '0xabc', baseContributionUsd: 10 },
       fundingTokenInput: { fundingTokenAddress: '0xdef' },
       delegationsBypassActive: true,
@@ -29,11 +29,11 @@ describe('background cycle readiness', () => {
       setupComplete: false,
     };
 
-    expect(canStartBackgroundCycle(view)).toBe(false);
+    expect(canStartBackgroundCycle(thread)).toBe(false);
   });
 
   it('is ready when setup is complete and delegation bypass is active', () => {
-    const view = {
+    const thread = {
       operatorInput: { walletAddress: '0xabc', baseContributionUsd: 10 },
       fundingTokenInput: { fundingTokenAddress: '0xdef' },
       delegationsBypassActive: true,
@@ -41,11 +41,11 @@ describe('background cycle readiness', () => {
       setupComplete: true,
     };
 
-    expect(canStartBackgroundCycle(view)).toBe(true);
+    expect(canStartBackgroundCycle(thread)).toBe(true);
   });
 
   it('is ready when setup is complete and a delegation bundle exists', () => {
-    const view = {
+    const thread = {
       operatorInput: { walletAddress: '0xabc', baseContributionUsd: 10 },
       fundingTokenInput: { fundingTokenAddress: '0xdef' },
       delegationsBypassActive: false,
@@ -54,6 +54,6 @@ describe('background cycle readiness', () => {
       setupComplete: true,
     };
 
-    expect(canStartBackgroundCycle(view)).toBe(true);
+    expect(canStartBackgroundCycle(thread)).toBe(true);
   });
 });

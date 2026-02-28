@@ -40,8 +40,7 @@ function renderAgentDetail(params: {
     timestamp?: string;
   }>;
   events?: ClmmEvent[];
-  currentCommand?: string;
-  setupComplete?: boolean;
+  isFiring?: boolean;
   activeInterrupt?:
     | { type: 'operator-config-request'; message: string }
     | { type: 'pendle-setup-request'; message: string }
@@ -83,9 +82,8 @@ function renderAgentDetail(params: {
       initialTab: params.initialTab,
       isHiring: false,
       hasLoadedView: params.hasLoadedView ?? true,
-      isFiring: false,
+      isFiring: params.isFiring ?? false,
       isSyncing: false,
-      currentCommand: params.currentCommand,
       uiError: null,
       onClearUiError: () => {},
       onHire: () => {},
@@ -107,7 +105,6 @@ function renderAgentDetail(params: {
       executionError: undefined,
       delegationsBypassActive: false,
       onboarding: undefined,
-      setupComplete: params.setupComplete,
       transactions: [],
       telemetry: params.telemetry ?? [],
       events: params.events ?? [],
@@ -149,7 +146,6 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
       agentId: id,
       agentName: name,
       isHired: true,
-      currentCommand: 'cycle',
     });
 
     expect(html).toContain('Agent is hired');
@@ -163,7 +159,6 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
       agentId: id,
       agentName: name,
       isHired: true,
-      currentCommand: 'cycle',
     });
 
     expect(html).toContain('Settings and policies');
@@ -214,7 +209,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
       agentId: id,
       agentName: name,
       isHired: true,
-      currentCommand: 'fire',
+      isFiring: true,
     });
 
     expect(html).toContain('No transactions yet');
@@ -227,8 +222,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
         agentId: id,
         agentName: name,
         isHired: false,
-        currentCommand: 'fire',
-        setupComplete: true,
+        isFiring: true,
       });
 
       expect(html).toContain('>Hire<');

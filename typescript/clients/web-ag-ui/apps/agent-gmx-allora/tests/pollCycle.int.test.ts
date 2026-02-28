@@ -7,7 +7,7 @@ import type { ClmmState } from '../src/workflow/context.js';
 import { pollCycleNode } from '../src/workflow/nodes/pollCycle.js';
 
 type PollCycleUpdate = {
-  view?: ClmmState['view'];
+  thread?: ClmmState['thread'];
   private?: ClmmState['private'];
 };
 
@@ -90,7 +90,7 @@ function buildBaseState(): ClmmState {
       cronScheduled: false,
       bootstrapped: true,
     },
-    view: {
+    thread: {
       command: undefined,
       task: undefined,
       poolArtifact: undefined,
@@ -212,16 +212,16 @@ describe('pollCycleNode (integration)', () => {
     fetchAlloraInferenceMock.mockRejectedValueOnce(new TypeError('fetch failed'));
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 47000;
+    state.thread.metrics.previousPrice = 47000;
 
     const result = await pollCycleNode(state, {});
     const update = extractPollCycleUpdate(result);
 
-    expect(update.view?.haltReason).toBeUndefined();
-    expect(update.view?.metrics.staleCycles).toBe(1);
-    expect(update.view?.metrics.previousPrice).toBe(47000);
+    expect(update.thread?.haltReason).toBeUndefined();
+    expect(update.thread?.metrics.staleCycles).toBe(1);
+    expect(update.thread?.metrics.previousPrice).toBe(47000);
 
-    const statusMessages = (update.view?.activity.events ?? [])
+    const statusMessages = (update.thread?.activity.events ?? [])
       .filter((event) => event.type === 'status')
       .map((event) => event.message);
     expect(statusMessages.join(' ')).toContain('WARNING');
@@ -239,10 +239,10 @@ describe('pollCycleNode (integration)', () => {
     const result = await pollCycleNode(state, {});
     const update = extractPollCycleUpdate(result);
 
-    expect(update.view?.haltReason).toContain(
+    expect(update.thread?.haltReason).toContain(
       `ERROR: Failed to fetch GMX markets/positions from ${ONCHAIN_ACTIONS_API_URL}`,
     );
-    expect(update.view?.haltReason).toContain('fetch failed');
+    expect(update.thread?.haltReason).toContain('fetch failed');
   });
 
   it('shows actionable guidance when GMX order simulation fails', async () => {
@@ -258,26 +258,26 @@ describe('pollCycleNode (integration)', () => {
     );
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 46000;
+    state.thread.metrics.previousPrice = 46000;
     const result = await pollCycleNode(state, {});
     const update = extractPollCycleUpdate(result);
 
-    expect(update.view?.haltReason).toBe('');
-    expect(update.view?.task?.taskStatus.state).toBe('input-required');
-    expect(update.view?.task?.taskStatus.message?.content).toContain(
+    expect(update.thread?.haltReason).toBe('');
+    expect(update.thread?.task?.taskStatus.state).toBe('input-required');
+    expect(update.thread?.task?.taskStatus.message?.content).toContain(
       'GMX order simulation failed',
     );
-    expect(update.view?.task?.taskStatus.message?.content).toContain(
+    expect(update.thread?.task?.taskStatus.message?.content).toContain(
       'enough USDC collateral and a small amount of Arbitrum ETH',
     );
-    expect(update.view?.task?.taskStatus.message?.content).toContain(
+    expect(update.thread?.task?.taskStatus.message?.content).toContain(
       'click Continue in Agent Blockers',
     );
-    expect(update.view?.task?.taskStatus.message?.content).not.toContain('{"command":"cycle"}');
-    expect(update.view?.executionError).toBe('');
-    expect(update.view?.transactionHistory).toHaveLength(0);
+    expect(update.thread?.task?.taskStatus.message?.content).not.toContain('{"command":"cycle"}');
+    expect(update.thread?.executionError).toBe('');
+    expect(update.thread?.transactionHistory).toHaveLength(0);
 
-    const executionResultArtifact = (update.view?.activity.events ?? []).find(
+    const executionResultArtifact = (update.thread?.activity.events ?? []).find(
       (event) => event.type === 'artifact' && event.artifact.artifactId === 'gmx-allora-execution-result',
     )?.artifact;
     const executionData = executionResultArtifact?.parts.find((part) => part.kind === 'data');
@@ -297,18 +297,18 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 46000;
+    state.thread.metrics.previousPrice = 46000;
     const result = await pollCycleNode(state, {});
 
     const update = extractPollCycleUpdate(result);
-    const events = update.view?.activity.events ?? [];
+    const events = update.thread?.activity.events ?? [];
     const artifactIds = events
       .filter((event) => event.type === 'artifact')
       .map((event) => event.artifact.artifactId);
 
     expect(artifactIds).toContain('gmx-allora-telemetry');
     expect(artifactIds).toContain('gmx-allora-execution-plan');
-    expect(update.view?.metrics.latestSnapshot?.totalUsd).toBeGreaterThan(0);
+    expect(update.thread?.metrics.latestSnapshot?.totalUsd).toBeGreaterThan(0);
   });
 
   it('fails cycle execution when perpetual lifecycle reports cancelled status for submitted open order', async () => {
@@ -354,7 +354,7 @@ describe('pollCycleNode (integration)', () => {
       });
 
       const state = buildBaseState();
-      state.view.metrics.previousPrice = 46000;
+      state.thread.metrics.previousPrice = 46000;
       const result = await pollCycleNode(state, {});
       const update = extractPollCycleUpdate(result);
 
@@ -364,10 +364,10 @@ describe('pollCycleNode (integration)', () => {
         txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
         walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       });
-      expect(update.view?.task?.taskStatus.state).toBe('working');
-      expect(update.view?.task?.taskStatus.message?.content).toContain('execution failed');
-      expect(update.view?.task?.taskStatus.message?.content).toContain('cancelled');
-      expect(update.view?.executionError).toContain('cancelled');
+      expect(update.thread?.task?.taskStatus.state).toBe('working');
+      expect(update.thread?.task?.taskStatus.message?.content).toContain('execution failed');
+      expect(update.thread?.task?.taskStatus.message?.content).toContain('cancelled');
+      expect(update.thread?.executionError).toContain('cancelled');
     } finally {
       process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
     }
@@ -383,7 +383,7 @@ describe('pollCycleNode (integration)', () => {
     listPerpetualPositionsMock.mockResolvedValueOnce([]);
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 46000;
+    state.thread.metrics.previousPrice = 46000;
     await pollCycleNode(state, {});
 
     expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
@@ -402,7 +402,7 @@ describe('pollCycleNode (integration)', () => {
     listPerpetualPositionsMock.mockResolvedValueOnce([]);
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 48000;
+    state.thread.metrics.previousPrice = 48000;
     await pollCycleNode(state, {});
 
     expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
@@ -421,8 +421,8 @@ describe('pollCycleNode (integration)', () => {
     listPerpetualPositionsMock.mockResolvedValueOnce([]);
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 48000;
-    state.view.metrics.assumedPositionSide = 'long';
+    state.thread.metrics.previousPrice = 48000;
+    state.thread.metrics.assumedPositionSide = 'long';
     await pollCycleNode(state, {});
 
     expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
@@ -447,21 +447,21 @@ describe('pollCycleNode (integration)', () => {
     listPerpetualPositionsMock.mockResolvedValue([]);
 
     const firstState = buildBaseState();
-    firstState.view.metrics.previousPrice = 48000;
-    firstState.view.metrics.assumedPositionSide = 'long';
+    firstState.thread.metrics.previousPrice = 48000;
+    firstState.thread.metrics.assumedPositionSide = 'long';
     const firstResult = await pollCycleNode(firstState, {});
 
     const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
-    secondState.view.metrics = {
-      ...secondState.view.metrics,
-      ...(firstUpdate.view?.metrics ?? {}),
+    secondState.thread.metrics = {
+      ...secondState.thread.metrics,
+      ...(firstUpdate.thread?.metrics ?? {}),
     };
-    secondState.view.metrics.assumedPositionSide = firstUpdate.view?.metrics?.assumedPositionSide;
-    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics?.latestCycle;
-    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics?.previousPrice;
-    secondState.view.metrics.cyclesSinceRebalance = 3;
+    secondState.thread.metrics.assumedPositionSide = firstUpdate.thread?.metrics?.assumedPositionSide;
+    secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
+    secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
+    secondState.thread.metrics.cyclesSinceRebalance = 3;
 
     await pollCycleNode(secondState, {});
 
@@ -522,20 +522,20 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
 
     const firstState = buildBaseState();
-    firstState.view.metrics.previousPrice = 46000;
+    firstState.thread.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
 
     const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
-    secondState.view.metrics = {
-      ...secondState.view.metrics,
-      ...(firstUpdate.view?.metrics ?? {}),
+    secondState.thread.metrics = {
+      ...secondState.thread.metrics,
+      ...(firstUpdate.thread?.metrics ?? {}),
     };
-    secondState.view.metrics.assumedPositionSide = firstUpdate.view?.metrics?.assumedPositionSide;
-    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics?.latestCycle;
-    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics?.previousPrice;
-    secondState.view.metrics.cyclesSinceRebalance = 3;
+    secondState.thread.metrics.assumedPositionSide = firstUpdate.thread?.metrics?.assumedPositionSide;
+    secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
+    secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
+    secondState.thread.metrics.cyclesSinceRebalance = 3;
 
     await pollCycleNode(secondState, {});
 
@@ -560,18 +560,18 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualLongMock.mockResolvedValue({ transactions: [approvalOnlyTransaction] });
 
     const firstState = buildBaseState();
-    firstState.view.metrics.previousPrice = 46000;
+    firstState.thread.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
 
     const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
-    secondState.view.metrics = {
-      ...secondState.view.metrics,
-      ...(firstUpdate.view?.metrics ?? {}),
+    secondState.thread.metrics = {
+      ...secondState.thread.metrics,
+      ...(firstUpdate.thread?.metrics ?? {}),
     };
-    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics?.latestCycle;
-    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics?.previousPrice;
+    secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
+    secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
 
     await pollCycleNode(secondState, {});
 
@@ -595,25 +595,25 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
 
     const firstState = buildBaseState();
-    firstState.view.metrics.previousPrice = 46000;
+    firstState.thread.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
     const firstUpdate = extractPollCycleUpdate(firstResult);
-    const firstSnapshot = firstUpdate.view?.metrics.latestSnapshot;
+    const firstSnapshot = firstUpdate.thread?.metrics.latestSnapshot;
     expect(firstSnapshot?.totalUsd).toBeGreaterThan(0);
 
     const secondState = buildBaseState();
-    secondState.view.metrics = {
-      ...secondState.view.metrics,
-      ...(firstUpdate.view?.metrics ?? {}),
+    secondState.thread.metrics = {
+      ...secondState.thread.metrics,
+      ...(firstUpdate.thread?.metrics ?? {}),
     };
-    secondState.view.metrics.assumedPositionSide = firstUpdate.view?.metrics.assumedPositionSide;
-    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics.latestCycle;
-    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics.previousPrice;
+    secondState.thread.metrics.assumedPositionSide = firstUpdate.thread?.metrics.assumedPositionSide;
+    secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics.latestCycle;
+    secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics.previousPrice;
 
     const secondResult = await pollCycleNode(secondState, {});
     const secondUpdate = extractPollCycleUpdate(secondResult);
 
-    expect(secondUpdate.view?.metrics.latestSnapshot?.totalUsd).toBe(0);
+    expect(secondUpdate.thread?.metrics.latestSnapshot?.totalUsd).toBe(0);
   });
 
   it('executes reduce plans via onchain-actions reduce endpoint when position exists', async () => {
@@ -659,10 +659,10 @@ describe('pollCycleNode (integration)', () => {
     ]);
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 46000;
-    state.view.metrics.iteration = 10;
-    state.view.metrics.cyclesSinceRebalance = 2;
-    state.view.metrics.assumedPositionSide = 'long';
+    state.thread.metrics.previousPrice = 46000;
+    state.thread.metrics.iteration = 10;
+    state.thread.metrics.cyclesSinceRebalance = 2;
+    state.thread.metrics.assumedPositionSide = 'long';
 
     const result = await pollCycleNode(state, {});
     const update = extractPollCycleUpdate(result);
@@ -672,7 +672,7 @@ describe('pollCycleNode (integration)', () => {
     expect(createPerpetualLongMock).not.toHaveBeenCalled();
     expect(createPerpetualReduceMock).not.toHaveBeenCalled();
 
-    const artifactIds = (update.view?.activity.events ?? [])
+    const artifactIds = (update.thread?.activity.events ?? [])
       .filter((event) => event.type === 'artifact')
       .map((event) => event.artifact.artifactId);
     expect(artifactIds).toContain('gmx-allora-telemetry');
@@ -722,12 +722,12 @@ describe('pollCycleNode (integration)', () => {
     ]);
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 46000;
-    state.view.metrics.assumedPositionSide = 'long';
+    state.thread.metrics.previousPrice = 46000;
+    state.thread.metrics.assumedPositionSide = 'long';
 
     const result = await pollCycleNode(state, {});
     const update = extractPollCycleUpdate(result);
-    const snapshot = update.view?.metrics.latestSnapshot;
+    const snapshot = update.thread?.metrics.latestSnapshot;
 
     expect(createPerpetualLongMock).not.toHaveBeenCalled();
     expect(snapshot?.totalUsd).toBe(16);
@@ -748,7 +748,7 @@ describe('pollCycleNode (integration)', () => {
     const result = await pollCycleNode(state, {});
 
     const update = extractPollCycleUpdate(result);
-    expect(update.view?.haltReason).toContain('No GMX');
+    expect(update.thread?.haltReason).toContain('No GMX');
   });
 
   it('blocks open trades when exposure exceeds caps', async () => {
@@ -798,7 +798,7 @@ describe('pollCycleNode (integration)', () => {
     const result = await pollCycleNode(state, {});
 
     const update = extractPollCycleUpdate(result);
-    const latestCycle = update.view?.metrics.latestCycle;
+    const latestCycle = update.thread?.metrics.latestCycle;
 
     expect(latestCycle?.action).toBe('hold');
     expect(latestCycle?.reason).toContain('Exposure limit');

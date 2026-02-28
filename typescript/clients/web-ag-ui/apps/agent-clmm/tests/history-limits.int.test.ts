@@ -3,12 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ClmmState } from '../src/workflow/context.js';
 
-type Transaction = ClmmState['view']['transactionHistory'][number];
-type Telemetry = ClmmState['view']['activity']['telemetry'][number];
-type NavSnapshot = ClmmState['view']['accounting']['navSnapshots'][number];
-type FlowLogEvent = ClmmState['view']['accounting']['flowLog'][number];
+type Transaction = ClmmState['thread']['transactionHistory'][number];
+type Telemetry = ClmmState['thread']['activity']['telemetry'][number];
+type NavSnapshot = ClmmState['thread']['accounting']['navSnapshots'][number];
+type FlowLogEvent = ClmmState['thread']['accounting']['flowLog'][number];
 
-type ViewUpdate = Partial<ClmmState['view']>;
+type ViewUpdate = Partial<ClmmState['thread']>;
 
 const STATE_HISTORY_LIMIT = 100;
 const ACCOUNTING_HISTORY_LIMIT = 200;
@@ -65,8 +65,8 @@ describe('state history limits in graph execution', () => {
     const flowLog = buildFlowLog(ACCOUNTING_HISTORY_LIMIT + 20);
 
     const graph = new StateGraph(ClmmStateAnnotation)
-      .addNode('apply', (): { view: ViewUpdate } => ({
-        view: {
+      .addNode('apply', (): { thread: ViewUpdate } => ({
+        thread: {
           activity: { telemetry },
           transactionHistory: transactions,
           accounting: {
@@ -81,13 +81,13 @@ describe('state history limits in graph execution', () => {
 
     const result = await graph.invoke({});
 
-    expect(result.view.activity.telemetry).toHaveLength(STATE_HISTORY_LIMIT);
-    expect(result.view.transactionHistory).toHaveLength(STATE_HISTORY_LIMIT);
-    expect(result.view.accounting.navSnapshots).toHaveLength(ACCOUNTING_HISTORY_LIMIT);
-    expect(result.view.accounting.flowLog).toHaveLength(ACCOUNTING_HISTORY_LIMIT);
-    expect(result.view.activity.telemetry[0]?.cycle).toBe(20);
-    expect(result.view.transactionHistory[0]?.cycle).toBe(20);
-    expect(result.view.accounting.navSnapshots[0]?.contextId).toBe('ctx-20');
-    expect(result.view.accounting.flowLog[0]?.id).toBe('flow-20');
+    expect(result.thread.activity.telemetry).toHaveLength(STATE_HISTORY_LIMIT);
+    expect(result.thread.transactionHistory).toHaveLength(STATE_HISTORY_LIMIT);
+    expect(result.thread.accounting.navSnapshots).toHaveLength(ACCOUNTING_HISTORY_LIMIT);
+    expect(result.thread.accounting.flowLog).toHaveLength(ACCOUNTING_HISTORY_LIMIT);
+    expect(result.thread.activity.telemetry[0]?.cycle).toBe(20);
+    expect(result.thread.transactionHistory[0]?.cycle).toBe(20);
+    expect(result.thread.accounting.navSnapshots[0]?.contextId).toBe('ctx-20');
+    expect(result.thread.accounting.flowLog[0]?.id).toBe('flow-20');
   });
 });

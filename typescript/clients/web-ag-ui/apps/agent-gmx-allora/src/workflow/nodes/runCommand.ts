@@ -2,7 +2,6 @@ import {
   extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
   resolveCommandTargetForBootstrappedFlow,
-  resolveRunCommandForView,
   type AgentCommand,
   type CommandEnvelope,
   type CommandRoutingTarget,
@@ -28,42 +27,34 @@ export function extractCommand(messages: ClmmState['messages']): AgentCommand | 
 export function runCommandNode(state: ClmmState): ClmmState {
   const commandEnvelope = extractCommandEnvelope(state.messages);
   const parsedCommand = commandEnvelope?.command ?? null;
-  const nextCommand = resolveRunCommandForView({
-    parsedCommand,
-    currentViewCommand: state.view.command,
-  });
   const lastAppliedClientMutationId =
     parsedCommand === 'sync'
-      ? commandEnvelope?.clientMutationId ?? state.view.lastAppliedClientMutationId
-      : state.view.lastAppliedClientMutationId;
+      ? commandEnvelope?.clientMutationId ?? state.thread.lastAppliedClientMutationId
+      : state.thread.lastAppliedClientMutationId;
 
   if (shouldTraceCommand(parsedCommand)) {
     logWarn('runCommand: received command envelope', {
       parsedCommand,
-      nextCommand,
-      currentViewCommand: state.view.command,
       messageCount: state.messages.length,
-      onboardingStatus: state.view.onboardingFlow?.status,
-      onboardingStep: state.view.onboarding?.step,
-      onboardingKey: state.view.onboarding?.key,
-      hasOperatorConfig: Boolean(state.view.operatorConfig),
-      hasDelegationBundle: Boolean(state.view.delegationBundle),
+      onboardingStep: state.thread.onboarding?.step,
+      onboardingKey: state.thread.onboarding?.key,
+      hasOperatorConfig: Boolean(state.thread.operatorConfig),
+      hasDelegationBundle: Boolean(state.thread.delegationBundle),
       clientMutationId: commandEnvelope?.clientMutationId,
     });
   }
 
   return {
     ...state,
-    view: {
-      ...state.view,
-      command: nextCommand,
+    thread: {
+      ...state.thread,
       lastAppliedClientMutationId,
     },
   };
 }
 
-export function resolveCommandTarget({ messages, private: priv, view }: ClmmState): CommandTarget {
-  const resolvedCommand = extractCommand(messages) ?? view.command;
+export function resolveCommandTarget({ messages, private: priv, thread }: ClmmState): CommandTarget {
+  const resolvedCommand = extractCommand(messages);
   const target = resolveCommandTargetForBootstrappedFlow({
     resolvedCommand,
     bootstrapped: priv.bootstrapped,
@@ -74,9 +65,8 @@ export function resolveCommandTarget({ messages, private: priv, view }: ClmmStat
       resolvedCommand,
       target,
       bootstrapped: priv.bootstrapped,
-      taskState: view.task?.taskStatus?.state,
-      taskMessage: view.task?.taskStatus?.message?.content,
-      onboardingStatus: view.onboardingFlow?.status,
+      taskState: thread.task?.taskStatus?.state,
+      taskMessage: thread.task?.taskStatus?.message?.content,
     });
   }
   return target;

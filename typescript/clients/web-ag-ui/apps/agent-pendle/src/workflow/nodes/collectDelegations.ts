@@ -1,7 +1,7 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
 import { createDelegation, getDeleGatorEnvironment } from '@metamask/delegation-toolkit';
-import { shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
+import { requestInterruptPayload, shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
 import { z } from 'zod';
 
 import type { Token, TokenizedYieldMarket } from '../../clients/onchainActions.js';
@@ -12,7 +12,7 @@ import {
 } from '../../config/constants.js';
 import { getAgentWalletAddress, getOnchainActionsClient } from '../clientFactory.js';
 import {
-  applyViewPatch,
+  applyThreadPatch,
   buildTaskStatus,
   logInfo,
   normalizeHexAddress,
@@ -31,14 +31,14 @@ const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
 const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
 const resolveDelegationOnboarding = (state: ClmmState): OnboardingState => {
-  if (state.view.delegationsBypassActive === true) {
+  if (state.thread.delegationsBypassActive === true) {
     return { step: 2, key: FUNDING_STEP_KEY };
   }
-  if (state.view.onboarding?.key === FUNDING_STEP_KEY) {
+  if (state.thread.onboarding?.key === FUNDING_STEP_KEY) {
     return { step: 3, key: DELEGATION_STEP_KEY };
   }
-  if (state.view.onboarding?.key === DELEGATION_STEP_KEY) {
-    return state.view.onboarding;
+  if (state.thread.onboarding?.key === DELEGATION_STEP_KEY) {
+    return state.thread.onboarding;
   }
   return { step: 2, key: DELEGATION_STEP_KEY };
 };
@@ -190,53 +190,53 @@ export const collectDelegationsNode = async (
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   const delegationOnboarding = resolveDelegationOnboarding(state);
   logInfo('collectDelegations: entering node', {
-    delegationsBypassActive: state.view.delegationsBypassActive === true,
-    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    delegationsBypassActive: state.thread.delegationsBypassActive === true,
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
   });
 
-  if (state.view.delegationsBypassActive === true) {
-    const bypassView = applyViewPatch(state, {
+  if (state.thread.delegationsBypassActive === true) {
+    const bypassView = applyThreadPatch(state, {
       delegationsBypassActive: true,
       onboarding: delegationOnboarding,
     });
     return {
-      view: bypassView,
+      thread: bypassView,
     };
   }
 
-  if (state.view.delegationBundle) {
-    if (state.view.task?.taskStatus.state === 'input-required') {
+  if (state.thread.delegationBundle) {
+    if (state.thread.task?.taskStatus.state === 'input-required') {
       const { task, statusEvent } = buildTaskStatus(
-        state.view.task,
+        state.thread.task,
         'working',
         'Delegation approvals received. Continuing onboarding.',
       );
-      const resumedView = applyViewPatch(state, {
-        delegationBundle: state.view.delegationBundle,
+      const resumedView = applyThreadPatch(state, {
+        delegationBundle: state.thread.delegationBundle,
         onboarding: delegationOnboarding,
         task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       });
       return {
-        view: resumedView,
+        thread: resumedView,
       };
     }
 
-    const delegatedView = applyViewPatch(state, {
-      delegationBundle: state.view.delegationBundle,
+    const delegatedView = applyThreadPatch(state, {
+      delegationBundle: state.thread.delegationBundle,
       onboarding: delegationOnboarding,
     });
     return {
-      view: delegatedView,
+      thread: delegatedView,
     };
   }
 
-  const operatorInput = state.view.operatorInput;
+  const operatorInput = state.thread.operatorInput;
   if (!operatorInput) {
     logInfo('collectDelegations: setup input missing; rerouting to collectSetupInput');
     return new Command({ goto: 'collectSetupInput' });
   }
-  const fundingTokenInput = state.view.fundingTokenInput;
+  const fundingTokenInput = state.thread.fundingTokenInput;
   if (!fundingTokenInput) {
     logInfo('collectDelegations: funding token input missing; rerouting to collectFundingTokenInput');
     return new Command({ goto: 'collectFundingTokenInput' });
@@ -249,25 +249,25 @@ export const collectDelegationsNode = async (
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Unable to resolve agent wallet address: ${message}`;
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    const failedView = applyViewPatch(state, {
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
+    const failedView = applyThreadPatch(state, {
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
     await copilotkitEmitState(config, {
-      view: failedView,
+      thread: failedView,
     });
-    const haltedView = applyViewPatch(state, {
+    const haltedView = applyThreadPatch(state, {
       haltReason: failureMessage,
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      profile: state.view.profile,
-      metrics: state.view.metrics,
-      transactionHistory: state.view.transactionHistory,
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+      profile: state.thread.profile,
+      metrics: state.thread.metrics,
+      transactionHistory: state.thread.transactionHistory,
     });
     return new Command({
       update: {
-        view: haltedView,
+        thread: haltedView,
       },
       goto: 'summarize',
     });
@@ -341,26 +341,26 @@ export const collectDelegationsNode = async (
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Unable to prepare delegation request: ${message}`;
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    const failedView = applyViewPatch(state, {
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
+    const failedView = applyThreadPatch(state, {
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
     await copilotkitEmitState(config, {
-      view: failedView,
+      thread: failedView,
     });
-    const haltedView = applyViewPatch(state, {
+    const haltedView = applyThreadPatch(state, {
       haltReason: failureMessage,
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       onboarding: delegationOnboarding,
-      profile: state.view.profile,
-      metrics: state.view.metrics,
-      transactionHistory: state.view.transactionHistory,
+      profile: state.thread.profile,
+      metrics: state.thread.metrics,
+      transactionHistory: state.thread.transactionHistory,
     });
     return new Command({
       update: {
-        view: haltedView,
+        thread: haltedView,
       },
       goto: 'summarize',
     });
@@ -373,7 +373,7 @@ export const collectDelegationsNode = async (
   ];
 
   const awaitingInput = buildTaskStatus(
-    state.view.task,
+    state.thread.task,
     'input-required',
     'Waiting for delegation approval to continue onboarding.',
   );
@@ -381,57 +381,50 @@ export const collectDelegationsNode = async (
   const pendingView = {
     onboarding: delegationOnboarding,
     task: awaitingInput.task,
-    activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
+    activity: { events: [awaitingInput.statusEvent], telemetry: state.thread.activity.telemetry },
   };
   const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
-    currentTaskState: state.view.task?.taskStatus?.state,
-    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
-    currentOnboardingKey: state.view.onboarding?.key,
+    currentTaskState: state.thread.task?.taskStatus?.state,
+    currentTaskMessage: state.thread.task?.taskStatus?.message?.content,
+    currentOnboardingKey: state.thread.onboarding?.key,
     nextOnboardingKey: pendingView.onboarding.key,
     nextTaskMessage: awaitingMessage,
   });
   if (shouldPersistPendingState) {
-    const mergedView = applyViewPatch(state, pendingView);
+    const mergedView = applyThreadPatch(state, pendingView);
     await copilotkitEmitState(config, {
-      view: mergedView,
+      thread: mergedView,
     });
   }
 
-  const incoming: unknown = await interrupt(request);
-
-  let inputToParse: unknown = incoming;
-  if (typeof incoming === 'string') {
-    try {
-      inputToParse = JSON.parse(incoming);
-    } catch {
-      // ignore
-    }
-  }
-
-  const parsed = DelegationSigningResponseSchema.safeParse(inputToParse);
+  const interruptResult = await requestInterruptPayload({
+    request,
+    interrupt,
+  });
+  const parsed = DelegationSigningResponseSchema.safeParse(interruptResult.decoded);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
     const failureMessage = `Invalid delegation signing response: ${issues}`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
-    const failedView = applyViewPatch(state, {
+    const failedView = applyThreadPatch(state, {
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
     await copilotkitEmitState(config, {
-      view: failedView,
+      thread: failedView,
     });
-    const haltedView = applyViewPatch(state, {
+    const haltedView = applyThreadPatch(state, {
       haltReason: failureMessage,
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       onboarding: delegationOnboarding,
-      profile: state.view.profile,
-      metrics: state.view.metrics,
-      transactionHistory: state.view.transactionHistory,
+      profile: state.thread.profile,
+      metrics: state.thread.metrics,
+      transactionHistory: state.thread.transactionHistory,
     });
     return new Command({
       update: {
-        view: haltedView,
+        thread: haltedView,
       },
       goto: 'summarize',
     });
@@ -443,24 +436,24 @@ export const collectDelegationsNode = async (
       'failed',
       'Delegation signing was rejected. The agent will not proceed.',
     );
-    const failedView = applyViewPatch(state, {
+    const failedView = applyThreadPatch(state, {
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
     await copilotkitEmitState(config, {
-      view: failedView,
+      thread: failedView,
     });
-    const haltedView = applyViewPatch(state, {
+    const haltedView = applyThreadPatch(state, {
       haltReason: 'Delegation signing rejected by user.',
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      profile: state.view.profile,
-      metrics: state.view.metrics,
-      transactionHistory: state.view.transactionHistory,
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+      profile: state.thread.profile,
+      metrics: state.thread.metrics,
+      transactionHistory: state.thread.transactionHistory,
     });
     return new Command({
       update: {
-        view: haltedView,
+        thread: haltedView,
       },
       goto: 'summarize',
     });
@@ -470,25 +463,25 @@ export const collectDelegationsNode = async (
   if (signedDelegations.length !== 1) {
     const failureMessage = `Delegation signing returned unexpected count (expected=1, got=${signedDelegations.length})`;
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
-    const failedView = applyViewPatch(state, {
+    const failedView = applyThreadPatch(state, {
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
     await copilotkitEmitState(config, {
-      view: failedView,
+      thread: failedView,
     });
-    const haltedView = applyViewPatch(state, {
+    const haltedView = applyThreadPatch(state, {
       haltReason: failureMessage,
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       onboarding: delegationOnboarding,
-      profile: state.view.profile,
-      metrics: state.view.metrics,
-      transactionHistory: state.view.transactionHistory,
+      profile: state.thread.profile,
+      metrics: state.thread.metrics,
+      transactionHistory: state.thread.transactionHistory,
     });
     return new Command({
       update: {
-        view: haltedView,
+        thread: haltedView,
       },
       goto: 'summarize',
     });
@@ -510,21 +503,21 @@ export const collectDelegationsNode = async (
     'working',
     'Delegations signed. Continuing onboarding.',
   );
-  const workingView = applyViewPatch(state, {
+  const workingView = applyThreadPatch(state, {
     task,
-    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
   });
   await copilotkitEmitState(config, {
-    view: workingView,
+    thread: workingView,
   });
 
-  const completedView = applyViewPatch(state, {
+  const completedView = applyThreadPatch(state, {
     task,
-    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     delegationBundle,
     onboarding: delegationOnboarding,
   });
   return {
-    view: completedView,
+    thread: completedView,
   };
 };

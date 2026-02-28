@@ -4,12 +4,12 @@ import { deriveTaskStateForUi } from './deriveTaskStateForUi';
 export function resolveSidebarTaskState(params: {
   listTaskState?: TaskState;
   runtimeTaskState?: TaskState;
-  runtimeCommand?: string | null;
+  runtimeLifecyclePhase?: string | null;
   runtimeTaskMessage?: string | null;
   fallbackToListWhenRuntimeMissing?: boolean;
 }): TaskState | undefined {
   const runtimeTaskState = deriveTaskStateForUi({
-    command: params.runtimeCommand,
+    lifecyclePhase: params.runtimeLifecyclePhase,
     taskState: params.runtimeTaskState ?? null,
     taskMessage: params.runtimeTaskMessage ?? null,
   }) as TaskState | null | undefined;

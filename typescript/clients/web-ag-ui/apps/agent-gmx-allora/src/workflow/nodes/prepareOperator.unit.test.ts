@@ -36,7 +36,7 @@ describe('prepareOperatorNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         operatorInput: {
           walletAddress: '0x1111111111111111111111111111111111111111',
           usdcAllocation: 100,
@@ -59,7 +59,7 @@ describe('prepareOperatorNode', () => {
     const result = await prepareOperatorNode(state, {});
 
     const updateResult = result as unknown as {
-      view?: {
+      thread?: {
         task?: {
           taskStatus?: {
             state?: string;
@@ -70,10 +70,10 @@ describe('prepareOperatorNode', () => {
       };
     };
 
-    expect(updateResult.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(updateResult.view?.task?.taskStatus?.message?.content).toBe(
+    expect(updateResult.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(updateResult.thread?.task?.taskStatus?.message?.content).toBe(
       'Waiting for delegation approval to continue onboarding.',
     );
-    expect(updateResult.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(updateResult.thread?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
   });
 });

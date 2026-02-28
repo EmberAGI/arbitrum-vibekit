@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { mergeViewPatchForEmit } from './viewEmission.js';
+import { mergeThreadPatchForEmit } from './threadEmission.js';
 
-describe('viewEmission', () => {
+describe('threadEmission', () => {
   it('preserves stable onboarding keys when emit patch is partial', () => {
-    const merged = mergeViewPatchForEmit({
-      currentView: {
+    const merged = mergeThreadPatchForEmit({
+      currentThread: {
         command: 'hire',
         onboarding: { step: 2, key: 'funding-token' },
         onboardingFlow: {
@@ -23,7 +23,7 @@ describe('viewEmission', () => {
           events: [{ type: 'status' }],
         },
       },
-      patchView: {
+      patchThread: {
         task: {
           id: 'task-1',
           taskStatus: { state: 'working' },
@@ -47,19 +47,19 @@ describe('viewEmission', () => {
       onboardingFlow?: { activeStepId?: string };
     };
 
-    const merged = mergeViewPatchForEmit<TestView>({
-      currentView: {
+    const merged = mergeThreadPatchForEmit<TestView>({
+      currentThread: {
         onboarding: { step: 2, key: 'funding-token' },
         onboardingFlow: { activeStepId: 'funding-token' },
       },
-      patchView: {
+      patchThread: {
         onboarding: { step: 3, key: 'delegation-signing' },
       },
-      mergeWithInvariants: (currentView, patchView) => ({
-        ...currentView,
-        ...patchView,
+      mergeWithInvariants: (currentThread, patchThread) => ({
+        ...currentThread,
+        ...patchThread,
         onboardingFlow: {
-          activeStepId: patchView.onboarding?.key,
+          activeStepId: patchThread.onboarding?.key,
         },
       }),
     });

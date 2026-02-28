@@ -22,6 +22,8 @@ These rules complement the C4 target architecture and make runtime behavior dete
 - `Busy`: server rejects a run because an active run already exists (e.g., 409/422 or equivalent busy message).
 - `Authority`: source of truth used to update client projection state.
 - `Client mutation intent`: web-side state/message change to be applied on agent via the next AG-UI `run` input.
+- `ThreadState`: agent-emitted domain/workflow state snapshot.
+- `UiState`: ViewModel-derived render model for React components.
 
 ## 3. Invariants
 
@@ -73,8 +75,18 @@ These rules complement the C4 target architecture and make runtime behavior dete
 
 10. Confirmation semantics:
    - “Saved/synced” UX should complete only when AG-UI state confirms application (e.g., task state, version, or acknowledged projection).
-   - Current handshake: client sends `clientMutationId` in `sync` command payload; agent projects `view.lastAppliedClientMutationId`; UI clears pending sync only when ids match.
+   - Current handshake: client sends `clientMutationId` in `sync` command payload; agent projects `lastAppliedClientMutationId` acknowledgment state; UI clears pending sync only when ids match.
    - Optimistic UI is allowed but must reconcile against streamed state.
+
+11. Intent/state boundary:
+   - Command intent is transport/control-plane input, not shared render truth.
+   - Shared agent state must not persist command as a render-driving field.
+   - ViewModel derives `UiState` from `ThreadState` plus local transient command lane state.
+
+12. Two-layer invariants:
+   - Agent invariants are authoritative business/workflow invariants.
+   - ViewModel invariants are defensive projection invariants (stale run rejection, ordering/authority guards).
+   - ViewModel must not re-implement business rules already owned by agents.
 
 ## 4. Recommended Implementation Shape
 
@@ -93,7 +105,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
 ## 5. Open Design Decisions
 
 1. Confirmation payload:
-   - `clientMutationId`/`view.lastAppliedClientMutationId` is the current explicit mutation acknowledgment path.
+   - `clientMutationId`/`lastAppliedClientMutationId` is the current explicit mutation acknowledgment path.
    - A future `settingsVersion` contract can supersede this if agents move to versioned settings documents.
 2. Retry backoff tuning:
    - Current implementation uses bounded `sync` replay retries (`3`) and replay delay (`500ms`) in `apps/web/src/utils/agentCommandScheduler.ts`.

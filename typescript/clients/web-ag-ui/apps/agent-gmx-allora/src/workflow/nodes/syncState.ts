@@ -2,14 +2,14 @@ import { logWarn, type ClmmState, type ClmmUpdate } from '../context.js';
 
 export function syncStateNode(state: ClmmState): ClmmState | ClmmUpdate {
   logWarn('syncState: returning current state snapshot', {
-    command: state.view.command,
-    taskState: state.view.task?.taskStatus?.state,
-    taskMessage: state.view.task?.taskStatus?.message?.content,
-    onboardingStatus: state.view.onboardingFlow?.status,
-    onboardingStep: state.view.onboarding?.step,
-    onboardingKey: state.view.onboarding?.key,
-    hasOperatorConfig: Boolean(state.view.operatorConfig),
-    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    lifecyclePhase: state.thread.lifecycle?.phase ?? 'prehire',
+    taskState: state.thread.task?.taskStatus?.state,
+    taskMessage: state.thread.task?.taskStatus?.message?.content,
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    onboardingStep: state.thread.onboarding?.step,
+    onboardingKey: state.thread.onboarding?.key,
+    hasOperatorConfig: Boolean(state.thread.operatorConfig),
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
   });
   return state;
 }

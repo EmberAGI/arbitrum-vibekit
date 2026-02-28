@@ -25,7 +25,7 @@ describe('collectFundingTokenInputNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {},
+      thread: {},
     } as unknown as ClmmState;
 
     const result = await collectFundingTokenInputNode(state, {});

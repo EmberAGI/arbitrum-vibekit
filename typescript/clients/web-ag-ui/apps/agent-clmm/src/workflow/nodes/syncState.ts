@@ -37,15 +37,15 @@ export async function syncStateNode(
       return state;
     }
     const accounting = applyAccountingUpdate({
-      existing: state.view.accounting,
+      existing: state.thread.accounting,
       snapshots: [snapshot],
     });
     const { profile, metrics } = applyAccountingToView({
-      profile: state.view.profile,
-      metrics: state.view.metrics,
+      profile: state.thread.profile,
+      metrics: state.thread.metrics,
       accounting,
     });
-    return { view: { accounting, profile, metrics } };
+    return { thread: { accounting, profile, metrics } };
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';

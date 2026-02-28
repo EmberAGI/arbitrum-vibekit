@@ -1,3 +1,6 @@
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+
 import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
 import { Annotation } from '@langchain/langgraph';
@@ -5,11 +8,13 @@ import {
   createMessageHistoryReducer,
   isTaskActiveState,
   isTaskTerminalState,
-  mergeViewPatchForEmit,
+  mergeThreadPatchForEmit,
+  normalizeStaleOnboardingTask,
   normalizeLegacyOnboardingState,
-  type AgentCommand,
+  resolveThreadLifecyclePhase,
   type OnboardingContract,
   type TaskState,
+  type ThreadLifecyclePhase,
 } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 
@@ -200,8 +205,14 @@ export type OnboardingState = {
   key?: string;
 };
 
-type ClmmViewState = {
-  command?: AgentCommand;
+export type ThreadLifecycle = {
+  phase: ThreadLifecyclePhase;
+  reason?: string;
+  updatedAt?: string;
+};
+
+type ClmmThreadState = {
+  lifecycle: ThreadLifecycle;
   lastAppliedClientMutationId?: string;
   task?: Task;
   poolArtifact?: Artifact;
@@ -234,9 +245,11 @@ const defaultPrivateState = (): ClmmPrivateState => ({
   bootstrapped: false,
 });
 
-const defaultViewState = (): ClmmViewState => ({
+const defaultThreadState = (): ClmmThreadState => ({
   // Workflow state exposed to the UI
-  command: undefined,
+  lifecycle: {
+    phase: 'prehire',
+  },
   lastAppliedClientMutationId: undefined,
   task: undefined,
   poolArtifact: undefined,
@@ -294,6 +307,7 @@ const defaultViewState = (): ClmmViewState => ({
     apy: undefined,
   },
 });
+export const createDefaultClmmThreadState = (): ClmmThreadState => defaultThreadState();
 
 const STATE_HISTORY_LIMIT = resolveStateHistoryLimit();
 const ACCOUNTING_HISTORY_LIMIT = resolveAccountingHistoryLimit();
@@ -345,13 +359,14 @@ const limitHistory = <T>(items: T[], limit: number): T[] => {
   return items.slice(-limit);
 };
 
-const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): ClmmViewState => {
+const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState>): ClmmThreadState => {
   if (!right) {
     return left;
   }
   const nextTask = right.task ?? left.task;
   const nextOnboarding = right.onboarding ?? left.onboarding;
   const nextOperatorConfig = right.operatorConfig ?? left.operatorConfig;
+  const nextDelegationBundle = right.delegationBundle ?? left.delegationBundle;
   const nextDelegationsBypassActive = right.delegationsBypassActive ?? left.delegationsBypassActive;
   const nextOnboardingFlow = deriveClmmOnboardingFlow({
     onboarding: nextOnboarding,
@@ -364,6 +379,18 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     onboarding: nextOnboarding,
     onboardingFlow: nextOnboardingFlow,
   });
+  const normalizedTaskProjection = normalizeStaleOnboardingTask({
+    thread: {
+      onboardingFlow: nextOnboardingFlow,
+      operatorConfig: nextOperatorConfig,
+      delegationBundle: nextDelegationBundle,
+      task: nextTask,
+    },
+    completedMessage: 'Onboarding complete. CLMM strategy is active.',
+  });
+  const normalizedTask = (normalizedTaskProjection as { task?: Task }).task ?? nextTask;
+  const effectiveOnboarding =
+    nextOnboardingFlow?.status === 'completed' ? undefined : normalizedOnboarding;
 
   const nextTelemetry = limitHistory(
     mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry),
@@ -425,20 +452,36 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     highWaterMarkUsd: right.accounting?.highWaterMarkUsd ?? left.accounting.highWaterMarkUsd,
     apy: right.accounting?.apy ?? left.accounting.apy,
   };
+  const explicitLifecyclePhase = right.lifecycle?.phase;
+  const nextLifecyclePhase = resolveThreadLifecyclePhase({
+    previousPhase: left.lifecycle?.phase,
+    taskState: normalizedTask?.taskStatus?.state,
+    onboardingFlowStatus: nextOnboardingFlow?.status,
+    onboardingStep: effectiveOnboarding?.step,
+    explicitLifecyclePhase,
+    hasOperatorConfig: Boolean(nextOperatorConfig),
+    hasDelegationBundle: Boolean(nextDelegationBundle),
+    fireRequested: explicitLifecyclePhase === 'firing',
+  });
+  const nextLifecycle: ThreadLifecycle = {
+    phase: nextLifecyclePhase,
+    reason: right.lifecycle?.reason ?? left.lifecycle?.reason,
+    updatedAt: right.lifecycle?.updatedAt ?? left.lifecycle?.updatedAt,
+  };
 
   return {
     ...left,
     ...right,
-    command: right.command ?? left.command,
-    task: nextTask,
+    lifecycle: nextLifecycle,
+    task: normalizedTask,
     poolArtifact: right.poolArtifact ?? left.poolArtifact,
     operatorInput: right.operatorInput ?? left.operatorInput,
-    onboarding: normalizedOnboarding,
+    onboarding: effectiveOnboarding,
     onboardingFlow: nextOnboardingFlow,
     fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
     selectedPool: right.selectedPool ?? left.selectedPool,
     operatorConfig: nextOperatorConfig,
-    delegationBundle: right.delegationBundle ?? left.delegationBundle,
+    delegationBundle: nextDelegationBundle,
     haltReason: right.haltReason ?? left.haltReason,
     executionError: right.executionError ?? left.executionError,
     delegationsBypassActive: nextDelegationsBypassActive,
@@ -452,6 +495,173 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     accounting: nextAccounting,
   };
 };
+
+type ClmmThreadTransitionLogSource = 'threadReducer' | 'applyThreadPatch';
+
+type ClmmThreadTransitionSnapshot = {
+  lifecyclePhase: ThreadLifecyclePhase;
+  taskId?: string;
+  taskState?: TaskState;
+  taskTimestamp?: string;
+  taskMessage?: string;
+  onboardingStep?: number;
+  onboardingKey?: string;
+  selectedPoolAddress?: `0x${string}`;
+  haltReason?: string;
+  executionError?: string;
+  delegationsBypassActive: boolean;
+  metricsIteration: number;
+  eventCount: number;
+  telemetryCount: number;
+  transactionCount: number;
+  accountingFlowCount: number;
+  accountingNavCount: number;
+};
+
+type ClmmThreadTransitionLogEntry = {
+  timestamp: string;
+  source: ClmmThreadTransitionLogSource;
+  changedFields: string[];
+  patchKeys: string[];
+  previous: ClmmThreadTransitionSnapshot;
+  next: ClmmThreadTransitionSnapshot;
+  patch?: Partial<ClmmThreadState>;
+};
+
+const CLMM_STATE_TRANSITION_LOG_DEFAULT_PATH = './.logs/clmm-state-transitions.ndjson';
+
+const clmmTransitionSnapshotKeys: Array<keyof ClmmThreadTransitionSnapshot> = [
+  'lifecyclePhase',
+  'taskId',
+  'taskState',
+  'taskTimestamp',
+  'taskMessage',
+  'onboardingStep',
+  'onboardingKey',
+  'selectedPoolAddress',
+  'haltReason',
+  'executionError',
+  'delegationsBypassActive',
+  'metricsIteration',
+  'eventCount',
+  'telemetryCount',
+  'transactionCount',
+  'accountingFlowCount',
+  'accountingNavCount',
+];
+
+let hasWarnedTransitionLogFailure = false;
+
+const isClmmTransitionLogEnabled = (): boolean =>
+  process.env['CLMM_STATE_TRANSITION_LOG_ENABLED'] === 'true';
+
+const shouldIncludeFullPatch = (): boolean =>
+  process.env['CLMM_STATE_TRANSITION_LOG_INCLUDE_FULL_PATCH'] === 'true';
+
+const resolveClmmTransitionLogPath = (): string =>
+  resolve(process.env['CLMM_STATE_TRANSITION_LOG_PATH'] ?? CLMM_STATE_TRANSITION_LOG_DEFAULT_PATH);
+
+const asTaskMessageText = (message: AgentMessage | undefined): string | undefined => {
+  if (!message) {
+    return undefined;
+  }
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  return undefined;
+};
+
+const summarizeThreadForTransitionLog = (thread: ClmmThreadState): ClmmThreadTransitionSnapshot => ({
+  lifecyclePhase: thread.lifecycle?.phase ?? 'prehire',
+  taskId: thread.task?.id,
+  taskState: thread.task?.taskStatus?.state,
+  taskTimestamp: thread.task?.taskStatus?.timestamp,
+  taskMessage: asTaskMessageText(thread.task?.taskStatus?.message),
+  onboardingStep: thread.onboarding?.step,
+  onboardingKey: thread.onboarding?.key,
+  selectedPoolAddress: thread.selectedPool?.address,
+  haltReason: thread.haltReason,
+  executionError: thread.executionError,
+  delegationsBypassActive: thread.delegationsBypassActive === true,
+  metricsIteration: thread.metrics.iteration,
+  eventCount: thread.activity.events.length,
+  telemetryCount: thread.activity.telemetry.length,
+  transactionCount: thread.transactionHistory.length,
+  accountingFlowCount: thread.accounting.flowLog.length,
+  accountingNavCount: thread.accounting.navSnapshots.length,
+});
+
+const computeTransitionChangedFields = (
+  previous: ClmmThreadTransitionSnapshot,
+  next: ClmmThreadTransitionSnapshot,
+): string[] =>
+  clmmTransitionSnapshotKeys.filter((key) => previous[key] !== next[key]).map(String);
+
+const patchKeys = (patch?: Partial<ClmmThreadState>): string[] =>
+  patch ? Object.keys(patch).sort() : [];
+
+const warnTransitionLogFailure = (error: unknown): void => {
+  if (hasWarnedTransitionLogFailure) {
+    return;
+  }
+  hasWarnedTransitionLogFailure = true;
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn('[CamelotCLMM] Failed to write state transition log', { message });
+};
+
+export const logClmmThreadTransition = (params: {
+  source: ClmmThreadTransitionLogSource;
+  previousThread: ClmmThreadState;
+  nextThread: ClmmThreadState;
+  patchThread?: Partial<ClmmThreadState>;
+}): void => {
+  if (!isClmmTransitionLogEnabled()) {
+    return;
+  }
+
+  const previous = summarizeThreadForTransitionLog(params.previousThread);
+  const next = summarizeThreadForTransitionLog(params.nextThread);
+  const changedFields = computeTransitionChangedFields(previous, next);
+  if (changedFields.length === 0) {
+    return;
+  }
+
+  const entry: ClmmThreadTransitionLogEntry = {
+    timestamp: new Date().toISOString(),
+    source: params.source,
+    changedFields,
+    patchKeys: patchKeys(params.patchThread),
+    previous,
+    next,
+  };
+  if (shouldIncludeFullPatch() && params.patchThread) {
+    entry.patch = params.patchThread;
+  }
+
+  const logPath = resolveClmmTransitionLogPath();
+  try {
+    mkdirSync(dirname(logPath), { recursive: true });
+    appendFileSync(logPath, `${JSON.stringify(entry)}\n`, 'utf8');
+  } catch (error: unknown) {
+    warnTransitionLogFailure(error);
+  }
+};
+
+const reduceThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState>): ClmmThreadState => {
+  const next = mergeThreadState(left, right);
+  logClmmThreadTransition({
+    source: 'threadReducer',
+    previousThread: left,
+    nextThread: next,
+    patchThread: right,
+  });
+  return next;
+};
+
+export const reduceThreadStateForTest = (
+  left: ClmmThreadState,
+  right?: Partial<ClmmThreadState>,
+): ClmmThreadState => reduceThreadState(left, right);
 
 const mergeCopilotkit = (
   left: CopilotkitState,
@@ -478,25 +688,32 @@ export const ClmmStateAnnotation = Annotation.Root({
     default: defaultPrivateState,
     reducer: (left, right) => mergePrivateState(left ?? defaultPrivateState(), right),
   }),
-  view: Annotation<ClmmViewState, Partial<ClmmViewState>>({
-    default: defaultViewState,
-    reducer: (left, right) => mergeViewState(left ?? defaultViewState(), right),
+  thread: Annotation<ClmmThreadState, Partial<ClmmThreadState>>({
+    default: defaultThreadState,
+    reducer: (left, right) => reduceThreadState(left ?? defaultThreadState(), right),
   }),
 });
 
 export type ClmmState = typeof ClmmStateAnnotation.State;
 export type ClmmUpdate = typeof ClmmStateAnnotation.Update;
 
-export const applyViewPatch = (state: ClmmState, patch: Partial<ClmmViewState>): ClmmViewState => {
-  const mergedView = mergeViewPatchForEmit({
-    currentView: state.view,
-    patchView: patch,
-    mergeWithInvariants: (currentView, patchView) => {
-      const hydratedCurrentView = mergeViewState(defaultViewState(), currentView);
-      return mergeViewState(hydratedCurrentView, patchView);
+export const applyThreadPatch = (state: ClmmState, patch: Partial<ClmmThreadState>): ClmmThreadState => {
+  const previousThread = state.thread;
+  const mergedView = mergeThreadPatchForEmit({
+    currentThread: state.thread,
+    patchThread: patch,
+    mergeWithInvariants: (currentThread, patchThread) => {
+      const hydratedCurrentView = mergeThreadState(defaultThreadState(), currentThread);
+      return mergeThreadState(hydratedCurrentView, patchThread);
     },
   });
-  state.view = mergedView;
+  state.thread = mergedView;
+  logClmmThreadTransition({
+    source: 'applyThreadPatch',
+    previousThread,
+    nextThread: mergedView,
+    patchThread: patch,
+  });
   return mergedView;
 };
 

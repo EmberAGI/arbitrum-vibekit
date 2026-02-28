@@ -32,13 +32,19 @@ describe('acknowledgeFundWalletNode', () => {
     expect(source.includes('new Command(')).toBe(false);
   });
 
+  it('uses shared interrupt payload helpers instead of manual JSON parsing', async () => {
+    const source = await readFile(new URL('./acknowledgeFundWallet.ts', import.meta.url), 'utf8');
+    expect(source.includes('requestInterruptPayload(')).toBe(true);
+    expect(source.includes('JSON.parse(')).toBe(false);
+  });
+
   it('persists input-required state via Command before interrupting when runnable config exists', async () => {
     interruptMock.mockReset();
     copilotkitEmitStateMock.mockReset();
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         task: {
           id: 'task-1',
           taskStatus: {
@@ -54,7 +60,7 @@ describe('acknowledgeFundWalletNode', () => {
     const commandResult = result as unknown as {
       goto?: string[];
       update?: {
-        view?: {
+        thread?: {
           task?: { taskStatus?: { state?: string; message?: { content?: string } } };
           haltReason?: string;
           executionError?: string;
@@ -65,13 +71,13 @@ describe('acknowledgeFundWalletNode', () => {
     expect(interruptMock).not.toHaveBeenCalled();
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
     expect(commandResult.goto).toContain('acknowledgeFundWallet');
-    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.task?.taskStatus?.message?.content).toContain(
+    expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(commandResult.update?.thread?.task?.taskStatus?.message?.content).toContain(
       'GMX order simulation failed',
     );
-    expect(commandResult.update?.view?.onboarding).toBeUndefined();
-    expect(commandResult.update?.view?.haltReason).toBe('');
-    expect(commandResult.update?.view?.executionError).toBe('');
+    expect(commandResult.update?.thread?.onboarding).toBeUndefined();
+    expect(commandResult.update?.thread?.haltReason).toBe('');
+    expect(commandResult.update?.thread?.executionError).toBe('');
   });
 
   it('uses default pending message when executionError is blank', async () => {
@@ -80,7 +86,7 @@ describe('acknowledgeFundWalletNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         executionError: '   ',
         task: {
           id: 'task-2',
@@ -96,16 +102,16 @@ describe('acknowledgeFundWalletNode', () => {
     const result = await acknowledgeFundWalletNode(state, { configurable: { thread_id: 'thread-2' } });
     const commandResult = result as unknown as {
       update?: {
-        view?: {
+        thread?: {
           task?: { taskStatus?: { message?: { content?: string } } };
         };
       };
     };
 
-    expect(commandResult.update?.view?.task?.taskStatus?.message?.content).toContain(
+    expect(commandResult.update?.thread?.task?.taskStatus?.message?.content).toContain(
       'GMX order simulation failed',
     );
-    expect(commandResult.update?.view?.task?.taskStatus?.message?.content).toContain(
+    expect(commandResult.update?.thread?.task?.taskStatus?.message?.content).toContain(
       'Ensure the trading wallet has enough USDC collateral',
     );
   });
@@ -116,7 +122,7 @@ describe('acknowledgeFundWalletNode', () => {
     interruptMock.mockResolvedValue({ acknowledged: true });
 
     const state = {
-      view: {
+      thread: {
         task: {
           id: 'task-1',
           taskStatus: {
@@ -155,7 +161,7 @@ describe('acknowledgeFundWalletNode', () => {
     interruptMock.mockResolvedValue({ acknowledged: false });
 
     const state = {
-      view: {},
+      thread: {},
     } as unknown as ClmmState;
 
     const result = await acknowledgeFundWalletNode(state, {});
@@ -172,7 +178,7 @@ describe('acknowledgeFundWalletNode', () => {
     interruptMock.mockResolvedValue({ acknowledged: true });
 
     const state = {
-      view: {
+      thread: {
         task: {
           id: 'task-3',
           taskStatus: {

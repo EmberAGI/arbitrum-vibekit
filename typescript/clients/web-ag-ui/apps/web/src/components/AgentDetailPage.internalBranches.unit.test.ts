@@ -6,7 +6,7 @@ import type {
   AgentInterrupt,
   AgentMetrics,
   AgentProfile,
-  AgentViewMetrics,
+  ThreadMetrics,
   ClmmEvent,
   OnboardingFlow,
   OnboardingState,
@@ -68,8 +68,36 @@ beforeEach(() => {
 });
 
 describe('AgentDetailPage internals: metrics variants', () => {
+  it('does not throw when metrics payload includes null numeric fields', () => {
+    const render = () =>
+      renderToStaticMarkup(
+        React.createElement(__agentDetailPageTestOnly.MetricsTab, {
+          agentId: 'agent-clmm',
+          profile: {
+            ...BASE_PROFILE,
+            apy: null as unknown as number,
+            agentIncome: null as unknown as number,
+          },
+          metrics: {
+            ...BASE_METRICS,
+            apy: null as unknown as number,
+            aumUsd: null as unknown as number,
+          } as unknown as AgentMetrics,
+          fullMetrics: {
+            ...BASE_METRICS,
+            previousPrice: null as unknown as number,
+          } as unknown as ThreadMetrics,
+          events: [],
+          transactions: [],
+          hasLoadedView: true,
+        }),
+      );
+
+    expect(render).not.toThrow();
+  });
+
   it('renders the CLMM metrics layout with latest cycle data', () => {
-    const fullMetrics: AgentViewMetrics = {
+    const fullMetrics: ThreadMetrics = {
       iteration: 7,
       cyclesSinceRebalance: 2,
       staleCycles: 1,

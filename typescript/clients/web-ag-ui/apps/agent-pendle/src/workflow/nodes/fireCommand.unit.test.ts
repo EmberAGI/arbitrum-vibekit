@@ -5,7 +5,7 @@ import type { ClmmState } from '../context.js';
 import { fireCommandNode } from './fireCommand.js';
 
 type EmitStatePayload = {
-  view?: {
+  thread?: {
     activity?: {
       events?: Array<{ message?: unknown }>;
     };
@@ -16,7 +16,7 @@ function getEmittedStatusMessage(payload: unknown): string | undefined {
   if (typeof payload !== 'object' || payload === null) {
     return undefined;
   }
-  const view = (payload as EmitStatePayload).view;
+  const view = (payload as EmitStatePayload).thread;
   const message = view?.activity?.events?.[0]?.message;
   return typeof message === 'string' ? message : undefined;
 }
@@ -84,7 +84,7 @@ const baseState = (): ClmmState =>
       cronScheduled: false,
       bootstrapped: true,
     },
-    view: {
+    thread: {
       command: undefined,
       task: { id: 'task-1', taskStatus: { state: 'working' } },
       poolArtifact: undefined,
@@ -135,20 +135,20 @@ describe('fireCommandNode', () => {
   it('does not attempt unwind when task is already terminal', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();
-    state.view.task = { id: 'task-1', taskStatus: { state: 'completed' } };
+    state.thread.task = { id: 'task-1', taskStatus: { state: 'completed' } };
 
     const result = await fireCommandNode(state, {});
 
     expect(executeUnwindMock).not.toHaveBeenCalled();
-    expect(result.view.command).toBe('fire');
-    expect(result.view.task?.taskStatus.state).toBe('completed');
+    expect(result.thread.lifecycle?.phase).toBe('inactive');
+    expect(result.thread.task?.taskStatus.state).toBe('completed');
   });
 
   it('attempts unwind even when task is failed', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();
-    state.view.task = { id: 'task-1', taskStatus: { state: 'failed' } };
-    state.view.operatorConfig = {
+    state.thread.task = { id: 'task-1', taskStatus: { state: 'failed' } };
+    state.thread.operatorConfig = {
       walletAddress: '0x0000000000000000000000000000000000000001',
       executionWalletAddress: '0x0000000000000000000000000000000000000001',
       baseContributionUsd: 10,
@@ -172,13 +172,13 @@ describe('fireCommandNode', () => {
     const result = await fireCommandNode(state, {});
 
     expect(executeUnwindMock).toHaveBeenCalledTimes(1);
-    expect(result.view.task?.taskStatus.state).toBe('completed');
+    expect(result.thread.task?.taskStatus.state).toBe('completed');
   });
 
   it('cancels cron when thread_id is present', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();
-    state.view.operatorConfig = {
+    state.thread.operatorConfig = {
       walletAddress: '0x0000000000000000000000000000000000000001',
       executionWalletAddress: '0x0000000000000000000000000000000000000001',
       baseContributionUsd: 10,
@@ -207,19 +207,19 @@ describe('fireCommandNode', () => {
   it('does not attempt unwind when onboarding is incomplete (no operatorConfig) and marks task canceled', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();
-    state.view.operatorConfig = undefined;
+    state.thread.operatorConfig = undefined;
 
     const result = await fireCommandNode(state, {});
 
     expect(executeUnwindMock).not.toHaveBeenCalled();
-    expect(result.view.command).toBe('fire');
-    expect(result.view.task?.taskStatus.state).toBe('canceled');
+    expect(result.thread.lifecycle?.phase).toBe('inactive');
+    expect(result.thread.task?.taskStatus.state).toBe('canceled');
   });
 
   it('attempts unwind then completes when onboarding is complete', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();
-    state.view.operatorConfig = {
+    state.thread.operatorConfig = {
       walletAddress: '0x0000000000000000000000000000000000000001',
       executionWalletAddress: '0x0000000000000000000000000000000000000001',
       baseContributionUsd: 10,
@@ -246,8 +246,8 @@ describe('fireCommandNode', () => {
     const result = await fireCommandNode(state, {});
 
     expect(executeUnwindMock).toHaveBeenCalledTimes(1);
-    expect(result.view.command).toBe('fire');
-    expect(result.view.task?.taskStatus.state).toBe('completed');
+    expect(result.thread.lifecycle?.phase).toBe('inactive');
+    expect(result.thread.task?.taskStatus.state).toBe('completed');
     expect(copilotkitEmitStateMock).toHaveBeenCalled();
     const emittedMessages = copilotkitEmitStateMock.mock.calls
       .map((call) => getEmittedStatusMessage(call[1] as unknown))
@@ -258,7 +258,7 @@ describe('fireCommandNode', () => {
   it('uses extended position lookup retries when a setup transaction exists', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();
-    state.view.operatorConfig = {
+    state.thread.operatorConfig = {
       walletAddress: '0x0000000000000000000000000000000000000001',
       executionWalletAddress: '0x0000000000000000000000000000000000000001',
       baseContributionUsd: 10,
@@ -274,7 +274,7 @@ describe('fireCommandNode', () => {
         maturity: '2030-01-01',
       },
     };
-    state.view.transactionHistory = [
+    state.thread.transactionHistory = [
       {
         cycle: 0,
         action: 'setup',
@@ -307,8 +307,8 @@ describe('fireCommandNode', () => {
     try {
       copilotkitEmitStateMock.mockResolvedValue(undefined);
       const state = baseState();
-      state.view.metrics.iteration = 12;
-      state.view.operatorConfig = {
+      state.thread.metrics.iteration = 12;
+      state.thread.operatorConfig = {
         walletAddress: '0x0000000000000000000000000000000000000001',
         executionWalletAddress: '0x0000000000000000000000000000000000000001',
         baseContributionUsd: 10,
@@ -335,7 +335,7 @@ describe('fireCommandNode', () => {
 
       const result = await fireCommandNode(state, {});
 
-      expect(result.view.transactionHistory).toEqual([
+      expect(result.thread.transactionHistory).toEqual([
         {
           cycle: 12,
           action: 'unwind',
@@ -353,7 +353,7 @@ describe('fireCommandNode', () => {
   it('includes last unwind tx hash in the completion status message', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();
-    state.view.operatorConfig = {
+    state.thread.operatorConfig = {
       walletAddress: '0x0000000000000000000000000000000000000001',
       executionWalletAddress: '0x0000000000000000000000000000000000000001',
       baseContributionUsd: 10,
@@ -389,7 +389,7 @@ describe('fireCommandNode', () => {
   it('completes with a "nothing to unwind" message when no positions are found', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();
-    state.view.operatorConfig = {
+    state.thread.operatorConfig = {
       walletAddress: '0x0000000000000000000000000000000000000001',
       executionWalletAddress: '0x0000000000000000000000000000000000000001',
       baseContributionUsd: 10,
@@ -412,7 +412,7 @@ describe('fireCommandNode', () => {
 
     const result = await fireCommandNode(state, {});
 
-    expect(result.view.task?.taskStatus.state).toBe('completed');
+    expect(result.thread.task?.taskStatus.state).toBe('completed');
     const lastCall = copilotkitEmitStateMock.mock.calls.at(-1);
     const lastMessage = getEmittedStatusMessage(lastCall?.[1] as unknown);
     expect(typeof lastMessage).toBe('string');
@@ -422,7 +422,7 @@ describe('fireCommandNode', () => {
   it('fails the task when unwind throws after exhausting retries', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();
-    state.view.operatorConfig = {
+    state.thread.operatorConfig = {
       walletAddress: '0x0000000000000000000000000000000000000001',
       executionWalletAddress: '0x0000000000000000000000000000000000000001',
       baseContributionUsd: 10,
@@ -446,8 +446,8 @@ describe('fireCommandNode', () => {
     const result = await fireCommandNode(state, {});
 
     expect(executeUnwindMock).toHaveBeenCalledTimes(1);
-    expect(result.view.command).toBe('fire');
-    expect(result.view.task?.taskStatus.state).toBe('failed');
+    expect(result.thread.lifecycle?.phase).toBe('inactive');
+    expect(result.thread.task?.taskStatus.state).toBe('failed');
     const lastCall = copilotkitEmitStateMock.mock.calls.at(-1);
     const lastMessage = getEmittedStatusMessage(lastCall?.[1] as unknown);
     expect(typeof lastMessage).toBe('string');
@@ -457,7 +457,7 @@ describe('fireCommandNode', () => {
   it('marks the task completed when unwind is interrupted', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = baseState();
-    state.view.operatorConfig = {
+    state.thread.operatorConfig = {
       walletAddress: '0x0000000000000000000000000000000000000001',
       executionWalletAddress: '0x0000000000000000000000000000000000000001',
       baseContributionUsd: 10,
@@ -481,8 +481,8 @@ describe('fireCommandNode', () => {
     const result = await fireCommandNode(state, {});
 
     expect(executeUnwindMock).toHaveBeenCalledTimes(1);
-    expect(result.view.command).toBe('fire');
-    expect(result.view.task?.taskStatus.state).toBe('completed');
+    expect(result.thread.lifecycle?.phase).toBe('inactive');
+    expect(result.thread.task?.taskStatus.state).toBe('completed');
     const lastCall = copilotkitEmitStateMock.mock.calls.at(-1);
     const lastMessage = getEmittedStatusMessage(lastCall?.[1] as unknown);
     expect(typeof lastMessage).toBe('string');

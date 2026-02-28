@@ -25,7 +25,7 @@ describe('runCycleCommandNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         operatorInput: {
           walletAddress: '0x1111111111111111111111111111111111111111',
           usdcAllocation: 100,

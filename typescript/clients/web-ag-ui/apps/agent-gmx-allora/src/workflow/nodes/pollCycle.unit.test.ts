@@ -25,7 +25,7 @@ describe('pollCycleNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         operatorInput: {
           walletAddress: '0x1111111111111111111111111111111111111111',
           usdcAllocation: 100,
@@ -44,7 +44,7 @@ describe('pollCycleNode', () => {
 
     const result = await pollCycleNode(state, {});
     const updateResult = result as unknown as {
-      view?: {
+      thread?: {
         task?: {
           taskStatus?: {
             state?: string;
@@ -54,8 +54,8 @@ describe('pollCycleNode', () => {
       };
     };
 
-    expect(updateResult.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(updateResult.view?.task?.taskStatus?.message?.content).toBe(
+    expect(updateResult.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(updateResult.thread?.task?.taskStatus?.message?.content).toBe(
       'Cycle paused until onboarding input is complete.',
     );
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);

@@ -46,6 +46,21 @@ describe('resolveSummaryTaskStatus', () => {
     });
   });
 
+  it('clears continue-setup input-required state after onboarding completion', () => {
+    expect(
+      resolveSummaryTaskStatus({
+        currentTaskState: 'input-required',
+        currentTaskMessage: 'Waiting for you to approve the required permissions to continue setup.',
+        onboardingComplete: true,
+        activeSummaryMessage: 'cycle summarized',
+        onboardingCompleteMessage: 'Onboarding complete. Strategy is active.',
+      }),
+    ).toEqual({
+      state: 'working',
+      message: 'Onboarding complete. Strategy is active.',
+    });
+  });
+
   it('does not clear non-onboarding input-required state after onboarding completion', () => {
     expect(
       resolveSummaryTaskStatus({

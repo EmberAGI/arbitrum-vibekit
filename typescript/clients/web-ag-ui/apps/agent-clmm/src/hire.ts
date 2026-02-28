@@ -133,11 +133,11 @@ export async function startClmmHire(
   if (
     typeof output === 'object' &&
     output !== null &&
-    'view' in output &&
-    typeof (output as { view?: unknown }).view === 'object' &&
-    (output as { view?: { haltReason?: unknown } }).view?.haltReason
+    'thread' in output &&
+    typeof (output as { thread?: unknown }).thread === 'object' &&
+    (output as { thread?: { haltReason?: unknown } }).thread?.haltReason
   ) {
-    const reason = String((output as { view: { haltReason: unknown } }).view.haltReason);
+    const reason = String((output as { thread: { haltReason: unknown } }).thread.haltReason);
     throw new Error(`Hire flow halted: ${reason}`);
   }
 }

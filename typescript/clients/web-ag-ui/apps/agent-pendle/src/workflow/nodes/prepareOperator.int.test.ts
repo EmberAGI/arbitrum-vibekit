@@ -176,7 +176,7 @@ describe('prepareOperatorNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -228,14 +228,14 @@ describe('prepareOperatorNode', () => {
         fundingAmount: '10000000',
       }),
     );
-    expect(update.view?.operatorConfig?.walletAddress).toBe(
+    expect(update.thread?.operatorConfig?.walletAddress).toBe(
       '0x0000000000000000000000000000000000000001',
     );
-    expect(update.view?.operatorConfig?.executionWalletAddress).toBe(
+    expect(update.thread?.operatorConfig?.executionWalletAddress).toBe(
       '0x3fd83e40F96C3c81A807575F959e55C34a40e523',
     );
-    expect(update.view?.selectedPool?.ytSymbol).toBe('YT-BEST');
-    expect(update.view?.setupComplete).toBe(true);
+    expect(update.thread?.selectedPool?.ytSymbol).toBe('YT-BEST');
+    expect(update.thread?.setupComplete).toBe(true);
   });
 
   it('skips initial deposit when wallet holds PT balance even if positions endpoint is empty', async () => {
@@ -404,7 +404,7 @@ describe('prepareOperatorNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -450,7 +450,7 @@ describe('prepareOperatorNode', () => {
     const update = result as ClmmUpdate;
 
     expect(executeInitialDepositMock).not.toHaveBeenCalled();
-    expect(update.view?.setupComplete).toBe(true);
+    expect(update.thread?.setupComplete).toBe(true);
   });
 
   it('skips initial deposit when setup is already complete', async () => {
@@ -550,7 +550,7 @@ describe('prepareOperatorNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -597,8 +597,8 @@ describe('prepareOperatorNode', () => {
     const update = result as ClmmUpdate;
 
     expect(executeInitialDepositMock).not.toHaveBeenCalled();
-    expect(update.view?.setupComplete).toBe(true);
-    expect(update.view?.selectedPool?.ytSymbol).toBe('YT-BEST');
+    expect(update.thread?.setupComplete).toBe(true);
+    expect(update.thread?.selectedPool?.ytSymbol).toBe('YT-BEST');
   });
 
   it('skips initial deposit and marks setup complete in smoke mode', async () => {
@@ -699,7 +699,7 @@ describe('prepareOperatorNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -745,8 +745,8 @@ describe('prepareOperatorNode', () => {
     const update = result as ClmmUpdate;
 
     expect(executeInitialDepositMock).not.toHaveBeenCalled();
-    expect(update.view?.setupComplete).toBe(true);
-    expect(update.view?.selectedPool?.ytSymbol).toBe('YT-BEST');
+    expect(update.thread?.setupComplete).toBe(true);
+    expect(update.thread?.selectedPool?.ytSymbol).toBe('YT-BEST');
   });
 
   it('does not require signing key when tx execution mode is plan', async () => {
@@ -851,7 +851,7 @@ describe('prepareOperatorNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -903,7 +903,7 @@ describe('prepareOperatorNode', () => {
       txExecutionMode: 'plan',
       clients: undefined,
     });
-    expect(update.view?.setupComplete).toBe(true);
+    expect(update.thread?.setupComplete).toBe(true);
   });
 
   it('fails early when funding token balance is below the configured initial deposit amount', async () => {
@@ -1035,7 +1035,7 @@ describe('prepareOperatorNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -1080,7 +1080,7 @@ describe('prepareOperatorNode', () => {
 
     const result = await prepareOperatorNode(state, {});
     const update = (result as { update?: ClmmUpdate }).update;
-    const failureMessage = update?.view?.task?.taskStatus?.message?.content ?? '';
+    const failureMessage = update?.thread?.task?.taskStatus?.message?.content ?? '';
 
     expect(executeInitialDepositMock).not.toHaveBeenCalled();
     expect(failureMessage).toContain('ERROR: Insufficient USDC balance for initial deposit');
@@ -1285,7 +1285,7 @@ describe('prepareOperatorNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -1337,7 +1337,7 @@ describe('prepareOperatorNode', () => {
         fundingAmount: '2000000',
       }),
     );
-    expect(update.view?.setupComplete).toBe(true);
+    expect(update.thread?.setupComplete).toBe(true);
   });
 
   it('reroutes to funding token collection when funding token input is missing', async () => {
@@ -1352,7 +1352,7 @@ describe('prepareOperatorNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -1398,13 +1398,13 @@ describe('prepareOperatorNode', () => {
       update?: ClmmUpdate;
     };
     const update = commandResult.update;
-    const nextTaskState = update?.view?.task?.taskStatus?.state;
+    const nextTaskState = update?.thread?.task?.taskStatus?.state;
 
     expect(nextTaskState).toBe('input-required');
     expect(commandResult.goto).toEqual(expect.arrayContaining(['collectFundingTokenInput']));
-    expect(update?.view?.haltReason).toBeUndefined();
+    expect(update?.thread?.haltReason).toBeUndefined();
     expect(
-      update?.view?.operatorInput as { walletAddress?: string; baseContributionUsd?: number } | undefined,
+      update?.thread?.operatorInput as { walletAddress?: string; baseContributionUsd?: number } | undefined,
     ).toEqual(
       expect.objectContaining({
         walletAddress: '0x0000000000000000000000000000000000000001',
@@ -1425,7 +1425,7 @@ describe('prepareOperatorNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -1472,17 +1472,17 @@ describe('prepareOperatorNode', () => {
 
     const result = await prepareOperatorNode(state, {});
     const update = (result as { update?: ClmmUpdate }).update;
-    const nextTaskState = update?.view?.task?.taskStatus?.state;
-    const nextTaskMessage = update?.view?.task?.taskStatus?.message?.content;
+    const nextTaskState = update?.thread?.task?.taskStatus?.state;
+    const nextTaskMessage = update?.thread?.task?.taskStatus?.message?.content;
 
     expect(nextTaskState).toBe('input-required');
     expect(nextTaskMessage).toBe('Waiting for delegation approval to continue onboarding.');
-    expect(update?.view?.onboarding).toEqual({
+    expect(update?.thread?.onboarding).toEqual({
       step: 3,
       key: 'delegation-signing',
     });
     expect(
-      update?.view?.operatorInput as { walletAddress?: string; baseContributionUsd?: number } | undefined,
+      update?.thread?.operatorInput as { walletAddress?: string; baseContributionUsd?: number } | undefined,
     ).toEqual(
       expect.objectContaining({
         walletAddress: '0x0000000000000000000000000000000000000001',
@@ -1490,7 +1490,7 @@ describe('prepareOperatorNode', () => {
       }),
     );
     expect(
-      update?.view?.fundingTokenInput as { fundingTokenAddress?: string } | undefined,
+      update?.thread?.fundingTokenInput as { fundingTokenAddress?: string } | undefined,
     ).toEqual(
       expect.objectContaining({
         fundingTokenAddress: '0xusdc',

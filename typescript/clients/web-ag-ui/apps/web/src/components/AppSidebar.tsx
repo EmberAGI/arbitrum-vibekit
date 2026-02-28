@@ -25,6 +25,7 @@ import { useAgentList } from '@/contexts/AgentListContext';
 import { getAllAgents } from '@/config/agents';
 import type { TaskState } from '@/types/agent';
 import { resolveSidebarTaskState } from '@/utils/resolveSidebarTaskState';
+import { selectRuntimeTaskState } from '@/utils/selectRuntimeTaskState';
 import { collectUniqueChainNames, collectUniqueTokenSymbols } from '@/utils/agentCollections';
 import { PROTOCOL_TOKEN_FALLBACK } from '@/constants/protocolTokenFallback';
 import {
@@ -46,16 +47,6 @@ const ETHEREUM_MAINNET_CHAIN_ID = 1;
 export function getWalletSelectorChains(chains: readonly Chain[]): Chain[] {
   return chains.filter(
     (chain) => chain.id === defaultEvmChain.id || chain.id === ETHEREUM_MAINNET_CHAIN_ID,
-  );
-}
-
-function isLikelyStaleOnboardingTaskMessage(message: string | undefined): boolean {
-  const normalized = `${message ?? ''}`.toLowerCase();
-  if (normalized.length === 0) return false;
-  return (
-    normalized.includes('onboarding') ||
-    normalized.includes('delegation approval') ||
-    normalized.includes('market + allocation')
   );
 }
 
@@ -98,22 +89,24 @@ export function AppSidebar() {
   const agentConfigs = useMemo(() => getAllAgents(), []);
   const isInactiveRuntime = agent.config.id === 'inactive-agent';
   const runtimeAgentId = isInactiveRuntime ? null : agent.config.id;
-  const runtimeTaskId = agent.view.task?.id;
-  const runtimeTaskState = agent.view.task?.taskStatus?.state as TaskState | undefined;
-  const runtimeCommand = agent.view.command;
-  const runtimeHaltReason = agent.view.haltReason;
-  const runtimeExecutionError = agent.view.executionError;
-  const runtimeHasConfiguredStrategy = Boolean(
-    agent.view.setupComplete || agent.view.operatorConfig || agent.view.delegationBundle,
-  );
+  const runtimeTaskId = agent.uiState.task?.id;
+  const runtimeLifecyclePhase = agent.uiState.lifecycle?.phase;
+  const runtimeHaltReason = agent.uiState.haltReason;
+  const runtimeExecutionError = agent.uiState.executionError;
   const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
   const runtimeTaskMessage = (() => {
-    const message = agent.view.task?.taskStatus?.message;
+    const message = agent.uiState.task?.taskStatus?.message;
     if (typeof message !== 'object' || message === null) return undefined;
     if (!('content' in message)) return undefined;
     const content = (message as { content?: unknown }).content;
     return typeof content === 'string' ? content : undefined;
   })();
+  const runtimeTaskState = selectRuntimeTaskState({
+    effectiveTaskState: agent.uiState.selectors?.effectiveTaskState,
+    lifecyclePhase: runtimeLifecyclePhase,
+    taskState: agent.uiState.task?.taskStatus?.state,
+    taskMessage: runtimeTaskMessage,
+  }) as TaskState | undefined;
 
   const blockedAgents: AgentActivity[] = [];
   const activeAgents: AgentActivity[] = [];
@@ -129,11 +122,10 @@ export function AppSidebar() {
           taskState: resolveSidebarTaskState({
             listTaskState: listEntry?.taskState,
             runtimeTaskState,
-            runtimeCommand,
+            runtimeLifecyclePhase,
             runtimeTaskMessage,
             fallbackToListWhenRuntimeMissing: false,
           }),
-          command: runtimeCommand,
           taskMessage: runtimeTaskMessage,
           haltReason: runtimeHaltReason,
           executionError: runtimeExecutionError,
@@ -141,25 +133,6 @@ export function AppSidebar() {
       : listEntry;
 
     let taskState = entry?.taskState;
-    if (!taskState && useRuntime && runtimeHasConfiguredStrategy) {
-      taskState = 'working';
-    }
-    if (
-      taskState === 'input-required' &&
-      useRuntime &&
-      runtimeHasConfiguredStrategy &&
-      isLikelyStaleOnboardingTaskMessage(runtimeTaskMessage)
-    ) {
-      taskState = 'working';
-    }
-    if (
-      taskState === 'input-required' &&
-      useRuntime &&
-      runtimeHasConfiguredStrategy &&
-      (!runtimeTaskMessage || runtimeTaskMessage.trim().length === 0)
-    ) {
-      taskState = 'working';
-    }
     if (!taskState) {
       return;
     }
@@ -176,11 +149,9 @@ export function AppSidebar() {
         source: useRuntime ? 'runtime' : 'list',
         runtimeTaskId,
         runtimeTaskState,
-        runtimeCommand,
         runtimeTaskMessage,
         listTaskState: listEntry?.taskState,
         resolvedTaskState: taskState,
-        runtimeHasConfiguredStrategy,
         isBlocked,
         isCompleted,
       });

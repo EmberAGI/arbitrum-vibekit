@@ -53,7 +53,7 @@ describe('runGraphOnce busy handling integration (CLMM)', () => {
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
         return jsonResponse({
           values: {
-            view: {
+            thread: {
               command: 'hire',
               poolArtifact: {},
               operatorInput: {},
@@ -88,9 +88,9 @@ describe('runGraphOnce busy handling integration (CLMM)', () => {
           throw new Error('Expected string request body');
         }
         const body = JSON.parse(bodyText) as {
-          values?: { view?: { task?: { taskStatus?: { state?: string } } } };
+          values?: { thread?: { task?: { taskStatus?: { state?: string } } } };
         };
-        expect(body.values?.view?.task?.taskStatus?.state).toBe('working');
+        expect(body.values?.thread?.task?.taskStatus?.state).toBe('working');
         return jsonResponse({ checkpoint_id: 'cp-1' });
       }
       if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {

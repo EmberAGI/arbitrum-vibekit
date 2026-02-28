@@ -217,7 +217,7 @@ describe('pollCycleNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: 'cycle',
         task: undefined,
         poolArtifact: undefined,
@@ -280,7 +280,7 @@ describe('pollCycleNode', () => {
 
     const result = await pollCycleNode(state, {});
     const update = (result as { update?: ClmmUpdate }).update;
-    const view = update?.view;
+    const view = update?.thread;
 
     expect(result).toBeInstanceOf(Command);
     expect(view?.selectedPool?.ytSymbol).toBe('YT-BEST');
@@ -388,7 +388,7 @@ describe('pollCycleNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: 'cycle',
         task: undefined,
         poolArtifact: undefined,
@@ -451,7 +451,7 @@ describe('pollCycleNode', () => {
 
     const result = await pollCycleNode(state, {});
     const update = (result as { update?: ClmmUpdate }).update;
-    const view = update?.view;
+    const view = update?.thread;
 
     expect(result).toBeInstanceOf(Command);
     expect(view?.haltReason).toBeUndefined();
@@ -591,7 +591,7 @@ describe('pollCycleNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: 'cycle',
         task: undefined,
         poolArtifact: undefined,
@@ -654,7 +654,7 @@ describe('pollCycleNode', () => {
 
     const result = await pollCycleNode(state, { configurable: { thread_id: 'thread-1' } });
     const update = (result as { update?: ClmmUpdate }).update;
-    const view = update?.view;
+    const view = update?.thread;
 
     expect(view?.activity?.telemetry?.[0]?.action).toBe('hold');
     expect(update?.private?.cronScheduled).toBe(true);
@@ -674,7 +674,7 @@ describe('pollCycleNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: 'cycle',
         task: undefined,
         poolArtifact: undefined,
@@ -718,8 +718,8 @@ describe('pollCycleNode', () => {
 
     expect(result).toBeInstanceOf(Command);
     expect(resolvedGoto).toBe('__end__');
-    expect(update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(update?.view?.task?.taskStatus?.message?.content).toContain('strategy configuration missing');
+    expect(update?.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(update?.thread?.task?.taskStatus?.message?.content).toContain('strategy configuration missing');
   });
 
   it('downgrades to hold in smoke mode when no position exists', async () => {
@@ -863,7 +863,7 @@ describe('pollCycleNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: 'cycle',
         task: undefined,
         poolArtifact: undefined,
@@ -926,7 +926,7 @@ describe('pollCycleNode', () => {
 
     const result = await pollCycleNode(state, { configurable: { thread_id: 'thread-smoke' } });
     const update = (result as { update?: ClmmUpdate }).update;
-    const view = update?.view;
+    const view = update?.thread;
 
     expect(result).toBeInstanceOf(Command);
     expect(view?.activity?.telemetry?.[0]?.action).toBe('hold');
@@ -1068,7 +1068,7 @@ describe('pollCycleNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: 'cycle',
         task: undefined,
         poolArtifact: undefined,
@@ -1133,7 +1133,7 @@ describe('pollCycleNode', () => {
     const update = (result as { update?: ClmmUpdate }).update;
 
     expect(result).toBeInstanceOf(Command);
-    const haltReason = update?.view?.haltReason ?? '';
+    const haltReason = update?.thread?.haltReason ?? '';
     expect(haltReason).toContain('Missing tokenized yield data needed to rebalance');
     expect(executeRebalanceMock).not.toHaveBeenCalled();
   });
@@ -1307,7 +1307,7 @@ describe('pollCycleNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: 'cycle',
         task: undefined,
         poolArtifact: undefined,
@@ -1375,7 +1375,7 @@ describe('pollCycleNode', () => {
     const command = await pollCycleNode(state, {});
     expect(command).toBeInstanceOf(Command);
     const update = (command as { update?: ClmmUpdate }).update;
-    const telemetry = update?.view?.activity?.telemetry?.[0];
+    const telemetry = update?.thread?.activity?.telemetry?.[0];
     expect(telemetry?.action).toBe('rollover');
     expect(telemetry?.txHash).toBe('0xrolloverhash');
     expect(executeRolloverMock).toHaveBeenCalledTimes(1);
@@ -1568,7 +1568,7 @@ describe('pollCycleNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: 'cycle',
         task: undefined,
         poolArtifact: undefined,
@@ -1636,9 +1636,9 @@ describe('pollCycleNode', () => {
     const command = await pollCycleNode(state, {});
     expect(command).toBeInstanceOf(Command);
     const update = (command as { update?: ClmmUpdate }).update;
-    const telemetry = update?.view?.activity?.telemetry?.[0];
-    expect(update?.view?.haltReason).toBeUndefined();
-    expect(update?.view?.executionError).toBeUndefined();
+    const telemetry = update?.thread?.activity?.telemetry?.[0];
+    expect(update?.thread?.haltReason).toBeUndefined();
+    expect(update?.thread?.executionError).toBeUndefined();
     expect(telemetry?.action).toBe('hold');
     expect(telemetry?.reason).toContain('already settled');
     expect(executeRolloverMock).toHaveBeenCalledTimes(1);
@@ -1827,7 +1827,7 @@ describe('pollCycleNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: 'cycle',
         task: undefined,
         poolArtifact: undefined,
@@ -1895,10 +1895,10 @@ describe('pollCycleNode', () => {
     const command = await pollCycleNode(state, {});
     expect(command).toBeInstanceOf(Command);
     const update = (command as { update?: ClmmUpdate }).update;
-    const telemetry = update?.view?.activity?.telemetry?.[0];
+    const telemetry = update?.thread?.activity?.telemetry?.[0];
     expect(telemetry?.action).toBe('compound');
     expect(telemetry?.txHash).toBe('0xcompoundhash');
-    const nextMetrics = update?.view?.metrics;
+    const nextMetrics = update?.thread?.metrics;
     expect(nextMetrics?.aumUsd).toBe(10);
     expect(nextMetrics?.apy).toBe(5);
     expect(nextMetrics?.pendle?.ytSymbol).toBe('YT-CUR');

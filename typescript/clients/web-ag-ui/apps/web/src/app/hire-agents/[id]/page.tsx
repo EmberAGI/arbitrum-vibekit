@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
 import { getAgentConfig, isRegisteredAgentId } from '@/config/agents';
 import { useAgent } from '@/contexts/AgentContext';
-import type { OnboardingState } from '@/types/agent';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
 type UiPreviewTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
@@ -71,11 +70,6 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
     const config = getAgentConfig(previewAgentId);
 
     const isHired = uiPreviewState !== 'prehire';
-    const onboarding: OnboardingState | undefined =
-      uiPreviewState === 'onboarding' ? { step: 2, key: 'setup-agent' } : undefined;
-
-    const currentCommand =
-      uiPreviewState === 'prehire' ? undefined : uiPreviewState === 'onboarding' ? 'hire' : 'cycle';
 
     return (
       <AgentDetailPage
@@ -111,7 +105,6 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         hasLoadedView
         isFiring={false}
         isSyncing={false}
-        currentCommand={currentCommand}
         uiError={null}
         onClearUiError={() => undefined}
         onHire={() => undefined}
@@ -126,9 +119,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         haltReason={undefined}
         executionError={undefined}
         delegationsBypassActive={false}
-        onboarding={onboarding}
         onboardingFlow={undefined}
-        setupComplete={false}
         transactions={[]}
         telemetry={[]}
         events={[]}
@@ -171,26 +162,23 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       isHired={agent.isHired}
       isHiring={agent.isHiring}
       hasLoadedView={agent.hasLoadedView}
-        isFiring={agent.isFiring}
-        isSyncing={agent.isSyncing}
-        currentCommand={agent.view.command}
-        uiError={agent.uiError}
-        onClearUiError={agent.clearUiError}
-        onHire={agent.runHire}
-        onFire={agent.runFire}
-        onSync={agent.runSync}
+      isFiring={agent.isFiring}
+      isSyncing={agent.isSyncing}
+      uiError={agent.uiError}
+      onClearUiError={agent.clearUiError}
+      onHire={agent.runHire}
+      onFire={agent.runFire}
+      onSync={agent.runSync}
       onBack={handleBack}
       activeInterrupt={agent.activeInterrupt}
       allowedPools={selectedProfile.allowedPools ?? []}
       onInterruptSubmit={agent.resolveInterrupt}
-      taskId={agent.view.task?.id}
-      taskStatus={agent.view.task?.taskStatus?.state}
-      haltReason={agent.view.haltReason}
-      executionError={agent.view.executionError}
-      delegationsBypassActive={agent.view.delegationsBypassActive}
-      onboarding={agent.view.onboarding}
-      onboardingFlow={agent.view.onboardingFlow}
-      setupComplete={agent.view.setupComplete}
+      taskId={agent.uiState.task?.id}
+      taskStatus={agent.uiState.task?.taskStatus?.state}
+      haltReason={agent.uiState.haltReason}
+      executionError={agent.uiState.executionError}
+      delegationsBypassActive={agent.uiState.delegationsBypassActive}
+      onboardingFlow={agent.uiState.onboardingFlow}
       transactions={agent.transactionHistory}
       telemetry={agent.activity.telemetry}
       events={agent.events}

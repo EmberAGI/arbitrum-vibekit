@@ -47,7 +47,7 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
         return jsonResponse({ thread_id: 'thread-1' });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
-        return jsonResponse({ values: { view: {} } });
+        return jsonResponse({ values: { thread: {} } });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
         return new Response('busy', { status: 409 });
@@ -78,7 +78,7 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
         return jsonResponse({ thread_id: 'thread-1' });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
-        return jsonResponse({ values: { view: {} } });
+        return jsonResponse({ values: { thread: {} } });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
         return jsonResponse({ checkpoint_id: 'cp-1' });
@@ -115,7 +115,7 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
         return jsonResponse({
           values: {
-            view: {
+            thread: {
               command: 'hire',
               onboardingFlow: {
                 status: 'completed',
@@ -145,9 +145,9 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
           throw new Error('Expected string request body');
         }
         const body = JSON.parse(bodyText) as {
-          values?: { view?: { task?: { taskStatus?: { state?: string } } } };
+          values?: { thread?: { task?: { taskStatus?: { state?: string } } } };
         };
-        expect(body.values?.view?.task?.taskStatus?.state).toBe('working');
+        expect(body.values?.thread?.task?.taskStatus?.state).toBe('working');
         return jsonResponse({ checkpoint_id: 'cp-1' });
       }
       if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {

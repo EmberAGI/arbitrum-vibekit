@@ -20,7 +20,7 @@ describe('pollCycleNode', () => {
   it('reroutes to onboarding when poll prerequisites are missing', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = {
-      view: {
+      thread: {
         poolArtifact: { id: 'camelot-pools', generatedAt: '2026-01-01T00:00:00Z', kind: 'pool-list', payload: {} },
         operatorInput: {
           poolAddress: '0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526',
@@ -49,7 +49,7 @@ describe('pollCycleNode', () => {
     const commandResult = result as unknown as {
       goto?: string[];
       update?: {
-        view?: {
+        thread?: {
           haltReason?: string;
           task?: { taskStatus?: { state?: string; message?: { content?: string } } };
         };
@@ -57,10 +57,10 @@ describe('pollCycleNode', () => {
     };
 
     expect(commandResult.goto).toContain('collectDelegations');
-    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.task?.taskStatus?.message?.content).toBe(
+    expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(commandResult.update?.thread?.task?.taskStatus?.message?.content).toBe(
       'Cycle paused until onboarding input is complete.',
     );
-    expect(commandResult.update?.view?.haltReason).toBeUndefined();
+    expect(commandResult.update?.thread?.haltReason).toBeUndefined();
   });
 });

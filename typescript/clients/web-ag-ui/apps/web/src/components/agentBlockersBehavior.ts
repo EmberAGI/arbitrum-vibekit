@@ -1,45 +1,27 @@
-const ONBOARDING_RUN_BEHAVIOR: Record<string, { hireRunIsOnboardingWhileSetupIncomplete: boolean }> = {
-  'agent-pendle': { hireRunIsOnboardingWhileSetupIncomplete: true },
-  'agent-clmm': { hireRunIsOnboardingWhileSetupIncomplete: false },
-  'agent-gmx-allora': { hireRunIsOnboardingWhileSetupIncomplete: false },
-};
-
 const DELEGATION_CONTEXT_LABELS: Record<string, string> = {
   'agent-pendle': 'Pendle execution',
   'agent-gmx-allora': 'GMX perps execution',
 };
-
-const TERMINAL_TASK_STATES = new Set(['completed', 'failed', 'canceled']);
 
 export function resolveDelegationContextLabel(agentId: string): string {
   return DELEGATION_CONTEXT_LABELS[agentId] ?? 'liquidity management';
 }
 
 export function resolveOnboardingActive(input: {
-  agentId: string;
   activeInterruptPresent: boolean;
   taskStatus?: string;
-  currentCommand?: string;
-  setupComplete?: boolean;
   onboardingStatus?: 'in_progress' | 'completed' | 'failed' | 'canceled';
 }): boolean {
   if (input.onboardingStatus === 'in_progress') {
     return true;
   }
-  if (input.onboardingStatus === 'completed') {
+  if (
+    input.onboardingStatus === 'completed' ||
+    input.onboardingStatus === 'failed' ||
+    input.onboardingStatus === 'canceled'
+  ) {
     return false;
   }
 
-  const profile = ONBOARDING_RUN_BEHAVIOR[input.agentId] ?? {
-    hireRunIsOnboardingWhileSetupIncomplete: false,
-  };
-
-  const isTaskTerminal = TERMINAL_TASK_STATES.has(input.taskStatus ?? '');
-  const isConfiguredOnboardingRun =
-    profile.hireRunIsOnboardingWhileSetupIncomplete &&
-    input.currentCommand === 'hire' &&
-    input.setupComplete !== true &&
-    !isTaskTerminal;
-
-  return input.activeInterruptPresent || input.taskStatus === 'input-required' || isConfiguredOnboardingRun;
+  return input.activeInterruptPresent || input.taskStatus === 'input-required';
 }

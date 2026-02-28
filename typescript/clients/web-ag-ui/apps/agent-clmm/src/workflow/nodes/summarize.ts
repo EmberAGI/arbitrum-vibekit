@@ -14,34 +14,32 @@ export const summarizeNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
-  const summaryArtifact = buildSummaryArtifact(state.view.activity.telemetry ?? []);
-  const currentTaskState = state.view.task?.taskStatus?.state;
-  const currentTaskMessage = state.view.task?.taskStatus?.message?.content;
-  const shouldClearStaleDelegationWait =
-    currentTaskState === 'input-required' &&
-    Boolean(state.view.operatorConfig) &&
-    Boolean(state.view.delegationBundle) &&
-    `${currentTaskMessage ?? ''}`.toLowerCase().includes('delegation approval');
+  const summaryArtifact = buildSummaryArtifact(state.thread.activity.telemetry ?? []);
+  const currentTaskState = state.thread.task?.taskStatus?.state;
+  const currentTaskMessage = state.thread.task?.taskStatus?.message?.content;
+  const onboardingComplete =
+    state.thread.onboardingFlow?.status === 'completed' ||
+    Boolean(state.thread.operatorConfig) ||
+    Boolean(state.thread.delegationBundle);
   const { state: finalState, message: finalMessage } = resolveSummaryTaskStatus({
-    haltReason: state.view.haltReason,
+    haltReason: state.thread.haltReason,
     currentTaskState,
     currentTaskMessage,
-    staleDelegationWaitCleared: shouldClearStaleDelegationWait,
-    onboardingComplete: state.view.onboardingFlow?.status === 'completed',
+    onboardingComplete,
     activeSummaryMessage: 'CLMM cycle summarized.',
     onboardingCompleteMessage: 'Onboarding complete. CLMM strategy is active.',
   });
 
   const { task, statusEvent: completion } = buildTaskStatus(
-    state.view.task,
+    state.thread.task,
     finalState,
     finalMessage,
   );
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [completion] } },
+    thread: { task, activity: { events: [completion] } },
   });
   return {
-    view: {
+    thread: {
       task,
       activity: {
         telemetry: [],

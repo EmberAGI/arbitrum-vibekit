@@ -31,7 +31,7 @@ describe('collectSetupInputNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         task: { id: 'task-1', taskStatus: { state: 'submitted' } },
         activity: { telemetry: [], events: [] },
       },
@@ -43,9 +43,9 @@ describe('collectSetupInputNode', () => {
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
     const commandResult = result as unknown as {
       goto?: string[];
-      update?: { view?: { task?: { taskStatus?: { state?: string } } } };
+      update?: { thread?: { task?: { taskStatus?: { state?: string } } } };
     };
     expect(commandResult.goto).toContain('collectSetupInput');
-    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
+    expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
   });
 });

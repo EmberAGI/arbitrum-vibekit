@@ -2,33 +2,32 @@ import { describe, expect, it } from 'vitest';
 
 import {
   resolveCommandTargetForBootstrappedFlow,
-  resolveRunCommandForView,
+  resolveRunCommandForThread,
 } from './commandRouting';
 
 describe('commandRouting', () => {
-  it('keeps current view command when incoming command is sync', () => {
+  it('returns explicit sync command without falling back to persisted thread command', () => {
     expect(
-      resolveRunCommandForView({
+      resolveRunCommandForThread({
         parsedCommand: 'sync',
-        currentViewCommand: 'hire',
       }),
-    ).toBe('hire');
+    ).toBe('sync');
   });
 
-  it('uses parsed command when not sync and falls back to current command', () => {
+  it('does not fall back to persisted command when no command is parsed', () => {
     expect(
-      resolveRunCommandForView({
+      resolveRunCommandForThread({
+        parsedCommand: null,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('uses parsed command when present', () => {
+    expect(
+      resolveRunCommandForThread({
         parsedCommand: 'fire',
-        currentViewCommand: 'hire',
       }),
     ).toBe('fire');
-
-    expect(
-      resolveRunCommandForView({
-        parsedCommand: null,
-        currentViewCommand: 'cycle',
-      }),
-    ).toBe('cycle');
   });
 
   it('routes standard command targets based on bootstrapped state', () => {

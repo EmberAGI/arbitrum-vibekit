@@ -103,7 +103,7 @@ describe('collectFundingTokenInputNode', () => {
     });
 
     const state = {
-      view: {
+      thread: {
         operatorInput: {
           poolAddress: '0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526',
           walletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9',
@@ -138,10 +138,39 @@ describe('collectFundingTokenInputNode', () => {
     } as unknown as ClmmState;
 
     const result = await collectFundingTokenInputNode(state, {});
-    const view = (result as { view: ClmmState['view'] }).view;
+    const view = (result as { thread: ClmmState['thread'] }).thread;
 
     expect(view.fundingTokenInput?.fundingTokenAddress).toBe('0xaf88d065e77c8cc2239327c5edb3a432268e5831');
     expect(view.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
     expect(interruptMock).not.toHaveBeenCalled();
+  });
+
+  it('does not reintroduce onboarding when funding token is already present after setup completion', async () => {
+    const state = {
+      thread: {
+        operatorInput: {
+          poolAddress: '0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526',
+          walletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9',
+          baseContributionUsd: 10,
+        },
+        fundingTokenInput: {
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+        },
+        onboarding: undefined,
+        onboardingFlow: {
+          status: 'completed',
+          revision: 4,
+          steps: [],
+        },
+        operatorConfig: {
+          agentWalletAddress: '0x3fd83e40F96C3c81A807575F959e55C34a40e523',
+        },
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectFundingTokenInputNode(state, {});
+    const view = (result as { thread: ClmmState['thread'] }).thread;
+
+    expect(view.onboarding).toBeUndefined();
   });
 });

@@ -12,9 +12,15 @@ describe('collectDelegationsNode', () => {
     expect(source.includes('new Command(')).toBe(false);
   });
 
+  it('uses shared interrupt payload helpers instead of manual JSON parsing', async () => {
+    const source = await readFile(new URL('./collectDelegations.ts', import.meta.url), 'utf8');
+    expect(source.includes('requestInterruptPayload(')).toBe(true);
+    expect(source.includes('JSON.parse(')).toBe(false);
+  });
+
   it('preserves reduced onboarding totals when delegation step is skipped', async () => {
     const state = {
-      view: {
+      thread: {
         delegationsBypassActive: true,
         delegationBundle: undefined,
         onboarding: { step: 2, key: 'funding-token' },
@@ -23,15 +29,15 @@ describe('collectDelegationsNode', () => {
 
     const result = await collectDelegationsNode(state, {});
 
-    expect('view' in result).toBe(true);
-    const onboarding = (result as { view: { onboarding?: { step: number; key?: string } } }).view
+    expect('thread' in result).toBe(true);
+    const onboarding = (result as { thread: { onboarding?: { step: number; key?: string } } }).thread
       .onboarding;
     expect(onboarding).toEqual({ step: 2, key: 'funding-token' });
   });
 
   it('advances task state after delegation bundle is present', async () => {
     const state = {
-      view: {
+      thread: {
         delegationsBypassActive: false,
         delegationBundle: {
           delegations: [],
@@ -51,16 +57,16 @@ describe('collectDelegationsNode', () => {
 
     const result = await collectDelegationsNode(state, {});
 
-    expect('view' in result).toBe(true);
-    const view = (result as { view: { task?: { taskStatus?: { state?: string; message?: { content?: string } } } } })
-      .view;
+    expect('thread' in result).toBe(true);
+    const view = (result as { thread: { task?: { taskStatus?: { state?: string; message?: { content?: string } } } } })
+      .thread;
     expect(view.task?.taskStatus?.state).toBe('working');
     expect(view.task?.taskStatus?.message?.content).toBe('Delegation approvals received. Continuing onboarding.');
   });
 
   it('returns state-only update when setup input is missing', async () => {
     const state = {
-      view: {
+      thread: {
         delegationsBypassActive: false,
         delegationBundle: undefined,
         operatorInput: undefined,

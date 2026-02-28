@@ -1,11 +1,17 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command, interrupt } from '@langchain/langgraph';
-import { shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
+import { type Command, interrupt } from '@langchain/langgraph';
+import {
+  buildInterruptPauseTransition,
+  buildNodeTransition,
+  buildStateUpdate,
+  requestInterruptPayload,
+  shouldPersistInputRequiredCheckpoint,
+} from 'agent-workflow-core';
 import { z } from 'zod';
 
 import { OperatorConfigInputSchema } from '../../domain/types.js';
 import {
-  applyViewPatch,
+  applyThreadPatch,
   buildTaskStatus,
   logInfo,
   type OnboardingState,
@@ -13,6 +19,7 @@ import {
   type OperatorInterrupt,
   type ClmmUpdate,
 } from '../context.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -20,14 +27,17 @@ const SETUP_STEP_KEY: OnboardingState['key'] = 'setup';
 const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
 const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
-const resolveOperatorResumeOnboarding = (state: ClmmState): OnboardingState => {
-  if (!state.view.fundingTokenInput) {
+const resolveOperatorResumeOnboarding = (state: ClmmState): OnboardingState | undefined => {
+  if (state.thread.operatorConfig || state.thread.onboardingFlow?.status === 'completed') {
+    return state.thread.onboarding;
+  }
+  if (!state.thread.fundingTokenInput) {
     return { step: 2, key: FUNDING_STEP_KEY };
   }
-  if (state.view.delegationsBypassActive === true) {
+  if (state.thread.delegationsBypassActive === true) {
     return { step: 2, key: FUNDING_STEP_KEY };
   }
-  return state.view.onboarding?.key === FUNDING_STEP_KEY
+  return state.thread.onboarding?.key === FUNDING_STEP_KEY
     ? { step: 3, key: DELEGATION_STEP_KEY }
     : { step: 2, key: DELEGATION_STEP_KEY };
 };
@@ -36,48 +46,55 @@ export const collectOperatorInputNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
-  logInfo('collectOperatorInput: entering node', { hasPoolArtifact: !!state.view.poolArtifact });
+  logInfo('collectOperatorInput: entering node', { hasPoolArtifact: !!state.thread.poolArtifact });
 
-  if (state.view.operatorInput) {
+  if (state.thread.operatorInput) {
     logInfo('collectOperatorInput: operator input already present; skipping step');
-    const resumedView = applyViewPatch(state, {
-      onboarding: resolveOperatorResumeOnboarding(state),
+    const resumedOnboarding = resolveOperatorResumeOnboarding(state);
+    if (!resumedOnboarding) {
+      return buildStateUpdate({
+        thread: state.thread,
+      });
+    }
+    const resumedView = applyThreadPatch(state, {
+      onboarding: resumedOnboarding,
     });
-    return {
-      view: resumedView,
-    };
+    return buildStateUpdate({
+      thread: resumedView,
+    });
   }
 
-  if (!state.view.poolArtifact) {
+  if (!state.thread.poolArtifact) {
     const failureMessage = 'ERROR: Pool artifact missing before operator input';
     logInfo('collectOperatorInput: missing pool artifact - cannot prompt operator', {
-      hasProfilePools: Array.isArray(state.view.profile?.pools) ? state.view.profile.pools.length : 0,
-      hasAllowedPools: Array.isArray(state.view.profile?.allowedPools)
-        ? state.view.profile.allowedPools.length
+      hasProfilePools: Array.isArray(state.thread.profile?.pools) ? state.thread.profile.pools.length : 0,
+      hasAllowedPools: Array.isArray(state.thread.profile?.allowedPools)
+        ? state.thread.profile.allowedPools.length
         : 0,
-      command: state.view.command,
+      lifecyclePhase: state.thread.lifecycle?.phase ?? 'prehire',
     });
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    const failedView = applyViewPatch(state, {
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
+    const failedView = applyThreadPatch(state, {
       task,
       activity: { events: [statusEvent], telemetry: [] },
     });
     await copilotkitEmitState(config, {
-      view: failedView,
+      thread: failedView,
     });
-    const haltedView = applyViewPatch(state, {
+    const haltedView = applyThreadPatch(state, {
       haltReason: failureMessage,
       task,
       activity: { events: [statusEvent], telemetry: [] },
-      profile: state.view.profile,
-      metrics: state.view.metrics,
-      transactionHistory: state.view.transactionHistory,
+      profile: state.thread.profile,
+      metrics: state.thread.metrics,
+      transactionHistory: state.thread.transactionHistory,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
-        view: haltedView,
+        thread: haltedView,
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -86,13 +103,13 @@ export const collectOperatorInputNode = async (
     message:
       'Select a Camelot pool to manage, confirm wallet, and optional allocation override for this CLMM workflow.',
     payloadSchema: z.toJSONSchema(OperatorConfigInputSchema),
-    artifactId: state.view.poolArtifact.artifactId,
+    artifactId: state.thread.poolArtifact.artifactId,
   };
 
   logInfo('collectOperatorInput: emitting input-required status before interrupt');
 
   const awaitingInput = buildTaskStatus(
-    state.view.task,
+    state.thread.task,
     'input-required',
     'Awaiting operator configuration to continue CLMM setup.',
   );
@@ -103,28 +120,33 @@ export const collectOperatorInputNode = async (
     activity: { events: [awaitingInput.statusEvent], telemetry: [] },
   };
   const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
-    currentTaskState: state.view.task?.taskStatus?.state,
-    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
-    currentOnboardingKey: state.view.onboarding?.key,
+    currentTaskState: state.thread.task?.taskStatus?.state,
+    currentTaskMessage: state.thread.task?.taskStatus?.message?.content,
+    currentOnboardingKey: state.thread.onboarding?.key,
     nextOnboardingKey: pendingView.onboarding.key,
     nextTaskMessage: awaitingMessage,
   });
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
   if (hasRunnableConfig && shouldPersistPendingState) {
-    const mergedView = applyViewPatch(state, pendingView);
+    const mergedView = applyThreadPatch(state, pendingView);
     await copilotkitEmitState(config, {
-      view: mergedView,
+      thread: mergedView,
     });
-    return new Command({
+    return buildInterruptPauseTransition({
+      node: 'collectOperatorInput',
       update: {
-        view: mergedView,
+        thread: mergedView,
       },
-      goto: 'collectOperatorInput',
+      createCommand: createLangGraphCommand,
     });
   }
 
   logInfo('collectOperatorInput: calling interrupt() - graph should pause here');
-  const incoming: unknown = await interrupt(request);
+  const interruptResult = await requestInterruptPayload({
+    request,
+    interrupt,
+  });
+  const incoming: unknown = interruptResult.raw;
   logInfo('collectOperatorInput: interrupt resolved with input', {
     hasInput: incoming !== undefined,
     incomingType: typeof incoming,
@@ -132,14 +154,11 @@ export const collectOperatorInputNode = async (
   });
 
   // CopilotKit's AG-UI protocol passes the response as a JSON string, so parse it first
-  let inputToParse: unknown = incoming;
-  if (typeof incoming === 'string') {
-    try {
-      inputToParse = JSON.parse(incoming);
-      logInfo('collectOperatorInput: parsed JSON string input', { parsed: inputToParse });
-    } catch {
-      logInfo('collectOperatorInput: incoming is string but not valid JSON');
-    }
+  const inputToParse = interruptResult.decoded;
+  if (inputToParse !== incoming) {
+    logInfo('collectOperatorInput: parsed JSON string input', { parsed: inputToParse });
+  } else if (typeof incoming === 'string') {
+    logInfo('collectOperatorInput: incoming is string but not valid JSON');
   }
 
   const parsed = OperatorConfigInputSchema.safeParse(inputToParse);
@@ -148,24 +167,24 @@ export const collectOperatorInputNode = async (
     const failureMessage = `Invalid operator input: ${issues}`;
     logInfo('collectOperatorInput: validation failed', { issues, failureMessage });
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
-    const failedView = applyViewPatch(state, {
+    const failedView = applyThreadPatch(state, {
       task,
       activity: { events: [statusEvent], telemetry: [] },
     });
     await copilotkitEmitState(config, {
-      view: failedView,
+      thread: failedView,
     });
-    const haltedView = applyViewPatch(state, {
+    const haltedView = applyThreadPatch(state, {
       haltReason: failureMessage,
       task,
       activity: { events: [statusEvent], telemetry: [] },
-      profile: state.view.profile,
-      metrics: state.view.metrics,
-      transactionHistory: state.view.transactionHistory,
+      profile: state.thread.profile,
+      metrics: state.thread.metrics,
+      transactionHistory: state.thread.transactionHistory,
     });
-    return {
-      view: haltedView,
-    };
+    return buildStateUpdate({
+      thread: haltedView,
+    });
   }
 
   logInfo('Operator input received', {
@@ -178,21 +197,21 @@ export const collectOperatorInputNode = async (
     'working',
     'Operator configuration received. Preparing execution context.',
   );
-  const workingView = applyViewPatch(state, {
+  const workingView = applyThreadPatch(state, {
     task,
     activity: { events: [statusEvent], telemetry: [] },
   });
   await copilotkitEmitState(config, {
-    view: workingView,
+    thread: workingView,
   });
 
-  const completedView = applyViewPatch(state, {
+  const completedView = applyThreadPatch(state, {
     operatorInput: parsed.data,
     onboarding: { step: 2, key: FUNDING_STEP_KEY },
     task,
     activity: { events: [statusEvent], telemetry: [] },
   });
-  return {
-    view: completedView,
-  };
+  return buildStateUpdate({
+    thread: completedView,
+  });
 };

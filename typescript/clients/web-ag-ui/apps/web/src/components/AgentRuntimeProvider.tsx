@@ -18,19 +18,18 @@ function AgentListRuntimeBridge() {
   const lastSnapshotRef = useRef<string | null>(null);
   const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
 
-  const { view, config } = agent;
+  const { uiState, config } = agent;
   const agentId = config.id;
 
   useEffect(() => {
     if (!agentId || agentId === 'inactive-agent') return;
 
     const update = projectAgentListUpdate({
-      command: view.command,
-      profile: view.profile,
-      metrics: view.metrics,
-      task: view.task,
-      haltReason: view.haltReason,
-      executionError: view.executionError,
+      profile: uiState.profile,
+      metrics: uiState.metrics,
+      task: uiState.task,
+      haltReason: uiState.haltReason,
+      executionError: uiState.executionError,
     });
     const snapshotKey = JSON.stringify(update);
     if (snapshotKey === lastSnapshotRef.current) {
@@ -41,7 +40,6 @@ function AgentListRuntimeBridge() {
     if (debugStatus) {
       console.debug('[AgentListRuntimeBridge] upsert detail-connect', {
         agentId,
-        command: update.command,
         taskId: update.taskId,
         taskState: update.taskState,
         taskMessage: update.taskMessage,
@@ -55,12 +53,11 @@ function AgentListRuntimeBridge() {
     agentId,
     debugStatus,
     upsertAgent,
-    view.command,
-    view.executionError,
-    view.haltReason,
-    view.metrics,
-    view.profile,
-    view.task,
+    uiState.executionError,
+    uiState.haltReason,
+    uiState.metrics,
+    uiState.profile,
+    uiState.task,
   ]);
 
   return null;

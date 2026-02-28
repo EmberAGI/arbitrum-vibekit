@@ -460,6 +460,19 @@ function pinKey(pins: readonly AllowedCalldataPin[]): string {
     .join('|');
 }
 
+function uniqStrings(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const value of values) {
+    if (seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    unique.push(value);
+  }
+  return unique;
+}
+
 function expandMulticallIfSupported(tx: NormalizedTransaction): {
   expanded: NormalizedTransaction[];
   warning: string | null;
@@ -619,7 +632,7 @@ export function normalizeAndExpandTransactions(params: {
     chainId,
     environment,
     normalizedTransactions: expanded,
-    warnings,
+    warnings: uniqStrings(warnings),
   };
 }
 
