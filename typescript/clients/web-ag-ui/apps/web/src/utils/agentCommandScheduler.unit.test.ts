@@ -153,6 +153,26 @@ describe('agentCommandScheduler', () => {
     scheduler.dispose();
   });
 
+  it('adds a clientMutationId to command messages when one is not provided', () => {
+    const scheduler = createScheduler();
+
+    const accepted = scheduler.dispatch('hire');
+
+    expect(accepted).toBe(true);
+    const firstMessage = agent?.addMessage.mock.calls[0]?.[0] as { content?: string } | undefined;
+    const parsedContent =
+      typeof firstMessage?.content === 'string'
+        ? (JSON.parse(firstMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+
+    expect(parsedContent).toEqual({
+      command: 'hire',
+      clientMutationId: 'msg-1',
+    });
+
+    scheduler.dispose();
+  });
+
   it('normalizes busy failures for non-sync commands via onCommandBusy', async () => {
     runAgent = vi.fn(async () => {
       throw new Error('run already active');

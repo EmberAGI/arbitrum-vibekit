@@ -627,12 +627,16 @@ describe('useAgentConnection integration', () => {
     latestValue?.runHire();
     await flushEffects();
 
-    expect(mocks.agent.addMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role: 'user',
-        content: JSON.stringify({ command: 'hire' }),
-      }),
-    );
+    const resumedHireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
+      | { role?: string; content?: string }
+      | undefined;
+    const parsedResumedHireMessage =
+      typeof resumedHireMessage?.content === 'string'
+        ? (JSON.parse(resumedHireMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+    expect(resumedHireMessage?.role).toBe('user');
+    expect(parsedResumedHireMessage?.command).toBe('hire');
+    expect(typeof parsedResumedHireMessage?.clientMutationId).toBe('string');
   });
 
   it('surfaces busy UI state when saveSettings sync dispatch is rejected as busy', async () => {
@@ -706,12 +710,16 @@ describe('useAgentConnection integration', () => {
     latestValue?.runHire();
     await flushEffects();
 
-    expect(mocks.agent.addMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role: 'user',
-        content: JSON.stringify({ command: 'hire' }),
-      }),
-    );
+    const hireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
+      | { role?: string; content?: string }
+      | undefined;
+    const parsedHireMessage =
+      typeof hireMessage?.content === 'string'
+        ? (JSON.parse(hireMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+    expect(hireMessage?.role).toBe('user');
+    expect(parsedHireMessage?.command).toBe('hire');
+    expect(typeof parsedHireMessage?.clientMutationId).toBe('string');
     expect(mocks.agent.setState).not.toHaveBeenCalled();
   });
 
@@ -773,12 +781,16 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
     await flushEffects();
 
-    expect(mocks.agent.addMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role: 'user',
-        content: JSON.stringify({ command: 'fire' }),
-      }),
-    );
+    const fireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
+      | { role?: string; content?: string }
+      | undefined;
+    const parsedFireMessage =
+      typeof fireMessage?.content === 'string'
+        ? (JSON.parse(fireMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+    expect(fireMessage?.role).toBe('user');
+    expect(parsedFireMessage?.command).toBe('fire');
+    expect(typeof parsedFireMessage?.clientMutationId).toBe('string');
   });
 
   it('marks agent as not hired once fire reaches a terminal task state', async () => {

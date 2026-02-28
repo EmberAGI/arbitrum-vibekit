@@ -27,4 +27,27 @@ describe('deriveClmmOnboardingFlow', () => {
 
     expect(flow?.steps.map((step) => step.id)).toEqual(['setup', 'funding-token']);
   });
+
+  it('does not bump revision when onboarding checkpoint is unchanged', () => {
+    const previous = deriveClmmOnboardingFlow({
+      onboarding: { step: 2, key: 'funding-token' },
+      previous: undefined,
+      taskState: 'input-required',
+      delegationsBypassActive: false,
+      setupComplete: false,
+    });
+
+    const next = deriveClmmOnboardingFlow({
+      onboarding: { step: 2, key: 'funding-token' },
+      previous,
+      taskState: 'input-required',
+      delegationsBypassActive: false,
+      setupComplete: false,
+    });
+
+    expect(previous).toBeDefined();
+    expect(next).toBeDefined();
+    expect(next?.revision).toBe(previous?.revision);
+    expect(next).toEqual(previous);
+  });
 });

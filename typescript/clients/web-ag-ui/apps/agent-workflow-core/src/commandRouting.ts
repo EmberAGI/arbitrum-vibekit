@@ -14,6 +14,51 @@ export function resolveRunCommandForThread(input: {
   return input.parsedCommand ?? undefined;
 }
 
+export function resolveCycleCommandTarget(input: {
+  bootstrapped: boolean;
+  onboardingReady: boolean;
+}): Extract<CommandRoutingTarget, 'bootstrap' | 'syncState' | 'runCycleCommand'> {
+  if (!input.bootstrapped) {
+    return 'bootstrap';
+  }
+  return input.onboardingReady ? 'runCycleCommand' : 'syncState';
+}
+
+export function resolveCommandReplayGuardState(input: {
+  parsedCommand: AgentCommand | null;
+  clientMutationId?: string;
+  lastAppliedCommandMutationId?: string;
+}): {
+  suppressDuplicateCommand: boolean;
+  lastAppliedCommandMutationId?: string;
+} {
+  if (!input.parsedCommand || input.parsedCommand === 'sync') {
+    return {
+      suppressDuplicateCommand: false,
+      lastAppliedCommandMutationId: input.lastAppliedCommandMutationId,
+    };
+  }
+
+  if (!input.clientMutationId || input.clientMutationId.length === 0) {
+    return {
+      suppressDuplicateCommand: false,
+      lastAppliedCommandMutationId: input.lastAppliedCommandMutationId,
+    };
+  }
+
+  if (input.clientMutationId === input.lastAppliedCommandMutationId) {
+    return {
+      suppressDuplicateCommand: true,
+      lastAppliedCommandMutationId: input.lastAppliedCommandMutationId,
+    };
+  }
+
+  return {
+    suppressDuplicateCommand: false,
+    lastAppliedCommandMutationId: input.clientMutationId,
+  };
+}
+
 export function resolveCommandTargetForBootstrappedFlow(input: {
   resolvedCommand: string | null | undefined;
   bootstrapped: boolean;
@@ -28,7 +73,10 @@ export function resolveCommandTargetForBootstrappedFlow(input: {
     case 'fire':
       return 'fireCommand';
     case 'cycle':
-      return input.bootstrapped ? 'runCycleCommand' : 'bootstrap';
+      return resolveCycleCommandTarget({
+        bootstrapped: input.bootstrapped,
+        onboardingReady: true,
+      });
     case 'sync':
       return input.bootstrapped ? 'syncState' : 'bootstrap';
     default:

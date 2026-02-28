@@ -27,6 +27,34 @@ describe('fireAgentRun', () => {
     expect(calls).toEqual(['detachActiveRun', 'addMessage', 'runAgent']);
   });
 
+  it('enqueues fire command with a clientMutationId for replay-safe routing', async () => {
+    const agent = {
+      isRunning: false,
+      detachActiveRun: vi.fn(async () => undefined),
+      addMessage: vi.fn(),
+    };
+    const runInFlightRef = { current: false };
+
+    const ok = await fireAgentRun({
+      agent,
+      runAgent: async () => undefined,
+      threadId: 'thread-1',
+      runInFlightRef,
+      createId: () => 'msg-1',
+    });
+
+    expect(ok).toBe(true);
+    const firstMessage = agent.addMessage.mock.calls[0]?.[0] as { content?: string } | undefined;
+    const parsedContent =
+      typeof firstMessage?.content === 'string'
+        ? (JSON.parse(firstMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+    expect(parsedContent).toEqual({
+      command: 'fire',
+      clientMutationId: 'msg-1',
+    });
+  });
+
   it('preempts the active run via stop callback, detaches, then sends the fire command', async () => {
     const calls: string[] = [];
 

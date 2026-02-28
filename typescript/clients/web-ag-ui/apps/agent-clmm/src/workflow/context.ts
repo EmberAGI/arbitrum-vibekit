@@ -56,6 +56,8 @@ export type ClmmPrivateState = {
   streamLimit: number;
   cronScheduled: boolean;
   bootstrapped: boolean;
+  suppressDuplicateCommand?: boolean;
+  lastAppliedCommandMutationId?: string;
 };
 
 export type ClmmProfile = {
@@ -233,6 +235,13 @@ type ClmmThreadState = {
   delegationsBypassActive?: boolean;
 };
 
+const ONBOARDING_KEY_PROGRESS: Record<string, number> = {
+  setup: 1,
+  'fund-wallet': 1.5,
+  'funding-token': 2,
+  'delegation-signing': 3,
+};
+
 const defaultSettingsState = (): ClmmSettings => ({
   amount: undefined,
 });
@@ -243,6 +252,8 @@ const defaultPrivateState = (): ClmmPrivateState => ({
   streamLimit: resolveStreamLimit(),
   cronScheduled: false,
   bootstrapped: false,
+  suppressDuplicateCommand: false,
+  lastAppliedCommandMutationId: undefined,
 });
 
 const defaultThreadState = (): ClmmThreadState => ({
@@ -325,6 +336,9 @@ const mergePrivateState = (
   streamLimit: right?.streamLimit ?? left.streamLimit ?? resolveStreamLimit(),
   cronScheduled: right?.cronScheduled ?? left.cronScheduled ?? false,
   bootstrapped: right?.bootstrapped ?? left.bootstrapped ?? false,
+  suppressDuplicateCommand: right?.suppressDuplicateCommand ?? left.suppressDuplicateCommand ?? false,
+  lastAppliedCommandMutationId:
+    right?.lastAppliedCommandMutationId ?? left.lastAppliedCommandMutationId,
 });
 
 const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
@@ -359,22 +373,124 @@ const limitHistory = <T>(items: T[], limit: number): T[] => {
   return items.slice(-limit);
 };
 
+const isHireSubmittedTask = (task: Task | undefined): boolean => {
+  if (!task || task.taskStatus.state !== 'submitted') {
+    return false;
+  }
+  const message = task.taskStatus.message;
+  const content = message ? message.content : undefined;
+  const messageText = typeof content === 'string' ? content : undefined;
+  return typeof messageText === 'string' && messageText.startsWith('Agent hired!');
+};
+
+const resetThreadForNewHire = (thread: ClmmThreadState): ClmmThreadState => ({
+  ...defaultThreadState(),
+  delegationsBypassActive: thread.delegationsBypassActive,
+});
+
+const resolveOnboardingProgress = (onboarding: OnboardingState | undefined): number => {
+  if (!onboarding) {
+    return 0;
+  }
+  const keyProgress =
+    typeof onboarding.key === 'string' ? (ONBOARDING_KEY_PROGRESS[onboarding.key] ?? 0) : 0;
+  return Math.max(onboarding.step, keyProgress);
+};
+
+const resolveMonotonicOnboardingState = (
+  previous: OnboardingState | undefined,
+  incoming: OnboardingState | undefined,
+): OnboardingState | undefined => {
+  if (!previous || !incoming) {
+    return incoming ?? previous;
+  }
+  if (resolveOnboardingProgress(incoming) < resolveOnboardingProgress(previous)) {
+    return previous;
+  }
+  return incoming;
+};
+
+const shouldPreserveOnboardingInputRequiredTask = (params: {
+  previousTask: Task | undefined;
+  incomingTask: Task | undefined;
+  previousOnboarding: OnboardingState | undefined;
+  incomingOnboarding: OnboardingState | undefined;
+  onboardingFlowStatus: OnboardingContract['status'] | undefined;
+  previousOperatorInput: OperatorConfigInput | undefined;
+  incomingOperatorInput: OperatorConfigInput | undefined;
+  previousFundingTokenInput: FundingTokenInput | undefined;
+  incomingFundingTokenInput: FundingTokenInput | undefined;
+  previousDelegationBundle: DelegationBundle | undefined;
+  incomingDelegationBundle: DelegationBundle | undefined;
+  previousOperatorConfig: ResolvedOperatorConfig | undefined;
+  incomingOperatorConfig: ResolvedOperatorConfig | undefined;
+}): boolean => {
+  const previousTaskState = params.previousTask?.taskStatus?.state;
+  const incomingTaskState = params.incomingTask?.taskStatus?.state;
+  if (previousTaskState !== 'input-required' || incomingTaskState !== 'working') {
+    return false;
+  }
+  if (params.onboardingFlowStatus === 'completed') {
+    return false;
+  }
+
+  const previousOnboardingProgress = resolveOnboardingProgress(params.previousOnboarding);
+  const incomingOnboardingProgress = resolveOnboardingProgress(params.incomingOnboarding);
+  const hasOnboardingForwardProgress = incomingOnboardingProgress > previousOnboardingProgress;
+  if (hasOnboardingForwardProgress) {
+    return false;
+  }
+
+  const hasDomainForwardProgress =
+    (!params.previousOperatorInput && Boolean(params.incomingOperatorInput)) ||
+    (!params.previousFundingTokenInput && Boolean(params.incomingFundingTokenInput)) ||
+    (!params.previousDelegationBundle && Boolean(params.incomingDelegationBundle)) ||
+    (!params.previousOperatorConfig && Boolean(params.incomingOperatorConfig));
+
+  return !hasDomainForwardProgress;
+};
+
 const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState>): ClmmThreadState => {
   if (!right) {
     return left;
   }
-  const nextTask = right.task ?? left.task;
-  const nextOnboarding = right.onboarding ?? left.onboarding;
-  const nextOperatorConfig = right.operatorConfig ?? left.operatorConfig;
-  const nextDelegationBundle = right.delegationBundle ?? left.delegationBundle;
-  const nextDelegationsBypassActive = right.delegationsBypassActive ?? left.delegationsBypassActive;
+  const baseThread =
+    right.lifecycle?.phase === 'onboarding' && isHireSubmittedTask(right.task)
+      ? resetThreadForNewHire(left)
+      : left;
+  const incomingOnboarding = right.onboarding ?? baseThread.onboarding;
+  const nextOnboarding = resolveMonotonicOnboardingState(baseThread.onboarding, incomingOnboarding);
+  const nextOperatorConfig = right.operatorConfig ?? baseThread.operatorConfig;
+  const nextDelegationBundle = right.delegationBundle ?? baseThread.delegationBundle;
+  const nextOperatorInput = right.operatorInput ?? baseThread.operatorInput;
+  const nextFundingTokenInput = right.fundingTokenInput ?? baseThread.fundingTokenInput;
+  const incomingTask = right.task ?? baseThread.task;
+  const nextDelegationsBypassActive =
+    right.delegationsBypassActive ?? baseThread.delegationsBypassActive;
   const nextOnboardingFlow = deriveClmmOnboardingFlow({
     onboarding: nextOnboarding,
-    previous: left.onboardingFlow,
+    previous: baseThread.onboardingFlow,
     setupComplete: Boolean(nextOperatorConfig),
-    taskState: nextTask?.taskStatus?.state,
+    taskState: incomingTask?.taskStatus?.state,
     delegationsBypassActive: nextDelegationsBypassActive === true,
   });
+  const nextTask = shouldPreserveOnboardingInputRequiredTask({
+    previousTask: baseThread.task,
+    incomingTask,
+    previousOnboarding: baseThread.onboarding,
+    incomingOnboarding: nextOnboarding,
+    onboardingFlowStatus: nextOnboardingFlow?.status,
+    previousOperatorInput: baseThread.operatorInput,
+    incomingOperatorInput: nextOperatorInput,
+    previousFundingTokenInput: baseThread.fundingTokenInput,
+    incomingFundingTokenInput: nextFundingTokenInput,
+    previousDelegationBundle: baseThread.delegationBundle,
+    incomingDelegationBundle: nextDelegationBundle,
+    previousOperatorConfig: baseThread.operatorConfig,
+    incomingOperatorConfig: nextOperatorConfig,
+  })
+    ? baseThread.task
+    : incomingTask;
   const normalizedOnboarding = normalizeLegacyOnboardingState({
     onboarding: nextOnboarding,
     onboardingFlow: nextOnboardingFlow,
@@ -393,68 +509,69 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
     nextOnboardingFlow?.status === 'completed' ? undefined : normalizedOnboarding;
 
   const nextTelemetry = limitHistory(
-    mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry),
+    mergeAppendOrReplace(baseThread.activity.telemetry, right.activity?.telemetry),
     STATE_HISTORY_LIMIT,
   );
   const nextEvents = limitHistory(
-    mergeAppendOrReplace(left.activity.events, right.activity?.events),
+    mergeAppendOrReplace(baseThread.activity.events, right.activity?.events),
     STATE_HISTORY_LIMIT,
   );
   const nextTransactions = limitHistory(
-    mergeAppendOrReplace(left.transactionHistory, right.transactionHistory),
+    mergeAppendOrReplace(baseThread.transactionHistory, right.transactionHistory),
     STATE_HISTORY_LIMIT,
   );
   const nextProfile: ClmmProfile = {
-    agentIncome: right.profile?.agentIncome ?? left.profile.agentIncome,
-    aum: right.profile?.aum ?? left.profile.aum,
-    totalUsers: right.profile?.totalUsers ?? left.profile.totalUsers,
-    apy: right.profile?.apy ?? left.profile.apy,
-    chains: right.profile?.chains ?? left.profile.chains,
-    protocols: right.profile?.protocols ?? left.profile.protocols,
-    tokens: right.profile?.tokens ?? left.profile.tokens,
-    pools: right.profile?.pools ?? left.profile.pools,
-    allowedPools: right.profile?.allowedPools ?? left.profile.allowedPools,
+    agentIncome: right.profile?.agentIncome ?? baseThread.profile.agentIncome,
+    aum: right.profile?.aum ?? baseThread.profile.aum,
+    totalUsers: right.profile?.totalUsers ?? baseThread.profile.totalUsers,
+    apy: right.profile?.apy ?? baseThread.profile.apy,
+    chains: right.profile?.chains ?? baseThread.profile.chains,
+    protocols: right.profile?.protocols ?? baseThread.profile.protocols,
+    tokens: right.profile?.tokens ?? baseThread.profile.tokens,
+    pools: right.profile?.pools ?? baseThread.profile.pools,
+    allowedPools: right.profile?.allowedPools ?? baseThread.profile.allowedPools,
   };
   const nextMetrics: ClmmMetrics = {
-    lastSnapshot: right.metrics?.lastSnapshot ?? left.metrics.lastSnapshot,
-    previousPrice: right.metrics?.previousPrice ?? left.metrics.previousPrice,
+    lastSnapshot: right.metrics?.lastSnapshot ?? baseThread.metrics.lastSnapshot,
+    previousPrice: right.metrics?.previousPrice ?? baseThread.metrics.previousPrice,
     cyclesSinceRebalance:
-      right.metrics?.cyclesSinceRebalance ?? left.metrics.cyclesSinceRebalance ?? 0,
-    staleCycles: right.metrics?.staleCycles ?? left.metrics.staleCycles ?? 0,
-    rebalanceCycles: right.metrics?.rebalanceCycles ?? left.metrics.rebalanceCycles ?? 0,
-    iteration: right.metrics?.iteration ?? left.metrics.iteration ?? 0,
-    latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
-    aumUsd: right.metrics?.aumUsd ?? left.metrics.aumUsd,
-    apy: right.metrics?.apy ?? left.metrics.apy,
-    lifetimePnlUsd: right.metrics?.lifetimePnlUsd ?? left.metrics.lifetimePnlUsd,
-    latestSnapshot: right.metrics?.latestSnapshot ?? left.metrics.latestSnapshot,
+      right.metrics?.cyclesSinceRebalance ?? baseThread.metrics.cyclesSinceRebalance ?? 0,
+    staleCycles: right.metrics?.staleCycles ?? baseThread.metrics.staleCycles ?? 0,
+    rebalanceCycles: right.metrics?.rebalanceCycles ?? baseThread.metrics.rebalanceCycles ?? 0,
+    iteration: right.metrics?.iteration ?? baseThread.metrics.iteration ?? 0,
+    latestCycle: right.metrics?.latestCycle ?? baseThread.metrics.latestCycle,
+    aumUsd: right.metrics?.aumUsd ?? baseThread.metrics.aumUsd,
+    apy: right.metrics?.apy ?? baseThread.metrics.apy,
+    lifetimePnlUsd: right.metrics?.lifetimePnlUsd ?? baseThread.metrics.lifetimePnlUsd,
+    latestSnapshot: right.metrics?.latestSnapshot ?? baseThread.metrics.latestSnapshot,
   };
   const nextAccounting: ClmmAccounting = {
     navSnapshots: limitHistory(
-      mergeAppendOrReplace(left.accounting.navSnapshots, right.accounting?.navSnapshots),
+      mergeAppendOrReplace(baseThread.accounting.navSnapshots, right.accounting?.navSnapshots),
       ACCOUNTING_HISTORY_LIMIT,
     ),
     flowLog: limitHistory(
-      mergeAppendOrReplace(left.accounting.flowLog, right.accounting?.flowLog),
+      mergeAppendOrReplace(baseThread.accounting.flowLog, right.accounting?.flowLog),
       ACCOUNTING_HISTORY_LIMIT,
     ),
-    latestNavSnapshot: right.accounting?.latestNavSnapshot ?? left.accounting.latestNavSnapshot,
-    lastUpdated: right.accounting?.lastUpdated ?? left.accounting.lastUpdated,
-    lifecycleStart: right.accounting?.lifecycleStart ?? left.accounting.lifecycleStart,
-    lifecycleEnd: right.accounting?.lifecycleEnd ?? left.accounting.lifecycleEnd,
-    initialAllocationUsd: right.accounting?.initialAllocationUsd ?? left.accounting.initialAllocationUsd,
-    cashUsd: right.accounting?.cashUsd ?? left.accounting.cashUsd,
-    positionsUsd: right.accounting?.positionsUsd ?? left.accounting.positionsUsd,
-    aumUsd: right.accounting?.aumUsd ?? left.accounting.aumUsd,
-    lifetimePnlUsd: right.accounting?.lifetimePnlUsd ?? left.accounting.lifetimePnlUsd,
+    latestNavSnapshot: right.accounting?.latestNavSnapshot ?? baseThread.accounting.latestNavSnapshot,
+    lastUpdated: right.accounting?.lastUpdated ?? baseThread.accounting.lastUpdated,
+    lifecycleStart: right.accounting?.lifecycleStart ?? baseThread.accounting.lifecycleStart,
+    lifecycleEnd: right.accounting?.lifecycleEnd ?? baseThread.accounting.lifecycleEnd,
+    initialAllocationUsd:
+      right.accounting?.initialAllocationUsd ?? baseThread.accounting.initialAllocationUsd,
+    cashUsd: right.accounting?.cashUsd ?? baseThread.accounting.cashUsd,
+    positionsUsd: right.accounting?.positionsUsd ?? baseThread.accounting.positionsUsd,
+    aumUsd: right.accounting?.aumUsd ?? baseThread.accounting.aumUsd,
+    lifetimePnlUsd: right.accounting?.lifetimePnlUsd ?? baseThread.accounting.lifetimePnlUsd,
     lifetimeReturnPct:
-      right.accounting?.lifetimeReturnPct ?? left.accounting.lifetimeReturnPct,
-    highWaterMarkUsd: right.accounting?.highWaterMarkUsd ?? left.accounting.highWaterMarkUsd,
-    apy: right.accounting?.apy ?? left.accounting.apy,
+      right.accounting?.lifetimeReturnPct ?? baseThread.accounting.lifetimeReturnPct,
+    highWaterMarkUsd: right.accounting?.highWaterMarkUsd ?? baseThread.accounting.highWaterMarkUsd,
+    apy: right.accounting?.apy ?? baseThread.accounting.apy,
   };
   const explicitLifecyclePhase = right.lifecycle?.phase;
   const nextLifecyclePhase = resolveThreadLifecyclePhase({
-    previousPhase: left.lifecycle?.phase,
+    previousPhase: baseThread.lifecycle?.phase,
     taskState: normalizedTask?.taskStatus?.state,
     onboardingFlowStatus: nextOnboardingFlow?.status,
     onboardingStep: effectiveOnboarding?.step,
@@ -465,25 +582,25 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
   });
   const nextLifecycle: ThreadLifecycle = {
     phase: nextLifecyclePhase,
-    reason: right.lifecycle?.reason ?? left.lifecycle?.reason,
-    updatedAt: right.lifecycle?.updatedAt ?? left.lifecycle?.updatedAt,
+    reason: right.lifecycle?.reason ?? baseThread.lifecycle?.reason,
+    updatedAt: right.lifecycle?.updatedAt ?? baseThread.lifecycle?.updatedAt,
   };
 
   return {
-    ...left,
+    ...baseThread,
     ...right,
     lifecycle: nextLifecycle,
     task: normalizedTask,
-    poolArtifact: right.poolArtifact ?? left.poolArtifact,
-    operatorInput: right.operatorInput ?? left.operatorInput,
+    poolArtifact: right.poolArtifact ?? baseThread.poolArtifact,
+    operatorInput: nextOperatorInput,
     onboarding: effectiveOnboarding,
     onboardingFlow: nextOnboardingFlow,
-    fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
-    selectedPool: right.selectedPool ?? left.selectedPool,
+    fundingTokenInput: nextFundingTokenInput,
+    selectedPool: right.selectedPool ?? baseThread.selectedPool,
     operatorConfig: nextOperatorConfig,
     delegationBundle: nextDelegationBundle,
-    haltReason: right.haltReason ?? left.haltReason,
-    executionError: right.executionError ?? left.executionError,
+    haltReason: right.haltReason ?? baseThread.haltReason,
+    executionError: right.executionError ?? baseThread.executionError,
     delegationsBypassActive: nextDelegationsBypassActive,
     profile: nextProfile,
     activity: {

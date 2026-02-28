@@ -62,6 +62,15 @@ describe('summarizeNode', () => {
             },
           },
         },
+        poolArtifact: { artifactId: 'camelot-pools' },
+        operatorInput: {
+          poolAddress: '0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526',
+          walletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9',
+          baseContributionUsd: 10,
+        },
+        fundingTokenInput: {
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+        },
         operatorConfig: { walletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9' },
         delegationBundle: { delegations: [{ signature: '0xabc' }] },
         haltReason: undefined,
@@ -103,6 +112,15 @@ describe('summarizeNode', () => {
               content: 'Waiting for you to approve the required permissions to continue setup.',
             },
           },
+        },
+        poolArtifact: { artifactId: 'camelot-pools' },
+        operatorInput: {
+          poolAddress: '0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526',
+          walletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9',
+          baseContributionUsd: 10,
+        },
+        fundingTokenInput: {
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
         },
         operatorConfig: { walletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9' },
         delegationBundle: { delegations: [{ signature: '0xabc' }] },

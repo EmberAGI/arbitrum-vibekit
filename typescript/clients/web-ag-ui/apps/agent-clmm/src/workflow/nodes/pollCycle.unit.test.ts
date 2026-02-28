@@ -17,7 +17,7 @@ describe('pollCycleNode', () => {
     copilotkitEmitStateMock.mockReset();
   });
 
-  it('reroutes to onboarding when poll prerequisites are missing', async () => {
+  it('reroutes to onboarding without mutating onboarding task state when poll prerequisites are missing', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     const state = {
       thread: {
@@ -57,10 +57,8 @@ describe('pollCycleNode', () => {
     };
 
     expect(commandResult.goto).toContain('collectDelegations');
-    expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.thread?.task?.taskStatus?.message?.content).toBe(
-      'Cycle paused until onboarding input is complete.',
-    );
+    expect(commandResult.update?.thread?.task).toBeUndefined();
     expect(commandResult.update?.thread?.haltReason).toBeUndefined();
+    expect(copilotkitEmitStateMock).not.toHaveBeenCalled();
   });
 });

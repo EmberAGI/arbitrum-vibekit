@@ -15,6 +15,8 @@ export {
   type ResolvedSummaryTaskStatus,
 } from './summaryTaskResolution.js';
 export {
+  resolveCommandReplayGuardState,
+  resolveCycleCommandTarget,
   resolveCommandTargetForBootstrappedFlow,
   resolveRunCommandForThread,
   type CommandRoutingTarget,

@@ -18,12 +18,12 @@ type Configurable = { configurable?: { thread_id?: string } };
 export async function syncStateNode(
   state: ClmmState,
   config?: Configurable,
-): Promise<ClmmState | ClmmUpdate> {
+): Promise<ClmmUpdate> {
   const camelotClient = getCamelotClient();
   const threadId = config?.configurable?.thread_id;
   if (!threadId) {
     logInfo('Accounting sync skipped: missing threadId', {});
-    return state;
+    return {};
   }
 
   try {
@@ -34,7 +34,7 @@ export async function syncStateNode(
       threadId,
     });
     if (!snapshot) {
-      return state;
+      return {};
     }
     const accounting = applyAccountingUpdate({
       existing: state.thread.accounting,
@@ -50,6 +50,6 @@ export async function syncStateNode(
     const message =
       error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
     logInfo('Accounting sync failed', { error: message });
-    return state;
+    return {};
   }
 }

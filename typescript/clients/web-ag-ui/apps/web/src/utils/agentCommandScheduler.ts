@@ -165,13 +165,22 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
       command,
       options,
       beforeRun: (agent) => {
-        const payload = options?.messagePayload;
+        const payload = options?.messagePayload ?? {};
+        const hasClientMutationId =
+          typeof payload['clientMutationId'] === 'string' &&
+          (payload['clientMutationId'] as string).length > 0;
+        const messagePayload = hasClientMutationId
+          ? payload
+          : {
+              ...payload,
+              clientMutationId: params.createId(),
+            };
         agent.addMessage({
           id: params.createId(),
           role: 'user',
           content: JSON.stringify({
             command,
-            ...(payload ?? {}),
+            ...messagePayload,
           }),
         });
       },

@@ -283,10 +283,11 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
     runInFlight: runInFlightRef.current,
   });
 
+  const fireClientMutationId = params.createId();
   agent.addMessage({
     id: params.createId(),
     role: 'user',
-    content: JSON.stringify({ command: 'fire' }),
+    content: JSON.stringify({ command: 'fire', clientMutationId: fireClientMutationId }),
   });
 
   // Fire-and-forget with short retry if the runtime is still finalizing a previous run.

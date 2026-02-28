@@ -29,7 +29,7 @@ describe('prepareOperatorNode', () => {
     loadBootstrapContextMock.mockReset();
   });
 
-  it('reroutes to collectDelegations when delegation bundle is missing', async () => {
+  it('reroutes to collectDelegations without rewriting onboarding task state when delegation bundle is missing', async () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
     getCamelotClientMock.mockReturnValue({});
     loadBootstrapContextMock.mockResolvedValue({
@@ -78,10 +78,8 @@ describe('prepareOperatorNode', () => {
     };
 
     expect(commandResult.goto).toContain('collectDelegations');
-    expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.thread?.task?.taskStatus?.message?.content).toBe(
-      'Waiting for you to approve the required permissions to continue setup.',
-    );
-    expect(commandResult.update?.thread?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(commandResult.update?.thread?.task).toBeUndefined();
+    expect(commandResult.update?.thread?.onboarding).toBeUndefined();
+    expect(copilotkitEmitStateMock).not.toHaveBeenCalled();
   });
 });

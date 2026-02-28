@@ -125,10 +125,8 @@ describe('collectOperatorInputNode', () => {
     } as unknown as ClmmState;
 
     const result = await collectOperatorInputNode(state, {});
-    const view = (result as { thread: ClmmState['thread'] }).thread;
-
     expect(interruptMock).not.toHaveBeenCalled();
     expect(copilotkitEmitStateMock).not.toHaveBeenCalled();
-    expect(view.onboarding).toBeUndefined();
+    expect((result as { thread?: ClmmState['thread'] }).thread).toBeUndefined();
   });
 });

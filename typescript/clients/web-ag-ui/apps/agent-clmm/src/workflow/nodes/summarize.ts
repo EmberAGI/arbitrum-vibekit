@@ -7,6 +7,7 @@ import {
   type ClmmState,
   type ClmmUpdate,
 } from '../context.js';
+import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -17,10 +18,7 @@ export const summarizeNode = async (
   const summaryArtifact = buildSummaryArtifact(state.thread.activity.telemetry ?? []);
   const currentTaskState = state.thread.task?.taskStatus?.state;
   const currentTaskMessage = state.thread.task?.taskStatus?.message?.content;
-  const onboardingComplete =
-    state.thread.onboardingFlow?.status === 'completed' ||
-    Boolean(state.thread.operatorConfig) ||
-    Boolean(state.thread.delegationBundle);
+  const onboardingComplete = resolveNextOnboardingNode(state) === 'syncState';
   const { state: finalState, message: finalMessage } = resolveSummaryTaskStatus({
     haltReason: state.thread.haltReason,
     currentTaskState,

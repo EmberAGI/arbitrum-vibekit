@@ -52,15 +52,14 @@ export const collectOperatorInputNode = async (
     logInfo('collectOperatorInput: operator input already present; skipping step');
     const resumedOnboarding = resolveOperatorResumeOnboarding(state);
     if (!resumedOnboarding) {
-      return buildStateUpdate({
-        thread: state.thread,
-      });
+      return buildStateUpdate({});
     }
-    const resumedView = applyThreadPatch(state, {
+    const resumedPatch = {
       onboarding: resumedOnboarding,
-    });
+    };
+    applyThreadPatch(state, resumedPatch);
     return buildStateUpdate({
-      thread: resumedView,
+      thread: resumedPatch,
     });
   }
 
@@ -81,18 +80,19 @@ export const collectOperatorInputNode = async (
     await copilotkitEmitState(config, {
       thread: failedView,
     });
-    const haltedView = applyThreadPatch(state, {
+    const haltedPatch = {
       haltReason: failureMessage,
       task,
       activity: { events: [statusEvent], telemetry: [] },
       profile: state.thread.profile,
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
-    });
+    };
+    applyThreadPatch(state, haltedPatch);
     return buildNodeTransition({
       node: 'summarize',
       update: {
-        thread: haltedView,
+        thread: haltedPatch,
       },
       createCommand: createLangGraphCommand,
     });
@@ -135,7 +135,7 @@ export const collectOperatorInputNode = async (
     return buildInterruptPauseTransition({
       node: 'collectOperatorInput',
       update: {
-        thread: mergedView,
+        thread: pendingView,
       },
       createCommand: createLangGraphCommand,
     });
@@ -174,16 +174,17 @@ export const collectOperatorInputNode = async (
     await copilotkitEmitState(config, {
       thread: failedView,
     });
-    const haltedView = applyThreadPatch(state, {
+    const haltedPatch = {
       haltReason: failureMessage,
       task,
       activity: { events: [statusEvent], telemetry: [] },
       profile: state.thread.profile,
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
-    });
+    };
+    applyThreadPatch(state, haltedPatch);
     return buildStateUpdate({
-      thread: haltedView,
+      thread: haltedPatch,
     });
   }
 
@@ -205,13 +206,14 @@ export const collectOperatorInputNode = async (
     thread: workingView,
   });
 
-  const completedView = applyThreadPatch(state, {
+  const completedPatch = {
     operatorInput: parsed.data,
     onboarding: { step: 2, key: FUNDING_STEP_KEY },
     task,
     activity: { events: [statusEvent], telemetry: [] },
-  });
+  };
+  applyThreadPatch(state, completedPatch);
   return buildStateUpdate({
-    thread: completedView,
+    thread: completedPatch,
   });
 };

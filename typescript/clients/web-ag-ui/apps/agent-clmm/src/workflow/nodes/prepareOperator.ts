@@ -40,18 +40,19 @@ export const prepareOperatorNode = async (
     await copilotkitEmitState(config, {
       thread: failedView,
     });
-    const haltedView = applyThreadPatch(state, {
+    const haltedPatch = {
       haltReason: failureMessage,
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       task,
       profile: state.thread.profile,
       transactionHistory: state.thread.transactionHistory,
       metrics: state.thread.metrics,
-    });
+    };
+    applyThreadPatch(state, haltedPatch);
     return buildNodeTransition({
       node: 'summarize',
       update: {
-        thread: haltedView,
+        thread: haltedPatch,
       },
       createCommand: createLangGraphCommand,
     });
@@ -82,18 +83,19 @@ export const prepareOperatorNode = async (
     await copilotkitEmitState(config, {
       thread: failedView,
     });
-    const haltedView = applyThreadPatch(state, {
+    const haltedPatch = {
       haltReason: failureMessage,
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       task,
       profile: state.thread.profile,
       transactionHistory: state.thread.transactionHistory,
       metrics: state.thread.metrics,
-    });
+    };
+    applyThreadPatch(state, haltedPatch);
     return buildNodeTransition({
       node: 'summarize',
       update: {
-        thread: haltedView,
+        thread: haltedPatch,
       },
       createCommand: createLangGraphCommand,
     });
@@ -110,23 +112,12 @@ export const prepareOperatorNode = async (
   if (!delegationsBypassActive) {
     const delegationBundle = state.thread.delegationBundle;
     if (!delegationBundle) {
-      const message = 'Waiting for you to approve the required permissions to continue setup.';
-      const { task, statusEvent } = buildTaskStatus(state.thread.task, 'input-required', message);
-      const onboardingStep = state.thread.onboarding?.key === 'funding-token' ? 3 : 2;
-      const pendingView = {
-        onboarding: { step: onboardingStep, key: 'delegation-signing' as const },
-        task,
-        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
-      };
-      const mergedView = applyThreadPatch(state, pendingView);
-      await copilotkitEmitState(config, {
-        thread: mergedView,
+      logInfo('prepareOperator: delegation bundle missing; rerouting to collectDelegations', {
+        onboardingKey: state.thread.onboarding?.key,
+        onboardingStep: state.thread.onboarding?.step,
       });
       return buildNodeTransition({
         node: 'collectDelegations',
-        update: {
-          thread: mergedView,
-        },
         createCommand: createLangGraphCommand,
       });
     }
@@ -142,18 +133,19 @@ export const prepareOperatorNode = async (
       await copilotkitEmitState(config, {
         thread: failedView,
       });
-      const haltedView = applyThreadPatch(state, {
+      const haltedPatch = {
         haltReason: failureMessage,
         activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         task,
         profile: state.thread.profile,
         transactionHistory: state.thread.transactionHistory,
         metrics: state.thread.metrics,
-      });
+      };
+      applyThreadPatch(state, haltedPatch);
       return buildNodeTransition({
         node: 'summarize',
         update: {
-          thread: haltedView,
+          thread: haltedPatch,
         },
         createCommand: createLangGraphCommand,
       });
@@ -170,18 +162,19 @@ export const prepareOperatorNode = async (
       await copilotkitEmitState(config, {
         thread: failedView,
       });
-      const haltedView = applyThreadPatch(state, {
+      const haltedPatch = {
         haltReason: failureMessage,
         activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         task,
         profile: state.thread.profile,
         transactionHistory: state.thread.transactionHistory,
         metrics: state.thread.metrics,
-      });
+      };
+      applyThreadPatch(state, haltedPatch);
       return buildNodeTransition({
         node: 'summarize',
         update: {
-          thread: haltedView,
+          thread: haltedPatch,
         },
         createCommand: createLangGraphCommand,
       });
@@ -264,7 +257,7 @@ export const prepareOperatorNode = async (
     accounting,
   });
 
-  const completedView = applyThreadPatch(state, {
+  const completedPatch = {
     operatorConfig,
     selectedPool,
     metrics: nextMetrics,
@@ -273,9 +266,10 @@ export const prepareOperatorNode = async (
     transactionHistory: state.thread.transactionHistory,
     profile: nextProfile,
     accounting,
-  });
+  };
+  applyThreadPatch(state, completedPatch);
   return buildStateUpdate({
-    thread: completedView,
+    thread: completedPatch,
     private: {
       cronScheduled: false, // Will be set to true in pollCycle after first cycle
     },

@@ -1,6 +1,6 @@
 import { logWarn, type ClmmState, type ClmmUpdate } from '../context.js';
 
-export function syncStateNode(state: ClmmState): ClmmState | ClmmUpdate {
+export function syncStateNode(state: ClmmState): ClmmUpdate {
   logWarn('syncState: returning current state snapshot', {
     lifecyclePhase: state.thread.lifecycle?.phase ?? 'prehire',
     taskState: state.thread.task?.taskStatus?.state,
@@ -11,5 +11,5 @@ export function syncStateNode(state: ClmmState): ClmmState | ClmmUpdate {
     hasOperatorConfig: Boolean(state.thread.operatorConfig),
     hasDelegationBundle: Boolean(state.thread.delegationBundle),
   });
-  return state;
+  return {};
 }

@@ -59,6 +59,21 @@ const message = (command: 'hire' | 'fire' | 'cycle' | 'sync') => ({
   content: JSON.stringify({ command }),
 });
 
+const applyRunCommandUpdate = (state: ClmmState): ClmmState => {
+  const update = runCommandNode(state);
+  return {
+    ...state,
+    private: {
+      ...state.private,
+      ...(update.private ?? {}),
+    },
+    thread: {
+      ...state.thread,
+      ...(update.thread ?? {}),
+    },
+  };
+};
+
 describe('resolveCommandTarget', () => {
   it('records lastAppliedClientMutationId when sync command includes one', () => {
     const state = baseState();
@@ -82,24 +97,24 @@ describe('resolveCommandTarget', () => {
     expect(resolveCommandTarget(state)).toBe('bootstrap');
   });
 
-  it('routes cycle to collectSetupInput when bootstrapped but missing operator input', () => {
+  it('routes cycle to syncState when bootstrapped but onboarding is incomplete', () => {
     const state = baseState();
     state.private.bootstrapped = true;
     state.messages = [message('cycle')];
 
-    expect(resolveCommandTarget(state)).toBe('collectSetupInput');
+    expect(resolveCommandTarget(state)).toBe('syncState');
   });
 
-  it('routes cycle to collectFundingTokenInput when funding token selection is missing', () => {
+  it('routes cycle to syncState when funding token selection is missing', () => {
     const state = baseState();
     state.private.bootstrapped = true;
     state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
     state.messages = [message('cycle')];
 
-    expect(resolveCommandTarget(state)).toBe('collectFundingTokenInput');
+    expect(resolveCommandTarget(state)).toBe('syncState');
   });
 
-  it('routes cycle to collectDelegations when delegations are required but missing', () => {
+  it('routes cycle to syncState when delegations are required but missing', () => {
     const state = baseState();
     state.private.bootstrapped = true;
     state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
@@ -107,10 +122,10 @@ describe('resolveCommandTarget', () => {
     state.thread.delegationsBypassActive = false;
     state.messages = [message('cycle')];
 
-    expect(resolveCommandTarget(state)).toBe('collectDelegations');
+    expect(resolveCommandTarget(state)).toBe('syncState');
   });
 
-  it('routes cycle to prepareOperator when operator config is missing', () => {
+  it('routes cycle to syncState when operator config is missing', () => {
     const state = baseState();
     state.private.bootstrapped = true;
     state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
@@ -118,10 +133,10 @@ describe('resolveCommandTarget', () => {
     state.thread.delegationsBypassActive = true;
     state.messages = [message('cycle')];
 
-    expect(resolveCommandTarget(state)).toBe('prepareOperator');
+    expect(resolveCommandTarget(state)).toBe('syncState');
   });
 
-  it('routes cycle to prepareOperator when setup is not complete yet', () => {
+  it('routes cycle to syncState when setup is not complete yet', () => {
     const state = baseState();
     state.private.bootstrapped = true;
     state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
@@ -146,7 +161,7 @@ describe('resolveCommandTarget', () => {
     state.thread.setupComplete = false;
     state.messages = [message('cycle')];
 
-    expect(resolveCommandTarget(state)).toBe('prepareOperator');
+    expect(resolveCommandTarget(state)).toBe('syncState');
   });
 
   it('routes cycle to runCycleCommand when configured and setup complete', () => {
@@ -175,5 +190,43 @@ describe('resolveCommandTarget', () => {
     state.messages = [message('cycle')];
 
     expect(resolveCommandTarget(state)).toBe('runCycleCommand');
+  });
+
+  it('suppresses replayed non-sync command envelopes with the same clientMutationId', () => {
+    const state = baseState();
+    state.private.bootstrapped = true;
+    state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
+    state.thread.fundingTokenInput = { fundingTokenAddress: '0xdef' as `0x${string}` };
+    state.thread.delegationsBypassActive = true;
+    state.thread.operatorConfig = {
+      walletAddress: '0xabc' as `0x${string}`,
+      baseContributionUsd: 10,
+      fundingTokenAddress: '0xdef' as `0x${string}`,
+      targetYieldToken: {
+        marketAddress: '0xmarket',
+        ptAddress: '0xpt',
+        ytAddress: '0xyt',
+        ptSymbol: 'PT-USDai-2030',
+        maturity: '2030-01-01',
+        underlyingSymbol: 'USDai',
+        underlyingAddress: '0xusdai',
+        ytSymbol: 'YT-USDai-2030',
+        apy: 1,
+      },
+    };
+    state.thread.setupComplete = true;
+    state.messages = [
+      {
+        id: 'msg-1',
+        role: 'user',
+        content: JSON.stringify({ command: 'cycle', clientMutationId: 'cycle-1' }),
+      },
+    ];
+
+    const first = applyRunCommandUpdate(state);
+    expect(resolveCommandTarget(first)).toBe('runCycleCommand');
+
+    const second = applyRunCommandUpdate(first);
+    expect(resolveCommandTarget(second)).toBe('__end__');
   });
 });

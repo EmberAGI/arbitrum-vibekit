@@ -127,33 +127,13 @@ export const pollCycleNode = async (
   if (!operatorConfig || !selectedPool) {
     const nextOnboardingNode = resolveNextOnboardingNode(state);
     if (nextOnboardingNode !== 'syncState') {
-      const needsUserInput =
-        nextOnboardingNode === 'collectOperatorInput' ||
-        nextOnboardingNode === 'collectFundingTokenInput' ||
-        nextOnboardingNode === 'collectDelegations';
-      const status = needsUserInput ? 'input-required' : 'working';
-      const message = needsUserInput
-        ? 'Cycle paused until onboarding input is complete.'
-        : 'Cycle paused while onboarding prerequisites are prepared.';
-      const { task, statusEvent } = buildTaskStatus(state.thread.task, status, message);
-      const mergedView = {
-        ...state.thread,
-        task,
-        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
-      };
       logInfo('pollCycle: onboarding incomplete; rerouting before polling', {
         nextOnboardingNode,
         hasOperatorConfig: Boolean(state.thread.operatorConfig),
         hasSelectedPool: Boolean(state.thread.selectedPool),
       });
-      await copilotkitEmitState(config, {
-        thread: mergedView,
-      });
       return buildNodeTransition({
         node: nextOnboardingNode,
-        update: {
-          thread: mergedView,
-        },
         createCommand: createLangGraphCommand,
       });
     }

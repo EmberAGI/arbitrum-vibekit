@@ -1,13 +1,16 @@
 import {
   extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
+  resolveCommandReplayGuardState,
+  resolveCycleCommandTarget,
   resolveCommandTargetForBootstrappedFlow,
   type AgentCommand,
   type CommandEnvelope,
   type CommandRoutingTarget,
 } from 'agent-workflow-core';
 
-import { type ClmmState } from '../context.js';
+import { type ClmmState, type ClmmUpdate } from '../context.js';
+import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 
 type CommandTarget = CommandRoutingTarget;
 
@@ -19,26 +22,45 @@ export function extractCommand(messages: ClmmState['messages']): AgentCommand | 
   return extractCommandFromMessages(messages);
 }
 
-export function runCommandNode(state: ClmmState): ClmmState {
+export function runCommandNode(state: ClmmState): ClmmUpdate {
   const commandEnvelope = extractCommandEnvelope(state.messages);
   const parsedCommand = commandEnvelope?.command ?? null;
+  const replayGuardState = resolveCommandReplayGuardState({
+    parsedCommand,
+    clientMutationId: commandEnvelope?.clientMutationId,
+    lastAppliedCommandMutationId: state.private.lastAppliedCommandMutationId,
+  });
   const lastAppliedClientMutationId =
     parsedCommand === 'sync'
       ? commandEnvelope?.clientMutationId ?? state.thread.lastAppliedClientMutationId
       : state.thread.lastAppliedClientMutationId;
 
   return {
-    ...state,
+    private: {
+      suppressDuplicateCommand: replayGuardState.suppressDuplicateCommand,
+      lastAppliedCommandMutationId: replayGuardState.lastAppliedCommandMutationId,
+    },
     thread: {
-      ...state.thread,
       lastAppliedClientMutationId,
     },
   };
 }
 
-export function resolveCommandTarget({ messages, private: priv }: ClmmState): CommandTarget {
+export function resolveCommandTarget(state: ClmmState): CommandTarget {
+  if (state.private.suppressDuplicateCommand === true) {
+    return '__end__';
+  }
+
+  const resolvedCommand = extractCommand(state.messages);
+  if (resolvedCommand === 'cycle') {
+    return resolveCycleCommandTarget({
+      bootstrapped: state.private.bootstrapped,
+      onboardingReady: resolveNextOnboardingNode(state) === 'syncState',
+    });
+  }
+
   return resolveCommandTargetForBootstrappedFlow({
-    resolvedCommand: extractCommand(messages),
-    bootstrapped: priv.bootstrapped,
+    resolvedCommand,
+    bootstrapped: state.private.bootstrapped,
   });
 }

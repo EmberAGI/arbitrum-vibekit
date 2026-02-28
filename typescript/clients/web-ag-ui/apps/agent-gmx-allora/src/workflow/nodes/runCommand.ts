@@ -1,13 +1,16 @@
 import {
   extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
+  resolveCommandReplayGuardState,
+  resolveCycleCommandTarget,
   resolveCommandTargetForBootstrappedFlow,
   type AgentCommand,
   type CommandEnvelope,
   type CommandRoutingTarget,
 } from 'agent-workflow-core';
 
-import { logWarn, type ClmmState } from '../context.js';
+import { logWarn, type ClmmState, type ClmmUpdate } from '../context.js';
+import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 
 type CommandTarget = CommandRoutingTarget;
 const TRACEABLE_COMMANDS: readonly AgentCommand[] = ['hire', 'fire', 'cycle'];
@@ -24,9 +27,14 @@ export function extractCommand(messages: ClmmState['messages']): AgentCommand | 
   return extractCommandFromMessages(messages);
 }
 
-export function runCommandNode(state: ClmmState): ClmmState {
+export function runCommandNode(state: ClmmState): ClmmUpdate {
   const commandEnvelope = extractCommandEnvelope(state.messages);
   const parsedCommand = commandEnvelope?.command ?? null;
+  const replayGuardState = resolveCommandReplayGuardState({
+    parsedCommand,
+    clientMutationId: commandEnvelope?.clientMutationId,
+    lastAppliedCommandMutationId: state.private.lastAppliedCommandMutationId,
+  });
   const lastAppliedClientMutationId =
     parsedCommand === 'sync'
       ? commandEnvelope?.clientMutationId ?? state.thread.lastAppliedClientMutationId
@@ -45,28 +53,52 @@ export function runCommandNode(state: ClmmState): ClmmState {
   }
 
   return {
-    ...state,
+    private: {
+      suppressDuplicateCommand: replayGuardState.suppressDuplicateCommand,
+      lastAppliedCommandMutationId: replayGuardState.lastAppliedCommandMutationId,
+    },
     thread: {
-      ...state.thread,
       lastAppliedClientMutationId,
     },
   };
 }
 
-export function resolveCommandTarget({ messages, private: priv, thread }: ClmmState): CommandTarget {
-  const resolvedCommand = extractCommand(messages);
+export function resolveCommandTarget(state: ClmmState): CommandTarget {
+  if (state.private.suppressDuplicateCommand === true) {
+    return '__end__';
+  }
+
+  const resolvedCommand = extractCommand(state.messages);
+  if (resolvedCommand === 'cycle') {
+    const target = resolveCycleCommandTarget({
+      bootstrapped: state.private.bootstrapped,
+      onboardingReady: resolveNextOnboardingNode(state) === 'syncState',
+    });
+
+    if (shouldTraceCommand(resolvedCommand)) {
+      logWarn('runCommand: resolved command target', {
+        resolvedCommand,
+        target,
+        bootstrapped: state.private.bootstrapped,
+        taskState: state.thread.task?.taskStatus?.state,
+        taskMessage: state.thread.task?.taskStatus?.message?.content,
+      });
+    }
+    return target;
+  }
+
   const target = resolveCommandTargetForBootstrappedFlow({
     resolvedCommand,
-    bootstrapped: priv.bootstrapped,
+    bootstrapped: state.private.bootstrapped,
   });
 
   if (shouldTraceCommand(resolvedCommand)) {
     logWarn('runCommand: resolved command target', {
       resolvedCommand,
       target,
-      bootstrapped: priv.bootstrapped,
-      taskState: thread.task?.taskStatus?.state,
-      taskMessage: thread.task?.taskStatus?.message?.content,
+      bootstrapped: state.private.bootstrapped,
+      taskState: state.thread.task?.taskStatus?.state,
+      taskMessage: state.thread.task?.taskStatus?.message?.content,
     });
   }
   return target;

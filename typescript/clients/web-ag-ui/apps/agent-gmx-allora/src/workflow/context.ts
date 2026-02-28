@@ -50,6 +50,8 @@ export type ClmmPrivateState = {
   streamLimit: number;
   cronScheduled: boolean;
   bootstrapped: boolean;
+  suppressDuplicateCommand?: boolean;
+  lastAppliedCommandMutationId?: string;
 };
 
 export type ClmmProfile = {
@@ -260,6 +262,8 @@ const defaultPrivateState = (): ClmmPrivateState => ({
   streamLimit: resolveStreamLimit(),
   cronScheduled: false,
   bootstrapped: false,
+  suppressDuplicateCommand: false,
+  lastAppliedCommandMutationId: undefined,
 });
 
 const defaultThreadState = (): ClmmThreadState => ({
@@ -328,6 +332,9 @@ const mergePrivateState = (
   streamLimit: right?.streamLimit ?? left.streamLimit ?? resolveStreamLimit(),
   cronScheduled: right?.cronScheduled ?? left.cronScheduled ?? false,
   bootstrapped: right?.bootstrapped ?? left.bootstrapped ?? false,
+  suppressDuplicateCommand: right?.suppressDuplicateCommand ?? left.suppressDuplicateCommand ?? false,
+  lastAppliedCommandMutationId:
+    right?.lastAppliedCommandMutationId ?? left.lastAppliedCommandMutationId,
 });
 
 const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {

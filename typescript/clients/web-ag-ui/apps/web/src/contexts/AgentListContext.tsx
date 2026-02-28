@@ -83,6 +83,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
   const { privyWallet } = usePrivyWalletClient();
   const walletKey = resolveAgentThreadWalletAddress(privyWallet?.address);
   const activeAgentId = useMemo(() => resolveAgentIdFromPath(pathname), [pathname]);
+  const activeAgentIdRef = useRef(activeAgentId);
   const [state, setState] = useState<{ walletKey: string | null; agents: Record<string, AgentListEntry> }>(
     () => ({
       walletKey,
@@ -146,6 +147,10 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
   }, [agents]);
 
   useEffect(() => {
+    activeAgentIdRef.current = activeAgentId;
+  }, [activeAgentId]);
+
+  useEffect(() => {
     if (lastWalletKeyRef.current === walletKey) {
       return;
     }
@@ -161,12 +166,18 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
       if (!walletKey) {
         return;
       }
+      if (activeAgentIdRef.current === agentId) {
+        return;
+      }
       if (inFlightRef.current.has(agentId)) {
         return;
       }
 
       const threadId = getAgentThreadId(agentId, walletKey);
       if (!threadId) {
+        return;
+      }
+      if (activeAgentIdRef.current === agentId) {
         return;
       }
 

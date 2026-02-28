@@ -39,7 +39,7 @@ describe('runGraphOnce busy handling integration (CLMM)', () => {
     vi.restoreAllMocks();
   });
 
-  it('normalizes stale onboarding input-required task state when projecting cycle command to thread state', async () => {
+  it('does not replay thread state when posting cycle command updates', async () => {
     const fetchMock = vi.fn((input: string | URL | Request, init?: unknown) => {
       const url = getUrl(input);
       const method = getMethod(init);
@@ -50,35 +50,6 @@ describe('runGraphOnce busy handling integration (CLMM)', () => {
       if (url.endsWith('/threads/thread-1') && method === 'PATCH') {
         return jsonResponse({ thread_id: 'thread-1' });
       }
-      if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
-        return jsonResponse({
-          values: {
-            thread: {
-              command: 'hire',
-              poolArtifact: {},
-              operatorInput: {},
-              fundingTokenInput: {},
-              delegationsBypassActive: true,
-              operatorConfig: {},
-              onboardingFlow: {
-                status: 'completed',
-                revision: 5,
-                steps: [
-                  { id: 'pool-selection', title: 'Pool Selection', status: 'completed' },
-                  { id: 'delegation-signing', title: 'Delegation Signing', status: 'completed' },
-                ],
-              },
-              task: {
-                id: 'task-1',
-                taskStatus: {
-                  state: 'input-required',
-                  message: { content: 'Waiting for delegation approval to continue onboarding.' },
-                },
-              },
-            },
-          },
-        });
-      }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
         if (!init || typeof init !== 'object' || !('body' in init)) {
           throw new Error('Missing request body');
@@ -88,9 +59,10 @@ describe('runGraphOnce busy handling integration (CLMM)', () => {
           throw new Error('Expected string request body');
         }
         const body = JSON.parse(bodyText) as {
-          values?: { thread?: { task?: { taskStatus?: { state?: string } } } };
+          values?: { thread?: unknown; messages?: unknown[] };
         };
-        expect(body.values?.thread?.task?.taskStatus?.state).toBe('working');
+        expect(body.values?.messages).toBeDefined();
+        expect(body.values?.thread).toBeUndefined();
         return jsonResponse({ checkpoint_id: 'cp-1' });
       }
       if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {

@@ -169,8 +169,6 @@ describe('collectFundingTokenInputNode', () => {
     } as unknown as ClmmState;
 
     const result = await collectFundingTokenInputNode(state, {});
-    const view = (result as { thread: ClmmState['thread'] }).thread;
-
-    expect(view.onboarding).toBeUndefined();
+    expect((result as { thread?: ClmmState['thread'] }).thread).toBeUndefined();
   });
 });

@@ -177,4 +177,29 @@ describe('AgentListProvider integration', () => {
     await flushEffects();
     expect(latest?.agents['agent-clmm']?.taskState).toBeUndefined();
   });
+
+  it('hard-blocks agent-list polling for the active detail agent even if selection includes it', async () => {
+    const pollWithConcurrencyMock = vi.mocked(agentListPolling.pollAgentIdsWithConcurrency);
+    const pollViaAgUiMock = vi.mocked(agentListPolling.pollAgentListUpdateViaAgUi);
+    const selectAgentIdsForPollingSpy = vi.spyOn(agentListPolling, 'selectAgentIdsForPolling');
+
+    selectAgentIdsForPollingSpy.mockReturnValue(['agent-pendle']);
+    pollWithConcurrencyMock.mockImplementation(async ({ agentIds, pollAgent }) => {
+      for (const agentId of agentIds) {
+        await pollAgent(agentId);
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <AgentListProvider>
+          <div>child</div>
+        </AgentListProvider>,
+      );
+    });
+    await flushEffects();
+
+    expect(pollViaAgUiMock).not.toHaveBeenCalled();
+    selectAgentIdsForPollingSpy.mockRestore();
+  });
 });

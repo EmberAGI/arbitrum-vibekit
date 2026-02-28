@@ -362,26 +362,25 @@ export const collectDelegationsNode = async (
         'working',
         'Delegation approvals received. Continuing onboarding.',
       );
-      const resumedView = applyThreadPatch(state, {
+      const resumedPatch = {
         ...delegatedPatch,
         task,
         activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
-      });
+      };
+      applyThreadPatch(state, resumedPatch);
       return buildStateUpdate({
-        thread: resumedView,
+        thread: resumedPatch,
       });
     }
 
-    const delegatedView = applyThreadPatch(state, delegatedPatch);
+    applyThreadPatch(state, delegatedPatch);
     return buildStateUpdate({
-      thread: delegatedView,
+      thread: delegatedPatch,
     });
   }
 
   if (!delegationOnboarding) {
-    return buildStateUpdate({
-      thread: state.thread,
-    });
+    return buildStateUpdate({});
   }
 
   const operatorInput = state.thread.operatorInput;
@@ -436,18 +435,19 @@ export const collectDelegationsNode = async (
     await copilotkitEmitState(config, {
       thread: failedView,
     });
-    const haltedView = applyThreadPatch(state, {
+    const haltedPatch = {
       haltReason: failureMessage,
       task,
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       profile: state.thread.profile,
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
-    });
+    };
+    applyThreadPatch(state, haltedPatch);
     return buildNodeTransition({
       node: 'summarize',
       update: {
-        thread: haltedView,
+        thread: haltedPatch,
       },
       createCommand: createLangGraphCommand,
     });
@@ -636,18 +636,19 @@ export const collectDelegationsNode = async (
     await copilotkitEmitState(config, {
       thread: failedView,
     });
-    const haltedView = applyThreadPatch(state, {
+    const haltedPatch = {
       haltReason: failureMessage,
       task,
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       profile: state.thread.profile,
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
-    });
+    };
+    applyThreadPatch(state, haltedPatch);
     return buildNodeTransition({
       node: 'summarize',
       update: {
-        thread: haltedView,
+        thread: haltedPatch,
       },
       createCommand: createLangGraphCommand,
     });
@@ -703,7 +704,7 @@ export const collectDelegationsNode = async (
     return buildInterruptPauseTransition({
       node: 'collectDelegations',
       update: {
-        thread: mergedView,
+        thread: pendingView,
       },
       createCommand: createLangGraphCommand,
     });
@@ -750,14 +751,15 @@ export const collectDelegationsNode = async (
     await copilotkitEmitState(config, {
       thread: failedView,
     });
-    const haltedView = applyThreadPatch(state, {
+    const haltedPatch = {
       haltReason: failureMessage,
       task,
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       onboarding: delegationOnboarding,
-    });
+    };
+    applyThreadPatch(state, haltedPatch);
     return buildStateUpdate({
-      thread: haltedView,
+      thread: haltedPatch,
     });
   }
 
@@ -779,18 +781,19 @@ export const collectDelegationsNode = async (
     await copilotkitEmitState(config, {
       thread: failedView,
     });
-    const haltedView = applyThreadPatch(state, {
+    const haltedPatch = {
       haltReason: 'Delegation signing rejected by user.',
       task,
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       profile: state.thread.profile,
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
-    });
+    };
+    applyThreadPatch(state, haltedPatch);
     return buildNodeTransition({
       node: 'summarize',
       update: {
-        thread: haltedView,
+        thread: haltedPatch,
       },
       createCommand: createLangGraphCommand,
     });
@@ -807,14 +810,15 @@ export const collectDelegationsNode = async (
     await copilotkitEmitState(config, {
       thread: failedView,
     });
-    const haltedView = applyThreadPatch(state, {
+    const haltedPatch = {
       haltReason: failureMessage,
       task,
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       onboarding: delegationOnboarding,
-    });
+    };
+    applyThreadPatch(state, haltedPatch);
     return buildStateUpdate({
-      thread: haltedView,
+      thread: haltedPatch,
     });
   }
 
@@ -834,14 +838,15 @@ export const collectDelegationsNode = async (
       await copilotkitEmitState(config, {
         thread: failedView,
       });
-      const haltedView = applyThreadPatch(state, {
+      const haltedPatch = {
         haltReason: failureMessage,
         task,
         activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         onboarding: delegationOnboarding,
-      });
+      };
+      applyThreadPatch(state, haltedPatch);
       return buildStateUpdate({
-        thread: haltedView,
+        thread: haltedPatch,
       });
     }
   }
@@ -874,13 +879,14 @@ export const collectDelegationsNode = async (
     thread: workingView,
   });
 
-  const completedView = applyThreadPatch(state, {
+  const completedPatch = {
     task,
     activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     delegationBundle,
     onboarding: delegationOnboarding,
-  });
+  };
+  applyThreadPatch(state, completedPatch);
   return buildStateUpdate({
-    thread: completedView,
+    thread: completedPatch,
   });
 };

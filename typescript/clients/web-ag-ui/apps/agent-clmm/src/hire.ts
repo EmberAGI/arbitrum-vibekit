@@ -84,10 +84,11 @@ export async function startClmmHire(
   operatorInput: OperatorConfigInput,
   options?: { durability?: LangGraphDurability },
 ) {
+  const clientMutationId = uuidv7();
   const hireMessage = {
     id: uuidv7(),
     role: 'user' as const,
-    content: JSON.stringify({ command: 'hire' }),
+    content: JSON.stringify({ command: 'hire', clientMutationId }),
   };
 
   type ClmmInvokeInput = Parameters<typeof clmmGraph.invoke>[0];
