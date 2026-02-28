@@ -14,6 +14,7 @@ coverage
 
 # LangGraph API
 .langgraph_api
+.logs/
 
 # This package intentionally keeps its own lockfile for standalone Docker builds.
 !pnpm-lock.yaml
