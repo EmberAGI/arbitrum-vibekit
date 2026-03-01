@@ -1,0 +1,22 @@
+# Ignore local dev artifacts to avoid clobbering image build layers
+node_modules
+.next
+.xmcp
+
+# VCS
+.git
+.gitignore
+
+# IDE/OS
+.vscode
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env files (passed at runtime, not needed at build time)
+.env
+.env.*
