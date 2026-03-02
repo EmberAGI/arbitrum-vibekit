@@ -17,6 +17,7 @@ type TestAgent = {
   subscribe: (subscriber: AgentSubscriber) => { unsubscribe: () => void };
   detachActiveRun: ReturnType<typeof vi.fn>;
   connectAgent: ReturnType<typeof vi.fn>;
+  isRunning?: boolean | (() => boolean);
   runAgent?: ReturnType<typeof vi.fn>;
 };
 
@@ -745,7 +746,7 @@ describe('useAgentConnection integration', () => {
     expect(mocks.agent.setState).not.toHaveBeenCalled();
   });
 
-  it('preempts active run ownership via stopAgent before dispatching fire', async () => {
+  it('detaches stale local run ownership without stopAgent before dispatching fire', async () => {
     let subscriber: AgentSubscriber | undefined;
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
@@ -774,7 +775,7 @@ describe('useAgentConnection integration', () => {
     latestValue?.runFire();
     await flushEffects();
 
-    expect(mocks.stopAgent).toHaveBeenCalledWith({ agent: mocks.agent });
+    expect(mocks.stopAgent).not.toHaveBeenCalled();
     expect(mocks.agent.detachActiveRun.mock.calls.length).toBeGreaterThanOrEqual(1);
     subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
     await new Promise<void>((resolve) => setTimeout(resolve, 80));
@@ -791,6 +792,39 @@ describe('useAgentConnection integration', () => {
     expect(fireMessage?.role).toBe('user');
     expect(parsedFireMessage?.command).toBe('fire');
     expect(typeof parsedFireMessage?.clientMutationId).toBe('string');
+  });
+
+  it('uses stopAgent preemption when backend reports an active run during fire', async () => {
+    let subscriber: AgentSubscriber | undefined;
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+    mocks.agent.isRunning = () => true;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.runFire();
+    await flushEffects();
+
+    expect(mocks.stopAgent).toHaveBeenCalledWith({ agent: mocks.agent });
+    expect(mocks.agent.detachActiveRun.mock.calls.length).toBeGreaterThanOrEqual(1);
+    subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
+    await flushEffects();
   });
 
   it('marks agent as not hired once fire reaches a terminal task state', async () => {

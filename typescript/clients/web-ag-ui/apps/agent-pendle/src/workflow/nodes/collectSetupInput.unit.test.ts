@@ -43,9 +43,15 @@ describe('collectSetupInputNode', () => {
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
     const commandResult = result as unknown as {
       goto?: string[];
-      update?: { thread?: { task?: { taskStatus?: { state?: string } } } };
+      update?: {
+        thread?: {
+          task?: { taskStatus?: { state?: string } };
+          profile?: unknown;
+        };
+      };
     };
     expect(commandResult.goto).toContain('collectSetupInput');
     expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(commandResult.update?.thread?.profile).toBeUndefined();
   });
 });

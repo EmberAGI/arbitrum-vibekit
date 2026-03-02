@@ -84,7 +84,7 @@ export const collectOperatorInputNode = async (
     });
     return new Command({
       update: {
-        thread: mergedView,
+        thread: pendingView,
       },
       goto: 'collectOperatorInput',
     });

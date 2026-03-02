@@ -324,10 +324,13 @@ export const pollCycleNode = async (
         ? 'Cycle paused until onboarding input is complete.'
         : 'Cycle paused while onboarding prerequisites are prepared.';
       const { task, statusEvent } = buildTaskStatus(state.thread.task, status, message);
-      const mergedView = {
-        ...state.thread,
+      const pendingView = {
         task,
         activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+      };
+      const mergedView = {
+        ...state.thread,
+        ...pendingView,
       };
       logInfo('pollCycle: onboarding incomplete; rerouting before polling', {
         nextOnboardingNode,
@@ -349,7 +352,7 @@ export const pollCycleNode = async (
         });
       }
       return {
-        thread: mergedView,
+        thread: pendingView,
       };
     }
 

@@ -78,7 +78,7 @@ export const collectSetupInputNode = async (
     });
     return new Command({
       update: {
-        thread: mergedView,
+        thread: pendingView,
       },
       goto: 'collectSetupInput',
     });

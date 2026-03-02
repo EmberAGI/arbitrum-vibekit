@@ -3,6 +3,7 @@ import { resolveSummaryTaskStatus } from 'agent-workflow-core';
 
 import { buildSummaryArtifact } from '../artifacts.js';
 import { buildTaskStatus, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
+import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -11,6 +12,7 @@ export const summarizeNode = async (
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
   const summaryArtifact = buildSummaryArtifact(state.thread.activity.telemetry ?? []);
+  const onboardingComplete = resolveNextOnboardingNode(state) === 'syncState';
   const currentTaskState = state.thread.task?.taskStatus?.state;
   const currentTaskMessage = state.thread.task?.taskStatus?.message?.content;
   const shouldClearStaleDelegationWait =
@@ -23,7 +25,7 @@ export const summarizeNode = async (
     currentTaskState,
     currentTaskMessage,
     staleDelegationWaitCleared: shouldClearStaleDelegationWait,
-    onboardingComplete: state.thread.onboardingFlow?.status === 'completed',
+    onboardingComplete,
     activeSummaryMessage: 'GMX Allora cycle summarized.',
     onboardingCompleteMessage: 'Onboarding complete. GMX Allora strategy is active.',
   });

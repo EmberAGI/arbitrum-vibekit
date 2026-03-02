@@ -51,6 +51,7 @@ describe('pollCycleNode', () => {
             message?: { content?: string };
           };
         };
+        profile?: unknown;
       };
     };
 
@@ -58,6 +59,7 @@ describe('pollCycleNode', () => {
     expect(updateResult.thread?.task?.taskStatus?.message?.content).toBe(
       'Cycle paused until onboarding input is complete.',
     );
+    expect(updateResult.thread?.profile).toBeUndefined();
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
   });
 });

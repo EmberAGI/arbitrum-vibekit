@@ -1,10 +1,8 @@
-import { readFile } from 'node:fs/promises';
-
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ClmmState } from '../context.js';
 
-import { collectSetupInputNode } from './collectSetupInput.js';
+import { collectOperatorInputNode } from './collectOperatorInput.js';
 
 const { interruptMock, copilotkitEmitStateMock } = vi.hoisted(() => ({
   interruptMock: vi.fn(),
@@ -26,19 +24,8 @@ vi.mock('@langchain/langgraph', async (importOriginal) => {
   };
 });
 
-describe('collectSetupInputNode', () => {
-  it('uses core transition helpers instead of direct Command construction', async () => {
-    const source = await readFile(new URL('./collectSetupInput.ts', import.meta.url), 'utf8');
-    expect(source.includes('new Command(')).toBe(false);
-  });
-
-  it('uses shared interrupt payload helpers instead of manual JSON parsing', async () => {
-    const source = await readFile(new URL('./collectSetupInput.ts', import.meta.url), 'utf8');
-    expect(source.includes('requestInterruptPayload(')).toBe(true);
-    expect(source.includes('JSON.parse(')).toBe(false);
-  });
-
-  it('persists input-required state before interrupting when runnable config exists', async () => {
+describe('collectOperatorInputNode', () => {
+  it('returns patch-only interrupt update when runnable config exists', async () => {
     interruptMock.mockReset();
     copilotkitEmitStateMock.mockReset();
     copilotkitEmitStateMock.mockResolvedValue(undefined);
@@ -47,11 +34,12 @@ describe('collectSetupInputNode', () => {
       thread: {
         task: { id: 'task-1', taskStatus: { state: 'submitted' } },
         activity: { telemetry: [], events: [] },
+        poolArtifact: { artifactId: 'mock-pools' },
         profile: {
-          agentIncome: undefined,
-          aum: undefined,
-          totalUsers: undefined,
-          apy: undefined,
+          agentIncome: 1,
+          aum: 2,
+          totalUsers: 3,
+          apy: 4,
           chains: [],
           protocols: [],
           tokens: [],
@@ -61,25 +49,22 @@ describe('collectSetupInputNode', () => {
       },
     } as unknown as ClmmState;
 
-    const result = await collectSetupInputNode(state, { configurable: { thread_id: 'thread-1' } });
-
-    expect(interruptMock).not.toHaveBeenCalled();
-    expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
-
+    const result = await collectOperatorInputNode(state, { configurable: { thread_id: 'thread-1' } });
     const commandResult = result as unknown as {
       goto?: string[];
       update?: {
         thread?: {
-          task?: { taskStatus?: { state?: string } };
           onboarding?: { step?: number; key?: string };
+          task?: { taskStatus?: { state?: string } };
           profile?: unknown;
         };
       };
     };
 
-    expect(commandResult.goto).toContain('collectSetupInput');
-    expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(interruptMock).not.toHaveBeenCalled();
+    expect(commandResult.goto).toContain('collectOperatorInput');
     expect(commandResult.update?.thread?.onboarding).toEqual({ step: 1, key: 'setup' });
+    expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
     expect(commandResult.update?.thread?.profile).toBeUndefined();
   });
 });

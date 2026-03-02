@@ -119,7 +119,7 @@ export const acknowledgeFundWalletNode = async (
     return buildInterruptPauseTransition({
       node: 'acknowledgeFundWallet',
       update: {
-        thread: mergedView,
+        thread: pendingView,
       },
       createCommand: createLangGraphCommand,
     });

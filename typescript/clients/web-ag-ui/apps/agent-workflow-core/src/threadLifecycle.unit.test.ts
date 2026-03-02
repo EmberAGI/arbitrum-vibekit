@@ -48,6 +48,17 @@ describe('threadLifecycle', () => {
     ).toBe('inactive');
   });
 
+  it('honors explicit inactive on terminal task even when setup signals are present', () => {
+    expect(
+      resolveThreadLifecyclePhase({
+        previousPhase: 'active',
+        explicitLifecyclePhase: 'inactive',
+        taskState: 'completed',
+        hasOperatorConfig: true,
+      }),
+    ).toBe('inactive');
+  });
+
   it('does not regress onboarding to prehire when explicit lifecycle is stale', () => {
     expect(
       resolveThreadLifecyclePhase({

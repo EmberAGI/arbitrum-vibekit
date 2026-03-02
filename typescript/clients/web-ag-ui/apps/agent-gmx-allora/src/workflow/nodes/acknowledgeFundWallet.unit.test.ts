@@ -53,6 +53,17 @@ describe('acknowledgeFundWalletNode', () => {
           },
         },
         activity: { telemetry: [], events: [] },
+        profile: {
+          agentIncome: undefined,
+          aum: undefined,
+          totalUsers: undefined,
+          apy: undefined,
+          chains: [],
+          protocols: [],
+          tokens: [],
+          pools: [],
+          allowedPools: [],
+        },
       },
     } as unknown as ClmmState;
 
@@ -64,6 +75,7 @@ describe('acknowledgeFundWalletNode', () => {
           task?: { taskStatus?: { state?: string; message?: { content?: string } } };
           haltReason?: string;
           executionError?: string;
+          profile?: unknown;
         };
       };
     };
@@ -78,6 +90,7 @@ describe('acknowledgeFundWalletNode', () => {
     expect(commandResult.update?.thread?.onboarding).toBeUndefined();
     expect(commandResult.update?.thread?.haltReason).toBe('');
     expect(commandResult.update?.thread?.executionError).toBe('');
+    expect(commandResult.update?.thread?.profile).toBeUndefined();
   });
 
   it('uses default pending message when executionError is blank', async () => {

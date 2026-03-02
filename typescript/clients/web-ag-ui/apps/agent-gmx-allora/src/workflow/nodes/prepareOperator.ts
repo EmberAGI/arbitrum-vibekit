@@ -124,7 +124,7 @@ export const prepareOperatorNode = async (
       thread: mergedView,
     });
     return {
-      thread: mergedView,
+      thread: pendingView,
     };
   }
 

@@ -67,6 +67,7 @@ describe('prepareOperatorNode', () => {
           };
         };
         onboarding?: { step?: number; key?: string };
+        profile?: unknown;
       };
     };
 
@@ -75,5 +76,6 @@ describe('prepareOperatorNode', () => {
       'Waiting for delegation approval to continue onboarding.',
     );
     expect(updateResult.thread?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(updateResult.thread?.profile).toBeUndefined();
   });
 });

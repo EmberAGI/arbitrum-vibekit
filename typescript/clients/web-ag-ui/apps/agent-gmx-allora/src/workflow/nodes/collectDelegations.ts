@@ -252,7 +252,10 @@ export const collectDelegationsNode = async (
     return buildInterruptPauseTransition({
       node: 'collectDelegations',
       update: {
-        thread: mergedView,
+        thread: {
+          ...pendingView,
+          onboardingFlow: mergedView.onboardingFlow,
+        },
       },
       createCommand: createLangGraphCommand,
     });

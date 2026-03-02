@@ -108,7 +108,7 @@ export const collectSetupInputNode = async (
     return buildInterruptPauseTransition({
       node: 'collectSetupInput',
       update: {
-        thread: mergedView,
+        thread: pendingView,
       },
       createCommand: createLangGraphCommand,
     });

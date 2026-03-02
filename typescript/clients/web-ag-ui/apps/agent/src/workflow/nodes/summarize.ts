@@ -17,6 +17,12 @@ export const summarizeNode = async (
   const summaryArtifact = buildSummaryArtifact(state.thread.activity.telemetry ?? []);
   const currentTaskState = state.thread.task?.taskStatus?.state;
   const currentTaskMessage = state.thread.task?.taskStatus?.message?.content;
+  const onboardingComplete =
+    Boolean(state.thread.poolArtifact) &&
+    Boolean(state.thread.operatorInput) &&
+    Boolean(state.thread.fundingTokenInput) &&
+    (state.thread.delegationsBypassActive === true || Boolean(state.thread.delegationBundle)) &&
+    Boolean(state.thread.operatorConfig);
   const shouldClearStaleDelegationWait =
     currentTaskState === 'input-required' &&
     Boolean(state.thread.operatorConfig) &&
@@ -27,7 +33,7 @@ export const summarizeNode = async (
     currentTaskState,
     currentTaskMessage,
     staleDelegationWaitCleared: shouldClearStaleDelegationWait,
-    onboardingComplete: state.thread.onboardingFlow?.status === 'completed',
+    onboardingComplete,
     activeSummaryMessage: 'Mock CLMM cycle summarized.',
     onboardingCompleteMessage: 'Onboarding complete. Mock CLMM strategy is active.',
   });

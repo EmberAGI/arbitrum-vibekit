@@ -189,7 +189,7 @@ export const collectFundingTokenInputNode = async (
       });
       return new Command({
         update: {
-          thread: mergedView,
+          thread: pendingView,
         },
         goto: 'collectFundingTokenInput',
       });
@@ -244,7 +244,7 @@ export const collectFundingTokenInputNode = async (
     });
     return new Command({
       update: {
-        thread: mergedView,
+        thread: pendingView,
       },
       goto: 'collectFundingTokenInput',
     });

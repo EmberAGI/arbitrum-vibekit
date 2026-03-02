@@ -64,6 +64,17 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
         },
         task: { id: 'task-1', taskStatus: { state: 'submitted' } },
         activity: { telemetry: [], events: [] },
+        profile: {
+          agentIncome: undefined,
+          aum: undefined,
+          totalUsers: undefined,
+          apy: undefined,
+          chains: [],
+          protocols: [],
+          tokens: [],
+          pools: [],
+          allowedPools: [],
+        },
       },
     } as unknown as ClmmState;
 
@@ -78,6 +89,7 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
           task?: { taskStatus?: { state?: string } };
           onboarding?: { step?: number; key?: string };
           onboardingFlow?: { activeStepId?: string };
+          profile?: unknown;
         };
       };
     };
@@ -85,6 +97,7 @@ describe('collectDelegationsNode interrupt checkpoint', () => {
     expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
     expect(commandResult.update?.thread?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
     expect(commandResult.update?.thread?.onboardingFlow?.activeStepId).toBe('delegation-signing');
+    expect(commandResult.update?.thread?.profile).toBeUndefined();
   });
 
   it('does not emit another pending checkpoint when delegation step is already persisted', async () => {

@@ -87,4 +87,35 @@ describe('summarizeNode', () => {
       'Onboarding complete. Pendle strategy is active.',
     );
   });
+
+  it('does not clear delegation wait from stale onboardingFlow completion alone', async () => {
+    copilotkitEmitStateMock.mockReset();
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      thread: {
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              id: 'msg-1',
+              role: 'assistant',
+              content: 'Waiting for delegation approval to continue onboarding.',
+            },
+          },
+        },
+        onboardingFlow: { status: 'completed' },
+        haltReason: undefined,
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await summarizeNode(state, {});
+
+    expect(result.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(result.thread?.task?.taskStatus?.message?.content).toBe(
+      'Waiting for delegation approval to continue onboarding.',
+    );
+  });
 });

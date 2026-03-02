@@ -26,6 +26,13 @@ export const resolveThreadLifecyclePhase = (input: {
     return 'inactive';
   }
 
+  // Fire terminal updates can arrive without a persisted prior `firing` phase
+  // (for example when only final node patch is checkpointed). Honor explicit
+  // inactive on terminal tasks before setup-completion promotion runs.
+  if (input.explicitLifecyclePhase === 'inactive' && hasTerminalTask) {
+    return 'inactive';
+  }
+
   const setupComplete =
     input.setupComplete === true ||
     input.hasOperatorConfig === true ||
