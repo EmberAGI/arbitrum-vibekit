@@ -47,7 +47,7 @@ import { fireAgentRun, logFireCommandDebug } from '../utils/fireAgentRun';
 import { resumeInterruptViaAgent } from '../utils/interruptResolution';
 import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 import { canonicalizeChainLabel } from '../utils/iconResolution';
-import { isAgentRunning, isBusyRunError } from '../utils/runConcurrency';
+import { isAbortLikeError, isAgentRunning, isBusyRunError } from '../utils/runConcurrency';
 import { deriveUiState } from '../utils/deriveUiState';
 import {
   isAgentInterrupt,
@@ -494,6 +494,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       runAgent: async (currentAgent) => copilotkit.runAgent({ agent: currentAgent }),
       createId: v7,
       isBusyRunError,
+      isAbortLikeError,
       isAgentRunning,
       onSyncingChange: (isSyncing) => {
         setSyncingState({

@@ -44,6 +44,7 @@ describe('agentCommandScheduler', () => {
       createId: () => 'msg-1',
       isBusyRunError: (error) =>
         error instanceof Error && error.message.includes('already active'),
+      isAbortLikeError: (error) => error instanceof Error && error.message.includes('aborted'),
       isAgentRunning: (value) => value.isRunning === true,
       onSyncingChange,
       onCommandError,
@@ -140,6 +141,31 @@ describe('agentCommandScheduler', () => {
     }
   });
 
+  it('retries sync on abort-like transport failures before surfacing busy state', async () => {
+    vi.useFakeTimers();
+
+    runAgent = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error('BodyStreamBuffer was aborted'))
+      .mockResolvedValueOnce(undefined);
+
+    const scheduler = createScheduler({ syncReplayDelayMs: 10, syncBusyMaxRetries: 2 });
+
+    try {
+      scheduler.dispatch('sync', { allowSyncCoalesce: true });
+
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(20);
+
+      expect(runAgent).toHaveBeenCalledTimes(2);
+      expect(onCommandBusy).not.toHaveBeenCalled();
+      expect(onCommandError).not.toHaveBeenCalled();
+    } finally {
+      scheduler.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it('rejects non-sync command dispatch while run is in flight', () => {
     runInFlight = true;
     const scheduler = createScheduler();
@@ -176,6 +202,22 @@ describe('agentCommandScheduler', () => {
   it('normalizes busy failures for non-sync commands via onCommandBusy', async () => {
     runAgent = vi.fn(async () => {
       throw new Error('run already active');
+    });
+    const scheduler = createScheduler();
+
+    scheduler.dispatch('hire');
+    await Promise.resolve();
+
+    expect(onCommandBusy).toHaveBeenCalledTimes(1);
+    expect(onCommandBusy).toHaveBeenCalledWith('hire', expect.any(Error));
+    expect(onCommandError).not.toHaveBeenCalled();
+
+    scheduler.dispose();
+  });
+
+  it('treats abort-like failures for non-sync commands as transient busy responses', async () => {
+    runAgent = vi.fn(async () => {
+      throw new Error('BodyStreamBuffer was aborted');
     });
     const scheduler = createScheduler();
 

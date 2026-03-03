@@ -2,6 +2,7 @@ type HttpStatus = number | string;
 
 type BusyError = {
   message?: string;
+  name?: string;
   status?: HttpStatus;
   statusCode?: HttpStatus;
   code?: string;
@@ -38,6 +39,27 @@ export function isBusyRunError(error: unknown): boolean {
     message.includes('thread is busy') ||
     message.includes('active run') ||
     message.includes('currently active')
+  );
+}
+
+export function isAbortLikeError(error: unknown): boolean {
+  const maybeError = error as BusyError;
+  const status = toStatusCode(
+    maybeError?.status ??
+      maybeError?.statusCode ??
+      (typeof maybeError?.response === 'object' ? maybeError.response?.status : undefined),
+  );
+  if (status === 499) return true;
+
+  const name = `${maybeError?.name ?? ''}`.toLowerCase();
+  if (name.includes('abort')) return true;
+
+  const message = `${maybeError?.message ?? ''}`.toLowerCase();
+  return (
+    message.includes('aborterror') ||
+    message.includes('aborted') ||
+    message.includes('abort') ||
+    message.includes('bodystreambuffer')
   );
 }
 

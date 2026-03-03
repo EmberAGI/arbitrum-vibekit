@@ -284,6 +284,47 @@ describe('fireAgentRun', () => {
     }
   });
 
+  it('retries aborted fire starts and avoids surfacing transient stream abort errors', async () => {
+    vi.useFakeTimers();
+
+    const onError = vi.fn();
+    const agent = {
+      isRunning: false,
+      addMessage: vi.fn(),
+      detachActiveRun: vi.fn(async () => undefined),
+    };
+    const runInFlightRef = { current: false };
+    const runAgent = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('BodyStreamBuffer was aborted'))
+      .mockResolvedValueOnce(undefined);
+
+    try {
+      const ok = await fireAgentRun({
+        agent,
+        runAgent,
+        threadId: 'thread-1',
+        runInFlightRef,
+        createId: () => 'msg-1',
+        onError,
+        busyRunMaxRetries: 4,
+        busyRunRetryDelayMs: 100,
+      });
+
+      expect(ok).toBe(true);
+      expect(runAgent).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(120);
+
+      expect(runAgent).toHaveBeenCalledTimes(2);
+      expect(onError).not.toHaveBeenCalled();
+      expect(runInFlightRef.current).toBe(true);
+      expect(agent.addMessage).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does nothing when threadId is missing', async () => {
     const agent = { abortRun: vi.fn(), detachActiveRun: vi.fn(), addMessage: vi.fn() };
     const copilotkit = { runAgent: vi.fn() };

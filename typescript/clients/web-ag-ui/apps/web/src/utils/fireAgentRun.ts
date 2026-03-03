@@ -1,5 +1,5 @@
 import type { v7 as uuidv7 } from 'uuid';
-import { isAgentRunning, isBusyRunError } from './runConcurrency';
+import { isAbortLikeError, isAgentRunning, isBusyRunError } from './runConcurrency';
 
 type AgentLike = {
   addMessage: (message: { id: string; role: 'user'; content: string }) => void;
@@ -122,13 +122,14 @@ const startFireRun = async <TAgent extends AgentLike>(
     });
     const maxRetries = options?.maxRetries ?? FIRE_RUN_MAX_RETRIES;
     const retryDelayMs = options?.retryDelayMs ?? FIRE_RUN_RETRY_DELAY_MS;
-    if (isBusyRunError(error) && attempt < maxRetries - 1) {
+    const shouldRetry = isBusyRunError(error) || isAbortLikeError(error);
+    if (shouldRetry && attempt < maxRetries - 1) {
       await sleep(retryDelayMs);
       return startFireRun(runAgent, agent, runInFlightRef, options, attempt + 1);
     }
 
     runInFlightRef.current = false;
-    if (isBusyRunError(error)) {
+    if (isBusyRunError(error) || isAbortLikeError(error)) {
       throw new Error('Agent run is still active. Please retry in a moment.');
     }
     throw error;
