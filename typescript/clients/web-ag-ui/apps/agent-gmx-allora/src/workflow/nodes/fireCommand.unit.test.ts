@@ -135,7 +135,7 @@ describe('fireCommandNode (GMX Allora)', () => {
 
     const onchainActionsClient = {
       listPerpetualPositions: vi.fn().mockResolvedValue([
-        makePosition({ wallet: delegatorWalletAddress, market: marketAddress }),
+        makePosition({ wallet: delegateeWalletAddress, market: marketAddress }),
       ]),
       createPerpetualClose: vi.fn(),
     };
@@ -170,7 +170,7 @@ describe('fireCommandNode (GMX Allora)', () => {
 
     expect(cancelCronForThreadMock).toHaveBeenCalledWith(threadId);
     expect(onchainActionsClient.listPerpetualPositions).toHaveBeenCalledWith(
-      expect.objectContaining({ walletAddress: delegatorWalletAddress }),
+      expect.objectContaining({ walletAddress: delegateeWalletAddress }),
     );
     expect(executePerpetualPlanMock).toHaveBeenCalled();
     const firstCall = executePerpetualPlanMock.mock.calls[0];
@@ -262,6 +262,10 @@ describe('fireCommandNode (GMX Allora)', () => {
     const result = await fireCommandNode(state, {} as never);
 
     expect(onchainActionsClient.listPerpetualPositions).toHaveBeenCalledTimes(4);
+    expect(onchainActionsClient.listPerpetualPositions).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ walletAddress: delegatorWalletAddress }),
+    );
     expect(executePerpetualPlanMock).toHaveBeenCalledTimes(1);
 
     const task = (result as { thread: { task: { taskStatus: { state: string; message?: { content?: string } } } } })

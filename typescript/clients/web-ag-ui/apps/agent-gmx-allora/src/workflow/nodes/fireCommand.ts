@@ -18,6 +18,7 @@ import {
 } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
 import { executePerpetualPlan } from '../execution.js';
+import { resolvePlanBuilderWalletAddress } from '../planBuilderWallet.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = {
@@ -206,19 +207,25 @@ export const fireCommandNode = async (
 
   const txExecutionMode = resolveGmxAlloraTxExecutionMode();
   const willExecute = txExecutionMode === 'execute';
+  const delegationsBypassActive = state.thread.delegationsBypassActive === true;
+  const planBuilderWalletAddress = resolvePlanBuilderWalletAddress({
+    operatorConfig,
+    delegationsBypassActive,
+  });
 
   logInfo('Fire command requested; attempting to close any open GMX position', {
     threadId,
     checkpointId,
     checkpointNamespace,
+    planBuilderWalletAddress,
     delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
     marketAddress: operatorConfig.targetMarket.address,
-    delegationsBypassActive: state.thread.delegationsBypassActive === true,
+    delegationsBypassActive,
     hasDelegationBundle: Boolean(state.thread.delegationBundle),
     configuredTxMode: txExecutionMode,
   });
 
-  if (willExecute && state.thread.delegationsBypassActive !== true && !state.thread.delegationBundle) {
+  if (willExecute && !delegationsBypassActive && !state.thread.delegationBundle) {
     logFireDebug('fireCommand: missing delegation bundle for execute mode', {
       threadId,
       txExecutionMode,
@@ -244,7 +251,7 @@ export const fireCommandNode = async (
   let positions: PerpetualPosition[] = [];
   try {
     positions = await onchainActionsClient.listPerpetualPositions({
-      walletAddress: operatorConfig.delegatorWalletAddress,
+      walletAddress: planBuilderWalletAddress,
       chainIds: [ARBITRUM_CHAIN_ID.toString()],
     });
   } catch (error: unknown) {
@@ -314,7 +321,7 @@ export const fireCommandNode = async (
   }
 
   const closeRequest = {
-    walletAddress: operatorConfig.delegatorWalletAddress,
+    walletAddress: planBuilderWalletAddress,
     marketAddress: operatorConfig.targetMarket.address,
     positionSide: positionToClose.positionSide,
     isLimit: false,
@@ -354,7 +361,7 @@ export const fireCommandNode = async (
         clients,
         plan,
         txExecutionMode,
-        delegationsBypassActive: state.thread.delegationsBypassActive === true,
+        delegationsBypassActive,
         delegationBundle: state.thread.delegationBundle,
         delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
         delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
@@ -385,7 +392,7 @@ export const fireCommandNode = async (
     const fallbackPlan: ExecutionPlan = {
       action: 'reduce',
       request: {
-        walletAddress: operatorConfig.delegatorWalletAddress,
+        walletAddress: planBuilderWalletAddress,
         key: positionToClose.key,
         sizeDeltaUsd: positionToClose.sizeInUsd,
       },
@@ -405,7 +412,7 @@ export const fireCommandNode = async (
           clients,
           plan: fallbackPlan,
           txExecutionMode,
-          delegationsBypassActive: state.thread.delegationsBypassActive === true,
+          delegationsBypassActive,
           delegationBundle: state.thread.delegationBundle,
           delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
           delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
@@ -454,7 +461,7 @@ export const fireCommandNode = async (
       verificationAttemptsCompleted = attempt;
       try {
         const postClosePositions = await onchainActionsClient.listPerpetualPositions({
-          walletAddress: operatorConfig.delegatorWalletAddress,
+          walletAddress: planBuilderWalletAddress,
           chainIds: [ARBITRUM_CHAIN_ID.toString()],
         });
         postCloseTotalPositions = postClosePositions.length;
@@ -486,7 +493,7 @@ export const fireCommandNode = async (
             providerName: GMX_PERPETUALS_PROVIDER_NAME,
             chainId: ARBITRUM_CHAIN_ID.toString(),
             txHash: executionResult.lastTxHash,
-            walletAddress: operatorConfig.delegatorWalletAddress,
+            walletAddress: planBuilderWalletAddress,
           });
 
           if (lifecycle.needsDisambiguation !== true) {

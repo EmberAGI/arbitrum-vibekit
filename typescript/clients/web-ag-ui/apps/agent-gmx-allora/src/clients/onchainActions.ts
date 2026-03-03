@@ -4,6 +4,7 @@ const HTTP_TIMEOUT_MS = 60_000;
 const GMX_PERPETUALS_PROVIDER_NAME = 'GMX Perpetuals' as const;
 const DEFAULT_SLIPPAGE_BPS = '100' as const;
 const USDC_TO_GMX_USD_SCALE = 10n ** 24n;
+const ERROR_REQUEST_BODY_MAX_CHARS = 2_000;
 
 const PaginationSchema = z.object({
   cursor: z.string().nullable(),
@@ -118,6 +119,10 @@ const WalletBalancesResponseSchema = PaginationSchema.extend({
   balances: z.array(WalletBalanceSchema),
 });
 
+const TokensResponseSchema = PaginationSchema.extend({
+  tokens: z.array(TokenSchemaBridge),
+});
+
 export const TransactionPlanSchema = z.object({
   type: z.string(),
   to: z.string(),
@@ -195,17 +200,37 @@ const PerpetualLifecycleResponseSchema = z.union([
 ]);
 export type PerpetualLifecycleResponse = z.infer<typeof PerpetualLifecycleResponseSchema>;
 
+const SwapTokensResponseSchema = z
+  .object({
+    exactFromAmount: z.string(),
+    exactToAmount: z.string(),
+    transactions: z.array(TransactionPlanSchema),
+  })
+  .catchall(z.unknown());
+export type SwapTokensResponse = z.infer<typeof SwapTokensResponseSchema>;
+
 export class OnchainActionsRequestError extends Error {
   readonly status: number;
   readonly url: string;
   readonly bodyText: string;
+  readonly method: string;
+  readonly requestBody: string | undefined;
 
-  constructor(params: { message: string; status: number; url: string; bodyText: string }) {
+  constructor(params: {
+    message: string;
+    status: number;
+    url: string;
+    bodyText: string;
+    method: string;
+    requestBody?: string;
+  }) {
     super(params.message);
     this.name = 'OnchainActionsRequestError';
     this.status = params.status;
     this.url = params.url;
     this.bodyText = params.bodyText;
+    this.method = params.method;
+    this.requestBody = params.requestBody;
   }
 }
 
@@ -279,6 +304,12 @@ type PerpetualDecreasePayload = {
         slippageBps: string;
       };
 };
+
+type PerpetualQuoteActionRequest =
+  | { action: 'long'; request: PerpetualLongRequest }
+  | { action: 'short'; request: PerpetualShortRequest }
+  | { action: 'close'; request: PerpetualCloseRequest }
+  | { action: 'reduce'; request: PerpetualReduceRequest };
 
 export class OnchainActionsClient {
   constructor(private readonly baseUrl: string) {}
@@ -398,11 +429,17 @@ export class OnchainActionsClient {
 
     if (!response.ok) {
       const text = await response.text().catch(() => 'No error body');
+      const requestBody =
+        typeof init?.body === 'string'
+          ? init.body.slice(0, ERROR_REQUEST_BODY_MAX_CHARS)
+          : undefined;
       throw new OnchainActionsRequestError({
         message: `Onchain actions request failed (${response.status}): ${text}`,
         status: response.status,
         url,
         bodyText: text,
+        method: init?.method ?? 'GET',
+        requestBody,
       });
     }
 
@@ -488,10 +525,74 @@ export class OnchainActionsClient {
     return balances;
   }
 
+  async listTokens(params?: { chainIds?: string[] }): Promise<z.infer<typeof TokenSchema>[]> {
+    const baseQuery = this.buildQuery({
+      chainIds: params?.chainIds,
+    });
+    const endpoint = baseQuery.toString() ? `/tokens?${baseQuery.toString()}` : '/tokens';
+    const firstPage = await this.fetchEndpoint(endpoint, TokensResponseSchema);
+    const tokens = [...firstPage.tokens];
+    const cursor = firstPage.cursor ?? undefined;
+    if (!cursor || firstPage.totalPages <= 1) {
+      return tokens;
+    }
+
+    for (let page = 2; page <= firstPage.totalPages; page += 1) {
+      const query = this.buildQuery({
+        chainIds: params?.chainIds,
+        cursor,
+        page: page.toString(),
+      });
+      const pageEndpoint = `/tokens?${query.toString()}`;
+      const data = await this.fetchEndpoint(pageEndpoint, TokensResponseSchema);
+      tokens.push(...data.tokens);
+    }
+
+    return tokens;
+  }
+
+  async createSwap(params: {
+    walletAddress: `0x${string}`;
+    amount: string;
+    amountType: 'exactIn' | 'exactOut';
+    fromTokenUid: TokenIdentifier;
+    toTokenUid: TokenIdentifier;
+    slippageTolerance?: string;
+    expiration?: string;
+    signal?: AbortSignal;
+  }): Promise<SwapTokensResponse> {
+    const { signal, ...rest } = params;
+    const payload = {
+      walletAddress: rest.walletAddress,
+      amount: rest.amount,
+      amountType: rest.amountType,
+      fromTokenUid: rest.fromTokenUid,
+      toTokenUid: rest.toTokenUid,
+      ...(rest.slippageTolerance ? { slippageTolerance: rest.slippageTolerance } : {}),
+      ...(rest.expiration ? { expiration: rest.expiration } : {}),
+    };
+    return this.fetchEndpoint('/swap', SwapTokensResponseSchema, {
+      method: 'POST',
+      body: this.stringifyPayload(payload),
+      signal,
+    });
+  }
+
   private stringifyPayload(value: unknown): string {
     return JSON.stringify(value, (_key: string, item: unknown): unknown =>
       typeof item === 'bigint' ? item.toString() : item,
     );
+  }
+
+  private sumQuoteFeesUsd(quote: PerpetualQuoteResponse): number | undefined {
+    const totals = [quote.fees.positionFeeUsd, quote.fees.borrowingFeeUsd, quote.fees.fundingFeeUsd]
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value) && value >= 0);
+    if (totals.length === 0) {
+      return undefined;
+    }
+    const total = totals.reduce((sum, value) => sum + value, 0);
+    return total > 0 ? total : undefined;
   }
 
   private async quotePerpetualIncrease(payload: PerpetualIncreasePayload): Promise<PerpetualQuoteResponse> {
@@ -618,6 +719,73 @@ export class OnchainActionsClient {
         },
       }),
     });
+  }
+
+  async estimatePerpetualQuoteFeeUsd(params: PerpetualQuoteActionRequest): Promise<number | undefined> {
+    if (params.action === 'long' || params.action === 'short') {
+      const side = params.action;
+      const request = params.request;
+      const payload: PerpetualIncreasePayload = {
+        walletAddress: request.walletAddress,
+        providerName: GMX_PERPETUALS_PROVIDER_NAME,
+        chainId: request.chainId,
+        marketAddress: request.marketAddress,
+        collateralTokenAddress: request.collateralTokenAddress,
+        side,
+        collateralDeltaAmount: request.amount,
+        sizeDeltaUsd: this.deriveSizeDeltaUsd({
+          collateralDeltaAmount: request.amount,
+          leverage: request.leverage,
+        }),
+        slippageBps: DEFAULT_SLIPPAGE_BPS,
+      };
+      const quote = await this.quotePerpetualIncrease(payload);
+      return this.sumQuoteFeesUsd(quote);
+    }
+
+    if (params.action === 'close') {
+      const request = params.request;
+      const position = await this.resolvePositionForClose({
+        walletAddress: request.walletAddress,
+        marketAddress: request.marketAddress,
+        positionSide: request.positionSide,
+      });
+      const payload: PerpetualDecreasePayload = {
+        walletAddress: request.walletAddress,
+        providerName: GMX_PERPETUALS_PROVIDER_NAME,
+        chainId: position.chainId,
+        marketAddress: position.marketAddress,
+        collateralTokenAddress: position.collateralToken.tokenUid.address,
+        side: position.positionSide,
+        decrease: {
+          mode: 'full',
+          slippageBps: DEFAULT_SLIPPAGE_BPS,
+        },
+      };
+      const quote = await this.quotePerpetualDecrease(payload);
+      return this.sumQuoteFeesUsd(quote);
+    }
+
+    const request = params.request;
+    const position = await this.resolvePositionByKey({
+      walletAddress: request.walletAddress,
+      key: request.key,
+    });
+    const payload: PerpetualDecreasePayload = {
+      walletAddress: request.walletAddress,
+      providerName: request.providerName ?? GMX_PERPETUALS_PROVIDER_NAME,
+      chainId: position.chainId,
+      marketAddress: position.marketAddress,
+      collateralTokenAddress: position.collateralToken.tokenUid.address,
+      side: position.positionSide,
+      decrease: {
+        mode: 'partial',
+        sizeDeltaUsd: request.sizeDeltaUsd,
+        slippageBps: DEFAULT_SLIPPAGE_BPS,
+      },
+    };
+    const quote = await this.quotePerpetualDecrease(payload);
+    return this.sumQuoteFeesUsd(quote);
   }
 
   async getPerpetualLifecycle(

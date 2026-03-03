@@ -141,7 +141,9 @@ function resolvePostPrepareOperator(state: ClmmState): 'collectDelegations' | 'p
   return target;
 }
 
-function resolvePostCollectDelegations(state: ClmmState): 'collectSetupInput' | 'prepareOperator' | 'summarize' {
+function resolvePostCollectDelegations(
+  state: ClmmState,
+): 'collectSetupInput' | 'collectDelegations' | 'prepareOperator' | 'summarize' {
   if (!state.thread.operatorInput) {
     logRouteDecision('collectDelegations', 'collectSetupInput', {
       reason: 'operator-input-missing',
@@ -157,6 +159,16 @@ function resolvePostCollectDelegations(state: ClmmState): 'collectSetupInput' | 
       haltReason: state.thread.haltReason,
     });
     return 'summarize';
+  }
+
+  if (state.thread.delegationsBypassActive !== true && !state.thread.delegationBundle) {
+    logRouteDecision('collectDelegations', 'collectDelegations', {
+      reason: 'delegation-bundle-missing',
+      hasDelegationBundle: false,
+      onboardingStep: state.thread.onboarding?.step,
+      onboardingKey: state.thread.onboarding?.key,
+    });
+    return 'collectDelegations';
   }
 
   logRouteDecision('collectDelegations', 'prepareOperator', {

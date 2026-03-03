@@ -105,7 +105,7 @@ export const prepareOperatorNode = async (
     });
     const message = 'Waiting for delegation approval to continue onboarding.';
     const { task, statusEvent } = buildTaskStatus(state.thread.task, 'input-required', message);
-    const onboardingStep = state.thread.onboarding?.key === 'funding-token' ? 3 : 2;
+    const onboardingStep = 3;
     const pendingView = {
       onboarding: { step: onboardingStep, key: 'delegation-signing' as const },
       task,
