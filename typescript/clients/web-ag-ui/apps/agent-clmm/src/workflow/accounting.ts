@@ -44,6 +44,12 @@ export async function createCamelotAccountingSnapshot(params: {
     return null;
   }
 
+  const managedPoolAddress =
+    params.state.thread.selectedPool?.address ??
+    params.state.thread.operatorInput?.poolAddress ??
+    params.state.thread.metrics.lastSnapshot?.address ??
+    params.state.thread.metrics.latestSnapshot?.poolAddress;
+
   return createCamelotNavSnapshot({
     contextId,
     trigger: params.trigger,
@@ -51,9 +57,7 @@ export async function createCamelotAccountingSnapshot(params: {
     chainId: ARBITRUM_CHAIN_ID,
     camelotClient: params.camelotClient,
     flowLog: params.flowLog ?? params.state.thread.accounting.flowLog,
-    managedPoolAddresses: params.state.thread.selectedPool
-      ? [params.state.thread.selectedPool.address]
-      : undefined,
+    managedPoolAddresses: managedPoolAddress ? [managedPoolAddress] : undefined,
     transactionHash: params.transactionHash,
     threadId: params.threadId,
     cycle: params.cycle,

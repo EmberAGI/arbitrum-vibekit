@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  analyzeCycleProjectionThread,
   normalizeStaleOnboardingTask,
   projectCycleCommandThread,
   shouldPersistInputRequiredCheckpoint,
@@ -116,5 +117,42 @@ describe('threadInvariants', () => {
 
     expect(projectedTask?.taskStatus?.state).toBe('working');
     expect(projectedTask?.taskStatus?.message?.content).toBe('Onboarding complete. Strategy is active.');
+  });
+
+  it('reports inactive projection as preserved when inactive lifecycle remains unchanged', () => {
+    const diagnostics = analyzeCycleProjectionThread({
+      currentThread: {
+        lifecycle: { phase: 'inactive' },
+        task: { taskStatus: { state: 'completed' } },
+      },
+      projectedThread: {
+        lifecycle: { phase: 'inactive' },
+        task: { taskStatus: { state: 'completed' } },
+      },
+    });
+
+    expect(diagnostics.previousLifecyclePhase).toBe('inactive');
+    expect(diagnostics.projectedLifecyclePhase).toBe('inactive');
+    expect(diagnostics.inactiveLifecyclePreserved).toBe(true);
+  });
+
+  it('flags inactive projection drift when lifecycle changes away from inactive', () => {
+    const diagnostics = analyzeCycleProjectionThread({
+      currentThread: {
+        lifecycle: { phase: 'inactive' },
+        task: { taskStatus: { state: 'completed' } },
+        setupComplete: true,
+        operatorConfig: { walletAddress: '0xabc' },
+      },
+      projectedThread: {
+        lifecycle: { phase: 'active' },
+        task: { taskStatus: { state: 'working' } },
+      },
+    });
+
+    expect(diagnostics.previousLifecyclePhase).toBe('inactive');
+    expect(diagnostics.projectedLifecyclePhase).toBe('active');
+    expect(diagnostics.inactiveLifecyclePreserved).toBe(false);
+    expect(diagnostics.hasSetupSignals).toBe(true);
   });
 });

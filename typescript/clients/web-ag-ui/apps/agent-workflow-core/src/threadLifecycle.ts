@@ -33,22 +33,28 @@ export const resolveThreadLifecyclePhase = (input: {
     return 'inactive';
   }
 
+  // Fire completion often leaves setup/delegation signals intact. Preserve the
+  // inactive lifecycle on subsequent terminal snapshots unless a new explicit
+  // phase is provided.
+  if (input.previousPhase === 'inactive' && hasTerminalTask && !input.explicitLifecyclePhase) {
+    return 'inactive';
+  }
+
   const setupComplete =
     input.setupComplete === true ||
     input.hasOperatorConfig === true ||
     input.hasDelegationBundle === true;
-  if (setupComplete || input.onboardingFlowStatus === 'completed') {
-    return 'active';
-  }
 
   const hasOnboardingStep =
     typeof input.onboardingStep === 'number' && Number.isFinite(input.onboardingStep);
   const phaseFromSignals =
-    input.onboardingFlowStatus === 'in_progress' || hasOnboardingStep
-      ? 'onboarding'
-      : input.previousPhase === 'inactive'
-        ? 'inactive'
-        : 'prehire';
+    setupComplete || input.onboardingFlowStatus === 'completed'
+      ? 'active'
+      : input.onboardingFlowStatus === 'in_progress' || hasOnboardingStep
+        ? 'onboarding'
+        : input.previousPhase === 'inactive'
+          ? 'inactive'
+          : 'prehire';
 
   const candidate = input.explicitLifecyclePhase ?? phaseFromSignals;
 

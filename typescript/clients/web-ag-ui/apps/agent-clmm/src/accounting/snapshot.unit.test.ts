@@ -248,6 +248,56 @@ describe('createCamelotNavSnapshot', () => {
     expect(call?.positions[0]?.poolAddress).toBe('0xpool1');
   });
 
+  it('prefers explicit managed pool addresses over stale flow-log pool entries', async () => {
+    const { createCamelotNavSnapshot } = await import('./snapshot.js');
+
+    const positions: WalletPosition[] = [
+      basePosition,
+      { ...basePosition, poolAddress: '0xpool2' },
+    ];
+    const flowLog: FlowLogEvent[] = [
+      {
+        id: 'flow-supply-old',
+        type: 'supply',
+        timestamp: '2025-01-01T00:00:00.000Z',
+        contextId: 'ctx-1',
+        chainId: 42161,
+        protocolId: 'camelot-clmm',
+        poolAddress: '0xpool1',
+      },
+    ];
+
+    const poolTwo: CamelotPool = {
+      ...basePool,
+      address: '0xpool2',
+    };
+    const { client } = buildClient({ positions, pools: [basePool, poolTwo] });
+    resolveTokenPriceMap.mockResolvedValue(new Map());
+    computeCamelotPositionValues.mockReturnValue([
+      {
+        positionId: 'camelot-0xpool2-0',
+        poolAddress: '0xpool2',
+        protocolId: 'camelot-clmm',
+        tokens: [],
+        positionValueUsd: 123,
+      },
+    ]);
+
+    await createCamelotNavSnapshot({
+      contextId: 'ctx-1',
+      trigger: 'cycle',
+      walletAddress: '0xabc',
+      chainId: 42161,
+      camelotClient: client,
+      flowLog,
+      managedPoolAddresses: ['0xpool2'],
+    });
+
+    const call = computeCamelotPositionValues.mock.calls[0]?.[0];
+    expect(call?.positions).toHaveLength(1);
+    expect(call?.positions[0]?.poolAddress).toBe('0xpool2');
+  });
+
   it('reports mixed pricing sources and aggregates fees/rewards', async () => {
     const { createCamelotNavSnapshot } = await import('./snapshot.js');
 

@@ -1,6 +1,7 @@
 import type { TaskState } from './taskLifecycle.js';
 
 type ThreadRecord = Record<string, unknown>;
+type MaybeThreadRecord = ThreadRecord | null;
 
 const isPlainRecord = (value: unknown): value is ThreadRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -11,6 +12,30 @@ const resolveTaskState = (taskStatus: unknown): string | null => {
   }
   const state = taskStatus['state'];
   return typeof state === 'string' ? state : null;
+};
+
+const resolveLifecyclePhase = (thread: MaybeThreadRecord): string | undefined => {
+  if (!isPlainRecord(thread)) {
+    return undefined;
+  }
+  const lifecycle = thread['lifecycle'];
+  if (!isPlainRecord(lifecycle)) {
+    return undefined;
+  }
+  const phase = lifecycle['phase'];
+  return typeof phase === 'string' ? phase : undefined;
+};
+
+const resolveThreadTaskState = (thread: MaybeThreadRecord): string | undefined => {
+  if (!isPlainRecord(thread)) {
+    return undefined;
+  }
+  const task = thread['task'];
+  if (!isPlainRecord(task)) {
+    return undefined;
+  }
+  const taskState = resolveTaskState(task['taskStatus']);
+  return taskState ?? undefined;
 };
 
 const resolveTaskMessageContent = (taskStatus: unknown): string | null => {
@@ -143,4 +168,37 @@ export function projectCycleCommandThread(currentThread: ThreadRecord | null): T
   return resolveNormalizedThreadTask({
     thread: nextThread,
   });
+}
+
+export type CycleProjectionDiagnostics = {
+  previousLifecyclePhase?: string;
+  projectedLifecyclePhase?: string;
+  previousTaskState?: string;
+  projectedTaskState?: string;
+  hasSetupSignals: boolean;
+  inactiveLifecyclePreserved: boolean;
+};
+
+export function analyzeCycleProjectionThread(params: {
+  currentThread: ThreadRecord | null;
+  projectedThread: ThreadRecord;
+}): CycleProjectionDiagnostics {
+  const previousLifecyclePhase = resolveLifecyclePhase(params.currentThread);
+  const projectedLifecyclePhase = resolveLifecyclePhase(params.projectedThread);
+  const previousTaskState = resolveThreadTaskState(params.currentThread);
+  const projectedTaskState = resolveThreadTaskState(params.projectedThread);
+  const hasSetupSignals =
+    (isPlainRecord(params.currentThread) && hasCompletedSetupSignals(params.currentThread)) ||
+    hasCompletedSetupSignals(params.projectedThread);
+  const inactiveLifecyclePreserved =
+    previousLifecyclePhase !== 'inactive' || projectedLifecyclePhase === 'inactive';
+
+  return {
+    previousLifecyclePhase,
+    projectedLifecyclePhase,
+    previousTaskState,
+    projectedTaskState,
+    hasSetupSignals,
+    inactiveLifecyclePreserved,
+  };
 }

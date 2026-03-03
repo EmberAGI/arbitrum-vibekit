@@ -78,4 +78,54 @@ describe('createCamelotAccountingSnapshot', () => {
     expect(result).toBeNull();
     expect(createCamelotNavSnapshot).not.toHaveBeenCalled();
   });
+
+  it('uses operator input pool as managed pool fallback when selected pool is missing', async () => {
+    const { createCamelotAccountingSnapshot } = await import('./accounting.js');
+
+    createCamelotNavSnapshot.mockResolvedValue({
+      contextId: 'thread-1',
+      trigger: 'cycle',
+      timestamp: '2026-02-20T00:00:00.000Z',
+      protocolId: 'camelot-clmm',
+      walletAddress: '0x1111111111111111111111111111111111111111',
+      chainId: 42161,
+      totalUsd: 1,
+      positions: [],
+      priceSource: 'unknown',
+    });
+
+    const state = {
+      thread: {
+        operatorInput: {
+          poolAddress: '0x3333333333333333333333333333333333333333',
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          baseContributionUsd: 10,
+        },
+        operatorConfig: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+        },
+        selectedPool: undefined,
+        metrics: {
+          lastSnapshot: undefined,
+          latestSnapshot: undefined,
+        },
+        accounting: {
+          flowLog: [],
+        },
+      },
+    } as unknown as ClmmState;
+
+    await createCamelotAccountingSnapshot({
+      state,
+      camelotClient: {} as never,
+      trigger: 'cycle',
+      threadId: 'thread-1',
+    });
+
+    expect(createCamelotNavSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        managedPoolAddresses: ['0x3333333333333333333333333333333333333333'],
+      }),
+    );
+  });
 });

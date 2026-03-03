@@ -1,7 +1,11 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
-import { isLangGraphBusyStatus, projectCycleCommandThread } from 'agent-workflow-core';
+import {
+  analyzeCycleProjectionThread,
+  isLangGraphBusyStatus,
+  projectCycleCommandThread,
+} from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
@@ -275,6 +279,10 @@ function resolveLangGraphGraphId(): string {
   return process.env['LANGGRAPH_GRAPH_ID'] ?? 'agent-gmx-allora';
 }
 
+function isStrictInactiveCycleProjectionAssertEnabled(): boolean {
+  return process.env['AGENT_STRICT_INACTIVE_CYCLE_ASSERT'] === 'true';
+}
+
 async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>): Promise<T> {
   const payloadText = await response.text();
   if (!response.ok) {
@@ -364,6 +372,28 @@ async function updateCycleState(
   }
 
   const thread = projectCycleCommandThread(existingThread);
+  const projectionDiagnostics = analyzeCycleProjectionThread({
+    currentThread: existingThread,
+    projectedThread: thread,
+  });
+  if (projectionDiagnostics.previousLifecyclePhase === 'inactive') {
+    console.info('[cron] Cycle projection diagnostics (inactive lifecycle)', {
+      threadId,
+      ...projectionDiagnostics,
+    });
+  }
+  if (!projectionDiagnostics.inactiveLifecyclePreserved) {
+    console.warn('[cron] Inactive lifecycle projection drift detected', {
+      threadId,
+      ...projectionDiagnostics,
+    });
+    if (isStrictInactiveCycleProjectionAssertEnabled()) {
+      throw new Error(
+        'Cycle projection drift detected: inactive lifecycle was not preserved. Disable AGENT_STRICT_INACTIVE_CYCLE_ASSERT to continue without hard failure.',
+      );
+    }
+  }
+
   const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -41,6 +41,8 @@ export {
 } from './onboardingContract.js';
 export { mergeThreadPatchForEmit } from './threadEmission.js';
 export {
+  analyzeCycleProjectionThread,
+  type CycleProjectionDiagnostics,
   normalizeStaleOnboardingTask,
   projectCycleCommandThread,
   shouldPersistInputRequiredCheckpoint,

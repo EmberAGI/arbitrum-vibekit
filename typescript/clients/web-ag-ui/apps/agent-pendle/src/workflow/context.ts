@@ -399,19 +399,39 @@ const limitHistory = <T>(items: T[], limit: number): T[] => {
   return items.slice(-limit);
 };
 
+const isHireSubmittedTask = (task: Task | undefined): boolean => {
+  if (!task || task.taskStatus.state !== 'submitted') {
+    return false;
+  }
+  const message = task.taskStatus.message;
+  const content = message ? message.content : undefined;
+  const messageText = typeof content === 'string' ? content : undefined;
+  return typeof messageText === 'string' && messageText.startsWith('Agent hired!');
+};
+
+const resetThreadForNewHire = (thread: ClmmThreadState): ClmmThreadState => ({
+  ...defaultThreadState(),
+  delegationsBypassActive: thread.delegationsBypassActive,
+});
+
 const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState>): ClmmThreadState => {
   if (!right) {
     return left;
   }
-  const nextTask = right.task ?? left.task;
-  const nextOnboarding = right.onboarding ?? left.onboarding;
-  const nextSetupComplete = right.setupComplete ?? left.setupComplete;
-  const nextOperatorConfig = right.operatorConfig ?? left.operatorConfig;
-  const nextDelegationBundle = right.delegationBundle ?? left.delegationBundle;
-  const nextDelegationsBypassActive = right.delegationsBypassActive ?? left.delegationsBypassActive;
+  const baseThread =
+    right.lifecycle?.phase === 'onboarding' && isHireSubmittedTask(right.task)
+      ? resetThreadForNewHire(left)
+      : left;
+  const nextTask = right.task ?? baseThread.task;
+  const nextOnboarding = right.onboarding ?? baseThread.onboarding;
+  const nextSetupComplete = right.setupComplete ?? baseThread.setupComplete;
+  const nextOperatorConfig = right.operatorConfig ?? baseThread.operatorConfig;
+  const nextDelegationBundle = right.delegationBundle ?? baseThread.delegationBundle;
+  const nextDelegationsBypassActive =
+    right.delegationsBypassActive ?? baseThread.delegationsBypassActive;
   const nextOnboardingFlow = derivePendleOnboardingFlow({
     onboarding: nextOnboarding,
-    previous: left.onboardingFlow,
+    previous: baseThread.onboardingFlow,
     setupComplete: nextSetupComplete === true,
     taskState: nextTask?.taskStatus?.state,
     delegationsBypassActive: nextDelegationsBypassActive === true,
@@ -422,44 +442,44 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
   });
 
   const nextTelemetry = limitHistory(
-    mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry),
+    mergeAppendOrReplace(baseThread.activity.telemetry, right.activity?.telemetry),
     STATE_HISTORY_LIMIT,
   );
   const nextEvents = limitHistory(
-    mergeAppendOrReplace(left.activity.events, right.activity?.events),
+    mergeAppendOrReplace(baseThread.activity.events, right.activity?.events),
     STATE_HISTORY_LIMIT,
   );
   const nextTransactions = limitHistory(
-    mergeAppendOrReplace(left.transactionHistory, right.transactionHistory),
+    mergeAppendOrReplace(baseThread.transactionHistory, right.transactionHistory),
     STATE_HISTORY_LIMIT,
   );
   const nextProfile: ClmmProfile = {
-    agentIncome: right.profile?.agentIncome ?? left.profile.agentIncome,
-    aum: right.profile?.aum ?? left.profile.aum,
-    totalUsers: right.profile?.totalUsers ?? left.profile.totalUsers,
-    apy: right.profile?.apy ?? left.profile.apy,
-    chains: right.profile?.chains ?? left.profile.chains,
-    protocols: right.profile?.protocols ?? left.profile.protocols,
-    tokens: right.profile?.tokens ?? left.profile.tokens,
-    pools: right.profile?.pools ?? left.profile.pools,
-    allowedPools: right.profile?.allowedPools ?? left.profile.allowedPools,
+    agentIncome: right.profile?.agentIncome ?? baseThread.profile.agentIncome,
+    aum: right.profile?.aum ?? baseThread.profile.aum,
+    totalUsers: right.profile?.totalUsers ?? baseThread.profile.totalUsers,
+    apy: right.profile?.apy ?? baseThread.profile.apy,
+    chains: right.profile?.chains ?? baseThread.profile.chains,
+    protocols: right.profile?.protocols ?? baseThread.profile.protocols,
+    tokens: right.profile?.tokens ?? baseThread.profile.tokens,
+    pools: right.profile?.pools ?? baseThread.profile.pools,
+    allowedPools: right.profile?.allowedPools ?? baseThread.profile.allowedPools,
   };
   const nextMetrics: ClmmMetrics = {
-    lastSnapshot: right.metrics?.lastSnapshot ?? left.metrics.lastSnapshot,
-    previousApy: right.metrics?.previousApy ?? left.metrics.previousApy,
-    cyclesSinceRebalance: right.metrics?.cyclesSinceRebalance ?? left.metrics.cyclesSinceRebalance,
-    staleCycles: right.metrics?.staleCycles ?? left.metrics.staleCycles,
-    iteration: right.metrics?.iteration ?? left.metrics.iteration,
-    latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
-    aumUsd: right.metrics?.aumUsd ?? left.metrics.aumUsd,
-    apy: right.metrics?.apy ?? left.metrics.apy,
-    lifetimePnlUsd: right.metrics?.lifetimePnlUsd ?? left.metrics.lifetimePnlUsd,
-    pendle: right.metrics?.pendle ?? left.metrics.pendle,
-    latestSnapshot: right.metrics?.latestSnapshot ?? left.metrics.latestSnapshot,
+    lastSnapshot: right.metrics?.lastSnapshot ?? baseThread.metrics.lastSnapshot,
+    previousApy: right.metrics?.previousApy ?? baseThread.metrics.previousApy,
+    cyclesSinceRebalance: right.metrics?.cyclesSinceRebalance ?? baseThread.metrics.cyclesSinceRebalance,
+    staleCycles: right.metrics?.staleCycles ?? baseThread.metrics.staleCycles,
+    iteration: right.metrics?.iteration ?? baseThread.metrics.iteration,
+    latestCycle: right.metrics?.latestCycle ?? baseThread.metrics.latestCycle,
+    aumUsd: right.metrics?.aumUsd ?? baseThread.metrics.aumUsd,
+    apy: right.metrics?.apy ?? baseThread.metrics.apy,
+    lifetimePnlUsd: right.metrics?.lifetimePnlUsd ?? baseThread.metrics.lifetimePnlUsd,
+    pendle: right.metrics?.pendle ?? baseThread.metrics.pendle,
+    latestSnapshot: right.metrics?.latestSnapshot ?? baseThread.metrics.latestSnapshot,
   };
   const explicitLifecyclePhase = right.lifecycle?.phase;
   const nextLifecyclePhase = resolveThreadLifecyclePhase({
-    previousPhase: left.lifecycle?.phase,
+    previousPhase: baseThread.lifecycle?.phase,
     taskState: nextTask?.taskStatus?.state,
     onboardingFlowStatus: nextOnboardingFlow?.status,
     onboardingStep: normalizedOnboarding?.step,
@@ -471,26 +491,26 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
   });
   const nextLifecycle: ThreadLifecycle = {
     phase: nextLifecyclePhase,
-    reason: right.lifecycle?.reason ?? left.lifecycle?.reason,
-    updatedAt: right.lifecycle?.updatedAt ?? left.lifecycle?.updatedAt,
+    reason: right.lifecycle?.reason ?? baseThread.lifecycle?.reason,
+    updatedAt: right.lifecycle?.updatedAt ?? baseThread.lifecycle?.updatedAt,
   };
 
   return {
-    ...left,
+    ...baseThread,
     ...right,
     lifecycle: nextLifecycle,
     task: nextTask,
-    poolArtifact: right.poolArtifact ?? left.poolArtifact,
-    operatorInput: right.operatorInput ?? left.operatorInput,
+    poolArtifact: right.poolArtifact ?? baseThread.poolArtifact,
+    operatorInput: right.operatorInput ?? baseThread.operatorInput,
     onboarding: normalizedOnboarding,
     onboardingFlow: nextOnboardingFlow,
-    fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
-    selectedPool: right.selectedPool ?? left.selectedPool,
+    fundingTokenInput: right.fundingTokenInput ?? baseThread.fundingTokenInput,
+    selectedPool: right.selectedPool ?? baseThread.selectedPool,
     operatorConfig: nextOperatorConfig,
     setupComplete: nextSetupComplete,
     delegationBundle: nextDelegationBundle,
-    haltReason: right.haltReason ?? left.haltReason,
-    executionError: right.executionError ?? left.executionError,
+    haltReason: right.haltReason ?? baseThread.haltReason,
+    executionError: right.executionError ?? baseThread.executionError,
     delegationsBypassActive: nextDelegationsBypassActive,
     profile: nextProfile,
     activity: {

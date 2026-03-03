@@ -1,6 +1,7 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
+import { fetchPoolSnapshot } from '../../clients/emberApi.js';
 import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
 import type { ClmmAction } from '../../domain/types.js';
 import { resolveAccountingContextId } from '../accounting.js';
@@ -41,14 +42,28 @@ export const fireCommandNode = async (
     };
   }
 
-  const onboardingComplete = Boolean(state.thread.operatorConfig && state.thread.selectedPool);
-  if (!onboardingComplete) {
+  const operatorConfig = state.thread.operatorConfig;
+  let selectedPool = state.thread.selectedPool ?? state.thread.metrics.lastSnapshot;
+  const fallbackPoolAddress =
+    state.thread.operatorInput?.poolAddress ??
+    state.thread.metrics.lastSnapshot?.address ??
+    state.thread.metrics.latestSnapshot?.poolAddress;
+  let camelotClient = undefined as ReturnType<typeof getCamelotClient> | undefined;
+  if (operatorConfig && !selectedPool && fallbackPoolAddress) {
+    camelotClient = getCamelotClient();
+    selectedPool =
+      (await fetchPoolSnapshot(
+        camelotClient,
+        fallbackPoolAddress,
+        ARBITRUM_CHAIN_ID,
+      )) ?? undefined;
+  }
+
+  if (!operatorConfig) {
     const { task, statusEvent } = buildTaskStatus(
       currentTask,
-      state.thread.operatorConfig ? 'failed' : 'canceled',
-      state.thread.operatorConfig
-        ? 'Agent fired, but workflow is missing a selected pool.'
-        : 'Agent fired before onboarding completed.',
+      'canceled',
+      'Agent fired before onboarding completed.',
     );
     await copilotkitEmitState(config, {
       thread: { task, activity: { events: [statusEvent], telemetry: [] } },
@@ -66,13 +81,11 @@ export const fireCommandNode = async (
     };
   }
 
-  const operatorConfig = state.thread.operatorConfig;
-  const selectedPool = state.thread.selectedPool;
-  if (!operatorConfig || !selectedPool) {
+  if (!selectedPool) {
     const { task, statusEvent } = buildTaskStatus(
       currentTask,
-      'failed',
-      'Agent fired, but workflow state is missing operatorConfig or selectedPool.',
+      'completed',
+      'Agent fired. Managed CLMM pool metadata is unavailable, so unwind was skipped.',
     );
     await copilotkitEmitState(config, {
       thread: { task, activity: { events: [statusEvent], telemetry: [] } },
@@ -125,7 +138,7 @@ export const fireCommandNode = async (
     },
   });
 
-  const camelotClient = getCamelotClient();
+  const executionCamelotClient = camelotClient ?? getCamelotClient();
   let txHash: string | undefined;
   let executionFlowEvents: Array<ReturnType<typeof createFlowEvent>> = [];
   try {
@@ -136,7 +149,7 @@ export const fireCommandNode = async (
     };
     const outcome = await executeDecision({
       action,
-      camelotClient,
+      camelotClient: executionCamelotClient,
       pool: selectedPool,
       operatorConfig,
       fundingTokenAddress: state.thread.fundingTokenInput?.fundingTokenAddress,

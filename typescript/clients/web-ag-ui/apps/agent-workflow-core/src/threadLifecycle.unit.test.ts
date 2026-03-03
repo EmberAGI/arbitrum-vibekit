@@ -59,6 +59,29 @@ describe('threadLifecycle', () => {
     ).toBe('inactive');
   });
 
+  it('keeps inactive after fire terminal snapshots even when setup signals persist', () => {
+    expect(
+      resolveThreadLifecyclePhase({
+        previousPhase: 'inactive',
+        taskState: 'completed',
+        hasOperatorConfig: true,
+        hasDelegationBundle: true,
+      }),
+    ).toBe('inactive');
+  });
+
+  it('allows a new explicit onboarding phase to start from inactive', () => {
+    expect(
+      resolveThreadLifecyclePhase({
+        previousPhase: 'inactive',
+        explicitLifecyclePhase: 'onboarding',
+        taskState: 'submitted',
+        hasOperatorConfig: true,
+        hasDelegationBundle: true,
+      }),
+    ).toBe('onboarding');
+  });
+
   it('does not regress onboarding to prehire when explicit lifecycle is stale', () => {
     expect(
       resolveThreadLifecyclePhase({
