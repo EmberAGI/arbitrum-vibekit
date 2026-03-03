@@ -1,6 +1,11 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command, interrupt } from '@langchain/langgraph';
-import { requestInterruptPayload, shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
+import { interrupt } from '@langchain/langgraph';
+import type { Command } from '@langchain/langgraph';
+import {
+  buildNodeTransition,
+  requestInterruptPayload,
+  shouldPersistInputRequiredCheckpoint,
+} from 'agent-workflow-core';
 import { z } from 'zod';
 
 import { PendleSetupInputSchema } from '../../domain/types.js';
@@ -13,6 +18,7 @@ import {
   type PendleSetupInterrupt,
   type ClmmUpdate,
 } from '../context.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 
 const SETUP_STEP_KEY: OnboardingState['key'] = 'funding-amount';
 const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
@@ -76,11 +82,12 @@ export const collectSetupInputNode = async (
     await copilotkitEmitState(config, {
       thread: mergedView,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'collectSetupInput',
       update: {
         thread: pendingView,
       },
-      goto: 'collectSetupInput',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -108,11 +115,12 @@ export const collectSetupInputNode = async (
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: haltedView,
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 

@@ -1,7 +1,12 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command, interrupt } from '@langchain/langgraph';
+import { interrupt } from '@langchain/langgraph';
+import type { Command } from '@langchain/langgraph';
 import { createDelegation, getDeleGatorEnvironment } from '@metamask/delegation-toolkit';
-import { requestInterruptPayload, shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
+import {
+  buildNodeTransition,
+  requestInterruptPayload,
+  shouldPersistInputRequiredCheckpoint,
+} from 'agent-workflow-core';
 import { z } from 'zod';
 
 import type { Token, TokenizedYieldMarket } from '../../clients/onchainActions.js';
@@ -24,6 +29,7 @@ import {
   type OnboardingState,
   type SignedDelegation,
 } from '../context.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -234,12 +240,18 @@ export const collectDelegationsNode = async (
   const operatorInput = state.thread.operatorInput;
   if (!operatorInput) {
     logInfo('collectDelegations: setup input missing; rerouting to collectSetupInput');
-    return new Command({ goto: 'collectSetupInput' });
+    return buildNodeTransition({
+      node: 'collectSetupInput',
+      createCommand: createLangGraphCommand,
+    });
   }
   const fundingTokenInput = state.thread.fundingTokenInput;
   if (!fundingTokenInput) {
     logInfo('collectDelegations: funding token input missing; rerouting to collectFundingTokenInput');
-    return new Command({ goto: 'collectFundingTokenInput' });
+    return buildNodeTransition({
+      node: 'collectFundingTokenInput',
+      createCommand: createLangGraphCommand,
+    });
   }
 
   const delegatorAddress = normalizeHexAddress(operatorInput.walletAddress, 'delegator wallet address');
@@ -265,11 +277,12 @@ export const collectDelegationsNode = async (
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: haltedView,
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -358,11 +371,12 @@ export const collectDelegationsNode = async (
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: haltedView,
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -422,11 +436,12 @@ export const collectDelegationsNode = async (
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: haltedView,
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -451,11 +466,12 @@ export const collectDelegationsNode = async (
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: haltedView,
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -479,11 +495,12 @@ export const collectDelegationsNode = async (
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: haltedView,
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 

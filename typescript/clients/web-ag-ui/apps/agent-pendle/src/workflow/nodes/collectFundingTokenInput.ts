@@ -1,6 +1,11 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command, interrupt } from '@langchain/langgraph';
-import { requestInterruptPayload, shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
+import { interrupt } from '@langchain/langgraph';
+import type { Command } from '@langchain/langgraph';
+import {
+  buildNodeTransition,
+  requestInterruptPayload,
+  shouldPersistInputRequiredCheckpoint,
+} from 'agent-workflow-core';
 import { z } from 'zod';
 
 import { resolvePendleChainIds, resolveStablecoinWhitelist } from '../../config/constants.js';
@@ -19,6 +24,7 @@ import {
   type FundingTokenInterrupt,
   type OnboardingState,
 } from '../context.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -51,7 +57,10 @@ export const collectFundingTokenInputNode = async (
   const operatorInput = state.thread.operatorInput;
   if (!operatorInput) {
     logInfo('collectFundingTokenInput: setup input missing; rerouting to collectSetupInput');
-    return new Command({ goto: 'collectSetupInput' });
+    return buildNodeTransition({
+      node: 'collectSetupInput',
+      createCommand: createLangGraphCommand,
+    });
   }
 
   if (state.thread.fundingTokenInput) {
@@ -147,11 +156,12 @@ export const collectFundingTokenInputNode = async (
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: haltedView,
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -187,11 +197,12 @@ export const collectFundingTokenInputNode = async (
       await copilotkitEmitState(config, {
         thread: mergedView,
       });
-      return new Command({
+      return buildNodeTransition({
+        node: 'collectFundingTokenInput',
         update: {
           thread: pendingView,
         },
-        goto: 'collectFundingTokenInput',
+        createCommand: createLangGraphCommand,
       });
     }
 
@@ -202,13 +213,19 @@ export const collectFundingTokenInputNode = async (
     const parsedAck = FundWalletAckSchema.safeParse(interruptResult.decoded);
     if (!parsedAck.success) {
       // Treat invalid responses as a no-op and keep the agent blocked.
-      return new Command({ goto: '__end__' });
+      return buildNodeTransition({
+        node: '__end__',
+        createCommand: createLangGraphCommand,
+      });
     }
 
     // This interrupt is intentionally an "ack + retry" flow.
     // We end the run here and let the UI trigger a new `cycle` run which re-checks balances
     // and proceeds into the next onboarding interrupt (funding token selection).
-    return new Command({ goto: '__end__' });
+    return buildNodeTransition({
+      node: '__end__',
+      createCommand: createLangGraphCommand,
+    });
   }
 
   const request: FundingTokenInterrupt = {
@@ -242,11 +259,12 @@ export const collectFundingTokenInputNode = async (
     await copilotkitEmitState(config, {
       thread: mergedView,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'collectFundingTokenInput',
       update: {
         thread: pendingView,
       },
-      goto: 'collectFundingTokenInput',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -274,11 +292,12 @@ export const collectFundingTokenInputNode = async (
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: haltedView,
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -307,11 +326,12 @@ export const collectFundingTokenInputNode = async (
       metrics: state.thread.metrics,
       transactionHistory: state.thread.transactionHistory,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: haltedView,
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 

@@ -1,5 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
+import type { Command } from '@langchain/langgraph';
+import { buildNodeTransition } from 'agent-workflow-core';
 import { formatUnits, parseUnits } from 'viem';
 
 import type { TokenizedYieldMarket, WalletBalance } from '../../clients/onchainActions.js';
@@ -26,6 +27,7 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 import { executeInitialDeposit } from '../execution.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 import { buildPendleLatestSnapshot, buildPendleLatestSnapshotFromOnchain } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -107,11 +109,12 @@ export const prepareOperatorNode = async (
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       task,
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: failureView,
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   };
 
@@ -124,11 +127,12 @@ export const prepareOperatorNode = async (
       onboarding: { step: 1, key: SETUP_STEP_KEY },
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'collectSetupInput',
       update: {
         thread: pendingView,
       },
-      goto: 'collectSetupInput',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -143,11 +147,12 @@ export const prepareOperatorNode = async (
       onboarding: { step: 2, key: FUNDING_STEP_KEY },
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'collectFundingTokenInput',
       update: {
         thread: pendingView,
       },
-      goto: 'collectFundingTokenInput',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -165,11 +170,12 @@ export const prepareOperatorNode = async (
       onboarding: resolveDelegationOnboarding(state),
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'collectDelegations',
       update: {
         thread: pendingView,
       },
-      goto: 'collectDelegations',
+      createCommand: createLangGraphCommand,
     });
   }
 

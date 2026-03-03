@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ClmmState } from '../context.js';
@@ -25,6 +27,11 @@ vi.mock('@langchain/langgraph', async (importOriginal) => {
 });
 
 describe('collectSetupInputNode', () => {
+  it('uses core transition helpers instead of direct Command construction', async () => {
+    const source = await readFile(new URL('./collectSetupInput.ts', import.meta.url), 'utf8');
+    expect(source.includes('new Command(')).toBe(false);
+  });
+
   it('persists input-required state before interrupting when runnable config exists', async () => {
     interruptMock.mockReset();
     copilotkitEmitStateMock.mockReset();

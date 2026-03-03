@@ -1,5 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
+import type { Command } from '@langchain/langgraph';
+import { buildNodeTransition } from 'agent-workflow-core';
 
 import {
   resolvePendleChainIds,
@@ -23,6 +24,7 @@ import {
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';
 import { executeCompound, executeRebalance, executeRollover } from '../execution.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 import { buildPendleLatestSnapshot, buildPendleLatestSnapshotFromOnchain } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -97,7 +99,8 @@ export const pollCycleNode = async (
       thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
 
-    return new Command({
+    return buildNodeTransition({
+      node: '__end__',
       update: {
         thread: {
           haltReason: '',
@@ -109,7 +112,7 @@ export const pollCycleNode = async (
           transactionHistory: state.thread.transactionHistory,
         },
       },
-      goto: '__end__',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -155,7 +158,8 @@ export const pollCycleNode = async (
     await copilotkitEmitState(config, {
       thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: {
           haltReason: failureMessage,
@@ -166,7 +170,7 @@ export const pollCycleNode = async (
           transactionHistory: state.thread.transactionHistory,
         },
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -177,7 +181,8 @@ export const pollCycleNode = async (
     await copilotkitEmitState(config, {
       thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
         thread: {
           haltReason: failureMessage,
@@ -188,7 +193,7 @@ export const pollCycleNode = async (
           transactionHistory: state.thread.transactionHistory,
         },
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -276,7 +281,8 @@ export const pollCycleNode = async (
       await copilotkitEmitState(config, {
         thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
       });
-      return new Command({
+      return buildNodeTransition({
+        node: 'summarize',
         update: {
           thread: {
             haltReason: failureMessage,
@@ -288,7 +294,7 @@ export const pollCycleNode = async (
             transactionHistory: state.thread.transactionHistory,
           },
         },
-        goto: 'summarize',
+        createCommand: createLangGraphCommand,
       });
     }
 
@@ -386,7 +392,8 @@ export const pollCycleNode = async (
         await copilotkitEmitState(config, {
           thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
         });
-        return new Command({
+        return buildNodeTransition({
+          node: 'summarize',
           update: {
             thread: {
               haltReason: failureMessage,
@@ -398,7 +405,7 @@ export const pollCycleNode = async (
               transactionHistory: state.thread.transactionHistory,
             },
           },
-          goto: 'summarize',
+          createCommand: createLangGraphCommand,
         });
       }
     }
@@ -549,7 +556,8 @@ export const pollCycleNode = async (
     allowedPools: eligibleMarkets,
   };
 
-  return new Command({
+  return buildNodeTransition({
+    node: 'summarize',
     update: {
       thread: {
         metrics: {
@@ -591,6 +599,6 @@ export const pollCycleNode = async (
         cronScheduled,
       },
     },
-    goto: 'summarize',
+    createCommand: createLangGraphCommand,
   });
 };

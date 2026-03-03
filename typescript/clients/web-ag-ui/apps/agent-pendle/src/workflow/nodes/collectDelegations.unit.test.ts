@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OnchainActionsClient, Token, TokenizedYieldMarket } from '../../clients/onchainActions.js';
@@ -47,6 +49,11 @@ vi.mock('@langchain/langgraph', async (importOriginal) => {
 });
 
 describe('collectDelegationsNode', () => {
+  it('uses core transition helpers instead of direct Command construction', async () => {
+    const source = await readFile(new URL('./collectDelegations.ts', import.meta.url), 'utf8');
+    expect(source.includes('new Command(')).toBe(false);
+  });
+
   beforeEach(() => {
     interruptMock.mockReset();
     copilotkitEmitStateMock.mockReset();

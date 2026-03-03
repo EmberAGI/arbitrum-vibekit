@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type { OnchainActionsClient } from '../../clients/onchainActions.js';
@@ -56,6 +58,11 @@ const buildState = (): ClmmState =>
   }) as unknown as ClmmState;
 
 describe('collectFundingTokenInputNode', () => {
+  it('uses core transition helpers instead of direct Command construction', async () => {
+    const source = await readFile(new URL('./collectFundingTokenInput.ts', import.meta.url), 'utf8');
+    expect(source.includes('new Command(')).toBe(false);
+  });
+
   it('returns patch-only command update for fund-wallet checkpoint when no eligible balances exist', async () => {
     interruptMock.mockReset();
     copilotkitEmitStateMock.mockReset();
