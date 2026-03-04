@@ -136,4 +136,53 @@ describe('summarizeNode', () => {
       'Onboarding complete. CLMM strategy is active.',
     );
   });
+
+  it('preserves the active cycle status message when task is already working post-onboarding', async () => {
+    copilotkitEmitStateMock.mockReset();
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      thread: {
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'working',
+            timestamp: '2026-03-04T02:26:22.000Z',
+            message: {
+              id: 'msg-cycle',
+              role: 'assistant',
+              content: '[Cycle 2] hold: Within target band; monitoring continues',
+            },
+          },
+        },
+        poolArtifact: { artifactId: 'camelot-pools' },
+        operatorInput: {
+          poolAddress: '0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526',
+          walletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9',
+          baseContributionUsd: 10,
+        },
+        operatorConfig: { walletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9' },
+        delegationBundle: { delegations: [{ signature: '0xabc' }] },
+        haltReason: undefined,
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await summarizeNode(state, {});
+
+    expect(result.thread?.task?.taskStatus?.state).toBe('working');
+    expect(result.thread?.task?.taskStatus?.message?.content).toBe(
+      '[Cycle 2] hold: Within target band; monitoring continues',
+    );
+    expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
+    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { thread?: unknown })?.thread as
+      | {
+          task?: { taskStatus?: { state?: string; message?: { content?: string } } };
+        }
+      | undefined;
+    expect(emittedView?.task?.taskStatus?.state).toBe('working');
+    expect(emittedView?.task?.taskStatus?.message?.content).toBe(
+      '[Cycle 2] hold: Within target band; monitoring continues',
+    );
+  });
 });

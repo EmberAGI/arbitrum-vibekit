@@ -19,14 +19,44 @@ export const summarizeNode = async (
   const currentTaskState = state.thread.task?.taskStatus?.state;
   const currentTaskMessage = state.thread.task?.taskStatus?.message?.content;
   const onboardingComplete = resolveNextOnboardingNode(state) === 'syncState';
+  const activeSummaryMessage =
+    currentTaskState === 'working' && typeof currentTaskMessage === 'string' && currentTaskMessage.length > 0
+      ? currentTaskMessage
+      : 'CLMM cycle summarized.';
   const { state: finalState, message: finalMessage } = resolveSummaryTaskStatus({
     haltReason: state.thread.haltReason,
     currentTaskState,
     currentTaskMessage,
     onboardingComplete,
-    activeSummaryMessage: 'CLMM cycle summarized.',
+    activeSummaryMessage,
     onboardingCompleteMessage: 'Onboarding complete. CLMM strategy is active.',
   });
+  const artifactEvent = {
+    type: 'artifact' as const,
+    artifact: summaryArtifact,
+  };
+  const canReuseTask =
+    state.thread.task !== undefined &&
+    currentTaskState === finalState &&
+    currentTaskMessage === finalMessage;
+
+  if (canReuseTask) {
+    await copilotkitEmitState(config, {
+      thread: {
+        task: state.thread.task,
+        activity: { events: [artifactEvent] },
+      },
+    });
+    return {
+      thread: {
+        task: state.thread.task,
+        activity: {
+          telemetry: [],
+          events: [artifactEvent],
+        },
+      },
+    };
+  }
 
   const { task, statusEvent: completion } = buildTaskStatus(
     state.thread.task,
@@ -42,10 +72,7 @@ export const summarizeNode = async (
       activity: {
         telemetry: [],
         events: [
-          {
-            type: 'artifact',
-            artifact: summaryArtifact,
-          },
+          artifactEvent,
           completion,
         ],
       },

@@ -291,4 +291,149 @@ describe('CLMM thread lifecycle invariants', () => {
     expect(next.onboarding?.step).toBe(2);
     expect(next.onboarding?.key).toBe('delegation-signing');
   });
+
+  it('does not regress onboarding step for delegation-signing when stale step 2 patch arrives', () => {
+    const left = {
+      ...createDefaultClmmThreadState(),
+      lifecycle: { phase: 'onboarding' as const },
+      onboarding: { step: 3, key: 'delegation-signing' as const },
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'input-required' as const,
+          timestamp: '2026-03-04T02:10:00.000Z',
+          message: {
+            id: 'wait-msg',
+            role: 'assistant' as const,
+            content: 'Waiting for you to approve the required permissions to continue setup.',
+          },
+        },
+      },
+    };
+
+    const next = reduceThreadStateForTest(left, {
+      onboarding: { step: 2, key: 'delegation-signing' },
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'working',
+          timestamp: '2026-03-04T02:10:00.100Z',
+          message: {
+            id: 'working-msg',
+            role: 'assistant',
+            content: 'Delegation approvals received. Continuing onboarding.',
+          },
+        },
+      },
+    });
+
+    expect(next.onboarding?.step).toBe(3);
+    expect(next.onboarding?.key).toBe('delegation-signing');
+    expect(next.task?.taskStatus.state).toBe('input-required');
+  });
+
+  it('does not regress onboarding key at equal progress when stale key patch arrives', () => {
+    const left = {
+      ...createDefaultClmmThreadState(),
+      lifecycle: { phase: 'onboarding' as const },
+      onboarding: { step: 3, key: 'delegation-signing' as const },
+    };
+
+    const next = reduceThreadStateForTest(left, {
+      onboarding: { step: 3, key: 'funding-token' },
+    });
+
+    expect(next.onboarding?.step).toBe(3);
+    expect(next.onboarding?.key).toBe('delegation-signing');
+  });
+
+  it('does not regress active cycle task message when stale lower-iteration update arrives', () => {
+    const left = {
+      ...createDefaultClmmThreadState(),
+      lifecycle: { phase: 'active' as const },
+      metrics: {
+        ...createDefaultClmmThreadState().metrics,
+        iteration: 4,
+      },
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'working' as const,
+          timestamp: '2026-03-04T03:35:04.421Z',
+          message: {
+            id: 'cycle-4',
+            role: 'assistant' as const,
+            content: '[Cycle 4] hold: Within target band; monitoring continues',
+          },
+        },
+      },
+    };
+
+    const next = reduceThreadStateForTest(left, {
+      metrics: {
+        iteration: 3,
+      },
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'working',
+          timestamp: '2026-03-04T03:35:11.681Z',
+          message: {
+            id: 'cycle-3',
+            role: 'assistant',
+            content: '[Cycle 3] hold: Within target band; monitoring continues',
+          },
+        },
+      },
+    });
+
+    expect(next.metrics.iteration).toBe(4);
+    expect(next.task?.taskStatus.message?.content).toBe(
+      '[Cycle 4] hold: Within target band; monitoring continues',
+    );
+  });
+
+  it('ignores stale onboarding-era working message once active cycle telemetry is established', () => {
+    const left = {
+      ...createDefaultClmmThreadState(),
+      lifecycle: { phase: 'active' as const },
+      metrics: {
+        ...createDefaultClmmThreadState().metrics,
+        iteration: 2,
+      },
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'working' as const,
+          timestamp: '2026-03-04T03:34:15.798Z',
+          message: {
+            id: 'cycle-2',
+            role: 'assistant' as const,
+            content: '[Cycle 2] hold: Within target band; monitoring continues',
+          },
+        },
+      },
+    };
+
+    const next = reduceThreadStateForTest(left, {
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'working',
+          timestamp: '2026-03-04T03:34:11.357Z',
+          message: {
+            id: 'delegations-active',
+            role: 'assistant',
+            content:
+              'Delegations active. Managing pool WETH/USDC from user wallet 0xbD70792F773a39f88b43d35bb5Aa3d5e098EfeA4',
+          },
+        },
+      },
+    });
+
+    expect(next.metrics.iteration).toBe(2);
+    expect(next.task?.taskStatus.message?.content).toBe(
+      '[Cycle 2] hold: Within target band; monitoring continues',
+    );
+  });
 });

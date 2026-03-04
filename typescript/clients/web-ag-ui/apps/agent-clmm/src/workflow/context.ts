@@ -397,6 +397,13 @@ const resolveOnboardingProgress = (onboarding: OnboardingState | undefined): num
   return Math.max(onboarding.step, keyProgress);
 };
 
+const resolveOnboardingKeyProgress = (onboarding: OnboardingState | undefined): number => {
+  if (!onboarding || typeof onboarding.key !== 'string') {
+    return 0;
+  }
+  return ONBOARDING_KEY_PROGRESS[onboarding.key] ?? 0;
+};
+
 const resolveMonotonicOnboardingState = (
   previous: OnboardingState | undefined,
   incoming: OnboardingState | undefined,
@@ -404,9 +411,26 @@ const resolveMonotonicOnboardingState = (
   if (!previous || !incoming) {
     return incoming ?? previous;
   }
-  if (resolveOnboardingProgress(incoming) < resolveOnboardingProgress(previous)) {
+  const previousProgress = resolveOnboardingProgress(previous);
+  const incomingProgress = resolveOnboardingProgress(incoming);
+  if (incomingProgress < previousProgress) {
     return previous;
   }
+
+  // Keep state monotonic even when normalized progress is tied. Without this,
+  // stale payloads can regress from delegation step 3 to step 2 (or regress key),
+  // which causes onboarding UI model churn and visible page flipping.
+  if (incomingProgress === previousProgress) {
+    const previousKeyProgress = resolveOnboardingKeyProgress(previous);
+    const incomingKeyProgress = resolveOnboardingKeyProgress(incoming);
+    if (incomingKeyProgress < previousKeyProgress) {
+      return previous;
+    }
+    if (incoming.step < previous.step) {
+      return previous;
+    }
+  }
+
   return incoming;
 };
 
@@ -450,6 +474,107 @@ const shouldPreserveOnboardingInputRequiredTask = (params: {
   return !hasDomainForwardProgress;
 };
 
+const CLMM_CYCLE_MESSAGE_PREFIX = /^\[Cycle\s+(\d+)\]/i;
+
+const getTaskMessageText = (task: Task | undefined): string | undefined => {
+  const content = task?.taskStatus?.message?.content;
+  return typeof content === 'string' ? content : undefined;
+};
+
+const extractCycleOrdinal = (message: string | undefined): number | undefined => {
+  if (!message) {
+    return undefined;
+  }
+  const match = CLMM_CYCLE_MESSAGE_PREFIX.exec(message);
+  if (!match) {
+    return undefined;
+  }
+  return Number.parseInt(match[1], 10);
+};
+
+const parseIsoTimestamp = (timestamp: string | undefined): number | undefined => {
+  if (!timestamp) {
+    return undefined;
+  }
+  const epochMs = Date.parse(timestamp);
+  if (Number.isNaN(epochMs)) {
+    return undefined;
+  }
+  return epochMs;
+};
+
+const isOnboardingEraWorkingMessage = (message: string | undefined): boolean => {
+  if (!message) {
+    return false;
+  }
+  return (
+    message.startsWith('Delegations active.') ||
+    message.startsWith('Delegations signed.') ||
+    message.includes('continuing onboarding')
+  );
+};
+
+const shouldPreserveActiveCycleTask = (params: {
+  previousLifecyclePhase: ThreadLifecyclePhase;
+  explicitLifecyclePhase: ThreadLifecyclePhase | undefined;
+  previousTask: Task | undefined;
+  incomingTask: Task | undefined;
+  previousIteration: number;
+  incomingIteration: number | undefined;
+}): boolean => {
+  if (params.previousLifecyclePhase !== 'active') {
+    return false;
+  }
+
+  if (params.explicitLifecyclePhase && params.explicitLifecyclePhase !== 'active') {
+    return false;
+  }
+
+  const previousTask = params.previousTask;
+  const incomingTask = params.incomingTask;
+  if (!previousTask || !incomingTask) {
+    return false;
+  }
+  if (previousTask.taskStatus.state !== 'working' || incomingTask.taskStatus.state !== 'working') {
+    return false;
+  }
+  if (previousTask.id !== incomingTask.id) {
+    return false;
+  }
+
+  const previousMessage = getTaskMessageText(previousTask);
+  const incomingMessage = getTaskMessageText(incomingTask);
+  const previousCycleFromMessage = extractCycleOrdinal(previousMessage);
+  const incomingCycleFromMessage = extractCycleOrdinal(incomingMessage);
+  const previousCycleProgress = Math.max(params.previousIteration, previousCycleFromMessage ?? 0);
+  const incomingCycleProgress = Math.max(params.incomingIteration ?? 0, incomingCycleFromMessage ?? 0);
+
+  if (incomingCycleProgress > 0 && incomingCycleProgress < previousCycleProgress) {
+    return true;
+  }
+
+  const previousTaskTimestamp = parseIsoTimestamp(previousTask.taskStatus.timestamp);
+  const incomingTaskTimestamp = parseIsoTimestamp(incomingTask.taskStatus.timestamp);
+  if (
+    previousCycleProgress > 0 &&
+    previousTaskTimestamp !== undefined &&
+    incomingTaskTimestamp !== undefined &&
+    incomingTaskTimestamp < previousTaskTimestamp
+  ) {
+    return true;
+  }
+
+  if (
+    previousCycleProgress > 0 &&
+    incomingCycleProgress === 0 &&
+    isOnboardingEraWorkingMessage(incomingMessage)
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState>): ClmmThreadState => {
   if (!right) {
     return left;
@@ -465,6 +590,12 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
   const nextOperatorInput = right.operatorInput ?? baseThread.operatorInput;
   const nextFundingTokenInput = right.fundingTokenInput ?? baseThread.fundingTokenInput;
   const incomingTask = right.task ?? baseThread.task;
+  const previousIteration = baseThread.metrics.iteration ?? 0;
+  const incomingIteration = right.metrics?.iteration;
+  const nextIteration =
+    typeof incomingIteration === 'number'
+      ? Math.max(incomingIteration, previousIteration)
+      : previousIteration;
   const nextDelegationsBypassActive =
     right.delegationsBypassActive ?? baseThread.delegationsBypassActive;
   const nextOnboardingFlow = deriveClmmOnboardingFlow({
@@ -505,6 +636,16 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
     completedMessage: 'Onboarding complete. CLMM strategy is active.',
   });
   const normalizedTask = (normalizedTaskProjection as { task?: Task }).task ?? nextTask;
+  const effectiveTask = shouldPreserveActiveCycleTask({
+    previousLifecyclePhase: baseThread.lifecycle?.phase ?? 'prehire',
+    explicitLifecyclePhase: right.lifecycle?.phase,
+    previousTask: baseThread.task,
+    incomingTask: normalizedTask,
+    previousIteration,
+    incomingIteration,
+  })
+    ? baseThread.task
+    : normalizedTask;
   const effectiveOnboarding =
     nextOnboardingFlow?.status === 'completed' ? undefined : normalizedOnboarding;
 
@@ -538,7 +679,7 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
       right.metrics?.cyclesSinceRebalance ?? baseThread.metrics.cyclesSinceRebalance ?? 0,
     staleCycles: right.metrics?.staleCycles ?? baseThread.metrics.staleCycles ?? 0,
     rebalanceCycles: right.metrics?.rebalanceCycles ?? baseThread.metrics.rebalanceCycles ?? 0,
-    iteration: right.metrics?.iteration ?? baseThread.metrics.iteration ?? 0,
+    iteration: nextIteration,
     latestCycle: right.metrics?.latestCycle ?? baseThread.metrics.latestCycle,
     aumUsd: right.metrics?.aumUsd ?? baseThread.metrics.aumUsd,
     apy: right.metrics?.apy ?? baseThread.metrics.apy,
@@ -572,7 +713,7 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
   const explicitLifecyclePhase = right.lifecycle?.phase;
   const nextLifecyclePhase = resolveThreadLifecyclePhase({
     previousPhase: baseThread.lifecycle?.phase,
-    taskState: normalizedTask?.taskStatus?.state,
+    taskState: effectiveTask?.taskStatus?.state,
     onboardingFlowStatus: nextOnboardingFlow?.status,
     onboardingStep: effectiveOnboarding?.step,
     explicitLifecyclePhase,
@@ -590,7 +731,7 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
     ...baseThread,
     ...right,
     lifecycle: nextLifecycle,
-    task: normalizedTask,
+    task: effectiveTask,
     poolArtifact: right.poolArtifact ?? baseThread.poolArtifact,
     operatorInput: nextOperatorInput,
     onboarding: effectiveOnboarding,
