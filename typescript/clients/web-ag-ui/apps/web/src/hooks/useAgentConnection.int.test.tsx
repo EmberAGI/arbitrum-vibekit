@@ -53,6 +53,16 @@ const mocks = vi.hoisted(() => {
     connectAgent: vi.fn(async () => undefined),
     runAgent: vi.fn(async () => undefined),
     stopAgent: vi.fn(() => undefined),
+    disconnectFetch: vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ok: true,
+            abortedCount: 1,
+          }),
+          { status: 200 },
+        ),
+    ),
     interruptState: {
       activeInterrupt: null as AgentInterrupt | null,
       canResolve: false,
@@ -68,6 +78,17 @@ const mocks = vi.hoisted(() => {
       this.runAgent.mockImplementation(async () => undefined);
       this.stopAgent.mockReset();
       this.stopAgent.mockImplementation(() => undefined);
+      this.disconnectFetch.mockReset();
+      this.disconnectFetch.mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({
+              ok: true,
+              abortedCount: 1,
+            }),
+            { status: 200 },
+          ),
+      );
       this.interruptState.activeInterrupt = null;
       this.interruptState.canResolve = false;
       this.interruptState.resolve.mockReset();
@@ -129,10 +150,33 @@ async function flushEffects(): Promise<void> {
 describe('useAgentConnection integration', () => {
   let container: HTMLDivElement;
   let root: Root;
+  const originalFetch = global.fetch;
+
+  const readDisconnectPayload = (): { agentId?: string; threadId?: string } | null => {
+    const latestCall = mocks.disconnectFetch.mock.calls.at(-1);
+    if (!latestCall) return null;
+    const init = latestCall[1];
+    if (!init || typeof init !== 'object') return null;
+    if (!('body' in init)) return null;
+    const body = init.body;
+    if (typeof body !== 'string') return null;
+    try {
+      const parsed = JSON.parse(body) as unknown;
+      if (typeof parsed !== 'object' || parsed === null) return null;
+      const payload = parsed as { agentId?: unknown; threadId?: unknown };
+      return {
+        agentId: typeof payload.agentId === 'string' ? payload.agentId : undefined,
+        threadId: typeof payload.threadId === 'string' ? payload.threadId : undefined,
+      };
+    } catch {
+      return null;
+    }
+  };
 
   beforeEach(() => {
     __resetAgentStreamCoordinatorForTests();
     mocks.reset();
+    vi.stubGlobal('fetch', mocks.disconnectFetch as unknown as typeof fetch);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -143,6 +187,7 @@ describe('useAgentConnection integration', () => {
       root.unmount();
     });
     container.remove();
+    global.fetch = originalFetch;
     __resetAgentStreamCoordinatorForTests();
   });
 
@@ -162,6 +207,12 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(mocks.agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(mocks.stopAgent).toHaveBeenCalledTimes(0);
+    expect(mocks.disconnectFetch).toHaveBeenCalledTimes(1);
+    expect(readDisconnectPayload()).toEqual({
+      agentId: 'agent-clmm',
+      threadId: 'thread-1',
+    });
   });
 
   it('does not connect when runtime transport is not connected', async () => {
@@ -191,6 +242,35 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(mocks.agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(mocks.stopAgent).toHaveBeenCalledTimes(0);
+    expect(mocks.disconnectFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call stopAgent during cleanup while a run is active', async () => {
+    let subscriber: AgentSubscriber | undefined;
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    subscriber?.onRunStartedEvent?.({ input: { threadId: 'thread-1' } });
+    await flushEffects();
+
+    await act(async () => {
+      root.unmount();
+    });
+    await flushEffects();
+
+    expect(mocks.agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(mocks.stopAgent).toHaveBeenCalledTimes(0);
+    expect(mocks.disconnectFetch).toHaveBeenCalledTimes(1);
   });
 
   it('reconnects detail connection after runtime transport recovers', async () => {

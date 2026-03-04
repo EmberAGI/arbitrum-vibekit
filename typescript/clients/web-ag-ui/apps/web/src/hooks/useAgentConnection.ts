@@ -165,6 +165,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const agentDebugIdsRef = useRef(new WeakMap<object, number>());
   const nextAgentDebugIdRef = useRef(1);
   const streamOwnerIdRef = useRef<string | null>(null);
+  const disconnectRequestKeyRef = useRef<string | null>(null);
 
   if (streamOwnerIdRef.current == null) {
     streamOwnerIdRef.current = v7();
@@ -208,6 +209,47 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       });
     },
     [debugConnect],
+  );
+
+  const disconnectRuntimeStream = useCallback(
+    async (params: { threadId: string | null; agent: string; reason: string }) => {
+      if (!params.threadId) return;
+      const requestKey = `${agentId}:${params.threadId}`;
+      if (disconnectRequestKeyRef.current === requestKey) {
+        logConnectEvent('preempt-cleanup-disconnect-skip', {
+          agentId,
+          agent: params.agent,
+          threadId: params.threadId,
+          reason: params.reason,
+        });
+        return;
+      }
+
+      disconnectRequestKeyRef.current = requestKey;
+      logConnectEvent('preempt-cleanup-disconnect', {
+        agentId,
+        agent: params.agent,
+        threadId: params.threadId,
+        reason: params.reason,
+      });
+
+      await Promise.resolve(
+        fetch('/api/agent-disconnect', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            agentId,
+            threadId: params.threadId,
+          }),
+          keepalive: true,
+        }),
+      ).catch(() => {
+        // Best-effort runtime-side connect teardown.
+      });
+    },
+    [agentId, logConnectEvent],
   );
 
   const dispatchCommand = useCallback(
@@ -554,19 +596,36 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
     registerAgentStreamOwner(ownerId, async () => {
       const currentAgent = agentRef.current;
-      if (!currentAgent) return;
+
+      if (!currentAgent) {
+        logConnectEvent('preempt-cleanup-agent-missing', {
+          agentId,
+          threadId: threadIdRef.current ?? lastConnectedThreadRef.current ?? null,
+        });
+      }
+
       logConnectEvent('preempt-cleanup', {
         agentId,
         agent: getAgentDebugId(currentAgent),
       });
-      await cleanupAgentConnection(currentAgent);
+      if (currentAgent) {
+        await cleanupAgentConnection(currentAgent);
+      }
+
+      const disconnectThreadId =
+        currentAgent?.threadId ?? threadIdRef.current ?? lastConnectedThreadRef.current ?? null;
+      await disconnectRuntimeStream({
+        threadId: disconnectThreadId,
+        agent: getAgentDebugId(currentAgent),
+        reason: 'owner-preempt',
+      });
     });
 
     return () => {
       void releaseAgentStreamOwner(ownerId);
       void unregisterAgentStreamOwner(ownerId);
     };
-  }, [agentId, getAgentDebugId, logConnectEvent]);
+  }, [agentId, disconnectRuntimeStream, getAgentDebugId, logConnectEvent]);
 
   useEffect(() => {
     if (!agent) return undefined;
@@ -586,8 +645,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       } else if (ownerId) {
         void releaseAgentStreamOwner(ownerId);
       }
+
+      const disconnectThreadId =
+        agent.threadId ?? threadId ?? threadIdRef.current ?? lastConnectedThreadRef.current ?? null;
+      void disconnectRuntimeStream({
+        threadId: disconnectThreadId,
+        agent: getAgentDebugId(agent),
+        reason: 'effect-cleanup',
+      });
     };
-  }, [agent, agentId, getAgentDebugId, logConnectEvent, threadId]);
+  }, [agent, agentId, disconnectRuntimeStream, getAgentDebugId, logConnectEvent, threadId]);
 
   useEffect(() => {
     setRunInFlight(false);
@@ -637,6 +704,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
       currentAgent.threadId = threadId;
       lastConnectedThreadRef.current = threadId;
+      disconnectRequestKeyRef.current = null;
       messagesSnapshotRef.current = false;
 
       const hasConnectAgent = typeof currentAgent.connectAgent === 'function';
@@ -806,7 +874,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         const ok = await fireAgentRun({
           agent: value,
           runAgent: async (current) =>
-            copilotkit.runAgent({ agent: current } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+            copilotkit.runAgent({
+              agent: current,
+            } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
           preemptActiveRun: async (current) => copilotkit.stopAgent({ agent: current }),
           threadId,
           runInFlightRef,

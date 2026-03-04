@@ -53,6 +53,19 @@ const resolveDelegationOnboarding = (state: ClmmState): OnboardingState => {
   return { step: 2, key: DELEGATION_STEP_KEY };
 };
 
+function readConfigString(
+  config: CopilotKitConfig,
+  key: 'thread_id' | 'checkpoint_id' | 'checkpoint_ns',
+): string | undefined {
+  const root = config as { configurable?: unknown };
+  if (!root.configurable || typeof root.configurable !== 'object') {
+    return undefined;
+  }
+  const configurable = root.configurable as Record<string, unknown>;
+  const value = configurable[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 const HexSchema = z
   .string()
   .regex(/^0x[0-9a-fA-F]*$/u)
@@ -125,12 +138,25 @@ export const collectDelegationsNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+  const runMetadata = {
+    threadId: readConfigString(config, 'thread_id'),
+    checkpointId: readConfigString(config, 'checkpoint_id'),
+    checkpointNamespace: readConfigString(config, 'checkpoint_ns'),
+  };
   const delegationOnboarding = resolveDelegationOnboarding(state);
+  const taskState = state.thread.task?.taskStatus?.state;
+  const taskMessage = state.thread.task?.taskStatus?.message?.content;
+  const isAwaitingDelegationInput =
+    taskState === 'input-required' &&
+    typeof taskMessage === 'string' &&
+    taskMessage.toLowerCase().includes('delegation approval');
   logInfo('collectDelegations: entering node', {
+    ...runMetadata,
     delegationsBypassActive: state.thread.delegationsBypassActive === true,
     hasDelegationBundle: Boolean(state.thread.delegationBundle),
   });
   logWarn('collectDelegations: node entered', {
+    ...runMetadata,
     onboardingStatus: state.thread.onboardingFlow?.status,
     onboardingStep: state.thread.onboarding?.step,
     onboardingKey: state.thread.onboarding?.key,
@@ -138,6 +164,7 @@ export const collectDelegationsNode = async (
     hasDelegationBundle: Boolean(state.thread.delegationBundle),
     hasOperatorInput: Boolean(state.thread.operatorInput),
     hasFundingTokenInput: Boolean(state.thread.fundingTokenInput),
+    isAwaitingDelegationInput,
   });
 
   if (state.thread.delegationsBypassActive === true) {
@@ -235,6 +262,16 @@ export const collectDelegationsNode = async (
     nextTaskMessage: awaitingMessage,
   });
   const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+  logInfo('collectDelegations: pause transition prepared', {
+    ...runMetadata,
+    hasRunnableConfig,
+    shouldPersistPendingState,
+    isAwaitingDelegationInput,
+    currentOnboardingStep: state.thread.onboarding?.step,
+    currentOnboardingKey: state.thread.onboarding?.key,
+    nextOnboardingStep: delegationOnboarding.step,
+    nextOnboardingKey: delegationOnboarding.key,
+  });
   const pauseSnapshotView = applyThreadPatch(state, pendingView);
   if (hasRunnableConfig && shouldPersistPendingState) {
     const mergedView = pauseSnapshotView;
@@ -244,6 +281,10 @@ export const collectDelegationsNode = async (
       thread: mergedView,
       metadata: {
         pauseMechanism: 'checkpoint-and-interrupt',
+        ...runMetadata,
+        hasRunnableConfig,
+        shouldPersistPendingState,
+        isAwaitingDelegationInput,
       },
     });
     await copilotkitEmitState(config, {
@@ -272,7 +313,10 @@ export const collectDelegationsNode = async (
     thread: pauseSnapshotView,
     metadata: {
       pauseMechanism: 'interrupt',
+      ...runMetadata,
+      hasRunnableConfig,
       checkpointPersisted: shouldPersistPendingState,
+      isAwaitingDelegationInput,
     },
   });
 
@@ -280,10 +324,19 @@ export const collectDelegationsNode = async (
     request,
     interrupt,
   });
+  logInfo('collectDelegations: interrupt payload received', {
+    ...runMetadata,
+    rawPayloadType: typeof interruptResult.raw,
+    hasDecodedPayload: interruptResult.decoded !== undefined,
+  });
   const parsed = DelegationSigningResponseSchema.safeParse(interruptResult.decoded);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
     const failureMessage = `Invalid delegation signing response: ${issues}`;
+    logWarn('collectDelegations: invalid delegation signing payload', {
+      ...runMetadata,
+      issues,
+    });
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
     const failedView = applyThreadPatch(state, {
       task,
@@ -304,6 +357,9 @@ export const collectDelegationsNode = async (
   }
 
   if (parsed.data.outcome === 'rejected') {
+    logWarn('collectDelegations: delegation signing rejected by user', {
+      ...runMetadata,
+    });
     const { task, statusEvent } = buildTaskStatus(
       awaitingInput.task,
       'failed',
@@ -344,6 +400,10 @@ export const collectDelegationsNode = async (
     descriptions: [...DELEGATION_DESCRIPTIONS],
     warnings,
   };
+  logInfo('collectDelegations: delegation signing accepted', {
+    ...runMetadata,
+    signedDelegationCount: delegationBundle.delegations.length,
+  });
 
   const { task, statusEvent } = buildTaskStatus(
     awaitingInput.task,
