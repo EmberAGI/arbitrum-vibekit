@@ -1,6 +1,5 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { type Command } from '@langchain/langgraph';
-import { buildNodeTransition, buildStateUpdate } from 'agent-workflow-core';
+import { buildNodeTransition } from 'agent-workflow-core';
 
 import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
 import { type CamelotPool } from '../../domain/types.js';
@@ -13,8 +12,10 @@ import {
   type ClmmState,
   type ClmmUpdate,
 } from '../context.js';
+import { copilotkitEmitState } from '../emitState.js';
 import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 import { isPoolAllowed } from '../pools.js';
+import { buildLoggedStateUpdate } from '../stateUpdateFactory.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -110,7 +111,7 @@ export const listPoolsNode = async (
   // via the interrupt in collectOperatorInput. This ensures the cron only starts
   // once the workflow is fully configured.
 
-  return buildStateUpdate({
+  return buildLoggedStateUpdate('listPoolsNode', {
     thread: {
       profile: {
         pools,

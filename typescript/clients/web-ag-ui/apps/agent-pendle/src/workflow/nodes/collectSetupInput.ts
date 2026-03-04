@@ -24,7 +24,14 @@ const SETUP_STEP_KEY: OnboardingState['key'] = 'funding-amount';
 const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
 const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
-const resolveResumeOnboarding = (state: ClmmState): OnboardingState => {
+const resolveResumeOnboarding = (state: ClmmState): OnboardingState | undefined => {
+  if (
+    state.thread.setupComplete === true ||
+    state.thread.operatorConfig ||
+    state.thread.onboardingFlow?.status === 'completed'
+  ) {
+    return state.thread.onboarding;
+  }
   if (!state.thread.fundingTokenInput) {
     return { step: 2, key: FUNDING_STEP_KEY };
   }
@@ -43,8 +50,12 @@ export const collectSetupInputNode = async (
 
   if (state.thread.operatorInput) {
     logInfo('collectSetupInput: operator input already present; skipping step');
+    const resumedOnboarding = resolveResumeOnboarding(state);
+    if (!resumedOnboarding) {
+      return {};
+    }
     const resumedView = applyThreadPatch(state, {
-      onboarding: resolveResumeOnboarding(state),
+      onboarding: resumedOnboarding,
     });
     return {
       thread: resumedView,

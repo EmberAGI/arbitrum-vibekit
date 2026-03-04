@@ -36,7 +36,14 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
 const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
-const resolveDelegationOnboarding = (state: ClmmState): OnboardingState => {
+const resolveDelegationOnboarding = (state: ClmmState): OnboardingState | undefined => {
+  if (
+    state.thread.setupComplete === true ||
+    state.thread.operatorConfig ||
+    state.thread.onboardingFlow?.status === 'completed'
+  ) {
+    return state.thread.onboarding;
+  }
   if (state.thread.delegationsBypassActive === true) {
     return { step: 2, key: FUNDING_STEP_KEY };
   }
@@ -199,6 +206,15 @@ export const collectDelegationsNode = async (
     delegationsBypassActive: state.thread.delegationsBypassActive === true,
     hasDelegationBundle: Boolean(state.thread.delegationBundle),
   });
+
+  if (!delegationOnboarding) {
+    logInfo('collectDelegations: onboarding already complete; skipping stale delegation update', {
+      onboardingStatus: state.thread.onboardingFlow?.status,
+      setupComplete: state.thread.setupComplete === true,
+      hasOperatorConfig: Boolean(state.thread.operatorConfig),
+    });
+    return {};
+  }
 
   if (state.thread.delegationsBypassActive === true) {
     const bypassView = applyThreadPatch(state, {

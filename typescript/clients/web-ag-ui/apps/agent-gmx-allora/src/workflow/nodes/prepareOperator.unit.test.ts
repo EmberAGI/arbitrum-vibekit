@@ -114,4 +114,45 @@ describe('prepareOperatorNode', () => {
 
     expect(updateResult.thread?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
   });
+
+  it('returns a no-op update when onboarding is already completed', async () => {
+    process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = '0x3333333333333333333333333333333333333333';
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      thread: {
+        operatorInput: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          usdcAllocation: 100,
+          targetMarket: 'ETH',
+        },
+        fundingTokenInput: {
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+        },
+        delegationsBypassActive: false,
+        delegationBundle: undefined,
+        operatorConfig: {
+          delegatorWalletAddress: '0x1111111111111111111111111111111111111111',
+          delegateeWalletAddress: '0x3333333333333333333333333333333333333333',
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          baseContributionUsd: 100,
+          targetMarket: {
+            address: '0x4444444444444444444444444444444444444444',
+            indexToken: 'ETH',
+            longToken: 'ETH',
+            shortToken: 'USDC',
+          },
+        },
+        onboardingFlow: { status: 'completed' },
+        onboarding: undefined,
+        task: { id: 'task-1', taskStatus: { state: 'working' } },
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await prepareOperatorNode(state, {});
+
+    expect(result).toEqual({});
+    expect(copilotkitEmitStateMock).not.toHaveBeenCalled();
+  });
 });

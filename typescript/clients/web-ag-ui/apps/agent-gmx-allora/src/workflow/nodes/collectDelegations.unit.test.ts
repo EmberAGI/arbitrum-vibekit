@@ -76,4 +76,41 @@ describe('collectDelegationsNode', () => {
     const result = await collectDelegationsNode(state, {});
     expect(result).toEqual({});
   });
+
+  it('returns a no-op update when operator config is already established', async () => {
+    const state = {
+      thread: {
+        delegationsBypassActive: false,
+        operatorConfig: {
+          delegatorWalletAddress: '0x1111111111111111111111111111111111111111',
+          delegateeWalletAddress: '0x2222222222222222222222222222222222222222',
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          baseContributionUsd: 100,
+          targetMarket: {
+            address: '0x3333333333333333333333333333333333333333',
+            indexToken: 'BTC',
+            longToken: 'BTC',
+            shortToken: 'USDC',
+          },
+        },
+        delegationBundle: {
+          delegations: [],
+        },
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              content: 'Waiting for delegation approval to continue onboarding.',
+            },
+          },
+        },
+        onboarding: undefined,
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectDelegationsNode(state, {});
+    expect(result).toEqual({});
+  });
 });

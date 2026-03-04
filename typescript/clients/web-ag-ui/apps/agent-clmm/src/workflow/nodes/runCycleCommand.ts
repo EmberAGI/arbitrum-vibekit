@@ -1,10 +1,11 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { type Command } from '@langchain/langgraph';
-import { buildNodeTransition, buildStateUpdate } from 'agent-workflow-core';
+import { buildNodeTransition } from 'agent-workflow-core';
 
 import { buildTaskStatus, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
+import { copilotkitEmitState } from '../emitState.js';
 import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 import { resolveNextOnboardingNode } from '../onboardingRouting.js';
+import { buildLoggedStateUpdate } from '../stateUpdateFactory.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -28,7 +29,7 @@ export const runCycleCommandNode = async (
   }
 
   if (state.thread.task?.taskStatus?.state === 'working') {
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('runCycleCommandNode', {
       thread: {
         lifecycle: { phase: 'active' as const },
       },
@@ -42,7 +43,7 @@ export const runCycleCommandNode = async (
   );
   await copilotkitEmitState(config, { thread: { task, activity: { events: [statusEvent], telemetry: [] } } });
 
-  return buildStateUpdate({
+  return buildLoggedStateUpdate('runCycleCommandNode', {
     thread: {
       task,
       lifecycle: { phase: 'active' as const },

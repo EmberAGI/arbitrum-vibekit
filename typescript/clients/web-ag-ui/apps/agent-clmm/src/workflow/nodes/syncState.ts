@@ -2,6 +2,7 @@ import { applyAccountingUpdate } from '../../accounting/state.js';
 import { createCamelotAccountingSnapshot } from '../accounting.js';
 import { getCamelotClient } from '../clientFactory.js';
 import { logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
+import { buildLoggedStateUpdate } from '../stateUpdateFactory.js';
 import { applyAccountingToView } from '../viewMapping.js';
 
 /**
@@ -45,7 +46,7 @@ export async function syncStateNode(
       metrics: state.thread.metrics,
       accounting,
     });
-    return { thread: { accounting, profile, metrics } };
+    return buildLoggedStateUpdate('syncStateNode', { thread: { accounting, profile, metrics } });
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';

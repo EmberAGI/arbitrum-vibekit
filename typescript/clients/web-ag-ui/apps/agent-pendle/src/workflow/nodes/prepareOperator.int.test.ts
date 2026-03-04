@@ -597,8 +597,8 @@ describe('prepareOperatorNode', () => {
     const update = result as ClmmUpdate;
 
     expect(executeInitialDepositMock).not.toHaveBeenCalled();
-    expect(update.thread?.setupComplete).toBe(true);
-    expect(update.thread?.selectedPool?.ytSymbol).toBe('YT-BEST');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(update).toEqual({});
   });
 
   it('skips initial deposit and marks setup complete in smoke mode', async () => {

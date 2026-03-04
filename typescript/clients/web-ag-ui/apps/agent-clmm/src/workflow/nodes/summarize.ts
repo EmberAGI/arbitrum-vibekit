@@ -1,4 +1,3 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { resolveSummaryTaskStatus } from 'agent-workflow-core';
 
 import { buildSummaryArtifact } from '../artifacts.js';
@@ -7,6 +6,7 @@ import {
   type ClmmState,
   type ClmmUpdate,
 } from '../context.js';
+import { copilotkitEmitState } from '../emitState.js';
 import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];

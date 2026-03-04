@@ -61,6 +61,52 @@ describe('collectDelegationsNode', () => {
     getOnchainActionsClientMock.mockReset();
   });
 
+  it('returns a no-op update when setup is already complete', async () => {
+    const state = {
+      thread: {
+        delegationsBypassActive: false,
+        setupComplete: true,
+        operatorConfig: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          executionWalletAddress: '0x2222222222222222222222222222222222222222',
+          baseContributionUsd: 25,
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          targetYieldToken: {
+            marketAddress: '0x3333333333333333333333333333333333333333',
+            ptAddress: '0x4444444444444444444444444444444444444444',
+            ytAddress: '0x5555555555555555555555555555555555555555',
+            ptSymbol: 'PT-USDC',
+            ytSymbol: 'YT-USDC',
+            underlyingSymbol: 'USDC',
+            underlyingAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+            maturity: '2030-01-01T00:00:00.000Z',
+            apy: 12,
+          },
+        },
+        delegationBundle: {
+          signedDelegations: [],
+        },
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              content: 'Waiting for delegation approval to continue onboarding.',
+            },
+          },
+        },
+        onboarding: undefined,
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectDelegationsNode(state, {});
+
+    expect(result).toEqual({});
+    expect(interruptMock).not.toHaveBeenCalled();
+    expect(copilotkitEmitStateMock).not.toHaveBeenCalled();
+  });
+
   it('emits input-required state and requests delegation signatures in the same run', async () => {
     const usdaiToken: Token = {
       tokenUid: { chainId: '42161', address: '0x0a1a1a107e45b7ced86833863f482bc5f4ed82ef' },

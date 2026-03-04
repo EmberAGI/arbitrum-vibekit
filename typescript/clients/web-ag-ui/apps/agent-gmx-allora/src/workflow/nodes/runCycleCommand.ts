@@ -51,6 +51,14 @@ export const runCycleCommandNode = async (
     return {};
   }
 
+  if (state.thread.task?.taskStatus?.state === 'working') {
+    return {
+      thread: {
+        lifecycle: { phase: 'active' },
+      },
+    };
+  }
+
   const { task, statusEvent } = buildTaskStatus(
     state.thread.task,
     'working',

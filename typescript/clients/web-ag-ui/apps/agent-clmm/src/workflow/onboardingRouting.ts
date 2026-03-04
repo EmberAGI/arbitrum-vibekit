@@ -12,8 +12,9 @@ export type OnboardingNodeTarget =
 
 export function resolveNextOnboardingNode(state: ClmmState): OnboardingNodeTarget {
   const hasOperatorConfig = Boolean(state.thread.operatorConfig);
+  const fundingStepAlreadySatisfied = state.thread.onboarding?.key === 'delegation-signing';
   const hasFundingTokenRequirementSatisfied =
-    Boolean(state.thread.fundingTokenInput) || hasOperatorConfig;
+    Boolean(state.thread.fundingTokenInput) || hasOperatorConfig || fundingStepAlreadySatisfied;
 
   const phase = resolveOnboardingPhase({
     requiresPoolCatalog: true,

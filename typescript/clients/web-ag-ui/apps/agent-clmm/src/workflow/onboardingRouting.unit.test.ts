@@ -63,4 +63,25 @@ describe('resolveNextOnboardingNode', () => {
 
     expect(resolveNextOnboardingNode(state)).toBe('syncState');
   });
+
+  it('routes to delegation signing when onboarding already advanced past funding-token selection', () => {
+    const state = createState({
+      poolArtifact: { id: 'camelot-pools' as const },
+      operatorInput: {
+        poolAddress: '0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526',
+        walletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9',
+        baseContributionUsd: 10,
+      },
+      onboarding: {
+        step: 2,
+        key: 'delegation-signing',
+      },
+      fundingTokenInput: undefined,
+      delegationBundle: undefined,
+      operatorConfig: undefined,
+      delegationsBypassActive: false,
+    });
+
+    expect(resolveNextOnboardingNode(state)).toBe('collectDelegations');
+  });
 });

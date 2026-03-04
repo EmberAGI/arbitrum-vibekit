@@ -1,9 +1,7 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { type Command, interrupt } from '@langchain/langgraph';
 import {
   buildInterruptPauseTransition,
   buildNodeTransition,
-  buildStateUpdate,
   requestInterruptPayload,
   shouldPersistInputRequiredCheckpoint,
 } from 'agent-workflow-core';
@@ -26,8 +24,10 @@ import {
   type FundingTokenOption,
   type OnboardingState,
 } from '../context.js';
+import { copilotkitEmitState } from '../emitState.js';
 import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 import { estimateTokenAllocationsUsd } from '../planning/allocations.js';
+import { buildLoggedStateUpdate } from '../stateUpdateFactory.js';
 import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -118,13 +118,13 @@ export const collectFundingTokenInputNode = async (
     logInfo('collectFundingTokenInput: funding token already present; skipping step');
     const resumedOnboarding = resolveFundingResumeOnboarding(state);
     if (!resumedOnboarding) {
-      return buildStateUpdate({});
+      return buildLoggedStateUpdate('collectFundingTokenInputNode', {});
     }
     const resumedPatch = {
       onboarding: resumedOnboarding,
     };
     applyThreadPatch(state, resumedPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectFundingTokenInputNode', {
       thread: resumedPatch,
     });
   }
@@ -215,7 +215,7 @@ export const collectFundingTokenInputNode = async (
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     };
     applyThreadPatch(state, skipPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectFundingTokenInputNode', {
       thread: skipPatch,
     });
   }
@@ -262,7 +262,7 @@ export const collectFundingTokenInputNode = async (
       onboarding: { step: 2, key: DELEGATION_STEP_KEY },
     };
     applyThreadPatch(state, skipPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectFundingTokenInputNode', {
       thread: skipPatch,
     });
   }
@@ -298,7 +298,7 @@ export const collectFundingTokenInputNode = async (
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     };
     applyThreadPatch(state, haltedPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectFundingTokenInputNode', {
       thread: haltedPatch,
     });
   }
@@ -377,7 +377,7 @@ export const collectFundingTokenInputNode = async (
     await copilotkitEmitState(config, {
       thread: autoSelectedView,
     });
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectFundingTokenInputNode', {
       thread: autoSelectedPatch,
     });
   }
@@ -403,7 +403,7 @@ export const collectFundingTokenInputNode = async (
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     };
     applyThreadPatch(state, haltedPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectFundingTokenInputNode', {
       thread: haltedPatch,
     });
   }
@@ -487,7 +487,7 @@ export const collectFundingTokenInputNode = async (
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     };
     applyThreadPatch(state, haltedPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectFundingTokenInputNode', {
       thread: haltedPatch,
     });
   }
@@ -516,7 +516,7 @@ export const collectFundingTokenInputNode = async (
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     };
     applyThreadPatch(state, haltedPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectFundingTokenInputNode', {
       thread: haltedPatch,
     });
   }
@@ -549,7 +549,7 @@ export const collectFundingTokenInputNode = async (
     activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
   };
   applyThreadPatch(state, completedPatch);
-  return buildStateUpdate({
+  return buildLoggedStateUpdate('collectFundingTokenInputNode', {
     thread: completedPatch,
   });
 };

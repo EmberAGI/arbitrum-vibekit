@@ -1,9 +1,7 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { type Command, interrupt } from '@langchain/langgraph';
 import {
   buildInterruptPauseTransition,
   buildNodeTransition,
-  buildStateUpdate,
   requestInterruptPayload,
   shouldPersistInputRequiredCheckpoint,
 } from 'agent-workflow-core';
@@ -44,8 +42,10 @@ import {
   type SignedDelegation,
   type UnsignedDelegation,
 } from '../context.js';
+import { copilotkitEmitState } from '../emitState.js';
 import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 import { estimateTokenAllocationsUsd } from '../planning/allocations.js';
+import { buildLoggedStateUpdate } from '../stateUpdateFactory.js';
 import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -343,7 +343,7 @@ export const collectDelegationsNode = async (
     if (delegationOnboarding) {
       bypassView.onboarding = delegationOnboarding;
     }
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectDelegationsNode', {
       thread: bypassView,
     });
   }
@@ -368,19 +368,19 @@ export const collectDelegationsNode = async (
         activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       };
       applyThreadPatch(state, resumedPatch);
-      return buildStateUpdate({
+      return buildLoggedStateUpdate('collectDelegationsNode', {
         thread: resumedPatch,
       });
     }
 
     applyThreadPatch(state, delegatedPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectDelegationsNode', {
       thread: delegatedPatch,
     });
   }
 
   if (!delegationOnboarding) {
-    return buildStateUpdate({});
+    return buildLoggedStateUpdate('collectDelegationsNode', {});
   }
 
   const operatorInput = state.thread.operatorInput;
@@ -758,7 +758,7 @@ export const collectDelegationsNode = async (
       onboarding: delegationOnboarding,
     };
     applyThreadPatch(state, haltedPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectDelegationsNode', {
       thread: haltedPatch,
     });
   }
@@ -817,7 +817,7 @@ export const collectDelegationsNode = async (
       onboarding: delegationOnboarding,
     };
     applyThreadPatch(state, haltedPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectDelegationsNode', {
       thread: haltedPatch,
     });
   }
@@ -845,7 +845,7 @@ export const collectDelegationsNode = async (
         onboarding: delegationOnboarding,
       };
       applyThreadPatch(state, haltedPatch);
-      return buildStateUpdate({
+      return buildLoggedStateUpdate('collectDelegationsNode', {
         thread: haltedPatch,
       });
     }
@@ -886,7 +886,7 @@ export const collectDelegationsNode = async (
     onboarding: delegationOnboarding,
   };
   applyThreadPatch(state, completedPatch);
-  return buildStateUpdate({
+  return buildLoggedStateUpdate('collectDelegationsNode', {
     thread: completedPatch,
   });
 };

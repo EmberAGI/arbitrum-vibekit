@@ -1,9 +1,7 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { type Command, interrupt } from '@langchain/langgraph';
 import {
   buildInterruptPauseTransition,
   buildNodeTransition,
-  buildStateUpdate,
   requestInterruptPayload,
   shouldPersistInputRequiredCheckpoint,
 } from 'agent-workflow-core';
@@ -19,7 +17,9 @@ import {
   type OperatorInterrupt,
   type ClmmUpdate,
 } from '../context.js';
+import { copilotkitEmitState } from '../emitState.js';
 import { createLangGraphCommand } from '../langGraphCommandFactory.js';
+import { buildLoggedStateUpdate } from '../stateUpdateFactory.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -52,13 +52,13 @@ export const collectOperatorInputNode = async (
     logInfo('collectOperatorInput: operator input already present; skipping step');
     const resumedOnboarding = resolveOperatorResumeOnboarding(state);
     if (!resumedOnboarding) {
-      return buildStateUpdate({});
+      return buildLoggedStateUpdate('collectOperatorInputNode', {});
     }
     const resumedPatch = {
       onboarding: resumedOnboarding,
     };
     applyThreadPatch(state, resumedPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectOperatorInputNode', {
       thread: resumedPatch,
     });
   }
@@ -183,7 +183,7 @@ export const collectOperatorInputNode = async (
       transactionHistory: state.thread.transactionHistory,
     };
     applyThreadPatch(state, haltedPatch);
-    return buildStateUpdate({
+    return buildLoggedStateUpdate('collectOperatorInputNode', {
       thread: haltedPatch,
     });
   }
@@ -213,7 +213,7 @@ export const collectOperatorInputNode = async (
     activity: { events: [statusEvent], telemetry: [] },
   };
   applyThreadPatch(state, completedPatch);
-  return buildStateUpdate({
+  return buildLoggedStateUpdate('collectOperatorInputNode', {
     thread: completedPatch,
   });
 };

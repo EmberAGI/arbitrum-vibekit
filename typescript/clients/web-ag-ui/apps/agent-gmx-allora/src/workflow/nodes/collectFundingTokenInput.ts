@@ -21,6 +21,18 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 const FUNDING_STEP_KEY: OnboardingState['key'] = 'funding-token';
 const DELEGATION_STEP_KEY: OnboardingState['key'] = 'delegation-signing';
 
+const resolveFundingResumeOnboarding = (state: ClmmState): OnboardingState | undefined => {
+  if (state.thread.operatorConfig || state.thread.onboardingFlow?.status === 'completed') {
+    return state.thread.onboarding;
+  }
+  if (state.thread.delegationsBypassActive === true) {
+    return { step: 2, key: FUNDING_STEP_KEY };
+  }
+  return state.thread.onboarding?.key === FUNDING_STEP_KEY
+    ? { step: 3, key: DELEGATION_STEP_KEY }
+    : { step: 2, key: DELEGATION_STEP_KEY };
+};
+
 function resolveUsdcTokenAddressFromMarket(market: PerpetualMarket): `0x${string}` {
   const longToken = market.longToken;
   const shortToken = market.shortToken;
@@ -68,13 +80,12 @@ export const collectFundingTokenInputNode = async (
       onboardingStep: state.thread.onboarding?.step,
       onboardingKey: state.thread.onboarding?.key,
     });
+    const resumedOnboarding = resolveFundingResumeOnboarding(state);
+    if (!resumedOnboarding) {
+      return {};
+    }
     const resumedView = applyThreadPatch(state, {
-      onboarding:
-        state.thread.delegationsBypassActive === true
-          ? { step: 2, key: FUNDING_STEP_KEY }
-          : state.thread.onboarding?.key === FUNDING_STEP_KEY
-            ? { step: 3, key: DELEGATION_STEP_KEY }
-            : { step: 2, key: DELEGATION_STEP_KEY },
+      onboarding: resumedOnboarding,
     });
     return {
       thread: resumedView,

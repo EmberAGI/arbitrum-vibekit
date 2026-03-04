@@ -90,6 +90,17 @@ export const prepareOperatorNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+  if (
+    state.thread.setupComplete === true ||
+    state.thread.onboardingFlow?.status === 'completed'
+  ) {
+    logInfo('prepareOperator: onboarding already completed; skipping stale operator preparation update', {
+      onboardingStatus: state.thread.onboardingFlow?.status,
+      setupComplete: state.thread.setupComplete === true,
+    });
+    return {};
+  }
+
   const emitMergedView = async (patch: Partial<ClmmState['thread']>) => {
     const mergedView = applyThreadPatch(state, patch);
     await copilotkitEmitState(config, {
@@ -179,6 +190,16 @@ export const prepareOperatorNode = async (
     });
   }
 
+  const preparingStatus = buildTaskStatus(
+    state.thread.task,
+    'working',
+    'Delegation approvals received. Preparing Pendle strategy configuration.',
+  );
+  await emitMergedView({
+    task: preparingStatus.task,
+    activity: { events: [preparingStatus.statusEvent], telemetry: state.thread.activity.telemetry },
+  });
+
   const onchainActionsClient = getOnchainActionsClient();
   let eligibleYieldTokens = [];
   let tokenizedMarkets = [];
@@ -186,6 +207,7 @@ export const prepareOperatorNode = async (
   let existingMarketAddress: string | undefined;
   let existingFundingTokenAddress: `0x${string}` | undefined;
   let existingPosition: Awaited<ReturnType<typeof onchainActionsClient.listTokenizedYieldPositions>>[number] | undefined;
+  const marketDiscoveryStartedAt = Date.now();
   try {
     const chainIds = resolvePendleChainIds();
     const [markets, fetchedTokens] = await Promise.all([
@@ -234,8 +256,18 @@ export const prepareOperatorNode = async (
         error: message,
       });
     }
+    logInfo('prepareOperator: resolved Pendle market discovery', {
+      durationMs: Date.now() - marketDiscoveryStartedAt,
+      marketCount: markets.length,
+      tokenCount: fetchedTokens.length,
+      positionDetected: Boolean(existingMarketAddress),
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    logInfo('prepareOperator: market discovery failed', {
+      durationMs: Date.now() - marketDiscoveryStartedAt,
+      error: message,
+    });
     const failureMessage = `ERROR: Failed to fetch Pendle markets: ${message}`;
     return failAndSummarize(failureMessage);
   }
@@ -307,7 +339,7 @@ export const prepareOperatorNode = async (
   });
 
   const { task, statusEvent } = buildTaskStatus(
-    state.thread.task,
+    preparingStatus.task,
     'working',
     delegationsBypassActive
       ? `Delegation bypass active. Allocating into ${selectedYieldToken.ytSymbol} from agent wallet.`
@@ -318,8 +350,8 @@ export const prepareOperatorNode = async (
     activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
   });
 
-  const events: ClmmEvent[] = [statusEvent];
-  let setupComplete = state.thread.setupComplete === true;
+  const events: ClmmEvent[] = [preparingStatus.statusEvent, statusEvent];
+  let setupComplete = false;
   let setupTxHash: `0x${string}` | undefined;
   const txExecutionMode = resolvePendleTxExecutionMode();
 

@@ -1,4 +1,3 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
@@ -8,6 +7,7 @@ import { resolveAccountingContextId } from '../accounting.js';
 import { getCamelotClient, getOnchainClients } from '../clientFactory.js';
 import { buildTaskStatus, isTaskTerminal, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
+import { copilotkitEmitState } from '../emitState.js';
 import { executeDecision } from '../execution.js';
 import { appendFlowLogHistory, appendTransactionHistory, loadFlowLogHistory } from '../historyStore.js';
 import { applyAccountingToView } from '../viewMapping.js';

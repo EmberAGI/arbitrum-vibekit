@@ -8,6 +8,14 @@ export const runCycleCommandNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
+  if (state.thread.task?.taskStatus?.state === 'working') {
+    return {
+      thread: {
+        lifecycle: { phase: 'active' },
+      },
+    };
+  }
+
   const { task, statusEvent } = buildTaskStatus(
     state.thread.task,
     'working',

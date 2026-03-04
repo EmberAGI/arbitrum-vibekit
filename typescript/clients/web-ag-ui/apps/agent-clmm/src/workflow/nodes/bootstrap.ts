@@ -1,8 +1,8 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import type { Command } from '@langchain/langgraph';
 
 import { resolvePollIntervalMs, resolveStreamLimit } from '../../config/constants.js';
 import { logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
+import { copilotkitEmitState } from '../emitState.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };

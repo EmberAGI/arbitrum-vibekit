@@ -1,6 +1,5 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { type Command } from '@langchain/langgraph';
-import { buildNodeTransition, buildStateUpdate } from 'agent-workflow-core';
+import { buildNodeTransition } from 'agent-workflow-core';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
@@ -17,8 +16,10 @@ import {
   normalizeHexAddress,
   type ClmmEvent,
 } from '../context.js';
+import { copilotkitEmitState } from '../emitState.js';
 import { appendFlowLogHistory, loadFlowLogHistory } from '../historyStore.js';
 import { createLangGraphCommand } from '../langGraphCommandFactory.js';
+import { buildLoggedStateUpdate } from '../stateUpdateFactory.js';
 import { loadBootstrapContext } from '../store.js';
 import { applyAccountingToView } from '../viewMapping.js';
 
@@ -268,7 +269,7 @@ export const prepareOperatorNode = async (
     accounting,
   };
   applyThreadPatch(state, completedPatch);
-  return buildStateUpdate({
+  return buildLoggedStateUpdate('prepareOperatorNode', {
     thread: completedPatch,
     private: {
       cronScheduled: false, // Will be set to true in pollCycle after first cycle

@@ -549,17 +549,25 @@ const shouldPreserveActiveCycleTask = (params: {
   const previousCycleProgress = Math.max(params.previousIteration, previousCycleFromMessage ?? 0);
   const incomingCycleProgress = Math.max(params.incomingIteration ?? 0, incomingCycleFromMessage ?? 0);
 
+  const previousTaskTimestamp = parseIsoTimestamp(previousTask.taskStatus.timestamp);
+  const incomingTaskTimestamp = parseIsoTimestamp(incomingTask.taskStatus.timestamp);
+  if (
+    previousTaskTimestamp !== undefined &&
+    incomingTaskTimestamp !== undefined &&
+    incomingTaskTimestamp < previousTaskTimestamp
+  ) {
+    return true;
+  }
+
   if (incomingCycleProgress > 0 && incomingCycleProgress < previousCycleProgress) {
     return true;
   }
 
-  const previousTaskTimestamp = parseIsoTimestamp(previousTask.taskStatus.timestamp);
-  const incomingTaskTimestamp = parseIsoTimestamp(incomingTask.taskStatus.timestamp);
+  const cycleDidNotAdvance = incomingCycleProgress <= previousCycleProgress;
   if (
-    previousCycleProgress > 0 &&
-    previousTaskTimestamp !== undefined &&
-    incomingTaskTimestamp !== undefined &&
-    incomingTaskTimestamp < previousTaskTimestamp
+    previousCycleFromMessage !== undefined &&
+    incomingCycleFromMessage === undefined &&
+    cycleDidNotAdvance
   ) {
     return true;
   }
@@ -755,6 +763,7 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
 };
 
 type ClmmThreadTransitionLogSource = 'threadReducer' | 'applyThreadPatch';
+type ClmmStateEmissionLogSource = 'command' | 'state-update' | 'emit-state';
 
 type ClmmThreadTransitionSnapshot = {
   lifecyclePhase: ThreadLifecyclePhase;
@@ -786,7 +795,25 @@ type ClmmThreadTransitionLogEntry = {
   patch?: Partial<ClmmThreadState>;
 };
 
+type ClmmStateEmissionLogEntry = {
+  timestamp: string;
+  source: ClmmStateEmissionLogSource;
+  goto?: string;
+  origin?: string;
+  updateKeys: string[];
+  threadPatchKeys: string[];
+  lifecyclePhase?: ThreadLifecyclePhase;
+  taskId?: string;
+  taskState?: TaskState;
+  taskTimestamp?: string;
+  taskMessage?: string;
+  onboardingStep?: number;
+  onboardingKey?: string;
+  metricsIteration?: number;
+};
+
 const CLMM_STATE_TRANSITION_LOG_DEFAULT_PATH = './.logs/clmm-state-transitions.ndjson';
+const CLMM_STATE_EMISSION_LOG_DEFAULT_PATH = './.logs/clmm-state-emissions.ndjson';
 
 const clmmTransitionSnapshotKeys: Array<keyof ClmmThreadTransitionSnapshot> = [
   'lifecyclePhase',
@@ -809,15 +836,20 @@ const clmmTransitionSnapshotKeys: Array<keyof ClmmThreadTransitionSnapshot> = [
 ];
 
 let hasWarnedTransitionLogFailure = false;
+let hasWarnedEmissionLogFailure = false;
 
 const isClmmTransitionLogEnabled = (): boolean =>
   process.env['CLMM_STATE_TRANSITION_LOG_ENABLED'] === 'true';
+const isClmmStateEmissionLogEnabled = (): boolean =>
+  process.env['CLMM_STATE_EMISSION_LOG_ENABLED'] === 'true' || isClmmTransitionLogEnabled();
 
 const shouldIncludeFullPatch = (): boolean =>
   process.env['CLMM_STATE_TRANSITION_LOG_INCLUDE_FULL_PATCH'] === 'true';
 
 const resolveClmmTransitionLogPath = (): string =>
   resolve(process.env['CLMM_STATE_TRANSITION_LOG_PATH'] ?? CLMM_STATE_TRANSITION_LOG_DEFAULT_PATH);
+const resolveClmmStateEmissionLogPath = (): string =>
+  resolve(process.env['CLMM_STATE_EMISSION_LOG_PATH'] ?? CLMM_STATE_EMISSION_LOG_DEFAULT_PATH);
 
 const asTaskMessageText = (message: AgentMessage | undefined): string | undefined => {
   if (!message) {
@@ -867,6 +899,49 @@ const warnTransitionLogFailure = (error: unknown): void => {
   console.warn('[CamelotCLMM] Failed to write state transition log', { message });
 };
 
+const warnEmissionLogFailure = (error: unknown): void => {
+  if (hasWarnedEmissionLogFailure) {
+    return;
+  }
+  hasWarnedEmissionLogFailure = true;
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn('[CamelotCLMM] Failed to write state emission log', { message });
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+
+const asString = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
+const asFiniteNumber = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const summarizeEmissionUpdate = (update: Record<string, unknown> | undefined) => {
+  const threadPatch = asRecord(update?.['thread']);
+  const taskPatch = asRecord(threadPatch?.['task']);
+  const taskStatusPatch = asRecord(taskPatch?.['taskStatus']);
+  const taskMessagePatch = asRecord(taskStatusPatch?.['message']);
+  const onboardingPatch = asRecord(threadPatch?.['onboarding']);
+  const lifecyclePatch = asRecord(threadPatch?.['lifecycle']);
+  const metricsPatch = asRecord(threadPatch?.['metrics']);
+
+  return {
+    updateKeys: update ? Object.keys(update).sort() : [],
+    threadPatchKeys: threadPatch ? Object.keys(threadPatch).sort() : [],
+    lifecyclePhase: asString(lifecyclePatch?.['phase']) as ThreadLifecyclePhase | undefined,
+    taskId: asString(taskPatch?.['id']),
+    taskState: asString(taskStatusPatch?.['state']) as TaskState | undefined,
+    taskTimestamp: asString(taskStatusPatch?.['timestamp']),
+    taskMessage: asString(taskMessagePatch?.['content']),
+    onboardingStep: asFiniteNumber(onboardingPatch?.['step']),
+    onboardingKey: asString(onboardingPatch?.['key']),
+    metricsIteration: asFiniteNumber(metricsPatch?.['iteration']),
+  };
+};
+
 export const logClmmThreadTransition = (params: {
   source: ClmmThreadTransitionLogSource;
   previousThread: ClmmThreadState;
@@ -902,6 +977,43 @@ export const logClmmThreadTransition = (params: {
     appendFileSync(logPath, `${JSON.stringify(entry)}\n`, 'utf8');
   } catch (error: unknown) {
     warnTransitionLogFailure(error);
+  }
+};
+
+export const logClmmStateEmission = (params: {
+  source: ClmmStateEmissionLogSource;
+  goto?: string;
+  origin?: string;
+  update?: Record<string, unknown>;
+}): void => {
+  if (!isClmmStateEmissionLogEnabled()) {
+    return;
+  }
+
+  const summary = summarizeEmissionUpdate(params.update);
+  const entry: ClmmStateEmissionLogEntry = {
+    timestamp: new Date().toISOString(),
+    source: params.source,
+    goto: params.goto,
+    origin: params.origin,
+    updateKeys: summary.updateKeys,
+    threadPatchKeys: summary.threadPatchKeys,
+    lifecyclePhase: summary.lifecyclePhase,
+    taskId: summary.taskId,
+    taskState: summary.taskState,
+    taskTimestamp: summary.taskTimestamp,
+    taskMessage: summary.taskMessage,
+    onboardingStep: summary.onboardingStep,
+    onboardingKey: summary.onboardingKey,
+    metricsIteration: summary.metricsIteration,
+  };
+
+  const logPath = resolveClmmStateEmissionLogPath();
+  try {
+    mkdirSync(dirname(logPath), { recursive: true });
+    appendFileSync(logPath, `${JSON.stringify(entry)}\n`, 'utf8');
+  } catch (error: unknown) {
+    warnEmissionLogFailure(error);
   }
 };
 

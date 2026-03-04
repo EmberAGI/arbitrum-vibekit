@@ -18,8 +18,16 @@ import {
   canStartBackgroundCycle,
   getBackgroundCycleReadiness,
 } from './workflow/backgroundCycleReadiness.js';
-import { ClmmStateAnnotation, memory, type ClmmState } from './workflow/context.js';
+import { ClmmStateAnnotation, memory } from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
+import {
+  resolvePostBootstrap,
+  resolvePostCollectDelegations,
+  resolvePostFundingTokenInput,
+  resolvePostPollCycle,
+  resolvePostPrepareOperator,
+  resolvePostRunCycle,
+} from './workflow/graphRouting.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
 import { collectDelegationsNode } from './workflow/nodes/collectDelegations.js';
 import { collectFundingTokenInputNode } from './workflow/nodes/collectFundingTokenInput.js';
@@ -28,7 +36,7 @@ import { fireCommandNode } from './workflow/nodes/fireCommand.js';
 import { hireCommandNode } from './workflow/nodes/hireCommand.js';
 import { pollCycleNode } from './workflow/nodes/pollCycle.js';
 import { prepareOperatorNode } from './workflow/nodes/prepareOperator.js';
-import { extractCommand, resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
+import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
@@ -39,33 +47,6 @@ const fetchRequest = globalThis.fetch as unknown as (
   input: string,
   init?: unknown,
 ) => Promise<Response>;
-
-function resolvePostBootstrap(
-  state: ClmmState,
-):
-  | 'collectSetupInput'
-  | 'collectFundingTokenInput'
-  | 'collectDelegations'
-  | 'prepareOperator'
-  | 'syncState' {
-  const command = extractCommand(state.messages);
-  if (command === 'sync') {
-    return 'syncState';
-  }
-  if (!state.thread.operatorInput) {
-    return 'collectSetupInput';
-  }
-  if (!state.thread.fundingTokenInput) {
-    return 'collectFundingTokenInput';
-  }
-  if (state.thread.delegationsBypassActive !== true && !state.thread.delegationBundle) {
-    return 'collectDelegations';
-  }
-  if (!state.thread.operatorConfig || state.thread.setupComplete !== true) {
-    return 'prepareOperator';
-  }
-  return 'syncState';
-}
 
 const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('runCommand', runCommandNode)
@@ -86,14 +67,14 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addConditionalEdges('runCommand', resolveCommandTarget)
   .addEdge('hireCommand', 'bootstrap')
   .addEdge('fireCommand', END)
-  .addEdge('runCycleCommand', 'pollCycle')
+  .addConditionalEdges('runCycleCommand', resolvePostRunCycle)
   .addEdge('syncState', END)
   .addConditionalEdges('bootstrap', resolvePostBootstrap)
   .addEdge('collectSetupInput', 'collectFundingTokenInput')
-  .addEdge('collectFundingTokenInput', 'collectDelegations')
-  .addEdge('collectDelegations', 'prepareOperator')
-  .addEdge('prepareOperator', 'pollCycle')
-  .addEdge('pollCycle', 'summarize')
+  .addConditionalEdges('collectFundingTokenInput', resolvePostFundingTokenInput)
+  .addConditionalEdges('collectDelegations', resolvePostCollectDelegations)
+  .addConditionalEdges('prepareOperator', resolvePostPrepareOperator)
+  .addConditionalEdges('pollCycle', resolvePostPollCycle)
   .addEdge('summarize', END);
 
 export const graph = workflow.compile({

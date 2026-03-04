@@ -61,4 +61,44 @@ describe('collectSetupInputNode', () => {
     expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
     expect(commandResult.update?.thread?.profile).toBeUndefined();
   });
+
+  it('returns a no-op update when setup is already complete', async () => {
+    interruptMock.mockReset();
+    copilotkitEmitStateMock.mockReset();
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      thread: {
+        operatorInput: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          baseContributionUsd: 25,
+        },
+        operatorConfig: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          executionWalletAddress: '0x2222222222222222222222222222222222222222',
+          baseContributionUsd: 25,
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          targetYieldToken: {
+            marketAddress: '0x3333333333333333333333333333333333333333',
+            ptAddress: '0x4444444444444444444444444444444444444444',
+            ytAddress: '0x5555555555555555555555555555555555555555',
+            ptSymbol: 'PT-USDC',
+            ytSymbol: 'YT-USDC',
+            underlyingSymbol: 'USDC',
+            underlyingAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+            maturity: '2030-01-01T00:00:00.000Z',
+            apy: 12,
+          },
+        },
+        setupComplete: true,
+        onboarding: undefined,
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectSetupInputNode(state, {});
+
+    expect(result).toEqual({});
+    expect(interruptMock).not.toHaveBeenCalled();
+    expect(copilotkitEmitStateMock).not.toHaveBeenCalled();
+  });
 });

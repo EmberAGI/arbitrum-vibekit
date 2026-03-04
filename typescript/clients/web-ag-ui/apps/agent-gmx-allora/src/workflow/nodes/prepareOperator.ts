@@ -30,6 +30,13 @@ export const prepareOperatorNode = async (
     hasDelegationBundle: Boolean(state.thread.delegationBundle),
     hasOperatorConfig: Boolean(state.thread.operatorConfig),
   });
+  if (state.thread.operatorConfig || state.thread.onboardingFlow?.status === 'completed') {
+    logInfo('prepareOperator: onboarding already completed; skipping stale operator preparation update', {
+      onboardingStatus: state.thread.onboardingFlow?.status,
+      hasOperatorConfig: Boolean(state.thread.operatorConfig),
+    });
+    return {};
+  }
   const { operatorInput } = state.thread;
   if (!operatorInput) {
     const failureMessage = 'ERROR: Setup input missing';

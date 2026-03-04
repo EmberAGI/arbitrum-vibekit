@@ -14,9 +14,16 @@ import {
   ClmmStateAnnotation,
   memory,
   normalizeHexAddress,
-  type ClmmState,
 } from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
+import {
+  resolvePostBootstrap,
+  resolvePostCollectDelegations,
+  resolvePostFundingTokenInput,
+  resolvePostPollCycle,
+  resolvePostPrepareOperator,
+  resolvePostRunCycle,
+} from './workflow/graphRouting.js';
 import { configureLangGraphApiCheckpointer } from './workflow/langgraphApiCheckpointer.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
 import { collectDelegationsNode } from './workflow/nodes/collectDelegations.js';
@@ -27,33 +34,11 @@ import { hireCommandNode } from './workflow/nodes/hireCommand.js';
 import { listPoolsNode } from './workflow/nodes/listPools.js';
 import { pollCycleNode } from './workflow/nodes/pollCycle.js';
 import { prepareOperatorNode } from './workflow/nodes/prepareOperator.js';
-import { extractCommand, resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
+import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
-import { resolveNextOnboardingNode } from './workflow/onboardingRouting.js';
 import { saveBootstrapContext } from './workflow/store.js';
-
-/**
- * Routes after bootstrap based on the original command.
- * - sync: go to syncState (just return state after bootstrap)
- * - hire/cycle: resume from the next missing onboarding requirement
- */
-function resolvePostBootstrap(
-  state: ClmmState,
-):
-  | 'listPools'
-  | 'collectOperatorInput'
-  | 'collectFundingTokenInput'
-  | 'collectDelegations'
-  | 'prepareOperator'
-  | 'syncState' {
-  const command = extractCommand(state.messages);
-  if (command === 'sync') {
-    return 'syncState';
-  }
-  return resolveNextOnboardingNode(state);
-}
 
 const store = new InMemoryStore();
 const DEFAULT_DURABILITY = resolveLangGraphDefaults().durability;
@@ -87,21 +72,21 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('collectFundingTokenInput', collectFundingTokenInputNode)
   .addNode('collectDelegations', collectDelegationsNode)
   .addNode('prepareOperator', prepareOperatorNode)
-  .addNode('pollCycle', pollCycleNode, { ends: ['summarize'] })
+  .addNode('pollCycle', pollCycleNode)
   .addNode('summarize', summarizeNode)
   .addEdge(START, 'runCommand')
   .addConditionalEdges('runCommand', resolveCommandTarget)
   .addEdge('hireCommand', 'bootstrap')
   .addEdge('fireCommand', END)
-  .addEdge('runCycleCommand', 'pollCycle')
+  .addConditionalEdges('runCycleCommand', resolvePostRunCycle)
   .addEdge('syncState', END)
   .addConditionalEdges('bootstrap', resolvePostBootstrap)
   .addEdge('listPools', 'collectOperatorInput')
   .addEdge('collectOperatorInput', 'collectFundingTokenInput')
-  .addEdge('collectFundingTokenInput', 'collectDelegations')
-  .addEdge('collectDelegations', 'prepareOperator')
-  .addEdge('prepareOperator', 'pollCycle')
-  .addEdge('pollCycle', 'summarize')
+  .addConditionalEdges('collectFundingTokenInput', resolvePostFundingTokenInput)
+  .addConditionalEdges('collectDelegations', resolvePostCollectDelegations)
+  .addConditionalEdges('prepareOperator', resolvePostPrepareOperator)
+  .addConditionalEdges('pollCycle', resolvePostPollCycle)
   .addEdge('summarize', END);
 
 export const clmmGraph = workflow.compile({

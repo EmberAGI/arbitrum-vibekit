@@ -436,4 +436,93 @@ describe('CLMM thread lifecycle invariants', () => {
       '[Cycle 2] hold: Within target band; monitoring continues',
     );
   });
+
+  it('does not replace cycle message with non-cycle active message when iteration does not advance', () => {
+    const left = {
+      ...createDefaultClmmThreadState(),
+      lifecycle: { phase: 'active' as const },
+      metrics: {
+        ...createDefaultClmmThreadState().metrics,
+        iteration: 1,
+      },
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'working' as const,
+          timestamp: '2026-03-04T04:39:02.420Z',
+          message: {
+            id: 'cycle-1',
+            role: 'assistant' as const,
+            content:
+              '[Cycle 1] enter-range: No active CLMM position detected for this pool (tx: 0xafbc59bc37ed7b5d6dcf5fae644c35380a6dc91a63f2e7632e777798d579492f)',
+          },
+        },
+      },
+    };
+
+    const next = reduceThreadStateForTest(left, {
+      metrics: {
+        iteration: 1,
+      },
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'working',
+          timestamp: '2026-03-04T04:39:05.243Z',
+          message: {
+            id: 'delegations-active',
+            role: 'assistant',
+            content:
+              'Delegations active. Managing pool WETH/USDC from user wallet 0xbD70792F773a39f88b43d35bb5Aa3d5e098EfeA4',
+          },
+        },
+      },
+    });
+
+    expect(next.metrics.iteration).toBe(1);
+    expect(next.task?.taskStatus.message?.content).toContain('[Cycle 1] enter-range');
+  });
+
+  it('does not regress active working task timestamp before first cycle iteration', () => {
+    const left = {
+      ...createDefaultClmmThreadState(),
+      lifecycle: { phase: 'active' as const },
+      metrics: {
+        ...createDefaultClmmThreadState().metrics,
+        iteration: 0,
+      },
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'working' as const,
+          timestamp: '2026-03-04T04:38:55.048Z',
+          message: {
+            id: 'delegations-active',
+            role: 'assistant' as const,
+            content:
+              'Delegations active. Managing pool WETH/USDC from user wallet 0xbD70792F773a39f88b43d35bb5Aa3d5e098EfeA4',
+          },
+        },
+      },
+    };
+
+    const next = reduceThreadStateForTest(left, {
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'working',
+          timestamp: '2026-03-04T04:38:55.021Z',
+          message: {
+            id: 'delegations-signed',
+            role: 'assistant',
+            content: 'Delegations signed. Continuing onboarding.',
+          },
+        },
+      },
+    });
+
+    expect(next.metrics.iteration).toBe(0);
+    expect(next.task?.taskStatus.timestamp).toBe('2026-03-04T04:38:55.048Z');
+    expect(next.task?.taskStatus.message?.content).toContain('Delegations active.');
+  });
 });
