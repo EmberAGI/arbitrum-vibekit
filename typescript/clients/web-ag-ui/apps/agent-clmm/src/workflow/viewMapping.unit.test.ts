@@ -69,30 +69,89 @@ describe('applyAccountingToView', () => {
   it('maps accounting AUM/APY and iteration into profile/metrics', () => {
     const accounting = buildAccounting();
 
-  const { profile, metrics } = applyAccountingToView({
-    profile: baseProfile,
-    metrics: baseMetrics,
-    accounting,
-  });
+    const { profile, metrics } = applyAccountingToView({
+      profile: baseProfile,
+      metrics: baseMetrics,
+      accounting,
+    });
 
-  expect(profile.aum).toBe(12);
-  expect(profile.apy).toBe(1.25);
-  expect(profile.agentIncome).toBe(3.5);
-  expect(metrics.iteration).toBe(4);
-  expect(metrics.aumUsd).toBe(12);
+    expect(profile.aum).toBe(12);
+    expect(profile.apy).toBe(1.25);
+    expect(profile.agentIncome).toBe(3.5);
+    expect(metrics.iteration).toBe(4);
+    expect(metrics.aumUsd).toBe(12);
     expect(metrics.apy).toBe(75);
-  expect(metrics.lifetimePnlUsd).toBe(3.5);
-  expect(metrics.latestSnapshot?.totalUsd).toBe(12);
-});
-
-it('overwrites agent income with accounting lifetime PnL', () => {
-  const accounting = buildAccounting({ lifetimePnlUsd: 99 });
-  const { profile } = applyAccountingToView({
-    profile: { ...baseProfile, agentIncome: 42 },
-    metrics: baseMetrics,
-    accounting,
+    expect(metrics.lifetimePnlUsd).toBe(3.5);
+    expect(metrics.latestSnapshot?.totalUsd).toBe(12);
   });
 
-  expect(profile.agentIncome).toBe(99);
-});
+  it('overwrites agent income with accounting lifetime PnL', () => {
+    const accounting = buildAccounting({ lifetimePnlUsd: 99 });
+    const { profile } = applyAccountingToView({
+      profile: { ...baseProfile, agentIncome: 42 },
+      metrics: baseMetrics,
+      accounting,
+    });
+
+    expect(profile.agentIncome).toBe(99);
+  });
+
+  it('computes inherited-position APY from post-hire fee growth without supply events', () => {
+    const lifecycleStart = '2026-01-01T00:00:00.000Z';
+    const latestTimestamp = '2026-01-11T00:00:00.000Z';
+    const position = {
+      positionId: 'position-1',
+      poolAddress: '0xpool1' as const,
+      protocolId: 'camelot',
+      tokens: [],
+      positionValueUsd: 100,
+      feesUsd: 1.5,
+    };
+    const baselineSnapshot = {
+      contextId: 'ctx-1',
+      trigger: 'cycle' as const,
+      timestamp: lifecycleStart,
+      protocolId: 'camelot',
+      walletAddress: '0x0000000000000000000000000000000000000000' as const,
+      chainId: 42161,
+      totalUsd: 100,
+      positions: [position],
+      feesUsd: 1,
+      priceSource: 'ember' as const,
+      cycle: 1,
+    };
+    const latestSnapshot = {
+      ...baselineSnapshot,
+      timestamp: latestTimestamp,
+      feesUsd: 1.5,
+      cycle: 2,
+    };
+    const accounting = buildAccounting({
+      flowLog: [
+        {
+          id: 'flow-hire-1',
+          type: 'hire',
+          timestamp: lifecycleStart,
+          contextId: 'ctx-1',
+          chainId: 42161,
+          usdValue: 100,
+        },
+      ],
+      navSnapshots: [baselineSnapshot, latestSnapshot],
+      latestNavSnapshot: latestSnapshot,
+      lifecycleStart,
+      aumUsd: 100,
+      apy: 0,
+    });
+
+    const { metrics } = applyAccountingToView({
+      profile: baseProfile,
+      metrics: baseMetrics,
+      accounting,
+    });
+
+    expect(metrics.apy).toBeCloseTo(18.25, 6);
+    expect(metrics.latestSnapshot?.feesApy).toBeCloseTo(18.25, 6);
+    expect(metrics.latestSnapshot?.positionOpenedAt).toBeUndefined();
+  });
 });
