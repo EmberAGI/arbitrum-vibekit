@@ -554,11 +554,89 @@ function isResolvedLifecycle(
 function formatLifecycleFailureDetail(params: {
   status: 'cancelled' | 'failed';
   reason?: string;
+  reasonBytes?: string;
+  requestedPrice?: string;
+  observedPrice?: string;
 }): string {
-  if (params.reason) {
-    return `Onchain order ${params.status}: ${params.reason}`;
+  const decodedReason = decodeLifecycleFailureReason(params);
+  if (decodedReason) {
+    return `Onchain order ${params.status}: ${decodedReason}`;
   }
   return `Onchain order ${params.status}.`;
+}
+
+function parseBigIntValue(raw: string | undefined): bigint | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const normalized = raw.trim();
+  if (!/^(0x[0-9a-f]+|\d+)$/iu.test(normalized)) {
+    return undefined;
+  }
+  try {
+    return BigInt(normalized);
+  } catch {
+    return undefined;
+  }
+}
+
+function formatPercentFromBps(valueBps: bigint): string {
+  const whole = valueBps / 100n;
+  const fraction = valueBps % 100n;
+  return `${whole.toString()}.${fraction.toString().padStart(2, '0')}%`;
+}
+
+function decodeLifecycleFailureReason(params: {
+  reason?: string;
+  reasonBytes?: string;
+  requestedPrice?: string;
+  observedPrice?: string;
+}): string | undefined {
+  const explicitReason = params.reason?.trim();
+  if (explicitReason) {
+    return explicitReason;
+  }
+
+  const reasonBytes = params.reasonBytes?.trim().toLowerCase();
+  if (reasonBytes && /^0x[0-9a-f]+$/u.test(reasonBytes) && reasonBytes.length >= 10) {
+    const selector = reasonBytes.slice(0, 10);
+    if (selector === '0xe09ad0e9' && reasonBytes.length >= 10 + 64 * 2) {
+      const orderPriceRaw = parseBigIntValue(`0x${reasonBytes.slice(10, 74)}`);
+      const acceptablePriceRaw = parseBigIntValue(`0x${reasonBytes.slice(74, 138)}`);
+      if (
+        orderPriceRaw !== undefined &&
+        acceptablePriceRaw !== undefined &&
+        acceptablePriceRaw > 0n
+      ) {
+        const absDiff =
+          orderPriceRaw >= acceptablePriceRaw
+            ? orderPriceRaw - acceptablePriceRaw
+            : acceptablePriceRaw - orderPriceRaw;
+        const diffBps = (absDiff * 10_000n) / acceptablePriceRaw;
+        const direction = orderPriceRaw > acceptablePriceRaw ? 'above' : 'below';
+        return `OrderNotFulfillableAtAcceptablePrice (order price ${direction} acceptable bound by ~${formatPercentFromBps(diffBps)}).`;
+      }
+      return 'OrderNotFulfillableAtAcceptablePrice.';
+    }
+  }
+
+  const requestedPriceRaw = parseBigIntValue(params.requestedPrice);
+  const observedPriceRaw = parseBigIntValue(params.observedPrice);
+  if (
+    requestedPriceRaw !== undefined &&
+    observedPriceRaw !== undefined &&
+    requestedPriceRaw > 0n
+  ) {
+    const absDiff =
+      observedPriceRaw >= requestedPriceRaw
+        ? observedPriceRaw - requestedPriceRaw
+        : requestedPriceRaw - observedPriceRaw;
+    const diffBps = (absDiff * 10_000n) / requestedPriceRaw;
+    const direction = observedPriceRaw > requestedPriceRaw ? 'above' : 'below';
+    return `Price moved outside acceptable bounds (observed ${direction} requested by ~${formatPercentFromBps(diffBps)}).`;
+  }
+
+  return undefined;
 }
 
 function buildLatestSnapshot(params: {
@@ -867,8 +945,9 @@ export const pollCycleNode = async (
 
   const previousCycle = state.thread.metrics.latestCycle;
   const assumedPositionSide = state.thread.metrics.assumedPositionSide;
+  let reconciledAssumedPositionSide = assumedPositionSide;
   const nowEpochMs = Date.now();
-  const activePositionSyncGuard = resolveActivePositionSyncGuard(
+  let activePositionSyncGuard = resolveActivePositionSyncGuard(
     state.thread.metrics.pendingPositionSync,
     nowEpochMs,
   );
@@ -876,6 +955,50 @@ export const pollCycleNode = async (
   const currentMarketPosition = positions.find(
     (position) => position.marketAddress.toLowerCase() === normalizedTargetMarket,
   );
+  let positionSyncGuardClearedFromLifecycle = false;
+  if (activePositionSyncGuard && !currentMarketPosition && activePositionSyncGuard.sourceTxHash) {
+    const guardSourceTxHash = normalizeHexAddress(
+      activePositionSyncGuard.sourceTxHash,
+      'position sync source tx hash',
+    );
+    const guardSourceAction = activePositionSyncGuard.sourceAction;
+    try {
+      const guardLifecycle = await onchainActionsClient.getPerpetualLifecycle({
+        providerName: GMX_PERPETUALS_PROVIDER_NAME,
+        chainId: ARBITRUM_CHAIN_ID.toString(),
+        txHash: guardSourceTxHash,
+        walletAddress: planBuilderWalletAddress,
+      });
+      if (
+        isResolvedLifecycle(guardLifecycle) &&
+        (guardLifecycle.status === 'cancelled' || guardLifecycle.status === 'failed')
+      ) {
+        logWarn('pollCycle: clearing stale position sync guard after terminal lifecycle', {
+          threadId: runtimeThreadId,
+          checkpointId: runtimeCheckpointId,
+          checkpointNamespace: runtimeCheckpointNamespace,
+          iteration,
+          guardSourceTxHash,
+          guardSourceAction,
+          lifecycleStatus: guardLifecycle.status,
+          lifecycleReason: guardLifecycle.reason,
+        });
+        activePositionSyncGuard = undefined;
+        reconciledAssumedPositionSide = undefined;
+        positionSyncGuardClearedFromLifecycle = true;
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarn('pollCycle: position sync guard lifecycle query failed', {
+        threadId: runtimeThreadId,
+        checkpointId: runtimeCheckpointId,
+        checkpointNamespace: runtimeCheckpointNamespace,
+        iteration,
+        guardSourceTxHash,
+        error: message,
+      });
+    }
+  }
   logWarn('pollCycle: market position snapshot before decision', {
     threadId: runtimeThreadId,
     checkpointId: runtimeCheckpointId,
@@ -888,16 +1011,18 @@ export const pollCycleNode = async (
     matchedPositionSizeUsd: currentMarketPosition?.sizeInUsd,
     matchedPositionPnl: currentMarketPosition?.pnl,
     assumedPositionSide,
+    reconciledAssumedPositionSide,
     activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
     activePositionSyncGuardSourceAction: activePositionSyncGuard?.sourceAction,
     activePositionSyncGuardExpiresAtEpochMs: activePositionSyncGuard?.expiresAtEpochMs,
+    positionSyncGuardClearedFromLifecycle,
   });
   const currentPositionSide = currentMarketPosition?.positionSide;
   // Only treat a prior position as open when it is backed by onchain state
   // (current position) or explicit local assumption from a successful prior trade.
   // Never infer open state from previous cycle telemetry alone.
   const decisionPreviousSide =
-    currentPositionSide ?? assumedPositionSide ?? activePositionSyncGuard?.expectedSide;
+    currentPositionSide ?? reconciledAssumedPositionSide ?? activePositionSyncGuard?.expectedSide;
   const decisionPreviousAction = decisionPreviousSide ? 'open' : undefined;
   logWarn('pollCycle: decision context resolved', {
     threadId: runtimeThreadId,
@@ -906,6 +1031,7 @@ export const pollCycleNode = async (
     iteration,
     currentPositionSide,
     assumedPositionSide,
+    reconciledAssumedPositionSide,
     previousCycleAction: previousCycle?.action,
     previousCycleSide: previousCycle?.side,
     activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
@@ -1218,6 +1344,7 @@ export const pollCycleNode = async (
     (executionPlan.action === 'long' || executionPlan.action === 'short') &&
     isApprovalOnlyTransactions(executionResult.transactions);
   let lifecycleFailure: ExecutionFailureSummary | undefined;
+  let lifecycleStatus: 'pending' | 'executed' | 'cancelled' | 'failed' | 'unknown' | undefined;
   if (
     executionResult.ok &&
     txExecutionMode === 'execute' &&
@@ -1234,6 +1361,7 @@ export const pollCycleNode = async (
       });
 
       if (isResolvedLifecycle(lifecycle)) {
+        lifecycleStatus = lifecycle.status;
         logWarn('pollCycle: perpetual lifecycle status resolved', {
           threadId: runtimeThreadId,
           checkpointId: runtimeCheckpointId,
@@ -1254,6 +1382,9 @@ export const pollCycleNode = async (
             error: formatLifecycleFailureDetail({
               status: lifecycle.status,
               reason: lifecycle.reason,
+              reasonBytes: lifecycle.reasonBytes,
+              requestedPrice: lifecycle.requestedPrice,
+              observedPrice: lifecycle.observedPrice,
             }),
           });
         }
@@ -1370,6 +1501,9 @@ export const pollCycleNode = async (
 
   const hasCompletedTradeEffect =
     executionCompletedSuccessfully && executionPlan.action !== 'none' && !approvalOnlyExecution;
+  const executionAwaitingPositionConfirmation =
+    hasCompletedTradeEffect && lifecycleStatus === 'pending' && !positionAfterExecution;
+  const hasConfirmedTradeEffect = hasCompletedTradeEffect && !executionAwaitingPositionConfirmation;
   const lifetimePnlUsd = positionAfterExecution
     ? parseUsdMetric(positionAfterExecution.pnl)
     : executionCompletedSuccessfully && executionPlan.action === 'close'
@@ -1429,10 +1563,15 @@ export const pollCycleNode = async (
 
   const nextAssumedPositionSide = (() => {
     if (!executionCompletedSuccessfully) {
-      return currentPositionSide ?? assumedPositionSide ?? activePositionSyncGuard?.expectedSide;
+      return (
+        currentPositionSide ?? reconciledAssumedPositionSide ?? activePositionSyncGuard?.expectedSide
+      );
     }
     if (approvalOnlyExecution) {
-      return assumedPositionSide;
+      return reconciledAssumedPositionSide;
+    }
+    if (executionAwaitingPositionConfirmation) {
+      return currentPositionSide ?? reconciledAssumedPositionSide;
     }
     // Planned actions should advance local assumptions immediately so we don't
     // repeat stale intent on the next cycle.
@@ -1449,7 +1588,7 @@ export const pollCycleNode = async (
     if (positionAfterExecution?.positionSide) {
       return positionAfterExecution.positionSide;
     }
-    return currentPositionSide ?? assumedPositionSide ?? nextPendingPositionSync?.expectedSide;
+    return currentPositionSide ?? reconciledAssumedPositionSide ?? nextPendingPositionSync?.expectedSide;
   })();
   const executionPlanEvent: ClmmEvent | undefined =
     executionPlan.action === 'none'
@@ -1476,7 +1615,7 @@ export const pollCycleNode = async (
       matchedMarketPosition: Boolean(currentMarketPosition),
       matchedMarketPositionSide: currentMarketPosition?.positionSide,
       matchedMarketPositionSizeUsd: currentMarketPosition?.sizeInUsd,
-      assumedPositionSide,
+      assumedPositionSide: reconciledAssumedPositionSide,
       activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
     });
   }
@@ -1526,7 +1665,9 @@ export const pollCycleNode = async (
   const finalReason = latestCycle.reason;
   const resolvedTxHash = executionResult.lastTxHash ?? latestCycle.txHash;
   const transactionEntry =
-    executionPlan.action !== 'none' && !requiresFundingAcknowledgement
+    executionPlan.action !== 'none' &&
+    !requiresFundingAcknowledgement &&
+    !executionAwaitingPositionConfirmation
       ? {
           cycle: iteration,
           action: finalAction,
@@ -1567,7 +1708,7 @@ export const pollCycleNode = async (
         assumedPositionSide: nextAssumedPositionSide,
         lastInferenceSnapshotKey: inferenceSnapshotKey,
         lastTradedInferenceSnapshotKey:
-          hasCompletedTradeEffect && inferenceSnapshotKey
+          hasConfirmedTradeEffect && inferenceSnapshotKey
             ? inferenceSnapshotKey
             : state.thread.metrics.lastTradedInferenceSnapshotKey,
         pendingPositionSync: nextPendingPositionSync,

@@ -325,6 +325,7 @@ export interface ThreadMetrics {
   aumUsd?: number;
   apy?: number;
   lifetimePnlUsd?: number;
+  assumedPositionSide?: 'long' | 'short';
   pendle?: PendleStrategyMetric;
   latestSnapshot?: {
     poolAddress?: `0x${string}`;

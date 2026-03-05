@@ -256,6 +256,176 @@ describe('AgentDetailPage internals: metrics variants', () => {
     expect(html).toContain('Decision Threshold');
   });
 
+  it('renders GMX session metrics without profile-level fallback values', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(__agentDetailPageTestOnly.MetricsTab, {
+        agentId: 'agent-gmx-allora',
+        profile: {
+          ...BASE_PROFILE,
+          apy: 99.9,
+          aum: 999_999,
+          agentIncome: 888_888,
+        },
+        metrics: {
+          iteration: 2,
+          cyclesSinceRebalance: 1,
+          staleCycles: 0,
+          aumUsd: undefined,
+          apy: undefined,
+          lifetimePnlUsd: undefined,
+        },
+        fullMetrics: {
+          iteration: 2,
+          cyclesSinceRebalance: 1,
+          staleCycles: 0,
+          latestCycle: {
+            cycle: 2,
+            action: 'hold',
+            marketSymbol: 'BTC/USDC',
+            timestamp: '2026-02-15T12:00:00.000Z',
+            prediction: {
+              topic: 'allora:btc:8h',
+              horizonHours: 8,
+              confidence: 0.88,
+              direction: 'up',
+              predictedPrice: 71000,
+              timestamp: '2026-02-15T11:59:00.000Z',
+            },
+            metrics: {
+              decisionThreshold: 0.62,
+            },
+          },
+          latestSnapshot: {
+            poolAddress: `0x${'6'.repeat(40)}`,
+            totalUsd: 123.45,
+            positionTokens: [],
+          },
+        },
+        events: [],
+        transactions: [],
+        hasLoadedView: true,
+      }),
+    );
+
+    expect(html).toContain('Session Performance');
+    expect(html).not.toContain('Strategy Performance');
+    expect(html).not.toContain('Agent Income');
+    expect(html).not.toContain('$999,999');
+    expect(html).not.toContain('$888,888');
+  });
+
+  it('renders GMX collateral instead of notional and uses real collateral value', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(__agentDetailPageTestOnly.MetricsTab, {
+        agentId: 'agent-gmx-allora',
+        profile: BASE_PROFILE,
+        metrics: {
+          ...BASE_METRICS,
+          lifetimePnlUsd: 0,
+        },
+        fullMetrics: {
+          iteration: 3,
+          cyclesSinceRebalance: 0,
+          staleCycles: 0,
+          latestCycle: {
+            cycle: 3,
+            action: 'open',
+            marketSymbol: 'BTC/USDC',
+            side: 'long',
+            sizeUsd: 100,
+            leverage: 2,
+            timestamp: '2026-02-15T12:00:00.000Z',
+            prediction: {
+              topic: 'allora:btc:8h',
+              horizonHours: 8,
+              confidence: 0.91,
+              direction: 'up',
+              predictedPrice: 71000,
+              timestamp: '2026-02-15T11:59:00.000Z',
+            },
+            metrics: {
+              decisionThreshold: 0.62,
+            },
+          },
+          latestSnapshot: {
+            poolAddress: `0x${'6'.repeat(40)}`,
+            totalUsd: 100,
+            leverage: 2,
+            positionTokens: [
+              {
+                address: `0x${'f'.repeat(40)}`,
+                symbol: 'USDC',
+                decimals: 6,
+                amountBaseUnits: '50000000',
+                valueUsd: 50,
+              },
+            ],
+          },
+        },
+        events: [],
+        transactions: [],
+        hasLoadedView: true,
+      }),
+    );
+
+    expect(html).toContain('Position Size');
+    expect(html).toContain('$100');
+    expect(html).toContain('Collateral');
+    expect(html).toContain('$50');
+    expect(html).not.toContain('Notional');
+  });
+
+  it('falls back to assumed position side for inherited GMX positions', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(__agentDetailPageTestOnly.MetricsTab, {
+        agentId: 'agent-gmx-allora',
+        profile: BASE_PROFILE,
+        metrics: {
+          ...BASE_METRICS,
+          lifetimePnlUsd: -25,
+        },
+        fullMetrics: {
+          iteration: 7,
+          cyclesSinceRebalance: 2,
+          staleCycles: 1,
+          latestCycle: {
+            cycle: 7,
+            action: 'hold',
+            marketSymbol: 'BTC/USDC',
+            side: undefined,
+            sizeUsd: undefined,
+            leverage: undefined,
+            timestamp: '2026-02-15T12:00:00.000Z',
+            prediction: {
+              topic: 'allora:btc:8h',
+              horizonHours: 8,
+              confidence: 0.91,
+              direction: 'up',
+              predictedPrice: 71000,
+              timestamp: '2026-02-15T11:59:00.000Z',
+            },
+            metrics: {
+              decisionThreshold: 0.62,
+            },
+          },
+          latestSnapshot: {
+            poolAddress: `0x${'6'.repeat(40)}`,
+            totalUsd: 100,
+            leverage: 2,
+            positionTokens: [],
+          },
+          assumedPositionSide: 'long',
+        },
+        events: [],
+        transactions: [],
+        hasLoadedView: true,
+      }),
+    );
+
+    expect(html).toContain('Position Side');
+    expect(html).toContain('LONG');
+  });
+
   it('renders GMX funding-blocked execution as pending without a failure banner', () => {
     const events: ClmmEvent[] = [
       {

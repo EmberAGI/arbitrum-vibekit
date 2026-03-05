@@ -110,7 +110,6 @@ export function MetricsTab({ agentId, profile, metrics, fullMetrics, events, tra
   if (rendererId === 'agent-gmx-allora') {
     return (
       <GmxAlloraMetricsTab
-        profile={profile}
         metrics={metrics}
         fullMetrics={fullMetrics}
         events={events}
@@ -354,11 +353,10 @@ function toArbiscanTxUrl(txHash: string) {
 
 type GmxAlloraMetricsTabProps = Pick<
   MetricsTabProps,
-  'profile' | 'metrics' | 'fullMetrics' | 'events' | 'transactions'
+  'metrics' | 'fullMetrics' | 'events' | 'transactions'
 >;
 
 export function GmxAlloraMetricsTab({
-  profile,
   metrics,
   fullMetrics,
   events,
@@ -444,10 +442,29 @@ export function GmxAlloraMetricsTab({
                 : 'pending';
 
   const marketLabel = latestCycle?.marketSymbol ?? formatPoolPair(fullMetrics?.lastSnapshot);
-  const sideLabel = latestCycle?.side ? latestCycle.side.toUpperCase() : '—';
+  const inferredSide = latestCycle?.side ?? fullMetrics?.assumedPositionSide;
+  const sideLabel = inferredSide ? inferredSide.toUpperCase() : '—';
 
-  const displayedLeverage = latestCycle?.leverage ?? latestSnapshot?.leverage;
-  const displayedNotionalUsd = latestCycle?.sizeUsd ?? latestSnapshot?.totalUsd;
+  const displayedLeverage = latestSnapshot?.leverage;
+  const collateralUsd = (() => {
+    const positionTokens = latestSnapshot?.positionTokens ?? [];
+    let collateralFromTokens = 0;
+    let hasTokenCollateral = false;
+    for (const token of positionTokens) {
+      const tokenValueUsd = asFiniteNumber(token.valueUsd);
+      if (tokenValueUsd === undefined) continue;
+      collateralFromTokens += tokenValueUsd;
+      hasTokenCollateral = true;
+    }
+    if (hasTokenCollateral) return collateralFromTokens;
+
+    const positionSizeUsd = asFiniteNumber(latestSnapshot?.totalUsd);
+    const leverage = asFiniteNumber(latestSnapshot?.leverage);
+    if (positionSizeUsd !== undefined && leverage !== undefined && leverage > 0) {
+      return positionSizeUsd / leverage;
+    }
+    return undefined;
+  })();
   const confidencePercent = (() => {
     const value = asFiniteNumber(latestPrediction?.confidence);
     return value === undefined ? null : formatPercent(value * 100, 1);
@@ -460,30 +477,30 @@ export function GmxAlloraMetricsTab({
   return (
     <div className="space-y-6">
       <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Strategy Performance</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">Session Performance</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
             <div className="text-2xl font-bold text-teal-400">
-              {formatPercent(metrics.apy, 1) ?? formatPercent(profile.apy, 1) ?? '—'}
+              {formatUsd(latestSnapshot?.totalUsd)}
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Collateral</div>
             <div className="text-2xl font-bold text-white">
-              {formatUsd(metrics.aumUsd ?? profile.aum)}
+              {formatUsd(collateralUsd)}
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Agent Income</div>
-            <div className="text-2xl font-bold text-white">
-              {formatUsd(profile.agentIncome)}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PnL</div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Lifetime PnL</div>
             <div className="text-2xl font-bold text-white">
               {formatUsd(metrics.lifetimePnlUsd)}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Side</div>
+            <div className="text-2xl font-bold text-white">
+              {sideLabel}
             </div>
           </div>
         </div>
@@ -565,8 +582,8 @@ export function GmxAlloraMetricsTab({
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Notional</div>
-            <div className="text-white font-medium">{formatUsd(displayedNotionalUsd)}</div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Collateral</div>
+            <div className="text-white font-medium">{formatUsd(collateralUsd)}</div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Signal Confidence</div>
