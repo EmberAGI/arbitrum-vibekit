@@ -62,16 +62,55 @@ const finalizeForTaskState = (params: {
   taskState?: TaskState;
 }): OnboardingContract => {
   if (params.setupComplete) {
+    if (params.flow.status === 'completed') {
+      return params.flow;
+    }
     return finalizeOnboardingContract(params.flow, 'completed');
   }
   if (params.taskState === 'failed') {
+    if (params.flow.status === 'failed') {
+      return params.flow;
+    }
     return finalizeOnboardingContract(params.flow, 'failed');
   }
   if (params.taskState === 'canceled') {
+    if (params.flow.status === 'canceled') {
+      return params.flow;
+    }
     return finalizeOnboardingContract(params.flow, 'canceled');
   }
   return params.flow;
 };
+
+const areStepStatesEqual = (left: OnboardingContract['steps'], right: OnboardingContract['steps']): boolean => {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const leftStep = left[index];
+    const rightStep = right[index];
+    if (
+      !leftStep ||
+      !rightStep ||
+      leftStep.id !== rightStep.id ||
+      leftStep.title !== rightStep.title ||
+      leftStep.description !== rightStep.description ||
+      leftStep.status !== rightStep.status
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const areSemanticallyEqualOnboardingFlows = (
+  left: OnboardingContract,
+  right: OnboardingContract,
+): boolean =>
+  left.status === right.status &&
+  left.key === right.key &&
+  left.activeStepId === right.activeStepId &&
+  areStepStatesEqual(left.steps, right.steps);
 
 export const deriveClmmOnboardingFlow = (params: {
   onboarding?: LegacyOnboardingState;
@@ -104,9 +143,16 @@ export const deriveClmmOnboardingFlow = (params: {
     revision: (params.previous?.revision ?? 0) + 1,
   });
 
-  return finalizeForTaskState({
+  const finalizedFlow = finalizeForTaskState({
     flow,
     setupComplete: params.setupComplete,
     taskState: params.taskState,
   });
+  if (
+    params.previous &&
+    areSemanticallyEqualOnboardingFlows(params.previous, finalizedFlow)
+  ) {
+    return params.previous;
+  }
+  return finalizedFlow;
 };

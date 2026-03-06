@@ -8,17 +8,25 @@ export const runCycleCommandNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
+  if (state.thread.task?.taskStatus?.state === 'working') {
+    return {
+      thread: {
+        lifecycle: { phase: 'active' },
+      },
+    };
+  }
+
   const { task, statusEvent } = buildTaskStatus(
-    state.view.task,
+    state.thread.task,
     'working',
     'Running scheduled Pendle cycle.',
   );
-  await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
+  await copilotkitEmitState(config, { thread: { task, activity: { events: [statusEvent], telemetry: [] } } });
 
   return {
-    view: {
+    thread: {
       task,
-      command: 'cycle',
+      lifecycle: { phase: 'active' },
       activity: { events: [statusEvent], telemetry: [] },
     },
   };

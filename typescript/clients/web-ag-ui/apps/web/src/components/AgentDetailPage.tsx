@@ -19,10 +19,9 @@ import type {
   AgentMetrics,
   AgentInterrupt,
   AgentSettings,
-  AgentViewMetrics,
+  ThreadMetrics,
   FundingTokenOption,
   OnboardingFlow,
-  OnboardingState,
   Pool,
   PendleMarket,
   OperatorConfigInput,
@@ -82,14 +81,13 @@ interface AgentDetailPageProps {
   rating?: number;
   profile: AgentProfile;
   metrics: AgentMetrics;
-  fullMetrics?: AgentViewMetrics;
+  fullMetrics?: ThreadMetrics;
   initialTab?: TabType;
   isHired: boolean;
   isHiring: boolean;
   hasLoadedView: boolean;
   isFiring?: boolean;
   isSyncing?: boolean;
-  currentCommand?: string;
   uiError?: string | null;
   onClearUiError?: () => void;
   onHire: () => void;
@@ -114,9 +112,7 @@ interface AgentDetailPageProps {
   haltReason?: string;
   executionError?: string;
   delegationsBypassActive?: boolean;
-  onboarding?: OnboardingState;
   onboardingFlow?: OnboardingFlow;
-  setupComplete?: boolean;
   // Activity data
   transactions?: Transaction[];
   telemetry?: TelemetryItem[];
@@ -221,6 +217,10 @@ function Sparkline(props: {
   );
 }
 
+function asFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function FloatingErrorToast(props: {
   title: string;
   message: string;
@@ -268,7 +268,6 @@ export function AgentDetailPage({
   hasLoadedView,
   isFiring,
   isSyncing,
-  currentCommand,
   uiError,
   onClearUiError,
   onHire,
@@ -283,9 +282,7 @@ export function AgentDetailPage({
   haltReason,
   executionError,
   delegationsBypassActive,
-  onboarding,
   onboardingFlow,
-  setupComplete,
   transactions = [],
   telemetry = [],
   events = [],
@@ -293,9 +290,7 @@ export function AgentDetailPage({
   onSettingsChange,
   onSettingsSave,
 }: AgentDetailPageProps) {
-  const hasHistoricalHireContext =
-    currentCommand === 'fire' || setupComplete === true || onboardingFlow?.status === 'completed';
-  const showPostHireLayout = isHired || hasHistoricalHireContext;
+  const showPostHireLayout = isHired || Boolean(isFiring);
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (showPostHireLayout ? 'blockers' : 'metrics'),
   );
@@ -303,15 +298,12 @@ export function AgentDetailPage({
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
   const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
   const isOnboardingActive = resolveOnboardingActive({
-    agentId,
     activeInterruptPresent: Boolean(activeInterrupt),
     taskStatus,
-    currentCommand,
-    setupComplete,
     onboardingStatus: onboardingFlow?.status,
   });
   const forceBlockersTab = isOnboardingActive;
-  const defaultPostHireTab: TabType = currentCommand === 'fire' ? 'transactions' : 'metrics';
+  const defaultPostHireTab: TabType = isFiring ? 'transactions' : 'metrics';
   const selectTab = useCallback((tab: TabType) => {
     setHasUserSelectedTab(true);
     setActiveTab(tab);
@@ -447,31 +439,37 @@ export function AgentDetailPage({
   };
 
   const formatCurrency = (value: number | undefined) => {
-    if (value === undefined || value === null) return null;
-    if (value >= 1000000) {
-      return `$${(value / 1000000).toFixed(2)}M`;
+    const resolved = asFiniteNumber(value);
+    if (resolved === undefined) return null;
+    if (resolved >= 1000000) {
+      return `$${(resolved / 1000000).toFixed(2)}M`;
     }
-    if (value >= 1000) {
-      return `$${value.toLocaleString()}`;
+    if (resolved >= 1000) {
+      return `$${resolved.toLocaleString()}`;
     }
-    return `$${value.toFixed(2)}`;
+    return `$${resolved.toFixed(2)}`;
   };
 
   const formatSignedCurrency = (value: number | undefined) => {
-    if (value === undefined || value === null) return null;
-    const sign = value > 0 ? '+' : '';
-    return `${sign}${formatCurrency(value)}`;
+    const resolved = asFiniteNumber(value);
+    if (resolved === undefined) return null;
+    const sign = resolved > 0 ? '+' : '';
+    return `${sign}${formatCurrency(resolved)}`;
   };
 
   const formatNumber = (value: number | undefined) => {
-    if (value === undefined || value === null) return null;
-    return value.toLocaleString();
+    const resolved = asFiniteNumber(value);
+    if (resolved === undefined) return null;
+    return resolved.toLocaleString();
   };
 
-  const formatPercent = (value: number | undefined) => {
-    if (value === undefined || value === null) return null;
-    return `${value.toFixed(0)}%`;
+  const formatPercent = (value: number | undefined, digits = 0) => {
+    const resolved = asFiniteNumber(value);
+    if (resolved === undefined) return null;
+    return `${resolved.toFixed(digits)}%`;
   };
+  const currentApy = asFiniteNumber(metrics.apy);
+  const previousApy = asFiniteNumber(fullMetrics?.previousApy);
 
   const renderStars = (ratingValue: number) => {
     const stars = [];
@@ -537,7 +535,6 @@ export function AgentDetailPage({
                 haltReason={haltReason}
                 executionError={executionError}
                 delegationsBypassActive={delegationsBypassActive}
-                onboarding={onboarding}
                 onboardingFlow={onboardingFlow}
                 settings={settings}
                 onSettingsChange={onSettingsChange}
@@ -1079,12 +1076,12 @@ export function AgentDetailPage({
                       isLoaded={hasLoadedView}
                       skeletonClassName="h-7 w-20"
                       loadedClassName="text-teal-400"
-                      value={metrics.apy !== undefined ? `${metrics.apy.toFixed(0)}%` : null}
+                      value={formatPercent(currentApy)}
                     />
                   </div>
                   <div className="text-xs text-gray-500">
-                    {fullMetrics?.previousApy !== undefined && metrics.apy !== undefined
-                      ? `${(metrics.apy - fullMetrics.previousApy).toFixed(1)}%`
+                    {currentApy !== undefined && previousApy !== undefined
+                      ? formatPercent(currentApy - previousApy, 1)
                       : '—'}
                   </div>
                 </div>
@@ -1114,7 +1111,7 @@ export function AgentDetailPage({
                       isLoaded={hasLoadedView}
                       skeletonClassName="h-7 w-24"
                       loadedClassName="text-white"
-                      value={profile.totalUsers !== undefined ? profile.totalUsers.toLocaleString() : null}
+                      value={formatNumber(profile.totalUsers)}
                     />
                   </div>
                   <div className="text-xs text-gray-500">—</div>
@@ -1413,7 +1410,6 @@ interface AgentBlockersTabProps {
   haltReason?: string;
   executionError?: string;
   delegationsBypassActive?: boolean;
-  onboarding?: OnboardingState;
   onboardingFlow?: OnboardingFlow;
   settings?: AgentSettings;
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
@@ -1429,7 +1425,6 @@ function AgentBlockersTab({
   haltReason,
   executionError,
   delegationsBypassActive,
-  onboarding,
   onboardingFlow,
   settings,
   onSettingsChange,
@@ -1477,7 +1472,6 @@ function AgentBlockersTab({
   const currentStep = resolveCurrentSetupStep({
     maxSetupStep,
     onboardingFlow,
-    onboarding,
   });
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
@@ -2096,8 +2090,8 @@ function AgentBlockersTab({
                     <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
                       <div className="text-yellow-300 text-sm font-medium mb-2">Warnings</div>
                       <ul className="space-y-1 text-yellow-200 text-xs">
-                        {(activeInterrupt as unknown as { warnings: string[] }).warnings.map((w) => (
-                          <li key={w}>{w}</li>
+                        {(activeInterrupt as unknown as { warnings: string[] }).warnings.map((w, index) => (
+                          <li key={`${index}-${w}`}>{w}</li>
                         ))}
                       </ul>
                     </div>
@@ -2106,8 +2100,8 @@ function AgentBlockersTab({
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
                     <div className="text-gray-300 text-sm font-medium mb-2">What you are authorizing</div>
                     <ul className="space-y-1 text-gray-400 text-xs">
-                      {(activeInterrupt as unknown as { descriptions?: string[] }).descriptions?.map((d) => (
-                        <li key={d}>{d}</li>
+                      {(activeInterrupt as unknown as { descriptions?: string[] }).descriptions?.map((d, index) => (
+                        <li key={`${index}-${d}`}>{d}</li>
                       ))}
                     </ul>
                   </div>
@@ -2363,6 +2357,7 @@ interface SettingsTabProps {
 
 function SettingsTab({ settings, onSettingsChange, onSettingsSave, isSyncing }: SettingsTabProps) {
   const [localAmount, setLocalAmount] = useState(settings?.amount?.toString() ?? '');
+  const resolvedAllocationAmount = asFiniteNumber(settings?.amount);
 
   const handleSave = () => {
     if (!onSettingsChange && !onSettingsSave) return;
@@ -2411,9 +2406,9 @@ function SettingsTab({ settings, onSettingsChange, onSettingsSave, isSyncing }: 
               {isSyncing ? 'Syncing...' : 'Save'}
             </button>
           </div>
-          {settings?.amount !== undefined && (
+          {resolvedAllocationAmount !== undefined && (
             <p className="text-xs text-gray-500 mt-2">
-              Current allocation: ${settings.amount.toLocaleString()}
+              Current allocation: ${resolvedAllocationAmount.toLocaleString()}
             </p>
           )}
         </div>

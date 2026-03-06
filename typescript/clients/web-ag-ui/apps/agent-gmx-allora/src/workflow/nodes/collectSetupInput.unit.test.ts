@@ -32,15 +32,32 @@ describe('collectSetupInputNode', () => {
     expect(source.includes('new Command(')).toBe(false);
   });
 
+  it('uses shared interrupt payload helpers instead of manual JSON parsing', async () => {
+    const source = await readFile(new URL('./collectSetupInput.ts', import.meta.url), 'utf8');
+    expect(source.includes('requestInterruptPayload(')).toBe(true);
+    expect(source.includes('JSON.parse(')).toBe(false);
+  });
+
   it('persists input-required state before interrupting when runnable config exists', async () => {
     interruptMock.mockReset();
     copilotkitEmitStateMock.mockReset();
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         task: { id: 'task-1', taskStatus: { state: 'submitted' } },
         activity: { telemetry: [], events: [] },
+        profile: {
+          agentIncome: undefined,
+          aum: undefined,
+          totalUsers: undefined,
+          apy: undefined,
+          chains: [],
+          protocols: [],
+          tokens: [],
+          pools: [],
+          allowedPools: [],
+        },
       },
     } as unknown as ClmmState;
 
@@ -52,15 +69,52 @@ describe('collectSetupInputNode', () => {
     const commandResult = result as unknown as {
       goto?: string[];
       update?: {
-        view?: {
+        thread?: {
           task?: { taskStatus?: { state?: string } };
           onboarding?: { step?: number; key?: string };
+          profile?: unknown;
         };
       };
     };
 
     expect(commandResult.goto).toContain('collectSetupInput');
-    expect(commandResult.update?.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(commandResult.update?.view?.onboarding).toEqual({ step: 1, key: 'setup' });
+    expect(commandResult.update?.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(commandResult.update?.thread?.onboarding).toEqual({ step: 1, key: 'setup' });
+    expect(commandResult.update?.thread?.profile).toBeUndefined();
+  });
+
+  it('returns a no-op update when setup is already complete', async () => {
+    interruptMock.mockReset();
+    copilotkitEmitStateMock.mockReset();
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      thread: {
+        operatorInput: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          usdcAllocation: 100,
+          targetMarket: 'BTC',
+        },
+        operatorConfig: {
+          delegatorWalletAddress: '0x1111111111111111111111111111111111111111',
+          delegateeWalletAddress: '0x2222222222222222222222222222222222222222',
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          baseContributionUsd: 100,
+          targetMarket: {
+            address: '0x3333333333333333333333333333333333333333',
+            indexToken: 'BTC',
+            longToken: 'BTC',
+            shortToken: 'USDC',
+          },
+        },
+        onboarding: undefined,
+      },
+    } as unknown as ClmmState;
+
+    const result = await collectSetupInputNode(state, {});
+
+    expect(result).toEqual({});
+    expect(interruptMock).not.toHaveBeenCalled();
+    expect(copilotkitEmitStateMock).not.toHaveBeenCalled();
   });
 });

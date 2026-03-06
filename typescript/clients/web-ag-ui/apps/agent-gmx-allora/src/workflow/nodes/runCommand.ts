@@ -1,14 +1,16 @@
 import {
   extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
+  resolveCommandReplayGuardState,
+  resolveCycleCommandTarget,
   resolveCommandTargetForBootstrappedFlow,
-  resolveRunCommandForView,
   type AgentCommand,
   type CommandEnvelope,
   type CommandRoutingTarget,
 } from 'agent-workflow-core';
 
-import { logWarn, type ClmmState } from '../context.js';
+import { logWarn, type ClmmState, type ClmmUpdate } from '../context.js';
+import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 
 type CommandTarget = CommandRoutingTarget;
 const TRACEABLE_COMMANDS: readonly AgentCommand[] = ['hire', 'fire', 'cycle'];
@@ -25,58 +27,78 @@ export function extractCommand(messages: ClmmState['messages']): AgentCommand | 
   return extractCommandFromMessages(messages);
 }
 
-export function runCommandNode(state: ClmmState): ClmmState {
+export function runCommandNode(state: ClmmState): ClmmUpdate {
   const commandEnvelope = extractCommandEnvelope(state.messages);
   const parsedCommand = commandEnvelope?.command ?? null;
-  const nextCommand = resolveRunCommandForView({
+  const replayGuardState = resolveCommandReplayGuardState({
     parsedCommand,
-    currentViewCommand: state.view.command,
+    clientMutationId: commandEnvelope?.clientMutationId,
+    lastAppliedCommandMutationId: state.private.lastAppliedCommandMutationId,
   });
   const lastAppliedClientMutationId =
     parsedCommand === 'sync'
-      ? commandEnvelope?.clientMutationId ?? state.view.lastAppliedClientMutationId
-      : state.view.lastAppliedClientMutationId;
+      ? commandEnvelope?.clientMutationId ?? state.thread.lastAppliedClientMutationId
+      : state.thread.lastAppliedClientMutationId;
 
   if (shouldTraceCommand(parsedCommand)) {
     logWarn('runCommand: received command envelope', {
       parsedCommand,
-      nextCommand,
-      currentViewCommand: state.view.command,
       messageCount: state.messages.length,
-      onboardingStatus: state.view.onboardingFlow?.status,
-      onboardingStep: state.view.onboarding?.step,
-      onboardingKey: state.view.onboarding?.key,
-      hasOperatorConfig: Boolean(state.view.operatorConfig),
-      hasDelegationBundle: Boolean(state.view.delegationBundle),
+      onboardingStep: state.thread.onboarding?.step,
+      onboardingKey: state.thread.onboarding?.key,
+      hasOperatorConfig: Boolean(state.thread.operatorConfig),
+      hasDelegationBundle: Boolean(state.thread.delegationBundle),
       clientMutationId: commandEnvelope?.clientMutationId,
     });
   }
 
   return {
-    ...state,
-    view: {
-      ...state.view,
-      command: nextCommand,
+    private: {
+      suppressDuplicateCommand: replayGuardState.suppressDuplicateCommand,
+      lastAppliedCommandMutationId: replayGuardState.lastAppliedCommandMutationId,
+    },
+    thread: {
       lastAppliedClientMutationId,
     },
   };
 }
 
-export function resolveCommandTarget({ messages, private: priv, view }: ClmmState): CommandTarget {
-  const resolvedCommand = extractCommand(messages) ?? view.command;
+export function resolveCommandTarget(state: ClmmState): CommandTarget {
+  if (state.private.suppressDuplicateCommand === true) {
+    return '__end__';
+  }
+
+  const resolvedCommand = extractCommand(state.messages);
+  if (resolvedCommand === 'cycle') {
+    const target = resolveCycleCommandTarget({
+      bootstrapped: state.private.bootstrapped,
+      onboardingReady: resolveNextOnboardingNode(state) === 'syncState',
+    });
+
+    if (shouldTraceCommand(resolvedCommand)) {
+      logWarn('runCommand: resolved command target', {
+        resolvedCommand,
+        target,
+        bootstrapped: state.private.bootstrapped,
+        taskState: state.thread.task?.taskStatus?.state,
+        taskMessage: state.thread.task?.taskStatus?.message?.content,
+      });
+    }
+    return target;
+  }
+
   const target = resolveCommandTargetForBootstrappedFlow({
     resolvedCommand,
-    bootstrapped: priv.bootstrapped,
+    bootstrapped: state.private.bootstrapped,
   });
 
   if (shouldTraceCommand(resolvedCommand)) {
     logWarn('runCommand: resolved command target', {
       resolvedCommand,
       target,
-      bootstrapped: priv.bootstrapped,
-      taskState: view.task?.taskStatus?.state,
-      taskMessage: view.task?.taskStatus?.message?.content,
-      onboardingStatus: view.onboardingFlow?.status,
+      bootstrapped: state.private.bootstrapped,
+      taskState: state.thread.task?.taskStatus?.state,
+      taskMessage: state.thread.task?.taskStatus?.message?.content,
     });
   }
   return target;

@@ -47,7 +47,7 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
         return jsonResponse({ thread_id: 'thread-1' });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
-        return jsonResponse({ values: { view: {} } });
+        return jsonResponse({ values: { thread: {} } });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
         return new Response('busy', { status: 409 });
@@ -78,7 +78,7 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
         return jsonResponse({ thread_id: 'thread-1' });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
-        return jsonResponse({ values: { view: {} } });
+        return jsonResponse({ values: { thread: {} } });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
         return jsonResponse({ checkpoint_id: 'cp-1' });
@@ -115,7 +115,7 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
         return jsonResponse({
           values: {
-            view: {
+            thread: {
               command: 'hire',
               onboardingFlow: {
                 status: 'completed',
@@ -145,9 +145,9 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
           throw new Error('Expected string request body');
         }
         const body = JSON.parse(bodyText) as {
-          values?: { view?: { task?: { taskStatus?: { state?: string } } } };
+          values?: { thread?: { task?: { taskStatus?: { state?: string } } } };
         };
-        expect(body.values?.view?.task?.taskStatus?.state).toBe('working');
+        expect(body.values?.thread?.task?.taskStatus?.state).toBe('working');
         return jsonResponse({ checkpoint_id: 'cp-1' });
       }
       if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {
@@ -160,5 +160,61 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
 
     await expect(runGraphOnce('thread-1')).resolves.toBeUndefined();
     expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('preserves inactive lifecycle for fire-terminal snapshots even when setup signals persist', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: unknown) => {
+      const url = getUrl(input);
+      const method = getMethod(init);
+
+      if (url.endsWith('/threads') && method === 'POST') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1') && method === 'PATCH') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
+        return jsonResponse({
+          values: {
+            thread: {
+              lifecycle: { phase: 'inactive' },
+              command: 'fire',
+              operatorConfig: {
+                delegateeWalletAddress: '0x1111111111111111111111111111111111111111',
+              },
+              task: {
+                id: 'task-fire',
+                taskStatus: {
+                  state: 'completed',
+                  message: { content: 'Agent fired. Workflow completed.' },
+                },
+              },
+            },
+          },
+        });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
+        if (!init || typeof init !== 'object' || !('body' in init)) {
+          throw new Error('Missing request body');
+        }
+        const bodyText = (init as { body?: unknown }).body;
+        if (typeof bodyText !== 'string') {
+          throw new Error('Expected string request body');
+        }
+        const body = JSON.parse(bodyText) as {
+          values?: { thread?: { lifecycle?: { phase?: string }; task?: { taskStatus?: { state?: string } } } };
+        };
+        expect(body.values?.thread?.lifecycle?.phase).toBe('inactive');
+        expect(body.values?.thread?.task?.taskStatus?.state).toBe('completed');
+        return jsonResponse({ checkpoint_id: 'cp-1' });
+      }
+      if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {
+        return new Response('busy', { status: 422 });
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(runGraphOnce('thread-1')).resolves.toBeUndefined();
   });
 });

@@ -666,5 +666,66 @@ describe('OnchainActionsClient', () => {
         leverage: '2',
       }),
     ).rejects.toThrow('Onchain actions request failed (400)');
+
+    await expect(
+      client.createPerpetualLong({
+        amount: '100',
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      }),
+    ).rejects.toMatchObject({
+      name: 'OnchainActionsRequestError',
+      status: 400,
+      method: 'POST',
+      url: 'https://api.example.test/perpetuals/increase/quote',
+      bodyText: 'bad request',
+    });
+  });
+
+  it('estimates quote fees for perpetual long requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          asOf: '2026-02-25T00:00:00.000Z',
+          ttlMs: 30000,
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          pricing: {
+            markPrice: '1',
+            acceptablePrice: '1',
+            slippageBps: '100',
+            priceImpactDeltaUsd: '0',
+          },
+          fees: { positionFeeUsd: '0.03', borrowingFeeUsd: '0.02', fundingFeeUsd: '0.01' },
+          warnings: [],
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new OnchainActionsClient('https://api.example.test');
+    const estimated = await client.estimatePerpetualQuoteFeeUsd({
+      action: 'long',
+      request: {
+        amount: '100',
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
+    });
+
+    const quoteCall = fetchMock.mock.calls[0] as [unknown, RequestInit | undefined] | undefined;
+    expect(quoteCall?.[0]).toBe('https://api.example.test/perpetuals/increase/quote');
+    expect(estimated).toBeCloseTo(0.06, 6);
   });
 });

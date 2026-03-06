@@ -1,5 +1,9 @@
 import type { OnchainClients } from '../clients/clients.js';
-import type { OnchainActionsClient, TransactionPlan } from '../clients/onchainActions.js';
+import {
+  OnchainActionsRequestError,
+  type OnchainActionsClient,
+  type TransactionPlan,
+} from '../clients/onchainActions.js';
 import { redeemDelegationsAndExecuteTransactions } from '../core/delegatedExecution.js';
 import type { ExecutionPlan } from '../core/executionPlan.js';
 import { executeTransaction } from '../core/transaction.js';
@@ -128,6 +132,52 @@ async function planOrExecuteTransactions(params: {
   return { txHashes, lastTxHash: txHashes.at(-1) };
 }
 
+export async function executePreparedTransactions(params: {
+  transactions: TransactionPlan[];
+  txExecutionMode: 'plan' | 'execute';
+  clients?: OnchainClients;
+  delegationsBypassActive: boolean;
+  delegationBundle?: DelegationBundle;
+  delegatorWalletAddress?: `0x${string}`;
+  delegateeWalletAddress?: `0x${string}`;
+}): Promise<{
+  ok: boolean;
+  transactions: TransactionPlan[];
+  txHashes?: `0x${string}`[];
+  lastTxHash?: `0x${string}`;
+  error?: string;
+}> {
+  const delegation =
+    params.txExecutionMode === 'execute' && params.delegationsBypassActive === false
+      ? resolveDelegationExecutionConfig({
+          delegationBundle: params.delegationBundle,
+          delegatorWalletAddress: params.delegatorWalletAddress,
+          delegateeWalletAddress: params.delegateeWalletAddress,
+        })
+      : undefined;
+
+  try {
+    const execution = await planOrExecuteTransactions({
+      txExecutionMode: params.txExecutionMode,
+      clients: params.clients,
+      transactions: params.transactions,
+      delegationBundle: delegation,
+    });
+    return {
+      ok: true,
+      transactions: params.transactions,
+      txHashes: execution.txHashes,
+      lastTxHash: execution.lastTxHash,
+    };
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      transactions: params.transactions,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 function summarizeExecutionRequest(plan: ExecutionPlan): Record<string, unknown> {
   if (!plan.request || plan.action === 'none') {
     return {};
@@ -172,6 +222,33 @@ function summarizePlannedTransactions(transactions: TransactionPlan[]): Record<s
     firstTransactionChainId: firstTransaction?.chainId,
     firstTransactionValue: firstTransaction?.value,
     firstTransactionDataSelector,
+  };
+}
+
+function parseOnchainActionsBodyError(bodyText: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(bodyText);
+    if (!parsed || typeof parsed !== 'object') {
+      return undefined;
+    }
+    const candidate = (parsed as { error?: unknown }).error;
+    return typeof candidate === 'string' && candidate.length > 0 ? candidate : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function summarizeOnchainActionsError(error: unknown): Record<string, unknown> {
+  if (!(error instanceof OnchainActionsRequestError)) {
+    return {};
+  }
+  return {
+    onchainActionsStatus: error.status,
+    onchainActionsMethod: error.method,
+    onchainActionsUrl: error.url,
+    onchainActionsResponseBody: error.bodyText,
+    onchainActionsResponseError: parseOnchainActionsBodyError(error.bodyText),
+    onchainActionsRequestBody: error.requestBody,
   };
 }
 
@@ -300,12 +377,14 @@ export async function executePerpetualPlan(params: {
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
+    const onchainActionsError = summarizeOnchainActionsError(error);
     logWarn('executePerpetualPlan: failed to create or execute plan', {
       action: plan.action,
       txExecutionMode: params.txExecutionMode,
       delegationActive: Boolean(delegation),
       ...requestSummary,
       error: message,
+      ...onchainActionsError,
     });
     return { action: plan.action, ok: false, error: message };
   }

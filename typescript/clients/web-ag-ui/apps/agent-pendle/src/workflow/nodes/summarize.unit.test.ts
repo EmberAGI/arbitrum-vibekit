@@ -18,7 +18,7 @@ describe('summarizeNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         task: {
           id: 'task-1',
           taskStatus: {
@@ -33,10 +33,10 @@ describe('summarizeNode', () => {
 
     const result = await summarizeNode(state, {});
 
-    expect(result.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(result.view?.task?.taskStatus?.message?.content).toBe('Waiting for delegation approval.');
+    expect(result.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(result.thread?.task?.taskStatus?.message?.content).toBe('Waiting for delegation approval.');
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
-    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { view?: unknown })?.view as
+    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { thread?: unknown })?.thread as
       | {
           task?: { taskStatus?: { state?: string; message?: { content?: string } } };
         }
@@ -50,7 +50,7 @@ describe('summarizeNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         task: {
           id: 'task-1',
           taskStatus: {
@@ -72,12 +72,12 @@ describe('summarizeNode', () => {
 
     const result = await summarizeNode(state, {});
 
-    expect(result.view?.task?.taskStatus?.state).toBe('working');
-    expect(result.view?.task?.taskStatus?.message?.content).toBe(
+    expect(result.thread?.task?.taskStatus?.state).toBe('working');
+    expect(result.thread?.task?.taskStatus?.message?.content).toBe(
       'Onboarding complete. Pendle strategy is active.',
     );
     expect(copilotkitEmitStateMock).toHaveBeenCalledTimes(1);
-    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { view?: unknown })?.view as
+    const emittedView = (copilotkitEmitStateMock.mock.calls[0]?.[1] as { thread?: unknown })?.thread as
       | {
           task?: { taskStatus?: { state?: string; message?: { content?: string } } };
         }
@@ -85,6 +85,37 @@ describe('summarizeNode', () => {
     expect(emittedView?.task?.taskStatus?.state).toBe('working');
     expect(emittedView?.task?.taskStatus?.message?.content).toBe(
       'Onboarding complete. Pendle strategy is active.',
+    );
+  });
+
+  it('does not clear delegation wait from stale onboardingFlow completion alone', async () => {
+    copilotkitEmitStateMock.mockReset();
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      thread: {
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              id: 'msg-1',
+              role: 'assistant',
+              content: 'Waiting for delegation approval to continue onboarding.',
+            },
+          },
+        },
+        onboardingFlow: { status: 'completed' },
+        haltReason: undefined,
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await summarizeNode(state, {});
+
+    expect(result.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(result.thread?.task?.taskStatus?.message?.content).toBe(
+      'Waiting for delegation approval to continue onboarding.',
     );
   });
 });

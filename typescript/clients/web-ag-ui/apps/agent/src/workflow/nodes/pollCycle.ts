@@ -46,10 +46,10 @@ function buildMockTxHash(iteration: number): string {
 }
 
 function buildPoolSnapshot(params: {
-  pool: ClmmState['view']['selectedPool'];
+  pool: ClmmState['thread']['selectedPool'];
   iteration: number;
   tickDelta: number;
-}): NonNullable<ClmmState['view']['selectedPool']> {
+}): NonNullable<ClmmState['thread']['selectedPool']> {
   const baseTvl = params.pool?.activeTvlUSD ?? 1_000_000;
   return {
     ...(params.pool ?? {
@@ -84,30 +84,30 @@ export const pollCycleNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<Command<string, ClmmUpdate>> => {
-  const { operatorConfig, selectedPool } = state.view;
+  const { operatorConfig, selectedPool } = state.thread;
 
   if (!operatorConfig || !selectedPool) {
     const failureMessage = 'ERROR: Polling node missing operator configuration or selected pool';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
     return new Command({
       update: {
-        view: {
+        thread: {
           haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: state.view.metrics,
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+          metrics: state.thread.metrics,
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       },
       goto: 'summarize',
     });
   }
 
-  const iteration = (state.view.metrics.iteration ?? 0) + 1;
+  const iteration = (state.thread.metrics.iteration ?? 0) + 1;
   const action = actionForIteration(iteration);
   const reason = reasonForAction(action);
   const tickSpacing = selectedPool.tickSpacing ?? 60;
@@ -117,7 +117,7 @@ export const pollCycleNode = async (
   const token0Price = selectedPool.token0.usdPrice ?? 2000;
   const token1Price = selectedPool.token1.usdPrice ?? 1;
   const impliedPrice = token1Price > 0 ? token0Price / token1Price : token0Price;
-  const previousPrice = state.view.metrics.previousPrice ?? impliedPrice;
+  const previousPrice = state.thread.metrics.previousPrice ?? impliedPrice;
   const drift = ((iteration % 5) - 2) * 1.25;
   const midPrice = Number(Math.max(1, previousPrice + drift).toFixed(6));
   const volatilityPct = computeVolatilityPct(previousPrice, midPrice);
@@ -151,7 +151,7 @@ export const pollCycleNode = async (
     volatilityPct,
     tvlUsd: poolSnapshot.activeTvlUSD,
     rebalanceThresholdPct,
-    cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
+    cyclesSinceRebalance: state.thread.metrics.cyclesSinceRebalance ?? 0,
     bandwidthBps: operatorConfig.manualBandwidthBps,
     inRange,
     inInnerBand,
@@ -183,15 +183,15 @@ export const pollCycleNode = async (
   };
 
   const cyclesSinceRebalance = action === 'hold'
-    ? (state.view.metrics.cyclesSinceRebalance ?? 0) + 1
+    ? (state.thread.metrics.cyclesSinceRebalance ?? 0) + 1
     : 0;
 
   const cycleStatusMessage = `[Cycle ${iteration}] ${action}: ${reason}${txHash ? ` (tx: ${txHash.slice(0, 10)}...)` : ''}`;
-  let { task, statusEvent } = buildTaskStatus(state.view.task, 'working', cycleStatusMessage);
+  let { task, statusEvent } = buildTaskStatus(state.thread.task, 'working', cycleStatusMessage);
   await copilotkitEmitState(config, {
-    view: {
+    thread: {
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       metrics: { latestCycle: cycleTelemetry },
     },
   });
@@ -204,9 +204,9 @@ export const pollCycleNode = async (
       task = updated.task;
       statusEvent = updated.statusEvent;
       await copilotkitEmitState(config, {
-        view: {
+        thread: {
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
           metrics: { latestCycle: cycleTelemetry },
         },
       });
@@ -241,24 +241,24 @@ export const pollCycleNode = async (
           timestamp,
         };
 
-  const baseAum = state.view.profile.aum ?? 25_000;
-  const baseIncome = state.view.profile.agentIncome ?? 3_250;
+  const baseAum = state.thread.profile.aum ?? 25_000;
+  const baseIncome = state.thread.profile.agentIncome ?? 3_250;
   const aumDelta = action === 'hold' ? 25 : 150;
   const incomeDelta = action === 'hold' ? 2 : 8;
   const nextProfile = {
-    ...state.view.profile,
+    ...state.thread.profile,
     aum: Number((baseAum + aumDelta).toFixed(2)),
     agentIncome: Number((baseIncome + incomeDelta).toFixed(2)),
   };
 
   return new Command({
     update: {
-      view: {
+      thread: {
         metrics: {
           lastSnapshot: poolSnapshot,
           previousPrice: midPrice,
           cyclesSinceRebalance,
-          staleCycles: state.view.metrics.staleCycles ?? 0,
+          staleCycles: state.thread.metrics.staleCycles ?? 0,
           iteration,
           latestCycle: cycleTelemetry,
         },
@@ -268,8 +268,8 @@ export const pollCycleNode = async (
           events: [telemetryEvent, statusEvent],
         },
         transactionHistory: transactionEntry
-          ? [...state.view.transactionHistory, transactionEntry]
-          : state.view.transactionHistory,
+          ? [...state.thread.transactionHistory, transactionEntry]
+          : state.thread.transactionHistory,
         profile: nextProfile,
       },
       private: {

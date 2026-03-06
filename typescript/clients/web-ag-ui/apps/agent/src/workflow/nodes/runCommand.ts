@@ -1,14 +1,15 @@
 import {
   extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
+  resolveCommandReplayGuardState,
+  resolveCycleCommandTarget,
   resolveCommandTargetForBootstrappedFlow,
-  resolveRunCommandForView,
   type AgentCommand,
   type CommandEnvelope,
   type CommandRoutingTarget,
 } from 'agent-workflow-core';
 
-import { type ClmmState } from '../context.js';
+import { type ClmmState, type ClmmUpdate } from '../context.js';
 
 type CommandTarget = CommandRoutingTarget;
 
@@ -20,31 +21,61 @@ export function extractCommand(messages: ClmmState['messages']): AgentCommand | 
   return extractCommandFromMessages(messages);
 }
 
-export function runCommandNode(state: ClmmState): ClmmState {
+export function runCommandNode(state: ClmmState): ClmmUpdate {
   const commandEnvelope = extractCommandEnvelope(state.messages);
   const parsedCommand = commandEnvelope?.command ?? null;
-  const nextCommand = resolveRunCommandForView({
+  const replayGuardState = resolveCommandReplayGuardState({
     parsedCommand,
-    currentViewCommand: state.view.command,
+    clientMutationId: commandEnvelope?.clientMutationId,
+    lastAppliedCommandMutationId: state.private.lastAppliedCommandMutationId,
   });
   const lastAppliedClientMutationId =
     parsedCommand === 'sync'
-      ? commandEnvelope?.clientMutationId ?? state.view.lastAppliedClientMutationId
-      : state.view.lastAppliedClientMutationId;
+      ? commandEnvelope?.clientMutationId ?? state.thread.lastAppliedClientMutationId
+      : state.thread.lastAppliedClientMutationId;
 
   return {
-    ...state,
-    view: {
-      ...state.view,
-      command: nextCommand,
+    private: {
+      suppressDuplicateCommand: replayGuardState.suppressDuplicateCommand,
+      lastAppliedCommandMutationId: replayGuardState.lastAppliedCommandMutationId,
+    },
+    thread: {
       lastAppliedClientMutationId,
     },
   };
 }
 
-export function resolveCommandTarget({ messages, private: priv, view }: ClmmState): CommandTarget {
+function isOnboardingReady(state: ClmmState): boolean {
+  if (!state.thread.poolArtifact) {
+    return false;
+  }
+  if (!state.thread.operatorInput) {
+    return false;
+  }
+  if (!state.thread.fundingTokenInput) {
+    return false;
+  }
+  if (state.thread.delegationsBypassActive !== true && !state.thread.delegationBundle) {
+    return false;
+  }
+  return Boolean(state.thread.operatorConfig);
+}
+
+export function resolveCommandTarget(state: ClmmState): CommandTarget {
+  if (state.private.suppressDuplicateCommand === true) {
+    return '__end__';
+  }
+
+  const resolvedCommand = extractCommand(state.messages);
+  if (resolvedCommand === 'cycle') {
+    return resolveCycleCommandTarget({
+      bootstrapped: state.private.bootstrapped,
+      onboardingReady: isOnboardingReady(state),
+    });
+  }
+
   return resolveCommandTargetForBootstrappedFlow({
-    resolvedCommand: extractCommand(messages) ?? view.command,
-    bootstrapped: priv.bootstrapped,
+    resolvedCommand,
+    bootstrapped: state.private.bootstrapped,
   });
 }

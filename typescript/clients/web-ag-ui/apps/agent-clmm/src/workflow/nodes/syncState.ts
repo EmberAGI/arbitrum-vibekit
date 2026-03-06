@@ -2,6 +2,7 @@ import { applyAccountingUpdate } from '../../accounting/state.js';
 import { createCamelotAccountingSnapshot } from '../accounting.js';
 import { getCamelotClient } from '../clientFactory.js';
 import { logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
+import { buildLoggedStateUpdate } from '../stateUpdateFactory.js';
 import { applyAccountingToView } from '../viewMapping.js';
 
 /**
@@ -18,12 +19,12 @@ type Configurable = { configurable?: { thread_id?: string } };
 export async function syncStateNode(
   state: ClmmState,
   config?: Configurable,
-): Promise<ClmmState | ClmmUpdate> {
+): Promise<ClmmUpdate> {
   const camelotClient = getCamelotClient();
   const threadId = config?.configurable?.thread_id;
   if (!threadId) {
     logInfo('Accounting sync skipped: missing threadId', {});
-    return state;
+    return {};
   }
 
   try {
@@ -34,22 +35,22 @@ export async function syncStateNode(
       threadId,
     });
     if (!snapshot) {
-      return state;
+      return {};
     }
     const accounting = applyAccountingUpdate({
-      existing: state.view.accounting,
+      existing: state.thread.accounting,
       snapshots: [snapshot],
     });
     const { profile, metrics } = applyAccountingToView({
-      profile: state.view.profile,
-      metrics: state.view.metrics,
+      profile: state.thread.profile,
+      metrics: state.thread.metrics,
       accounting,
     });
-    return { view: { accounting, profile, metrics } };
+    return buildLoggedStateUpdate('syncStateNode', { thread: { accounting, profile, metrics } });
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
     logInfo('Accounting sync failed', { error: message });
-    return state;
+    return {};
   }
 }

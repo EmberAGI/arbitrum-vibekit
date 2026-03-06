@@ -58,7 +58,7 @@ export const bootstrapNode = async (
   };
 
   await copilotkitEmitState(config, {
-    view: { activity: { events: [dispatch], telemetry: [] } },
+    thread: { activity: { events: [dispatch], telemetry: [] } },
   });
 
   return {
@@ -68,7 +68,7 @@ export const bootstrapNode = async (
       pollIntervalMs,
       streamLimit,
     },
-    view: {
+    thread: {
       activity: { events: [dispatch], telemetry: [] },
       profile: {
         agentIncome: 4100,
@@ -90,16 +90,6 @@ export const bootstrapNode = async (
         latestCycle: undefined,
       },
       transactionHistory: [],
-      command: undefined,
-      task: undefined,
-      poolArtifact: undefined,
-      operatorInput: undefined,
-      selectedPool: undefined,
-      operatorConfig: undefined,
-      haltReason: undefined,
-      executionError: undefined,
-      fundingTokenInput: undefined,
-      delegationBundle: undefined,
       delegationsBypassActive,
     },
   };

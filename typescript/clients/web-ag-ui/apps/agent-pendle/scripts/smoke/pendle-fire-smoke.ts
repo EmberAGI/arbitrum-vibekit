@@ -279,7 +279,7 @@ const run = async () => {
         baseUrl,
         threadId,
         values: {
-          view: {
+          thread: {
             operatorConfig: {
               walletAddress: operatorWallet,
               executionWalletAddress: operatorWallet,

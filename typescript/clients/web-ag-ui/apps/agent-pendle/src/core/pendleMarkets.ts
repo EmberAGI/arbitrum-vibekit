@@ -89,9 +89,12 @@ export function buildEligibleYieldTokens(params: {
   whitelistSymbols: readonly string[];
 }): PendleYieldToken[] {
   const supportedTokenKeys = new Set(params.supportedTokens.map(tokenKey));
+  const whitelistSymbols = new Set(
+    params.whitelistSymbols.map((symbol) => symbol.toLowerCase()),
+  );
 
   const eligible = params.markets.filter((market) => {
-    if (!params.whitelistSymbols.includes(market.underlyingToken.symbol)) {
+    if (!whitelistSymbols.has(market.underlyingToken.symbol.toLowerCase())) {
       return false;
     }
     return supportedTokenKeys.has(tokenKey(market.underlyingToken));

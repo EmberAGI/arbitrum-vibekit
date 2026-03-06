@@ -84,10 +84,11 @@ export async function startClmmHire(
   operatorInput: OperatorConfigInput,
   options?: { durability?: LangGraphDurability },
 ) {
+  const clientMutationId = uuidv7();
   const hireMessage = {
     id: uuidv7(),
     role: 'user' as const,
-    content: JSON.stringify({ command: 'hire' }),
+    content: JSON.stringify({ command: 'hire', clientMutationId }),
   };
 
   type ClmmInvokeInput = Parameters<typeof clmmGraph.invoke>[0];
@@ -133,11 +134,11 @@ export async function startClmmHire(
   if (
     typeof output === 'object' &&
     output !== null &&
-    'view' in output &&
-    typeof (output as { view?: unknown }).view === 'object' &&
-    (output as { view?: { haltReason?: unknown } }).view?.haltReason
+    'thread' in output &&
+    typeof (output as { thread?: unknown }).thread === 'object' &&
+    (output as { thread?: { haltReason?: unknown } }).thread?.haltReason
   ) {
-    const reason = String((output as { view: { haltReason: unknown } }).view.haltReason);
+    const reason = String((output as { thread: { haltReason: unknown } }).thread.haltReason);
     throw new Error(`Hire flow halted: ${reason}`);
   }
 }

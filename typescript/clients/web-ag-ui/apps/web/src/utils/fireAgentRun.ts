@@ -1,5 +1,5 @@
 import type { v7 as uuidv7 } from 'uuid';
-import { isAgentRunning, isBusyRunError } from './runConcurrency';
+import { isAbortLikeError, isAgentRunning, isBusyRunError } from './runConcurrency';
 
 type AgentLike = {
   addMessage: (message: { id: string; role: 'user'; content: string }) => void;
@@ -9,8 +9,8 @@ type AgentLike = {
 
 type BoolRef = { current: boolean };
 
-const FIRE_RUN_MAX_RETRIES = 5;
-const FIRE_RUN_RETRY_DELAY_MS = 150;
+const FIRE_RUN_MAX_RETRIES = 80;
+const FIRE_RUN_RETRY_DELAY_MS = 250;
 const FIRE_PREEMPT_WAIT_MS = 1_500;
 const FIRE_PREEMPT_POLL_MS = 50;
 
@@ -88,6 +88,10 @@ const startFireRun = async <TAgent extends AgentLike>(
   runAgent: (agent: TAgent) => Promise<unknown>,
   agent: TAgent,
   runInFlightRef: BoolRef,
+  options?: {
+    maxRetries?: number;
+    retryDelayMs?: number;
+  },
   attempt = 0,
 ): Promise<void> => {
   try {
@@ -116,13 +120,16 @@ const startFireRun = async <TAgent extends AgentLike>(
       busy: isBusyRunError(error),
       detail,
     });
-    if (isBusyRunError(error) && attempt < FIRE_RUN_MAX_RETRIES - 1) {
-      await sleep(FIRE_RUN_RETRY_DELAY_MS);
-      return startFireRun(runAgent, agent, runInFlightRef, attempt + 1);
+    const maxRetries = options?.maxRetries ?? FIRE_RUN_MAX_RETRIES;
+    const retryDelayMs = options?.retryDelayMs ?? FIRE_RUN_RETRY_DELAY_MS;
+    const shouldRetry = isBusyRunError(error) || isAbortLikeError(error);
+    if (shouldRetry && attempt < maxRetries - 1) {
+      await sleep(retryDelayMs);
+      return startFireRun(runAgent, agent, runInFlightRef, options, attempt + 1);
     }
 
     runInFlightRef.current = false;
-    if (isBusyRunError(error)) {
+    if (isBusyRunError(error) || isAbortLikeError(error)) {
       throw new Error('Agent run is still active. Please retry in a moment.');
     }
     throw error;
@@ -139,6 +146,8 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
   onError?: (message: string) => void;
   preemptWaitMs?: number;
   preemptPollMs?: number;
+  busyRunMaxRetries?: number;
+  busyRunRetryDelayMs?: number;
 }): Promise<boolean> {
   const { agent, threadId, runInFlightRef } = params;
   if (!agent || !threadId) {
@@ -172,20 +181,27 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
     logFireCommandDebug('preempting due to ui in-flight ownership', {
       threadId,
     });
-    await Promise.resolve(params.preemptActiveRun?.(agent))
-      .then(() => {
-        logFireCommandDebug('preempt active run request completed', {
-          threadId,
-          reason: 'ui-run-in-flight',
+    if (canPreempt && backendRunLikelyActive) {
+      await Promise.resolve(params.preemptActiveRun?.(agent))
+        .then(() => {
+          logFireCommandDebug('preempt active run request completed', {
+            threadId,
+            reason: 'ui-run-in-flight',
+          });
+        })
+        .catch((error: unknown) => {
+          logFireCommandDebug('preempt active run request failed', {
+            threadId,
+            reason: 'ui-run-in-flight',
+            detail: error instanceof Error ? error.message : String(error),
+          });
         });
-      })
-      .catch((error: unknown) => {
-        logFireCommandDebug('preempt active run request failed', {
-          threadId,
-          reason: 'ui-run-in-flight',
-          detail: error instanceof Error ? error.message : String(error),
-        });
+    } else {
+      logFireCommandDebug('skipping stop preempt for stale local ownership', {
+        threadId,
+        backendRunLikelyActive,
       });
+    }
     await Promise.resolve(agent.detachActiveRun?.())
       .then(() => {
         detachedOwnership = true;
@@ -202,7 +218,7 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
         });
       });
 
-    if (canPreempt) {
+    if (canPreempt && backendRunLikelyActive) {
       await waitForPreemptedRun({
         agent,
         runInFlightRef,
@@ -283,17 +299,27 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
     runInFlight: runInFlightRef.current,
   });
 
+  const fireClientMutationId = params.createId();
   agent.addMessage({
     id: params.createId(),
     role: 'user',
-    content: JSON.stringify({ command: 'fire' }),
+    content: JSON.stringify({ command: 'fire', clientMutationId: fireClientMutationId }),
   });
 
   // Fire-and-forget with short retry if the runtime is still finalizing a previous run.
   logFireCommandDebug('starting fire run dispatch', {
     threadId,
   });
-  void startFireRun(params.runAgent, agent, runInFlightRef, 0).catch((error: unknown) => {
+  void startFireRun(
+    params.runAgent,
+    agent,
+    runInFlightRef,
+    {
+      maxRetries: params.busyRunMaxRetries,
+      retryDelayMs: params.busyRunRetryDelayMs,
+    },
+    0,
+  ).catch((error: unknown) => {
     runInFlightRef.current = false;
     const message = error instanceof Error ? error.message : String(error);
     logFireCommandTrace('runAgent failed', {

@@ -1,23 +1,18 @@
 import {
   extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
-  mapOnboardingPhaseToTarget,
+  resolveCommandReplayGuardState,
+  resolveCycleCommandTarget,
   resolveOnboardingPhase,
   resolveCommandTargetForBootstrappedFlow,
-  resolveRunCommandForView,
   type AgentCommand,
   type CommandEnvelope,
   type CommandRoutingTarget,
 } from 'agent-workflow-core';
 
-import { type ClmmState } from '../context.js';
+import { type ClmmState, type ClmmUpdate } from '../context.js';
 
-type CommandTarget =
-  | CommandRoutingTarget
-  | 'collectSetupInput'
-  | 'collectFundingTokenInput'
-  | 'collectDelegations'
-  | 'prepareOperator';
+type CommandTarget = CommandRoutingTarget;
 
 export function extractCommandEnvelope(messages: ClmmState['messages']): CommandEnvelope | null {
   return extractCommandEnvelopeFromMessages(messages);
@@ -27,30 +22,36 @@ export function extractCommand(messages: ClmmState['messages']): AgentCommand | 
   return extractCommandFromMessages(messages);
 }
 
-export function runCommandNode(state: ClmmState): ClmmState {
+export function runCommandNode(state: ClmmState): ClmmUpdate {
   const commandEnvelope = extractCommandEnvelope(state.messages);
   const parsedCommand = commandEnvelope?.command ?? null;
-  const nextCommand = resolveRunCommandForView({
+  const replayGuardState = resolveCommandReplayGuardState({
     parsedCommand,
-    currentViewCommand: state.view.command,
+    clientMutationId: commandEnvelope?.clientMutationId,
+    lastAppliedCommandMutationId: state.private.lastAppliedCommandMutationId,
   });
   const lastAppliedClientMutationId =
     parsedCommand === 'sync'
-      ? commandEnvelope?.clientMutationId ?? state.view.lastAppliedClientMutationId
-      : state.view.lastAppliedClientMutationId;
+      ? commandEnvelope?.clientMutationId ?? state.thread.lastAppliedClientMutationId
+      : state.thread.lastAppliedClientMutationId;
 
   return {
-    ...state,
-    view: {
-      ...state.view,
-      command: nextCommand,
+    private: {
+      suppressDuplicateCommand: replayGuardState.suppressDuplicateCommand,
+      lastAppliedCommandMutationId: replayGuardState.lastAppliedCommandMutationId,
+    },
+    thread: {
       lastAppliedClientMutationId,
     },
   };
 }
 
-export function resolveCommandTarget({ messages, private: priv, view }: ClmmState): CommandTarget {
-  const resolvedCommand = extractCommand(messages) ?? view.command;
+export function resolveCommandTarget({ messages, private: priv, thread }: ClmmState): CommandTarget {
+  if (priv.suppressDuplicateCommand === true) {
+    return '__end__';
+  }
+
+  const resolvedCommand = extractCommand(messages);
   if (!resolvedCommand) {
     return '__end__';
   }
@@ -61,24 +62,18 @@ export function resolveCommandTarget({ messages, private: priv, view }: ClmmStat
     }
 
     const phase = resolveOnboardingPhase({
-      hasSetupInput: Boolean(view.operatorInput),
-      hasFundingTokenInput: Boolean(view.fundingTokenInput),
-      requiresDelegationSigning: view.delegationsBypassActive !== true,
-      hasDelegationBundle: Boolean(view.delegationBundle),
-      hasOperatorConfig: Boolean(view.operatorConfig),
+      hasSetupInput: Boolean(thread.operatorInput),
+      hasFundingTokenInput: Boolean(thread.fundingTokenInput),
+      requiresDelegationSigning: thread.delegationsBypassActive !== true,
+      hasDelegationBundle: Boolean(thread.delegationBundle),
+      hasOperatorConfig: Boolean(thread.operatorConfig),
       requiresSetupComplete: true,
-      setupComplete: view.setupComplete === true,
+      setupComplete: thread.setupComplete === true,
     });
 
-    return mapOnboardingPhaseToTarget<CommandTarget>({
-      phase,
-      targets: {
-        collectSetupInput: 'collectSetupInput',
-        collectFundingToken: 'collectFundingTokenInput',
-        collectDelegations: 'collectDelegations',
-        prepareOperator: 'prepareOperator',
-        ready: 'runCycleCommand',
-      },
+    return resolveCycleCommandTarget({
+      bootstrapped: priv.bootstrapped,
+      onboardingReady: phase === 'ready',
     });
   }
 

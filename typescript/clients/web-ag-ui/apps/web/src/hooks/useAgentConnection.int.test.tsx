@@ -17,6 +17,7 @@ type TestAgent = {
   subscribe: (subscriber: AgentSubscriber) => { unsubscribe: () => void };
   detachActiveRun: ReturnType<typeof vi.fn>;
   connectAgent: ReturnType<typeof vi.fn>;
+  isRunning?: boolean | (() => boolean);
   runAgent?: ReturnType<typeof vi.fn>;
 };
 
@@ -52,6 +53,16 @@ const mocks = vi.hoisted(() => {
     connectAgent: vi.fn(async () => undefined),
     runAgent: vi.fn(async () => undefined),
     stopAgent: vi.fn(() => undefined),
+    disconnectFetch: vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ok: true,
+            abortedCount: 1,
+          }),
+          { status: 200 },
+        ),
+    ),
     interruptState: {
       activeInterrupt: null as AgentInterrupt | null,
       canResolve: false,
@@ -67,6 +78,17 @@ const mocks = vi.hoisted(() => {
       this.runAgent.mockImplementation(async () => undefined);
       this.stopAgent.mockReset();
       this.stopAgent.mockImplementation(() => undefined);
+      this.disconnectFetch.mockReset();
+      this.disconnectFetch.mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({
+              ok: true,
+              abortedCount: 1,
+            }),
+            { status: 200 },
+          ),
+      );
       this.interruptState.activeInterrupt = null;
       this.interruptState.canResolve = false;
       this.interruptState.resolve.mockReset();
@@ -128,10 +150,33 @@ async function flushEffects(): Promise<void> {
 describe('useAgentConnection integration', () => {
   let container: HTMLDivElement;
   let root: Root;
+  const originalFetch = global.fetch;
+
+  const readDisconnectPayload = (): { agentId?: string; threadId?: string } | null => {
+    const latestCall = mocks.disconnectFetch.mock.calls.at(-1);
+    if (!latestCall) return null;
+    const init = latestCall[1];
+    if (!init || typeof init !== 'object') return null;
+    if (!('body' in init)) return null;
+    const body = init.body;
+    if (typeof body !== 'string') return null;
+    try {
+      const parsed = JSON.parse(body) as unknown;
+      if (typeof parsed !== 'object' || parsed === null) return null;
+      const payload = parsed as { agentId?: unknown; threadId?: unknown };
+      return {
+        agentId: typeof payload.agentId === 'string' ? payload.agentId : undefined,
+        threadId: typeof payload.threadId === 'string' ? payload.threadId : undefined,
+      };
+    } catch {
+      return null;
+    }
+  };
 
   beforeEach(() => {
     __resetAgentStreamCoordinatorForTests();
     mocks.reset();
+    vi.stubGlobal('fetch', mocks.disconnectFetch as unknown as typeof fetch);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -142,6 +187,7 @@ describe('useAgentConnection integration', () => {
       root.unmount();
     });
     container.remove();
+    global.fetch = originalFetch;
     __resetAgentStreamCoordinatorForTests();
   });
 
@@ -161,6 +207,12 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(mocks.agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(mocks.stopAgent).toHaveBeenCalledTimes(0);
+    expect(mocks.disconnectFetch).toHaveBeenCalledTimes(1);
+    expect(readDisconnectPayload()).toEqual({
+      agentId: 'agent-clmm',
+      threadId: 'thread-1',
+    });
   });
 
   it('does not connect when runtime transport is not connected', async () => {
@@ -190,6 +242,35 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(mocks.agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(mocks.stopAgent).toHaveBeenCalledTimes(0);
+    expect(mocks.disconnectFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call stopAgent during cleanup while a run is active', async () => {
+    let subscriber: AgentSubscriber | undefined;
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    subscriber?.onRunStartedEvent?.({ input: { threadId: 'thread-1' } });
+    await flushEffects();
+
+    await act(async () => {
+      root.unmount();
+    });
+    await flushEffects();
+
+    expect(mocks.agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(mocks.stopAgent).toHaveBeenCalledTimes(0);
+    expect(mocks.disconnectFetch).toHaveBeenCalledTimes(1);
   });
 
   it('reconnects detail connection after runtime transport recovers', async () => {
@@ -297,7 +378,7 @@ describe('useAgentConnection integration', () => {
       input: { threadId: 'thread-1' },
       state: {
         settings: { amount: 250 },
-        view: {
+        thread: {
           command: 'cycle',
           lastAppliedClientMutationId: clientMutationId,
         },
@@ -305,6 +386,63 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
     await flushEffects();
+    expect(latestValue?.isSyncing).toBe(false);
+  });
+
+  it('clears sync pending when mutation id acknowledgement arrives on thread payloads', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.saveSettings({ amount: 250 });
+    await flushEffects();
+    expect(latestValue?.isSyncing).toBe(true);
+
+    const syncMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
+      | { content?: string }
+      | undefined;
+    const parsedMessage =
+      typeof syncMessage?.content === 'string'
+        ? (JSON.parse(syncMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+    expect(parsedMessage?.command).toBe('sync');
+    expect(typeof parsedMessage?.clientMutationId).toBe('string');
+    const clientMutationId = parsedMessage?.clientMutationId as string;
+
+    subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
+    await flushEffects();
+    expect(latestValue?.isSyncing).toBe(true);
+
+    subscriber?.onRunInitialized?.({
+      input: { threadId: 'thread-1' },
+      state: {
+        settings: { amount: 250 },
+        thread: {
+          lastAppliedClientMutationId: clientMutationId,
+        },
+      },
+    });
+    await flushEffects();
+    await flushEffects();
+
     expect(latestValue?.isSyncing).toBe(false);
   });
 
@@ -327,14 +465,14 @@ describe('useAgentConnection integration', () => {
     mocks.agent.setState.mockClear();
 
     subscriber?.onRunInitialized?.({
-      state: { view: { command: 'cycle' } },
+      state: { thread: { command: 'cycle' } },
       input: { threadId: 'stale-thread' },
     });
     await flushEffects();
     expect(mocks.agent.setState).not.toHaveBeenCalled();
 
     subscriber?.onRunInitialized?.({
-      state: { view: { command: 'cycle' } },
+      state: { thread: { command: 'cycle' } },
       input: { threadId: 'thread-1' },
     });
     await flushEffects();
@@ -361,7 +499,7 @@ describe('useAgentConnection integration', () => {
 
     subscriber?.onRunInitialized?.({
       state: {
-        view: {
+        thread: {
           task: {
             id: 'task-1',
             taskStatus: {
@@ -379,7 +517,7 @@ describe('useAgentConnection integration', () => {
     subscriber?.onStateSnapshotEvent?.({
       event: {
         snapshot: {
-          view: {
+          thread: {
             task: {
               id: 'task-1',
               taskStatus: {
@@ -396,9 +534,9 @@ describe('useAgentConnection integration', () => {
 
     expect(mocks.agent.setState).toHaveBeenCalledTimes(2);
     const latestState = mocks.agent.setState.mock.calls.at(-1)?.[0] as
-      | { view?: { task?: { taskStatus?: { state?: string } } } }
+      | { thread?: { task?: { taskStatus?: { state?: string } } } }
       | undefined;
-    expect(latestState?.view?.task?.taskStatus?.state).toBe('working');
+    expect(latestState?.thread?.task?.taskStatus?.state).toBe('working');
   });
 
   it('ignores stale run-id snapshots that arrive after a newer run state', async () => {
@@ -421,7 +559,7 @@ describe('useAgentConnection integration', () => {
 
     subscriber?.onRunInitialized?.({
       state: {
-        view: {
+        thread: {
           task: {
             id: 'task-new',
             taskStatus: {
@@ -439,7 +577,7 @@ describe('useAgentConnection integration', () => {
     subscriber?.onStateSnapshotEvent?.({
       event: {
         snapshot: {
-          view: {
+          thread: {
             task: {
               id: 'task-old',
               taskStatus: {
@@ -456,12 +594,12 @@ describe('useAgentConnection integration', () => {
 
     expect(mocks.agent.setState).toHaveBeenCalledTimes(1);
     const latestState = mocks.agent.setState.mock.calls.at(-1)?.[0] as
-      | { view?: { task?: { taskStatus?: { state?: string } } } }
+      | { thread?: { task?: { taskStatus?: { state?: string } } } }
       | undefined;
-    expect(latestState?.view?.task?.taskStatus?.state).toBe('working');
+    expect(latestState?.thread?.task?.taskStatus?.state).toBe('working');
   });
 
-  it('ignores stale onboarding input-required snapshots without run-id after completion state is applied', async () => {
+  it('applies onboarding snapshots without run-id after completion state is applied', async () => {
     let subscriber: AgentSubscriber | undefined;
 
     mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
@@ -481,7 +619,7 @@ describe('useAgentConnection integration', () => {
 
     subscriber?.onRunInitialized?.({
       state: {
-        view: {
+        thread: {
           onboardingFlow: {
             status: 'completed',
             revision: 4,
@@ -504,7 +642,7 @@ describe('useAgentConnection integration', () => {
     subscriber?.onStateSnapshotEvent?.({
       event: {
         snapshot: {
-          view: {
+          thread: {
             task: {
               id: 'task-old',
               taskStatus: {
@@ -519,11 +657,11 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
 
-    expect(mocks.agent.setState).toHaveBeenCalledTimes(1);
+    expect(mocks.agent.setState).toHaveBeenCalledTimes(2);
     const latestState = mocks.agent.setState.mock.calls.at(-1)?.[0] as
-      | { view?: { task?: { taskStatus?: { state?: string } } } }
+      | { thread?: { task?: { taskStatus?: { state?: string } } } }
       | undefined;
-    expect(latestState?.view?.task?.taskStatus?.state).toBe('working');
+    expect(latestState?.thread?.task?.taskStatus?.state).toBe('input-required');
   });
 
   it('keeps local run ownership gated until active-thread terminal events are observed', async () => {
@@ -570,12 +708,16 @@ describe('useAgentConnection integration', () => {
     latestValue?.runHire();
     await flushEffects();
 
-    expect(mocks.agent.addMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role: 'user',
-        content: JSON.stringify({ command: 'hire' }),
-      }),
-    );
+    const resumedHireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
+      | { role?: string; content?: string }
+      | undefined;
+    const parsedResumedHireMessage =
+      typeof resumedHireMessage?.content === 'string'
+        ? (JSON.parse(resumedHireMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+    expect(resumedHireMessage?.role).toBe('user');
+    expect(parsedResumedHireMessage?.command).toBe('hire');
+    expect(typeof parsedResumedHireMessage?.clientMutationId).toBe('string');
   });
 
   it('surfaces busy UI state when saveSettings sync dispatch is rejected as busy', async () => {
@@ -649,12 +791,16 @@ describe('useAgentConnection integration', () => {
     latestValue?.runHire();
     await flushEffects();
 
-    expect(mocks.agent.addMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role: 'user',
-        content: JSON.stringify({ command: 'hire' }),
-      }),
-    );
+    const hireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
+      | { role?: string; content?: string }
+      | undefined;
+    const parsedHireMessage =
+      typeof hireMessage?.content === 'string'
+        ? (JSON.parse(hireMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+    expect(hireMessage?.role).toBe('user');
+    expect(parsedHireMessage?.command).toBe('hire');
+    expect(typeof parsedHireMessage?.clientMutationId).toBe('string');
     expect(mocks.agent.setState).not.toHaveBeenCalled();
   });
 
@@ -680,7 +826,7 @@ describe('useAgentConnection integration', () => {
     expect(mocks.agent.setState).not.toHaveBeenCalled();
   });
 
-  it('preempts active run ownership via stopAgent before dispatching fire', async () => {
+  it('detaches stale local run ownership without stopAgent before dispatching fire', async () => {
     let subscriber: AgentSubscriber | undefined;
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
@@ -709,27 +855,66 @@ describe('useAgentConnection integration', () => {
     latestValue?.runFire();
     await flushEffects();
 
-    expect(mocks.stopAgent).toHaveBeenCalledWith({ agent: mocks.agent });
+    expect(mocks.stopAgent).not.toHaveBeenCalled();
     expect(mocks.agent.detachActiveRun.mock.calls.length).toBeGreaterThanOrEqual(1);
     subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
     await new Promise<void>((resolve) => setTimeout(resolve, 80));
     await flushEffects();
     await flushEffects();
 
-    expect(mocks.agent.addMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role: 'user',
-        content: JSON.stringify({ command: 'fire' }),
-      }),
-    );
+    const fireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
+      | { role?: string; content?: string }
+      | undefined;
+    const parsedFireMessage =
+      typeof fireMessage?.content === 'string'
+        ? (JSON.parse(fireMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+    expect(fireMessage?.role).toBe('user');
+    expect(parsedFireMessage?.command).toBe('fire');
+    expect(typeof parsedFireMessage?.clientMutationId).toBe('string');
+  });
+
+  it('uses stopAgent preemption when backend reports an active run during fire', async () => {
+    let subscriber: AgentSubscriber | undefined;
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+    mocks.agent.isRunning = () => true;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.runFire();
+    await flushEffects();
+
+    expect(mocks.stopAgent).toHaveBeenCalledWith({ agent: mocks.agent });
+    expect(mocks.agent.detachActiveRun.mock.calls.length).toBeGreaterThanOrEqual(1);
+    subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
+    await flushEffects();
   });
 
   it('marks agent as not hired once fire reaches a terminal task state', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
     mocks.agent.state = {
-      view: {
-        command: 'fire',
+      thread: {
+        lifecycle: {
+          phase: 'firing',
+        },
         task: {
           id: 'task-fire',
           taskStatus: {
@@ -754,8 +939,10 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.isHired).toBe(true);
 
     mocks.agent.state = {
-      view: {
-        command: 'fire',
+      thread: {
+        lifecycle: {
+          phase: 'inactive',
+        },
         task: {
           id: 'task-fire',
           taskStatus: {
@@ -778,6 +965,199 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
     expect(latestValue?.isHired).toBe(false);
+  });
+
+  it('does not treat stale hire command as hired when lifecycle phase is inactive', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        command: 'hire',
+        lifecycle: {
+          phase: 'inactive',
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.isHired).toBe(false);
+  });
+
+  it('does not treat command alone as hired when lifecycle is missing', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        command: 'hire',
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.isHired).toBe(false);
+  });
+
+  it('does not infer hired state from onboarding completion fields without lifecycle', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        command: 'cycle',
+        setupComplete: true,
+        onboardingFlow: {
+          status: 'completed',
+          steps: [],
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+    expect(latestValue?.isHired).toBe(false);
+
+    mocks.agent.state = {
+      thread: {
+        command: undefined,
+        setupComplete: true,
+        onboardingFlow: {
+          status: 'completed',
+          steps: [],
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+    expect(latestValue?.isHired).toBe(false);
+  });
+
+  it('requires lifecycle phase to derive hired state', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        setupComplete: true,
+        onboardingFlow: {
+          status: 'completed',
+          steps: [],
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.isHired).toBe(false);
+  });
+
+  it('treats thread payloads as loaded state for sync gating', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        profile: {
+          chains: ['Arbitrum'],
+          protocols: ['Camelot'],
+          tokens: ['WETH', 'USDC'],
+          pools: [],
+          allowedPools: [],
+          totalUsers: 42,
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasLoadedView).toBe(true);
+  });
+
+  it('marks agent active from non-terminal task state even when command is omitted', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        command: undefined,
+        task: {
+          id: 'task-cycle',
+          taskStatus: {
+            state: 'working',
+            message: { content: 'Cycle in progress.' },
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-clmm"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.isActive).toBe(true);
   });
 
   it('serializes rapid A->B->A detail handoff so next connect waits for prior disconnect', async () => {

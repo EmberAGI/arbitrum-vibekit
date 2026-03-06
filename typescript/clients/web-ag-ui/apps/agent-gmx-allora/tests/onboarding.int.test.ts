@@ -44,7 +44,7 @@ function buildBaseState(): ClmmState {
       cronScheduled: false,
       bootstrapped: false,
     },
-    view: {
+    thread: {
       command: undefined,
       task: undefined,
       poolArtifact: undefined,
@@ -86,13 +86,13 @@ function mergeState(state: ClmmState, update: Partial<ClmmState>): ClmmState {
   return {
     ...state,
     ...update,
-    view: {
-      ...state.view,
-      ...update.view,
-      activity: update.view?.activity ?? state.view.activity,
-      metrics: update.view?.metrics ?? state.view.metrics,
-      profile: update.view?.profile ?? state.view.profile,
-      transactionHistory: update.view?.transactionHistory ?? state.view.transactionHistory,
+    thread: {
+      ...state.thread,
+      ...update.thread,
+      activity: update.thread?.activity ?? state.thread.activity,
+      metrics: update.thread?.metrics ?? state.thread.metrics,
+      profile: update.thread?.profile ?? state.thread.profile,
+      transactionHistory: update.thread?.transactionHistory ?? state.thread.transactionHistory,
     },
     private: {
       ...state.private,
@@ -183,27 +183,27 @@ describe('GMX Allora onboarding (integration)', () => {
 
     const prepared = await prepareOperatorNode(stateAfterDelegations, {});
 
-    expect(prepared.view?.operatorConfig?.baseContributionUsd).toBe(250);
-    expect(prepared.view?.operatorConfig?.fundingTokenAddress).toBe(
+    expect(prepared.thread?.operatorConfig?.baseContributionUsd).toBe(250);
+    expect(prepared.thread?.operatorConfig?.fundingTokenAddress).toBe(
       '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
     );
   });
 
   it('skips delegation signing interrupts when bypass is active', async () => {
     const state = buildBaseState();
-    state.view.delegationsBypassActive = true;
+    state.thread.delegationsBypassActive = true;
 
     const update = await collectDelegationsNode(state, {});
 
     expect(interruptMock).not.toHaveBeenCalled();
-    expect(update.view?.onboarding).toEqual({ step: 2, key: 'funding-token' });
+    expect(update.thread?.onboarding).toEqual({ step: 2, key: 'funding-token' });
   });
 
   it('omits testing warning in production-mode delegation requests', async () => {
     const state = buildBaseState();
-    state.view.delegationsBypassActive = false;
+    state.thread.delegationsBypassActive = false;
     state.private.mode = 'production';
-    state.view.operatorInput = {
+    state.thread.operatorInput = {
       walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       usdcAllocation: 10,
       targetMarket: 'ETH',
@@ -220,9 +220,9 @@ describe('GMX Allora onboarding (integration)', () => {
 
   it('includes testing warning in debug-mode delegation requests', async () => {
     const state = buildBaseState();
-    state.view.delegationsBypassActive = false;
+    state.thread.delegationsBypassActive = false;
     state.private.mode = 'debug';
-    state.view.operatorInput = {
+    state.thread.operatorInput = {
       walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       usdcAllocation: 10,
       targetMarket: 'ETH',
@@ -238,15 +238,15 @@ describe('GMX Allora onboarding (integration)', () => {
 
   it('persists delegation-signing checkpoint before interrupt when runnable config is present', async () => {
     const state = buildBaseState();
-    state.view.delegationsBypassActive = false;
+    state.thread.delegationsBypassActive = false;
     state.private.mode = 'debug';
-    state.view.onboarding = { step: 2, key: 'funding-token' };
-    state.view.operatorInput = {
+    state.thread.onboarding = { step: 2, key: 'funding-token' };
+    state.thread.operatorInput = {
       walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       usdcAllocation: 10,
       targetMarket: 'ETH',
     };
-    state.view.task = { id: 'task-1', taskStatus: { state: 'submitted' } };
+    state.thread.task = { id: 'task-1', taskStatus: { state: 'submitted' } };
 
     const firstResult = await collectDelegationsNode(state, {
       configurable: { thread_id: 'thread-1' },
@@ -255,14 +255,14 @@ describe('GMX Allora onboarding (integration)', () => {
     expect(interruptMock).not.toHaveBeenCalled();
     const firstCommand = firstResult as unknown as {
       goto?: string[];
-      update?: { view?: { onboarding?: { step?: number; key?: string }; task?: { taskStatus?: { state?: string } } } };
+      update?: { thread?: { onboarding?: { step?: number; key?: string }; task?: { taskStatus?: { state?: string } } } };
     };
     expect(firstCommand.goto).toContain('collectDelegations');
-    expect(firstCommand.update?.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
-    expect(firstCommand.update?.view?.task?.taskStatus?.state).toBe('input-required');
+    expect(firstCommand.update?.thread?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(firstCommand.update?.thread?.task?.taskStatus?.state).toBe('input-required');
 
     const stateAfterCheckpoint = mergeState(state, {
-      view: firstCommand.update?.view,
+      thread: firstCommand.update?.thread,
     });
     interruptMock.mockResolvedValueOnce({
       outcome: 'signed',
@@ -283,8 +283,8 @@ describe('GMX Allora onboarding (integration)', () => {
     });
 
     expect(interruptMock).toHaveBeenCalledTimes(1);
-    expect(secondResult.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
-    expect(secondResult.view?.delegationBundle).toBeTruthy();
+    expect(secondResult.thread?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(secondResult.thread?.delegationBundle).toBeTruthy();
   });
 
   it('rejects setup input without USDC allocation', async () => {
@@ -297,6 +297,6 @@ describe('GMX Allora onboarding (integration)', () => {
 
     const setupUpdate = await collectSetupInputNode(state, {});
 
-    expect(setupUpdate.view?.haltReason).toContain('Invalid setup input');
+    expect(setupUpdate.thread?.haltReason).toContain('Invalid setup input');
   });
 });

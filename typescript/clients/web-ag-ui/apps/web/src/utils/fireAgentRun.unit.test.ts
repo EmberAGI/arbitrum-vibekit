@@ -27,10 +27,39 @@ describe('fireAgentRun', () => {
     expect(calls).toEqual(['detachActiveRun', 'addMessage', 'runAgent']);
   });
 
+  it('enqueues fire command with a clientMutationId for replay-safe routing', async () => {
+    const agent = {
+      isRunning: false,
+      detachActiveRun: vi.fn(async () => undefined),
+      addMessage: vi.fn(),
+    };
+    const runInFlightRef = { current: false };
+
+    const ok = await fireAgentRun({
+      agent,
+      runAgent: async () => undefined,
+      threadId: 'thread-1',
+      runInFlightRef,
+      createId: () => 'msg-1',
+    });
+
+    expect(ok).toBe(true);
+    const firstMessage = agent.addMessage.mock.calls[0]?.[0] as { content?: string } | undefined;
+    const parsedContent =
+      typeof firstMessage?.content === 'string'
+        ? (JSON.parse(firstMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+    expect(parsedContent).toEqual({
+      command: 'fire',
+      clientMutationId: 'msg-1',
+    });
+  });
+
   it('preempts the active run via stop callback, detaches, then sends the fire command', async () => {
     const calls: string[] = [];
 
     const agent = {
+      isRunning: true,
       abortRun: vi.fn(() => calls.push('abortRun')),
       detachActiveRun: vi.fn(async () => calls.push('detachActiveRun')),
       addMessage: vi.fn(() => calls.push('addMessage')),
@@ -60,6 +89,36 @@ describe('fireAgentRun', () => {
     expect(agent.addMessage).toHaveBeenCalledTimes(1);
     expect(copilotkit.runAgent).toHaveBeenCalledTimes(1);
     expect(calls).toEqual(['stopAgent', 'detachActiveRun', 'addMessage', 'runAgent']);
+  });
+
+  it('does not call stop when local run ownership is stale but backend run is not active', async () => {
+    const calls: string[] = [];
+
+    const agent = {
+      isRunning: false,
+      detachActiveRun: vi.fn(async () => calls.push('detachActiveRun')),
+      addMessage: vi.fn(() => calls.push('addMessage')),
+    };
+    const runInFlightRef = { current: true };
+    const preemptActiveRun = vi.fn(async () => {
+      calls.push('stopAgent');
+    });
+
+    const ok = await fireAgentRun({
+      agent,
+      runAgent: async () => {
+        calls.push('runAgent');
+      },
+      preemptActiveRun,
+      threadId: 'thread-1',
+      runInFlightRef,
+      createId: () => 'msg-1',
+    });
+
+    expect(ok).toBe(true);
+    expect(preemptActiveRun).not.toHaveBeenCalled();
+    expect(agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(['detachActiveRun', 'addMessage', 'runAgent']);
   });
 
   it('retries run start when the runtime reports an active run, without re-adding fire message', async () => {
@@ -92,7 +151,7 @@ describe('fireAgentRun', () => {
       expect(copilotkit.runAgent).toHaveBeenCalledTimes(1);
       expect(runInFlightRef.current).toBe(true);
 
-      await vi.advanceTimersByTimeAsync(200);
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(copilotkit.runAgent).toHaveBeenCalledTimes(2);
       expect(agent.addMessage).toHaveBeenCalledTimes(1);
@@ -177,9 +236,90 @@ describe('fireAgentRun', () => {
       expect(calls[1]).toBe('detachActiveRun');
       expect(calls[2]).toBe('addMessage');
 
-      await vi.advanceTimersByTimeAsync(200);
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(copilotkit.runAgent).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps retrying busy fire starts long enough to outlast active cycle runs', async () => {
+    vi.useFakeTimers();
+
+    const agent = {
+      isRunning: false,
+      addMessage: vi.fn(),
+      detachActiveRun: vi.fn(async () => undefined),
+    };
+    const runInFlightRef = { current: false };
+    const runAgent = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Thread is already running a task.'))
+      .mockRejectedValueOnce(new Error('Thread is already running a task.'))
+      .mockRejectedValueOnce(new Error('Thread is already running a task.'))
+      .mockResolvedValueOnce(undefined);
+
+    try {
+      const ok = await fireAgentRun({
+        agent,
+        runAgent,
+        threadId: 'thread-1',
+        runInFlightRef,
+        createId: () => 'msg-1',
+        busyRunMaxRetries: 8,
+        busyRunRetryDelayMs: 1000,
+      });
+
+      expect(ok).toBe(true);
+      expect(runAgent).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(runAgent).toHaveBeenCalledTimes(4);
+      expect(runInFlightRef.current).toBe(true);
+      expect(agent.addMessage).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries aborted fire starts and avoids surfacing transient stream abort errors', async () => {
+    vi.useFakeTimers();
+
+    const onError = vi.fn();
+    const agent = {
+      isRunning: false,
+      addMessage: vi.fn(),
+      detachActiveRun: vi.fn(async () => undefined),
+    };
+    const runInFlightRef = { current: false };
+    const runAgent = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('BodyStreamBuffer was aborted'))
+      .mockResolvedValueOnce(undefined);
+
+    try {
+      const ok = await fireAgentRun({
+        agent,
+        runAgent,
+        threadId: 'thread-1',
+        runInFlightRef,
+        createId: () => 'msg-1',
+        onError,
+        busyRunMaxRetries: 4,
+        busyRunRetryDelayMs: 100,
+      });
+
+      expect(ok).toBe(true);
+      expect(runAgent).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(120);
+
+      expect(runAgent).toHaveBeenCalledTimes(2);
+      expect(onError).not.toHaveBeenCalled();
+      expect(runInFlightRef.current).toBe(true);
+      expect(agent.addMessage).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }

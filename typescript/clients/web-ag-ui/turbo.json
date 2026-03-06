@@ -4,6 +4,7 @@
       "DELEGATIONS_BYPASS",
       "NODE_EXTRA_CA_CERTS",
       "ONCHAIN_ACTIONS_API_URL",
+      "PENDLE_LATENCY_LOG_PATH",
       "PENDLE_SMOKE_MODE",
       "PENDLE_POLL_INTERVAL_MS",
       "A2A_TEST_AGENT_NODE_PRIVATE_KEY",
@@ -15,6 +16,7 @@
       "persistent": true
     },
     "start": {
+      "dependsOn": ["build"],
       "cache": false,
       "persistent": true
     },

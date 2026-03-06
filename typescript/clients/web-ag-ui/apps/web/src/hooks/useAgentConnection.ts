@@ -12,11 +12,12 @@ import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterrup
 import { getAgentConfig, type AgentConfig } from '../config/agents';
 import { projectDetailStateFromPayload } from '../contexts/agentProjection';
 import {
-  type AgentState,
-  type AgentView,
-  type AgentViewProfile,
-  type AgentViewMetrics,
-  type AgentViewActivity,
+  type ThreadSnapshot,
+  type ThreadState,
+  type UiState,
+  type ThreadProfile,
+  type ThreadMetrics,
+  type ThreadActivity,
   type AgentSettings,
   type AgentInterrupt,
   type OperatorConfigInput,
@@ -27,7 +28,7 @@ import {
   type FundWalletAcknowledgement,
   type Transaction,
   type ClmmEvent,
-  defaultView,
+  defaultThreadState,
   defaultProfile,
   defaultMetrics,
   defaultActivity,
@@ -46,19 +47,20 @@ import { fireAgentRun, logFireCommandDebug } from '../utils/fireAgentRun';
 import { resumeInterruptViaAgent } from '../utils/interruptResolution';
 import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 import { canonicalizeChainLabel } from '../utils/iconResolution';
-import { isAgentRunning, isBusyRunError } from '../utils/runConcurrency';
-import { deriveTaskStateForUi } from '../utils/deriveTaskStateForUi';
+import { isAbortLikeError, isAgentRunning, isBusyRunError } from '../utils/runConcurrency';
+import { deriveUiState } from '../utils/deriveUiState';
 import {
   isAgentInterrupt,
   selectActiveInterrupt,
 } from '../utils/interruptSelection';
 
 export type {
-  AgentState,
-  AgentView,
-  AgentViewProfile,
-  AgentViewMetrics,
-  AgentViewActivity,
+  ThreadSnapshot,
+  ThreadState,
+  UiState,
+  ThreadProfile,
+  ThreadMetrics,
+  ThreadActivity,
   AgentSettings,
   AgentInterrupt,
   OperatorConfigInput,
@@ -79,11 +81,11 @@ export interface UseAgentConnectionResult {
   uiError: string | null;
   clearUiError: () => void;
 
-  // Full view state
-  view: AgentView;
-  profile: AgentViewProfile;
-  metrics: AgentViewMetrics;
-  activity: AgentViewActivity;
+  // View-model state consumed by React
+  uiState: UiState;
+  profile: ThreadProfile;
+  metrics: ThreadMetrics;
+  activity: ThreadActivity;
   transactionHistory: Transaction[];
   events: ClmmEvent[];
   settings: AgentSettings;
@@ -115,47 +117,6 @@ export interface UseAgentConnectionResult {
   // Settings management
   updateSettings: (updates: Partial<AgentSettings>) => void;
   saveSettings: (updates: Partial<AgentSettings>) => void;
-}
-
-function extractTaskMessage(task: AgentState['view']['task'] | undefined): string | null {
-  const message = task?.taskStatus?.message;
-  if (typeof message !== 'object' || message === null) return null;
-  if (!('content' in message)) return null;
-  const content = (message as { content?: unknown }).content;
-  return typeof content === 'string' && content.length > 0 ? content : null;
-}
-
-function isLikelyStaleOnboardingTaskMessage(message: string | null): boolean {
-  const normalized = `${message ?? ''}`.toLowerCase();
-  if (normalized.length === 0) return false;
-  return (
-    normalized.includes('onboarding') ||
-    normalized.includes('delegation approval') ||
-    normalized.includes('market + allocation')
-  );
-}
-
-function shouldIgnoreStaleOnboardingTaskRegression(params: {
-  previousState: AgentState | null;
-  nextState: AgentState;
-}): boolean {
-  const previousState = params.previousState;
-  if (!previousState) return false;
-
-  const previousTaskState = previousState.view?.task?.taskStatus?.state;
-  const nextTaskState = params.nextState.view?.task?.taskStatus?.state;
-  if (!previousTaskState || previousTaskState === 'input-required') return false;
-  if (nextTaskState !== 'input-required') return false;
-
-  const onboardingCompletionObserved =
-    previousState.view?.onboardingFlow?.status === 'completed' ||
-    params.nextState.view?.onboardingFlow?.status === 'completed' ||
-    Boolean(previousState.view?.operatorConfig) ||
-    Boolean(params.nextState.view?.operatorConfig);
-  if (!onboardingCompletionObserved) return false;
-
-  const nextTaskMessage = extractTaskMessage(params.nextState.view?.task);
-  return isLikelyStaleOnboardingTaskMessage(nextTaskMessage);
 }
 
 export function useAgentConnection(agentId: string): UseAgentConnectionResult {
@@ -204,6 +165,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const agentDebugIdsRef = useRef(new WeakMap<object, number>());
   const nextAgentDebugIdRef = useRef(1);
   const streamOwnerIdRef = useRef<string | null>(null);
+  const disconnectRequestKeyRef = useRef<string | null>(null);
 
   if (streamOwnerIdRef.current == null) {
     streamOwnerIdRef.current = v7();
@@ -249,6 +211,47 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [debugConnect],
   );
 
+  const disconnectRuntimeStream = useCallback(
+    async (params: { threadId: string | null; agent: string; reason: string }) => {
+      if (!params.threadId) return;
+      const requestKey = `${agentId}:${params.threadId}`;
+      if (disconnectRequestKeyRef.current === requestKey) {
+        logConnectEvent('preempt-cleanup-disconnect-skip', {
+          agentId,
+          agent: params.agent,
+          threadId: params.threadId,
+          reason: params.reason,
+        });
+        return;
+      }
+
+      disconnectRequestKeyRef.current = requestKey;
+      logConnectEvent('preempt-cleanup-disconnect', {
+        agentId,
+        agent: params.agent,
+        threadId: params.threadId,
+        reason: params.reason,
+      });
+
+      await Promise.resolve(
+        fetch('/api/agent-disconnect', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            agentId,
+            threadId: params.threadId,
+          }),
+          keepalive: true,
+        }),
+      ).catch(() => {
+        // Best-effort runtime-side connect teardown.
+      });
+    },
+    [agentId, logConnectEvent],
+  );
+
   const dispatchCommand = useCallback(
     (
       command: string,
@@ -265,7 +268,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const runCommand = useCallback((command: string) => dispatchCommand(command), [dispatchCommand]);
 
-  const hasStateValues = useCallback((value: unknown): value is AgentState => {
+  const setRunInFlight = useCallback((next: boolean) => {
+    runInFlightRef.current = next;
+  }, []);
+
+  const hasStateValues = useCallback((value: unknown): value is ThreadSnapshot => {
     return Boolean(
       value &&
       typeof value === 'object' &&
@@ -275,11 +282,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const extractAppliedMutationId = useCallback((value: unknown): string | null => {
     if (typeof value !== 'object' || value === null) return null;
-    if (!('view' in value)) return null;
-    const view = (value as { view?: unknown }).view;
-    if (typeof view !== 'object' || view === null) return null;
-    if (!('lastAppliedClientMutationId' in view)) return null;
-    const mutationId = (view as { lastAppliedClientMutationId?: unknown }).lastAppliedClientMutationId;
+    const stateEnvelope = value as { thread?: unknown };
+    const stateSlice = stateEnvelope.thread;
+    if (typeof stateSlice !== 'object' || stateSlice === null) return null;
+    if (!('lastAppliedClientMutationId' in stateSlice)) return null;
+    const mutationId = (stateSlice as { lastAppliedClientMutationId?: unknown })
+      .lastAppliedClientMutationId;
     return typeof mutationId === 'string' && mutationId.length > 0 ? mutationId : null;
   }, []);
 
@@ -289,16 +297,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const needsSync = useCallback((value: unknown): boolean => {
     if (!value || typeof value !== 'object') return true;
-    const state = value as AgentState;
-    const view = state.view;
-    if (!view) return true;
+    const state = value as ThreadSnapshot;
+    const threadState = state.thread;
+    if (!threadState) return true;
 
     // The backend state can arrive partially-shaped (missing array fields). Keep the UI resilient
     // by normalizing anything that should be an array to an empty array before reading `.length`.
-    const profileRaw = view.profile ?? defaultProfile;
-    const metrics = view.metrics ?? defaultMetrics;
-    const activityRaw = view.activity ?? defaultActivity;
-    const profile: AgentViewProfile = {
+    const profileRaw = threadState.profile ?? defaultProfile;
+    const metrics = threadState.metrics ?? defaultMetrics;
+    const activityRaw = threadState.activity ?? defaultActivity;
+    const profile: ThreadProfile = {
       ...profileRaw,
       chains: Array.isArray(profileRaw.chains) ? profileRaw.chains : [],
       protocols: Array.isArray(profileRaw.protocols) ? profileRaw.protocols : [],
@@ -306,7 +314,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       pools: Array.isArray(profileRaw.pools) ? profileRaw.pools : [],
       allowedPools: Array.isArray(profileRaw.allowedPools) ? profileRaw.allowedPools : [],
     };
-    const activity: AgentViewActivity = {
+    const activity: ThreadActivity = {
       ...activityRaw,
       telemetry: Array.isArray(activityRaw.telemetry) ? activityRaw.telemetry : [],
       events: Array.isArray(activityRaw.events) ? activityRaw.events : [],
@@ -332,7 +340,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       metrics.latestSnapshot !== undefined ||
       metrics.rebalanceCycles !== undefined;
     const hasActivity = activity.telemetry.length > 0 || activity.events.length > 0;
-    const transactionHistory = Array.isArray(view.transactionHistory) ? view.transactionHistory : [];
+    const transactionHistory = Array.isArray(threadState.transactionHistory)
+      ? threadState.transactionHistory
+      : [];
     const hasHistory = transactionHistory.length > 0;
 
     return !(hasProfile || hasMetrics || hasActivity || hasHistory);
@@ -443,32 +453,19 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           clientMutationId: null,
         });
       }
-      const previousState = hasStateValues(agent.state) ? (agent.state as AgentState) : null;
+      const previousState = hasStateValues(agent.state) ? (agent.state as ThreadSnapshot) : null;
       const projectedState = projectDetailStateFromPayload(statePayload, previousState);
       if (projectedState) {
-        if (shouldIgnoreStaleOnboardingTaskRegression({ previousState, nextState: projectedState })) {
-          logConnectEvent('state-regression-ignored', {
-            agentId,
-            threadId: threadIdRef.current,
-            previousTaskState: previousState?.view?.task?.taskStatus?.state,
-            previousTaskMessage: extractTaskMessage(previousState?.view?.task),
-            nextTaskState: projectedState.view?.task?.taskStatus?.state,
-            nextTaskMessage: extractTaskMessage(projectedState.view?.task),
-            previousOnboardingStatus: previousState?.view?.onboardingFlow?.status,
-            nextOnboardingStatus: projectedState.view?.onboardingFlow?.status,
-            previousHasOperatorConfig: Boolean(previousState?.view?.operatorConfig),
-            nextHasOperatorConfig: Boolean(projectedState.view?.operatorConfig),
-          });
-          return;
-        }
+        const previousThread = previousState?.thread;
+        const projectedThread = projectedState.thread;
 
         logConnectEvent('state-applied', {
           agentId,
           threadId: threadIdRef.current,
-          previousTaskState: previousState?.view?.task?.taskStatus?.state,
-          nextTaskState: projectedState.view?.task?.taskStatus?.state,
-          previousOnboardingStatus: previousState?.view?.onboardingFlow?.status,
-          nextOnboardingStatus: projectedState.view?.onboardingFlow?.status,
+          previousTaskState: previousThread?.task?.taskStatus?.state,
+          nextTaskState: projectedThread?.task?.taskStatus?.state,
+          previousOnboardingStatus: previousThread?.onboardingFlow?.status,
+          nextOnboardingStatus: projectedThread?.onboardingFlow?.status,
         });
         agent.setState(projectedState);
         return;
@@ -494,7 +491,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       onRunStartedEvent: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
         rememberActiveRun(payload);
-        runInFlightRef.current = true;
+        setRunInFlight(true);
       },
       onRunFinishedEvent: (payload) => clearRunFlag(payload),
       onRunErrorEvent: (payload) => clearRunFlag(payload),
@@ -519,7 +516,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     });
 
     return () => subscription.unsubscribe();
-  }, [agent, agentId, extractAppliedMutationId, hasStateValues, logConnectEvent]);
+  }, [agent, agentId, extractAppliedMutationId, hasStateValues, logConnectEvent, setRunInFlight]);
 
   // Initial sync when thread is established - runs once per agent instance
   useEffect(() => {
@@ -535,12 +532,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       getAgent: () => agentRef.current as HookAgent | null,
       getThreadId: () => threadIdRef.current,
       getRunInFlight: () => runInFlightRef.current,
-      setRunInFlight: (next) => {
-        runInFlightRef.current = next;
-      },
+      setRunInFlight,
       runAgent: async (currentAgent) => copilotkit.runAgent({ agent: currentAgent }),
       createId: v7,
       isBusyRunError,
+      isAbortLikeError,
       isAgentRunning,
       onSyncingChange: (isSyncing) => {
         setSyncingState({
@@ -592,7 +588,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         commandSchedulerRef.current = null;
       }
     };
-  }, [agentId, copilotkit]);
+  }, [agentId, copilotkit, setRunInFlight]);
 
   useEffect(() => {
     const ownerId = streamOwnerIdRef.current;
@@ -600,19 +596,36 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
     registerAgentStreamOwner(ownerId, async () => {
       const currentAgent = agentRef.current;
-      if (!currentAgent) return;
+
+      if (!currentAgent) {
+        logConnectEvent('preempt-cleanup-agent-missing', {
+          agentId,
+          threadId: threadIdRef.current ?? lastConnectedThreadRef.current ?? null,
+        });
+      }
+
       logConnectEvent('preempt-cleanup', {
         agentId,
         agent: getAgentDebugId(currentAgent),
       });
-      await cleanupAgentConnection(currentAgent);
+      if (currentAgent) {
+        await cleanupAgentConnection(currentAgent);
+      }
+
+      const disconnectThreadId =
+        currentAgent?.threadId ?? threadIdRef.current ?? lastConnectedThreadRef.current ?? null;
+      await disconnectRuntimeStream({
+        threadId: disconnectThreadId,
+        agent: getAgentDebugId(currentAgent),
+        reason: 'owner-preempt',
+      });
     });
 
     return () => {
       void releaseAgentStreamOwner(ownerId);
       void unregisterAgentStreamOwner(ownerId);
     };
-  }, [agentId, getAgentDebugId, logConnectEvent]);
+  }, [agentId, disconnectRuntimeStream, getAgentDebugId, logConnectEvent]);
 
   useEffect(() => {
     if (!agent) return undefined;
@@ -632,15 +645,23 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       } else if (ownerId) {
         void releaseAgentStreamOwner(ownerId);
       }
+
+      const disconnectThreadId =
+        agent.threadId ?? threadId ?? threadIdRef.current ?? lastConnectedThreadRef.current ?? null;
+      void disconnectRuntimeStream({
+        threadId: disconnectThreadId,
+        agent: getAgentDebugId(agent),
+        reason: 'effect-cleanup',
+      });
     };
-  }, [agent, agentId, getAgentDebugId, logConnectEvent, threadId]);
+  }, [agent, agentId, disconnectRuntimeStream, getAgentDebugId, logConnectEvent, threadId]);
 
   useEffect(() => {
-    runInFlightRef.current = false;
+    setRunInFlight(false);
     lastConnectedThreadRef.current = null;
     activeRunRef.current = { threadId, runId: null };
     commandSchedulerRef.current?.reset();
-  }, [threadId]);
+  }, [threadId, setRunInFlight]);
 
   useEffect(() => {
     if (!agent) return;
@@ -683,6 +704,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
       currentAgent.threadId = threadId;
       lastConnectedThreadRef.current = threadId;
+      disconnectRequestKeyRef.current = null;
       messagesSnapshotRef.current = false;
 
       const hasConnectAgent = typeof currentAgent.connectAgent === 'function';
@@ -725,21 +747,32 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   // Extract state with defaults
   const currentState =
     agent.state && Object.keys(agent.state).length > 0
-      ? (agent.state as AgentState)
+      ? (agent.state as ThreadSnapshot)
       : initialAgentState;
-  const view = currentState.view ?? defaultView;
-  const profile = view.profile ?? defaultProfile;
-  const metrics = view.metrics ?? defaultMetrics;
-  const activity = view.activity ?? defaultActivity;
-  const transactionHistory = view.transactionHistory ?? [];
-  const events = activity.events ?? [];
-  const settings = currentState.settings ?? defaultSettings;
+  const threadState = currentState.thread ?? defaultThreadState;
   const syncRunPending = syncingState.threadId === threadId ? syncingState.isSyncing : false;
   const pendingSyncMutationId =
     pendingSyncMutationByThread.threadId === threadId
       ? pendingSyncMutationByThread.clientMutationId
       : null;
   const isSyncing = syncRunPending || pendingSyncMutationId !== null;
+  const hasLoadedView = !needsSync(currentState);
+  const uiState: UiState = deriveUiState({
+    threadState,
+    runtime: {
+      isConnected: runtimeStatus === CopilotKitCoreRuntimeConnectionStatus.Connected,
+      hasLoadedSnapshot: hasLoadedView,
+      commandInFlight: isHiring || isFiring || isSyncing,
+      syncPending: isSyncing,
+      pendingSyncMutationId,
+    },
+  });
+  const profile = uiState.profile ?? defaultProfile;
+  const metrics = uiState.metrics ?? defaultMetrics;
+  const activity = uiState.activity ?? defaultActivity;
+  const transactionHistory = uiState.transactionHistory ?? [];
+  const events = activity.events ?? [];
+  const settings = currentState.settings ?? defaultSettings;
 
   const mergeUniqueStrings = (params: {
     primary: string[];
@@ -765,7 +798,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     return out;
   };
 
-  const profileWithFallback: AgentViewProfile = {
+  const profileWithFallback: ThreadProfile = {
     ...profile,
     chains: mergeUniqueStrings({
       primary: profile.chains,
@@ -786,27 +819,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   };
 
   // Derived state
-  const effectiveTaskState = deriveTaskStateForUi({
-    command: view.command,
-    taskState: view.task?.taskStatus?.state ?? null,
-    taskMessage: extractTaskMessage(view.task),
-  });
-  const isFireTaskTerminal =
-    view.command === 'fire' &&
-    (effectiveTaskState === 'completed' ||
-      effectiveTaskState === 'canceled' ||
-      effectiveTaskState === 'failed');
-  const isHired =
-    view.command === 'hire' ||
-    view.command === 'run' ||
-    view.command === 'cycle' ||
-    // `fire` is still a hired agent state: the user is firing an already-hired agent.
-    // Once the fire task reaches a terminal state, return to the pre-hire UI.
-    (view.command === 'fire' && !isFireTaskTerminal) ||
-    view.onboardingFlow?.status === 'in_progress' ||
-    (typeof view.onboarding?.step === 'number' && Number.isFinite(view.onboarding.step));
-  const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
-  const hasLoadedView = !needsSync(currentState);
+  const isHired = uiState.selectors.isHired;
+  const isActive = uiState.selectors.isActive;
 
   const runSync = useCallback(() => {
     setUiError(null);
@@ -860,7 +874,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         const ok = await fireAgentRun({
           agent: value,
           runAgent: async (current) =>
-            copilotkit.runAgent({ agent: current } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+            copilotkit.runAgent({
+              agent: current,
+            } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
           preemptActiveRun: async (current) => copilotkit.stopAgent({ agent: current }),
           threadId,
           runInFlightRef,
@@ -966,7 +982,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       if (!currentAgent) return;
 
       const nextState =
-        hasStateValues(currentAgent.state) ? (currentAgent.state as AgentState) : initialAgentState;
+        hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
 
       currentAgent.setState({
         ...nextState,
@@ -1013,7 +1029,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     interruptRenderer,
     uiError,
     clearUiError,
-    view,
+    uiState,
     profile: profileWithFallback,
     metrics,
     activity,

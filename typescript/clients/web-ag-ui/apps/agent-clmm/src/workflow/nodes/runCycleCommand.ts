@@ -1,8 +1,11 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
+import { type Command } from '@langchain/langgraph';
+import { buildNodeTransition } from 'agent-workflow-core';
 
 import { buildTaskStatus, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
+import { copilotkitEmitState } from '../emitState.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 import { resolveNextOnboardingNode } from '../onboardingRouting.js';
+import { buildLoggedStateUpdate } from '../stateUpdateFactory.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -14,28 +17,37 @@ export const runCycleCommandNode = async (
   if (nextOnboardingNode !== 'syncState') {
     logInfo('runCycleCommand: onboarding incomplete; deferring cycle run', {
       nextOnboardingNode,
-      hasOperatorConfig: Boolean(state.view.operatorConfig),
-      hasSelectedPool: Boolean(state.view.selectedPool),
-      hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
-      hasDelegationBundle: Boolean(state.view.delegationBundle),
+      hasOperatorConfig: Boolean(state.thread.operatorConfig),
+      hasSelectedPool: Boolean(state.thread.selectedPool),
+      hasFundingTokenInput: Boolean(state.thread.fundingTokenInput),
+      hasDelegationBundle: Boolean(state.thread.delegationBundle),
     });
-    return new Command({
-      goto: nextOnboardingNode,
+    return buildNodeTransition({
+      node: nextOnboardingNode,
+      createCommand: createLangGraphCommand,
+    });
+  }
+
+  if (state.thread.task?.taskStatus?.state === 'working') {
+    return buildLoggedStateUpdate('runCycleCommandNode', {
+      thread: {
+        lifecycle: { phase: 'active' as const },
+      },
     });
   }
 
   const { task, statusEvent } = buildTaskStatus(
-    state.view.task,
+    state.thread.task,
     'working',
     'Running scheduled CLMM cycle.',
   );
-  await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
+  await copilotkitEmitState(config, { thread: { task, activity: { events: [statusEvent], telemetry: [] } } });
 
-  return {
-    view: {
+  return buildLoggedStateUpdate('runCycleCommandNode', {
+    thread: {
       task,
-      command: 'cycle',
+      lifecycle: { phase: 'active' as const },
       activity: { events: [statusEvent], telemetry: [] },
     },
-  };
+  });
 };

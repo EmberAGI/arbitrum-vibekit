@@ -23,9 +23,9 @@ Current code references that motivate this:
 1. AG-UI is the only web-to-agent protocol boundary.
 2. One long-lived `connect` stream only while an agent detail page is active; no hidden background persistent streams.
 3. List/status updates are bounded polling and protocol-compliant.
-4. All agents publish one versioned `ThreadView` contract.
+4. All agents publish one versioned `ThreadState` contract.
 5. Agent command and task transitions are governed by a shared state machine library, not per-agent drift.
-6. One authority gate and shared projection contract are the source of truth for UI state across `connect`/`run`/poll ingress.
+6. One authority gate and shared projection reducer are the source of truth for UI state across `connect`/`run`/poll ingress.
 
 ## 3. C4 Level 1: System Context
 
@@ -105,7 +105,7 @@ Explicit non-goal container:
   - Writes normalized status to shared projection store.
 
 - `AgentProjectionReducer`:
-  - Target: shared projection contract from AG-UI events to `ThreadViewProjection` for both sidebar and detail.
+  - Target: shared projection contract from AG-UI events and `ThreadState` snapshots to `UiState` for both sidebar and detail.
   - Supports multiple ingress channels (`connect`, `run`, polling) with single-owner authority per agent.
   - Active detail-page agent is owned by `connect`; non-active-detail agents are owned by polling snapshots.
   - Applies source-ownership checks and drops non-owner updates.
@@ -148,14 +148,14 @@ Each `apps/agent*` uses a standard graph shape:
 - Onboarding/bootstrapping nodes
 - Cycle/poll nodes
 - Summary/terminal node
-- `view` + `task` projection emission
+- `ThreadState` + `task` projection emission
 
 Target factorization:
 
 - `@web-ag-ui/agent-workflow-core` (new shared internal package):
   - Canonical command parsing
   - Canonical onboarding + task state machine
-  - Shared `ThreadView` schema + versioning
+  - Shared `ThreadState` schema + versioning
   - Shared event/status helpers
 
 ## 6. Dynamic views (sequence)
@@ -232,9 +232,10 @@ sequenceDiagram
 
 ### 7.1 Canonical contracts (target)
 
-- `ThreadView@vN` (versioned): profile, metrics, activity, task, interrupts, onboarding.
+- `ThreadState@vN` (versioned, domain-facing): profile, metrics, activity, task, interrupts, onboarding.
+- `UiState` (web VM-facing): deterministic projection from AG-UI events + `ThreadState` snapshots.
 - `TaskState` enum (shared): `submitted`, `working`, `input-required`, `completed`, `failed`, `canceled`.
-- `AgentCommand` enum (shared): `hire`, `sync`, `fire`, plus typed interrupt resolutions.
+- `AgentCommand` enum (shared control-plane intent): `hire`, `sync`, `fire`, plus typed interrupt resolutions.
 
 ### 7.2 Rules
 
@@ -242,6 +243,7 @@ sequenceDiagram
 - UI projections are derived from AG-UI events, not direct thread reads.
 - Client-to-agent state mutation uses AG-UI `run` input (`state`/`messages`), not `connect`.
 - `connect` is attach/replay for projection continuity, not a write path.
+- `AgentCommand` is transport/control-plane intent and must not be persisted as a render-driving field in shared `ThreadState`/`UiState`.
 - Unknown contract version must fail safe with explicit telemetry.
 
 ## 8. Operational invariants
@@ -338,7 +340,7 @@ Completed:
   - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-active-detail polling fan-out and periodic no-overlap behavior.
   - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts detail-page connect and deterministic detach on unmount.
   - `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts `sync` coalescing, terminal replay, bounded busy retries, and non-sync in-flight rejection.
-  - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts sync confirmation semantics via `clientMutationId` -> `view.lastAppliedClientMutationId` handshake.
+- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts sync confirmation semantics via client mutation id handshake between command dispatch and projected state acknowledgement.
 
 Remaining gaps:
 

@@ -26,27 +26,27 @@ export const listPoolsNode = async (
 
   const poolArtifact = buildPoolArtifact(allowedPools.slice(0, 8));
   const { task, statusEvent } = buildTaskStatus(
-    state.view.task,
+    state.thread.task,
     'working',
     `Loaded ${allowedPools.length} mock pools for onboarding.`,
   );
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    thread: { task, activity: { events: [statusEvent], telemetry: [] } },
   });
 
   const events: ClmmEvent[] = [{ type: 'artifact', artifact: poolArtifact }, statusEvent];
 
   return {
-    view: {
+    thread: {
       profile: {
         pools,
         allowedPools,
       },
       poolArtifact,
       task,
-      activity: { events, telemetry: state.view.activity.telemetry },
-      transactionHistory: state.view.transactionHistory,
-      metrics: state.view.metrics,
+      activity: { events, telemetry: state.thread.activity.telemetry },
+      transactionHistory: state.thread.transactionHistory,
+      metrics: state.thread.metrics,
     },
     private: {
       mode: state.private.mode,

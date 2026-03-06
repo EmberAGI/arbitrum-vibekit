@@ -11,11 +11,11 @@ export type OnboardingNodeTarget =
 
 export function resolveNextOnboardingNode(state: ClmmState): OnboardingNodeTarget {
   const phase = resolveOnboardingPhase({
-    hasSetupInput: Boolean(state.view.operatorInput),
-    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
-    requiresDelegationSigning: state.view.delegationsBypassActive !== true,
-    hasDelegationBundle: Boolean(state.view.delegationBundle),
-    hasOperatorConfig: Boolean(state.view.operatorConfig),
+    hasSetupInput: Boolean(state.thread.operatorInput),
+    hasFundingTokenInput: Boolean(state.thread.fundingTokenInput),
+    requiresDelegationSigning: state.thread.delegationsBypassActive !== true,
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
+    hasOperatorConfig: Boolean(state.thread.operatorConfig),
   });
 
   return mapOnboardingPhaseToTarget<OnboardingNodeTarget>({

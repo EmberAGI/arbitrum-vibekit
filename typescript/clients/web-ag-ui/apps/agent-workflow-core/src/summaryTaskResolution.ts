@@ -22,7 +22,9 @@ function isLikelyStaleOnboardingWaitMessage(message: string | null | undefined):
   }
 
   return (
+    normalized.includes('continue setup') ||
     normalized.includes('continue onboarding') ||
+    normalized.includes('required permissions') ||
     normalized.includes('delegation approval') ||
     normalized.includes('onboarding input') ||
     normalized.includes('onboarding prerequisite')

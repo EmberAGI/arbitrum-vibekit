@@ -162,6 +162,107 @@ function resolvePositionOpenedAt(params: {
   }, undefined);
 }
 
+function parseTimestamp(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function resolveLatestHireTimestamp(flowLog: AccountingState['flowLog']): string | undefined {
+  const hireEvents = flowLog.filter((event) => event.type === 'hire');
+  if (hireEvents.length === 0) {
+    return undefined;
+  }
+  return hireEvents.reduce<string | undefined>((latest, event) => {
+    if (!latest) {
+      return event.timestamp;
+    }
+    const latestTs = parseTimestamp(latest) ?? 0;
+    const eventTs = parseTimestamp(event.timestamp) ?? 0;
+    return eventTs >= latestTs ? event.timestamp : latest;
+  }, undefined);
+}
+
+function resolveLifecycleBaselineSnapshot(params: {
+  navSnapshots: AccountingState['navSnapshots'];
+  lifecycleStart?: string;
+  latestSnapshotTimestamp?: string;
+  poolAddress?: `0x${string}`;
+}): NavSnapshot | undefined {
+  if (params.navSnapshots.length === 0) {
+    return undefined;
+  }
+  const lifecycleStart = parseTimestamp(params.lifecycleStart);
+  if (!lifecycleStart) {
+    return undefined;
+  }
+  const latestSnapshotTimestamp = parseTimestamp(params.latestSnapshotTimestamp);
+  const targetPool = normalizeAddress(params.poolAddress);
+  const eligible = params.navSnapshots
+    .map((snapshot) => ({
+      snapshot,
+      timestamp: parseTimestamp(snapshot.timestamp),
+    }))
+    .filter(({ timestamp, snapshot }) => {
+      if (timestamp === undefined || timestamp < lifecycleStart) {
+        return false;
+      }
+      if (latestSnapshotTimestamp !== undefined && timestamp > latestSnapshotTimestamp) {
+        return false;
+      }
+      if (!targetPool) {
+        return true;
+      }
+      return snapshot.positions.some(
+        (position) => normalizeAddress(position.poolAddress) === targetPool,
+      );
+    })
+    .sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+  return eligible[0]?.snapshot;
+}
+
+function computeInheritedPositionFeesApy(params: {
+  accounting: AccountingState;
+  latestSnapshot?: NavSnapshot;
+  poolAddress?: `0x${string}`;
+}): number | undefined {
+  if (!params.latestSnapshot || params.latestSnapshot.totalUsd <= 0) {
+    return undefined;
+  }
+  const lifecycleStart =
+    params.accounting.lifecycleStart ?? resolveLatestHireTimestamp(params.accounting.flowLog);
+  const baselineSnapshot = resolveLifecycleBaselineSnapshot({
+    navSnapshots: params.accounting.navSnapshots,
+    lifecycleStart,
+    latestSnapshotTimestamp: params.latestSnapshot.timestamp,
+    poolAddress: params.poolAddress,
+  });
+  if (!baselineSnapshot) {
+    return undefined;
+  }
+  const latestFeesUsd = params.latestSnapshot.feesUsd;
+  if (!latestFeesUsd || latestFeesUsd <= 0) {
+    return undefined;
+  }
+  const baselineFeesUsd = baselineSnapshot.feesUsd ?? 0;
+  if (latestFeesUsd <= baselineFeesUsd) {
+    return undefined;
+  }
+  const start = parseTimestamp(baselineSnapshot.timestamp);
+  const end = parseTimestamp(params.latestSnapshot.timestamp);
+  if (!start || !end || end <= start) {
+    return undefined;
+  }
+  const days = (end - start) / (1000 * 60 * 60 * 24);
+  if (days <= 0) {
+    return undefined;
+  }
+  const feesDelta = latestFeesUsd - baselineFeesUsd;
+  return (feesDelta / params.latestSnapshot.totalUsd) * (365 / days) * 100;
+}
+
 function computeFeesApy(params: {
   totalUsd?: number;
   feesUsd?: number;
@@ -211,9 +312,18 @@ export function applyAccountingToMetrics(
     positionOpenedAt,
     snapshotTimestamp,
   });
+  const inheritedPositionFeesApy =
+    computedFeesApy === undefined
+      ? computeInheritedPositionFeesApy({
+          accounting,
+          latestSnapshot: latestNavSnapshot,
+          poolAddress,
+        })
+      : undefined;
   const hasPosition = (latestNavSnapshot?.positions.length ?? 0) > 0;
   const incomingApy =
     computedFeesApy ??
+    inheritedPositionFeesApy ??
     latestNavSnapshot?.feesApy ??
     (hasPosition ? accounting.apy : undefined);
   if (accounting.aumUsd !== undefined) {
@@ -232,6 +342,8 @@ export function applyAccountingToMetrics(
   });
   if (nextMetrics.latestSnapshot && computedFeesApy !== undefined) {
     nextMetrics.latestSnapshot.feesApy = Number(computedFeesApy.toFixed(6));
+  } else if (nextMetrics.latestSnapshot && inheritedPositionFeesApy !== undefined) {
+    nextMetrics.latestSnapshot.feesApy = Number(inheritedPositionFeesApy.toFixed(6));
   } else if (nextMetrics.latestSnapshot && accounting.latestNavSnapshot?.feesApy !== undefined) {
     nextMetrics.latestSnapshot.feesApy = accounting.latestNavSnapshot.feesApy;
   }

@@ -5,7 +5,6 @@ import { projectAgentListUpdate } from './agentListProjection';
 describe('agentListProjection', () => {
   it('projects task-backed runtime view state into sidebar list update', () => {
     const update = projectAgentListUpdate({
-      command: 'cycle',
       profile: { chains: ['Arbitrum'], protocols: [], tokens: [], pools: [], allowedPools: [] },
       metrics: { iteration: 12, cyclesSinceRebalance: 1, staleCycles: 0 },
       task: {
@@ -20,7 +19,6 @@ describe('agentListProjection', () => {
     });
 
     expect(update.synced).toBe(true);
-    expect(update.command).toBe('cycle');
     expect(update.taskId).toBe('task-1');
     expect(update.taskState).toBe('working');
     expect(update.taskMessage).toBe('Rebalancing');
@@ -32,7 +30,6 @@ describe('agentListProjection', () => {
 
   it('clears task fields when runtime view has no task', () => {
     const update = projectAgentListUpdate({
-      command: 'idle',
       profile: null,
       metrics: null,
       task: undefined,
@@ -46,6 +43,5 @@ describe('agentListProjection', () => {
     expect(update.taskMessage).toBeUndefined();
     expect(update.haltReason).toBeUndefined();
     expect(update.executionError).toBeUndefined();
-    expect(update.command).toBe('idle');
   });
 });

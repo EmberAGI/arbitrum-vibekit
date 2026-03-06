@@ -656,7 +656,7 @@ export async function executeUnwind(params: {
 }
 
 export async function executeInitialDeposit(params: {
-  onchainActionsClient: Pick<OnchainActionsClient, 'createTokenizedYieldBuyPt'>;
+  onchainActionsClient: Pick<OnchainActionsClient, 'createSwap' | 'createTokenizedYieldBuyPt'>;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
   delegationBundle?: DelegationBundle;
@@ -665,17 +665,32 @@ export async function executeInitialDeposit(params: {
   targetMarket: TokenizedYieldMarket;
   fundingAmount: string;
 }): Promise<ExecutionResult> {
-  const fundingTokenUid = params.fundingToken.tokenUid;
   const transactions: TransactionPlan[] = [];
+  const targetUnderlyingTokenUid = params.targetMarket.underlyingToken.tokenUid;
 
-  // Buy PT using the selected funding token directly.
-  // Pendle can route from common stables (eg USDai) into PT markets even when the market underlying differs (eg sUSDai),
-  // so we avoid forcing a generic DEX swap to the underlying first.
+  let buyInputTokenUid = params.fundingToken.tokenUid;
+  let buyAmount = params.fundingAmount;
+
+  if (!isSameToken(buyInputTokenUid, targetUnderlyingTokenUid)) {
+    const swapPlan = await params.onchainActionsClient.createSwap({
+      walletAddress: params.walletAddress,
+      amount: params.fundingAmount,
+      amountType: 'exactIn',
+      fromTokenUid: buyInputTokenUid,
+      toTokenUid: targetUnderlyingTokenUid,
+      slippageTolerance: '0.01',
+    });
+
+    buyInputTokenUid = targetUnderlyingTokenUid;
+    buyAmount = swapPlan.exactToAmount;
+    transactions.push(...swapPlan.transactions);
+  }
+
   const buyPlan = await params.onchainActionsClient.createTokenizedYieldBuyPt({
     walletAddress: params.walletAddress,
     marketAddress: params.targetMarket.marketIdentifier.address,
-    inputTokenUid: fundingTokenUid,
-    amount: params.fundingAmount,
+    inputTokenUid: buyInputTokenUid,
+    amount: buyAmount,
     slippage: '0.01',
   });
 

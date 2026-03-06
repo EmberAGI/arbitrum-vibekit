@@ -1,12 +1,13 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
+import { fetchPoolSnapshot } from '../../clients/emberApi.js';
 import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
 import type { ClmmAction } from '../../domain/types.js';
 import { resolveAccountingContextId } from '../accounting.js';
 import { getCamelotClient, getOnchainClients } from '../clientFactory.js';
 import { buildTaskStatus, isTaskTerminal, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
+import { copilotkitEmitState } from '../emitState.js';
 import { executeDecision } from '../execution.js';
 import { appendFlowLogHistory, appendTransactionHistory, loadFlowLogHistory } from '../historyStore.js';
 import { applyAccountingToView } from '../viewMapping.js';
@@ -19,7 +20,7 @@ export const fireCommandNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
-  const currentTask = state.view.task;
+  const currentTask = state.thread.task;
   const threadId = (config as Configurable).configurable?.thread_id;
   if (threadId) {
     cancelCronForThread(threadId);
@@ -31,83 +32,95 @@ export const fireCommandNode = async (
       currentTask.taskStatus.state,
       `Task ${currentTask.id} is already in a terminal state.`,
     );
-    await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
+    await copilotkitEmitState(config, { thread: { task, activity: { events: [statusEvent], telemetry: [] } } });
     return {
-      view: {
+      thread: {
         task,
         activity: { events: [statusEvent], telemetry: [] },
-        command: 'fire',
+        lifecycle: { phase: 'inactive' },
       },
     };
   }
 
-  const onboardingComplete = Boolean(state.view.operatorConfig && state.view.selectedPool);
-  if (!onboardingComplete) {
+  const operatorConfig = state.thread.operatorConfig;
+  let selectedPool = state.thread.selectedPool ?? state.thread.metrics.lastSnapshot;
+  const fallbackPoolAddress =
+    state.thread.operatorInput?.poolAddress ??
+    state.thread.metrics.lastSnapshot?.address ??
+    state.thread.metrics.latestSnapshot?.poolAddress;
+  let camelotClient = undefined as ReturnType<typeof getCamelotClient> | undefined;
+  if (operatorConfig && !selectedPool && fallbackPoolAddress) {
+    camelotClient = getCamelotClient();
+    selectedPool =
+      (await fetchPoolSnapshot(
+        camelotClient,
+        fallbackPoolAddress,
+        ARBITRUM_CHAIN_ID,
+      )) ?? undefined;
+  }
+
+  if (!operatorConfig) {
     const { task, statusEvent } = buildTaskStatus(
       currentTask,
-      state.view.operatorConfig ? 'failed' : 'canceled',
-      state.view.operatorConfig
-        ? 'Agent fired, but workflow is missing a selected pool.'
-        : 'Agent fired before onboarding completed.',
+      'canceled',
+      'Agent fired before onboarding completed.',
     );
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
     return {
-      view: {
+      thread: {
         task,
-        command: 'fire',
+        lifecycle: { phase: 'inactive' },
         activity: { events: [statusEvent], telemetry: [] },
-        accounting: state.view.accounting,
-        profile: state.view.profile,
-        metrics: state.view.metrics,
-        transactionHistory: state.view.transactionHistory,
+        accounting: state.thread.accounting,
+        profile: state.thread.profile,
+        metrics: state.thread.metrics,
+        transactionHistory: state.thread.transactionHistory,
       },
     };
   }
 
-  const operatorConfig = state.view.operatorConfig;
-  const selectedPool = state.view.selectedPool;
-  if (!operatorConfig || !selectedPool) {
+  if (!selectedPool) {
     const { task, statusEvent } = buildTaskStatus(
       currentTask,
-      'failed',
-      'Agent fired, but workflow state is missing operatorConfig or selectedPool.',
+      'completed',
+      'Agent fired. Managed CLMM pool metadata is unavailable, so unwind was skipped.',
     );
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
     return {
-      view: {
+      thread: {
         task,
-        command: 'fire',
+        lifecycle: { phase: 'inactive' },
         activity: { events: [statusEvent], telemetry: [] },
-        accounting: state.view.accounting,
-        profile: state.view.profile,
-        metrics: state.view.metrics,
-        transactionHistory: state.view.transactionHistory,
+        accounting: state.thread.accounting,
+        profile: state.thread.profile,
+        metrics: state.thread.metrics,
+        transactionHistory: state.thread.transactionHistory,
       },
     };
   }
-  const delegationsBypassActive = state.view.delegationsBypassActive === true;
-  const delegationBundle = state.view.delegationBundle;
+  const delegationsBypassActive = state.thread.delegationsBypassActive === true;
+  const delegationBundle = state.thread.delegationBundle;
 
   if (!delegationsBypassActive && !delegationBundle) {
     const failureMessage =
       'Cannot unwind CLMM position during fire: missing delegation bundle. Complete onboarding and approve delegations, or enable DELEGATIONS_BYPASS to execute from the agent wallet.';
     const { task, statusEvent } = buildTaskStatus(currentTask, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
     return {
-      view: {
+      thread: {
         task,
-        command: 'fire',
+        lifecycle: { phase: 'inactive' },
         activity: { events: [statusEvent], telemetry: [] },
-        accounting: state.view.accounting,
-        profile: state.view.profile,
-        metrics: state.view.metrics,
-        transactionHistory: state.view.transactionHistory,
+        accounting: state.thread.accounting,
+        profile: state.thread.profile,
+        metrics: state.thread.metrics,
+        transactionHistory: state.thread.transactionHistory,
       },
     };
   }
@@ -118,10 +131,14 @@ export const fireCommandNode = async (
     'Firing agent: withdrawing liquidity and stopping CLMM workflow.',
   );
   await copilotkitEmitState(config, {
-    view: { task: workingTask, activity: { events: [workingEvent], telemetry: [] } },
+    thread: {
+      task: workingTask,
+      lifecycle: { phase: 'firing' },
+      activity: { events: [workingEvent], telemetry: [] },
+    },
   });
 
-  const camelotClient = getCamelotClient();
+  const executionCamelotClient = camelotClient ?? getCamelotClient();
   let txHash: string | undefined;
   let executionFlowEvents: Array<ReturnType<typeof createFlowEvent>> = [];
   try {
@@ -132,10 +149,10 @@ export const fireCommandNode = async (
     };
     const outcome = await executeDecision({
       action,
-      camelotClient,
+      camelotClient: executionCamelotClient,
       pool: selectedPool,
       operatorConfig,
-      fundingTokenAddress: state.view.fundingTokenInput?.fundingTokenAddress,
+      fundingTokenAddress: state.thread.fundingTokenInput?.fundingTokenAddress,
       delegationsBypassActive,
       delegationBundle: delegationsBypassActive ? undefined : delegationBundle,
       clients,
@@ -160,17 +177,17 @@ export const fireCommandNode = async (
       `Agent fired, but unwinding CLMM position failed: ${message}`,
     );
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
     return {
-      view: {
+      thread: {
         task,
-        command: 'fire',
+        lifecycle: { phase: 'inactive' },
         activity: { events: [statusEvent], telemetry: [] },
-        accounting: state.view.accounting,
-        profile: state.view.profile,
-        metrics: state.view.metrics,
-        transactionHistory: state.view.transactionHistory,
+        accounting: state.thread.accounting,
+        profile: state.thread.profile,
+        metrics: state.thread.metrics,
+        transactionHistory: state.thread.transactionHistory,
       },
     };
   }
@@ -182,8 +199,8 @@ export const fireCommandNode = async (
   const { task, statusEvent } = buildTaskStatus(currentTask, terminalState, terminalMessage);
 
   const contextId = resolveAccountingContextId({ state, threadId });
-  const aumUsd = state.view.accounting.aumUsd ?? state.view.accounting.latestNavSnapshot?.totalUsd;
-  let accountingBase = state.view.accounting;
+  const aumUsd = state.thread.accounting.aumUsd ?? state.thread.accounting.latestNavSnapshot?.totalUsd;
+  let accountingBase = state.thread.accounting;
   const storedFlowLog = threadId ? await loadFlowLogHistory({ threadId }) : [];
   if (storedFlowLog.length > 0) {
     accountingBase = { ...accountingBase, flowLog: storedFlowLog };
@@ -217,7 +234,7 @@ export const fireCommandNode = async (
   const transactionEntry =
     txHash
       ? {
-          cycle: state.view.metrics.iteration,
+          cycle: state.thread.metrics.iteration,
           action: 'withdraw',
           txHash,
           status: 'success' as const,
@@ -230,32 +247,33 @@ export const fireCommandNode = async (
   }
 
   await copilotkitEmitState(config, {
-    view: {
+    thread: {
       task,
+      lifecycle: { phase: 'inactive' },
       activity: { events: [statusEvent], telemetry: [] },
       transactionHistory: transactionEntry
-        ? [...state.view.transactionHistory, transactionEntry]
-        : state.view.transactionHistory,
+        ? [...state.thread.transactionHistory, transactionEntry]
+        : state.thread.transactionHistory,
     },
   });
 
   const { profile, metrics } = applyAccountingToView({
-    profile: state.view.profile,
-    metrics: state.view.metrics,
+    profile: state.thread.profile,
+    metrics: state.thread.metrics,
     accounting,
   });
 
   return {
-    view: {
+    thread: {
       task,
-      command: 'fire',
+      lifecycle: { phase: 'inactive' },
       activity: { events: [statusEvent], telemetry: [] },
       accounting,
       profile,
       metrics,
       transactionHistory: transactionEntry
-        ? [...state.view.transactionHistory, transactionEntry]
-        : state.view.transactionHistory,
+        ? [...state.thread.transactionHistory, transactionEntry]
+        : state.thread.transactionHistory,
     },
   };
 };

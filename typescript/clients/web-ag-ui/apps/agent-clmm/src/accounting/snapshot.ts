@@ -110,6 +110,10 @@ function extractManagedPools(params: {
   flowLog?: FlowLogEvent[];
   managedPoolAddresses?: Array<`0x${string}`>;
 }): Set<string> | null {
+  if (params.managedPoolAddresses && params.managedPoolAddresses.length > 0) {
+    return new Set(params.managedPoolAddresses.map((poolAddress) => poolAddress.toLowerCase()));
+  }
+
   const pools = new Set<string>();
   if (params.flowLog) {
     for (const event of params.flowLog) {
@@ -119,11 +123,6 @@ function extractManagedPools(params: {
       if (event.poolAddress) {
         pools.add(event.poolAddress.toLowerCase());
       }
-    }
-  }
-  if (pools.size === 0 && params.managedPoolAddresses) {
-    for (const poolAddress of params.managedPoolAddresses) {
-      pools.add(poolAddress.toLowerCase());
     }
   }
   return pools.size > 0 ? pools : null;

@@ -1,5 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
+import type { Command } from '@langchain/langgraph';
+import { buildNodeTransition } from 'agent-workflow-core';
 import { formatUnits, parseUnits } from 'viem';
 
 import type { TokenizedYieldMarket, WalletBalance } from '../../clients/onchainActions.js';
@@ -17,7 +18,7 @@ import {
   getOnchainClients,
 } from '../clientFactory.js';
 import {
-  applyViewPatch,
+  applyThreadPatch,
   buildTaskStatus,
   logInfo,
   normalizeHexAddress,
@@ -26,6 +27,8 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 import { executeInitialDeposit } from '../execution.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
+import { measureAsyncStage, startLatencyStage } from '../latency.js';
 import { buildPendleLatestSnapshot, buildPendleLatestSnapshotFromOnchain } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -36,7 +39,7 @@ const FUNDING_STEP_KEY = 'funding-token' as const;
 const DELEGATION_STEP_KEY = 'delegation-signing' as const;
 
 const resolveDelegationOnboarding = (state: ClmmState): { step: number; key: string } => ({
-  step: state.view.onboarding?.key === FUNDING_STEP_KEY ? 3 : 2,
+  step: state.thread.onboarding?.key === FUNDING_STEP_KEY ? 3 : 2,
   key: DELEGATION_STEP_KEY,
 });
 
@@ -88,66 +91,70 @@ export const prepareOperatorNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
-  const emitMergedView = async (patch: Partial<ClmmState['view']>) => {
-    const mergedView = applyViewPatch(state, patch);
+  logInfo('prepareOperator: entering node', {
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    onboardingStep: state.thread.onboarding?.step,
+    onboardingKey: state.thread.onboarding?.key,
+    hasOperatorInput: Boolean(state.thread.operatorInput),
+    hasFundingTokenInput: Boolean(state.thread.fundingTokenInput),
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
+    delegationsBypassActive: state.thread.delegationsBypassActive === true,
+  });
+
+  if (
+    state.thread.setupComplete === true ||
+    state.thread.onboardingFlow?.status === 'completed'
+  ) {
+    logInfo('prepareOperator: onboarding already completed; skipping stale operator preparation update', {
+      onboardingStatus: state.thread.onboardingFlow?.status,
+      setupComplete: state.thread.setupComplete === true,
+    });
+    return {};
+  }
+
+  const emitMergedView = async (patch: Partial<ClmmState['thread']>) => {
+    const mergedView = applyThreadPatch(state, patch);
     await copilotkitEmitState(config, {
-      view: mergedView,
+      thread: mergedView,
     });
     return mergedView;
   };
 
-  const failAndSummarize = async (
-    failureMessage: string,
-    options?: { includeExecutionError?: boolean },
-  ): Promise<Command<string, ClmmUpdate>> => {
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-    const failureView = await emitMergedView({
-      haltReason: failureMessage,
-      executionError: options?.includeExecutionError ? failureMessage : undefined,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      task,
-    });
-    return new Command({
-      update: {
-        view: failureView,
-      },
-      goto: 'summarize',
-    });
-  };
-
-  const { operatorInput } = state.view;
+  const { operatorInput } = state.thread;
   if (!operatorInput) {
     const message = 'Awaiting funding amount to continue onboarding.';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'input-required', message);
     const pendingView = await emitMergedView({
       task,
       onboarding: { step: 1, key: SETUP_STEP_KEY },
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'collectSetupInput',
       update: {
-        view: pendingView,
+        thread: pendingView,
       },
-      goto: 'collectSetupInput',
+      createCommand: createLangGraphCommand,
     });
   }
 
   const operatorWalletAddress = normalizeHexAddress(operatorInput.walletAddress, 'wallet address');
 
-  const fundingTokenInput = state.view.fundingTokenInput;
+  const fundingTokenInput = state.thread.fundingTokenInput;
   if (!fundingTokenInput) {
     const message = 'Awaiting funding-token selection to continue onboarding.';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'input-required', message);
     const pendingView = await emitMergedView({
       task,
       onboarding: { step: 2, key: FUNDING_STEP_KEY },
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'collectFundingTokenInput',
       update: {
-        view: pendingView,
+        thread: pendingView,
       },
-      goto: 'collectFundingTokenInput',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -156,22 +163,67 @@ export const prepareOperatorNode = async (
     'funding token address',
   );
 
-  const delegationsBypassActive = state.view.delegationsBypassActive === true;
-  if (!delegationsBypassActive && !state.view.delegationBundle) {
+  const delegationsBypassActive = state.thread.delegationsBypassActive === true;
+  if (!delegationsBypassActive && !state.thread.delegationBundle) {
     const message = DELEGATION_APPROVAL_MESSAGE;
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'input-required', message);
     const pendingView = await emitMergedView({
       task,
       onboarding: resolveDelegationOnboarding(state),
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'collectDelegations',
       update: {
-        view: pendingView,
+        thread: pendingView,
       },
-      goto: 'collectDelegations',
+      createCommand: createLangGraphCommand,
     });
   }
+
+  const preparingStatus = buildTaskStatus(
+    state.thread.task,
+    'working',
+    'Delegation approvals received. Preparing Pendle strategy configuration.',
+  );
+  await emitMergedView({
+    task: preparingStatus.task,
+    activity: { events: [preparingStatus.statusEvent], telemetry: state.thread.activity.telemetry },
+  });
+
+  const setupLatencyStage = startLatencyStage({
+    node: 'prepareOperator',
+    stage: 'post-onboarding-setup',
+    metadata: {
+      operatorWalletAddress,
+      delegationsBypassActive,
+      fundingTokenAddress,
+    },
+  });
+
+  const failAndSummarize = async (
+    failureMessage: string,
+    options?: { includeExecutionError?: boolean },
+  ): Promise<Command<string, ClmmUpdate>> => {
+    setupLatencyStage.fail(failureMessage, {
+      failureKind: 'summarize',
+      includeExecutionError: options?.includeExecutionError === true,
+    });
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
+    const failureView = await emitMergedView({
+      haltReason: failureMessage,
+      executionError: options?.includeExecutionError ? failureMessage : undefined,
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+      task,
+    });
+    return buildNodeTransition({
+      node: 'summarize',
+      update: {
+        thread: failureView,
+      },
+      createCommand: createLangGraphCommand,
+    });
+  };
 
   const onchainActionsClient = getOnchainActionsClient();
   let eligibleYieldTokens = [];
@@ -182,10 +234,23 @@ export const prepareOperatorNode = async (
   let existingPosition: Awaited<ReturnType<typeof onchainActionsClient.listTokenizedYieldPositions>>[number] | undefined;
   try {
     const chainIds = resolvePendleChainIds();
-    const [markets, fetchedTokens] = await Promise.all([
-      onchainActionsClient.listTokenizedYieldMarkets({ chainIds }),
-      onchainActionsClient.listTokens({ chainIds }),
-    ]);
+    const [markets, fetchedTokens] = await measureAsyncStage({
+      node: 'prepareOperator',
+      stage: 'market-discovery',
+      metadata: {
+        operatorWalletAddress,
+        chainIds,
+      },
+      run: async () =>
+        Promise.all([
+          onchainActionsClient.listTokenizedYieldMarkets({ chainIds }),
+          onchainActionsClient.listTokens({ chainIds }),
+        ]),
+      onSuccessMetadata: ([resolvedMarkets, resolvedTokens]) => ({
+        marketCount: resolvedMarkets.length,
+        tokenCount: resolvedTokens.length,
+      }),
+    });
     tokenizedMarkets = markets;
     supportedTokens = fetchedTokens;
     eligibleYieldTokens = buildEligibleYieldTokens({
@@ -195,9 +260,21 @@ export const prepareOperatorNode = async (
     });
 
     try {
-      const positions = await onchainActionsClient.listTokenizedYieldPositions({
-        walletAddress: operatorWalletAddress,
-        chainIds,
+      const positions = await measureAsyncStage({
+        node: 'prepareOperator',
+        stage: 'existing-position-discovery',
+        metadata: {
+          operatorWalletAddress,
+          chainIds,
+        },
+        run: async () =>
+          onchainActionsClient.listTokenizedYieldPositions({
+            walletAddress: operatorWalletAddress,
+            chainIds,
+          }),
+        onSuccessMetadata: (resolvedPositions) => ({
+          positionCount: resolvedPositions.length,
+        }),
       });
       const preferredPosition =
         positions.find((position) => {
@@ -249,7 +326,7 @@ export const prepareOperatorNode = async (
     : undefined;
   const shouldPreferExistingMarket = Boolean(existingMarket && !isMarketMatured(existingMarket.expiry));
   const selectedYieldToken =
-    state.view.selectedPool ??
+    state.thread.selectedPool ??
     (shouldPreferExistingMarket && existingMarketAddress
       ? eligibleYieldTokens.find(
           (token) => token.marketAddress.toLowerCase() === existingMarketAddress.toLowerCase(),
@@ -301,7 +378,7 @@ export const prepareOperatorNode = async (
   });
 
   const { task, statusEvent } = buildTaskStatus(
-    state.view.task,
+    preparingStatus.task,
     'working',
     delegationsBypassActive
       ? `Delegation bypass active. Allocating into ${selectedYieldToken.ytSymbol} from agent wallet.`
@@ -309,11 +386,11 @@ export const prepareOperatorNode = async (
   );
   await emitMergedView({
     task,
-    activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+    activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
   });
 
-  const events: ClmmEvent[] = [statusEvent];
-  let setupComplete = state.view.setupComplete === true;
+  const events: ClmmEvent[] = [preparingStatus.statusEvent, statusEvent];
+  let setupComplete = false;
   let setupTxHash: `0x${string}` | undefined;
   const txExecutionMode = resolvePendleTxExecutionMode();
 
@@ -424,15 +501,30 @@ export const prepareOperatorNode = async (
       if (!setupComplete) {
         try {
           const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
-          const execution = await executeInitialDeposit({
-            onchainActionsClient,
-            clients,
-            txExecutionMode,
-            delegationBundle: delegationsBypassActive ? undefined : state.view.delegationBundle,
-            walletAddress: operatorConfig.executionWalletAddress,
-            fundingToken,
-            targetMarket,
-            fundingAmount,
+          const execution = await measureAsyncStage({
+            node: 'prepareOperator',
+            stage: 'initial-deposit-execution',
+            metadata: {
+              operatorWalletAddress,
+              executionWalletAddress: operatorConfig.executionWalletAddress,
+              marketAddress: targetMarket.marketIdentifier.address,
+              fundingTokenAddress: fundingToken.tokenUid.address,
+              txExecutionMode,
+            },
+            run: async () =>
+              executeInitialDeposit({
+                onchainActionsClient,
+                clients,
+                txExecutionMode,
+                delegationBundle: delegationsBypassActive ? undefined : state.thread.delegationBundle,
+                walletAddress: operatorConfig.executionWalletAddress,
+                fundingToken,
+                targetMarket,
+                fundingAmount,
+              }),
+            onSuccessMetadata: (resolvedExecution) => ({
+              txHash: resolvedExecution.lastTxHash,
+            }),
           });
           setupTxHash = execution.lastTxHash;
           setupComplete = true;
@@ -457,8 +549,8 @@ export const prepareOperatorNode = async (
     : undefined;
 
   const timestamp = new Date().toISOString();
-  const positionOpenedAt = state.view.metrics.latestSnapshot?.positionOpenedAt ?? timestamp;
-  const previousOpenedTotalUsd = state.view.metrics.latestSnapshot?.positionOpenedTotalUsd;
+  const positionOpenedAt = state.thread.metrics.latestSnapshot?.positionOpenedAt ?? timestamp;
+  const previousOpenedTotalUsd = state.thread.metrics.latestSnapshot?.positionOpenedTotalUsd;
   // If the wallet already has a Pendle PT position, we don't have its true entry cost basis here.
   // In that case we initialize "opened value" to the current observed value so net PnL starts at 0.
   const positionOpenedTotalUsd = hasExistingPositionInSelectedMarket ? undefined : previousOpenedTotalUsd;
@@ -471,7 +563,18 @@ export const prepareOperatorNode = async (
     positionOpenedTotalUsd,
   });
   try {
-    const walletBalances = await onchainActionsClient.listWalletBalances(operatorWalletAddress);
+    const walletBalances = await measureAsyncStage({
+      node: 'prepareOperator',
+      stage: 'initial-snapshot-hydration',
+      metadata: {
+        operatorWalletAddress,
+        marketAddress: selectedYieldToken.marketAddress,
+      },
+      run: async () => onchainActionsClient.listWalletBalances(operatorWalletAddress),
+      onSuccessMetadata: (balances) => ({
+        balanceCount: balances.length,
+      }),
+    });
     latestSnapshot = buildPendleLatestSnapshotFromOnchain({
       operatorConfig,
       position: hasExistingPositionInSelectedMarket ? existingPosition : undefined,
@@ -487,7 +590,14 @@ export const prepareOperatorNode = async (
     });
   }
 
-  const completedView = applyViewPatch(state, {
+  setupLatencyStage.complete({
+    setupComplete,
+    selectedMarketAddress: selectedYieldToken.marketAddress,
+    positionDetected: hasExistingPositionInSelectedMarket,
+    setupTxHash,
+  });
+
+  const completedView = applyThreadPatch(state, {
     operatorConfig,
     setupComplete,
     selectedPool: selectedYieldToken,
@@ -516,12 +626,12 @@ export const prepareOperatorNode = async (
       latestSnapshot,
     },
     task,
-    activity: { events, telemetry: state.view.activity.telemetry },
+    activity: { events, telemetry: state.thread.activity.telemetry },
     transactionHistory: transactionEntry
-      ? [...state.view.transactionHistory, transactionEntry]
-      : state.view.transactionHistory,
+      ? [...state.thread.transactionHistory, transactionEntry]
+      : state.thread.transactionHistory,
     profile: {
-      ...state.view.profile,
+      ...state.thread.profile,
       aum: operatorConfig.baseContributionUsd,
       apy: Number.isFinite(selectedYieldToken.apy) ? Number(selectedYieldToken.apy.toFixed(2)) : undefined,
       pools: [
@@ -540,7 +650,7 @@ export const prepareOperatorNode = async (
   });
 
   return {
-    view: completedView,
+    thread: completedView,
     private: {
       cronScheduled: false,
     },

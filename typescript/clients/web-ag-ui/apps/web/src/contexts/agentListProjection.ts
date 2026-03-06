@@ -1,4 +1,4 @@
-import type { AgentView, TaskState } from '../types/agent';
+import type { ThreadState, TaskState } from '../types/agent';
 import type { AgentListEntry } from './agentListTypes';
 
 type TaskLike = {
@@ -18,9 +18,8 @@ function extractTaskMessage(task: TaskLike | null | undefined): string | undefin
 }
 
 export function projectAgentListUpdate(params: {
-  command?: AgentView['command'] | null;
-  profile?: AgentView['profile'] | null;
-  metrics?: AgentView['metrics'] | null;
+  profile?: ThreadState['profile'] | null;
+  metrics?: ThreadState['metrics'] | null;
   task?: TaskLike;
   haltReason?: string | null;
   executionError?: string | null;
@@ -30,7 +29,6 @@ export function projectAgentListUpdate(params: {
 
   return {
     synced: true,
-    command: params.command ?? undefined,
     profile: params.profile ?? undefined,
     metrics: params.metrics ?? undefined,
     taskId: hasTask ? params.task?.id : undefined,

@@ -23,7 +23,7 @@ export const fireCommandNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
-  const currentTask = state.view.task;
+  const currentTask = state.thread.task;
   const threadId = (config as Configurable).configurable?.thread_id;
   if (threadId) {
     cancelCronForThread(threadId);
@@ -36,18 +36,18 @@ export const fireCommandNode = async (
       `Task ${currentTask.id} is already in a terminal state.`,
     );
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
     return {
-      view: {
+      thread: {
         task,
         activity: { events: [statusEvent], telemetry: [] },
-        command: 'fire',
+        lifecycle: { phase: 'inactive' },
       },
     };
   }
 
-  const operatorConfig = state.view.operatorConfig;
+  const operatorConfig = state.thread.operatorConfig;
   if (!operatorConfig) {
     const { task, statusEvent } = buildTaskStatus(
       currentTask,
@@ -55,12 +55,12 @@ export const fireCommandNode = async (
       'Agent fired before onboarding completed.',
     );
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
     return {
-      view: {
+      thread: {
         task,
-        command: 'fire',
+        lifecycle: { phase: 'inactive' },
         activity: { events: [statusEvent], telemetry: [] },
       },
     };
@@ -71,8 +71,8 @@ export const fireCommandNode = async (
   const chainIds = resolvePendleChainIds();
   const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
   const delegationBundle =
-    state.view.delegationsBypassActive === true ? undefined : state.view.delegationBundle;
-  const hasSetupTransaction = state.view.transactionHistory.some(
+    state.thread.delegationsBypassActive === true ? undefined : state.thread.delegationBundle;
+  const hasSetupTransaction = state.thread.transactionHistory.some(
     (entry) => entry.action === 'setup' && entry.status === 'success',
   );
   const positionLookupAttempts = hasSetupTransaction ? 20 : 1;
@@ -81,7 +81,11 @@ export const fireCommandNode = async (
   const emitWorking = async (message: string) => {
     const { task, statusEvent } = buildTaskStatus(currentTask, 'working', message);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: {
+        task,
+        lifecycle: { phase: 'firing' },
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+      },
     });
   };
 
@@ -103,7 +107,7 @@ export const fireCommandNode = async (
 
     const unwindTxHashes = unwindResult.txHashes;
     const unwindTimestamp = new Date().toISOString();
-    const unwindCycle = state.view.metrics.iteration ?? 0;
+    const unwindCycle = state.thread.metrics.iteration ?? 0;
     const unwindTransactions =
       unwindTxHashes.length > 0
         ? unwindTxHashes.map((txHash) => ({
@@ -117,8 +121,8 @@ export const fireCommandNode = async (
         : [];
     const transactionHistory =
       unwindTransactions.length > 0
-        ? [...state.view.transactionHistory, ...unwindTransactions]
-        : state.view.transactionHistory;
+        ? [...state.thread.transactionHistory, ...unwindTransactions]
+        : state.thread.transactionHistory;
 
     const lastUnwindTxHash = unwindResult.lastTxHash ?? unwindTxHashes.at(-1);
     const completionMessage =
@@ -131,17 +135,17 @@ export const fireCommandNode = async (
             : `Agent fired. Unwind complete for ${unwindResult.positionCount} position(s) (${unwindResult.transactionCount} transaction(s) planned). Workflow completed.`;
     const { task, statusEvent } = buildTaskStatus(currentTask, 'completed', completionMessage);
     await copilotkitEmitState(config, {
-      view: {
+      thread: {
         task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         transactionHistory,
       },
     });
     return {
-      view: {
+      thread: {
         task,
-        command: 'fire',
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        lifecycle: { phase: 'inactive' },
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         transactionHistory,
       },
     };
@@ -155,13 +159,13 @@ export const fireCommandNode = async (
         'Agent fired. Unwind was interrupted before completion; no onchain changes were confirmed. Workflow completed.',
       );
       await copilotkitEmitState(config, {
-        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+        thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
       });
       return {
-        view: {
+        thread: {
           task,
-          command: 'fire',
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          lifecycle: { phase: 'inactive' },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         },
       };
     }
@@ -172,13 +176,13 @@ export const fireCommandNode = async (
       `ERROR: Unwind failed after 2 retries: ${message}`,
     );
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
     return {
-      view: {
+      thread: {
         task,
-        command: 'fire',
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        lifecycle: { phase: 'inactive' },
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       },
     };
   }

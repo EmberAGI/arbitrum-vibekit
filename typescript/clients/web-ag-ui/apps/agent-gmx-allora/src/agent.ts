@@ -1,7 +1,11 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
-import { isLangGraphBusyStatus, projectCycleCommandView } from 'agent-workflow-core';
+import {
+  analyzeCycleProjectionThread,
+  isLangGraphBusyStatus,
+  projectCycleCommandThread,
+} from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
@@ -53,17 +57,17 @@ function resolvePostBootstrap(
   | 'collectDelegations'
   | 'prepareOperator'
   | 'syncState' {
-  const command = extractCommand(state.messages) ?? state.view.command;
+  const command = extractCommand(state.messages);
   const target = command === 'sync' ? 'syncState' : resolveNextOnboardingNode(state);
   logRouteDecision('bootstrap', target, {
     command,
-    onboardingStatus: state.view.onboardingFlow?.status,
-    onboardingStep: state.view.onboarding?.step,
-    onboardingKey: state.view.onboarding?.key,
-    hasOperatorInput: Boolean(state.view.operatorInput),
-    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
-    hasDelegationBundle: Boolean(state.view.delegationBundle),
-    hasOperatorConfig: Boolean(state.view.operatorConfig),
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    onboardingStep: state.thread.onboarding?.step,
+    onboardingKey: state.thread.onboarding?.key,
+    hasOperatorInput: Boolean(state.thread.operatorInput),
+    hasFundingTokenInput: Boolean(state.thread.fundingTokenInput),
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
+    hasOperatorConfig: Boolean(state.thread.operatorConfig),
   });
   return target;
 }
@@ -79,29 +83,29 @@ function resolvePostRunCycle(
   const nextOnboardingNode = resolveNextOnboardingNode(state);
   const target = nextOnboardingNode === 'syncState' ? 'pollCycle' : nextOnboardingNode;
   logRouteDecision('runCycleCommand', target, {
-    onboardingStatus: state.view.onboardingFlow?.status,
-    onboardingStep: state.view.onboarding?.step,
-    onboardingKey: state.view.onboarding?.key,
-    hasOperatorConfig: Boolean(state.view.operatorConfig),
-    hasSelectedPool: Boolean(state.view.selectedPool),
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    onboardingStep: state.thread.onboarding?.step,
+    onboardingKey: state.thread.onboarding?.key,
+    hasOperatorConfig: Boolean(state.thread.operatorConfig),
+    hasSelectedPool: Boolean(state.thread.selectedPool),
   });
   return target;
 }
 
 function resolvePostFundingTokenInput(state: ClmmState): 'collectSetupInput' | 'collectDelegations' {
-  const target = state.view.operatorInput ? 'collectDelegations' : 'collectSetupInput';
+  const target = state.thread.operatorInput ? 'collectDelegations' : 'collectSetupInput';
   logRouteDecision('collectFundingTokenInput', target, {
-    hasOperatorInput: Boolean(state.view.operatorInput),
-    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
-    onboardingStep: state.view.onboarding?.step,
-    onboardingKey: state.view.onboarding?.key,
+    hasOperatorInput: Boolean(state.thread.operatorInput),
+    hasFundingTokenInput: Boolean(state.thread.fundingTokenInput),
+    onboardingStep: state.thread.onboarding?.step,
+    onboardingKey: state.thread.onboarding?.key,
   });
   return target;
 }
 
 function resolvePostPrepareOperator(state: ClmmState): 'collectDelegations' | 'pollCycle' | 'summarize' {
   let target: 'collectDelegations' | 'pollCycle' | 'summarize';
-  if (state.view.operatorConfig && state.view.selectedPool) {
+  if (state.thread.operatorConfig && state.thread.selectedPool) {
     target = 'pollCycle';
     logRouteDecision('prepareOperator', target, {
       reason: 'operator-config-ready',
@@ -111,16 +115,16 @@ function resolvePostPrepareOperator(state: ClmmState): 'collectDelegations' | 'p
     return target;
   }
 
-  if (state.view.haltReason) {
+  if (state.thread.haltReason) {
     target = 'summarize';
     logRouteDecision('prepareOperator', target, {
       reason: 'halt-reason-present',
-      haltReason: state.view.haltReason,
+      haltReason: state.thread.haltReason,
     });
     return target;
   }
 
-  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
+  if (state.thread.delegationsBypassActive !== true && !state.thread.delegationBundle) {
     target = 'collectDelegations';
     logRouteDecision('prepareOperator', target, {
       reason: 'delegation-bundle-missing',
@@ -133,37 +137,49 @@ function resolvePostPrepareOperator(state: ClmmState): 'collectDelegations' | 'p
   target = 'summarize';
   logRouteDecision('prepareOperator', target, {
     reason: 'fallback',
-    delegationsBypassActive: state.view.delegationsBypassActive === true,
-    hasDelegationBundle: Boolean(state.view.delegationBundle),
-    hasOperatorConfig: Boolean(state.view.operatorConfig),
-    hasSelectedPool: Boolean(state.view.selectedPool),
+    delegationsBypassActive: state.thread.delegationsBypassActive === true,
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
+    hasOperatorConfig: Boolean(state.thread.operatorConfig),
+    hasSelectedPool: Boolean(state.thread.selectedPool),
   });
   return target;
 }
 
-function resolvePostCollectDelegations(state: ClmmState): 'collectSetupInput' | 'prepareOperator' | 'summarize' {
-  if (!state.view.operatorInput) {
+function resolvePostCollectDelegations(
+  state: ClmmState,
+): 'collectSetupInput' | 'collectDelegations' | 'prepareOperator' | 'summarize' {
+  if (!state.thread.operatorInput) {
     logRouteDecision('collectDelegations', 'collectSetupInput', {
       reason: 'operator-input-missing',
-      onboardingStep: state.view.onboarding?.step,
-      onboardingKey: state.view.onboarding?.key,
+      onboardingStep: state.thread.onboarding?.step,
+      onboardingKey: state.thread.onboarding?.key,
     });
     return 'collectSetupInput';
   }
 
-  if (state.view.haltReason) {
+  if (state.thread.haltReason) {
     logRouteDecision('collectDelegations', 'summarize', {
       reason: 'halt-reason-present',
-      haltReason: state.view.haltReason,
+      haltReason: state.thread.haltReason,
     });
     return 'summarize';
   }
 
+  if (state.thread.delegationsBypassActive !== true && !state.thread.delegationBundle) {
+    logRouteDecision('collectDelegations', 'collectDelegations', {
+      reason: 'delegation-bundle-missing',
+      hasDelegationBundle: false,
+      onboardingStep: state.thread.onboarding?.step,
+      onboardingKey: state.thread.onboarding?.key,
+    });
+    return 'collectDelegations';
+  }
+
   logRouteDecision('collectDelegations', 'prepareOperator', {
     reason: 'delegation-step-complete',
-    hasDelegationBundle: Boolean(state.view.delegationBundle),
-    onboardingStep: state.view.onboarding?.step,
-    onboardingKey: state.view.onboarding?.key,
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
+    onboardingStep: state.thread.onboarding?.step,
+    onboardingKey: state.thread.onboarding?.key,
   });
   return 'prepareOperator';
 }
@@ -177,23 +193,23 @@ function resolvePostPollCycle(
   | 'prepareOperator'
   | 'acknowledgeFundWallet'
   | 'summarize' {
-  if (!state.view.operatorConfig || !state.view.selectedPool) {
+  if (!state.thread.operatorConfig || !state.thread.selectedPool) {
     const nextOnboardingNode = resolveNextOnboardingNode(state);
     const target = nextOnboardingNode === 'syncState' ? 'summarize' : nextOnboardingNode;
     logRouteDecision('pollCycle', target, {
       reason: 'operator-config-incomplete',
-      hasOperatorConfig: Boolean(state.view.operatorConfig),
-      hasSelectedPool: Boolean(state.view.selectedPool),
-      onboardingStatus: state.view.onboardingFlow?.status,
-      onboardingStep: state.view.onboarding?.step,
-      onboardingKey: state.view.onboarding?.key,
+      hasOperatorConfig: Boolean(state.thread.operatorConfig),
+      hasSelectedPool: Boolean(state.thread.selectedPool),
+      onboardingStatus: state.thread.onboardingFlow?.status,
+      onboardingStep: state.thread.onboarding?.step,
+      onboardingKey: state.thread.onboarding?.key,
     });
     return target;
   }
 
-  const taskState = state.view.task?.taskStatus?.state;
-  const taskMessage = state.view.task?.taskStatus?.message?.content ?? '';
-  const executionError = state.view.executionError ?? '';
+  const taskState = state.thread.task?.taskStatus?.state;
+  const taskMessage = state.thread.task?.taskStatus?.message?.content ?? '';
+  const executionError = state.thread.executionError ?? '';
   const normalizedExecutionError = executionError.toLowerCase();
   const requiresFundingAcknowledgement =
     taskState === 'input-required' &&
@@ -205,7 +221,7 @@ function resolvePostPollCycle(
     taskState,
     taskMessage,
     executionError,
-    onboardingStatus: state.view.onboardingFlow?.status,
+    onboardingStatus: state.thread.onboardingFlow?.status,
   });
   return target;
 }
@@ -263,6 +279,10 @@ function resolveLangGraphGraphId(): string {
   return process.env['LANGGRAPH_GRAPH_ID'] ?? 'agent-gmx-allora';
 }
 
+function isStrictInactiveCycleProjectionAssertEnabled(): boolean {
+  return process.env['AGENT_STRICT_INACTIVE_CYCLE_ASSERT'] === 'true';
+}
+
 async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>): Promise<T> {
   const payloadText = await response.text();
   if (!response.ok) {
@@ -298,7 +318,7 @@ function extractThreadStateValues(payload: unknown): ThreadStateValues | null {
     return data;
   }
 
-  if (isRecord(payload['view'])) {
+  if (isRecord(payload['thread'])) {
     return payload;
   }
 
@@ -336,11 +356,11 @@ async function updateCycleState(
   threadId: string,
   runMessage: { id: string; role: 'user'; content: string },
 ): Promise<boolean> {
-  let existingView: Record<string, unknown> | null = null;
+  let existingThread: Record<string, unknown> | null = null;
   try {
     const currentState = await fetchThreadStateValues(baseUrl, threadId);
-    if (currentState && isRecord(currentState['view'])) {
-      existingView = currentState['view'];
+    if (currentState && isRecord(currentState['thread'])) {
+      existingThread = currentState['thread'];
     }
   } catch (error: unknown) {
     const message =
@@ -351,12 +371,34 @@ async function updateCycleState(
     });
   }
 
-  const view = projectCycleCommandView(existingView);
+  const thread = projectCycleCommandThread(existingThread);
+  const projectionDiagnostics = analyzeCycleProjectionThread({
+    currentThread: existingThread,
+    projectedThread: thread,
+  });
+  if (projectionDiagnostics.previousLifecyclePhase === 'inactive') {
+    console.info('[cron] Cycle projection diagnostics (inactive lifecycle)', {
+      threadId,
+      ...projectionDiagnostics,
+    });
+  }
+  if (!projectionDiagnostics.inactiveLifecyclePreserved) {
+    console.warn('[cron] Inactive lifecycle projection drift detected', {
+      threadId,
+      ...projectionDiagnostics,
+    });
+    if (isStrictInactiveCycleProjectionAssertEnabled()) {
+      throw new Error(
+        'Cycle projection drift detected: inactive lifecycle was not preserved. Disable AGENT_STRICT_INACTIVE_CYCLE_ASSERT to continue without hard failure.',
+      );
+    }
+  }
+
   const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      values: { messages: [runMessage], view },
+      values: { messages: [runMessage], thread },
       as_node: 'runCommand',
     }),
   });

@@ -36,7 +36,7 @@ function getCallUrl(call: unknown[]): string {
   throw new Error('Unexpected fetch call input type');
 }
 
-const READY_VIEW = {
+const READY_THREAD = {
   operatorInput: {},
   fundingTokenInput: {},
   delegationsBypassActive: true,
@@ -67,7 +67,7 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
         return jsonResponse({ thread_id: 'thread-1' });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
-        return jsonResponse({ values: { view: READY_VIEW } });
+        return jsonResponse({ values: { thread: READY_THREAD } });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
         return new Response('busy', { status: 409 });
@@ -101,7 +101,7 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
         return jsonResponse({ thread_id: 'thread-1' });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
-        return jsonResponse({ values: { view: READY_VIEW } });
+        return jsonResponse({ values: { thread: READY_THREAD } });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
         return jsonResponse({ checkpoint_id: 'cp-1' });
@@ -145,7 +145,7 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
       if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
         return jsonResponse({
           values: {
-            view: {
+            thread: {
               command: 'hire',
               operatorInput: {},
               fundingTokenInput: {},
@@ -180,9 +180,9 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
           throw new Error('Expected string request body');
         }
         const body = JSON.parse(bodyText) as {
-          values?: { view?: { task?: { taskStatus?: { state?: string } } } };
+          values?: { thread?: { task?: { taskStatus?: { state?: string } } } };
         };
-        expect(body.values?.view?.task?.taskStatus?.state).toBe('working');
+        expect(body.values?.thread?.task?.taskStatus?.state).toBe('working');
         return jsonResponse({ checkpoint_id: 'cp-1' });
       }
       if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {
@@ -199,5 +199,66 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
     await expect(runGraphOnce('thread-1')).resolves.toBeUndefined();
 
     expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('preserves inactive lifecycle for fire-terminal snapshots even when setup signals persist', async () => {
+    const fetchMock = vi.fn((input: string | URL | Request, init?: unknown) => {
+      const url = getUrl(input);
+      const method = getMethod(init);
+
+      if (url.endsWith('/threads') && method === 'POST') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1') && method === 'PATCH') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
+        return jsonResponse({
+          values: {
+            thread: {
+              lifecycle: { phase: 'inactive' },
+              command: 'fire',
+              operatorInput: { walletAddress: '0xabc', baseContributionUsd: 10 },
+              fundingTokenInput: { fundingTokenAddress: '0xusdc' },
+              delegationsBypassActive: true,
+              setupComplete: true,
+              operatorConfig: { walletAddress: '0xabc' },
+              task: {
+                id: 'task-fire',
+                taskStatus: {
+                  state: 'completed',
+                  message: { content: 'Agent fired. Workflow completed.' },
+                },
+              },
+            },
+          },
+        });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
+        if (!init || typeof init !== 'object' || !('body' in init)) {
+          throw new Error('Missing request body');
+        }
+        const bodyText = (init as { body?: unknown }).body;
+        if (typeof bodyText !== 'string') {
+          throw new Error('Expected string request body');
+        }
+        const body = JSON.parse(bodyText) as {
+          values?: { thread?: { lifecycle?: { phase?: string }; task?: { taskStatus?: { state?: string } } } };
+        };
+        expect(body.values?.thread?.lifecycle?.phase).toBe('inactive');
+        expect(body.values?.thread?.task?.taskStatus?.state).toBe('completed');
+        return jsonResponse({ checkpoint_id: 'cp-1' });
+      }
+      if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {
+        return new Response('busy', { status: 422 });
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    vi.resetModules();
+    const { runGraphOnce } = await import('./agent.js');
+
+    await expect(runGraphOnce('thread-1')).resolves.toBeUndefined();
   });
 });

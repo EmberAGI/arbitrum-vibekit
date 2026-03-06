@@ -68,4 +68,36 @@ describe('buildFundingTokenOptions', () => {
     expect(options.map((option) => option.symbol)).toEqual(['USDC', 'USDC', 'USDT']);
     expect(options.map((option) => option.address)).toEqual(['0x0', '0x1', '0x2']);
   });
+
+  it('dedupes duplicate balances for the same token address', () => {
+    const balances: WalletBalance[] = [
+      balance({
+        address: '0x0b2b2b2076d95dda7817e785989fe353fe955ef9',
+        symbol: 'sUSDai',
+        decimals: 18,
+        amount: '49533087442598701335',
+        valueUsd: 49.53,
+      }),
+      balance({
+        address: '0x0b2b2b2076d95dda7817e785989fe353fe955ef9',
+        symbol: 'sUSDai',
+        decimals: 18,
+        amount: '49533087442598701335',
+        valueUsd: 49.53,
+      }),
+    ];
+
+    const options = buildFundingTokenOptions({
+      balances,
+      whitelistSymbols: ['sUSDai'],
+    });
+
+    expect(options).toHaveLength(1);
+    expect(options[0]).toMatchObject({
+      address: '0x0b2b2b2076d95dda7817e785989fe353fe955ef9',
+      symbol: 'sUSDai',
+      balance: '49533087442598701335',
+      decimals: 18,
+    });
+  });
 });

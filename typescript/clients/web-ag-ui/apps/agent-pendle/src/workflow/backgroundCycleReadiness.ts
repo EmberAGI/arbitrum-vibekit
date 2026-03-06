@@ -1,10 +1,10 @@
-type ThreadView = Record<string, unknown>;
+type ThreadRecord = Record<string, unknown>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export type BackgroundCycleReadiness = {
-  hasView: boolean;
+  hasThread: boolean;
   hasOperatorInput: boolean;
   hasFundingTokenInput: boolean;
   hasDelegationAccess: boolean;
@@ -12,10 +12,10 @@ export type BackgroundCycleReadiness = {
   isSetupComplete: boolean;
 };
 
-export function getBackgroundCycleReadiness(view: ThreadView | null): BackgroundCycleReadiness {
-  if (!isRecord(view)) {
+export function getBackgroundCycleReadiness(thread: ThreadRecord | null): BackgroundCycleReadiness {
+  if (!isRecord(thread)) {
     return {
-      hasView: false,
+      hasThread: false,
       hasOperatorInput: false,
       hasFundingTokenInput: false,
       hasDelegationAccess: false,
@@ -24,15 +24,15 @@ export function getBackgroundCycleReadiness(view: ThreadView | null): Background
     };
   }
 
-  const hasOperatorInput = isRecord(view['operatorInput']);
-  const hasFundingTokenInput = isRecord(view['fundingTokenInput']);
+  const hasOperatorInput = isRecord(thread['operatorInput']);
+  const hasFundingTokenInput = isRecord(thread['fundingTokenInput']);
   const hasDelegationAccess =
-    view['delegationsBypassActive'] === true || isRecord(view['delegationBundle']);
-  const hasOperatorConfig = isRecord(view['operatorConfig']);
-  const isSetupComplete = view['setupComplete'] === true;
+    thread['delegationsBypassActive'] === true || isRecord(thread['delegationBundle']);
+  const hasOperatorConfig = isRecord(thread['operatorConfig']);
+  const isSetupComplete = thread['setupComplete'] === true;
 
   return {
-    hasView: true,
+    hasThread: true,
     hasOperatorInput,
     hasFundingTokenInput,
     hasDelegationAccess,
@@ -41,10 +41,10 @@ export function getBackgroundCycleReadiness(view: ThreadView | null): Background
   };
 }
 
-export function canStartBackgroundCycle(view: ThreadView | null): boolean {
-  const readiness = getBackgroundCycleReadiness(view);
+export function canStartBackgroundCycle(thread: ThreadRecord | null): boolean {
+  const readiness = getBackgroundCycleReadiness(thread);
   return (
-    readiness.hasView &&
+    readiness.hasThread &&
     readiness.hasOperatorInput &&
     readiness.hasFundingTokenInput &&
     readiness.hasDelegationAccess &&

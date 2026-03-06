@@ -174,10 +174,15 @@ export async function pollAgentListUpdateViaAgUi(params: {
   });
 
   try {
+    const clientMutationId = uuidv7();
     runtimeAgent.addMessage({
       id: uuidv7(),
       role: 'user',
-      content: JSON.stringify({ command: 'sync', source: 'agent-list-poll' }),
+      content: JSON.stringify({
+        command: 'sync',
+        source: 'agent-list-poll',
+        clientMutationId,
+      }),
     });
   } catch {
     settle(null);

@@ -18,6 +18,7 @@ import {
 } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
 import { executePerpetualPlan } from '../execution.js';
+import { resolvePlanBuilderWalletAddress } from '../planBuilderWallet.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = {
@@ -121,7 +122,7 @@ export const fireCommandNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
-  const currentTask = state.view.task;
+  const currentTask = state.thread.task;
   const runtimeConfig = (config as Configurable).configurable;
   const threadId = runtimeConfig?.thread_id;
   const checkpointId = runtimeConfig?.checkpoint_id;
@@ -130,9 +131,9 @@ export const fireCommandNode = async (
     threadId,
     checkpointId,
     checkpointNamespace,
-    onboardingStatus: state.view.onboardingFlow?.status,
-    hasOperatorConfig: Boolean(state.view.operatorConfig),
-    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    hasOperatorConfig: Boolean(state.thread.operatorConfig),
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
   });
   logFireDebug('fireCommand: node entered', {
     threadId,
@@ -140,11 +141,11 @@ export const fireCommandNode = async (
     checkpointNamespace,
     hasTask: Boolean(currentTask),
     currentTaskState: currentTask?.taskStatus.state,
-    currentCommand: state.view.command,
-    onboardingStatus: state.view.onboardingFlow?.status,
-    hasOperatorConfig: Boolean(state.view.operatorConfig),
-    hasDelegationBundle: Boolean(state.view.delegationBundle),
-    delegationsBypassActive: state.view.delegationsBypassActive === true,
+    lifecyclePhase: state.thread.lifecycle?.phase ?? 'prehire',
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    hasOperatorConfig: Boolean(state.thread.operatorConfig),
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
+    delegationsBypassActive: state.thread.delegationsBypassActive === true,
   });
   if (threadId) {
     cancelCronForThread(threadId);
@@ -162,29 +163,29 @@ export const fireCommandNode = async (
       `Task ${currentTask.id} is already in a terminal state.`,
     );
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
     return {
-      view: {
+      thread: {
         task,
         activity: { events: [statusEvent], telemetry: [] },
-        command: 'fire',
+        lifecycle: { phase: 'inactive' },
       },
     };
   }
 
-  const operatorConfig = state.view.operatorConfig;
+  const operatorConfig = state.thread.operatorConfig;
   if (!operatorConfig) {
     logWarn('fireCommand: onboarding incomplete, terminating fire without close attempt', {
       threadId,
-      onboardingStatus: state.view.onboardingFlow?.status,
-      onboardingStep: state.view.onboarding?.step,
-      onboardingKey: state.view.onboarding?.key,
+      onboardingStatus: state.thread.onboardingFlow?.status,
+      onboardingStep: state.thread.onboarding?.step,
+      onboardingKey: state.thread.onboarding?.key,
     });
     logFireDebug('fireCommand: firing before onboarding completion', {
       threadId,
-      onboardingStatus: state.view.onboardingFlow?.status,
-      onboardingStep: state.view.onboarding?.step,
+      onboardingStatus: state.thread.onboardingFlow?.status,
+      onboardingStep: state.thread.onboarding?.step,
     });
     const { task, statusEvent } = buildTaskStatus(
       currentTask,
@@ -192,13 +193,13 @@ export const fireCommandNode = async (
       'Agent fired before onboarding completed.',
     );
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
 
     return {
-      view: {
+      thread: {
         task,
-        command: 'fire',
+        lifecycle: { phase: 'inactive' },
         activity: { events: [statusEvent], telemetry: [] },
       },
     };
@@ -206,32 +207,42 @@ export const fireCommandNode = async (
 
   const txExecutionMode = resolveGmxAlloraTxExecutionMode();
   const willExecute = txExecutionMode === 'execute';
+  const delegationsBypassActive = state.thread.delegationsBypassActive === true;
+  const planBuilderWalletAddress = resolvePlanBuilderWalletAddress({
+    operatorConfig,
+    delegationsBypassActive,
+  });
 
   logInfo('Fire command requested; attempting to close any open GMX position', {
     threadId,
     checkpointId,
     checkpointNamespace,
+    planBuilderWalletAddress,
     delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
     marketAddress: operatorConfig.targetMarket.address,
-    delegationsBypassActive: state.view.delegationsBypassActive === true,
-    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    delegationsBypassActive,
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
     configuredTxMode: txExecutionMode,
   });
 
-  if (willExecute && state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
+  if (willExecute && !delegationsBypassActive && !state.thread.delegationBundle) {
     logFireDebug('fireCommand: missing delegation bundle for execute mode', {
       threadId,
       txExecutionMode,
-      delegationsBypassActive: state.view.delegationsBypassActive ?? false,
+      delegationsBypassActive: state.thread.delegationsBypassActive ?? false,
     });
     const failureMessage =
       'Cannot close GMX position during fire: missing delegation bundle. Complete onboarding and approve delegations, or enable DELEGATIONS_BYPASS to execute from the agent wallet.';
     const { task, statusEvent } = buildTaskStatus(currentTask, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
     return {
-      view: { task, command: 'fire', activity: { events: [statusEvent], telemetry: [] } },
+      thread: {
+        task,
+        lifecycle: { phase: 'inactive' },
+        activity: { events: [statusEvent], telemetry: [] },
+      },
     };
   }
 
@@ -240,7 +251,7 @@ export const fireCommandNode = async (
   let positions: PerpetualPosition[] = [];
   try {
     positions = await onchainActionsClient.listPerpetualPositions({
-      walletAddress: operatorConfig.delegatorWalletAddress,
+      walletAddress: planBuilderWalletAddress,
       chainIds: [ARBITRUM_CHAIN_ID.toString()],
     });
   } catch (error: unknown) {
@@ -251,12 +262,12 @@ export const fireCommandNode = async (
       `Failed to fetch GMX positions while firing: ${message}`,
     );
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
     return {
-      view: {
+      thread: {
         task,
-        command: 'fire',
+        lifecycle: { phase: 'inactive' },
         activity: { events: [statusEvent], telemetry: [] },
       },
     };
@@ -298,19 +309,19 @@ export const fireCommandNode = async (
       'Agent fired. No open GMX position detected.',
     );
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+      thread: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
     return {
-      view: {
+      thread: {
         task,
-        command: 'fire',
+        lifecycle: { phase: 'inactive' },
         activity: { events: [statusEvent], telemetry: [] },
       },
     };
   }
 
   const closeRequest = {
-    walletAddress: operatorConfig.delegatorWalletAddress,
+    walletAddress: planBuilderWalletAddress,
     marketAddress: operatorConfig.targetMarket.address,
     positionSide: positionToClose.positionSide,
     isLimit: false,
@@ -350,8 +361,8 @@ export const fireCommandNode = async (
         clients,
         plan,
         txExecutionMode,
-        delegationsBypassActive: state.view.delegationsBypassActive === true,
-        delegationBundle: state.view.delegationBundle,
+        delegationsBypassActive,
+        delegationBundle: state.thread.delegationBundle,
         delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
         delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
       });
@@ -381,7 +392,7 @@ export const fireCommandNode = async (
     const fallbackPlan: ExecutionPlan = {
       action: 'reduce',
       request: {
-        walletAddress: operatorConfig.delegatorWalletAddress,
+        walletAddress: planBuilderWalletAddress,
         key: positionToClose.key,
         sizeDeltaUsd: positionToClose.sizeInUsd,
       },
@@ -401,8 +412,8 @@ export const fireCommandNode = async (
           clients,
           plan: fallbackPlan,
           txExecutionMode,
-          delegationsBypassActive: state.view.delegationsBypassActive === true,
-          delegationBundle: state.view.delegationBundle,
+          delegationsBypassActive,
+          delegationBundle: state.thread.delegationBundle,
           delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
           delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
         });
@@ -450,7 +461,7 @@ export const fireCommandNode = async (
       verificationAttemptsCompleted = attempt;
       try {
         const postClosePositions = await onchainActionsClient.listPerpetualPositions({
-          walletAddress: operatorConfig.delegatorWalletAddress,
+          walletAddress: planBuilderWalletAddress,
           chainIds: [ARBITRUM_CHAIN_ID.toString()],
         });
         postCloseTotalPositions = postClosePositions.length;
@@ -482,7 +493,7 @@ export const fireCommandNode = async (
             providerName: GMX_PERPETUALS_PROVIDER_NAME,
             chainId: ARBITRUM_CHAIN_ID.toString(),
             txHash: executionResult.lastTxHash,
-            walletAddress: operatorConfig.delegatorWalletAddress,
+            walletAddress: planBuilderWalletAddress,
           });
 
           if (lifecycle.needsDisambiguation !== true) {
@@ -615,9 +626,9 @@ export const fireCommandNode = async (
       return `Submitted GMX close request during fire, but position remained open after ${verificationAttemptsCompleted} verification checks.`;
     })();
     return [
-      ...state.view.transactionHistory,
+      ...state.thread.transactionHistory,
       {
-        cycle: state.view.metrics.iteration,
+        cycle: state.thread.metrics.iteration,
         action: 'close',
         txHash,
         status,
@@ -683,13 +694,13 @@ export const fireCommandNode = async (
     message: terminalMessage,
   });
   await copilotkitEmitState(config, {
-    view: { task, activity: { events: [statusEvent], telemetry: [] }, transactionHistory: nextTransactionHistory },
+    thread: { task, activity: { events: [statusEvent], telemetry: [] }, transactionHistory: nextTransactionHistory },
   });
 
   return {
-    view: {
+    thread: {
       task,
-      command: 'fire',
+      lifecycle: { phase: 'inactive' },
       activity: { events: [statusEvent], telemetry: [] },
       transactionHistory: nextTransactionHistory,
     },

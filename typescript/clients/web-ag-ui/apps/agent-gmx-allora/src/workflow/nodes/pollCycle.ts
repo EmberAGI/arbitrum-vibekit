@@ -2,10 +2,12 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import type { TaskState } from 'agent-workflow-core';
 
 import { fetchAlloraInference, type AlloraInference } from '../../clients/allora.js';
-import type {
-  PerpetualLifecycleResponse,
-  PerpetualPosition,
-  TransactionPlan,
+import {
+  type OnchainActionsClient,
+  type OnchainActionsRequestError,
+  type PerpetualLifecycleResponse,
+  type PerpetualPosition,
+  type TransactionPlan,
 } from '../../clients/onchainActions.js';
 import {
   ALLORA_HORIZON_HOURS,
@@ -22,7 +24,7 @@ import {
 } from '../../config/constants.js';
 import { buildAlloraPrediction } from '../../core/alloraPrediction.js';
 import { buildCycleTelemetry } from '../../core/cycle.js';
-import { buildPerpetualExecutionPlan } from '../../core/executionPlan.js';
+import { buildPerpetualExecutionPlan, type ExecutionPlan } from '../../core/executionPlan.js';
 import { applyExposureLimits } from '../../core/exposure.js';
 import { selectGmxPerpetualMarket } from '../../core/marketSelection.js';
 import type { AlloraPrediction } from '../../domain/types.js';
@@ -44,8 +46,9 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';
-import { executePerpetualPlan } from '../execution.js';
+import { executePerpetualPlan, executePreparedTransactions } from '../execution.js';
 import { resolveNextOnboardingNode } from '../onboardingRouting.js';
+import { resolvePlanBuilderWalletAddress } from '../planBuilderWallet.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = {
@@ -63,8 +66,14 @@ const ALLORA_STALE_CYCLE_LIMIT = 3;
 const ERC20_APPROVE_SELECTOR = '0x095ea7b3';
 const POSITION_SYNC_GUARD_WINDOW_MS = 90_000;
 const GMX_PERPETUALS_PROVIDER_NAME = 'GMX Perpetuals' as const;
+const EXECUTION_FEE_TOP_UP_EXECUTIONS_BUFFER_MULTIPLIER = 10;
+const EXECUTION_FEE_TOP_UP_FALLBACK_PER_EXECUTION_USD = 0.5;
+const EXECUTION_FEE_TOP_UP_MIN_USD = 1;
+const EXECUTION_FEE_TOP_UP_MAX_USD = 25;
+const EXECUTION_FEE_TOP_UP_SLIPPAGE_TOLERANCE_SEQUENCE = ['0.25', '0.5', '1'] as const;
+const ERROR_LOG_STRING_MAX_CHARS = 1_000;
 
-type PositionSyncGuard = NonNullable<ClmmState['view']['metrics']['pendingPositionSync']>;
+type PositionSyncGuard = NonNullable<ClmmState['thread']['metrics']['pendingPositionSync']>;
 
 function shouldDelayIteration(iteration: number): boolean {
   return iteration % 3 === 0;
@@ -174,7 +183,7 @@ function isApprovalOnlyTransactions(transactions: TransactionPlan[] | undefined)
 }
 
 function resolveActivePositionSyncGuard(
-  guard: ClmmState['view']['metrics']['pendingPositionSync'],
+  guard: ClmmState['thread']['metrics']['pendingPositionSync'],
   nowEpochMs: number,
 ): PositionSyncGuard | undefined {
   if (!guard) {
@@ -192,6 +201,305 @@ type ExecutionFailureSummary = {
   detail: string;
   requiresFundingAcknowledgement: boolean;
 };
+
+type ExecutionFeeTopUpAttempt = {
+  attempted: boolean;
+  funded: boolean;
+  error?: string;
+};
+
+type ExecutionFeeTopUpLogContext = {
+  threadId?: string;
+  checkpointId?: string;
+  checkpointNamespace?: string;
+  iteration: number;
+};
+
+function isExecutionFeeFundingShortfall(errorMessage: string | undefined): boolean {
+  if (!errorMessage) {
+    return false;
+  }
+  const normalized = errorMessage.toLowerCase();
+  return (
+    normalized.includes('execution fee') ||
+    normalized.includes('insufficient gas') ||
+    normalized.includes('insufficient funds for gas')
+  );
+}
+
+function isExecutionSimulationFailure(errorMessage: string | undefined): boolean {
+  if (!errorMessage) {
+    return false;
+  }
+  return errorMessage.toLowerCase().includes('execute order simulation failed');
+}
+
+function shouldAttemptExecutionFeeAutoTopUp(errorMessage: string | undefined): boolean {
+  return (
+    isExecutionFeeFundingShortfall(errorMessage) || isExecutionSimulationFailure(errorMessage)
+  );
+}
+
+function isSwapSlippageLimitExceeded(errorMessage: string): boolean {
+  return errorMessage.toLowerCase().includes('slippage limit exceeded');
+}
+
+function truncateForLogs(value: string): string {
+  return value.length <= ERROR_LOG_STRING_MAX_CHARS
+    ? value
+    : `${value.slice(0, ERROR_LOG_STRING_MAX_CHARS)}... [truncated]`;
+}
+
+function appendOnchainErrorDiagnostics(error: unknown, baseMessage: string): string {
+  if (!(error instanceof Error) || error.name !== 'OnchainActionsRequestError') {
+    return baseMessage;
+  }
+  const requestError = error as OnchainActionsRequestError;
+  const diagnostics = [
+    `method=${requestError.method}`,
+    `url=${requestError.url}`,
+    `status=${requestError.status}`,
+    requestError.bodyText ? `responseBody=${truncateForLogs(requestError.bodyText)}` : undefined,
+    requestError.requestBody
+      ? `requestBody=${truncateForLogs(requestError.requestBody)}`
+      : undefined,
+  ]
+    .filter((value): value is string => value !== undefined)
+    .join(' ');
+  return diagnostics.length > 0 ? `${baseMessage} (${diagnostics})` : baseMessage;
+}
+
+async function maybeAutoFundExecutionFee(params: {
+  onchainActionsClient: Pick<
+    OnchainActionsClient,
+    'listWalletBalances' | 'listTokens' | 'createSwap' | 'estimatePerpetualQuoteFeeUsd'
+  >;
+  txExecutionMode: 'plan' | 'execute';
+  clients: ReturnType<typeof getOnchainClients> | undefined;
+  delegationsBypassActive: boolean;
+  delegationBundle: ClmmState['thread']['delegationBundle'];
+  planBuilderWalletAddress: `0x${string}`;
+  delegatorWalletAddress: `0x${string}`;
+  delegateeWalletAddress: `0x${string}`;
+  fundingTokenAddress: `0x${string}`;
+  executionPlan: ExecutionPlan;
+  logContext: ExecutionFeeTopUpLogContext;
+}): Promise<ExecutionFeeTopUpAttempt> {
+  if (params.txExecutionMode !== 'execute') {
+    return { attempted: true, funded: false, error: 'Auto top-up requires execute mode.' };
+  }
+  if (!params.clients) {
+    return { attempted: true, funded: false, error: 'Onchain clients are unavailable for auto top-up.' };
+  }
+
+  try {
+    const chainId = ARBITRUM_CHAIN_ID.toString();
+    const tokens = await params.onchainActionsClient.listTokens({ chainIds: [chainId] });
+    const nativeEthToken = tokens.find(
+      (token) =>
+        token.isNative === true && token.symbol.toUpperCase() === 'ETH' && token.tokenUid.chainId === chainId,
+    );
+    if (!nativeEthToken) {
+      return { attempted: true, funded: false, error: 'Unable to resolve Arbitrum ETH token for auto top-up.' };
+    }
+
+    const normalizedFundingToken = params.fundingTokenAddress.toLowerCase();
+    const fundingToken = tokens.find(
+      (token) =>
+        token.tokenUid.chainId === chainId && token.tokenUid.address.toLowerCase() === normalizedFundingToken,
+    );
+    if (!fundingToken) {
+      return { attempted: true, funded: false, error: 'Unable to resolve funding token for auto top-up swap.' };
+    }
+    if (!params.executionPlan.request || params.executionPlan.action === 'none') {
+      return { attempted: true, funded: false, error: 'No execution plan available for fee estimation.' };
+    }
+    const estimatedFeeUsdRaw = await ((): Promise<number | undefined> => {
+      if (params.executionPlan.action === 'long') {
+        return params.onchainActionsClient.estimatePerpetualQuoteFeeUsd({
+          action: 'long',
+          request: params.executionPlan.request as Parameters<OnchainActionsClient['createPerpetualLong']>[0],
+        });
+      }
+      if (params.executionPlan.action === 'short') {
+        return params.onchainActionsClient.estimatePerpetualQuoteFeeUsd({
+          action: 'short',
+          request: params.executionPlan.request as Parameters<OnchainActionsClient['createPerpetualShort']>[0],
+        });
+      }
+      if (params.executionPlan.action === 'close') {
+        return params.onchainActionsClient.estimatePerpetualQuoteFeeUsd({
+          action: 'close',
+          request: params.executionPlan.request as Parameters<OnchainActionsClient['createPerpetualClose']>[0],
+        });
+      }
+      return params.onchainActionsClient.estimatePerpetualQuoteFeeUsd({
+        action: 'reduce',
+        request: params.executionPlan.request as Parameters<OnchainActionsClient['createPerpetualReduce']>[0],
+      });
+    })();
+    const perExecutionFeeUsd =
+      estimatedFeeUsdRaw && estimatedFeeUsdRaw > 0
+        ? estimatedFeeUsdRaw
+        : EXECUTION_FEE_TOP_UP_FALLBACK_PER_EXECUTION_USD;
+    const bufferedFeeUsd =
+      perExecutionFeeUsd * EXECUTION_FEE_TOP_UP_EXECUTIONS_BUFFER_MULTIPLIER;
+    const targetFeeUsd = Math.max(
+      EXECUTION_FEE_TOP_UP_MIN_USD,
+      Math.min(EXECUTION_FEE_TOP_UP_MAX_USD, bufferedFeeUsd),
+    );
+    const scale = 10 ** fundingToken.decimals;
+    const exactInAmountBaseUnits = Math.max(1, Math.ceil(targetFeeUsd * scale)).toString();
+    const balances = await params.onchainActionsClient.listWalletBalances({
+      walletAddress: params.planBuilderWalletAddress,
+    });
+    const nativeBalance = balances.find((balance) => {
+      if (balance.tokenUid.chainId !== chainId) {
+        return false;
+      }
+      return (
+        balance.tokenUid.address.toLowerCase() === nativeEthToken.tokenUid.address.toLowerCase() ||
+        balance.symbol?.toUpperCase() === 'ETH'
+      );
+    });
+    const nativeBalanceUsd =
+      typeof nativeBalance?.valueUsd === 'number' &&
+      Number.isFinite(nativeBalance.valueUsd) &&
+      nativeBalance.valueUsd >= 0
+        ? nativeBalance.valueUsd
+        : undefined;
+    logWarn('pollCycle: execution-fee top-up preflight computed', {
+      ...params.logContext,
+      estimatedFeeUsdRaw,
+      perExecutionFeeUsd,
+      targetFeeUsd,
+      exactInAmountBaseUnits,
+      nativeBalanceAmount: nativeBalance?.amount,
+      nativeBalanceUsd,
+    });
+    const hasReliableFeeEstimate =
+      estimatedFeeUsdRaw !== undefined && Number.isFinite(estimatedFeeUsdRaw) && estimatedFeeUsdRaw > 0;
+    if (nativeBalanceUsd !== undefined && nativeBalanceUsd >= targetFeeUsd) {
+      logWarn('pollCycle: execution-fee top-up skipped; native balance appears sufficient', {
+        ...params.logContext,
+        hasReliableFeeEstimate,
+        targetFeeUsd,
+        nativeBalanceUsd,
+      });
+      return { attempted: false, funded: false };
+    }
+
+    const fundingBalance = balances.find(
+      (balance) =>
+        balance.tokenUid.chainId === chainId &&
+        balance.tokenUid.address.toLowerCase() === fundingToken.tokenUid.address.toLowerCase(),
+    );
+    if (fundingBalance && BigInt(fundingBalance.amount) < BigInt(exactInAmountBaseUnits)) {
+      return {
+        attempted: true,
+        funded: false,
+        error:
+          'Insufficient funding token balance for automatic execution-fee top-up. Fund additional collateral and retry.',
+      };
+    }
+
+    let lastSwapError: string | undefined;
+    for (const slippageTolerance of EXECUTION_FEE_TOP_UP_SLIPPAGE_TOLERANCE_SEQUENCE) {
+      let approvalOnlyPlanRetriesRemaining = 1;
+      for (;;) {
+        try {
+          logWarn('pollCycle: requesting execution-fee top-up swap plan', {
+            ...params.logContext,
+            slippageTolerance,
+            exactInAmountBaseUnits,
+            approvalOnlyPlanRetriesRemaining,
+          });
+          const swapPlan = await params.onchainActionsClient.createSwap({
+            walletAddress: params.planBuilderWalletAddress,
+            amount: exactInAmountBaseUnits,
+            amountType: 'exactIn',
+            fromTokenUid: fundingToken.tokenUid,
+            toTokenUid: nativeEthToken.tokenUid,
+            slippageTolerance,
+          });
+          const approvalOnlyPlan = isApprovalOnlyTransactions(swapPlan.transactions);
+          logWarn('pollCycle: execution-fee top-up swap plan received', {
+            ...params.logContext,
+            slippageTolerance,
+            transactionCount: swapPlan.transactions.length,
+            approvalOnlyPlan,
+          });
+
+          const swapExecution = await executePreparedTransactions({
+            transactions: swapPlan.transactions,
+            txExecutionMode: params.txExecutionMode,
+            clients: params.clients,
+            delegationsBypassActive: params.delegationsBypassActive,
+            delegationBundle: params.delegationBundle,
+            delegatorWalletAddress: params.delegatorWalletAddress,
+            delegateeWalletAddress: params.delegateeWalletAddress,
+          });
+          logWarn('pollCycle: execution-fee top-up swap execution resolved', {
+            ...params.logContext,
+            slippageTolerance,
+            ok: swapExecution.ok,
+            txHash: swapExecution.lastTxHash,
+            txHashes: swapExecution.txHashes,
+            error: swapExecution.ok ? undefined : swapExecution.error,
+          });
+          if (!swapExecution.ok) {
+            return {
+              attempted: true,
+              funded: false,
+              error: swapExecution.error ?? 'Execution-fee auto top-up transaction failed.',
+            };
+          }
+
+          if (approvalOnlyPlan) {
+            if (approvalOnlyPlanRetriesRemaining <= 0) {
+              return {
+                attempted: true,
+                funded: false,
+                error:
+                  'Execution-fee auto top-up only returned approval transactions and did not produce a swap transaction.',
+              };
+            }
+            approvalOnlyPlanRetriesRemaining -= 1;
+            continue;
+          }
+
+          return { attempted: true, funded: true };
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          lastSwapError = appendOnchainErrorDiagnostics(error, message);
+          logWarn('pollCycle: execution-fee top-up swap planning failed', {
+            ...params.logContext,
+            slippageTolerance,
+            error: lastSwapError,
+          });
+          if (!isSwapSlippageLimitExceeded(message)) {
+            return { attempted: true, funded: false, error: lastSwapError };
+          }
+          break;
+        }
+      }
+    }
+
+    return {
+      attempted: true,
+      funded: false,
+      error:
+        lastSwapError ??
+        'Execution-fee auto top-up failed after trying configured slippage tolerances.',
+    };
+  } catch (error: unknown) {
+    return {
+      attempted: true,
+      funded: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 function summarizeExecutionFailure(params: {
   iteration: number;
@@ -222,6 +530,21 @@ function summarizeExecutionFailure(params: {
   };
 }
 
+function summarizePersistentSimulationFailureAfterTopUp(params: {
+  iteration: number;
+  error?: string;
+}): ExecutionFailureSummary {
+  const rawError = params.error ?? 'Unknown error';
+  const detail =
+    'GMX order simulation still failed after successful execution-fee top-up. This is likely an upstream planning/simulation issue rather than wallet funding. The agent will continue retrying on future cycles.';
+  return {
+    taskState: 'working',
+    statusMessage: `[Cycle ${params.iteration}] execution failed: ${detail}`,
+    detail: rawError,
+    requiresFundingAcknowledgement: false,
+  };
+}
+
 function isResolvedLifecycle(
   lifecycle: PerpetualLifecycleResponse,
 ): lifecycle is Extract<PerpetualLifecycleResponse, { orderKey: string }> {
@@ -231,11 +554,89 @@ function isResolvedLifecycle(
 function formatLifecycleFailureDetail(params: {
   status: 'cancelled' | 'failed';
   reason?: string;
+  reasonBytes?: string;
+  requestedPrice?: string;
+  observedPrice?: string;
 }): string {
-  if (params.reason) {
-    return `Onchain order ${params.status}: ${params.reason}`;
+  const decodedReason = decodeLifecycleFailureReason(params);
+  if (decodedReason) {
+    return `Onchain order ${params.status}: ${decodedReason}`;
   }
   return `Onchain order ${params.status}.`;
+}
+
+function parseBigIntValue(raw: string | undefined): bigint | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const normalized = raw.trim();
+  if (!/^(0x[0-9a-f]+|\d+)$/iu.test(normalized)) {
+    return undefined;
+  }
+  try {
+    return BigInt(normalized);
+  } catch {
+    return undefined;
+  }
+}
+
+function formatPercentFromBps(valueBps: bigint): string {
+  const whole = valueBps / 100n;
+  const fraction = valueBps % 100n;
+  return `${whole.toString()}.${fraction.toString().padStart(2, '0')}%`;
+}
+
+function decodeLifecycleFailureReason(params: {
+  reason?: string;
+  reasonBytes?: string;
+  requestedPrice?: string;
+  observedPrice?: string;
+}): string | undefined {
+  const explicitReason = params.reason?.trim();
+  if (explicitReason) {
+    return explicitReason;
+  }
+
+  const reasonBytes = params.reasonBytes?.trim().toLowerCase();
+  if (reasonBytes && /^0x[0-9a-f]+$/u.test(reasonBytes) && reasonBytes.length >= 10) {
+    const selector = reasonBytes.slice(0, 10);
+    if (selector === '0xe09ad0e9' && reasonBytes.length >= 10 + 64 * 2) {
+      const orderPriceRaw = parseBigIntValue(`0x${reasonBytes.slice(10, 74)}`);
+      const acceptablePriceRaw = parseBigIntValue(`0x${reasonBytes.slice(74, 138)}`);
+      if (
+        orderPriceRaw !== undefined &&
+        acceptablePriceRaw !== undefined &&
+        acceptablePriceRaw > 0n
+      ) {
+        const absDiff =
+          orderPriceRaw >= acceptablePriceRaw
+            ? orderPriceRaw - acceptablePriceRaw
+            : acceptablePriceRaw - orderPriceRaw;
+        const diffBps = (absDiff * 10_000n) / acceptablePriceRaw;
+        const direction = orderPriceRaw > acceptablePriceRaw ? 'above' : 'below';
+        return `OrderNotFulfillableAtAcceptablePrice (order price ${direction} acceptable bound by ~${formatPercentFromBps(diffBps)}).`;
+      }
+      return 'OrderNotFulfillableAtAcceptablePrice.';
+    }
+  }
+
+  const requestedPriceRaw = parseBigIntValue(params.requestedPrice);
+  const observedPriceRaw = parseBigIntValue(params.observedPrice);
+  if (
+    requestedPriceRaw !== undefined &&
+    observedPriceRaw !== undefined &&
+    requestedPriceRaw > 0n
+  ) {
+    const absDiff =
+      observedPriceRaw >= requestedPriceRaw
+        ? observedPriceRaw - requestedPriceRaw
+        : requestedPriceRaw - observedPriceRaw;
+    const diffBps = (absDiff * 10_000n) / requestedPriceRaw;
+    const direction = observedPriceRaw > requestedPriceRaw ? 'above' : 'below';
+    return `Price moved outside acceptable bounds (observed ${direction} requested by ~${formatPercentFromBps(diffBps)}).`;
+  }
+
+  return undefined;
 }
 
 function buildLatestSnapshot(params: {
@@ -310,7 +711,8 @@ export const pollCycleNode = async (
   const runtimeThreadId = runtimeConfig?.thread_id;
   const runtimeCheckpointId = runtimeConfig?.checkpoint_id;
   const runtimeCheckpointNamespace = runtimeConfig?.checkpoint_ns;
-  const { operatorConfig, selectedPool } = state.view;
+  const { operatorConfig, selectedPool } = state.thread;
+  const delegationsBypassActive = state.thread.delegationsBypassActive === true;
 
   if (!operatorConfig || !selectedPool) {
     const nextOnboardingNode = resolveNextOnboardingNode(state);
@@ -323,25 +725,28 @@ export const pollCycleNode = async (
       const message = needsUserInput
         ? 'Cycle paused until onboarding input is complete.'
         : 'Cycle paused while onboarding prerequisites are prepared.';
-      const { task, statusEvent } = buildTaskStatus(state.view.task, status, message);
-      const mergedView = {
-        ...state.view,
+      const { task, statusEvent } = buildTaskStatus(state.thread.task, status, message);
+      const pendingView = {
         task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+      };
+      const mergedView = {
+        ...state.thread,
+        ...pendingView,
       };
       logInfo('pollCycle: onboarding incomplete; rerouting before polling', {
         nextOnboardingNode,
-        hasOperatorConfig: Boolean(state.view.operatorConfig),
-        hasSelectedPool: Boolean(state.view.selectedPool),
+        hasOperatorConfig: Boolean(state.thread.operatorConfig),
+        hasSelectedPool: Boolean(state.thread.selectedPool),
       });
       await copilotkitEmitState(config, {
-        view: mergedView,
+        thread: mergedView,
       });
       if (needsUserInput) {
         logPauseSnapshot({
           node: 'pollCycle',
           reason: 'onboarding prerequisites incomplete',
-          view: mergedView,
+          thread: mergedView,
           metadata: {
             pauseMechanism: 'state-wait',
             nextOnboardingNode,
@@ -349,23 +754,23 @@ export const pollCycleNode = async (
         });
       }
       return {
-        view: mergedView,
+        thread: pendingView,
       };
     }
 
     const failureMessage = 'ERROR: Polling node missing GMX strategy configuration';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
     return {
-      view: {
+      thread: {
         haltReason: failureMessage,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        metrics: state.view.metrics,
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+        metrics: state.thread.metrics,
         task,
-        profile: state.view.profile,
-        transactionHistory: state.view.transactionHistory,
+        profile: state.thread.profile,
+        transactionHistory: state.thread.transactionHistory,
       },
     };
   }
@@ -376,19 +781,23 @@ export const pollCycleNode = async (
     checkpointNamespace: runtimeCheckpointNamespace,
     hasOperatorConfig: Boolean(operatorConfig),
     hasSelectedPool: Boolean(selectedPool),
-    onboardingStatus: state.view.onboardingFlow?.status,
-    currentTaskState: state.view.task?.taskStatus?.state,
-    currentTaskMessage: state.view.task?.taskStatus?.message?.content,
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    currentTaskState: state.thread.task?.taskStatus?.state,
+    currentTaskMessage: state.thread.task?.taskStatus?.message?.content,
   });
 
-  const iteration = (state.view.metrics.iteration ?? 0) + 1;
+  const iteration = (state.thread.metrics.iteration ?? 0) + 1;
+  const planBuilderWalletAddress = resolvePlanBuilderWalletAddress({
+    operatorConfig,
+    delegationsBypassActive,
+  });
   const topicKey = resolveTopicKey(selectedPool.baseSymbol);
   const topicId = ALLORA_TOPIC_IDS[topicKey];
   const topicLabel = ALLORA_TOPIC_LABELS[topicKey];
 
   let prediction: AlloraPrediction;
-  let inferenceSnapshotKey = state.view.metrics.lastInferenceSnapshotKey;
-  let staleCycles = state.view.metrics.staleCycles ?? 0;
+  let inferenceSnapshotKey = state.thread.metrics.lastInferenceSnapshotKey;
+  let staleCycles = state.thread.metrics.staleCycles ?? 0;
   try {
     const inference = await fetchAlloraInference({
       baseUrl: resolveAlloraApiBaseUrl(),
@@ -399,7 +808,7 @@ export const pollCycleNode = async (
     });
     inferenceSnapshotKey = buildInferenceSnapshotKey(inference);
     staleCycles = 0;
-    const currentPrice = state.view.metrics.previousPrice ?? inference.combinedValue;
+    const currentPrice = state.thread.metrics.previousPrice ?? inference.combinedValue;
     prediction = buildAlloraPrediction({
       inference,
       currentPrice,
@@ -413,21 +822,21 @@ export const pollCycleNode = async (
     // Auth errors are configuration errors; surface them immediately.
     if (message.includes('(401)') || message.includes('(403)')) {
       const failureMessage = `ERROR: Failed to fetch Allora prediction: ${message}`;
-      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
       await copilotkitEmitState(config, {
-        view: {
+        thread: {
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         },
       });
       return {
-        view: {
+        thread: {
           haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: { ...state.view.metrics, staleCycles, iteration },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+          metrics: { ...state.thread.metrics, staleCycles, iteration },
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       };
     }
@@ -435,40 +844,40 @@ export const pollCycleNode = async (
     // Transient failures should not brick the agent; skip trades and retry on the next cycle.
     if (staleCycles > ALLORA_STALE_CYCLE_LIMIT) {
       const failureMessage = `ERROR: Abort: Allora API unreachable for ${staleCycles} consecutive cycles (last error: ${message})`;
-      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
       await copilotkitEmitState(config, {
-        view: {
+        thread: {
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         },
       });
       return {
-        view: {
+        thread: {
           haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: { ...state.view.metrics, staleCycles, iteration },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+          metrics: { ...state.thread.metrics, staleCycles, iteration },
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       };
     }
 
     const warningMessage = `WARNING: Allora prediction unavailable (attempt ${staleCycles}/${ALLORA_STALE_CYCLE_LIMIT}); skipping trades this cycle.`;
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'working', warningMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'working', warningMessage);
     await copilotkitEmitState(config, {
-      view: {
+      thread: {
         task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       },
     });
     return {
-      view: {
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        metrics: { ...state.view.metrics, staleCycles, iteration },
+      thread: {
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+        metrics: { ...state.thread.metrics, staleCycles, iteration },
         task,
-        profile: state.view.profile,
-        transactionHistory: state.view.transactionHistory,
+        profile: state.thread.profile,
+        transactionHistory: state.thread.transactionHistory,
       },
     };
   }
@@ -481,7 +890,7 @@ export const pollCycleNode = async (
     const [markets, walletPositions] = await Promise.all([
       onchainActionsClient.listPerpetualMarkets({ chainIds }),
       onchainActionsClient.listPerpetualPositions({
-        walletAddress: operatorConfig.delegatorWalletAddress,
+        walletAddress: planBuilderWalletAddress,
         chainIds,
       }),
     ]);
@@ -494,21 +903,21 @@ export const pollCycleNode = async (
 
     if (!selectedMarket) {
       const failureMessage = `ERROR: No GMX ${selectedPool.baseSymbol}/${selectedPool.quoteSymbol} market available`;
-      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
       await copilotkitEmitState(config, {
-        view: {
+        thread: {
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         },
       });
       return {
-        view: {
+        thread: {
           haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: state.view.metrics,
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+          metrics: state.thread.metrics,
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       };
     }
@@ -518,33 +927,78 @@ export const pollCycleNode = async (
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to fetch GMX markets/positions from ${ONCHAIN_ACTIONS_API_URL}: ${message}`;
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
     return {
-      view: {
+      thread: {
         haltReason: failureMessage,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        metrics: state.view.metrics,
+        activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+        metrics: state.thread.metrics,
         task,
-        profile: state.view.profile,
-        transactionHistory: state.view.transactionHistory,
+        profile: state.thread.profile,
+        transactionHistory: state.thread.transactionHistory,
       },
     };
   }
 
-  const previousCycle = state.view.metrics.latestCycle;
-  const assumedPositionSide = state.view.metrics.assumedPositionSide;
+  const previousCycle = state.thread.metrics.latestCycle;
+  const assumedPositionSide = state.thread.metrics.assumedPositionSide;
+  let reconciledAssumedPositionSide = assumedPositionSide;
   const nowEpochMs = Date.now();
-  const activePositionSyncGuard = resolveActivePositionSyncGuard(
-    state.view.metrics.pendingPositionSync,
+  let activePositionSyncGuard = resolveActivePositionSyncGuard(
+    state.thread.metrics.pendingPositionSync,
     nowEpochMs,
   );
   const normalizedTargetMarket = gmxMarketAddress.toLowerCase();
   const currentMarketPosition = positions.find(
     (position) => position.marketAddress.toLowerCase() === normalizedTargetMarket,
   );
+  let positionSyncGuardClearedFromLifecycle = false;
+  if (activePositionSyncGuard && !currentMarketPosition && activePositionSyncGuard.sourceTxHash) {
+    const guardSourceTxHash = normalizeHexAddress(
+      activePositionSyncGuard.sourceTxHash,
+      'position sync source tx hash',
+    );
+    const guardSourceAction = activePositionSyncGuard.sourceAction;
+    try {
+      const guardLifecycle = await onchainActionsClient.getPerpetualLifecycle({
+        providerName: GMX_PERPETUALS_PROVIDER_NAME,
+        chainId: ARBITRUM_CHAIN_ID.toString(),
+        txHash: guardSourceTxHash,
+        walletAddress: planBuilderWalletAddress,
+      });
+      if (
+        isResolvedLifecycle(guardLifecycle) &&
+        (guardLifecycle.status === 'cancelled' || guardLifecycle.status === 'failed')
+      ) {
+        logWarn('pollCycle: clearing stale position sync guard after terminal lifecycle', {
+          threadId: runtimeThreadId,
+          checkpointId: runtimeCheckpointId,
+          checkpointNamespace: runtimeCheckpointNamespace,
+          iteration,
+          guardSourceTxHash,
+          guardSourceAction,
+          lifecycleStatus: guardLifecycle.status,
+          lifecycleReason: guardLifecycle.reason,
+        });
+        activePositionSyncGuard = undefined;
+        reconciledAssumedPositionSide = undefined;
+        positionSyncGuardClearedFromLifecycle = true;
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarn('pollCycle: position sync guard lifecycle query failed', {
+        threadId: runtimeThreadId,
+        checkpointId: runtimeCheckpointId,
+        checkpointNamespace: runtimeCheckpointNamespace,
+        iteration,
+        guardSourceTxHash,
+        error: message,
+      });
+    }
+  }
   logWarn('pollCycle: market position snapshot before decision', {
     threadId: runtimeThreadId,
     checkpointId: runtimeCheckpointId,
@@ -557,16 +1011,18 @@ export const pollCycleNode = async (
     matchedPositionSizeUsd: currentMarketPosition?.sizeInUsd,
     matchedPositionPnl: currentMarketPosition?.pnl,
     assumedPositionSide,
+    reconciledAssumedPositionSide,
     activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
     activePositionSyncGuardSourceAction: activePositionSyncGuard?.sourceAction,
     activePositionSyncGuardExpiresAtEpochMs: activePositionSyncGuard?.expiresAtEpochMs,
+    positionSyncGuardClearedFromLifecycle,
   });
   const currentPositionSide = currentMarketPosition?.positionSide;
   // Only treat a prior position as open when it is backed by onchain state
   // (current position) or explicit local assumption from a successful prior trade.
   // Never infer open state from previous cycle telemetry alone.
   const decisionPreviousSide =
-    currentPositionSide ?? assumedPositionSide ?? activePositionSyncGuard?.expectedSide;
+    currentPositionSide ?? reconciledAssumedPositionSide ?? activePositionSyncGuard?.expectedSide;
   const decisionPreviousAction = decisionPreviousSide ? 'open' : undefined;
   logWarn('pollCycle: decision context resolved', {
     threadId: runtimeThreadId,
@@ -575,6 +1031,7 @@ export const pollCycleNode = async (
     iteration,
     currentPositionSide,
     assumedPositionSide,
+    reconciledAssumedPositionSide,
     previousCycleAction: previousCycle?.action,
     previousCycleSide: previousCycle?.side,
     activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
@@ -590,7 +1047,7 @@ export const pollCycleNode = async (
     baseContributionUsd: operatorConfig.baseContributionUsd,
     previousAction: decisionPreviousAction,
     previousSide: decisionPreviousSide,
-    cyclesSinceTrade: state.view.metrics.cyclesSinceRebalance ?? 0,
+    cyclesSinceTrade: state.thread.metrics.cyclesSinceRebalance ?? 0,
     isFirstCycle: iteration === 1,
     iteration,
     marketSymbol: `${selectedPool.baseSymbol}/${selectedPool.quoteSymbol}`,
@@ -617,7 +1074,7 @@ export const pollCycleNode = async (
     telemetry: exposureAdjusted,
     chainId: ARBITRUM_CHAIN_ID.toString(),
     marketAddress: gmxMarketAddress as `0x${string}`,
-    walletAddress: operatorConfig.delegatorWalletAddress,
+    walletAddress: planBuilderWalletAddress,
     payTokenAddress: operatorConfig.fundingTokenAddress,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
     positionContractKey: positionForReduce?.contractKey,
@@ -627,7 +1084,7 @@ export const pollCycleNode = async (
   const skipTradeForUnchangedInference =
     isTradePlanAction(plannedExecutionPlan.action) &&
     Boolean(inferenceSnapshotKey) &&
-    state.view.metrics.lastTradedInferenceSnapshotKey === inferenceSnapshotKey;
+    state.thread.metrics.lastTradedInferenceSnapshotKey === inferenceSnapshotKey;
 
   let adjustedTelemetry = skipTradeForUnchangedInference
     ? {
@@ -679,13 +1136,13 @@ export const pollCycleNode = async (
     activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
     activePositionSyncGuardSourceAction: activePositionSyncGuard?.sourceAction,
     inferenceSnapshotKey,
-    lastTradedInferenceSnapshotKey: state.view.metrics.lastTradedInferenceSnapshotKey,
+    lastTradedInferenceSnapshotKey: state.thread.metrics.lastTradedInferenceSnapshotKey,
     txExecutionMode: resolveGmxAlloraTxExecutionMode(),
   });
 
   const nextCyclesSinceTrade =
     adjustedTelemetry.action === 'hold' && telemetry.action === 'open'
-      ? (state.view.metrics.cyclesSinceRebalance ?? 0) + 1
+      ? (state.thread.metrics.cyclesSinceRebalance ?? 0) + 1
       : initialCyclesSinceTrade;
 
   const action = adjustedTelemetry.action;
@@ -693,11 +1150,11 @@ export const pollCycleNode = async (
   const txHash = adjustedTelemetry.txHash;
 
   const cycleStatusMessage = `[Cycle ${iteration}] ${action}: ${reason}${txHash ? ` (tx: ${txHash.slice(0, 10)}...)` : ''}`;
-  let { task, statusEvent } = buildTaskStatus(state.view.task, 'working', cycleStatusMessage);
+  let { task, statusEvent } = buildTaskStatus(state.thread.task, 'working', cycleStatusMessage);
   await copilotkitEmitState(config, {
-    view: {
+    thread: {
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       metrics: { latestCycle: adjustedTelemetry },
     },
   });
@@ -710,9 +1167,9 @@ export const pollCycleNode = async (
       task = updated.task;
       statusEvent = updated.statusEvent;
       await copilotkitEmitState(config, {
-        view: {
+        thread: {
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
           metrics: { latestCycle: adjustedTelemetry },
         },
       });
@@ -740,19 +1197,20 @@ export const pollCycleNode = async (
       iteration,
       executionPlanAction: executionPlan.action,
       txExecutionMode,
-      delegationsBypassActive: state.view.delegationsBypassActive === true,
-      hasDelegationBundle: Boolean(state.view.delegationBundle),
+      delegationsBypassActive,
+      hasDelegationBundle: Boolean(state.thread.delegationBundle),
+      planBuilderWalletAddress,
       delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
       delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
     });
   }
-  const executionResult = await executePerpetualPlan({
+  let executionResult = await executePerpetualPlan({
     client: onchainActionsClient,
     clients,
     plan: executionPlan,
     txExecutionMode,
-    delegationsBypassActive: state.view.delegationsBypassActive === true,
-    delegationBundle: state.view.delegationBundle,
+    delegationsBypassActive,
+    delegationBundle: state.thread.delegationBundle,
     delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
     delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
   });
@@ -767,11 +1225,126 @@ export const pollCycleNode = async (
     txHashes: executionResult.txHashes,
     error: executionResult.ok ? undefined : executionResult.error,
   });
+  const initialExecutionFailure = executionResult.ok
+    ? undefined
+    : summarizeExecutionFailure({
+        iteration,
+        error: executionResult.error,
+      });
+  let executionFeeTopUpFunded = false;
+  if (
+    txExecutionMode === 'execute' &&
+    initialExecutionFailure?.requiresFundingAcknowledgement === true &&
+    shouldAttemptExecutionFeeAutoTopUp(executionResult.error)
+  ) {
+    logWarn('pollCycle: execution-fee shortfall detected; attempting USDC -> ETH top-up', {
+      threadId: runtimeThreadId,
+      checkpointId: runtimeCheckpointId,
+      checkpointNamespace: runtimeCheckpointNamespace,
+      iteration,
+      walletAddress: planBuilderWalletAddress,
+      fundingTokenAddress: operatorConfig.fundingTokenAddress,
+      bufferedExecutions: EXECUTION_FEE_TOP_UP_EXECUTIONS_BUFFER_MULTIPLIER,
+    });
+    const topUpAttempt = await maybeAutoFundExecutionFee({
+      onchainActionsClient,
+      txExecutionMode,
+      clients,
+      delegationsBypassActive,
+      delegationBundle: state.thread.delegationBundle,
+      planBuilderWalletAddress,
+      delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+      delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+      fundingTokenAddress: operatorConfig.fundingTokenAddress,
+      executionPlan,
+      logContext: {
+        threadId: runtimeThreadId,
+        checkpointId: runtimeCheckpointId,
+        checkpointNamespace: runtimeCheckpointNamespace,
+        iteration,
+      },
+    });
+    logWarn('pollCycle: execution-fee top-up preflight result', {
+      threadId: runtimeThreadId,
+      checkpointId: runtimeCheckpointId,
+      checkpointNamespace: runtimeCheckpointNamespace,
+      iteration,
+      attempted: topUpAttempt.attempted,
+      funded: topUpAttempt.funded,
+      error: topUpAttempt.error,
+    });
+    if (topUpAttempt.funded) {
+      executionFeeTopUpFunded = true;
+      const fundingStatus = buildTaskStatus(
+        task,
+        'working',
+        `[Cycle ${iteration}] execution fee top-up completed; retrying trade.`,
+      );
+      task = fundingStatus.task;
+      statusEvent = fundingStatus.statusEvent;
+      await copilotkitEmitState(config, {
+        thread: {
+          task,
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+          metrics: { latestCycle: adjustedTelemetry },
+        },
+      });
+      executionResult = await executePerpetualPlan({
+        client: onchainActionsClient,
+        clients,
+        plan: executionPlan,
+        txExecutionMode,
+        delegationsBypassActive,
+        delegationBundle: state.thread.delegationBundle,
+        delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+        delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+      });
+      logWarn('pollCycle: retry after execution-fee top-up resolved', {
+        threadId: runtimeThreadId,
+        checkpointId: runtimeCheckpointId,
+        checkpointNamespace: runtimeCheckpointNamespace,
+        iteration,
+        action: executionResult.action,
+        ok: executionResult.ok,
+        txHash: executionResult.lastTxHash,
+        txHashes: executionResult.txHashes,
+        error: executionResult.ok ? undefined : executionResult.error,
+      });
+    } else if (topUpAttempt.attempted) {
+      logWarn('pollCycle: execution-fee top-up attempt failed', {
+        threadId: runtimeThreadId,
+        checkpointId: runtimeCheckpointId,
+        checkpointNamespace: runtimeCheckpointNamespace,
+        iteration,
+        error: topUpAttempt.error,
+      });
+      executionResult = {
+        ...executionResult,
+        error: topUpAttempt.error
+          ? `${executionResult.error ?? 'Execution failed'} Auto top-up failed: ${topUpAttempt.error}`
+          : executionResult.error,
+      };
+    }
+  }
+  const persistentSimulationFailureAfterTopUp =
+    executionFeeTopUpFunded &&
+    !executionResult.ok &&
+    isExecutionSimulationFailure(executionResult.error);
+  if (persistentSimulationFailureAfterTopUp) {
+    logWarn('pollCycle: simulation failure persisted after successful execution-fee top-up', {
+      threadId: runtimeThreadId,
+      checkpointId: runtimeCheckpointId,
+      checkpointNamespace: runtimeCheckpointNamespace,
+      iteration,
+      error: executionResult.error,
+    });
+  }
   const approvalOnlyExecution =
     executionResult.ok &&
     (executionPlan.action === 'long' || executionPlan.action === 'short') &&
     isApprovalOnlyTransactions(executionResult.transactions);
   let lifecycleFailure: ExecutionFailureSummary | undefined;
+  let lifecycleStatus: 'pending' | 'executed' | 'cancelled' | 'failed' | 'unknown' | undefined;
   if (
     executionResult.ok &&
     txExecutionMode === 'execute' &&
@@ -784,10 +1357,11 @@ export const pollCycleNode = async (
         providerName: GMX_PERPETUALS_PROVIDER_NAME,
         chainId: ARBITRUM_CHAIN_ID.toString(),
         txHash: executionResult.lastTxHash,
-        walletAddress: operatorConfig.delegatorWalletAddress,
+        walletAddress: planBuilderWalletAddress,
       });
 
       if (isResolvedLifecycle(lifecycle)) {
+        lifecycleStatus = lifecycle.status;
         logWarn('pollCycle: perpetual lifecycle status resolved', {
           threadId: runtimeThreadId,
           checkpointId: runtimeCheckpointId,
@@ -808,6 +1382,9 @@ export const pollCycleNode = async (
             error: formatLifecycleFailureDetail({
               status: lifecycle.status,
               reason: lifecycle.reason,
+              reasonBytes: lifecycle.reasonBytes,
+              requestedPrice: lifecycle.requestedPrice,
+              observedPrice: lifecycle.observedPrice,
             }),
           });
         }
@@ -833,10 +1410,15 @@ export const pollCycleNode = async (
     lifecycleFailure ??
     (executionResult.ok
       ? undefined
-      : summarizeExecutionFailure({
-          iteration,
-          error: executionResult.error,
-        }));
+      : persistentSimulationFailureAfterTopUp
+        ? summarizePersistentSimulationFailureAfterTopUp({
+            iteration,
+            error: executionResult.error,
+          })
+        : summarizeExecutionFailure({
+            iteration,
+            error: executionResult.error,
+          }));
   const executionCompletedSuccessfully = executionResult.ok && !executionFailure;
 
   if (executionFailure) {
@@ -874,7 +1456,7 @@ export const pollCycleNode = async (
   if (executionCompletedSuccessfully && executionPlan.action !== 'none') {
     try {
       const refreshedPositions = await onchainActionsClient.listPerpetualPositions({
-        walletAddress: operatorConfig.delegatorWalletAddress,
+        walletAddress: planBuilderWalletAddress,
         chainIds: [ARBITRUM_CHAIN_ID.toString()],
       });
       positionAfterExecution = refreshedPositions.find(
@@ -914,16 +1496,19 @@ export const pollCycleNode = async (
       executionResult.ok && (executionPlan.action === 'long' || executionPlan.action === 'short')
         ? latestCycle.timestamp
         : undefined,
-    previous: state.view.metrics.latestSnapshot,
+    previous: state.thread.metrics.latestSnapshot,
   });
 
   const hasCompletedTradeEffect =
     executionCompletedSuccessfully && executionPlan.action !== 'none' && !approvalOnlyExecution;
+  const executionAwaitingPositionConfirmation =
+    hasCompletedTradeEffect && lifecycleStatus === 'pending' && !positionAfterExecution;
+  const hasConfirmedTradeEffect = hasCompletedTradeEffect && !executionAwaitingPositionConfirmation;
   const lifetimePnlUsd = positionAfterExecution
     ? parseUsdMetric(positionAfterExecution.pnl)
     : executionCompletedSuccessfully && executionPlan.action === 'close'
       ? 0
-      : state.view.metrics.lifetimePnlUsd;
+      : state.thread.metrics.lifetimePnlUsd;
 
   const nextPendingPositionSync: PositionSyncGuard | undefined = (():
     | PositionSyncGuard
@@ -978,10 +1563,15 @@ export const pollCycleNode = async (
 
   const nextAssumedPositionSide = (() => {
     if (!executionCompletedSuccessfully) {
-      return currentPositionSide ?? assumedPositionSide ?? activePositionSyncGuard?.expectedSide;
+      return (
+        currentPositionSide ?? reconciledAssumedPositionSide ?? activePositionSyncGuard?.expectedSide
+      );
     }
     if (approvalOnlyExecution) {
-      return assumedPositionSide;
+      return reconciledAssumedPositionSide;
+    }
+    if (executionAwaitingPositionConfirmation) {
+      return currentPositionSide ?? reconciledAssumedPositionSide;
     }
     // Planned actions should advance local assumptions immediately so we don't
     // repeat stale intent on the next cycle.
@@ -998,7 +1588,7 @@ export const pollCycleNode = async (
     if (positionAfterExecution?.positionSide) {
       return positionAfterExecution.positionSide;
     }
-    return currentPositionSide ?? assumedPositionSide ?? nextPendingPositionSync?.expectedSide;
+    return currentPositionSide ?? reconciledAssumedPositionSide ?? nextPendingPositionSync?.expectedSide;
   })();
   const executionPlanEvent: ClmmEvent | undefined =
     executionPlan.action === 'none'
@@ -1025,7 +1615,7 @@ export const pollCycleNode = async (
       matchedMarketPosition: Boolean(currentMarketPosition),
       matchedMarketPositionSide: currentMarketPosition?.positionSide,
       matchedMarketPositionSizeUsd: currentMarketPosition?.sizeInUsd,
-      assumedPositionSide,
+      assumedPositionSide: reconciledAssumedPositionSide,
       activePositionSyncGuardExpectedSide: activePositionSyncGuard?.expectedSide,
     });
   }
@@ -1075,7 +1665,9 @@ export const pollCycleNode = async (
   const finalReason = latestCycle.reason;
   const resolvedTxHash = executionResult.lastTxHash ?? latestCycle.txHash;
   const transactionEntry =
-    executionPlan.action !== 'none' && !requiresFundingAcknowledgement
+    executionPlan.action !== 'none' &&
+    !requiresFundingAcknowledgement &&
+    !executionAwaitingPositionConfirmation
       ? {
           cycle: iteration,
           action: finalAction,
@@ -1088,37 +1680,37 @@ export const pollCycleNode = async (
         }
       : undefined;
 
-  const baseAum = state.view.profile.aum ?? 52_000;
-  const baseIncome = state.view.profile.agentIncome ?? 5_400;
+  const baseAum = state.thread.profile.aum ?? 52_000;
+  const baseIncome = state.thread.profile.agentIncome ?? 5_400;
   const aumDelta = finalAction === 'hold' || finalAction === 'cooldown' ? 10 : 180;
   const incomeDelta = finalAction === 'hold' || finalAction === 'cooldown' ? 1.2 : 9.5;
   const nextProfile = {
-    ...state.view.profile,
+    ...state.thread.profile,
     aum: Number((baseAum + aumDelta).toFixed(2)),
     agentIncome: Number((baseIncome + incomeDelta).toFixed(2)),
   };
 
   return {
-    view: {
+    thread: {
       metrics: {
         lastSnapshot: selectedPool,
         previousPrice: prediction.predictedPrice,
         cyclesSinceRebalance: approvalOnlyExecution
-          ? (state.view.metrics.cyclesSinceRebalance ?? 0) + 1
+          ? (state.thread.metrics.cyclesSinceRebalance ?? 0) + 1
           : nextCyclesSinceTrade,
-        staleCycles: state.view.metrics.staleCycles ?? 0,
+        staleCycles: state.thread.metrics.staleCycles ?? 0,
         iteration,
         latestCycle,
         aumUsd: latestSnapshot.totalUsd,
-        apy: state.view.metrics.apy ?? state.view.profile.apy,
+        apy: state.thread.metrics.apy ?? state.thread.profile.apy,
         lifetimePnlUsd,
         latestSnapshot,
         assumedPositionSide: nextAssumedPositionSide,
         lastInferenceSnapshotKey: inferenceSnapshotKey,
         lastTradedInferenceSnapshotKey:
-          hasCompletedTradeEffect && inferenceSnapshotKey
+          hasConfirmedTradeEffect && inferenceSnapshotKey
             ? inferenceSnapshotKey
-            : state.view.metrics.lastTradedInferenceSnapshotKey,
+            : state.thread.metrics.lastTradedInferenceSnapshotKey,
         pendingPositionSync: nextPendingPositionSync,
       },
       task,
@@ -1131,8 +1723,8 @@ export const pollCycleNode = async (
           : [telemetryEvent, statusEvent],
       },
       transactionHistory: transactionEntry
-        ? [...state.view.transactionHistory, transactionEntry]
-        : state.view.transactionHistory,
+        ? [...state.thread.transactionHistory, transactionEntry]
+        : state.thread.transactionHistory,
       profile: nextProfile,
       selectedPool,
       haltReason: '',

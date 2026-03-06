@@ -1,5 +1,5 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
+import { type Command } from '@langchain/langgraph';
+import { buildNodeTransition } from 'agent-workflow-core';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
 import type { AccountingState, FlowLogEventInput } from '../../accounting/types.js';
@@ -38,6 +38,7 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';
+import { copilotkitEmitState } from '../emitState.js';
 import { executeDecision } from '../execution.js';
 import {
   appendFlowLogHistory,
@@ -46,6 +47,7 @@ import {
   appendTransactionHistory,
   loadFlowLogHistory,
 } from '../historyStore.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 import { applyAccountingToView } from '../viewMapping.js';
 
@@ -120,65 +122,47 @@ export const pollCycleNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<Command<string, ClmmUpdate>> => {
-  const { operatorConfig, selectedPool } = state.view;
+  const { operatorConfig, selectedPool } = state.thread;
 
   if (!operatorConfig || !selectedPool) {
     const nextOnboardingNode = resolveNextOnboardingNode(state);
     if (nextOnboardingNode !== 'syncState') {
-      const needsUserInput =
-        nextOnboardingNode === 'collectOperatorInput' ||
-        nextOnboardingNode === 'collectFundingTokenInput' ||
-        nextOnboardingNode === 'collectDelegations';
-      const status = needsUserInput ? 'input-required' : 'working';
-      const message = needsUserInput
-        ? 'Cycle paused until onboarding input is complete.'
-        : 'Cycle paused while onboarding prerequisites are prepared.';
-      const { task, statusEvent } = buildTaskStatus(state.view.task, status, message);
-      const mergedView = {
-        ...state.view,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      };
       logInfo('pollCycle: onboarding incomplete; rerouting before polling', {
         nextOnboardingNode,
-        hasOperatorConfig: Boolean(state.view.operatorConfig),
-        hasSelectedPool: Boolean(state.view.selectedPool),
+        hasOperatorConfig: Boolean(state.thread.operatorConfig),
+        hasSelectedPool: Boolean(state.thread.selectedPool),
       });
-      await copilotkitEmitState(config, {
-        view: mergedView,
-      });
-      return new Command({
-        update: {
-          view: mergedView,
-        },
-        goto: nextOnboardingNode,
+      return buildNodeTransition({
+        node: nextOnboardingNode,
+        createCommand: createLangGraphCommand,
       });
     }
 
     const failureMessage = 'ERROR: Polling node missing required state (operatorConfig or selectedPool)';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
-    return new Command({
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
-        view: {
+        thread: {
           haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
           metrics: {
-            iteration: state.view.metrics.iteration ?? 0,
-            staleCycles: state.view.metrics.staleCycles ?? 0,
-            cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
-            lastSnapshot: state.view.metrics.lastSnapshot,
-            previousPrice: state.view.metrics.previousPrice,
-            latestCycle: state.view.metrics.latestCycle,
+            iteration: state.thread.metrics.iteration ?? 0,
+            staleCycles: state.thread.metrics.staleCycles ?? 0,
+            cyclesSinceRebalance: state.thread.metrics.cyclesSinceRebalance ?? 0,
+            lastSnapshot: state.thread.metrics.lastSnapshot,
+            previousPrice: state.thread.metrics.previousPrice,
+            latestCycle: state.thread.metrics.latestCycle,
           },
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
@@ -186,7 +170,7 @@ export const pollCycleNode = async (
   const camelotClient = getCamelotClient();
   const clients = await getOnchainClients();
 
-  const iteration = (state.view.metrics.iteration ?? 0) + 1;
+  const iteration = (state.thread.metrics.iteration ?? 0) + 1;
   const threadId = (config as Configurable).configurable?.thread_id;
   const contextId = resolveAccountingContextId({ state, threadId });
   const storedFlowLog = threadId ? await loadFlowLogHistory({ threadId }) : [];
@@ -195,14 +179,14 @@ export const pollCycleNode = async (
   };
   logInfo('Polling cycle begin', { iteration, poolAddress: selectedPool.address });
 
-  let staleCycles = state.view.metrics.staleCycles ?? 0;
+  let staleCycles = state.thread.metrics.staleCycles ?? 0;
   let poolSnapshot: CamelotPool | undefined;
-  let taskState = state.view.task;
+  let taskState = state.thread.task;
   const preCycleEvents: ClmmEvent[] = [];
   try {
     poolSnapshot =
       (await fetchPoolSnapshot(camelotClient, selectedPool.address, ARBITRUM_CHAIN_ID)) ??
-      state.view.metrics.lastSnapshot;
+      state.thread.metrics.lastSnapshot;
     staleCycles = 0;
   } catch (unknownError: unknown) {
     staleCycles += 1;
@@ -221,36 +205,37 @@ export const pollCycleNode = async (
     });
     if (staleCycles > DATA_STALE_CYCLE_LIMIT) {
       const failureMessage = `ERROR: Abort: Ember API unreachable for ${staleCycles} consecutive cycles (last error: ${cause})`;
-      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
       await copilotkitEmitState(config, {
-        view: {
+        thread: {
           task,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
         },
       });
-      logCycleAccountingSummary(state.view.accounting, 'cycle-abort: ember api unreachable');
-      return new Command({
+      logCycleAccountingSummary(state.thread.accounting, 'cycle-abort: ember api unreachable');
+      return buildNodeTransition({
+        node: 'summarize',
         update: {
-          view: {
+          thread: {
             haltReason: failureMessage,
-            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
             metrics: {
               staleCycles,
               iteration,
-              cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
-              lastSnapshot: state.view.metrics.lastSnapshot,
-              previousPrice: state.view.metrics.previousPrice,
-              latestCycle: state.view.metrics.latestCycle,
+              cyclesSinceRebalance: state.thread.metrics.cyclesSinceRebalance ?? 0,
+              lastSnapshot: state.thread.metrics.lastSnapshot,
+              previousPrice: state.thread.metrics.previousPrice,
+              latestCycle: state.thread.metrics.latestCycle,
             },
             task,
-            profile: state.view.profile,
-            transactionHistory: state.view.transactionHistory,
+            profile: state.thread.profile,
+            transactionHistory: state.thread.transactionHistory,
           },
         },
-        goto: 'summarize',
+        createCommand: createLangGraphCommand,
       });
     }
-    poolSnapshot = state.view.metrics.lastSnapshot;
+    poolSnapshot = state.thread.metrics.lastSnapshot;
     const { task, statusEvent } = buildTaskStatus(
       taskState,
       'working',
@@ -259,7 +244,7 @@ export const pollCycleNode = async (
     taskState = task;
     preCycleEvents.push(statusEvent);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
   }
 
@@ -267,36 +252,37 @@ export const pollCycleNode = async (
     const failureMessage = `ERROR: Unable to obtain Camelot pool snapshot after ${staleCycles} attempts`;
     const { task, statusEvent } = buildTaskStatus(taskState, 'failed', failureMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      thread: { task, activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry } },
     });
-    logCycleAccountingSummary(state.view.accounting, 'cycle-abort: missing pool snapshot');
-    return new Command({
+    logCycleAccountingSummary(state.thread.accounting, 'cycle-abort: missing pool snapshot');
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
-        view: {
+        thread: {
           haltReason: failureMessage,
           activity: {
             events: [...preCycleEvents, statusEvent],
-            telemetry: state.view.activity.telemetry,
+            telemetry: state.thread.activity.telemetry,
           },
           metrics: {
             staleCycles,
             iteration,
-            cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
-            lastSnapshot: state.view.metrics.lastSnapshot,
-            previousPrice: state.view.metrics.previousPrice,
-            latestCycle: state.view.metrics.latestCycle,
+            cyclesSinceRebalance: state.thread.metrics.cyclesSinceRebalance ?? 0,
+            lastSnapshot: state.thread.metrics.lastSnapshot,
+            previousPrice: state.thread.metrics.previousPrice,
+            latestCycle: state.thread.metrics.latestCycle,
           },
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
+          profile: state.thread.profile,
+          transactionHistory: state.thread.transactionHistory,
         },
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
 
   const midPrice = deriveMidPrice(poolSnapshot);
-  const volatilityPct = computeVolatilityPct(midPrice, state.view.metrics.previousPrice);
+  const volatilityPct = computeVolatilityPct(midPrice, state.thread.metrics.previousPrice);
   const decimalsDiff = poolSnapshot.token0.decimals - poolSnapshot.token1.decimals;
 
   const walletPositions = await camelotClient.getWalletPositions(
@@ -313,11 +299,12 @@ export const pollCycleNode = async (
     logInfo('Missing WETH/USD price for pool', { poolAddress: poolSnapshot.address });
     const failureMessage = `ERROR: Unable to locate a WETH/USD price for pool ${poolSnapshot.address}`;
     const { task, statusEvent } = buildTaskStatus(taskState, 'failed', failureMessage);
-    await copilotkitEmitState(config, { view: { task, events: [statusEvent] } });
-    logCycleAccountingSummary(state.view.accounting, 'cycle-abort: missing eth price');
-    return new Command({
+    await copilotkitEmitState(config, { thread: { task, events: [statusEvent] } });
+    logCycleAccountingSummary(state.thread.accounting, 'cycle-abort: missing eth price');
+    return buildNodeTransition({
+      node: 'summarize',
       update: {
-        view: {
+        thread: {
           haltReason: failureMessage,
           events: [...preCycleEvents, statusEvent],
           staleCycles,
@@ -325,14 +312,14 @@ export const pollCycleNode = async (
           task,
         },
       },
-      goto: 'summarize',
+      createCommand: createLangGraphCommand,
     });
   }
   const maxGasSpendUsd = MAX_GAS_SPEND_ETH * ethUsd;
   const estimatedFeeValueUsd = estimateFeeValueUsd(currentPosition, poolSnapshot);
   const minAllocationPct = resolveMinAllocationPct();
   const positionValueUsd =
-    state.view.accounting.positionsUsd ?? state.view.accounting.latestNavSnapshot?.totalUsd;
+    state.thread.accounting.positionsUsd ?? state.thread.accounting.latestNavSnapshot?.totalUsd;
   const targetAllocationUsd = operatorConfig.baseContributionUsd;
 
   const rebalanceThresholdPct = resolveRebalanceThresholdPct();
@@ -344,7 +331,7 @@ export const pollCycleNode = async (
     minAllocationPct,
     midPrice,
     volatilityPct,
-    cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
+    cyclesSinceRebalance: state.thread.metrics.cyclesSinceRebalance ?? 0,
     tickBandwidthBps: operatorConfig.manualBandwidthBps,
     rebalanceThresholdPct,
     autoCompoundFees: operatorConfig.autoCompoundFees,
@@ -444,7 +431,7 @@ export const pollCycleNode = async (
     volatilityPct,
     tvlUsd: poolSnapshot.activeTvlUSD,
     rebalanceThresholdPct,
-    cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
+    cyclesSinceRebalance: state.thread.metrics.cyclesSinceRebalance ?? 0,
     bandwidthBps: targetRangeTelemetry.bandwidthBps,
     inRange,
     inInnerBand,
@@ -467,8 +454,8 @@ export const pollCycleNode = async (
   }
   logInfo('Decision evaluated', { iteration, decision: decisionSummary });
 
-  let cyclesSinceRebalance = state.view.metrics.cyclesSinceRebalance ?? 0;
-  let rebalanceCycles = state.view.metrics.rebalanceCycles ?? 0;
+  let cyclesSinceRebalance = state.thread.metrics.cyclesSinceRebalance ?? 0;
+  let rebalanceCycles = state.thread.metrics.rebalanceCycles ?? 0;
   let txHash: string | undefined;
   let gasSpentWei: bigint | undefined;
   let executionFlowEvents: FlowLogEventInput[] = [];
@@ -490,9 +477,9 @@ export const pollCycleNode = async (
           camelotClient,
           pool: poolSnapshot,
           operatorConfig,
-          delegationBundle: state.view.delegationBundle,
-          fundingTokenAddress: state.view.fundingTokenInput?.fundingTokenAddress,
-          delegationsBypassActive: state.view.delegationsBypassActive,
+          delegationBundle: state.thread.delegationBundle,
+          fundingTokenAddress: state.thread.fundingTokenInput?.fundingTokenAddress,
+          delegationsBypassActive: state.thread.delegationsBypassActive,
           clients,
         });
         txHash = result?.txHash;
@@ -541,14 +528,14 @@ export const pollCycleNode = async (
           failureStatusMessage,
         );
         await copilotkitEmitState(config, {
-          view: {
+          thread: {
             task: failedTask,
-            activity: { events: [failureEvent], telemetry: state.view.activity.telemetry },
+            activity: { events: [failureEvent], telemetry: state.thread.activity.telemetry },
             ...(rateLimitDetected ? {} : { executionError: errorMessage }),
           },
         });
 
-        let accountingState = state.view.accounting;
+        let accountingState = state.thread.accounting;
         try {
           const snapshot = await createCamelotAccountingSnapshot({
             state,
@@ -575,31 +562,32 @@ export const pollCycleNode = async (
         logCycleAccountingSummary(accountingState, 'cycle-abort: execution failed');
 
         const { profile: nextProfile, metrics: nextMetrics } = applyAccountingToView({
-          profile: state.view.profile,
+          profile: state.thread.profile,
           metrics: {
-            ...state.view.metrics,
+            ...state.thread.metrics,
             lastSnapshot: poolSnapshot,
             previousPrice: midPrice,
-            cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
+            cyclesSinceRebalance: state.thread.metrics.cyclesSinceRebalance ?? 0,
             staleCycles,
             rebalanceCycles,
             iteration,
-            latestCycle: state.view.metrics.latestCycle,
+            latestCycle: state.thread.metrics.latestCycle,
           },
           accounting: accountingState,
         });
 
         // Return gracefully - don't throw. The cron job will run the next cycle.
-        return new Command({
+        return buildNodeTransition({
+          node: 'summarize',
           update: {
-            view: {
+            thread: {
               metrics: nextMetrics,
               task: failedTask,
               activity: {
-                telemetry: state.view.activity.telemetry,
+                telemetry: state.thread.activity.telemetry,
                 events: [...preCycleEvents, failureEvent],
               },
-              transactionHistory: state.view.transactionHistory,
+              transactionHistory: state.thread.transactionHistory,
               profile: nextProfile,
               executionError: errorMessage, // Store error for debugging/display
               accounting: accountingState,
@@ -608,7 +596,7 @@ export const pollCycleNode = async (
               cronScheduled,
             },
           },
-          goto: 'summarize',
+          createCommand: createLangGraphCommand,
         });
       }
     }
@@ -658,11 +646,11 @@ export const pollCycleNode = async (
   };
 
   const cycleStatusMessage = `[Cycle ${iteration}] ${decision.kind}: ${decision.reason}${txHash ? ` (tx: ${txHash})` : ''}`;
-  const { task, statusEvent } = buildTaskStatus(state.view.task, 'working', cycleStatusMessage);
+  const { task, statusEvent } = buildTaskStatus(state.thread.task, 'working', cycleStatusMessage);
   await copilotkitEmitState(config, {
-    view: {
+    thread: {
       task,
-      activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       metrics: { latestCycle: cycleTelemetry },
     },
   });
@@ -682,7 +670,7 @@ export const pollCycleNode = async (
     cronScheduled = true;
   }
 
-  const transactionEntry: ClmmState['view']['transactionHistory'][number] | undefined =
+  const transactionEntry: ClmmState['thread']['transactionHistory'][number] | undefined =
     decision.kind === 'hold'
       ? undefined
       : {
@@ -696,8 +684,8 @@ export const pollCycleNode = async (
 
   let accountingState =
     storedFlowLog.length > 0
-      ? { ...state.view.accounting, flowLog: storedFlowLog }
-      : state.view.accounting;
+      ? { ...state.thread.accounting, flowLog: storedFlowLog }
+      : state.thread.accounting;
   try {
     const flowEvents =
       contextId && executionFlowEvents.length > 0
@@ -765,9 +753,9 @@ export const pollCycleNode = async (
   }
 
   const { profile: nextProfile, metrics: nextMetrics } = applyAccountingToView({
-    profile: state.view.profile,
+    profile: state.thread.profile,
     metrics: {
-      ...state.view.metrics,
+      ...state.thread.metrics,
       lastSnapshot: poolSnapshot,
       previousPrice: midPrice,
       cyclesSinceRebalance,
@@ -779,9 +767,10 @@ export const pollCycleNode = async (
     accounting: accountingState,
   });
 
-  return new Command({
+  return buildNodeTransition({
+    node: 'summarize',
     update: {
-      view: {
+      thread: {
         metrics: nextMetrics,
         task,
         activity: {
@@ -789,8 +778,8 @@ export const pollCycleNode = async (
           events: [telemetryEvent, statusEvent],
         },
         transactionHistory: transactionEntry
-          ? [...state.view.transactionHistory, transactionEntry]
-          : state.view.transactionHistory,
+          ? [...state.thread.transactionHistory, transactionEntry]
+          : state.thread.transactionHistory,
         profile: nextProfile,
         accounting: accountingState,
       },
@@ -798,6 +787,6 @@ export const pollCycleNode = async (
         cronScheduled,
       },
     },
-    goto: 'summarize',
+    createCommand: createLangGraphCommand,
   });
 };
