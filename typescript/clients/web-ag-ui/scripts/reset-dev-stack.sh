@@ -231,6 +231,7 @@ kill_pnpm_dev() {
 
 cleanup_state() {
   rm -rf apps/agent-clmm/.langgraph_api apps/agent/.langgraph_api apps/agent-pendle/.langgraph_api apps/agent-gmx-allora/.langgraph_api apps/web/.next
+  rm -f tmp/agent-pendle-latency*.ndjson
 }
 
 has_targets_in_repo() {

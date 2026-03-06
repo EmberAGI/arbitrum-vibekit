@@ -25,6 +25,7 @@ import {
 import { ensureCronForThread } from '../cronScheduler.js';
 import { executeCompound, executeRebalance, executeRollover } from '../execution.js';
 import { createLangGraphCommand } from '../langGraphCommandFactory.js';
+import { measureAsyncStage, startLatencyStage } from '../latency.js';
 import { buildPendleLatestSnapshot, buildPendleLatestSnapshotFromOnchain } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -89,6 +90,12 @@ export const pollCycleNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<Command<string, ClmmUpdate>> => {
+  logInfo('pollCycle: entering node', {
+    iteration: (state.thread.metrics.iteration ?? 0) + 1,
+    hasOperatorConfig: Boolean(state.thread.operatorConfig),
+    hasSelectedPool: Boolean(state.thread.selectedPool),
+    delegationsBypassActive: state.thread.delegationsBypassActive === true,
+  });
   const { operatorConfig, selectedPool } = state.thread;
 
   if (!operatorConfig) {
@@ -117,6 +124,14 @@ export const pollCycleNode = async (
   }
 
   const iteration = (state.thread.metrics.iteration ?? 0) + 1;
+  const cycleLatencyStage = startLatencyStage({
+    node: 'pollCycle',
+    stage: 'cycle',
+    metadata: {
+      iteration,
+      walletAddress: operatorConfig.walletAddress,
+    },
+  });
   const onchainActionsClient = getOnchainActionsClient();
   let eligibleMarkets = [];
   let currentMarket = selectedPool ?? operatorConfig.targetYieldToken;
@@ -125,14 +140,29 @@ export const pollCycleNode = async (
 
   try {
     const chainIds = resolvePendleChainIds();
-    const [markets, supportedTokens, walletPositions] = await Promise.all([
-      onchainActionsClient.listTokenizedYieldMarkets({ chainIds }),
-      onchainActionsClient.listTokens({ chainIds }),
-      onchainActionsClient.listTokenizedYieldPositions({
+    const [markets, supportedTokens, walletPositions] = await measureAsyncStage({
+      node: 'pollCycle',
+      stage: 'market-refresh',
+      metadata: {
+        iteration,
         walletAddress: operatorConfig.walletAddress,
         chainIds,
+      },
+      run: async () =>
+        Promise.all([
+          onchainActionsClient.listTokenizedYieldMarkets({ chainIds }),
+          onchainActionsClient.listTokens({ chainIds }),
+          onchainActionsClient.listTokenizedYieldPositions({
+            walletAddress: operatorConfig.walletAddress,
+            chainIds,
+          }),
+        ]),
+      onSuccessMetadata: ([resolvedMarkets, resolvedTokens, resolvedPositions]) => ({
+        marketCount: resolvedMarkets.length,
+        tokenCount: resolvedTokens.length,
+        positionCount: resolvedPositions.length,
       }),
-    ]);
+    });
     tokenizedMarkets = markets;
     positions = walletPositions;
     eligibleMarkets = buildEligibleYieldTokens({
@@ -152,6 +182,7 @@ export const pollCycleNode = async (
       }
     }
   } catch (error: unknown) {
+    cycleLatencyStage.fail(error, { iteration, failureKind: 'market-refresh' });
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to refresh Pendle markets: ${message}`;
     const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
@@ -176,6 +207,10 @@ export const pollCycleNode = async (
 
   const bestMarket = eligibleMarkets[0];
   if (!bestMarket) {
+    cycleLatencyStage.fail('No Pendle markets available during cycle', {
+      iteration,
+      failureKind: 'market-selection',
+    });
     const failureMessage = 'ERROR: No Pendle markets available during cycle';
     const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
@@ -304,38 +339,82 @@ export const pollCycleNode = async (
         const delegationBundle =
           state.thread.delegationsBypassActive === true ? undefined : state.thread.delegationBundle;
         if (action === 'compound') {
-          const execution = await executeCompound({
-            onchainActionsClient,
-            txExecutionMode,
-            clients,
-            delegationBundle,
-            walletAddress: operatorConfig.executionWalletAddress,
-            position: selectedPosition,
-            currentMarket: currentTokenized,
+          const execution = await measureAsyncStage({
+            node: 'pollCycle',
+            stage: 'compound-execution',
+            metadata: {
+              iteration,
+              walletAddress: operatorConfig.executionWalletAddress,
+              marketAddress: currentTokenized.marketIdentifier.address,
+              txExecutionMode,
+            },
+            run: async () =>
+              executeCompound({
+                onchainActionsClient,
+                txExecutionMode,
+                clients,
+                delegationBundle,
+                walletAddress: operatorConfig.executionWalletAddress,
+                position: selectedPosition,
+                currentMarket: currentTokenized,
+              }),
+            onSuccessMetadata: (resolvedExecution) => ({
+              txHash: resolvedExecution.lastTxHash,
+            }),
           });
           executionTxHash = execution.lastTxHash;
         } else if (action === 'rollover') {
-          const execution = await executeRollover({
-            onchainActionsClient,
-            txExecutionMode,
-            clients,
-            delegationBundle,
-            walletAddress: operatorConfig.executionWalletAddress,
-            position: selectedPosition,
-            currentMarket: currentTokenized,
-            targetMarket: nextTokenized!,
+          const execution = await measureAsyncStage({
+            node: 'pollCycle',
+            stage: 'rollover-execution',
+            metadata: {
+              iteration,
+              walletAddress: operatorConfig.executionWalletAddress,
+              fromMarketAddress: currentTokenized.marketIdentifier.address,
+              toMarketAddress: nextTokenized!.marketIdentifier.address,
+              txExecutionMode,
+            },
+            run: async () =>
+              executeRollover({
+                onchainActionsClient,
+                txExecutionMode,
+                clients,
+                delegationBundle,
+                walletAddress: operatorConfig.executionWalletAddress,
+                position: selectedPosition,
+                currentMarket: currentTokenized,
+                targetMarket: nextTokenized!,
+              }),
+            onSuccessMetadata: (resolvedExecution) => ({
+              txHash: resolvedExecution.lastTxHash,
+            }),
           });
           executionTxHash = execution.lastTxHash;
         } else {
-          const execution = await executeRebalance({
-            onchainActionsClient,
-            txExecutionMode,
-            clients,
-            delegationBundle,
-            walletAddress: operatorConfig.executionWalletAddress,
-            position: selectedPosition,
-            currentMarket: currentTokenized,
-            targetMarket: nextTokenized!,
+          const execution = await measureAsyncStage({
+            node: 'pollCycle',
+            stage: 'rebalance-execution',
+            metadata: {
+              iteration,
+              walletAddress: operatorConfig.executionWalletAddress,
+              fromMarketAddress: currentTokenized.marketIdentifier.address,
+              toMarketAddress: nextTokenized!.marketIdentifier.address,
+              txExecutionMode,
+            },
+            run: async () =>
+              executeRebalance({
+                onchainActionsClient,
+                txExecutionMode,
+                clients,
+                delegationBundle,
+                walletAddress: operatorConfig.executionWalletAddress,
+                position: selectedPosition,
+                currentMarket: currentTokenized,
+                targetMarket: nextTokenized!,
+              }),
+            onSuccessMetadata: (resolvedExecution) => ({
+              txHash: resolvedExecution.lastTxHash,
+            }),
           });
           executionTxHash = execution.lastTxHash;
         }
@@ -382,6 +461,10 @@ export const pollCycleNode = async (
       if (recoveredFromSettledRollover) {
         // Continue the cycle as a hold update when the source PT position has already been fully redeemed.
       } else {
+        cycleLatencyStage.fail(message, {
+          iteration,
+          failureKind: `${action}-execution`,
+        });
         const failureMessage =
           action === 'rollover'
             ? `ERROR: Pendle rollover execution failed: ${message}`
@@ -531,7 +614,19 @@ export const pollCycleNode = async (
   });
 
   try {
-    const walletBalances = await onchainActionsClient.listWalletBalances(operatorConfig.walletAddress);
+    const walletBalances = await measureAsyncStage({
+      node: 'pollCycle',
+      stage: 'snapshot-hydration',
+      metadata: {
+        iteration,
+        walletAddress: operatorConfig.walletAddress,
+        marketAddress: normalizedMarketAddress,
+      },
+      run: async () => onchainActionsClient.listWalletBalances(operatorConfig.walletAddress),
+      onSuccessMetadata: (balances) => ({
+        balanceCount: balances.length,
+      }),
+    });
     latestSnapshot = buildPendleLatestSnapshotFromOnchain({
       operatorConfig: snapshotConfig,
       position: nextPosition,
@@ -546,6 +641,13 @@ export const pollCycleNode = async (
       error: message,
     });
   }
+
+  cycleLatencyStage.complete({
+    iteration,
+    action,
+    selectedMarketAddress: normalizedMarketAddress,
+    txHash,
+  });
 
   const nextProfile = {
     ...state.thread.profile,

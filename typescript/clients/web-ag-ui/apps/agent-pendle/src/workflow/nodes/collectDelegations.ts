@@ -227,6 +227,12 @@ export const collectDelegationsNode = async (
   }
 
   if (state.thread.delegationBundle) {
+    logInfo('collectDelegations: delegation bundle detected; resuming onboarding toward prepareOperator', {
+      taskState: state.thread.task?.taskStatus.state,
+      onboardingStep: delegationOnboarding.step,
+      onboardingKey: delegationOnboarding.key,
+      hasPendingInputTask: state.thread.task?.taskStatus.state === 'input-required',
+    });
     if (state.thread.task?.taskStatus.state === 'input-required') {
       const { task, statusEvent } = buildTaskStatus(
         state.thread.task,

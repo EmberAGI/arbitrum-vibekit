@@ -28,6 +28,7 @@ import {
 } from '../context.js';
 import { executeInitialDeposit } from '../execution.js';
 import { createLangGraphCommand } from '../langGraphCommandFactory.js';
+import { measureAsyncStage, startLatencyStage } from '../latency.js';
 import { buildPendleLatestSnapshot, buildPendleLatestSnapshotFromOnchain } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -90,6 +91,16 @@ export const prepareOperatorNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+  logInfo('prepareOperator: entering node', {
+    onboardingStatus: state.thread.onboardingFlow?.status,
+    onboardingStep: state.thread.onboarding?.step,
+    onboardingKey: state.thread.onboarding?.key,
+    hasOperatorInput: Boolean(state.thread.operatorInput),
+    hasFundingTokenInput: Boolean(state.thread.fundingTokenInput),
+    hasDelegationBundle: Boolean(state.thread.delegationBundle),
+    delegationsBypassActive: state.thread.delegationsBypassActive === true,
+  });
+
   if (
     state.thread.setupComplete === true ||
     state.thread.onboardingFlow?.status === 'completed'
@@ -107,26 +118,6 @@ export const prepareOperatorNode = async (
       thread: mergedView,
     });
     return mergedView;
-  };
-
-  const failAndSummarize = async (
-    failureMessage: string,
-    options?: { includeExecutionError?: boolean },
-  ): Promise<Command<string, ClmmUpdate>> => {
-    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
-    const failureView = await emitMergedView({
-      haltReason: failureMessage,
-      executionError: options?.includeExecutionError ? failureMessage : undefined,
-      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
-      task,
-    });
-    return buildNodeTransition({
-      node: 'summarize',
-      update: {
-        thread: failureView,
-      },
-      createCommand: createLangGraphCommand,
-    });
   };
 
   const { operatorInput } = state.thread;
@@ -200,6 +191,40 @@ export const prepareOperatorNode = async (
     activity: { events: [preparingStatus.statusEvent], telemetry: state.thread.activity.telemetry },
   });
 
+  const setupLatencyStage = startLatencyStage({
+    node: 'prepareOperator',
+    stage: 'post-onboarding-setup',
+    metadata: {
+      operatorWalletAddress,
+      delegationsBypassActive,
+      fundingTokenAddress,
+    },
+  });
+
+  const failAndSummarize = async (
+    failureMessage: string,
+    options?: { includeExecutionError?: boolean },
+  ): Promise<Command<string, ClmmUpdate>> => {
+    setupLatencyStage.fail(failureMessage, {
+      failureKind: 'summarize',
+      includeExecutionError: options?.includeExecutionError === true,
+    });
+    const { task, statusEvent } = buildTaskStatus(state.thread.task, 'failed', failureMessage);
+    const failureView = await emitMergedView({
+      haltReason: failureMessage,
+      executionError: options?.includeExecutionError ? failureMessage : undefined,
+      activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
+      task,
+    });
+    return buildNodeTransition({
+      node: 'summarize',
+      update: {
+        thread: failureView,
+      },
+      createCommand: createLangGraphCommand,
+    });
+  };
+
   const onchainActionsClient = getOnchainActionsClient();
   let eligibleYieldTokens = [];
   let tokenizedMarkets = [];
@@ -207,13 +232,25 @@ export const prepareOperatorNode = async (
   let existingMarketAddress: string | undefined;
   let existingFundingTokenAddress: `0x${string}` | undefined;
   let existingPosition: Awaited<ReturnType<typeof onchainActionsClient.listTokenizedYieldPositions>>[number] | undefined;
-  const marketDiscoveryStartedAt = Date.now();
   try {
     const chainIds = resolvePendleChainIds();
-    const [markets, fetchedTokens] = await Promise.all([
-      onchainActionsClient.listTokenizedYieldMarkets({ chainIds }),
-      onchainActionsClient.listTokens({ chainIds }),
-    ]);
+    const [markets, fetchedTokens] = await measureAsyncStage({
+      node: 'prepareOperator',
+      stage: 'market-discovery',
+      metadata: {
+        operatorWalletAddress,
+        chainIds,
+      },
+      run: async () =>
+        Promise.all([
+          onchainActionsClient.listTokenizedYieldMarkets({ chainIds }),
+          onchainActionsClient.listTokens({ chainIds }),
+        ]),
+      onSuccessMetadata: ([resolvedMarkets, resolvedTokens]) => ({
+        marketCount: resolvedMarkets.length,
+        tokenCount: resolvedTokens.length,
+      }),
+    });
     tokenizedMarkets = markets;
     supportedTokens = fetchedTokens;
     eligibleYieldTokens = buildEligibleYieldTokens({
@@ -223,9 +260,21 @@ export const prepareOperatorNode = async (
     });
 
     try {
-      const positions = await onchainActionsClient.listTokenizedYieldPositions({
-        walletAddress: operatorWalletAddress,
-        chainIds,
+      const positions = await measureAsyncStage({
+        node: 'prepareOperator',
+        stage: 'existing-position-discovery',
+        metadata: {
+          operatorWalletAddress,
+          chainIds,
+        },
+        run: async () =>
+          onchainActionsClient.listTokenizedYieldPositions({
+            walletAddress: operatorWalletAddress,
+            chainIds,
+          }),
+        onSuccessMetadata: (resolvedPositions) => ({
+          positionCount: resolvedPositions.length,
+        }),
       });
       const preferredPosition =
         positions.find((position) => {
@@ -256,18 +305,8 @@ export const prepareOperatorNode = async (
         error: message,
       });
     }
-    logInfo('prepareOperator: resolved Pendle market discovery', {
-      durationMs: Date.now() - marketDiscoveryStartedAt,
-      marketCount: markets.length,
-      tokenCount: fetchedTokens.length,
-      positionDetected: Boolean(existingMarketAddress),
-    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    logInfo('prepareOperator: market discovery failed', {
-      durationMs: Date.now() - marketDiscoveryStartedAt,
-      error: message,
-    });
     const failureMessage = `ERROR: Failed to fetch Pendle markets: ${message}`;
     return failAndSummarize(failureMessage);
   }
@@ -462,15 +501,30 @@ export const prepareOperatorNode = async (
       if (!setupComplete) {
         try {
           const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
-          const execution = await executeInitialDeposit({
-            onchainActionsClient,
-            clients,
-            txExecutionMode,
-            delegationBundle: delegationsBypassActive ? undefined : state.thread.delegationBundle,
-            walletAddress: operatorConfig.executionWalletAddress,
-            fundingToken,
-            targetMarket,
-            fundingAmount,
+          const execution = await measureAsyncStage({
+            node: 'prepareOperator',
+            stage: 'initial-deposit-execution',
+            metadata: {
+              operatorWalletAddress,
+              executionWalletAddress: operatorConfig.executionWalletAddress,
+              marketAddress: targetMarket.marketIdentifier.address,
+              fundingTokenAddress: fundingToken.tokenUid.address,
+              txExecutionMode,
+            },
+            run: async () =>
+              executeInitialDeposit({
+                onchainActionsClient,
+                clients,
+                txExecutionMode,
+                delegationBundle: delegationsBypassActive ? undefined : state.thread.delegationBundle,
+                walletAddress: operatorConfig.executionWalletAddress,
+                fundingToken,
+                targetMarket,
+                fundingAmount,
+              }),
+            onSuccessMetadata: (resolvedExecution) => ({
+              txHash: resolvedExecution.lastTxHash,
+            }),
           });
           setupTxHash = execution.lastTxHash;
           setupComplete = true;
@@ -509,7 +563,18 @@ export const prepareOperatorNode = async (
     positionOpenedTotalUsd,
   });
   try {
-    const walletBalances = await onchainActionsClient.listWalletBalances(operatorWalletAddress);
+    const walletBalances = await measureAsyncStage({
+      node: 'prepareOperator',
+      stage: 'initial-snapshot-hydration',
+      metadata: {
+        operatorWalletAddress,
+        marketAddress: selectedYieldToken.marketAddress,
+      },
+      run: async () => onchainActionsClient.listWalletBalances(operatorWalletAddress),
+      onSuccessMetadata: (balances) => ({
+        balanceCount: balances.length,
+      }),
+    });
     latestSnapshot = buildPendleLatestSnapshotFromOnchain({
       operatorConfig,
       position: hasExistingPositionInSelectedMarket ? existingPosition : undefined,
@@ -524,6 +589,13 @@ export const prepareOperatorNode = async (
       error: message,
     });
   }
+
+  setupLatencyStage.complete({
+    setupComplete,
+    selectedMarketAddress: selectedYieldToken.marketAddress,
+    positionDetected: hasExistingPositionInSelectedMarket,
+    setupTxHash,
+  });
 
   const completedView = applyThreadPatch(state, {
     operatorConfig,
