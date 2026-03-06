@@ -83,4 +83,37 @@ describe('buildEligibleYieldTokens', () => {
       'YT-USDC-2024:6.1:0xmarket2',
     ]);
   });
+
+  it('treats whitelist symbol matching as case-insensitive', () => {
+    const supported = [
+      token({ address: '0xusdai', symbol: 'USDAI' }),
+      token({ address: '0xsusdai', symbol: 'SUSDAI' }),
+    ];
+
+    const markets = [
+      market({
+        address: '0xmarket-usdai',
+        ytSymbol: 'YT-USDai-2026',
+        underlying: token({ address: '0xusdai', symbol: 'USDAI' }),
+        apy: '9.1',
+      }),
+      market({
+        address: '0xmarket-susdai',
+        ytSymbol: 'YT-sUSDai-2026',
+        underlying: token({ address: '0xsusdai', symbol: 'SUSDAI' }),
+        apy: '8.4',
+      }),
+    ];
+
+    const eligible = buildEligibleYieldTokens({
+      markets,
+      supportedTokens: supported,
+      whitelistSymbols: ['USDai', 'sUSDai'],
+    });
+
+    expect(toSummary(eligible)).toEqual([
+      'YT-USDai-2026:9.1:0xmarket-usdai',
+      'YT-sUSDai-2026:8.4:0xmarket-susdai',
+    ]);
+  });
 });
