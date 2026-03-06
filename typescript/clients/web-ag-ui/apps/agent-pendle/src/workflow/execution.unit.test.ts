@@ -714,6 +714,102 @@ describe('executeInitialDeposit', () => {
     executeTransactionMock.mockReset();
     redeemDelegationsAndExecuteTransactionsMock.mockReset();
   });
+  it('swaps to the target underlying before buying PT when the funding token differs', async () => {
+    const createSwap = vi.fn().mockResolvedValue({
+      exactFromAmount: '10000000',
+      exactToAmount: '9500000000000000000',
+      transactions: [
+        { type: 'EVM_TX', to: '0xswap', data: '0x03', value: '0', chainId: '42161' },
+      ],
+    });
+    const createTokenizedYieldBuyPt = vi.fn().mockResolvedValue({
+      transactions: [{ type: 'EVM_TX', to: '0xbuy', data: '0x04', value: '0', chainId: '42161' }],
+    });
+    const onchainActionsClient = {
+      createSwap,
+      createTokenizedYieldBuyPt,
+    } as unknown as Pick<OnchainActionsClient, 'createTokenizedYieldBuyPt'>;
+
+    executeTransactionMock
+      .mockResolvedValueOnce({ transactionHash: '0xswaphash' })
+      .mockResolvedValueOnce({ transactionHash: '0xbuyhash' });
+
+    const clients = {} as OnchainClients;
+
+    const fundingToken = {
+      tokenUid: { chainId: '42161', address: '0xsusdai' },
+      name: 'sUSDai',
+      symbol: 'sUSDai',
+      isNative: false,
+      decimals: 18,
+      iconUri: undefined,
+      isVetted: true,
+    };
+
+    const targetMarket: TokenizedYieldMarket = {
+      marketIdentifier: { chainId: '42161', address: '0xmarket-new' },
+      expiry: '2030-01-01',
+      details: {},
+      ptToken: {
+        tokenUid: { chainId: '42161', address: '0xpt-new' },
+        name: 'PT-NEW',
+        symbol: 'PT-NEW',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+      ytToken: {
+        tokenUid: { chainId: '42161', address: '0xyt-new' },
+        name: 'YT-NEW',
+        symbol: 'YT-NEW',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+      underlyingToken: {
+        tokenUid: { chainId: '42161', address: '0xusdai' },
+        name: 'USDai',
+        symbol: 'USDai',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+    };
+
+    const result = await executeInitialDeposit({
+      onchainActionsClient,
+      clients,
+      txExecutionMode: 'execute',
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      fundingToken,
+      targetMarket,
+      fundingAmount: '10000000',
+    });
+
+    expect(createSwap).toHaveBeenCalledWith({
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      amount: '10000000',
+      amountType: 'exactIn',
+      fromTokenUid: fundingToken.tokenUid,
+      toTokenUid: targetMarket.underlyingToken.tokenUid,
+      slippageTolerance: '0.01',
+    });
+    expect(createTokenizedYieldBuyPt).toHaveBeenCalledWith({
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      marketAddress: targetMarket.marketIdentifier.address,
+      inputTokenUid: targetMarket.underlyingToken.tokenUid,
+      amount: '9500000000000000000',
+      slippage: '0.01',
+    });
+    expect(executeTransactionMock).toHaveBeenCalledTimes(2);
+    expect(executeTransactionMock.mock.calls[0]?.[1]).toMatchObject({ to: '0xswap' });
+    expect(executeTransactionMock.mock.calls[1]?.[1]).toMatchObject({ to: '0xbuy' });
+    expect(result.lastTxHash).toBe('0xbuyhash');
+  });
+
   it('buys PT using the selected funding token directly', async () => {
     const onchainActionsClient: Pick<OnchainActionsClient, 'createTokenizedYieldBuyPt'> = {
       createTokenizedYieldBuyPt: vi.fn().mockResolvedValue({
@@ -728,11 +824,11 @@ describe('executeInitialDeposit', () => {
     const clients = {} as OnchainClients;
 
     const fundingToken = {
-      tokenUid: { chainId: '42161', address: '0xusdc' },
-      name: 'USDC',
-      symbol: 'USDC',
+      tokenUid: { chainId: '42161', address: '0xusdai' },
+      name: 'USDai',
+      symbol: 'USDai',
       isNative: false,
-      decimals: 6,
+      decimals: 18,
       iconUri: undefined,
       isVetted: true,
     };
@@ -809,11 +905,11 @@ describe('executeInitialDeposit', () => {
     const clients = {} as OnchainClients;
 
     const fundingToken = {
-      tokenUid: { chainId: '42161', address: '0xusdc' },
-      name: 'USDC',
-      symbol: 'USDC',
+      tokenUid: { chainId: '42161', address: '0xusdai' },
+      name: 'USDai',
+      symbol: 'USDai',
       isNative: false,
-      decimals: 6,
+      decimals: 18,
       iconUri: undefined,
       isVetted: true,
     };
@@ -905,11 +1001,11 @@ describe('executeInitialDeposit', () => {
     const clients = {} as OnchainClients;
 
     const fundingToken = {
-      tokenUid: { chainId: '42161', address: '0xusdc' },
-      name: 'USDC',
-      symbol: 'USDC',
+      tokenUid: { chainId: '42161', address: '0xusdai' },
+      name: 'USDai',
+      symbol: 'USDai',
       isNative: false,
-      decimals: 6,
+      decimals: 18,
       iconUri: undefined,
       isVetted: true,
     };
