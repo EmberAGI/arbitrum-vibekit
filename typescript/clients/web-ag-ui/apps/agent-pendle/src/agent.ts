@@ -1,7 +1,11 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
-import { isLangGraphBusyStatus, projectCycleCommandView } from 'agent-workflow-core';
+import {
+  analyzeCycleProjectionThread,
+  isLangGraphBusyStatus,
+  projectCycleCommandThread,
+} from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
@@ -14,8 +18,16 @@ import {
   canStartBackgroundCycle,
   getBackgroundCycleReadiness,
 } from './workflow/backgroundCycleReadiness.js';
-import { ClmmStateAnnotation, memory, type ClmmState } from './workflow/context.js';
+import { ClmmStateAnnotation, memory } from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
+import {
+  resolvePostBootstrap,
+  resolvePostCollectDelegations,
+  resolvePostFundingTokenInput,
+  resolvePostPollCycle,
+  resolvePostPrepareOperator,
+  resolvePostRunCycle,
+} from './workflow/graphRouting.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
 import { collectDelegationsNode } from './workflow/nodes/collectDelegations.js';
 import { collectFundingTokenInputNode } from './workflow/nodes/collectFundingTokenInput.js';
@@ -24,7 +36,7 @@ import { fireCommandNode } from './workflow/nodes/fireCommand.js';
 import { hireCommandNode } from './workflow/nodes/hireCommand.js';
 import { pollCycleNode } from './workflow/nodes/pollCycle.js';
 import { prepareOperatorNode } from './workflow/nodes/prepareOperator.js';
-import { extractCommand, resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
+import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
@@ -35,33 +47,6 @@ const fetchRequest = globalThis.fetch as unknown as (
   input: string,
   init?: unknown,
 ) => Promise<Response>;
-
-function resolvePostBootstrap(
-  state: ClmmState,
-):
-  | 'collectSetupInput'
-  | 'collectFundingTokenInput'
-  | 'collectDelegations'
-  | 'prepareOperator'
-  | 'syncState' {
-  const command = extractCommand(state.messages) ?? state.view.command;
-  if (command === 'sync') {
-    return 'syncState';
-  }
-  if (!state.view.operatorInput) {
-    return 'collectSetupInput';
-  }
-  if (!state.view.fundingTokenInput) {
-    return 'collectFundingTokenInput';
-  }
-  if (state.view.delegationsBypassActive !== true && !state.view.delegationBundle) {
-    return 'collectDelegations';
-  }
-  if (!state.view.operatorConfig || state.view.setupComplete !== true) {
-    return 'prepareOperator';
-  }
-  return 'syncState';
-}
 
 const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('runCommand', runCommandNode)
@@ -82,14 +67,14 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addConditionalEdges('runCommand', resolveCommandTarget)
   .addEdge('hireCommand', 'bootstrap')
   .addEdge('fireCommand', END)
-  .addEdge('runCycleCommand', 'pollCycle')
+  .addConditionalEdges('runCycleCommand', resolvePostRunCycle)
   .addEdge('syncState', END)
   .addConditionalEdges('bootstrap', resolvePostBootstrap)
   .addEdge('collectSetupInput', 'collectFundingTokenInput')
-  .addEdge('collectFundingTokenInput', 'collectDelegations')
-  .addEdge('collectDelegations', 'prepareOperator')
-  .addEdge('prepareOperator', 'pollCycle')
-  .addEdge('pollCycle', 'summarize')
+  .addConditionalEdges('collectFundingTokenInput', resolvePostFundingTokenInput)
+  .addConditionalEdges('collectDelegations', resolvePostCollectDelegations)
+  .addConditionalEdges('prepareOperator', resolvePostPrepareOperator)
+  .addConditionalEdges('pollCycle', resolvePostPollCycle)
   .addEdge('summarize', END);
 
 export const graph = workflow.compile({
@@ -114,6 +99,10 @@ function resolveLangGraphDeploymentUrl(): string {
 
 function resolveLangGraphGraphId(): string {
   return process.env['LANGGRAPH_GRAPH_ID'] ?? 'agent-pendle';
+}
+
+function isStrictInactiveCycleProjectionAssertEnabled(): boolean {
+  return process.env['AGENT_STRICT_INACTIVE_CYCLE_ASSERT'] === 'true';
 }
 
 async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>): Promise<T> {
@@ -151,7 +140,7 @@ function extractThreadStateValues(payload: unknown): ThreadStateValues | null {
     return data;
   }
 
-  if (isRecord(payload['view'])) {
+  if (isRecord(payload['thread'])) {
     return payload;
   }
 
@@ -189,11 +178,11 @@ async function updateCycleState(
   threadId: string,
   runMessage: { id: string; role: 'user'; content: string },
 ): Promise<boolean> {
-  let existingView: Record<string, unknown> | null = null;
+  let existingThread: Record<string, unknown> | null = null;
   try {
     const currentState = await fetchThreadStateValues(baseUrl, threadId);
-    if (currentState && isRecord(currentState['view'])) {
-      existingView = currentState['view'];
+    if (currentState && isRecord(currentState['thread'])) {
+      existingThread = currentState['thread'];
     }
   } catch (error: unknown) {
     const message =
@@ -201,20 +190,42 @@ async function updateCycleState(
     console.warn('[cron] Unable to fetch thread state before cycle update', { threadId, error: message });
   }
 
-  if (!canStartBackgroundCycle(existingView)) {
+  if (!canStartBackgroundCycle(existingThread)) {
     console.warn('[cron] Skipping cycle run; onboarding/setup is incomplete for background execution', {
       threadId,
-      readiness: getBackgroundCycleReadiness(existingView),
+      readiness: getBackgroundCycleReadiness(existingThread),
     });
     return false;
   }
 
-  const view = projectCycleCommandView(existingView);
+  const thread = projectCycleCommandThread(existingThread);
+  const projectionDiagnostics = analyzeCycleProjectionThread({
+    currentThread: existingThread,
+    projectedThread: thread,
+  });
+  if (projectionDiagnostics.previousLifecyclePhase === 'inactive') {
+    console.info('[cron] Cycle projection diagnostics (inactive lifecycle)', {
+      threadId,
+      ...projectionDiagnostics,
+    });
+  }
+  if (!projectionDiagnostics.inactiveLifecyclePreserved) {
+    console.warn('[cron] Inactive lifecycle projection drift detected', {
+      threadId,
+      ...projectionDiagnostics,
+    });
+    if (isStrictInactiveCycleProjectionAssertEnabled()) {
+      throw new Error(
+        'Cycle projection drift detected: inactive lifecycle was not preserved. Disable AGENT_STRICT_INACTIVE_CYCLE_ASSERT to continue without hard failure.',
+      );
+    }
+  }
+
   const response = await fetchRequest(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      values: { messages: [runMessage], view },
+      values: { messages: [runMessage], thread },
       as_node: 'runCommand',
     }),
   });

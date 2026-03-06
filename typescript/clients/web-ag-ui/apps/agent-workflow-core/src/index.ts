@@ -15,8 +15,10 @@ export {
   type ResolvedSummaryTaskStatus,
 } from './summaryTaskResolution.js';
 export {
+  resolveCommandReplayGuardState,
+  resolveCycleCommandTarget,
   resolveCommandTargetForBootstrappedFlow,
-  resolveRunCommandForView,
+  resolveRunCommandForThread,
   type CommandRoutingTarget,
 } from './commandRouting.js';
 export {
@@ -25,6 +27,7 @@ export {
   type ResolveOnboardingPhaseInput,
 } from './onboardingStateMachine.js';
 export { mapOnboardingPhaseToTarget } from './onboardingStateMachineMappings.js';
+export { resolveThreadLifecyclePhase, type ThreadLifecyclePhase } from './threadLifecycle.js';
 export {
   buildOnboardingContractFromLegacyStep,
   finalizeOnboardingContract,
@@ -36,8 +39,20 @@ export {
   type OnboardingStepState,
   type OnboardingStepStatus,
 } from './onboardingContract.js';
-export { mergeViewPatchForEmit } from './viewEmission.js';
-export { projectCycleCommandView, shouldPersistInputRequiredCheckpoint } from './viewInvariants.js';
+export { mergeThreadPatchForEmit } from './threadEmission.js';
+export {
+  analyzeCycleProjectionThread,
+  type CycleProjectionDiagnostics,
+  normalizeStaleOnboardingTask,
+  projectCycleCommandThread,
+  shouldPersistInputRequiredCheckpoint,
+} from './threadInvariants.js';
 export { isLangGraphBusyStatus } from './langGraphBusyResponse.js';
 export { createMessageHistoryReducer, mergeMessageHistory } from './messageHistory.js';
-export { buildInterruptPauseTransition, buildTerminalTransition } from './transitionCommands.js';
+export { decodeInterruptPayload, requestInterruptPayload } from './interruptPayload.js';
+export {
+  buildInterruptPauseTransition,
+  buildNodeTransition,
+  buildStateUpdate,
+  buildTerminalTransition,
+} from './transitionCommands.js';

@@ -38,6 +38,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
   runAgent: (agent: TAgent) => Promise<unknown>;
   createId: () => string;
   isBusyRunError: (error: unknown) => boolean;
+  isAbortLikeError?: (error: unknown) => boolean;
   isAgentRunning: (agent: TAgent) => boolean;
   onSyncingChange: (isSyncing: boolean) => void;
   onCommandError?: (command: string, error: unknown) => void;
@@ -122,7 +123,8 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
         syncRunInFlight = false;
 
         const busy = params.isBusyRunError(error) || params.isAgentRunning(agent);
-        if (busy && syncBusyRetries < syncBusyMaxRetries) {
+        const aborted = params.isAbortLikeError?.(error) ?? false;
+        if ((busy || aborted) && syncBusyRetries < syncBusyMaxRetries) {
           syncBusyRetries += 1;
           pendingSyncIntent = true;
           refreshSyncing();
@@ -142,7 +144,8 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
       }
 
       const busy = params.isBusyRunError(error) || params.isAgentRunning(agent);
-      if (busy) {
+      const aborted = params.isAbortLikeError?.(error) ?? false;
+      if (busy || aborted) {
         params.onCommandBusy?.(command, error);
         return;
       }
@@ -165,13 +168,22 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
       command,
       options,
       beforeRun: (agent) => {
-        const payload = options?.messagePayload;
+        const payload = options?.messagePayload ?? {};
+        const hasClientMutationId =
+          typeof payload['clientMutationId'] === 'string' &&
+          (payload['clientMutationId'] as string).length > 0;
+        const messagePayload = hasClientMutationId
+          ? payload
+          : {
+              ...payload,
+              clientMutationId: params.createId(),
+            };
         agent.addMessage({
           id: params.createId(),
           role: 'user',
           content: JSON.stringify({
             command,
-            ...(payload ?? {}),
+            ...messagePayload,
           }),
         });
       },

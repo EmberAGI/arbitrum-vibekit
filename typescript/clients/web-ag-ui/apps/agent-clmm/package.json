@@ -20,6 +20,7 @@
     "typecheck": "tsc --noEmit --project tsconfig.eslint.json",
     "format": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx}\" --write",
     "format:check": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx}\" --check",
+    "transitions:analyze": "tsx scripts/analyze-state-transitions.ts",
     "workflow:demo": "tsx --env-file=.env ./scripts/run-camelot-demo.ts",
     "wallet:withdraw": "tsx --env-file=.env scripts/manualWithdraw.ts"
   },

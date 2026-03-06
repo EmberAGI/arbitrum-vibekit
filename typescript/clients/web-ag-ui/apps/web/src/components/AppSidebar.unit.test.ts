@@ -72,9 +72,8 @@ vi.mock('@/contexts/AgentContext', () => {
   return {
     useAgent: () => ({
       config: { id: 'inactive-agent' },
-      view: {
+      uiState: {
         task: null,
-        command: null,
         haltReason: null,
         executionError: null,
         setupComplete: false,

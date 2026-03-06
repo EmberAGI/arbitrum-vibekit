@@ -135,7 +135,7 @@ describe('fireCommandNode (GMX Allora)', () => {
 
     const onchainActionsClient = {
       listPerpetualPositions: vi.fn().mockResolvedValue([
-        makePosition({ wallet: delegatorWalletAddress, market: marketAddress }),
+        makePosition({ wallet: delegateeWalletAddress, market: marketAddress }),
       ]),
       createPerpetualClose: vi.fn(),
     };
@@ -153,7 +153,7 @@ describe('fireCommandNode (GMX Allora)', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         operatorConfig,
         delegationsBypassActive: true,
         task: { id: 'task-1', taskStatus: { state: 'working' } },
@@ -170,7 +170,7 @@ describe('fireCommandNode (GMX Allora)', () => {
 
     expect(cancelCronForThreadMock).toHaveBeenCalledWith(threadId);
     expect(onchainActionsClient.listPerpetualPositions).toHaveBeenCalledWith(
-      expect.objectContaining({ walletAddress: delegatorWalletAddress }),
+      expect.objectContaining({ walletAddress: delegateeWalletAddress }),
     );
     expect(executePerpetualPlanMock).toHaveBeenCalled();
     const firstCall = executePerpetualPlanMock.mock.calls[0];
@@ -182,9 +182,11 @@ describe('fireCommandNode (GMX Allora)', () => {
     expect(firstArg.plan?.action).toBe('close');
     expect(firstArg.txExecutionMode).toBe('plan');
 
-    expect('view' in result).toBe(true);
-    const view = (result as { view: { command?: unknown; task?: unknown } }).view;
-    expect(view.command).toBe('fire');
+    expect('thread' in result).toBe(true);
+    const view = (result as {
+      thread: { lifecycle?: { phase?: unknown }; task?: unknown };
+    }).thread;
+    expect(view.lifecycle?.phase).toBe('inactive');
     const task = view.task as { taskStatus?: { state?: unknown } };
     expect(task.taskStatus?.state).toBe('completed');
   });
@@ -234,7 +236,7 @@ describe('fireCommandNode (GMX Allora)', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         operatorConfig,
         delegationBundle: {
           chainId: 42161,
@@ -260,10 +262,14 @@ describe('fireCommandNode (GMX Allora)', () => {
     const result = await fireCommandNode(state, {} as never);
 
     expect(onchainActionsClient.listPerpetualPositions).toHaveBeenCalledTimes(4);
+    expect(onchainActionsClient.listPerpetualPositions).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ walletAddress: delegatorWalletAddress }),
+    );
     expect(executePerpetualPlanMock).toHaveBeenCalledTimes(1);
 
-    const task = (result as { view: { task: { taskStatus: { state: string; message?: { content?: string } } } } })
-      .view.task;
+    const task = (result as { thread: { task: { taskStatus: { state: string; message?: { content?: string } } } } })
+      .thread.task;
     expect(task.taskStatus.state).toBe('failed');
     expect(task.taskStatus.message?.content).toContain(
       'position remains open after 3 verification checks.',
@@ -314,7 +320,7 @@ describe('fireCommandNode (GMX Allora)', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         operatorConfig,
         delegationBundle: {
           chainId: 42161,
@@ -340,8 +346,8 @@ describe('fireCommandNode (GMX Allora)', () => {
     const result = await fireCommandNode(state, {} as never);
 
     expect(onchainActionsClient.listPerpetualPositions).toHaveBeenCalledTimes(3);
-    const task = (result as { view: { task: { taskStatus: { state: string; message?: { content?: string } } } } })
-      .view.task;
+    const task = (result as { thread: { task: { taskStatus: { state: string; message?: { content?: string } } } } })
+      .thread.task;
     expect(task.taskStatus.state).toBe('completed');
     expect(task.taskStatus.message?.content).toContain('GMX position close confirmed.');
   });
@@ -395,7 +401,7 @@ describe('fireCommandNode (GMX Allora)', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         operatorConfig,
         delegationBundle: {
           chainId: 42161,
@@ -430,8 +436,8 @@ describe('fireCommandNode (GMX Allora)', () => {
     expect(fallbackArg.plan?.request?.key).toBe('pos-key');
     expect(fallbackArg.plan?.request?.sizeDeltaUsd).toBe('100');
 
-    const task = (result as { view: { task: { taskStatus: { state: string; message?: { content?: string } } } } })
-      .view.task;
+    const task = (result as { thread: { task: { taskStatus: { state: string; message?: { content?: string } } } } })
+      .thread.task;
     expect(task.taskStatus.state).toBe('completed');
     expect(task.taskStatus.message?.content).toContain('GMX position close confirmed.');
   });
@@ -482,7 +488,7 @@ describe('fireCommandNode (GMX Allora)', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         operatorConfig,
         delegationBundle: {
           chainId: 42161,
@@ -507,8 +513,8 @@ describe('fireCommandNode (GMX Allora)', () => {
 
     const result = await fireCommandNode(state, {} as never);
 
-    const task = (result as { view: { task: { taskStatus: { state: string; message?: { content?: string } } } } })
-      .view.task;
+    const task = (result as { thread: { task: { taskStatus: { state: string; message?: { content?: string } } } } })
+      .thread.task;
     expect(task.taskStatus.state).toBe('failed');
     expect(task.taskStatus.message?.content).toContain('close order was cancelled onchain');
     expect(task.taskStatus.message?.content).toContain('OrderNotFulfillableAtAcceptablePrice');
@@ -566,7 +572,7 @@ describe('fireCommandNode (GMX Allora)', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         operatorConfig,
         delegationBundle: {
           chainId: 42161,
@@ -591,8 +597,8 @@ describe('fireCommandNode (GMX Allora)', () => {
 
     const result = await fireCommandNode(state, {} as never);
 
-    const task = (result as { view: { task: { taskStatus: { state: string; message?: { content?: string } } } } })
-      .view.task;
+    const task = (result as { thread: { task: { taskStatus: { state: string; message?: { content?: string } } } } })
+      .thread.task;
     expect(task.taskStatus.state).toBe('failed');
     expect(task.taskStatus.message?.content).toContain('close order was cancelled onchain');
     expect(task.taskStatus.message?.content).toContain('OrderNotFulfillableAtAcceptablePrice');

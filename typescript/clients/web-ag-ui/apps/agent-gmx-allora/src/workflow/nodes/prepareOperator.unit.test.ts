@@ -36,7 +36,7 @@ describe('prepareOperatorNode', () => {
     copilotkitEmitStateMock.mockResolvedValue(undefined);
 
     const state = {
-      view: {
+      thread: {
         operatorInput: {
           walletAddress: '0x1111111111111111111111111111111111111111',
           usdcAllocation: 100,
@@ -59,7 +59,7 @@ describe('prepareOperatorNode', () => {
     const result = await prepareOperatorNode(state, {});
 
     const updateResult = result as unknown as {
-      view?: {
+      thread?: {
         task?: {
           taskStatus?: {
             state?: string;
@@ -67,13 +67,92 @@ describe('prepareOperatorNode', () => {
           };
         };
         onboarding?: { step?: number; key?: string };
+        profile?: unknown;
       };
     };
 
-    expect(updateResult.view?.task?.taskStatus?.state).toBe('input-required');
-    expect(updateResult.view?.task?.taskStatus?.message?.content).toBe(
+    expect(updateResult.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(updateResult.thread?.task?.taskStatus?.message?.content).toBe(
       'Waiting for delegation approval to continue onboarding.',
     );
-    expect(updateResult.view?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(updateResult.thread?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+    expect(updateResult.thread?.profile).toBeUndefined();
+  });
+
+  it('keeps delegation-signing onboarding step at 3 while waiting for bundle', async () => {
+    process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = '0x3333333333333333333333333333333333333333';
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      thread: {
+        operatorInput: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          usdcAllocation: 100,
+          targetMarket: 'ETH',
+        },
+        fundingTokenInput: {
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+        },
+        delegationsBypassActive: false,
+        delegationBundle: undefined,
+        onboarding: { step: 3, key: 'delegation-signing' },
+        task: { id: 'task-1', taskStatus: { state: 'working' } },
+        activity: { telemetry: [], events: [] },
+        profile: {},
+        metrics: {},
+        transactionHistory: [],
+      },
+    } as unknown as ClmmState;
+
+    const result = await prepareOperatorNode(state, {});
+
+    const updateResult = result as unknown as {
+      thread?: {
+        onboarding?: { step?: number; key?: string };
+      };
+    };
+
+    expect(updateResult.thread?.onboarding).toEqual({ step: 3, key: 'delegation-signing' });
+  });
+
+  it('returns a no-op update when onboarding is already completed', async () => {
+    process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = '0x3333333333333333333333333333333333333333';
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+
+    const state = {
+      thread: {
+        operatorInput: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          usdcAllocation: 100,
+          targetMarket: 'ETH',
+        },
+        fundingTokenInput: {
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+        },
+        delegationsBypassActive: false,
+        delegationBundle: undefined,
+        operatorConfig: {
+          delegatorWalletAddress: '0x1111111111111111111111111111111111111111',
+          delegateeWalletAddress: '0x3333333333333333333333333333333333333333',
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          baseContributionUsd: 100,
+          targetMarket: {
+            address: '0x4444444444444444444444444444444444444444',
+            indexToken: 'ETH',
+            longToken: 'ETH',
+            shortToken: 'USDC',
+          },
+        },
+        onboardingFlow: { status: 'completed' },
+        onboarding: undefined,
+        task: { id: 'task-1', taskStatus: { state: 'working' } },
+        activity: { telemetry: [], events: [] },
+      },
+    } as unknown as ClmmState;
+
+    const result = await prepareOperatorNode(state, {});
+
+    expect(result).toEqual({});
+    expect(copilotkitEmitStateMock).not.toHaveBeenCalled();
   });
 });

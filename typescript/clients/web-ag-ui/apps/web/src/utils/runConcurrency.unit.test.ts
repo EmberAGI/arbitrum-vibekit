@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isAgentRunning, isBusyRunError } from './runConcurrency';
+import { isAbortLikeError, isAgentRunning, isBusyRunError } from './runConcurrency';
 
 describe('runConcurrency', () => {
   it('recognizes server busy statuses', () => {
@@ -18,6 +18,13 @@ describe('runConcurrency', () => {
   it('returns false for unrelated errors', () => {
     expect(isBusyRunError({ message: 'bad gateway', status: 502 })).toBe(false);
     expect(isBusyRunError(new Error('network error'))).toBe(false);
+  });
+
+  it('recognizes abort-like transport errors', () => {
+    expect(isAbortLikeError({ name: 'AbortError' })).toBe(true);
+    expect(isAbortLikeError({ message: 'BodyStreamBuffer was aborted' })).toBe(true);
+    expect(isAbortLikeError({ status: 499 })).toBe(true);
+    expect(isAbortLikeError({ message: 'network error' })).toBe(false);
   });
 
   it('detects running agent flag as boolean or function', () => {

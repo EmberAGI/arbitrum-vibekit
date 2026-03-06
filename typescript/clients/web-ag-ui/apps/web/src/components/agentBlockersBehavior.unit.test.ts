@@ -12,72 +12,53 @@ describe('agentBlockersBehavior', () => {
     expect(resolveDelegationContextLabel('agent-clmm')).toBe('liquidity management');
   });
 
-  it('treats pendle hire run as onboarding in-flight when setup is incomplete', () => {
+  it('treats interrupt/input-required as onboarding-active', () => {
     expect(
       resolveOnboardingActive({
-        agentId: 'agent-pendle',
         activeInterruptPresent: false,
-        taskStatus: 'working',
-        currentCommand: 'hire',
-        setupComplete: false,
+        taskStatus: 'input-required',
       }),
     ).toBe(true);
 
     expect(
       resolveOnboardingActive({
-        agentId: 'agent-gmx-allora',
+        activeInterruptPresent: true,
+        taskStatus: 'working',
+      }),
+    ).toBe(true);
+  });
+
+  it('uses explicit onboarding status when present', () => {
+    expect(
+      resolveOnboardingActive({
         activeInterruptPresent: false,
         taskStatus: 'working',
-        currentCommand: 'hire',
-        setupComplete: false,
+        onboardingStatus: 'in_progress',
+      }),
+    ).toBe(true);
+
+    expect(
+      resolveOnboardingActive({
+        activeInterruptPresent: false,
+        taskStatus: 'input-required',
+        onboardingStatus: 'completed',
       }),
     ).toBe(false);
   });
 
-  it('treats interrupt/input-required as onboarding-active for all agents', () => {
+  it('does not force onboarding for terminal onboarding states', () => {
     expect(
       resolveOnboardingActive({
-        agentId: 'agent-clmm',
-        activeInterruptPresent: true,
-        taskStatus: 'working',
-        currentCommand: 'idle',
-        setupComplete: true,
-      }),
-    ).toBe(true);
-
-    expect(
-      resolveOnboardingActive({
-        agentId: 'agent-clmm',
         activeInterruptPresent: false,
         taskStatus: 'input-required',
-        currentCommand: 'idle',
-        setupComplete: true,
+        onboardingStatus: 'failed',
       }),
-    ).toBe(true);
-  });
-
-  it('keeps onboarding active when lifecycle is explicitly in progress', () => {
+    ).toBe(false);
     expect(
       resolveOnboardingActive({
-        agentId: 'agent-pendle',
         activeInterruptPresent: false,
-        taskStatus: 'working',
-        currentCommand: 'cycle',
-        setupComplete: false,
-        onboardingStatus: 'in_progress',
-      }),
-    ).toBe(true);
-  });
-
-  it('does not force onboarding when lifecycle is explicitly completed', () => {
-    expect(
-      resolveOnboardingActive({
-        agentId: 'agent-pendle',
-        activeInterruptPresent: false,
-        taskStatus: 'working',
-        currentCommand: 'cycle',
-        setupComplete: true,
-        onboardingStatus: 'completed',
+        taskStatus: 'input-required',
+        onboardingStatus: 'canceled',
       }),
     ).toBe(false);
   });

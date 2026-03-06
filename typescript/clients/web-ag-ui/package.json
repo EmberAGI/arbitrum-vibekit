@@ -14,6 +14,12 @@
     "start": "turbo run start",
     "start:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true turbo run start",
     "lint": "turbo run lint",
+    "test": "pnpm -r --filter \"./apps/*\" run test",
+    "test:unit": "pnpm -r --filter \"./apps/*\" run test:unit",
+    "test:int": "pnpm -r --filter \"./apps/*\" run test:int",
+    "test:e2e": "pnpm -r --filter \"./apps/*\" run test:e2e",
+    "test:watch": "pnpm -r --parallel --filter \"./apps/*\" run test:watch",
+    "test:ci": "pnpm -r --filter \"./apps/*\" run test:ci",
     "reset:dev-stack": "bash scripts/reset-dev-stack.sh"
   },
   "devDependencies": {

@@ -7,7 +7,7 @@ import type { ClmmState } from '../src/workflow/context.js';
 import { pollCycleNode } from '../src/workflow/nodes/pollCycle.js';
 
 type PollCycleUpdate = {
-  view?: ClmmState['view'];
+  thread?: ClmmState['thread'];
   private?: ClmmState['private'];
 };
 
@@ -28,10 +28,14 @@ const {
   fetchAlloraInferenceMock,
   listPerpetualMarketsMock,
   listPerpetualPositionsMock,
+  listWalletBalancesMock,
+  listTokensMock,
+  estimatePerpetualQuoteFeeUsdMock,
   createPerpetualLongMock,
   createPerpetualShortMock,
   createPerpetualCloseMock,
   createPerpetualReduceMock,
+  createSwapMock,
   getPerpetualLifecycleMock,
   getOnchainClientsMock,
 } = vi.hoisted(() => ({
@@ -39,10 +43,14 @@ const {
   fetchAlloraInferenceMock: vi.fn<[], Promise<AlloraInference>>(),
   listPerpetualMarketsMock: vi.fn<[], Promise<PerpetualMarket[]>>(),
   listPerpetualPositionsMock: vi.fn<[], Promise<PerpetualPosition[]>>(),
+  listWalletBalancesMock: vi.fn<[], Promise<unknown[]>>(),
+  listTokensMock: vi.fn<[], Promise<unknown[]>>(),
+  estimatePerpetualQuoteFeeUsdMock: vi.fn<[], Promise<number | undefined>>(),
   createPerpetualLongMock: vi.fn<[], Promise<unknown>>(),
   createPerpetualShortMock: vi.fn<[], Promise<unknown>>(),
   createPerpetualCloseMock: vi.fn<[], Promise<unknown>>(),
   createPerpetualReduceMock: vi.fn<[], Promise<unknown>>(),
+  createSwapMock: vi.fn<[], Promise<unknown>>(),
   getPerpetualLifecycleMock: vi.fn<[], Promise<unknown>>(),
   getOnchainClientsMock: vi.fn(),
 }));
@@ -65,10 +73,14 @@ vi.mock('../src/workflow/clientFactory.js', () => ({
   getOnchainActionsClient: () => ({
     listPerpetualMarkets: listPerpetualMarketsMock,
     listPerpetualPositions: listPerpetualPositionsMock,
+    listWalletBalances: listWalletBalancesMock,
+    listTokens: listTokensMock,
+    estimatePerpetualQuoteFeeUsd: estimatePerpetualQuoteFeeUsdMock,
     createPerpetualLong: createPerpetualLongMock,
     createPerpetualShort: createPerpetualShortMock,
     createPerpetualClose: createPerpetualCloseMock,
     createPerpetualReduce: createPerpetualReduceMock,
+    createSwap: createSwapMock,
     getPerpetualLifecycle: getPerpetualLifecycleMock,
   }),
   getOnchainClients: getOnchainClientsMock,
@@ -90,7 +102,7 @@ function buildBaseState(): ClmmState {
       cronScheduled: false,
       bootstrapped: true,
     },
-    view: {
+    thread: {
       command: undefined,
       task: undefined,
       poolArtifact: undefined,
@@ -199,10 +211,14 @@ describe('pollCycleNode (integration)', () => {
     fetchAlloraInferenceMock.mockReset();
     listPerpetualMarketsMock.mockReset();
     listPerpetualPositionsMock.mockReset();
+    listWalletBalancesMock.mockReset();
+    listTokensMock.mockReset();
+    estimatePerpetualQuoteFeeUsdMock.mockReset();
     createPerpetualLongMock.mockReset();
     createPerpetualShortMock.mockReset();
     createPerpetualCloseMock.mockReset();
     createPerpetualReduceMock.mockReset();
+    createSwapMock.mockReset();
     getPerpetualLifecycleMock.mockReset();
     getOnchainClientsMock.mockReset();
     copilotkitEmitStateMock.mockReset();
@@ -212,16 +228,16 @@ describe('pollCycleNode (integration)', () => {
     fetchAlloraInferenceMock.mockRejectedValueOnce(new TypeError('fetch failed'));
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 47000;
+    state.thread.metrics.previousPrice = 47000;
 
     const result = await pollCycleNode(state, {});
     const update = extractPollCycleUpdate(result);
 
-    expect(update.view?.haltReason).toBeUndefined();
-    expect(update.view?.metrics.staleCycles).toBe(1);
-    expect(update.view?.metrics.previousPrice).toBe(47000);
+    expect(update.thread?.haltReason).toBeUndefined();
+    expect(update.thread?.metrics.staleCycles).toBe(1);
+    expect(update.thread?.metrics.previousPrice).toBe(47000);
 
-    const statusMessages = (update.view?.activity.events ?? [])
+    const statusMessages = (update.thread?.activity.events ?? [])
       .filter((event) => event.type === 'status')
       .map((event) => event.message);
     expect(statusMessages.join(' ')).toContain('WARNING');
@@ -239,10 +255,10 @@ describe('pollCycleNode (integration)', () => {
     const result = await pollCycleNode(state, {});
     const update = extractPollCycleUpdate(result);
 
-    expect(update.view?.haltReason).toContain(
+    expect(update.thread?.haltReason).toContain(
       `ERROR: Failed to fetch GMX markets/positions from ${ONCHAIN_ACTIONS_API_URL}`,
     );
-    expect(update.view?.haltReason).toContain('fetch failed');
+    expect(update.thread?.haltReason).toContain('fetch failed');
   });
 
   it('shows actionable guidance when GMX order simulation fails', async () => {
@@ -256,34 +272,686 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualLongMock.mockRejectedValueOnce(
       new Error('Onchain actions request failed (500): {"error":"Error: Execute order simulation failed"}'),
     );
+    listTokensMock.mockResolvedValueOnce([
+      {
+        tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+        name: 'USD Coin',
+        symbol: 'USDC',
+        isNative: false,
+        decimals: 6,
+        isVetted: true,
+      },
+      {
+        tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+        name: 'Ether',
+        symbol: 'ETH',
+        isNative: true,
+        decimals: 18,
+        isVetted: true,
+      },
+    ]);
+    listWalletBalancesMock.mockResolvedValueOnce([
+      {
+        tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+        amount: '5000000000000000',
+        symbol: 'ETH',
+        valueUsd: 15,
+      },
+    ]);
+    estimatePerpetualQuoteFeeUsdMock.mockResolvedValueOnce(0.12);
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 46000;
+    state.thread.metrics.previousPrice = 46000;
     const result = await pollCycleNode(state, {});
     const update = extractPollCycleUpdate(result);
 
-    expect(update.view?.haltReason).toBe('');
-    expect(update.view?.task?.taskStatus.state).toBe('input-required');
-    expect(update.view?.task?.taskStatus.message?.content).toContain(
+    expect(update.thread?.haltReason).toBe('');
+    expect(update.thread?.task?.taskStatus.state).toBe('input-required');
+    expect(update.thread?.task?.taskStatus.message?.content).toContain(
       'GMX order simulation failed',
     );
-    expect(update.view?.task?.taskStatus.message?.content).toContain(
+    expect(update.thread?.task?.taskStatus.message?.content).toContain(
       'enough USDC collateral and a small amount of Arbitrum ETH',
     );
-    expect(update.view?.task?.taskStatus.message?.content).toContain(
+    expect(update.thread?.task?.taskStatus.message?.content).toContain(
       'click Continue in Agent Blockers',
     );
-    expect(update.view?.task?.taskStatus.message?.content).not.toContain('{"command":"cycle"}');
-    expect(update.view?.executionError).toBe('');
-    expect(update.view?.transactionHistory).toHaveLength(0);
+    expect(update.thread?.task?.taskStatus.message?.content).not.toContain('{"command":"cycle"}');
+    expect(createSwapMock).not.toHaveBeenCalled();
+    expect(update.thread?.executionError).toBe('');
+    expect(update.thread?.transactionHistory).toHaveLength(0);
 
-    const executionResultArtifact = (update.view?.activity.events ?? []).find(
+    const executionResultArtifact = (update.thread?.activity.events ?? []).find(
       (event) => event.type === 'artifact' && event.artifact.artifactId === 'gmx-allora-execution-result',
     )?.artifact;
     const executionData = executionResultArtifact?.parts.find((part) => part.kind === 'data');
     expect(executionData?.kind).toBe('data');
     expect(executionData?.data).toMatchObject({ ok: false, status: 'blocked' });
     expect((executionData?.data as { error?: string }).error).toBeUndefined();
+  });
+
+  it('auto-funds native ETH from USDC and retries cycle when execution fee is insufficient', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValueOnce([]);
+      createPerpetualLongMock
+        .mockRejectedValueOnce(
+          new Error(
+            'Onchain actions request failed (500): {"error":"Error: Execute order simulation failed"}',
+          ),
+        )
+        .mockResolvedValueOnce({ transactions: [] });
+      estimatePerpetualQuoteFeeUsdMock.mockResolvedValueOnce(0.12);
+      listTokensMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          name: 'USD Coin',
+          symbol: 'USDC',
+          isNative: false,
+          decimals: 6,
+          isVetted: true,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          name: 'Ether',
+          symbol: 'ETH',
+          isNative: true,
+          decimals: 18,
+          isVetted: true,
+        },
+      ]);
+      listWalletBalancesMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          amount: '30000000',
+          symbol: 'USDC',
+          valueUsd: 30,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          amount: '0',
+          symbol: 'ETH',
+          valueUsd: 0,
+        },
+      ]);
+      createSwapMock.mockResolvedValueOnce({
+        exactFromAmount: '500000',
+        exactToAmount: '1000000000000000',
+        transactions: [
+          {
+            type: 'evm',
+            to: '0x1111111111111111111111111111111111111111',
+            data: '0xdeadbeef',
+            value: '0',
+            chainId: '42161',
+          },
+        ],
+      });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValue('0x1111111111111111111111111111111111111111111111111111111111111111'),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn().mockResolvedValue({
+            status: 'success',
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(createSwapMock).toHaveBeenCalledTimes(1);
+      expect(createSwapMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amountType: 'exactIn',
+          amount: '1200000',
+          slippageTolerance: '0.25',
+        }),
+      );
+      expect(createPerpetualLongMock).toHaveBeenCalledTimes(2);
+      expect(update.thread?.task?.taskStatus.state).toBe('working');
+      expect(update.thread?.task?.taskStatus.message?.content).not.toContain('trade paused');
+      expect(update.thread?.executionError).toBe('');
+    } finally {
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+    }
+  });
+
+  it('treats persistent simulation failures after successful top-up as non-funding execution errors', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValueOnce([]);
+      createPerpetualLongMock
+        .mockRejectedValueOnce(
+          new Error('Onchain actions request failed (500): {"error":"Error: Execute order simulation failed"}'),
+        )
+        .mockRejectedValueOnce(
+          new Error('Onchain actions request failed (500): {"error":"Error: Execute order simulation failed"}'),
+        );
+      estimatePerpetualQuoteFeeUsdMock.mockResolvedValueOnce(0.12);
+      listTokensMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          name: 'USD Coin',
+          symbol: 'USDC',
+          isNative: false,
+          decimals: 6,
+          isVetted: true,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          name: 'Ether',
+          symbol: 'ETH',
+          isNative: true,
+          decimals: 18,
+          isVetted: true,
+        },
+      ]);
+      listWalletBalancesMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          amount: '30000000',
+          symbol: 'USDC',
+          valueUsd: 30,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          amount: '0',
+          symbol: 'ETH',
+          valueUsd: 0,
+        },
+      ]);
+      createSwapMock.mockResolvedValueOnce({
+        exactFromAmount: '1200000',
+        exactToAmount: '1000000000000000',
+        transactions: [
+          {
+            type: 'evm',
+            to: '0x1111111111111111111111111111111111111111',
+            data: '0xdeadbeef',
+            value: '0',
+            chainId: '42161',
+          },
+        ],
+      });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValue('0x1111111111111111111111111111111111111111111111111111111111111111'),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn().mockResolvedValue({
+            status: 'success',
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(createSwapMock).toHaveBeenCalledTimes(1);
+      expect(createPerpetualLongMock).toHaveBeenCalledTimes(2);
+      expect(update.thread?.task?.taskStatus.state).toBe('working');
+      expect(update.thread?.task?.taskStatus.message?.content).toContain(
+        'upstream planning/simulation issue',
+      );
+      expect(update.thread?.task?.taskStatus.message?.content).not.toContain(
+        'click Continue in Agent Blockers',
+      );
+      expect(update.thread?.executionError).toContain('Execute order simulation failed');
+    } finally {
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+    }
+  });
+
+  it('attempts top-up when quote fee estimate is unavailable instead of skipping on low-confidence balance heuristic', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValueOnce([]);
+      createPerpetualLongMock
+        .mockRejectedValueOnce(
+          new Error('Onchain actions request failed (500): {"error":"Error: Execute order simulation failed"}'),
+        )
+        .mockResolvedValueOnce({ transactions: [] });
+      estimatePerpetualQuoteFeeUsdMock.mockResolvedValueOnce(undefined);
+      listTokensMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          name: 'USD Coin',
+          symbol: 'USDC',
+          isNative: false,
+          decimals: 6,
+          isVetted: true,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          name: 'Ether',
+          symbol: 'ETH',
+          isNative: true,
+          decimals: 18,
+          isVetted: true,
+        },
+      ]);
+      listWalletBalancesMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          amount: '30000000',
+          symbol: 'USDC',
+          valueUsd: 30,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          amount: '800000000000000',
+          symbol: 'ETH',
+          valueUsd: 2,
+        },
+      ]);
+      createSwapMock.mockResolvedValueOnce({
+        exactFromAmount: '1000000',
+        exactToAmount: '1000000000000000',
+        transactions: [
+          {
+            type: 'evm',
+            to: '0x1111111111111111111111111111111111111111',
+            data: '0xdeadbeef',
+            value: '0',
+            chainId: '42161',
+          },
+        ],
+      });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValue('0x1111111111111111111111111111111111111111111111111111111111111111'),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn().mockResolvedValue({
+            status: 'success',
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(createSwapMock).toHaveBeenCalledTimes(1);
+      expect(createPerpetualLongMock).toHaveBeenCalledTimes(2);
+      expect(update.thread?.task?.taskStatus.state).toBe('working');
+      expect(update.thread?.executionError).toBe('');
+    } finally {
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+    }
+  });
+
+  it('skips top-up swap when native ETH balance already covers fallback target even if quote estimate is unavailable', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValueOnce([]);
+      createPerpetualLongMock.mockRejectedValueOnce(
+        new Error('Onchain actions request failed (500): {"error":"Error: Execute order simulation failed"}'),
+      );
+      estimatePerpetualQuoteFeeUsdMock.mockResolvedValueOnce(undefined);
+      listTokensMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          name: 'USD Coin',
+          symbol: 'USDC',
+          isNative: false,
+          decimals: 6,
+          isVetted: true,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          name: 'Ether',
+          symbol: 'ETH',
+          isNative: true,
+          decimals: 18,
+          isVetted: true,
+        },
+      ]);
+      listWalletBalancesMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          amount: '30000000',
+          symbol: 'USDC',
+          valueUsd: 30,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          amount: '4000000000000000',
+          symbol: 'ETH',
+          valueUsd: 8,
+        },
+      ]);
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi.fn(),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn(),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(createSwapMock).not.toHaveBeenCalled();
+      expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
+      expect(update.thread?.task?.taskStatus.state).toBe('input-required');
+    } finally {
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+    }
+  });
+
+  it('retries top-up swap with higher slippage tolerance when initial swap fails for slippage', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValueOnce([]);
+      createPerpetualLongMock
+        .mockRejectedValueOnce(
+          new Error('Onchain actions request failed (500): {"error":"Error: Execute order simulation failed"}'),
+        )
+        .mockResolvedValueOnce({ transactions: [] });
+      estimatePerpetualQuoteFeeUsdMock.mockResolvedValueOnce(0.12);
+      listTokensMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          name: 'USD Coin',
+          symbol: 'USDC',
+          isNative: false,
+          decimals: 6,
+          isVetted: true,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          name: 'Ether',
+          symbol: 'ETH',
+          isNative: true,
+          decimals: 18,
+          isVetted: true,
+        },
+      ]);
+      listWalletBalancesMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          amount: '30000000',
+          symbol: 'USDC',
+          valueUsd: 30,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          amount: '0',
+          symbol: 'ETH',
+          valueUsd: 0,
+        },
+      ]);
+      createSwapMock
+        .mockRejectedValueOnce(
+          new Error(
+            'Onchain actions request failed (500): {"error":"Error: Slippage limit exceeded: actual 0.3% > defined limit of 0.25%"}',
+          ),
+        )
+        .mockResolvedValueOnce({
+          exactFromAmount: '500000',
+          exactToAmount: '1000000000000000',
+          transactions: [
+            {
+              type: 'evm',
+              to: '0x1111111111111111111111111111111111111111',
+              data: '0xdeadbeef',
+              value: '0',
+              chainId: '42161',
+            },
+          ],
+        });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValue('0x1111111111111111111111111111111111111111111111111111111111111111'),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn().mockResolvedValue({
+            status: 'success',
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(createSwapMock).toHaveBeenCalledTimes(2);
+      expect(createSwapMock).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          amountType: 'exactIn',
+          slippageTolerance: '0.25',
+        }),
+      );
+      expect(createSwapMock).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          amountType: 'exactIn',
+          slippageTolerance: '0.5',
+        }),
+      );
+      expect(createPerpetualLongMock).toHaveBeenCalledTimes(2);
+      expect(update.thread?.task?.taskStatus.state).toBe('working');
+      expect(update.thread?.executionError).toBe('');
+    } finally {
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+    }
+  });
+
+  it('re-requests swap plan when top-up first returns approval-only transactions', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValueOnce([]);
+      createPerpetualLongMock
+        .mockRejectedValueOnce(
+          new Error('Onchain actions request failed (500): {"error":"Error: Execute order simulation failed"}'),
+        )
+        .mockResolvedValueOnce({ transactions: [] });
+      estimatePerpetualQuoteFeeUsdMock.mockResolvedValueOnce(0.12);
+      listTokensMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          name: 'USD Coin',
+          symbol: 'USDC',
+          isNative: false,
+          decimals: 6,
+          isVetted: true,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          name: 'Ether',
+          symbol: 'ETH',
+          isNative: true,
+          decimals: 18,
+          isVetted: true,
+        },
+      ]);
+      listWalletBalancesMock.mockResolvedValueOnce([
+        {
+          tokenUid: { chainId: '42161', address: '0x1111111111111111111111111111111111111111' },
+          amount: '30000000',
+          symbol: 'USDC',
+          valueUsd: 30,
+        },
+        {
+          tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+          amount: '0',
+          symbol: 'ETH',
+          valueUsd: 0,
+        },
+      ]);
+      createSwapMock
+        .mockResolvedValueOnce({
+          exactFromAmount: '500000',
+          exactToAmount: '0',
+          transactions: [approvalOnlyTransaction],
+        })
+        .mockResolvedValueOnce({
+          exactFromAmount: '500000',
+          exactToAmount: '1000000000000000',
+          transactions: [
+            {
+              type: 'evm',
+              to: '0x1111111111111111111111111111111111111111',
+              data: '0xdeadbeef',
+              value: '0',
+              chainId: '42161',
+            },
+          ],
+        });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValue('0x1111111111111111111111111111111111111111111111111111111111111111'),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn().mockResolvedValue({
+            status: 'success',
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(createSwapMock).toHaveBeenCalledTimes(2);
+      expect(createSwapMock).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          amountType: 'exactIn',
+          slippageTolerance: '0.25',
+        }),
+      );
+      expect(createSwapMock).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          amountType: 'exactIn',
+          slippageTolerance: '0.25',
+        }),
+      );
+      expect(createPerpetualLongMock).toHaveBeenCalledTimes(2);
+      expect(update.thread?.task?.taskStatus.state).toBe('working');
+      expect(update.thread?.executionError).toBe('');
+    } finally {
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+    }
   });
 
   it('emits telemetry and execution plan artifacts on open action', async () => {
@@ -297,18 +965,18 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 46000;
+    state.thread.metrics.previousPrice = 46000;
     const result = await pollCycleNode(state, {});
 
     const update = extractPollCycleUpdate(result);
-    const events = update.view?.activity.events ?? [];
+    const events = update.thread?.activity.events ?? [];
     const artifactIds = events
       .filter((event) => event.type === 'artifact')
       .map((event) => event.artifact.artifactId);
 
     expect(artifactIds).toContain('gmx-allora-telemetry');
     expect(artifactIds).toContain('gmx-allora-execution-plan');
-    expect(update.view?.metrics.latestSnapshot?.totalUsd).toBeGreaterThan(0);
+    expect(update.thread?.metrics.latestSnapshot?.totalUsd).toBeGreaterThan(0);
   });
 
   it('fails cycle execution when perpetual lifecycle reports cancelled status for submitted open order', async () => {
@@ -354,7 +1022,7 @@ describe('pollCycleNode (integration)', () => {
       });
 
       const state = buildBaseState();
-      state.view.metrics.previousPrice = 46000;
+      state.thread.metrics.previousPrice = 46000;
       const result = await pollCycleNode(state, {});
       const update = extractPollCycleUpdate(result);
 
@@ -364,10 +1032,247 @@ describe('pollCycleNode (integration)', () => {
         txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
         walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       });
-      expect(update.view?.task?.taskStatus.state).toBe('working');
-      expect(update.view?.task?.taskStatus.message?.content).toContain('execution failed');
-      expect(update.view?.task?.taskStatus.message?.content).toContain('cancelled');
-      expect(update.view?.executionError).toContain('cancelled');
+      expect(update.thread?.task?.taskStatus.state).toBe('working');
+      expect(update.thread?.task?.taskStatus.message?.content).toContain('execution failed');
+      expect(update.thread?.task?.taskStatus.message?.content).toContain('cancelled');
+      expect(update.thread?.executionError).toContain('cancelled');
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
+
+  it('decodes cancelled lifecycle reason from reasonBytes when reason text is empty', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValueOnce([]);
+      createPerpetualLongMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0x1', data: '0x2', value: '0', chainId: '42161' }],
+      });
+      getPerpetualLifecycleMock.mockResolvedValueOnce({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+        status: 'cancelled',
+        reason: '',
+        reasonBytes:
+          '0xe09ad0e9000000000000000000000000000000000000000002579e7af429ec8372dc5f83000000000000000000000000000000000000000002400fa64018726c433ae1b0',
+        requestedPrice: '696415174373352912272941488',
+        precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+        asOf: '2026-01-01T00:00:00.000Z',
+      });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValue('0x1111111111111111111111111111111111111111111111111111111111111111'),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn().mockResolvedValue({
+            status: 'success',
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(update.thread?.task?.taskStatus.message?.content).toContain(
+        'OrderNotFulfillableAtAcceptablePrice',
+      );
+      expect(update.thread?.task?.taskStatus.message?.content).toContain(
+        'order price above acceptable bound by ~4.08%',
+      );
+      expect(update.thread?.executionError).toContain('OrderNotFulfillableAtAcceptablePrice');
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
+
+  it('does not mark submitted open order as confirmed when lifecycle is still pending', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValue([]);
+      createPerpetualLongMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0x1', data: '0x2', value: '0', chainId: '42161' }],
+      });
+      getPerpetualLifecycleMock.mockResolvedValueOnce({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+        status: 'pending',
+        precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+        asOf: '2026-01-01T00:00:00.000Z',
+      });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValue('0x1111111111111111111111111111111111111111111111111111111111111111'),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn().mockResolvedValue({
+            status: 'success',
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(update.thread?.task?.taskStatus.state).toBe('working');
+      expect(update.thread?.metrics.pendingPositionSync).toMatchObject({
+        expectedSide: 'long',
+        sourceAction: 'long',
+      });
+      expect(update.thread?.metrics.assumedPositionSide).toBeUndefined();
+      expect(update.thread?.metrics.lastTradedInferenceSnapshotKey).toBeUndefined();
+      expect(update.thread?.transactionHistory).toHaveLength(0);
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
+
+  it('retries open trade immediately after pending sync guard resolves as cancelled', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock
+        .mockResolvedValueOnce({
+          topicId: 14,
+          combinedValue: 47000,
+          confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+        })
+        .mockResolvedValueOnce({
+          topicId: 14,
+          combinedValue: 47000,
+          confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+        });
+      listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValue([]);
+      createPerpetualLongMock
+        .mockResolvedValueOnce({
+          transactions: [{ type: 'evm', to: '0x1', data: '0x2', value: '0', chainId: '42161' }],
+        })
+        .mockResolvedValueOnce({
+          transactions: [{ type: 'evm', to: '0x1', data: '0x2', value: '0', chainId: '42161' }],
+        });
+      getPerpetualLifecycleMock
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          status: 'pending',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:00.000Z',
+        })
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          status: 'cancelled',
+          reason: 'OrderNotFulfillableAtAcceptablePrice',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:05.000Z',
+        })
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+          orderKey: '0x4444444444444444444444444444444444444444444444444444444444444444',
+          status: 'pending',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:10.000Z',
+        });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValueOnce(
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+            )
+            .mockResolvedValueOnce(
+              '0x3333333333333333333333333333333333333333333333333333333333333333',
+            ),
+        },
+        public: {
+          waitForTransactionReceipt: vi
+            .fn()
+            .mockResolvedValue({
+              status: 'success',
+              transactionHash:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
+            })
+            .mockResolvedValueOnce({
+              status: 'success',
+              transactionHash:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
+            })
+            .mockResolvedValueOnce({
+              status: 'success',
+              transactionHash:
+                '0x3333333333333333333333333333333333333333333333333333333333333333',
+            }),
+        },
+      });
+
+      const firstState = buildBaseState();
+      firstState.thread.metrics.previousPrice = 46000;
+      const firstResult = await pollCycleNode(firstState, {});
+      const firstUpdate = extractPollCycleUpdate(firstResult);
+      expect(firstUpdate.thread?.metrics.pendingPositionSync?.sourceTxHash).toBe(
+        '0x1111111111111111111111111111111111111111111111111111111111111111',
+      );
+
+      const secondState = buildBaseState();
+      secondState.thread.metrics = {
+        ...secondState.thread.metrics,
+        ...(firstUpdate.thread?.metrics ?? {}),
+      };
+      secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
+
+      const secondResult = await pollCycleNode(secondState, {});
+      const secondUpdate = extractPollCycleUpdate(secondResult);
+
+      expect(createPerpetualLongMock).toHaveBeenCalledTimes(2);
+      expect(secondUpdate.thread?.metrics.latestCycle?.action).toBe('open');
+      expect(secondUpdate.thread?.metrics.pendingPositionSync?.sourceTxHash).toBe(
+        '0x3333333333333333333333333333333333333333333333333333333333333333',
+      );
     } finally {
       process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
     }
@@ -383,13 +1288,47 @@ describe('pollCycleNode (integration)', () => {
     listPerpetualPositionsMock.mockResolvedValueOnce([]);
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 46000;
+    state.thread.metrics.previousPrice = 46000;
     await pollCycleNode(state, {});
 
     expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
     expect(createPerpetualShortMock).not.toHaveBeenCalled();
     expect(createPerpetualCloseMock).not.toHaveBeenCalled();
     expect(createPerpetualReduceMock).not.toHaveBeenCalled();
+  });
+
+  it('uses delegatee wallet for plan-building when delegation bypass is active', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValueOnce([]);
+
+    const state = buildBaseState();
+    state.thread.metrics.previousPrice = 46000;
+    if (!state.thread.operatorConfig) {
+      throw new Error('Expected operator config in test state');
+    }
+    state.thread.operatorConfig.delegatorWalletAddress =
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    state.thread.operatorConfig.delegateeWalletAddress =
+      '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    state.thread.delegationsBypassActive = true;
+
+    await pollCycleNode(state, {});
+
+    expect(listPerpetualPositionsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        walletAddress: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      }),
+    );
+    expect(createPerpetualLongMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        walletAddress: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      }),
+    );
   });
 
   it('routes open short decisions to createPerpetualShort', async () => {
@@ -402,7 +1341,7 @@ describe('pollCycleNode (integration)', () => {
     listPerpetualPositionsMock.mockResolvedValueOnce([]);
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 48000;
+    state.thread.metrics.previousPrice = 48000;
     await pollCycleNode(state, {});
 
     expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
@@ -421,8 +1360,8 @@ describe('pollCycleNode (integration)', () => {
     listPerpetualPositionsMock.mockResolvedValueOnce([]);
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 48000;
-    state.view.metrics.assumedPositionSide = 'long';
+    state.thread.metrics.previousPrice = 48000;
+    state.thread.metrics.assumedPositionSide = 'long';
     await pollCycleNode(state, {});
 
     expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
@@ -447,21 +1386,21 @@ describe('pollCycleNode (integration)', () => {
     listPerpetualPositionsMock.mockResolvedValue([]);
 
     const firstState = buildBaseState();
-    firstState.view.metrics.previousPrice = 48000;
-    firstState.view.metrics.assumedPositionSide = 'long';
+    firstState.thread.metrics.previousPrice = 48000;
+    firstState.thread.metrics.assumedPositionSide = 'long';
     const firstResult = await pollCycleNode(firstState, {});
 
     const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
-    secondState.view.metrics = {
-      ...secondState.view.metrics,
-      ...(firstUpdate.view?.metrics ?? {}),
+    secondState.thread.metrics = {
+      ...secondState.thread.metrics,
+      ...(firstUpdate.thread?.metrics ?? {}),
     };
-    secondState.view.metrics.assumedPositionSide = firstUpdate.view?.metrics?.assumedPositionSide;
-    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics?.latestCycle;
-    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics?.previousPrice;
-    secondState.view.metrics.cyclesSinceRebalance = 3;
+    secondState.thread.metrics.assumedPositionSide = firstUpdate.thread?.metrics?.assumedPositionSide;
+    secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
+    secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
+    secondState.thread.metrics.cyclesSinceRebalance = 3;
 
     await pollCycleNode(secondState, {});
 
@@ -522,20 +1461,20 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
 
     const firstState = buildBaseState();
-    firstState.view.metrics.previousPrice = 46000;
+    firstState.thread.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
 
     const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
-    secondState.view.metrics = {
-      ...secondState.view.metrics,
-      ...(firstUpdate.view?.metrics ?? {}),
+    secondState.thread.metrics = {
+      ...secondState.thread.metrics,
+      ...(firstUpdate.thread?.metrics ?? {}),
     };
-    secondState.view.metrics.assumedPositionSide = firstUpdate.view?.metrics?.assumedPositionSide;
-    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics?.latestCycle;
-    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics?.previousPrice;
-    secondState.view.metrics.cyclesSinceRebalance = 3;
+    secondState.thread.metrics.assumedPositionSide = firstUpdate.thread?.metrics?.assumedPositionSide;
+    secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
+    secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
+    secondState.thread.metrics.cyclesSinceRebalance = 3;
 
     await pollCycleNode(secondState, {});
 
@@ -560,18 +1499,18 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualLongMock.mockResolvedValue({ transactions: [approvalOnlyTransaction] });
 
     const firstState = buildBaseState();
-    firstState.view.metrics.previousPrice = 46000;
+    firstState.thread.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
 
     const firstUpdate = extractPollCycleUpdate(firstResult);
 
     const secondState = buildBaseState();
-    secondState.view.metrics = {
-      ...secondState.view.metrics,
-      ...(firstUpdate.view?.metrics ?? {}),
+    secondState.thread.metrics = {
+      ...secondState.thread.metrics,
+      ...(firstUpdate.thread?.metrics ?? {}),
     };
-    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics?.latestCycle;
-    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics?.previousPrice;
+    secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
+    secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
 
     await pollCycleNode(secondState, {});
 
@@ -595,25 +1534,25 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
 
     const firstState = buildBaseState();
-    firstState.view.metrics.previousPrice = 46000;
+    firstState.thread.metrics.previousPrice = 46000;
     const firstResult = await pollCycleNode(firstState, {});
     const firstUpdate = extractPollCycleUpdate(firstResult);
-    const firstSnapshot = firstUpdate.view?.metrics.latestSnapshot;
+    const firstSnapshot = firstUpdate.thread?.metrics.latestSnapshot;
     expect(firstSnapshot?.totalUsd).toBeGreaterThan(0);
 
     const secondState = buildBaseState();
-    secondState.view.metrics = {
-      ...secondState.view.metrics,
-      ...(firstUpdate.view?.metrics ?? {}),
+    secondState.thread.metrics = {
+      ...secondState.thread.metrics,
+      ...(firstUpdate.thread?.metrics ?? {}),
     };
-    secondState.view.metrics.assumedPositionSide = firstUpdate.view?.metrics.assumedPositionSide;
-    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics.latestCycle;
-    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics.previousPrice;
+    secondState.thread.metrics.assumedPositionSide = firstUpdate.thread?.metrics.assumedPositionSide;
+    secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics.latestCycle;
+    secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics.previousPrice;
 
     const secondResult = await pollCycleNode(secondState, {});
     const secondUpdate = extractPollCycleUpdate(secondResult);
 
-    expect(secondUpdate.view?.metrics.latestSnapshot?.totalUsd).toBe(0);
+    expect(secondUpdate.thread?.metrics.latestSnapshot?.totalUsd).toBe(0);
   });
 
   it('executes reduce plans via onchain-actions reduce endpoint when position exists', async () => {
@@ -659,10 +1598,10 @@ describe('pollCycleNode (integration)', () => {
     ]);
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 46000;
-    state.view.metrics.iteration = 10;
-    state.view.metrics.cyclesSinceRebalance = 2;
-    state.view.metrics.assumedPositionSide = 'long';
+    state.thread.metrics.previousPrice = 46000;
+    state.thread.metrics.iteration = 10;
+    state.thread.metrics.cyclesSinceRebalance = 2;
+    state.thread.metrics.assumedPositionSide = 'long';
 
     const result = await pollCycleNode(state, {});
     const update = extractPollCycleUpdate(result);
@@ -672,7 +1611,7 @@ describe('pollCycleNode (integration)', () => {
     expect(createPerpetualLongMock).not.toHaveBeenCalled();
     expect(createPerpetualReduceMock).not.toHaveBeenCalled();
 
-    const artifactIds = (update.view?.activity.events ?? [])
+    const artifactIds = (update.thread?.activity.events ?? [])
       .filter((event) => event.type === 'artifact')
       .map((event) => event.artifact.artifactId);
     expect(artifactIds).toContain('gmx-allora-telemetry');
@@ -722,12 +1661,12 @@ describe('pollCycleNode (integration)', () => {
     ]);
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 46000;
-    state.view.metrics.assumedPositionSide = 'long';
+    state.thread.metrics.previousPrice = 46000;
+    state.thread.metrics.assumedPositionSide = 'long';
 
     const result = await pollCycleNode(state, {});
     const update = extractPollCycleUpdate(result);
-    const snapshot = update.view?.metrics.latestSnapshot;
+    const snapshot = update.thread?.metrics.latestSnapshot;
 
     expect(createPerpetualLongMock).not.toHaveBeenCalled();
     expect(snapshot?.totalUsd).toBe(16);
@@ -748,7 +1687,7 @@ describe('pollCycleNode (integration)', () => {
     const result = await pollCycleNode(state, {});
 
     const update = extractPollCycleUpdate(result);
-    expect(update.view?.haltReason).toContain('No GMX');
+    expect(update.thread?.haltReason).toContain('No GMX');
   });
 
   it('blocks open trades when exposure exceeds caps', async () => {
@@ -798,7 +1737,7 @@ describe('pollCycleNode (integration)', () => {
     const result = await pollCycleNode(state, {});
 
     const update = extractPollCycleUpdate(result);
-    const latestCycle = update.view?.metrics.latestCycle;
+    const latestCycle = update.thread?.metrics.latestCycle;
 
     expect(latestCycle?.action).toBe('hold');
     expect(latestCycle?.reason).toContain('Exposure limit');

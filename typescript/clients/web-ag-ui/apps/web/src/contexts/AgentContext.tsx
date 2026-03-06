@@ -8,7 +8,7 @@ import {
   defaultMetrics,
   defaultProfile,
   defaultSettings,
-  defaultView,
+  defaultUiState,
 } from '../types/agent';
 
 const AgentContext = createContext<UseAgentConnectionResult | null>(null);
@@ -21,7 +21,7 @@ const inactiveAgent: UseAgentConnectionResult = {
   interruptRenderer: null,
   uiError: null,
   clearUiError: () => undefined,
-  view: defaultView,
+  uiState: defaultUiState,
   profile: defaultProfile,
   metrics: defaultMetrics,
   activity: defaultActivity,

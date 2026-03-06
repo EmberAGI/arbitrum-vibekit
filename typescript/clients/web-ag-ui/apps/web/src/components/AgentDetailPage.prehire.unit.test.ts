@@ -18,6 +18,41 @@ vi.mock('../hooks/usePrivyWalletClient', () => {
 });
 
 describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
+  it('does not throw when pre-hire metrics payload includes null numeric fields', () => {
+    const render = () =>
+      renderToStaticMarkup(
+        React.createElement(AgentDetailPage, {
+          agentId: 'agent-clmm',
+          agentName: 'Camelot CLMM',
+          agentDescription: 'desc',
+          creatorName: 'Ember AI Team',
+          creatorVerified: true,
+          profile: {
+            chains: [],
+            protocols: [],
+            tokens: [],
+            totalUsers: null as unknown as number,
+          },
+          metrics: {
+            apy: null as unknown as number,
+          },
+          fullMetrics: {
+            previousApy: null as unknown as number,
+          },
+          isHired: false,
+          isHiring: false,
+          hasLoadedView: true,
+          onHire: () => {},
+          onFire: () => {},
+          onSync: () => {},
+          onBack: () => {},
+          allowedPools: [],
+        }),
+      );
+
+    expect(render).not.toThrow();
+  });
+
   it('renders a lightweight metrics preview before the agent is hired', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
@@ -97,6 +132,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
         isHiring: false,
         onboarding: { step: 3 },
         taskStatus: 'working',
+        setupComplete: true,
         hasLoadedView: true,
         onHire: () => {},
         onFire: () => {},
@@ -114,7 +150,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     );
   });
 
-  it('keeps metrics disabled during Pendle hire while setup is still in progress', () => {
+  it('keeps metrics disabled while onboarding flow is in progress', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-pendle',
@@ -130,9 +166,16 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
         metrics: {},
         isHired: true,
         isHiring: false,
-        currentCommand: 'hire',
         taskStatus: 'working',
-        setupComplete: false,
+        onboardingFlow: {
+          status: 'in_progress',
+          revision: 2,
+          activeStepId: 'funding-token',
+          steps: [
+            { id: 'funding-amount', title: 'Funding Amount', status: 'completed' },
+            { id: 'funding-token', title: 'Funding Token', status: 'active' },
+          ],
+        },
         hasLoadedView: true,
         onHire: () => {},
         onFire: () => {},
@@ -147,7 +190,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     );
   });
 
-  it('enables metrics after Pendle setup is complete even if command remains hire', () => {
+  it('enables metrics when onboarding flow is completed', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-pendle',
@@ -163,9 +206,15 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
         metrics: {},
         isHired: true,
         isHiring: false,
-        currentCommand: 'hire',
         taskStatus: 'working',
-        setupComplete: true,
+        onboardingFlow: {
+          status: 'completed',
+          revision: 3,
+          steps: [
+            { id: 'funding-amount', title: 'Funding Amount', status: 'completed' },
+            { id: 'funding-token', title: 'Funding Token', status: 'completed' },
+          ],
+        },
         hasLoadedView: true,
         onHire: () => {},
         onFire: () => {},
@@ -199,7 +248,6 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
         metrics: {},
         isHired: true,
         isHiring: false,
-        currentCommand: 'cycle',
         taskStatus: 'working',
         onboardingFlow: {
           status: 'in_progress',

@@ -26,6 +26,26 @@ describe('mergeMessageHistory', () => {
     expect(result).toBe(right);
   });
 
+  it('replaces when right is a semantic full-prefix snapshot with reconstructed objects', () => {
+    const left = [
+      { id: '1', role: 'user', content: '{"command":"sync","clientMutationId":"m-1"}' },
+      { id: '2', role: 'user', content: '{"command":"cycle","clientMutationId":"m-2"}' },
+    ];
+    const right = [
+      { id: '1', role: 'user', content: '{"command":"sync","clientMutationId":"m-1"}' },
+      { id: '2', role: 'user', content: '{"command":"cycle","clientMutationId":"m-2"}' },
+      { id: '3', role: 'user', content: '{"command":"cycle","clientMutationId":"m-3"}' },
+    ];
+
+    const result = mergeMessageHistory({
+      left,
+      right,
+      limit: 100,
+    });
+
+    expect(result).toBe(right);
+  });
+
   it('appends when right is a delta', () => {
     const m1 = { id: '1' };
     const m2 = { id: '2' };

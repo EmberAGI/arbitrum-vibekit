@@ -20,12 +20,12 @@ const assertInputRequiredMessageInvariant = (update: TransitionUpdate | undefine
     return;
   }
 
-  const view = update['view'];
-  if (!isPlainRecord(view)) {
+  const thread = update['thread'];
+  if (!isPlainRecord(thread)) {
     return;
   }
 
-  const task = view['task'];
+  const task = thread['task'];
   if (!isPlainRecord(task)) {
     return;
   }
@@ -60,12 +60,12 @@ const assertTerminalOnboardingInvariant = (update: TransitionUpdate | undefined)
     return;
   }
 
-  const view = update['view'];
-  if (!isPlainRecord(view)) {
+  const thread = update['thread'];
+  if (!isPlainRecord(thread)) {
     return;
   }
 
-  const onboardingFlow = view['onboardingFlow'];
+  const onboardingFlow = thread['onboardingFlow'];
   if (!isPlainRecord(onboardingFlow)) {
     return;
   }
@@ -79,7 +79,7 @@ const assertTerminalOnboardingInvariant = (update: TransitionUpdate | undefined)
     return;
   }
 
-  const onboarding = view['onboarding'];
+  const onboarding = thread['onboarding'];
   if (!isPlainRecord(onboarding)) {
     return;
   }
@@ -112,6 +112,32 @@ export const buildInterruptPauseTransition = <
     goto: params.node,
     update: params.update,
   });
+};
+
+export const buildNodeTransition = <
+  TNode extends string,
+  TUpdate extends TransitionUpdate,
+  TCommand,
+>(
+  params: {
+    node: TNode;
+    update?: TUpdate;
+    createCommand: TransitionCommandFactory<TNode, TUpdate, TCommand>;
+  },
+): TCommand => {
+  assertNonEmptyNode(params.node);
+  assertInputRequiredMessageInvariant(params.update);
+  assertTerminalOnboardingInvariant(params.update);
+  return params.createCommand({
+    goto: params.node,
+    update: params.update,
+  });
+};
+
+export const buildStateUpdate = <TUpdate extends TransitionUpdate>(update: TUpdate): TUpdate => {
+  assertInputRequiredMessageInvariant(update);
+  assertTerminalOnboardingInvariant(update);
+  return update;
 };
 
 export const buildTerminalTransition = <TUpdate extends TransitionUpdate, TCommand>(params: {

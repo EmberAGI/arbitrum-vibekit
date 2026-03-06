@@ -1,11 +1,10 @@
-import type { AgentViewMetrics, AgentViewProfile, TaskState } from '../types/agent';
+import type { ThreadMetrics, ThreadProfile, TaskState } from '../types/agent';
 
 export type AgentListEntry = {
-  profile?: AgentViewProfile;
-  metrics?: AgentViewMetrics;
+  profile?: ThreadProfile;
+  metrics?: ThreadMetrics;
   taskId?: string;
   taskState?: TaskState;
-  command?: string;
   taskMessage?: string;
   haltReason?: string;
   executionError?: string;

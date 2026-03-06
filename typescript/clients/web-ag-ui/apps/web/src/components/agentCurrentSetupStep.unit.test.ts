@@ -38,13 +38,13 @@ describe('agentCurrentSetupStep', () => {
     expect(step).toBe(2);
   });
 
-  it('falls back to onboarding.step and clamps to setup-step bounds', () => {
+  it('ignores legacy onboarding.step when onboardingFlow is absent', () => {
     const step = resolveCurrentSetupStep({
       maxSetupStep: 2,
       onboarding: { step: 5, key: 'delegation-signing' },
     });
 
-    expect(step).toBe(2);
+    expect(step).toBe(1);
   });
 
   it('defaults to step 1 when no onboarding metadata is available', () => {

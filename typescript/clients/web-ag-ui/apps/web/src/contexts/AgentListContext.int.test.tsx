@@ -163,18 +163,43 @@ describe('AgentListProvider integration', () => {
     expect(latest).not.toBeNull();
 
     // Active detail route is agent-pendle, so poll updates for it must be ignored.
-    latest?.upsertAgent('agent-pendle', { command: 'sync' }, 'poll');
+    latest?.upsertAgent('agent-pendle', { taskState: 'working' }, 'poll');
     await flushEffects();
-    expect(latest?.agents['agent-pendle']?.command).toBeUndefined();
+    expect(latest?.agents['agent-pendle']?.taskState).toBeUndefined();
 
     // Detail-connect is authoritative for active detail agent.
-    latest?.upsertAgent('agent-pendle', { command: 'sync' }, 'detail-connect');
+    latest?.upsertAgent('agent-pendle', { taskState: 'working' }, 'detail-connect');
     await flushEffects();
-    expect(latest?.agents['agent-pendle']?.command).toBe('sync');
+    expect(latest?.agents['agent-pendle']?.taskState).toBe('working');
 
     // Detail-connect updates for non-active agents must be ignored.
-    latest?.upsertAgent('agent-clmm', { command: 'hire' }, 'detail-connect');
+    latest?.upsertAgent('agent-clmm', { taskState: 'working' }, 'detail-connect');
     await flushEffects();
-    expect(latest?.agents['agent-clmm']?.command).toBeUndefined();
+    expect(latest?.agents['agent-clmm']?.taskState).toBeUndefined();
+  });
+
+  it('hard-blocks agent-list polling for the active detail agent even if selection includes it', async () => {
+    const pollWithConcurrencyMock = vi.mocked(agentListPolling.pollAgentIdsWithConcurrency);
+    const pollViaAgUiMock = vi.mocked(agentListPolling.pollAgentListUpdateViaAgUi);
+    const selectAgentIdsForPollingSpy = vi.spyOn(agentListPolling, 'selectAgentIdsForPolling');
+
+    selectAgentIdsForPollingSpy.mockReturnValue(['agent-pendle']);
+    pollWithConcurrencyMock.mockImplementation(async ({ agentIds, pollAgent }) => {
+      for (const agentId of agentIds) {
+        await pollAgent(agentId);
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <AgentListProvider>
+          <div>child</div>
+        </AgentListProvider>,
+      );
+    });
+    await flushEffects();
+
+    expect(pollViaAgUiMock).not.toHaveBeenCalled();
+    selectAgentIdsForPollingSpy.mockRestore();
   });
 });

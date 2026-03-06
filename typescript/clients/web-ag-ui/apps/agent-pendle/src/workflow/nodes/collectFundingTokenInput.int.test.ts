@@ -92,7 +92,7 @@ describe('collectFundingTokenInputNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -190,7 +190,7 @@ describe('collectFundingTokenInputNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -233,7 +233,7 @@ describe('collectFundingTokenInputNode', () => {
     const result = await collectFundingTokenInputNode(state, {});
 
     expect(result).toMatchObject({
-      view: {
+      thread: {
         fundingTokenInput: { fundingTokenAddress: '0xusdc' },
         onboarding: { step: 3, key: 'delegation-signing' },
       },
@@ -289,7 +289,7 @@ describe('collectFundingTokenInputNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: 'hire',
         task: undefined,
         poolArtifact: undefined,
@@ -333,9 +333,9 @@ describe('collectFundingTokenInputNode', () => {
 
     const emittedView = (
       vi.mocked(copilotkitEmitState).mock.calls.at(-1)?.[1] as
-        | { view?: { command?: string; onboarding?: { step: number; key?: string } } }
+        | { thread?: { command?: string; onboarding?: { step: number; key?: string } } }
         | undefined
-    )?.view;
+    )?.thread;
     expect(emittedView?.command).toBe('hire');
     expect(emittedView?.onboarding).toEqual({ step: 2, key: 'funding-token' });
   });
@@ -454,7 +454,7 @@ describe('collectFundingTokenInputNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -498,7 +498,7 @@ describe('collectFundingTokenInputNode', () => {
 
     expect(interruptMock).not.toHaveBeenCalled();
     expect(result).toMatchObject({
-      view: {
+      thread: {
         fundingTokenInput: { fundingTokenAddress: UNDERLYING_ADDRESS },
         selectedPool: { marketAddress: MARKET_ADDRESS, underlyingSymbol: 'sUSDai' },
         onboarding: { step: 2, key: 'delegation-signing' },
@@ -518,7 +518,7 @@ describe('collectFundingTokenInputNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -560,7 +560,7 @@ describe('collectFundingTokenInputNode', () => {
     expect(result).toBeInstanceOf(Command);
     const commandResult = result as { goto?: string | string[]; update?: ClmmUpdate };
     expect(commandResult.goto).toEqual(expect.arrayContaining(['collectSetupInput']));
-    expect(commandResult.update?.view?.haltReason).toBeUndefined();
+    expect(commandResult.update?.thread?.haltReason).toBeUndefined();
   });
 
   it('fails when the selected token is not in allowed options', async () => {
@@ -608,7 +608,7 @@ describe('collectFundingTokenInputNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
@@ -651,7 +651,7 @@ describe('collectFundingTokenInputNode', () => {
     const result = await collectFundingTokenInputNode(state, {});
     expect(result).toBeInstanceOf(Command);
     const update = (result as { update?: ClmmUpdate }).update;
-    const haltReason: string | undefined = update?.view?.haltReason;
+    const haltReason: string | undefined = update?.thread?.haltReason;
 
     expect(haltReason).toContain('not in allowed options');
   });
@@ -709,7 +709,7 @@ describe('collectFundingTokenInputNode', () => {
         cronScheduled: false,
         bootstrapped: true,
       },
-      view: {
+      thread: {
         command: undefined,
         task: undefined,
         poolArtifact: undefined,
