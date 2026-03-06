@@ -11,6 +11,9 @@ services:
       - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.cloudflare.acme.storage=/acme/acme.json
       - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.public.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.public.acme.storage=/acme/acme.json
+      - --certificatesresolvers.public.acme.tlschallenge=true
       - --experimental.plugins.trauth.moduleName=github.com/leonjza/trauth
       - --experimental.plugins.trauth.version=v1.6.7
     ports:
