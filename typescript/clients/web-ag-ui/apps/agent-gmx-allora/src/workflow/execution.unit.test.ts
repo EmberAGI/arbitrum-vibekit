@@ -141,6 +141,77 @@ describe('executePerpetualPlan', () => {
     expect(result.error).toContain('boom');
   });
 
+  it('executes flip plans by closing the current side before opening the new side', async () => {
+    createPerpetualClose.mockResolvedValueOnce({
+      transactions: [
+        {
+          type: 'evm',
+          to: '0xclose',
+          data: '0xclose01',
+          chainId: '42161',
+          value: '0',
+        },
+      ],
+    });
+    createPerpetualShort.mockResolvedValueOnce({
+      transactions: [
+        {
+          type: 'evm',
+          to: '0xopen',
+          data: '0xopen01',
+          chainId: '42161',
+          value: '0',
+        },
+      ],
+    });
+    const plan: ExecutionPlan = {
+      action: 'flip',
+      closeRequest: {
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        marketAddress: '0xmarket',
+        positionSide: 'long',
+        isLimit: false,
+      },
+      openRequest: {
+        amount: '100',
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
+    };
+
+    const result = await executePerpetualPlan({
+      client,
+      plan,
+      txExecutionMode: 'plan',
+      delegationsBypassActive: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(createPerpetualClose).toHaveBeenCalledBefore(createPerpetualShort);
+    expect(createPerpetualClose).toHaveBeenCalledWith(plan.closeRequest);
+    expect(createPerpetualShort).toHaveBeenCalledWith(plan.openRequest);
+    expect(result.transactions).toEqual([
+      {
+        type: 'evm',
+        to: '0xclose',
+        data: '0xclose01',
+        chainId: '42161',
+        value: '0',
+      },
+      {
+        type: 'evm',
+        to: '0xopen',
+        data: '0xopen01',
+        chainId: '42161',
+        value: '0',
+      },
+    ]);
+  });
+
   it('submits transactions when tx execution mode is execute', async () => {
     executeTransactionMock.mockResolvedValueOnce({ transactionHash: '0xhash' });
     const clients = {} as OnchainClients;
