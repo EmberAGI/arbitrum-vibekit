@@ -1,7 +1,11 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
-import { isLangGraphBusyStatus, projectCycleCommandThread } from 'agent-workflow-core';
+import {
+  configureLangGraphApiCheckpointer,
+  isLangGraphBusyStatus,
+  projectCycleCommandThread,
+} from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
@@ -25,6 +29,8 @@ import { extractCommand, resolveCommandTarget, runCommandNode } from './workflow
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
+
+await configureLangGraphApiCheckpointer();
 
 function resolvePostBootstrap(
   state: ClmmState,

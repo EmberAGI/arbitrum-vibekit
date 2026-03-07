@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import {
   analyzeCycleProjectionThread,
+  configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,
   projectCycleCommandThread,
 } from 'agent-workflow-core';
@@ -47,6 +48,8 @@ const fetchRequest = globalThis.fetch as unknown as (
   input: string,
   init?: unknown,
 ) => Promise<Response>;
+
+await configureLangGraphApiCheckpointer();
 
 const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('runCommand', runCommandNode)
