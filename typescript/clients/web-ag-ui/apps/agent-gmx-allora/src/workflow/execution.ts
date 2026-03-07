@@ -2,6 +2,7 @@ import type { OnchainClients } from '../clients/clients.js';
 import {
   OnchainActionsRequestError,
   type OnchainActionsClient,
+  type PerpetualShortRequest,
   type TransactionPlan,
 } from '../clients/onchainActions.js';
 import { redeemDelegationsAndExecuteTransactions } from '../core/delegatedExecution.js';
@@ -18,6 +19,10 @@ export type ExecutionResult = {
   lastTxHash?: `0x${string}`;
   error?: string;
 };
+
+function resolveFlipSide(positionSide: 'long' | 'short' | undefined): 'long' | 'short' {
+  return positionSide === 'short' ? 'long' : 'short';
+}
 
 function normalizeHexData(value: string, label: string): `0x${string}` {
   if (!value.startsWith('0x')) {
@@ -179,11 +184,23 @@ export async function executePreparedTransactions(params: {
 }
 
 function summarizeExecutionRequest(plan: ExecutionPlan): Record<string, unknown> {
-  if (!plan.request || plan.action === 'none') {
+  if (plan.action === 'none') {
     return {};
   }
+  if (plan.action === 'flip') {
+    return {
+      closeWalletAddress: plan.closeRequest.walletAddress,
+      closeMarketAddress: plan.closeRequest.marketAddress,
+      closePositionSide: plan.closeRequest.positionSide,
+      openWalletAddress: plan.openRequest.walletAddress,
+      openMarketAddress: plan.openRequest.marketAddress,
+      nextPositionSide: resolveFlipSide(plan.closeRequest.positionSide),
+      openAmount: plan.openRequest.amount,
+      openLeverage: plan.openRequest.leverage,
+    };
+  }
   if (plan.action === 'long' || plan.action === 'short') {
-    const request = plan.request as Parameters<OnchainActionsClient['createPerpetualLong']>[0];
+    const request = plan.request;
     return {
       walletAddress: request.walletAddress,
       chainId: request.chainId,
@@ -194,7 +211,7 @@ function summarizeExecutionRequest(plan: ExecutionPlan): Record<string, unknown>
     };
   }
   if (plan.action === 'close') {
-    const request = plan.request as Parameters<OnchainActionsClient['createPerpetualClose']>[0];
+    const request = plan.request;
     return {
       walletAddress: request.walletAddress,
       marketAddress: request.marketAddress,
@@ -202,7 +219,7 @@ function summarizeExecutionRequest(plan: ExecutionPlan): Record<string, unknown>
       isLimit: request.isLimit,
     };
   }
-  const request = plan.request as Parameters<OnchainActionsClient['createPerpetualReduce']>[0];
+  const request = plan.request;
   return {
     walletAddress: request.walletAddress,
     key: request.key,
@@ -267,7 +284,7 @@ export async function executePerpetualPlan(params: {
 }): Promise<ExecutionResult> {
   const { plan } = params;
 
-  if (plan.action === 'none' || !plan.request) {
+  if (plan.action === 'none') {
     return { action: plan.action, ok: true, txHashes: [] };
   }
 
@@ -290,9 +307,7 @@ export async function executePerpetualPlan(params: {
 
   try {
     if (plan.action === 'long') {
-      const response = await params.client.createPerpetualLong(
-        plan.request as Parameters<OnchainActionsClient['createPerpetualLong']>[0],
-      );
+      const response = await params.client.createPerpetualLong(plan.request);
       logInfo('executePerpetualPlan: onchain-actions plan received', {
         action: plan.action,
         ...summarizePlannedTransactions(response.transactions),
@@ -312,9 +327,7 @@ export async function executePerpetualPlan(params: {
       };
     }
     if (plan.action === 'short') {
-      const response = await params.client.createPerpetualShort(
-        plan.request as Parameters<OnchainActionsClient['createPerpetualShort']>[0],
-      );
+      const response = await params.client.createPerpetualShort(plan.request);
       logInfo('executePerpetualPlan: onchain-actions plan received', {
         action: plan.action,
         ...summarizePlannedTransactions(response.transactions),
@@ -334,9 +347,7 @@ export async function executePerpetualPlan(params: {
       };
     }
     if (plan.action === 'reduce') {
-      const response = await params.client.createPerpetualReduce(
-        plan.request as Parameters<OnchainActionsClient['createPerpetualReduce']>[0],
-      );
+      const response = await params.client.createPerpetualReduce(plan.request);
       logInfo('executePerpetualPlan: onchain-actions plan received', {
         action: plan.action,
         ...summarizePlannedTransactions(response.transactions),
@@ -355,9 +366,39 @@ export async function executePerpetualPlan(params: {
         lastTxHash: execution.lastTxHash,
       };
     }
-    const response = await params.client.createPerpetualClose(
-      plan.request as Parameters<OnchainActionsClient['createPerpetualClose']>[0],
-    );
+    if (plan.action === 'flip') {
+      const closeResponse = await params.client.createPerpetualClose(plan.closeRequest);
+      logInfo('executePerpetualPlan: onchain-actions close plan received', {
+        action: plan.action,
+        ...summarizePlannedTransactions(closeResponse.transactions),
+      });
+      const nextPositionSide = resolveFlipSide(plan.closeRequest.positionSide);
+      const shortOpenRequest: PerpetualShortRequest = plan.openRequest;
+      const openResponse =
+        nextPositionSide === 'long'
+          ? await params.client.createPerpetualLong(plan.openRequest)
+          : await params.client.createPerpetualShort(shortOpenRequest);
+      logInfo('executePerpetualPlan: onchain-actions reopen plan received', {
+        action: plan.action,
+        nextPositionSide,
+        ...summarizePlannedTransactions(openResponse.transactions),
+      });
+      const transactions = [...closeResponse.transactions, ...openResponse.transactions];
+      const execution = await planOrExecuteTransactions({
+        txExecutionMode: params.txExecutionMode,
+        clients: params.clients,
+        transactions,
+        delegationBundle: delegation,
+      });
+      return {
+        action: plan.action,
+        ok: true,
+        transactions,
+        txHashes: execution.txHashes,
+        lastTxHash: execution.lastTxHash,
+      };
+    }
+    const response = await params.client.createPerpetualClose(plan.request);
     logInfo('executePerpetualPlan: onchain-actions plan received', {
       action: plan.action,
       ...summarizePlannedTransactions(response.transactions),

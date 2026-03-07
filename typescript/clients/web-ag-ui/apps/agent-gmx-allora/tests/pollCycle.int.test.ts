@@ -1350,24 +1350,88 @@ describe('pollCycleNode (integration)', () => {
     expect(createPerpetualReduceMock).not.toHaveBeenCalled();
   });
 
-  it('routes direction-flip decisions to createPerpetualClose', async () => {
+  it('closes and reopens within the same cycle when direction flips', async () => {
     fetchAlloraInferenceMock.mockResolvedValueOnce({
       topicId: 14,
       combinedValue: 47000,
       confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
     });
     listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
-    listPerpetualPositionsMock.mockResolvedValueOnce([]);
+    listPerpetualPositionsMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
+    createPerpetualShortMock.mockResolvedValueOnce({ transactions: [] });
 
     const state = buildBaseState();
     state.thread.metrics.previousPrice = 48000;
     state.thread.metrics.assumedPositionSide = 'long';
-    await pollCycleNode(state, {});
+    const result = await pollCycleNode(state, {});
+    const update = extractPollCycleUpdate(result);
 
     expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+    expect(createPerpetualCloseMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        marketAddress: '0xmarket',
+        positionSide: 'long',
+      }),
+    );
+    expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
+    expect(createPerpetualShortMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        marketAddress: '0xmarket',
+        leverage: '2',
+      }),
+    );
     expect(createPerpetualLongMock).not.toHaveBeenCalled();
+    expect(createPerpetualReduceMock).not.toHaveBeenCalled();
+    expect(update.thread?.metrics.pendingPositionSync).toMatchObject({
+      expectedSide: 'short',
+      sourceAction: 'flip',
+    });
+    expect(update.thread?.metrics.assumedPositionSide).toBe('short');
+  });
+
+  it('closes short and reopens long within the same cycle when direction flips bullish', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 49000,
+      confidenceIntervalValues: [48000, 48500, 49000, 49500, 50000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
+    createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
+
+    const state = buildBaseState();
+    state.thread.metrics.previousPrice = 46000;
+    state.thread.metrics.assumedPositionSide = 'short';
+    const result = await pollCycleNode(state, {});
+    const update = extractPollCycleUpdate(result);
+
+    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+    expect(createPerpetualCloseMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        marketAddress: '0xmarket',
+        positionSide: 'short',
+      }),
+    );
+    expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
+    expect(createPerpetualLongMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        marketAddress: '0xmarket',
+        leverage: '2',
+      }),
+    );
     expect(createPerpetualShortMock).not.toHaveBeenCalled();
     expect(createPerpetualReduceMock).not.toHaveBeenCalled();
+    expect(update.thread?.metrics.pendingPositionSync).toMatchObject({
+      expectedSide: 'long',
+      sourceAction: 'flip',
+    });
+    expect(update.thread?.metrics.assumedPositionSide).toBe('long');
   });
 
   it('skips a second trade when inference metrics are unchanged', async () => {

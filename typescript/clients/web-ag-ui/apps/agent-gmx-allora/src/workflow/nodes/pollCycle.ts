@@ -95,8 +95,12 @@ function buildInferenceSnapshotKey(inference: AlloraInference): string {
   });
 }
 
-function isTradePlanAction(action: 'none' | 'long' | 'short' | 'close' | 'reduce'): boolean {
+function isTradePlanAction(action: 'none' | 'long' | 'short' | 'close' | 'reduce' | 'flip'): boolean {
   return action !== 'none';
+}
+
+function resolveFlipSide(positionSide: 'long' | 'short' | undefined): 'long' | 'short' {
+  return positionSide === 'short' ? 'long' : 'short';
 }
 
 function parseUsdMetric(raw: string | undefined): number | undefined {
@@ -311,32 +315,49 @@ async function maybeAutoFundExecutionFee(params: {
     if (!fundingToken) {
       return { attempted: true, funded: false, error: 'Unable to resolve funding token for auto top-up swap.' };
     }
-    if (!params.executionPlan.request || params.executionPlan.action === 'none') {
+    if (params.executionPlan.action === 'none') {
       return { attempted: true, funded: false, error: 'No execution plan available for fee estimation.' };
     }
-    const estimatedFeeUsdRaw = await ((): Promise<number | undefined> => {
+    const estimatedFeeUsdRaw = await (async (): Promise<number | undefined> => {
+      if (params.executionPlan.action === 'flip') {
+        const closeFeeUsd = await params.onchainActionsClient.estimatePerpetualQuoteFeeUsd({
+          action: 'close',
+          request: params.executionPlan.closeRequest,
+        });
+        const openFeeUsd = await params.onchainActionsClient.estimatePerpetualQuoteFeeUsd({
+          action: resolveFlipSide(params.executionPlan.closeRequest.positionSide),
+          request: params.executionPlan.openRequest,
+        });
+        if (closeFeeUsd === undefined && openFeeUsd === undefined) {
+          return undefined;
+        }
+        return (closeFeeUsd ?? 0) + (openFeeUsd ?? 0);
+      }
       if (params.executionPlan.action === 'long') {
         return params.onchainActionsClient.estimatePerpetualQuoteFeeUsd({
           action: 'long',
-          request: params.executionPlan.request as Parameters<OnchainActionsClient['createPerpetualLong']>[0],
+          request: params.executionPlan.request,
         });
       }
       if (params.executionPlan.action === 'short') {
         return params.onchainActionsClient.estimatePerpetualQuoteFeeUsd({
           action: 'short',
-          request: params.executionPlan.request as Parameters<OnchainActionsClient['createPerpetualShort']>[0],
+          request: params.executionPlan.request,
         });
       }
       if (params.executionPlan.action === 'close') {
         return params.onchainActionsClient.estimatePerpetualQuoteFeeUsd({
           action: 'close',
-          request: params.executionPlan.request as Parameters<OnchainActionsClient['createPerpetualClose']>[0],
+          request: params.executionPlan.request,
         });
       }
-      return params.onchainActionsClient.estimatePerpetualQuoteFeeUsd({
-        action: 'reduce',
-        request: params.executionPlan.request as Parameters<OnchainActionsClient['createPerpetualReduce']>[0],
-      });
+      if (params.executionPlan.action === 'reduce') {
+        return params.onchainActionsClient.estimatePerpetualQuoteFeeUsd({
+          action: 'reduce',
+          request: params.executionPlan.request,
+        });
+      }
+      return undefined;
     })();
     const perExecutionFeeUsd =
       estimatedFeeUsdRaw && estimatedFeeUsdRaw > 0
@@ -1077,7 +1098,7 @@ export const pollCycleNode = async (
     walletAddress: planBuilderWalletAddress,
     payTokenAddress: operatorConfig.fundingTokenAddress,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
-    currentPositionSide,
+    currentPositionSide: decisionPreviousSide,
     positionContractKey: positionForReduce?.contractKey,
     positionSizeInUsd: positionForReduce?.sizeInUsd,
   });
@@ -1342,7 +1363,7 @@ export const pollCycleNode = async (
   }
   const approvalOnlyExecution =
     executionResult.ok &&
-    (executionPlan.action === 'long' || executionPlan.action === 'short') &&
+    (executionPlan.action === 'long' || executionPlan.action === 'short' || executionPlan.action === 'flip') &&
     isApprovalOnlyTransactions(executionResult.transactions);
   let lifecycleFailure: ExecutionFailureSummary | undefined;
   let lifecycleStatus: 'pending' | 'executed' | 'cancelled' | 'failed' | 'unknown' | undefined;
@@ -1475,7 +1496,7 @@ export const pollCycleNode = async (
       : executionCompletedSuccessfully && executionPlan.action === 'close'
       ? 0
       : executionCompletedSuccessfully &&
-          (executionPlan.action === 'long' || executionPlan.action === 'short')
+          (executionPlan.action === 'long' || executionPlan.action === 'short' || executionPlan.action === 'flip')
         ? adjustedTelemetry.sizeUsd
         : undefined;
   const normalizedFallbackSizeUsd =
@@ -1490,11 +1511,13 @@ export const pollCycleNode = async (
     position: positionAfterExecution,
     fallbackSizeUsd: normalizedFallbackSizeUsd,
     fallbackLeverage:
-      executionResult.ok && (executionPlan.action === 'long' || executionPlan.action === 'short')
+      executionResult.ok &&
+      (executionPlan.action === 'long' || executionPlan.action === 'short' || executionPlan.action === 'flip')
         ? latestCycle.leverage
         : undefined,
     fallbackOpenedAt:
-      executionResult.ok && (executionPlan.action === 'long' || executionPlan.action === 'short')
+      executionResult.ok &&
+      (executionPlan.action === 'long' || executionPlan.action === 'short' || executionPlan.action === 'flip')
         ? latestCycle.timestamp
         : undefined,
     previous: state.thread.metrics.latestSnapshot,
@@ -1525,6 +1548,20 @@ export const pollCycleNode = async (
       return {
         expectedSide: undefined,
         sourceAction: 'close' as const,
+        sourceIteration: iteration,
+        sourceTxHash: executionResult.lastTxHash,
+        expiresAtEpochMs: nowEpochMs + POSITION_SYNC_GUARD_WINDOW_MS,
+      };
+    }
+
+    if (executionPlan.action === 'flip') {
+      const expectedSide = resolveFlipSide(executionPlan.closeRequest.positionSide);
+      if (positionAfterExecution?.positionSide === expectedSide) {
+        return undefined;
+      }
+      return {
+        expectedSide,
+        sourceAction: 'flip' as const,
         sourceIteration: iteration,
         sourceTxHash: executionResult.lastTxHash,
         expiresAtEpochMs: nowEpochMs + POSITION_SYNC_GUARD_WINDOW_MS,
@@ -1578,6 +1615,9 @@ export const pollCycleNode = async (
     // repeat stale intent on the next cycle.
     if (executionPlan.action === 'close') {
       return undefined;
+    }
+    if (executionPlan.action === 'flip') {
+      return resolveFlipSide(executionPlan.closeRequest.positionSide);
     }
     if (executionPlan.action === 'long') {
       return 'long';

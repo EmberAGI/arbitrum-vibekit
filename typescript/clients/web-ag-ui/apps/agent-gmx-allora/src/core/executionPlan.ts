@@ -1,23 +1,26 @@
 import { parseUnits } from 'viem';
 
+import type {
+  PerpetualCloseRequest,
+  PerpetualLongRequest,
+  PerpetualReduceRequest,
+  PerpetualShortRequest,
+} from '../clients/onchainActions.js';
 import type { GmxAlloraTelemetry } from '../domain/types.js';
 
-export type ExecutionPlan = {
-  action: 'none' | 'long' | 'short' | 'close' | 'reduce';
-  request?: {
-    amount?: string;
-    walletAddress?: `0x${string}`;
-    chainId?: string;
-    marketAddress?: string;
-    payTokenAddress?: string;
-    collateralTokenAddress?: string;
-    leverage?: string;
-    positionSide?: 'long' | 'short';
-    isLimit?: boolean;
-    key?: string;
-    sizeDeltaUsd?: string;
-  };
-};
+type PerpetualOpenRequest = PerpetualLongRequest;
+
+export type ExecutionPlan =
+  | { action: 'none' }
+  | { action: 'long'; request: PerpetualLongRequest }
+  | { action: 'short'; request: PerpetualShortRequest }
+  | { action: 'close'; request: PerpetualCloseRequest }
+  | { action: 'reduce'; request: PerpetualReduceRequest }
+  | {
+      action: 'flip';
+      closeRequest: PerpetualCloseRequest;
+      openRequest: PerpetualOpenRequest;
+    };
 
 type BuildPlanParams = {
   telemetry: GmxAlloraTelemetry;
@@ -82,25 +85,40 @@ function toGmxUsdDelta(positionSizeInUsd: string | undefined): string | undefine
   return delta.toString();
 }
 
+function buildOpenRequest(params: BuildPlanParams): PerpetualOpenRequest | undefined {
+  const { telemetry } = params;
+  if (!telemetry.side || telemetry.sizeUsd === undefined || telemetry.leverage === undefined) {
+    return undefined;
+  }
+  const amount = toAmountString(telemetry.sizeUsd);
+  const leverage = formatNumber(telemetry.leverage);
+  if (!amount || !leverage) {
+    return undefined;
+  }
+
+  return {
+    amount,
+    walletAddress: params.walletAddress,
+    chainId: params.chainId,
+    marketAddress: params.marketAddress,
+    payTokenAddress: params.payTokenAddress,
+    collateralTokenAddress: params.collateralTokenAddress,
+    leverage,
+  };
+}
+
 export function buildPerpetualExecutionPlan(params: BuildPlanParams): ExecutionPlan {
   const { telemetry } = params;
 
   if (telemetry.action === 'open') {
-    if (!telemetry.side || telemetry.sizeUsd === undefined || telemetry.leverage === undefined) {
+    const request = buildOpenRequest(params);
+    if (!telemetry.side || !request?.amount) {
       return { action: 'none' };
     }
 
     return {
       action: telemetry.side === 'long' ? 'long' : 'short',
-      request: {
-        amount: toAmountString(telemetry.sizeUsd),
-        walletAddress: params.walletAddress,
-        chainId: params.chainId,
-        marketAddress: params.marketAddress,
-        payTokenAddress: params.payTokenAddress,
-        collateralTokenAddress: params.collateralTokenAddress,
-        leverage: formatNumber(telemetry.leverage),
-      },
+      request,
     };
   }
 
@@ -126,14 +144,29 @@ export function buildPerpetualExecutionPlan(params: BuildPlanParams): ExecutionP
       };
     }
 
+    const closeRequest: PerpetualCloseRequest = {
+      walletAddress: params.walletAddress,
+      marketAddress: params.marketAddress,
+      positionSide: params.currentPositionSide ?? telemetry.side,
+      isLimit: false,
+    };
+    const nextPositionSide = telemetry.side;
+    const openRequest = buildOpenRequest(params);
+    const shouldFlip =
+      params.currentPositionSide !== undefined &&
+      nextPositionSide !== params.currentPositionSide &&
+      openRequest?.amount !== undefined;
+    if (shouldFlip && openRequest) {
+      return {
+        action: 'flip',
+        closeRequest,
+        openRequest,
+      };
+    }
+
     return {
       action: 'close',
-      request: {
-        walletAddress: params.walletAddress,
-        marketAddress: params.marketAddress,
-        positionSide: params.currentPositionSide ?? telemetry.side,
-        isLimit: false,
-      },
+      request: closeRequest,
     };
   }
 

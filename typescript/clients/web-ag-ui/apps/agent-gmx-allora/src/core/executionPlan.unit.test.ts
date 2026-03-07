@@ -102,7 +102,7 @@ describe('buildPerpetualExecutionPlan', () => {
     });
   });
 
-  it('builds a close request using the current open position side', () => {
+  it('builds a same-cycle flip plan using the current open side for close and the target side for reopen', () => {
     const telemetry: GmxAlloraTelemetry = {
       cycle: 4,
       action: 'close',
@@ -124,12 +124,23 @@ describe('buildPerpetualExecutionPlan', () => {
       currentPositionSide: 'long',
     });
 
-    expect(plan.action).toBe('close');
-    expect(plan.request).toEqual({
-      walletAddress: '0xwallet',
-      marketAddress: '0xmarket',
-      positionSide: 'long',
-      isLimit: false,
+    expect(plan).toEqual({
+      action: 'flip',
+      closeRequest: {
+        walletAddress: '0xwallet',
+        marketAddress: '0xmarket',
+        positionSide: 'long',
+        isLimit: false,
+      },
+      openRequest: {
+        amount: '180000000',
+        walletAddress: '0xwallet',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
     });
   });
 
@@ -154,8 +165,12 @@ describe('buildPerpetualExecutionPlan', () => {
       collateralTokenAddress: '0xusdc',
     });
 
-    expect(plan.action).toBe('close');
-    expect(plan.request?.positionSide).toBe('short');
+    expect(plan).toMatchObject({
+      action: 'close',
+      request: {
+        positionSide: 'short',
+      },
+    });
   });
 
   it('returns none when required telemetry fields are missing', () => {
@@ -216,7 +231,11 @@ describe('buildPerpetualExecutionPlan', () => {
       collateralTokenAddress: '0xusdc',
     });
 
-    expect(plan.action).toBe('long');
-    expect(plan.request?.amount).toBe('10500000');
+    expect(plan).toMatchObject({
+      action: 'long',
+      request: {
+        amount: '10500000',
+      },
+    });
   });
 });
