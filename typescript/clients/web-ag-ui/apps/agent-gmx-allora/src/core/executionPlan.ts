@@ -26,6 +26,7 @@ type BuildPlanParams = {
   walletAddress: `0x${string}`;
   payTokenAddress: `0x${string}`;
   collateralTokenAddress: `0x${string}`;
+  currentPositionSide?: 'long' | 'short';
   positionContractKey?: string;
   positionSizeInUsd?: string;
 };
@@ -130,7 +131,7 @@ export function buildPerpetualExecutionPlan(params: BuildPlanParams): ExecutionP
       request: {
         walletAddress: params.walletAddress,
         marketAddress: params.marketAddress,
-        positionSide: telemetry.side,
+        positionSide: params.currentPositionSide ?? telemetry.side,
         isLimit: false,
       },
     };

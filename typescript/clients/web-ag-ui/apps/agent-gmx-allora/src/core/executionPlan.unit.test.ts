@@ -102,7 +102,38 @@ describe('buildPerpetualExecutionPlan', () => {
     });
   });
 
-  it('builds a close request for close actions', () => {
+  it('builds a close request using the current open position side', () => {
+    const telemetry: GmxAlloraTelemetry = {
+      cycle: 4,
+      action: 'close',
+      reason: 'Direction flipped',
+      marketSymbol: 'BTC/USDC',
+      side: 'short',
+      leverage: 2,
+      sizeUsd: 180,
+      timestamp: '2026-02-05T12:15:00.000Z',
+    };
+
+    const plan = buildPerpetualExecutionPlan({
+      telemetry,
+      chainId: '42161',
+      marketAddress: '0xmarket',
+      walletAddress: '0xwallet',
+      payTokenAddress: '0xusdc',
+      collateralTokenAddress: '0xusdc',
+      currentPositionSide: 'long',
+    });
+
+    expect(plan.action).toBe('close');
+    expect(plan.request).toEqual({
+      walletAddress: '0xwallet',
+      marketAddress: '0xmarket',
+      positionSide: 'long',
+      isLimit: false,
+    });
+  });
+
+  it('falls back to the telemetry side when the current position side is unavailable', () => {
     const telemetry: GmxAlloraTelemetry = {
       cycle: 4,
       action: 'close',
@@ -124,12 +155,7 @@ describe('buildPerpetualExecutionPlan', () => {
     });
 
     expect(plan.action).toBe('close');
-    expect(plan.request).toEqual({
-      walletAddress: '0xwallet',
-      marketAddress: '0xmarket',
-      positionSide: 'short',
-      isLimit: false,
-    });
+    expect(plan.request?.positionSide).toBe('short');
   });
 
   it('returns none when required telemetry fields are missing', () => {
