@@ -102,7 +102,49 @@ describe('buildPerpetualExecutionPlan', () => {
     });
   });
 
-  it('builds a close request for close actions', () => {
+  it('builds a same-cycle flip plan using the current open side for close and the target side for reopen', () => {
+    const telemetry: GmxAlloraTelemetry = {
+      cycle: 4,
+      action: 'close',
+      reason: 'Direction flipped',
+      marketSymbol: 'BTC/USDC',
+      side: 'short',
+      leverage: 2,
+      sizeUsd: 180,
+      timestamp: '2026-02-05T12:15:00.000Z',
+    };
+
+    const plan = buildPerpetualExecutionPlan({
+      telemetry,
+      chainId: '42161',
+      marketAddress: '0xmarket',
+      walletAddress: '0xwallet',
+      payTokenAddress: '0xusdc',
+      collateralTokenAddress: '0xusdc',
+      currentPositionSide: 'long',
+    });
+
+    expect(plan).toEqual({
+      action: 'flip',
+      closeRequest: {
+        walletAddress: '0xwallet',
+        marketAddress: '0xmarket',
+        positionSide: 'long',
+        isLimit: false,
+      },
+      openRequest: {
+        amount: '180000000',
+        walletAddress: '0xwallet',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
+    });
+  });
+
+  it('falls back to the telemetry side when the current position side is unavailable', () => {
     const telemetry: GmxAlloraTelemetry = {
       cycle: 4,
       action: 'close',
@@ -123,12 +165,11 @@ describe('buildPerpetualExecutionPlan', () => {
       collateralTokenAddress: '0xusdc',
     });
 
-    expect(plan.action).toBe('close');
-    expect(plan.request).toEqual({
-      walletAddress: '0xwallet',
-      marketAddress: '0xmarket',
-      positionSide: 'short',
-      isLimit: false,
+    expect(plan).toMatchObject({
+      action: 'close',
+      request: {
+        positionSide: 'short',
+      },
     });
   });
 
@@ -190,7 +231,11 @@ describe('buildPerpetualExecutionPlan', () => {
       collateralTokenAddress: '0xusdc',
     });
 
-    expect(plan.action).toBe('long');
-    expect(plan.request?.amount).toBe('10500000');
+    expect(plan).toMatchObject({
+      action: 'long',
+      request: {
+        amount: '10500000',
+      },
+    });
   });
 });

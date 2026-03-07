@@ -121,7 +121,7 @@ export type ClmmMetrics = {
   // Short-lived guard after successful execution while position index data catches up.
   pendingPositionSync?: {
     expectedSide?: 'long' | 'short';
-    sourceAction: 'long' | 'short' | 'close';
+    sourceAction: 'long' | 'short' | 'close' | 'flip';
     sourceIteration: number;
     sourceTxHash?: string;
     expiresAtEpochMs: number;
