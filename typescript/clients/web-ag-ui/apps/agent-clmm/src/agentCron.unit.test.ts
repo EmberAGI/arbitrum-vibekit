@@ -56,4 +56,5 @@ describe('runGraphOnce cron state update payload', () => {
       .filter((url) => url.includes(`/threads/${threadId}/state`));
     expect(calledUrls).toEqual([`http://localhost:8124/threads/${threadId}/state`]);
   });
+
 });
