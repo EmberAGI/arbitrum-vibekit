@@ -37,6 +37,82 @@ describe('clmmMessagesReducer', () => {
 });
 
 describe('CLMM thread lifecycle invariants', () => {
+  it('replaces older clmm-summary artifact events when a new summary arrives', () => {
+    const left = {
+      ...createDefaultClmmThreadState(),
+      activity: {
+        telemetry: [],
+        events: [
+          {
+            type: 'artifact' as const,
+            artifact: {
+              artifactId: 'clmm-summary',
+              name: 'clmm-summary.json',
+              parts: [{ kind: 'data' as const, data: { cycles: 24 } }],
+            },
+          },
+          {
+            type: 'status' as const,
+            message: '[Cycle 24] hold: monitoring',
+            task: {
+              id: 'task-1',
+              taskStatus: {
+                state: 'working' as const,
+                message: { id: 'msg-1', role: 'assistant' as const, content: '[Cycle 24] hold: monitoring' },
+              },
+            },
+          },
+          {
+            type: 'artifact' as const,
+            artifact: {
+              artifactId: 'clmm-summary',
+              name: 'clmm-summary.json',
+              parts: [{ kind: 'data' as const, data: { cycles: 25 } }],
+            },
+          },
+        ],
+      },
+    };
+
+    const next = reduceThreadStateForTest(left, {
+      activity: {
+        telemetry: [],
+        events: [
+          {
+            type: 'artifact',
+            artifact: {
+              artifactId: 'clmm-summary',
+              name: 'clmm-summary.json',
+              parts: [{ kind: 'data', data: { cycles: 26 } }],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(next.activity.events).toEqual([
+      {
+        type: 'status',
+        message: '[Cycle 24] hold: monitoring',
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'working',
+            message: { id: 'msg-1', role: 'assistant', content: '[Cycle 24] hold: monitoring' },
+          },
+        },
+      },
+      {
+        type: 'artifact',
+        artifact: {
+          artifactId: 'clmm-summary',
+          name: 'clmm-summary.json',
+          parts: [{ kind: 'data', data: { cycles: 26 } }],
+        },
+      },
+    ]);
+  });
+
   it('does not regress onboarding to prehire via the thread annotation reducer path', () => {
     type ThreadState = ReturnType<typeof createDefaultClmmThreadState>;
 
