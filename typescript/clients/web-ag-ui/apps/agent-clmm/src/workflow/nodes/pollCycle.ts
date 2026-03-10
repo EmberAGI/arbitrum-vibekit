@@ -40,6 +40,7 @@ import {
 import { ensureCronForThread } from '../cronScheduler.js';
 import { copilotkitEmitState } from '../emitState.js';
 import { executeDecision } from '../execution.js';
+import { writeClmmFailureLog } from '../failureLog.js';
 import {
   appendFlowLogHistory,
   appendNavSnapshotHistory,
@@ -52,6 +53,10 @@ import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 import { applyAccountingToView } from '../viewMapping.js';
 
 const DEBUG_MODE = process.env['DEBUG_MODE'] === 'true';
+const RETAINED_FAILURE_MESSAGE_MAX_LENGTH = 240;
+const LONG_HEX_PAYLOAD_PATTERN = /\b0x[a-fA-F0-9]{64,}\b/g;
+const DETAILS_LINE_PREFIX = 'Details:';
+const INSUFFICIENT_FUNDS_DETAILS_PATTERN = /(Details:\s+insufficient funds for gas \* price \+ value)[^.]*/i;
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = {
@@ -116,6 +121,37 @@ function logAccountingSummary(params: {
     params.note ? { ...summary, note: params.note } : summary,
     { detailed: true },
   );
+}
+
+export function summarizeExecutionErrorForRetention(message: string): string {
+  const lines = message
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return 'Execution failed. Full request payload omitted from retained state; see service logs.';
+  }
+
+  const firstLine = lines[0]?.replace(LONG_HEX_PAYLOAD_PATTERN, '[omitted hex payload]') ?? 'Execution failed.';
+  const detailsLine = lines.find((line) => line.startsWith(DETAILS_LINE_PREFIX));
+  const normalizedDetailsLine = detailsLine
+    ? detailsLine
+        .replace(INSUFFICIENT_FUNDS_DETAILS_PATTERN, '$1')
+        .replace(LONG_HEX_PAYLOAD_PATTERN, '[omitted hex payload]')
+    : undefined;
+
+  const summarySegments = [firstLine];
+  if (normalizedDetailsLine) {
+    summarySegments.push(normalizedDetailsLine);
+  }
+  summarySegments.push('Full request payload omitted from retained state; see service logs.');
+
+  const summary = summarySegments.join(' ').replace(/\s+/g, ' ').trim();
+  if (summary.length <= RETAINED_FAILURE_MESSAGE_MAX_LENGTH) {
+    return summary;
+  }
+  return `${summary.slice(0, RETAINED_FAILURE_MESSAGE_MAX_LENGTH - 1).trimEnd()}…`;
 }
 
 export const pollCycleNode = async (
@@ -503,6 +539,24 @@ export const pollCycleNode = async (
               emberError.upstreamStatus ? ` (upstream ${emberError.upstreamStatus})` : ''
             }${emberError.path ? ` ${emberError.path}` : ''}: ${rawMessage}`
           : rawMessage;
+        const retainedErrorMessage = summarizeExecutionErrorForRetention(errorMessage);
+        writeClmmFailureLog({
+          timestamp: new Date().toISOString(),
+          iteration,
+          action: decision.kind,
+          threadId,
+          retainedError: retainedErrorMessage,
+          fullError: errorMessage,
+          ...(emberError
+            ? {
+                emberError: {
+                  status: emberError.status,
+                  upstreamStatus: emberError.upstreamStatus,
+                  path: emberError.path,
+                },
+              }
+            : {}),
+        });
         logInfo('Action execution failed', {
           iteration,
           action: decision.kind,
@@ -521,7 +575,7 @@ export const pollCycleNode = async (
 
         const failureStatusMessage = rateLimitDetected
           ? `[Cycle ${iteration}] warning: RPC rate limit (HTTP 429). Will retry next cycle.`
-          : `[Cycle ${iteration}] ${decision.kind} FAILED: ${errorMessage}`;
+          : `[Cycle ${iteration}] ${decision.kind} FAILED: ${retainedErrorMessage}`;
         const { task: failedTask, statusEvent: failureEvent } = buildTaskStatus(
           taskState,
           'working', // Use 'working' not 'failed' - we'll retry on next cron cycle
@@ -531,7 +585,7 @@ export const pollCycleNode = async (
           thread: {
             task: failedTask,
             activity: { events: [failureEvent], telemetry: state.thread.activity.telemetry },
-            ...(rateLimitDetected ? {} : { executionError: errorMessage }),
+            ...(rateLimitDetected ? {} : { executionError: retainedErrorMessage }),
           },
         });
 
@@ -589,7 +643,7 @@ export const pollCycleNode = async (
               },
               transactionHistory: state.thread.transactionHistory,
               profile: nextProfile,
-              executionError: errorMessage, // Store error for debugging/display
+              executionError: retainedErrorMessage,
               accounting: accountingState,
             },
             private: {
