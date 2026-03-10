@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  merge_group:
+    types:
+      - checks_requested
 
 concurrency:
   group: sync-next-after-main-${{ github.ref }}
@@ -16,6 +19,7 @@ permissions:
 jobs:
   sync-next:
     name: Sync next branch
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -71,3 +75,11 @@ EOF
 
           gh pr merge --auto --merge "$pr_number" || gh pr merge --auto --rebase "$pr_number" || \
             echo "::warning::Unable to queue auto-merge for PR #$pr_number; please inspect the branch protection requirements."
+
+  acknowledge-merge-queue:
+    name: Acknowledge merge queue
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report merge queue compatibility
+        run: echo "Merge queue validation acknowledged; sync automation only runs after pushes to main."
