@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ci
     env:
-      IS_MAIN_TO_NEXT_SYNC: ${{ (github.event_name == 'pull_request' && github.head_ref == 'main' && github.base_ref == 'next') || (github.event_name == 'merge_group' && startsWith(github.ref, 'refs/heads/gh-readonly-queue/next/')) }}
+      IS_MAIN_TO_NEXT_SYNC: ${{ github.event_name == 'pull_request' && github.head_ref == 'main' && github.base_ref == 'next' }}
     steps:
       - name: Skip full CI for main-to-next sync
         if: env.IS_MAIN_TO_NEXT_SYNC == 'true'
