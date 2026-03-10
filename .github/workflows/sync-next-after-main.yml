@@ -1,0 +1,73 @@
+name: Sync Next After Main Merge
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: sync-next-after-main-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-next:
+    name: Sync next branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Open or queue the main-to-next sync PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin next
+          current_next="$(git rev-parse --verify origin/next)"
+          head_sha="$(git rev-parse HEAD)"
+
+          if [ "$current_next" = "$head_sha" ]; then
+            echo "next is already up to date with main"
+            exit 0
+          fi
+
+          if ! git merge-base --is-ancestor "$current_next" "$head_sha"; then
+            echo "::warning::origin/next has diverged from main; skipping auto-sync. Please merge main into next manually."
+            exit 0
+          fi
+
+          pr_number="$(gh pr list --base next --head main --state open --json number --jq '.[0].number // empty')"
+
+          if [ -z "$pr_number" ]; then
+            if ! gh pr create \
+              --base next \
+              --head main \
+              --title "fix(release): sync next to main" \
+              --body-file - <<'EOF'
+Automated sync PR opened after a merge to `main`.
+
+- carries the new `main` merge commit back onto `next`
+- keeps `next` from falling behind after `next` -> `main` promotions
+- uses the repository merge queue instead of direct branch pushes
+EOF
+            then
+              echo "PR creation did not succeed cleanly; checking whether another run created it."
+            fi
+
+            pr_number="$(gh pr list --base next --head main --state open --json number --jq '.[0].number // empty')"
+          fi
+
+          if [ -z "$pr_number" ]; then
+            echo "::error::Unable to find or create the sync PR from main to next."
+            exit 1
+          fi
+
+          gh pr merge --auto --merge "$pr_number" || gh pr merge --auto --rebase "$pr_number" || \
+            echo "::warning::Unable to queue auto-merge for PR #$pr_number; please inspect the branch protection requirements."
