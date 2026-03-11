@@ -1,6 +1,5 @@
 import { MemorySaver } from '@langchain/langgraph';
-
-import { pruneCheckpointerState, type CheckpointConfig } from './checkpointerPruner.js';
+import { pruneCheckpointerState, type CheckpointConfig } from 'agent-workflow-core';
 
 export class ShallowMemorySaver extends MemorySaver {
   override async put(

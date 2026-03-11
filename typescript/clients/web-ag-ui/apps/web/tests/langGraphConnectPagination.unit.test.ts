@@ -1,7 +1,3 @@
-import { existsSync, readdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
 import { describe, expect, it, vi } from 'vitest';
 
 type LangGraphAgentConstructor = new (config: {
@@ -52,18 +48,7 @@ type LangGraphAgentConstructor = new (config: {
 };
 
 async function loadLangGraphAgent(): Promise<LangGraphAgentConstructor> {
-  const pnpmDir = findPnpmStoreDir(process.cwd());
-  const packageDir = readdirSync(pnpmDir)
-    .filter((entry) => entry.startsWith('@ag-ui+langgraph@0.0.20'))
-    .sort()
-    .at(-1);
-  if (!packageDir) {
-    throw new Error('Unable to locate patched @ag-ui/langgraph package in pnpm store');
-  }
-
-  const modulePath = resolve(pnpmDir, packageDir, 'node_modules/@ag-ui/langgraph/dist/index.js');
-  const moduleUrl = pathToFileURL(modulePath).href;
-  const loaded = (await import(moduleUrl)) as unknown;
+  const loaded = (await import('@ag-ui/langgraph')) as unknown;
 
   if (
     typeof loaded !== 'object' ||
@@ -75,24 +60,6 @@ async function loadLangGraphAgent(): Promise<LangGraphAgentConstructor> {
   }
 
   return loaded.LangGraphAgent as LangGraphAgentConstructor;
-}
-
-function findPnpmStoreDir(startDir: string): string {
-  let currentDir = startDir;
-
-  while (true) {
-    const candidate = resolve(currentDir, 'node_modules/.pnpm');
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-
-    const parentDir = dirname(currentDir);
-    if (parentDir === currentDir) {
-      throw new Error(`Unable to locate pnpm store from ${startDir}`);
-    }
-
-    currentDir = parentDir;
-  }
 }
 
 describe('LangGraphAgent connect pagination', () => {
