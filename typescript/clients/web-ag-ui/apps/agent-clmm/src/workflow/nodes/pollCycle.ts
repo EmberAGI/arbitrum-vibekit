@@ -29,6 +29,7 @@ import {
   resolveAccountingContextId,
 } from '../accounting.js';
 import { buildTelemetryArtifact } from '../artifacts.js';
+import { buildClearedBlockingErrorState } from '../blockingErrors.js';
 import { getCamelotClient, getOnchainClients } from '../clientFactory.js';
 import {
   buildTaskStatus,
@@ -701,9 +702,11 @@ export const pollCycleNode = async (
 
   const cycleStatusMessage = `[Cycle ${iteration}] ${decision.kind}: ${decision.reason}${txHash ? ` (tx: ${txHash})` : ''}`;
   const { task, statusEvent } = buildTaskStatus(state.thread.task, 'working', cycleStatusMessage);
+  const clearedBlockingErrors = buildClearedBlockingErrorState();
   await copilotkitEmitState(config, {
     thread: {
       task,
+      ...clearedBlockingErrors,
       activity: { events: [statusEvent], telemetry: state.thread.activity.telemetry },
       metrics: { latestCycle: cycleTelemetry },
     },
@@ -827,6 +830,7 @@ export const pollCycleNode = async (
       thread: {
         metrics: nextMetrics,
         task,
+        ...clearedBlockingErrors,
         activity: {
           telemetry: [cycleTelemetry],
           events: [telemetryEvent, statusEvent],

@@ -760,6 +760,9 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
     updatedAt: right.lifecycle?.updatedAt ?? baseThread.lifecycle?.updatedAt,
   };
 
+  const hasExplicitHaltReason = Object.prototype.hasOwnProperty.call(right, 'haltReason');
+  const hasExplicitExecutionError = Object.prototype.hasOwnProperty.call(right, 'executionError');
+
   return {
     ...baseThread,
     ...right,
@@ -773,8 +776,8 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
     selectedPool: right.selectedPool ?? baseThread.selectedPool,
     operatorConfig: nextOperatorConfig,
     delegationBundle: nextDelegationBundle,
-    haltReason: right.haltReason ?? baseThread.haltReason,
-    executionError: right.executionError ?? baseThread.executionError,
+    haltReason: hasExplicitHaltReason ? right.haltReason : baseThread.haltReason,
+    executionError: hasExplicitExecutionError ? right.executionError : baseThread.executionError,
     delegationsBypassActive: nextDelegationsBypassActive,
     profile: nextProfile,
     activity: {
