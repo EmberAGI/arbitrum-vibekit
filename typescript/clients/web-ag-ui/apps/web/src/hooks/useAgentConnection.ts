@@ -49,10 +49,14 @@ import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCyc
 import { canonicalizeChainLabel } from '../utils/iconResolution';
 import { isAbortLikeError, isAgentRunning, isBusyRunError } from '../utils/runConcurrency';
 import { deriveUiState } from '../utils/deriveUiState';
+import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
+import { getAgentThreadId } from '../utils/agentThread';
 import {
   isAgentInterrupt,
   selectActiveInterrupt,
 } from '../utils/interruptSelection';
+
+const CONNECT_BUSY_RETRY_MS = 2_000;
 
 export type {
   ThreadSnapshot,
@@ -138,6 +142,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     threadId: undefined,
     clientMutationId: null,
   });
+  const [connectRetryTick, setConnectRetryTick] = useState(0);
   const pendingSyncMutationRef = useRef<{
     threadId: string | undefined;
     clientMutationId: string | null;
@@ -166,6 +171,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const nextAgentDebugIdRef = useRef(1);
   const streamOwnerIdRef = useRef<string | null>(null);
   const disconnectRequestKeyRef = useRef<string | null>(null);
+  const connectRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   if (streamOwnerIdRef.current == null) {
     streamOwnerIdRef.current = v7();
@@ -178,7 +184,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     agentId,
     updates: ['OnStateChanged'] as NonNullable<Parameters<typeof useAgent>[0]>['updates'],
   });
-  const { threadId } = useCopilotContext();
+  const { threadId: copilotThreadId } = useCopilotContext();
+  const { privyWallet } = usePrivyWalletClient();
+  const threadId = getAgentThreadId(agentId, privyWallet?.address) ?? copilotThreadId;
   const runtimeStatus = copilotkit.runtimeConnectionStatus;
 
   const { activeInterrupt, canResolve, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
@@ -211,6 +219,51 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [debugConnect],
   );
 
+  const emitConnectTrace = useCallback(
+    (event: string, payload: Record<string, unknown>) => {
+      if (!debugConnect) return;
+
+      const body = JSON.stringify({
+        ts: new Date().toISOString(),
+        event,
+        agentId,
+        threadId: threadId ?? null,
+        runtimeStatus,
+        seq: connectSeqRef.current,
+        ownerId: streamOwnerIdRef.current,
+        lastConnectedThread: lastConnectedThreadRef.current,
+        path: typeof window === 'undefined' ? undefined : window.location.pathname,
+        visibilityState: typeof document === 'undefined' ? undefined : document.visibilityState,
+        hasFocus: typeof document === 'undefined' ? undefined : document.hasFocus(),
+        payload,
+      });
+
+      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        const blob = new Blob([body], { type: 'application/json' });
+        navigator.sendBeacon('/api/agent-connect-debug', blob);
+        return;
+      }
+
+      void fetch('/api/agent-connect-debug', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body,
+        keepalive: true,
+      }).catch(() => {
+        // best-effort trace only
+      });
+    },
+    [agentId, debugConnect, runtimeStatus, threadId],
+  );
+
+  const clearConnectRetryTimer = useCallback(() => {
+    if (connectRetryTimeoutRef.current === null) return;
+    clearTimeout(connectRetryTimeoutRef.current);
+    connectRetryTimeoutRef.current = null;
+  }, []);
+
   const disconnectRuntimeStream = useCallback(
     async (params: { threadId: string | null; agent: string; reason: string }) => {
       if (!params.threadId) return;
@@ -222,12 +275,22 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           threadId: params.threadId,
           reason: params.reason,
         });
+        emitConnectTrace('disconnect-skip', {
+          agent: params.agent,
+          threadId: params.threadId,
+          reason: params.reason,
+        });
         return;
       }
 
       disconnectRequestKeyRef.current = requestKey;
       logConnectEvent('preempt-cleanup-disconnect', {
         agentId,
+        agent: params.agent,
+        threadId: params.threadId,
+        reason: params.reason,
+      });
+      emitConnectTrace('disconnect-request', {
         agent: params.agent,
         threadId: params.threadId,
         reason: params.reason,
@@ -249,7 +312,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         // Best-effort runtime-side connect teardown.
       });
     },
-    [agentId, logConnectEvent],
+    [agentId, emitConnectTrace, logConnectEvent],
   );
 
   const dispatchCommand = useCallback(
@@ -440,6 +503,14 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     };
 
     const applyProjectedState = (statePayload: unknown) => {
+      emitConnectTrace('state-apply-attempt', {
+        currentThreadId: threadIdRef.current ?? null,
+        appliedMutationId: extractAppliedMutationId(statePayload),
+        stateKeys:
+          typeof statePayload === 'object' && statePayload !== null
+            ? Object.keys(statePayload as Record<string, unknown>).slice(0, 20)
+            : null,
+      });
       const appliedMutationId = extractAppliedMutationId(statePayload);
       const pendingSyncMutation = pendingSyncMutationRef.current;
       if (
@@ -467,14 +538,31 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           previousOnboardingStatus: previousThread?.onboardingFlow?.status,
           nextOnboardingStatus: projectedThread?.onboardingFlow?.status,
         });
+        emitConnectTrace('state-apply-success', {
+          currentThreadId: threadIdRef.current ?? null,
+          previousTaskId: previousThread?.task?.id ?? null,
+          nextTaskId: projectedThread?.task?.id ?? null,
+          previousTaskState: previousThread?.task?.taskStatus?.state ?? null,
+          nextTaskState: projectedThread?.task?.taskStatus?.state ?? null,
+          previousEventCount: previousThread?.activity?.events?.length ?? null,
+          nextEventCount: projectedThread?.activity?.events?.length ?? null,
+        });
         agent.setState(projectedState);
         return;
       }
 
       if (projectDetailStateFromPayload(agent.state)) {
+        emitConnectTrace('state-apply-noop', {
+          reason: 'no-projected-state-existing-state-kept',
+          currentThreadId: threadIdRef.current ?? null,
+        });
         return;
       }
 
+      emitConnectTrace('state-apply-reset', {
+        reason: 'no-projected-state-reset-to-initial',
+        currentThreadId: threadIdRef.current ?? null,
+      });
       agent.setState(initialAgentState);
     };
 
@@ -498,25 +586,62 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       onRunFailed: (payload) => clearRunFlag(payload),
       onRunFinalized: (payload) => clearRunFlag(payload),
       onRunInitialized: (payload) => {
-        if (!shouldApplyRunScopedState(payload)) return;
+        const accepted = shouldApplyRunScopedState(payload);
+        emitConnectTrace('run-initialized', {
+          accepted,
+          inputThreadId: getInputThreadId(payload),
+          inputRunId: getInputRunId(payload),
+          currentThreadId: threadIdRef.current ?? null,
+          activeRunThreadId: activeRunRef.current.threadId ?? null,
+          activeRunId: activeRunRef.current.runId ?? null,
+        });
+        if (!accepted) return;
         rememberActiveRun(payload);
         applyProjectedState(payload.state);
       },
       onStateSnapshotEvent: (payload) => {
-        if (!shouldApplyRunScopedState(payload)) return;
+        const accepted = shouldApplyRunScopedState(payload);
+        emitConnectTrace('state-snapshot-event', {
+          accepted,
+          inputThreadId: getInputThreadId(payload),
+          inputRunId: getInputRunId(payload),
+          currentThreadId: threadIdRef.current ?? null,
+          activeRunThreadId: activeRunRef.current.threadId ?? null,
+          activeRunId: activeRunRef.current.runId ?? null,
+        });
+        if (!accepted) return;
         rememberActiveRun(payload);
         const snapshotState = extractSnapshotState(payload);
-        if (!snapshotState) return;
+        if (!snapshotState) {
+          emitConnectTrace('state-snapshot-empty', {
+            inputThreadId: getInputThreadId(payload),
+            inputRunId: getInputRunId(payload),
+          });
+          return;
+        }
         applyProjectedState(snapshotState);
       },
       onMessagesSnapshotEvent: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
+        emitConnectTrace('messages-snapshot-event', {
+          inputThreadId: getInputThreadId(payload),
+          inputRunId: getInputRunId(payload),
+          currentThreadId: threadIdRef.current ?? null,
+        });
         messagesSnapshotRef.current = true;
       },
     });
 
     return () => subscription.unsubscribe();
-  }, [agent, agentId, extractAppliedMutationId, hasStateValues, logConnectEvent, setRunInFlight]);
+  }, [
+    agent,
+    agentId,
+    emitConnectTrace,
+    extractAppliedMutationId,
+    hasStateValues,
+    logConnectEvent,
+    setRunInFlight,
+  ]);
 
   // Initial sync when thread is established - runs once per agent instance
   useEffect(() => {
@@ -661,7 +786,15 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     lastConnectedThreadRef.current = null;
     activeRunRef.current = { threadId, runId: null };
     commandSchedulerRef.current?.reset();
-  }, [threadId, setRunInFlight]);
+    clearConnectRetryTimer();
+  }, [threadId, clearConnectRetryTimer, setRunInFlight]);
+
+  useEffect(() => {
+    emitConnectTrace('runtime-status', {
+      agent: getAgentDebugId(agent),
+      runtimeStatus,
+    });
+  }, [agent, emitConnectTrace, getAgentDebugId, runtimeStatus]);
 
   useEffect(() => {
     if (!agent) return;
@@ -679,10 +812,24 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       threadId: lastConnectedThreadRef.current,
       runtimeStatus,
     });
+    emitConnectTrace('runtime-disconnected-cleanup', {
+      agent: getAgentDebugId(agent),
+      threadId: lastConnectedThreadRef.current,
+      runtimeStatus,
+    });
 
     lastConnectedThreadRef.current = null;
     messagesSnapshotRef.current = false;
-  }, [agent, runtimeStatus, agentId, getAgentDebugId, logConnectEvent]);
+    clearConnectRetryTimer();
+  }, [
+    agent,
+    runtimeStatus,
+    agentId,
+    clearConnectRetryTimer,
+    emitConnectTrace,
+    getAgentDebugId,
+    logConnectEvent,
+  ]);
 
   useEffect(() => {
     if (!threadId || !agent) return;
@@ -716,9 +863,30 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         agent: getAgentDebugId(currentAgent),
         hasConnectAgent,
       });
+      emitConnectTrace('connect-start', {
+        seq: connectSeq,
+        agent: getAgentDebugId(currentAgent),
+        hasConnectAgent,
+      });
 
-      void copilotkit.connectAgent({ agent: currentAgent }).catch(() => {
-        // Errors are already reported via CopilotKit core subscribers.
+      void copilotkit.connectAgent({ agent: currentAgent }).catch((error: unknown) => {
+        emitConnectTrace('connect-error', {
+          seq: connectSeq,
+          agent: getAgentDebugId(currentAgent),
+          error: error instanceof Error ? error.message : String(error),
+          busy: isBusyRunError(error),
+          canceled,
+        });
+        if (!isBusyRunError(error) || canceled) {
+          return;
+        }
+
+        lastConnectedThreadRef.current = null;
+        clearConnectRetryTimer();
+        connectRetryTimeoutRef.current = setTimeout(() => {
+          connectRetryTimeoutRef.current = null;
+          setConnectRetryTick((value) => value + 1);
+        }, CONNECT_BUSY_RETRY_MS);
       });
     };
 
@@ -726,10 +894,15 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
     return () => {
       canceled = true;
+      clearConnectRetryTimer();
       logConnectEvent('effect-cleanup', {
         agentId,
         seq: connectSeq,
         threadId,
+        agent: getAgentDebugId(agentRef.current),
+      });
+      emitConnectTrace('connect-effect-cleanup', {
+        seq: connectSeq,
         agent: getAgentDebugId(agentRef.current),
       });
       void releaseAgentStreamOwner(ownerId);
@@ -738,8 +911,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     threadId,
     agent,
     runtimeStatus,
+    connectRetryTick,
     copilotkit,
     agentId,
+    clearConnectRetryTimer,
+    emitConnectTrace,
     getAgentDebugId,
     logConnectEvent,
   ]);
@@ -772,7 +948,41 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const activity = uiState.activity ?? defaultActivity;
   const transactionHistory = uiState.transactionHistory ?? [];
   const events = activity.events ?? [];
+  const eventCount = events.length;
+  const latestEvent = eventCount > 0 ? events[eventCount - 1] : null;
+  const latestEventId =
+    latestEvent?.type === 'status'
+      ? latestEvent.task.id
+      : latestEvent?.type === 'artifact'
+        ? latestEvent.artifact.id ?? latestEvent.artifact.artifactId ?? null
+        : latestEvent?.type === 'dispatch-response'
+          ? latestEvent.parts[0]?.kind ?? null
+          : null;
   const settings = currentState.settings ?? defaultSettings;
+
+  useEffect(() => {
+    emitConnectTrace('state-applied', {
+      taskId: threadState.task?.id ?? null,
+      taskState: threadState.task?.taskStatus.state ?? null,
+      taskMessage:
+        typeof threadState.task?.taskStatus.message === 'string'
+          ? threadState.task.taskStatus.message
+          : null,
+      activityEventCount: eventCount,
+      latestEventId,
+      executionError: threadState.executionError ?? null,
+      haltReason: threadState.haltReason ?? null,
+    });
+  }, [
+    eventCount,
+    emitConnectTrace,
+    latestEventId,
+    threadState.executionError,
+    threadState.haltReason,
+    threadState.task?.id,
+    threadState.task?.taskStatus.message,
+    threadState.task?.taskStatus.state,
+  ]);
 
   const mergeUniqueStrings = (params: {
     primary: string[];
