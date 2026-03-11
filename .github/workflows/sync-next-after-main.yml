@@ -54,13 +54,7 @@ jobs:
               --base next \
               --head main \
               --title "fix(release): sync next to main" \
-              --body-file - <<'EOF'
-Automated sync PR opened after a merge to `main`.
-
-- carries the new `main` merge commit back onto `next`
-- keeps `next` from falling behind after `next` -> `main` promotions
-- uses the repository merge queue instead of direct branch pushes
-EOF
+              --body $'Automated sync PR opened after a merge to `main`.\n\n- carries the new `main` merge commit back onto `next`\n- keeps `next` from falling behind after `next` -> `main` promotions\n- uses the repository merge queue instead of direct branch pushes'
             then
               echo "PR creation did not succeed cleanly; checking whether another run created it."
             fi
