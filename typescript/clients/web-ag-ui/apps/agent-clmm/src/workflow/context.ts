@@ -366,6 +366,34 @@ const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
   return [...left, ...right];
 };
 
+function isClmmSummaryArtifactEvent(event: ClmmEvent): boolean {
+  return event.type === 'artifact' && event.artifact.artifactId === 'clmm-summary';
+}
+
+function mergeActivityEvents(left: ClmmEvent[], right?: ClmmEvent[]): ClmmEvent[] {
+  const merged = mergeAppendOrReplace(left, right);
+  if (!right?.some(isClmmSummaryArtifactEvent)) {
+    return merged;
+  }
+
+  let latestSummaryIndex = -1;
+  for (let index = merged.length - 1; index >= 0; index -= 1) {
+    const event = merged[index];
+    if (event && isClmmSummaryArtifactEvent(event)) {
+      latestSummaryIndex = index;
+      break;
+    }
+  }
+
+  if (latestSummaryIndex < 0) {
+    return merged;
+  }
+
+  return merged.filter(
+    (event, index) => !isClmmSummaryArtifactEvent(event) || index === latestSummaryIndex,
+  );
+}
+
 const limitHistory = <T>(items: T[], limit: number): T[] => {
   if (limit <= 0 || items.length <= limit) {
     return items;
@@ -661,10 +689,7 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
     mergeAppendOrReplace(baseThread.activity.telemetry, right.activity?.telemetry),
     STATE_HISTORY_LIMIT,
   );
-  const nextEvents = limitHistory(
-    mergeAppendOrReplace(baseThread.activity.events, right.activity?.events),
-    STATE_HISTORY_LIMIT,
-  );
+  const nextEvents = limitHistory(mergeActivityEvents(baseThread.activity.events, right.activity?.events), STATE_HISTORY_LIMIT);
   const nextTransactions = limitHistory(
     mergeAppendOrReplace(baseThread.transactionHistory, right.transactionHistory),
     STATE_HISTORY_LIMIT,
@@ -735,6 +760,9 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
     updatedAt: right.lifecycle?.updatedAt ?? baseThread.lifecycle?.updatedAt,
   };
 
+  const hasExplicitHaltReason = Object.prototype.hasOwnProperty.call(right, 'haltReason');
+  const hasExplicitExecutionError = Object.prototype.hasOwnProperty.call(right, 'executionError');
+
   return {
     ...baseThread,
     ...right,
@@ -748,8 +776,8 @@ const mergeThreadState = (left: ClmmThreadState, right?: Partial<ClmmThreadState
     selectedPool: right.selectedPool ?? baseThread.selectedPool,
     operatorConfig: nextOperatorConfig,
     delegationBundle: nextDelegationBundle,
-    haltReason: right.haltReason ?? baseThread.haltReason,
-    executionError: right.executionError ?? baseThread.executionError,
+    haltReason: hasExplicitHaltReason ? right.haltReason : baseThread.haltReason,
+    executionError: hasExplicitExecutionError ? right.executionError : baseThread.executionError,
     delegationsBypassActive: nextDelegationsBypassActive,
     profile: nextProfile,
     activity: {

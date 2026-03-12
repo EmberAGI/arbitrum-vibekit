@@ -47,6 +47,12 @@ export {
   projectCycleCommandThread,
   shouldPersistInputRequiredCheckpoint,
 } from './threadInvariants.js';
+export {
+  configureLangGraphApiCheckpointer,
+  loadLangGraphApiCheckpointer,
+  pruneCheckpointerState,
+  type CheckpointConfig,
+} from './langgraphCheckpointerRetention.js';
 export { isLangGraphBusyStatus } from './langGraphBusyResponse.js';
 export { createMessageHistoryReducer, mergeMessageHistory } from './messageHistory.js';
 export { decodeInterruptPayload, requestInterruptPayload } from './interruptPayload.js';

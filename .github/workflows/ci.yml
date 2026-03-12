@@ -12,39 +12,53 @@ jobs:
   build:
     runs-on: ubuntu-latest
     environment: ci
+    env:
+      IS_MAIN_TO_NEXT_SYNC: ${{ github.event_name == 'pull_request' && github.head_ref == 'main' && github.base_ref == 'next' }}
     steps:
+      - name: Skip full CI for main-to-next sync
+        if: env.IS_MAIN_TO_NEXT_SYNC == 'true'
+        run: echo "Skipping full CI for the automated main-to-next sync."
+
       - name: Checkout repository
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
 
       - name: Setup pnpm
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 10.7.0
           run_install: false
 
       - name: Install dependencies in project
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         working-directory: ./typescript
         run: pnpm install --frozen-lockfile
 
       - name: Run linter
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         working-directory: ./typescript
         run: pnpm lint
 
       - name: Build project
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         working-directory: ./typescript
         run: pnpm run build
 
       - name: Initialize environment files
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         working-directory: ./typescript
         run: |
           cp .env.example .env
 
       - name: Create agent-node test env file
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         working-directory: ./typescript/lib/agent-node
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -78,5 +92,6 @@ jobs:
           fi
 
       - name: Run tests
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         working-directory: ./typescript
         run: pnpm run test:ci

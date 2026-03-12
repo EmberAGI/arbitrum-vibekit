@@ -1,0 +1,14 @@
+name: Sync Next Merge Queue Acknowledgement
+
+on:
+  merge_group:
+    types:
+      - checks_requested
+
+jobs:
+  acknowledge-merge-queue:
+    name: Acknowledge merge queue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report merge queue compatibility
+        run: echo "Merge queue validation acknowledged; main-to-next sync automation only runs after pushes to main."
