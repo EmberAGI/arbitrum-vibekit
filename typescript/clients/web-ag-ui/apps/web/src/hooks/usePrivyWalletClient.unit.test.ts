@@ -57,6 +57,20 @@ describe('usePrivyWalletClient helpers', () => {
     ).toBeNull();
   });
 
+  it('prefers the most recent privy wallet when multiple privy wallets are present', () => {
+    const wallets = [
+      wallet({ address: '0xold', type: 'privy' }),
+      wallet({ address: '0x1111', type: 'metamask' }),
+      wallet({ address: '0xnew', type: 'privy' }),
+    ];
+
+    expect(
+      selectPrivyWallet({
+        wallets,
+      }),
+    ).toBe(wallets[2]);
+  });
+
   it('resolves query errors with provider > chain > wallet precedence', () => {
     const providerError = new Error('provider failed');
     const chainError = new Error('chain failed');

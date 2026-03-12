@@ -240,6 +240,39 @@ describe('useAgentConnection integration', () => {
     expect(mocks.agent.threadId).toBe(expectedThreadId);
   });
 
+  it('disconnects the old deterministic thread and reconnects when the privy wallet changes', async () => {
+    mocks.threadId = 'generic-copilot-thread';
+    mocks.privyWalletAddress = '0xbD70792F773a39f88b43d35bb5Aa3d5e098EfeA4';
+
+    const oldThreadId = getAgentThreadId('agent-clmm', mocks.privyWalletAddress);
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(oldThreadId).toBeTruthy();
+    expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+    expect(mocks.agent.threadId).toBe(oldThreadId);
+
+    mocks.privyWalletAddress = '0xaD53eC51a70e9a17df6752fdA80cd465457c258d';
+    const newThreadId = getAgentThreadId('agent-clmm', mocks.privyWalletAddress);
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(newThreadId).toBeTruthy();
+    expect(mocks.connectAgent).toHaveBeenCalledTimes(2);
+    expect(mocks.agent.threadId).toBe(newThreadId);
+    expect(mocks.disconnectFetch).toHaveBeenCalledTimes(1);
+    expect(readDisconnectPayload()).toEqual({
+      agentId: 'agent-clmm',
+      threadId: oldThreadId,
+    });
+  });
+
   it('falls back to the copilot context thread when no deterministic hired-agent thread is available', async () => {
     mocks.threadId = 'generic-copilot-thread';
     mocks.privyWalletAddress = null;
