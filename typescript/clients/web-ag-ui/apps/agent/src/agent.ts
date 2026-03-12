@@ -239,7 +239,7 @@ async function createRun(params: {
       },
       metadata: { source: 'cron' },
       stream_mode: ['events', 'values', 'messages'],
-      stream_resumable: true,
+      stream_resumable: false,
     }),
   });
 

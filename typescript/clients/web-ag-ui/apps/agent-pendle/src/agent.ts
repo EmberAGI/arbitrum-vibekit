@@ -258,7 +258,7 @@ async function createRun(params: {
     },
     metadata: { source: 'cron' },
     stream_mode: ['events', 'values', 'messages'],
-    stream_resumable: true,
+    stream_resumable: false,
   });
   if (!body) {
     throw new Error('[cron] Failed to serialize LangGraph run create request body');
