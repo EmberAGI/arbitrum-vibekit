@@ -1,7 +1,7 @@
 import { lazy } from 'react';
 
 // Dynamic imports for tool components
-const toolComponents = {
+export const toolComponents = {
   Swaps: lazy(() => import('@/components/tools/Swaps').then((m) => ({ default: m.Swaps }))),
   JsonViewer: lazy(() =>
     import('@/components/tools/JsonViewer').then((m) => ({
