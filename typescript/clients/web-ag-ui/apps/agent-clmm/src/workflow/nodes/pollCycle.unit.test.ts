@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ClmmState } from '../context.js';
 
-import { pollCycleNode } from './pollCycle.js';
+import { pollCycleNode, summarizeExecutionErrorForRetention } from './pollCycle.js';
 
 const { copilotkitEmitStateMock } = vi.hoisted(() => ({
   copilotkitEmitStateMock: vi.fn(),
@@ -15,6 +15,32 @@ vi.mock('@copilotkit/sdk-js/langgraph', () => ({
 describe('pollCycleNode', () => {
   afterEach(() => {
     copilotkitEmitStateMock.mockReset();
+  });
+
+  it('summarizes retained execution errors without calldata payloads', () => {
+    const fullError = [
+      'The total cost (gas * gas fee + value) of executing this transaction exceeds the balance of the account.',
+      '',
+      'Request Arguments:',
+      '  chain:  Arbitrum One (id: 42161)',
+      '  from:   0x3fd83e40F96C3c81A807575F959e55C34a40e523',
+      '  data:   0xcef6d2090000000000000000000000000000000000000000000000000000000000000060',
+      '',
+      'Details: insufficient funds for gas * price + value: address 0x3fd83e40F96C3c81A807575F959e55C34a40e523 have 1 want 2',
+      'Version: viem@2.45.1',
+    ].join('\n');
+
+    const summary = summarizeExecutionErrorForRetention(fullError);
+
+    expect(summary).toContain(
+      'The total cost (gas * gas fee + value) of executing this transaction exceeds the balance of the account.',
+    );
+    expect(summary).toContain('Details: insufficient funds for gas * price + value');
+    expect(summary).toContain('Full request payload omitted from retained state; see service logs.');
+    expect(summary).not.toContain('Request Arguments:');
+    expect(summary).not.toContain('data:');
+    expect(summary).not.toContain('0xcef6d209');
+    expect(summary.length).toBeLessThan(260);
   });
 
   it('reroutes to onboarding without mutating onboarding task state when poll prerequisites are missing', async () => {

@@ -145,6 +145,16 @@ describe('runGraphOnce integration', () => {
       getUrl(input as string | URL | Request).endsWith('/threads/thread-1/runs/run-1'),
     );
     expect(runCreateCalls).toHaveLength(1);
+    const runCreateInit = runCreateCalls[0]?.[1];
+    if (!runCreateInit || typeof runCreateInit !== 'object' || !('body' in runCreateInit)) {
+      throw new Error('Missing run create request body');
+    }
+    const bodyText = (runCreateInit as { body?: unknown }).body;
+    if (typeof bodyText !== 'string') {
+      throw new Error('Expected string run create request body');
+    }
+    const body = JSON.parse(bodyText) as { stream_resumable?: boolean };
+    expect(body.stream_resumable).toBe(false);
     expect(runStreamCalls).toHaveLength(1);
     expect(runFetchCalls).toHaveLength(1);
   });

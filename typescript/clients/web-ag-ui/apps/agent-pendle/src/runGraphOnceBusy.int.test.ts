@@ -131,6 +131,57 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 
+  it('creates non-resumable streams for successful runs', async () => {
+    const fetchMock = vi.fn((input: string | URL | Request, init?: unknown) => {
+      const url = getUrl(input);
+      const method = getMethod(init);
+
+      if (url.endsWith('/threads') && method === 'POST') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1') && method === 'PATCH') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
+        return jsonResponse({ values: { thread: READY_THREAD } });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
+        return jsonResponse({ checkpoint_id: 'cp-1' });
+      }
+      if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {
+        return jsonResponse({ run_id: 'run-1' });
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-1/stream') && method === 'GET') {
+        return new Response('event: done\n\n', { status: 200 });
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-1') && method === 'GET') {
+        return jsonResponse({ run_id: 'run-1', status: 'success' });
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    vi.resetModules();
+    const { runGraphOnce } = await import('./agent.js');
+
+    await expect(runGraphOnce('thread-1')).resolves.toBeUndefined();
+
+    const runCreateCall = fetchMock.mock.calls.find((call) =>
+      getCallUrl(call).endsWith('/threads/thread-1/runs'),
+    );
+    expect(runCreateCall).toBeDefined();
+    const runCreateInit = runCreateCall?.[1];
+    if (!runCreateInit || typeof runCreateInit !== 'object' || !('body' in runCreateInit)) {
+      throw new Error('Missing run create request body');
+    }
+    const bodyText = (runCreateInit as { body?: unknown }).body;
+    if (typeof bodyText !== 'string') {
+      throw new Error('Expected string run create request body');
+    }
+    const body = JSON.parse(bodyText) as { stream_resumable?: boolean };
+    expect(body.stream_resumable).toBe(false);
+  });
+
   it('normalizes stale onboarding input-required task state when projecting cycle command to thread state', async () => {
     const fetchMock = vi.fn((input: string | URL | Request, init?: unknown) => {
       const url = getUrl(input);

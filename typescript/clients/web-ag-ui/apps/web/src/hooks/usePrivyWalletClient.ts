@@ -45,7 +45,7 @@ export function selectPrivyWallet(params: {
   if (preferredAddress) {
     return params.wallets.find((wallet) => wallet.address.toLowerCase() === preferredAddress) ?? null;
   }
-  return params.wallets.find((wallet) => wallet.walletClientType === 'privy') ?? null;
+  return [...params.wallets].reverse().find((wallet) => wallet.walletClientType === 'privy') ?? null;
 }
 
 export function resolveWalletClientError(params: {

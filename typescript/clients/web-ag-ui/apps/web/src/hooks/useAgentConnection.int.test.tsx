@@ -8,6 +8,7 @@ import type { AgentSubscriber } from '@ag-ui/client';
 import { useAgentConnection } from './useAgentConnection';
 import type { AgentInterrupt } from '../types/agent';
 import { __resetAgentStreamCoordinatorForTests } from '../utils/agentStreamCoordinator';
+import { getAgentThreadId } from '../utils/agentThread';
 
 type TestAgent = {
   threadId: string | undefined;
@@ -49,6 +50,7 @@ const mocks = vi.hoisted(() => {
     runtimeStatuses,
     runtimeStatus: runtimeStatuses.Connected as (typeof runtimeStatuses)[keyof typeof runtimeStatuses],
     threadId: 'thread-1',
+    privyWalletAddress: null as string | null,
     agent: createAgent(),
     connectAgent: vi.fn(async () => undefined),
     runAgent: vi.fn(async () => undefined),
@@ -71,6 +73,7 @@ const mocks = vi.hoisted(() => {
     reset() {
       this.runtimeStatus = this.runtimeStatuses.Connected;
       this.threadId = 'thread-1';
+      this.privyWalletAddress = null;
       this.agent = createAgent();
       this.connectAgent.mockReset();
       this.connectAgent.mockImplementation(async () => undefined);
@@ -121,6 +124,12 @@ vi.mock('../app/hooks/useLangGraphInterruptCustomUI', () => ({
     activeInterrupt: mocks.interruptState.activeInterrupt,
     canResolve: () => mocks.interruptState.canResolve,
     resolve: mocks.interruptState.resolve,
+  }),
+}));
+
+vi.mock('../hooks/usePrivyWalletClient', () => ({
+  usePrivyWalletClient: () => ({
+    privyWallet: mocks.privyWalletAddress ? { address: mocks.privyWalletAddress } : null,
   }),
 }));
 
@@ -215,6 +224,68 @@ describe('useAgentConnection integration', () => {
     });
   });
 
+  it('prefers the deterministic hired-agent thread over the generic copilot context thread', async () => {
+    mocks.threadId = 'generic-copilot-thread';
+    mocks.privyWalletAddress = '0x9999999999999999999999999999999999999999';
+
+    const expectedThreadId = getAgentThreadId('agent-clmm', mocks.privyWalletAddress);
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(expectedThreadId).toBeTruthy();
+    expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+    expect(mocks.agent.threadId).toBe(expectedThreadId);
+  });
+
+  it('disconnects the old deterministic thread and reconnects when the privy wallet changes', async () => {
+    mocks.threadId = 'generic-copilot-thread';
+    mocks.privyWalletAddress = '0xbD70792F773a39f88b43d35bb5Aa3d5e098EfeA4';
+
+    const oldThreadId = getAgentThreadId('agent-clmm', mocks.privyWalletAddress);
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(oldThreadId).toBeTruthy();
+    expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+    expect(mocks.agent.threadId).toBe(oldThreadId);
+
+    mocks.privyWalletAddress = '0xaD53eC51a70e9a17df6752fdA80cd465457c258d';
+    const newThreadId = getAgentThreadId('agent-clmm', mocks.privyWalletAddress);
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(newThreadId).toBeTruthy();
+    expect(mocks.connectAgent).toHaveBeenCalledTimes(2);
+    expect(mocks.agent.threadId).toBe(newThreadId);
+    expect(mocks.disconnectFetch).toHaveBeenCalledTimes(1);
+    expect(readDisconnectPayload()).toEqual({
+      agentId: 'agent-clmm',
+      threadId: oldThreadId,
+    });
+  });
+
+  it('falls back to the copilot context thread when no deterministic hired-agent thread is available', async () => {
+    mocks.threadId = 'generic-copilot-thread';
+    mocks.privyWalletAddress = null;
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-clmm" />);
+    });
+    await flushEffects();
+
+    expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+    expect(mocks.agent.threadId).toBe('generic-copilot-thread');
+  });
+
   it('does not connect when runtime transport is not connected', async () => {
     mocks.runtimeStatus = mocks.runtimeStatuses.Disconnected;
 
@@ -296,6 +367,30 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(mocks.connectAgent).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries connect after a busy thread attach failure', async () => {
+    vi.useFakeTimers();
+    mocks.connectAgent
+      .mockRejectedValueOnce(new Error('Thread already running'))
+      .mockResolvedValue(undefined);
+
+    try {
+      await act(async () => {
+        root.render(<TestHarness agentId="agent-clmm" />);
+      });
+      await flushEffects();
+
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      await flushEffects();
+
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(2);
+      expect(mocks.connectAgent).toHaveBeenLastCalledWith({ agent: mocks.agent });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('saveSettings mutates local state and dispatches sync through AG-UI run', async () => {

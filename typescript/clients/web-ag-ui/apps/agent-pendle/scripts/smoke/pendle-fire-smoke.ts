@@ -167,7 +167,7 @@ const createRun = async (params: {
       config: { configurable: { thread_id: params.threadId } },
       metadata: { source: 'smoke' },
       stream_mode: ['events', 'values', 'messages'],
-      stream_resumable: true,
+      stream_resumable: false,
     }),
   });
   const payload = await parseJson(response);

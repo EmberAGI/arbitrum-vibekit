@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import {
   analyzeCycleProjectionThread,
+  configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,
   projectCycleCommandThread,
 } from 'agent-workflow-core';
@@ -37,6 +38,7 @@ import { syncStateNode } from './workflow/nodes/syncState.js';
 import { resolveNextOnboardingNode } from './workflow/onboardingRouting.js';
 
 await setupAgentLocalE2EMocksIfNeeded();
+await configureLangGraphApiCheckpointer();
 
 function logRouteDecision(
   node: string,
@@ -431,7 +433,7 @@ async function createRun(params: {
       },
       metadata: { source: 'cron' },
       stream_mode: ['events', 'values', 'messages'],
-      stream_resumable: true,
+      stream_resumable: false,
     }),
   });
 

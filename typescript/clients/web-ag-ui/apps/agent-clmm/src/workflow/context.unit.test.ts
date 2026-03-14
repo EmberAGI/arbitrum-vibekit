@@ -37,6 +37,82 @@ describe('clmmMessagesReducer', () => {
 });
 
 describe('CLMM thread lifecycle invariants', () => {
+  it('replaces older clmm-summary artifact events when a new summary arrives', () => {
+    const left = {
+      ...createDefaultClmmThreadState(),
+      activity: {
+        telemetry: [],
+        events: [
+          {
+            type: 'artifact' as const,
+            artifact: {
+              artifactId: 'clmm-summary',
+              name: 'clmm-summary.json',
+              parts: [{ kind: 'data' as const, data: { cycles: 24 } }],
+            },
+          },
+          {
+            type: 'status' as const,
+            message: '[Cycle 24] hold: monitoring',
+            task: {
+              id: 'task-1',
+              taskStatus: {
+                state: 'working' as const,
+                message: { id: 'msg-1', role: 'assistant' as const, content: '[Cycle 24] hold: monitoring' },
+              },
+            },
+          },
+          {
+            type: 'artifact' as const,
+            artifact: {
+              artifactId: 'clmm-summary',
+              name: 'clmm-summary.json',
+              parts: [{ kind: 'data' as const, data: { cycles: 25 } }],
+            },
+          },
+        ],
+      },
+    };
+
+    const next = reduceThreadStateForTest(left, {
+      activity: {
+        telemetry: [],
+        events: [
+          {
+            type: 'artifact',
+            artifact: {
+              artifactId: 'clmm-summary',
+              name: 'clmm-summary.json',
+              parts: [{ kind: 'data', data: { cycles: 26 } }],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(next.activity.events).toEqual([
+      {
+        type: 'status',
+        message: '[Cycle 24] hold: monitoring',
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'working',
+            message: { id: 'msg-1', role: 'assistant', content: '[Cycle 24] hold: monitoring' },
+          },
+        },
+      },
+      {
+        type: 'artifact',
+        artifact: {
+          artifactId: 'clmm-summary',
+          name: 'clmm-summary.json',
+          parts: [{ kind: 'data', data: { cycles: 26 } }],
+        },
+      },
+    ]);
+  });
+
   it('does not regress onboarding to prehire via the thread annotation reducer path', () => {
     type ThreadState = ReturnType<typeof createDefaultClmmThreadState>;
 
@@ -136,6 +212,46 @@ describe('CLMM thread lifecycle invariants', () => {
     expect(next.lifecycle.phase).toBe('active');
     expect(next.task?.taskStatus.state).toBe('working');
     expect(next.task?.taskStatus.message?.content).toBe('Onboarding complete. CLMM strategy is active.');
+  });
+
+  it('allows successful cycle updates to clear stale haltReason and executionError', () => {
+    const left = {
+      ...createDefaultClmmThreadState(),
+      haltReason: 'Previous execution failure',
+      executionError:
+        'The total cost (gas * gas fee + value) of executing this transaction exceeds the balance of the account.',
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'failed' as const,
+          message: {
+            id: 'msg-1',
+            role: 'assistant' as const,
+            content: 'Previous execution failed.',
+          },
+        },
+      },
+    };
+
+    const next = reduceThreadStateForTest(left, {
+      haltReason: undefined,
+      executionError: undefined,
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'working',
+          message: {
+            id: 'msg-2',
+            role: 'assistant',
+            content: '[Cycle 10467] hold: Within target band; monitoring continues',
+          },
+        },
+      },
+    });
+
+    expect(next.haltReason).toBeUndefined();
+    expect(next.executionError).toBeUndefined();
+    expect(next.task?.taskStatus.state).toBe('working');
   });
 
   it('resets stale onboarding domain state when a new hire starts', () => {

@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import {
   analyzeCycleProjectionThread,
+  configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,
   projectCycleCommandThread,
 } from 'agent-workflow-core';
@@ -47,6 +48,8 @@ const fetchRequest = globalThis.fetch as unknown as (
   input: string,
   init?: unknown,
 ) => Promise<Response>;
+
+await configureLangGraphApiCheckpointer();
 
 const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('runCommand', runCommandNode)
@@ -255,7 +258,7 @@ async function createRun(params: {
     },
     metadata: { source: 'cron' },
     stream_mode: ['events', 'values', 'messages'],
-    stream_resumable: true,
+    stream_resumable: false,
   });
   if (!body) {
     throw new Error('[cron] Failed to serialize LangGraph run create request body');

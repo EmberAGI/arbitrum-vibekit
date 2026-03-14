@@ -15,7 +15,8 @@ import {
   memory,
   normalizeHexAddress,
 } from './workflow/context.js';
-import { configureCronExecutor } from './workflow/cronScheduler.js';
+import { restorePersistedCronSchedulesFromCheckpointer } from './workflow/cronRecovery.js';
+import { configureCronExecutor, ensureCronForThread } from './workflow/cronScheduler.js';
 import {
   resolvePostBootstrap,
   resolvePostCollectDelegations,
@@ -169,7 +170,7 @@ async function createRun(params: {
       },
       metadata: { source: 'cron' },
       stream_mode: ['events', 'values', 'messages'],
-      stream_resumable: true,
+      stream_resumable: false,
     }),
   });
 
@@ -217,10 +218,7 @@ async function waitForRunStreamCompletion(params: {
   return run.status;
 }
 
-export async function runGraphOnce(
-  threadId: string,
-  options?: { durability?: LangGraphDurability },
-) {
+export async function runGraphOnce(threadId: string, options?: { durability?: LangGraphDurability }) {
   if (runningThreads.has(threadId)) {
     console.info(`[cron] Skipping tick - run already in progress (thread=${threadId})`);
     return;
@@ -273,6 +271,18 @@ export async function startClmmCron(
 }
 
 configureCronExecutor(runGraphOnce);
+try {
+  const recoveredCronThreads = await restorePersistedCronSchedulesFromCheckpointer((threadId, intervalMs) =>
+    ensureCronForThread(threadId, intervalMs),
+  );
+  if (recoveredCronThreads.length > 0) {
+    console.info('[cron] Recovered persisted cron schedules', {
+      threadIds: recoveredCronThreads.map((candidate) => candidate.threadId),
+    });
+  }
+} catch (error) {
+  console.error('[cron] Failed to recover persisted cron schedules', error);
+}
 
 const invokedAsEntryPoint =
   process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;

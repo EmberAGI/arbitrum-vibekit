@@ -2,6 +2,9 @@ import { type Artifact } from '@emberai/agent-node/workflow';
 
 import { type CamelotPool, type RebalanceTelemetry } from '../domain/types.js';
 
+const RECENT_ACTION_TIMELINE_LIMIT = 10;
+const RECENT_NON_HOLD_ACTION_LIMIT = 5;
+
 export function buildPoolArtifact(pools: CamelotPool[]): Artifact {
   return {
     artifactId: 'camelot-pools',
@@ -37,6 +40,29 @@ export function buildTelemetryArtifact(entry: RebalanceTelemetry): Artifact {
       },
     ],
   };
+}
+
+function buildSummaryActionsTimeline(telemetry: RebalanceTelemetry[]): Array<{
+  cycle: number;
+  action: RebalanceTelemetry['action'];
+  reason: string;
+  txHash: string | undefined;
+}> {
+  const recentEntries = telemetry.slice(-RECENT_ACTION_TIMELINE_LIMIT);
+  const selectedByCycle = new Map(recentEntries.map((entry) => [entry.cycle, entry]));
+
+  for (const entry of telemetry.filter((item) => item.action !== 'hold').slice(-RECENT_NON_HOLD_ACTION_LIMIT)) {
+    selectedByCycle.set(entry.cycle, entry);
+  }
+
+  return [...selectedByCycle.values()]
+    .sort((left, right) => left.cycle - right.cycle)
+    .map((item) => ({
+      cycle: item.cycle,
+      action: item.action,
+      reason: item.reason,
+      txHash: item.txHash,
+    }));
 }
 
 export function buildSummaryArtifact(telemetry: RebalanceTelemetry[]): Artifact {
@@ -200,12 +226,7 @@ export function buildSummaryArtifact(telemetry: RebalanceTelemetry[]): Artifact 
         kind: 'data',
         data: {
           cycles: telemetry.length,
-          actionsTimeline: telemetry.map((item) => ({
-            cycle: item.cycle,
-            action: item.action,
-            reason: item.reason,
-            txHash: item.txHash,
-          })),
+          actionsTimeline: buildSummaryActionsTimeline(telemetry),
           actionCounts: actions,
           rebalanceCount,
           rebalanceCadence: {

@@ -12,6 +12,8 @@ const disconnectPayloadSchema = z.object({
   agentId: z.string().min(1),
   threadId: z.string().min(1),
 });
+const shouldLogAgentConnectDebug =
+  process.env.AGENT_CONNECT_DEBUG === 'true' || process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === 'true';
 
 function getConnectAbortersByThread(): ConnectAbortersByThread | null {
   const runtimeGlobals = globalThis as RuntimeGlobals;
@@ -50,6 +52,13 @@ export async function POST(req: NextRequest): Promise<Response> {
   const abortersByThread = getConnectAbortersByThread();
   const aborters = abortersByThread?.get(connectKey);
   if (!aborters || aborters.size === 0) {
+    if (shouldLogAgentConnectDebug) {
+      console.info('[agent-disconnect]', {
+        agentId,
+        threadId,
+        abortedCount: 0,
+      });
+    }
     return Response.json({
       ok: true,
       abortedCount: 0,
@@ -66,6 +75,14 @@ export async function POST(req: NextRequest): Promise<Response> {
     } catch {
       // best-effort disconnect
     }
+  }
+
+  if (shouldLogAgentConnectDebug) {
+    console.info('[agent-disconnect]', {
+      agentId,
+      threadId,
+      abortedCount,
+    });
   }
 
   return Response.json({
