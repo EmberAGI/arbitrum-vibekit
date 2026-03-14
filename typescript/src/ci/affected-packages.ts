@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -85,6 +85,20 @@ function normalizePathRule(rule: string): string {
   return usesPrefixMatch ? `${normalized}/` : normalized;
 }
 
+function relativizeToWorkspaceRoot(changedFile: string, workspaceRootRelativePath: string): string {
+  if (workspaceRootRelativePath.length === 0) {
+    return changedFile;
+  }
+
+  const workspacePrefix = `${workspaceRootRelativePath}/`;
+
+  if (changedFile.startsWith(workspacePrefix)) {
+    return changedFile.slice(workspacePrefix.length);
+  }
+
+  return changedFile;
+}
+
 function isWithinPackage(changedFile: string, rootRelativeDir: string): boolean {
   if (rootRelativeDir === "") {
     return true;
@@ -114,6 +128,12 @@ export async function listChangedFilesFromGit(
   options: ChangedFilesFromGitOptions,
 ): Promise<string[]> {
   const headRef = options.headRef ?? "HEAD";
+  const { stdout: repoRootStdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: options.workspaceRoot,
+  });
+  const repoRoot = await realpath(repoRootStdout.trim());
+  const workspaceRoot = await realpath(options.workspaceRoot);
+  const workspaceRootRelativePath = normalizePath(path.relative(repoRoot, workspaceRoot));
   const { stdout } = await execFileAsync(
     "git",
     ["diff", "--name-only", `${options.baseRef}...${headRef}`],
@@ -125,6 +145,7 @@ export async function listChangedFilesFromGit(
   return stdout
     .split(/\r?\n/u)
     .map(normalizePath)
+    .map((changedFile) => relativizeToWorkspaceRoot(changedFile, workspaceRootRelativePath))
     .filter((changedFile) => changedFile.length > 0);
 }
 

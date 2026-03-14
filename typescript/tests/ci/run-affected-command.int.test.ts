@@ -157,4 +157,101 @@ describe("run-affected-command CLI", () => {
       await rm(workspaceRoot, { force: true, recursive: true });
     }
   });
+
+  it("runs package commands correctly when git paths come from a nested workspace root", async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), "affected-runner-nested-"));
+    const workspaceRoot = path.join(repoRoot, "typescript");
+    const runLogPath = path.join(workspaceRoot, "run.log");
+
+    try {
+      await mkdir(path.join(workspaceRoot, "packages/core/src"), { recursive: true });
+      await writeFile(
+        path.join(workspaceRoot, "package.json"),
+        JSON.stringify({
+          name: "monorepo-root",
+          private: true,
+          scripts: {
+            "build:root": createRecorderScript("root:build"),
+            "lint:root": createRecorderScript("root:lint"),
+            "test:ci:root": createRecorderScript("root:test:ci"),
+          },
+        }),
+      );
+      await writeFile(
+        path.join(workspaceRoot, "pnpm-workspace.yaml"),
+        "packages:\n  - 'packages/*'\n",
+      );
+      await writeFile(
+        path.join(workspaceRoot, "packages/core/package.json"),
+        JSON.stringify({
+          name: "core",
+          private: true,
+          scripts: {
+            build: createRecorderScript("core:build"),
+            lint: createRecorderScript("core:lint"),
+            "test:ci": createRecorderScript("core:test:ci"),
+          },
+        }),
+      );
+      await writeFile(
+        path.join(workspaceRoot, "packages/core/src/index.ts"),
+        "export const core = true;\n",
+      );
+
+      await execFileAsync("git", ["init", "--initial-branch=main"], {
+        cwd: repoRoot,
+      });
+      await execFileAsync("git", ["config", "user.name", "Codex"], {
+        cwd: repoRoot,
+      });
+      await execFileAsync("git", ["config", "user.email", "codex@example.com"], {
+        cwd: repoRoot,
+      });
+      await execFileAsync("git", ["add", "."], {
+        cwd: repoRoot,
+      });
+      await execFileAsync("git", ["commit", "-m", "initial"], {
+        cwd: repoRoot,
+      });
+
+      await writeFile(
+        path.join(workspaceRoot, "packages/core/src/index.ts"),
+        "export const core = false;\n",
+      );
+      await execFileAsync("git", ["add", "."], {
+        cwd: repoRoot,
+      });
+      await execFileAsync("git", ["commit", "-m", "change core"], {
+        cwd: repoRoot,
+      });
+
+      await execFileAsync(
+        "pnpm",
+        [
+          "exec",
+          "tsx",
+          "src/ci/run-affected-command.ts",
+          "--workspace-root",
+          workspaceRoot,
+          "--command",
+          "lint",
+          "--base-ref",
+          "HEAD~1",
+          "--head-ref",
+          "HEAD",
+        ],
+        {
+          cwd: path.resolve(import.meta.dirname, "../.."),
+          env: {
+            ...process.env,
+            RUN_LOG: runLogPath,
+          },
+        },
+      );
+
+      expect(await readFile(runLogPath, "utf8")).toBe("core:lint\n");
+    } finally {
+      await rm(repoRoot, { force: true, recursive: true });
+    }
+  });
 });

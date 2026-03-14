@@ -153,4 +153,88 @@ describe("detect-affected-packages CLI", () => {
       await rm(workspaceRoot, { force: true, recursive: true });
     }
   });
+
+  it("normalizes git diff paths for a nested workspace root", async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), "affected-cli-nested-"));
+    const workspaceRoot = path.join(repoRoot, "typescript");
+
+    try {
+      await mkdir(path.join(workspaceRoot, "packages/core/src"), { recursive: true });
+      await writeFile(
+        path.join(workspaceRoot, "package.json"),
+        JSON.stringify({
+          name: "monorepo-root",
+          version: "1.0.0",
+        }),
+      );
+      await writeFile(
+        path.join(workspaceRoot, "pnpm-workspace.yaml"),
+        "packages:\n  - 'packages/*'\n",
+      );
+      await writeFile(
+        path.join(workspaceRoot, "packages/core/package.json"),
+        JSON.stringify({
+          name: "core",
+          version: "1.0.0",
+        }),
+      );
+      await writeFile(
+        path.join(workspaceRoot, "packages/core/src/index.ts"),
+        "export const version = 'v1';\n",
+      );
+
+      await execFileAsync("git", ["init", "--initial-branch=main"], {
+        cwd: repoRoot,
+      });
+      await execFileAsync("git", ["config", "user.name", "Codex"], {
+        cwd: repoRoot,
+      });
+      await execFileAsync("git", ["config", "user.email", "codex@example.com"], {
+        cwd: repoRoot,
+      });
+      await execFileAsync("git", ["add", "."], {
+        cwd: repoRoot,
+      });
+      await execFileAsync("git", ["commit", "-m", "initial"], {
+        cwd: repoRoot,
+      });
+
+      await writeFile(
+        path.join(workspaceRoot, "packages/core/src/index.ts"),
+        "export const version = 'v2';\n",
+      );
+      await execFileAsync("git", ["add", "."], {
+        cwd: repoRoot,
+      });
+      await execFileAsync("git", ["commit", "-m", "change core"], {
+        cwd: repoRoot,
+      });
+
+      const { stdout } = await execFileAsync(
+        "pnpm",
+        [
+          "exec",
+          "tsx",
+          "src/ci/detect-affected-packages.ts",
+          "--workspace-root",
+          workspaceRoot,
+          "--base-ref",
+          "HEAD~1",
+          "--head-ref",
+          "HEAD",
+        ],
+        {
+          cwd: path.resolve(import.meta.dirname, "../.."),
+        },
+      );
+
+      expect(JSON.parse(stdout)).toEqual({
+        scope: "partial",
+        selectedPackageDirs: ["packages/core"],
+        selectedPackageNames: ["core"],
+      });
+    } finally {
+      await rm(repoRoot, { force: true, recursive: true });
+    }
+  });
 });
