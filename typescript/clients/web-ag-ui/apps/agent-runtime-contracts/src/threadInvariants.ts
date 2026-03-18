@@ -1,4 +1,4 @@
-import type { TaskState } from './taskLifecycle.js';
+import type { TaskState } from './taskState.js';
 
 type ThreadRecord = Record<string, unknown>;
 type MaybeThreadRecord = ThreadRecord | null;

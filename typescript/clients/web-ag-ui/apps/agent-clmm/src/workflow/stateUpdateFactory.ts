@@ -1,4 +1,4 @@
-import { buildStateUpdate } from 'agent-workflow-core';
+import { buildStateUpdate } from 'agent-runtime-contracts';
 
 import { logClmmStateEmission } from './context.js';
 

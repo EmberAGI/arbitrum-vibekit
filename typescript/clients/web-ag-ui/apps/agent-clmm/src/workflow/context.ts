@@ -10,11 +10,13 @@ import {
   isTaskTerminalState,
   mergeThreadPatchForEmit,
   normalizeStaleOnboardingTask,
-  normalizeLegacyOnboardingState,
   resolveThreadLifecyclePhase,
-  type OnboardingContract,
   type TaskState,
   type ThreadLifecyclePhase,
+} from 'agent-runtime-contracts';
+import {
+  normalizeLegacyOnboardingState,
+  type OnboardingContract,
 } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 

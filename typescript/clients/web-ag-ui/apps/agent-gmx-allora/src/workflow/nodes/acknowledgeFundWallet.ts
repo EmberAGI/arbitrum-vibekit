@@ -5,7 +5,7 @@ import {
   requestInterruptPayload,
   buildTerminalTransition,
   shouldPersistInputRequiredCheckpoint,
-} from 'agent-workflow-core';
+} from 'agent-runtime-contracts';
 import { z } from 'zod';
 
 import {

@@ -6,7 +6,7 @@ import {
   buildNodeTransition,
   requestInterruptPayload,
   shouldPersistInputRequiredCheckpoint,
-} from 'agent-workflow-core';
+} from 'agent-runtime-contracts';
 import { z } from 'zod';
 
 import type { Token, TokenizedYieldMarket } from '../../clients/onchainActions.js';

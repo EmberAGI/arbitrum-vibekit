@@ -5,7 +5,7 @@ import {
   buildNodeTransition,
   buildStateUpdate,
   buildTerminalTransition,
-} from './index';
+} from './index.js';
 
 describe('transitionCommands', () => {
   it('builds an interrupt pause transition that self-loops to the same node', () => {

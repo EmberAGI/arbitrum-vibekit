@@ -1,11 +1,11 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
+import { projectCycleCommandThread } from 'agent-runtime-contracts';
 import {
   configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,
-  projectCycleCommandThread,
-} from 'agent-workflow-core';
+} from 'agent-runtime-langgraph';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 

@@ -1,5 +1,5 @@
 {
-  "name": "agent-workflow-core",
+  "name": "agent-runtime-contracts",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -23,9 +23,5 @@
     "@types/node": "^22.19.2",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
-  },
-  "dependencies": {
-    "agent-runtime-contracts": "workspace:^",
-    "agent-runtime-langgraph": "workspace:^"
   }
 }

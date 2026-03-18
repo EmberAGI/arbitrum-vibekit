@@ -1,5 +1,5 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import type { TaskState } from 'agent-workflow-core';
+import type { TaskState } from 'agent-runtime-contracts';
 
 import { fetchAlloraInference, type AlloraInference } from '../../clients/allora.js';
 import {
