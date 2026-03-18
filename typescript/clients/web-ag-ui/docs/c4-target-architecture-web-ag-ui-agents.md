@@ -3,6 +3,12 @@
 Status: Draft (target vision)
 Scope: `typescript/clients/web-ag-ui/apps/web` and `typescript/clients/web-ag-ui/apps/agent*`
 
+See also:
+
+- `docs/c4-pi-runtime-architecture-and-boundaries.md` for the Pi-backed runtime specialization of this target architecture
+- `docs/ag-ui-client-runtime-invariants.md`
+- `docs/ag-ui-frontend-backend-contract-ui-stability.md`
+
 ## 1. Why this document exists
 
 This C4 document describes the target architecture we want to converge to from the current implementation:
@@ -139,6 +145,7 @@ Explicit non-goal container:
 - `Agent Registry`:
   - Maps agent ids to runtime endpoints and capabilities.
   - Provides metadata only; does not mirror thread state.
+  - Must support multiple runtime families cleanly, including standalone Pi gateway-backed agents registered through `HttpAgent` rather than in-process runtime embedding.
 
 ### 5.3 Agent runtime components (shared pattern)
 
