@@ -60,3 +60,21 @@ export {
   buildStateUpdate,
   buildTerminalTransition,
 } from './transitionCommands.js';
+export {
+  getCoreRuntimeTableName,
+  piRuntimePersistenceModel,
+  type PiRuntimeHistoryRecord,
+  type PiRuntimeLayering,
+  type PiRuntimePersistenceModel,
+  type PiRuntimeSupportingRecord,
+  type PiRuntimeTableDefinition,
+  type PiRuntimeTransactionBoundary,
+  type PiRuntimeTransactionBoundaryName,
+} from './piRuntimePersistence.js';
+export {
+  getPersistenceTargetsForSource,
+  piCorePersistenceMappings,
+  type PiCorePersistenceMapping,
+  type PiCorePersistenceSource,
+  type PiDurableRuntimeRecord,
+} from './piCorePersistenceMapping.js';
