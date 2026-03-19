@@ -15,6 +15,7 @@ const workspacePatterns = [
 ];
 
 const tsProjectPaths = [
+  "./tsconfig.json",
   "./tsconfig.base.json",
   ...workspacePatterns.flatMap(pattern =>
     globSync(`${pattern}/tsconfig.json`, { ignore: "**/node_modules/**" })

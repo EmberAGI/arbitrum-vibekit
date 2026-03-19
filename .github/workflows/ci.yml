@@ -22,12 +22,8 @@ jobs:
       - name: Checkout repository
         if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
-        uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          fetch-depth: 0
 
       - name: Setup pnpm
         if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
@@ -35,6 +31,37 @@ jobs:
         with:
           version: 10.7.0
           run_install: false
+
+      - name: Setup Node.js
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: ./typescript/pnpm-lock.yaml
+
+      - name: Fetch PR base ref
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true' && github.event_name == 'pull_request'
+        working-directory: ./typescript
+        run: git fetch --no-tags origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+
+      - name: Determine CI scope
+        if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
+        id: ci_scope
+        working-directory: ./typescript
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "mode=affected" >> "$GITHUB_OUTPUT"
+            echo "base_ref=origin/${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
+            echo "head_ref=HEAD" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "merge_group" ]; then
+            # merge_group checks out the synthetic queue merge commit.
+            echo "mode=affected" >> "$GITHUB_OUTPUT"
+            echo "base_ref=HEAD^1" >> "$GITHUB_OUTPUT"
+            echo "head_ref=HEAD" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install dependencies in project
         if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
@@ -44,12 +71,30 @@ jobs:
       - name: Run linter
         if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         working-directory: ./typescript
-        run: pnpm lint
+        run: |
+          if [ "${{ steps.ci_scope.outputs.mode }}" = "affected" ]; then
+            pnpm exec tsx src/ci/run-affected-command.ts \
+              --workspace-root . \
+              --command lint \
+              --base-ref "${{ steps.ci_scope.outputs.base_ref }}" \
+              --head-ref "${{ steps.ci_scope.outputs.head_ref }}"
+          else
+            pnpm lint
+          fi
 
       - name: Build project
         if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         working-directory: ./typescript
-        run: pnpm run build
+        run: |
+          if [ "${{ steps.ci_scope.outputs.mode }}" = "affected" ]; then
+            pnpm exec tsx src/ci/run-affected-command.ts \
+              --workspace-root . \
+              --command build \
+              --base-ref "${{ steps.ci_scope.outputs.base_ref }}" \
+              --head-ref "${{ steps.ci_scope.outputs.head_ref }}"
+          else
+            pnpm run build
+          fi
 
       - name: Initialize environment files
         if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
@@ -94,4 +139,13 @@ jobs:
       - name: Run tests
         if: env.IS_MAIN_TO_NEXT_SYNC != 'true'
         working-directory: ./typescript
-        run: pnpm run test:ci
+        run: |
+          if [ "${{ steps.ci_scope.outputs.mode }}" = "affected" ]; then
+            pnpm exec tsx src/ci/run-affected-command.ts \
+              --workspace-root . \
+              --command test:ci \
+              --base-ref "${{ steps.ci_scope.outputs.base_ref }}" \
+              --head-ref "${{ steps.ci_scope.outputs.head_ref }}"
+          else
+            pnpm run test:ci
+          fi
