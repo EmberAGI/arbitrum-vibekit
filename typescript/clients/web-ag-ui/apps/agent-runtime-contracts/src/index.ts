@@ -2,6 +2,30 @@ export { extractCommandEnvelopeFromMessages, extractCommandFromMessages, type Co
 export { decodeInterruptPayload, requestInterruptPayload } from './interruptPayload.js';
 export { createMessageHistoryReducer, mergeMessageHistory } from './messageHistory.js';
 export {
+  defineAgentDomainModule,
+  getDomainCommandNames,
+  getDomainInterruptTypes,
+  getProjectionHookNames,
+  type AgentDomainModule,
+  type CoreRuntimeRecord,
+  type DomainAutomationPolicyHookDefinition,
+  type DomainCommandDefinition,
+  type DomainInterruptDefinition,
+  type DomainJsonSchema,
+  type DomainLifecycleDefinition,
+  type DomainLifecycleTransition,
+  type DomainProjectionHookDefinition,
+  type DomainProjectionHookName,
+  type DomainRuntimeBoundary,
+  type DomainTransitionTrigger,
+} from './domainModule.js';
+export {
+  DEFI_LIFECYCLE_COMMANDS,
+  DEFI_LIFECYCLE_INTERRUPTS,
+  DEFI_LIFECYCLE_PHASES,
+  defiLifecycleDomainModule,
+} from './defiLifecycleModule.js';
+export {
   assertProjectionIdentityTransition,
   buildProjectionIdentitySnapshot,
   type A2AProjectionIdentity,
