@@ -3,13 +3,9 @@ import {
   buildOnboardingContractFromLegacyStep,
   finalizeOnboardingContract,
   type OnboardingContract,
+  type LegacyOnboardingState,
   type OnboardingStepDefinition,
 } from 'agent-workflow-core';
-
-type LegacyOnboardingState = {
-  step: number;
-  key?: string;
-};
 
 const BASE_STEPS: readonly OnboardingStepDefinition[] = [
   { id: 'setup', title: 'Agent Preferences' },
