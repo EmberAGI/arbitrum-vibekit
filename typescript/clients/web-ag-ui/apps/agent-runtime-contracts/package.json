@@ -23,5 +23,8 @@
     "@types/node": "^22.19.2",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "@a2a-js/sdk": "^0.3.4"
   }
 }
