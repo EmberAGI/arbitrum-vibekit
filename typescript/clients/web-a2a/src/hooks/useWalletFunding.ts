@@ -50,7 +50,9 @@ export function useWalletFunding(walletId: string | null): UseWalletFundingRetur
     if (!walletId) return;
     const storageKey = `${FUNDED_STORAGE_PREFIX}${walletId}`;
     const stored = localStorage.getItem(storageKey);
-    setIsFundedFromStorage(stored === 'true');
+    queueMicrotask(() => {
+      setIsFundedFromStorage(stored === 'true');
+    });
   }, [walletId]);
 
   // Query to check if wallet can be funded
