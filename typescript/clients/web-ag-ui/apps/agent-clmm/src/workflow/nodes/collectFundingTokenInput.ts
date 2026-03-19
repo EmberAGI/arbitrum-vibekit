@@ -4,7 +4,7 @@ import {
   buildNodeTransition,
   requestInterruptPayload,
   shouldPersistInputRequiredCheckpoint,
-} from 'agent-workflow-core';
+} from 'agent-runtime-contracts';
 import { erc20Abi, formatUnits } from 'viem';
 import { z } from 'zod';
 

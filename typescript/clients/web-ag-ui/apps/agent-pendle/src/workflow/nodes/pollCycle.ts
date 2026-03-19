@@ -1,6 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import type { Command } from '@langchain/langgraph';
-import { buildNodeTransition } from 'agent-workflow-core';
+import { buildNodeTransition } from 'agent-runtime-contracts';
 
 import {
   resolvePendleChainIds,

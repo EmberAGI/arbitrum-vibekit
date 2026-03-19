@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { decodeInterruptPayload, requestInterruptPayload } from './index';
+import { decodeInterruptPayload, requestInterruptPayload } from './index.js';
 
 describe('interruptPayload', () => {
   it('parses JSON string payloads returned by interrupt()', () => {

@@ -1,3 +1,4 @@
+import type { CommandEnvelope } from 'agent-runtime-contracts';
 import {
   extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
@@ -5,7 +6,6 @@ import {
   resolveCycleCommandTarget,
   resolveCommandTargetForBootstrappedFlow,
   type AgentCommand,
-  type CommandEnvelope,
   type CommandRoutingTarget,
 } from 'agent-workflow-core';
 
@@ -19,7 +19,7 @@ function shouldTraceCommand(command: AgentCommand | null | undefined): command i
   return command !== null && command !== undefined && TRACEABLE_COMMANDS.includes(command);
 }
 
-export function extractCommandEnvelope(messages: ClmmState['messages']): CommandEnvelope | null {
+export function extractCommandEnvelope(messages: ClmmState['messages']): CommandEnvelope<AgentCommand> | null {
   return extractCommandEnvelopeFromMessages(messages);
 }
 

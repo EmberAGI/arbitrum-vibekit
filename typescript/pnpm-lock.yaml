@@ -90,7 +90,7 @@ catalogs:
       version: 8.45.0
     viem:
       specifier: ^2.26.3
-      version: 2.38.1
+      version: 2.42.1
     vitest:
       specifier: ^3.2.4
       version: 3.2.4
@@ -445,9 +445,15 @@ importers:
       '@metamask/delegation-toolkit':
         specifier: ^0.13.0
         version: 0.13.0(viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.5))
+      agent-runtime-contracts:
+        specifier: workspace:^
+        version: link:../agent-runtime-contracts
+      agent-runtime-langgraph:
+        specifier: workspace:^
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
-        version: link:../agent-workflow-core
+        version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
@@ -493,7 +499,7 @@ importers:
         version: 4.4.4(eslint-plugin-import@2.32.0)(eslint@9.39.2(jiti@2.6.1))
       eslint-plugin-import:
         specifier: 2.32.0
-        version: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1))
+        version: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@4.4.4)(eslint@9.39.2(jiti@2.6.1))
       prettier:
         specifier: 'catalog:'
         version: 3.6.2
@@ -539,9 +545,15 @@ importers:
       '@metamask/delegation-toolkit':
         specifier: ^0.13.0
         version: 0.13.0(viem@2.42.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.5))
+      agent-runtime-contracts:
+        specifier: workspace:^
+        version: link:../agent-runtime-contracts
+      agent-runtime-langgraph:
+        specifier: workspace:^
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
-        version: link:../agent-workflow-core
+        version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
@@ -590,7 +602,7 @@ importers:
         version: 4.4.4(eslint-plugin-import@2.32.0)(eslint@9.39.2(jiti@2.6.1))
       eslint-plugin-import:
         specifier: 2.32.0
-        version: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1))
+        version: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@4.4.4)(eslint@9.39.2(jiti@2.6.1))
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -636,9 +648,15 @@ importers:
       '@metamask/delegation-toolkit':
         specifier: ^0.13.0
         version: 0.13.0(viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.5))
+      agent-runtime-contracts:
+        specifier: workspace:^
+        version: link:../agent-runtime-contracts
+      agent-runtime-langgraph:
+        specifier: workspace:^
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
-        version: link:../agent-workflow-core
+        version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
@@ -687,7 +705,7 @@ importers:
         version: 4.4.4(eslint-plugin-import@2.32.0)(eslint@9.39.2(jiti@2.6.1))
       eslint-plugin-import:
         specifier: 2.32.0
-        version: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1))
+        version: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@4.4.4)(eslint@9.39.2(jiti@2.6.1))
       msw:
         specifier: ^2.12.8
         version: 2.12.8(@types/node@22.19.2)(typescript@5.9.3)
@@ -736,9 +754,15 @@ importers:
       '@metamask/delegation-toolkit':
         specifier: ^0.13.0
         version: 0.13.0(viem@2.42.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.5))
+      agent-runtime-contracts:
+        specifier: workspace:^
+        version: link:../agent-runtime-contracts
+      agent-runtime-langgraph:
+        specifier: workspace:^
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
-        version: link:../agent-workflow-core
+        version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
@@ -787,7 +811,7 @@ importers:
         version: 4.4.4(eslint-plugin-import@2.32.0)(eslint@9.39.2(jiti@2.6.1))
       eslint-plugin-import:
         specifier: 2.32.0
-        version: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1))
+        version: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@4.4.4)(eslint@9.39.2(jiti@2.6.1))
       msw:
         specifier: ^2.12.8
         version: 2.12.8(@types/node@22.19.2)(typescript@5.9.3)
@@ -807,11 +831,46 @@ importers:
         specifier: ^4.0.8
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.2)(@vitest/ui@3.2.4(vitest@3.2.4))(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
 
-  clients/web-ag-ui/apps/agent-workflow-core:
+  clients/web-ag-ui/apps/agent-runtime-contracts:
+    dependencies:
+      '@a2a-js/sdk':
+        specifier: ^0.3.4
+        version: 0.3.4(express@5.1.0)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.2
+        version: 22.19.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.2)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
+
+  clients/web-ag-ui/apps/agent-runtime-langgraph:
     dependencies:
       '@langchain/langgraph':
         specifier: 1.0.2
         version: 1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.2
+        version: 22.19.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.2)(@vitest/ui@3.2.4(vitest@3.2.4))(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
+
+  clients/web-ag-ui/apps/agent-workflow-core:
+    dependencies:
+      agent-runtime-contracts:
+        specifier: workspace:^
+        version: link:../agent-runtime-contracts
+      agent-runtime-langgraph:
+        specifier: workspace:^
+        version: file:clients/web-ag-ui/apps/agent-runtime-langgraph(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
     devDependencies:
       '@types/node':
         specifier: ^22.19.2
@@ -9165,6 +9224,15 @@ packages:
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
+
+  agent-runtime-contracts@file:clients/web-ag-ui/apps/agent-runtime-contracts:
+    resolution: {directory: clients/web-ag-ui/apps/agent-runtime-contracts, type: directory}
+
+  agent-runtime-langgraph@file:clients/web-ag-ui/apps/agent-runtime-langgraph:
+    resolution: {directory: clients/web-ag-ui/apps/agent-runtime-langgraph, type: directory}
+
+  agent-workflow-core@file:clients/web-ag-ui/apps/agent-workflow-core:
+    resolution: {directory: clients/web-ag-ui/apps/agent-workflow-core, type: directory}
 
   agentkeepalive@4.6.0:
     resolution: {integrity: sha512-kja8j7PjmncONqaTsB8fQ+wE2mSU2DJ9D4XKoJ5PFWIdRMa6SLSN1ff4mOr4jCbfRSsxR4keIiySJU0N9T5hIQ==}
@@ -28810,6 +28878,15 @@ snapshots:
       msw: 2.12.8(@types/node@20.19.21)(typescript@5.9.3)
       vite: 7.1.7(@types/node@20.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
 
+  '@vitest/mocker@4.0.18(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(vite@7.1.7(@types/node@22.18.8)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1))':
+    dependencies:
+      '@vitest/spy': 4.0.18
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      msw: 2.12.8(@types/node@22.19.2)(typescript@5.9.3)
+      vite: 7.1.7(@types/node@22.18.8)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
+
   '@vitest/mocker@4.0.18(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(vite@7.1.7(@types/node@22.19.2)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
       '@vitest/spy': 4.0.18
@@ -30965,6 +31042,29 @@ snapshots:
     optional: true
 
   agent-base@7.1.4: {}
+
+  agent-runtime-contracts@file:clients/web-ag-ui/apps/agent-runtime-contracts: {}
+
+  agent-runtime-langgraph@file:clients/web-ag-ui/apps/agent-runtime-langgraph(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5):
+    dependencies:
+      '@langchain/langgraph': 1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
+    transitivePeerDependencies:
+      - '@langchain/core'
+      - react
+      - react-dom
+      - zod
+      - zod-to-json-schema
+
+  agent-workflow-core@file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5):
+    dependencies:
+      agent-runtime-contracts: file:clients/web-ag-ui/apps/agent-runtime-contracts
+      agent-runtime-langgraph: file:clients/web-ag-ui/apps/agent-runtime-langgraph(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
+    transitivePeerDependencies:
+      - '@langchain/core'
+      - react
+      - react-dom
+      - zod
+      - zod-to-json-schema
 
   agentkeepalive@4.6.0:
     dependencies:
@@ -33159,7 +33259,7 @@ snapshots:
       tinyglobby: 0.2.15
       unrs-resolver: 1.11.1
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1))
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@4.4.4)(eslint@9.39.2(jiti@2.6.1))
     transitivePeerDependencies:
       - supports-color
 
@@ -33193,6 +33293,17 @@ snapshots:
       eslint: 9.36.0(jiti@1.21.7)
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.36.0(jiti@1.21.7))
+    transitivePeerDependencies:
+      - supports-color
+
+  eslint-module-utils@2.12.1(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1)):
+    dependencies:
+      debug: 3.2.7
+    optionalDependencies:
+      '@typescript-eslint/parser': 8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
+      eslint: 9.39.2(jiti@2.6.1)
+      eslint-import-resolver-node: 0.3.9
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.2(jiti@2.6.1))
     transitivePeerDependencies:
       - supports-color
 
@@ -33295,6 +33406,35 @@ snapshots:
       - supports-color
 
   eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1)):
+    dependencies:
+      '@rtsao/scc': 1.1.0
+      array-includes: 3.1.9
+      array.prototype.findlastindex: 1.2.6
+      array.prototype.flat: 1.3.3
+      array.prototype.flatmap: 1.3.3
+      debug: 3.2.7
+      doctrine: 2.1.0
+      eslint: 9.39.2(jiti@2.6.1)
+      eslint-import-resolver-node: 0.3.9
+      eslint-module-utils: 2.12.1(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1))
+      hasown: 2.0.2
+      is-core-module: 2.16.1
+      is-glob: 4.0.3
+      minimatch: 3.1.2
+      object.fromentries: 2.0.8
+      object.groupby: 1.0.3
+      object.values: 1.2.1
+      semver: 6.3.1
+      string.prototype.trimend: 1.0.9
+      tsconfig-paths: 3.15.0
+    optionalDependencies:
+      '@typescript-eslint/parser': 8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
+    transitivePeerDependencies:
+      - eslint-import-resolver-typescript
+      - eslint-import-resolver-webpack
+      - supports-color
+
+  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@4.4.4)(eslint@9.39.2(jiti@2.6.1)):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
@@ -41909,6 +42049,46 @@ snapshots:
       - yaml
 
   vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.2)(@vitest/ui@3.2.4(vitest@3.2.4))(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1):
+    dependencies:
+      '@vitest/expect': 4.0.18
+      '@vitest/mocker': 4.0.18(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(vite@7.1.7(@types/node@22.18.8)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1))
+      '@vitest/pretty-format': 4.0.18
+      '@vitest/runner': 4.0.18
+      '@vitest/snapshot': 4.0.18
+      '@vitest/spy': 4.0.18
+      '@vitest/utils': 4.0.18
+      es-module-lexer: 1.7.0
+      expect-type: 1.2.2
+      magic-string: 0.30.21
+      obug: 2.1.1
+      pathe: 2.0.3
+      picomatch: 4.0.3
+      std-env: 3.10.0
+      tinybench: 2.9.0
+      tinyexec: 1.0.2
+      tinyglobby: 0.2.15
+      tinyrainbow: 3.0.3
+      vite: 7.1.7(@types/node@22.19.2)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@opentelemetry/api': 1.9.0
+      '@types/node': 22.19.2
+      '@vitest/ui': 3.2.4(vitest@3.2.4)
+      jsdom: 28.1.0(@noble/hashes@1.8.0)
+    transitivePeerDependencies:
+      - jiti
+      - less
+      - lightningcss
+      - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - terser
+      - tsx
+      - yaml
+
+  vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.2)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1):
     dependencies:
       '@vitest/expect': 4.0.18
       '@vitest/mocker': 4.0.18(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(vite@7.1.7(@types/node@22.19.2)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1))

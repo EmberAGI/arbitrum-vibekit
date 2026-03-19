@@ -1,4 +1,4 @@
 export {
   configureLangGraphApiCheckpointer,
   loadLangGraphApiCheckpointer,
-} from 'agent-workflow-core';
+} from 'agent-runtime-langgraph';

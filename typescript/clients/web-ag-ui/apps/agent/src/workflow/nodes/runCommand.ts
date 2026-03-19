@@ -1,3 +1,4 @@
+import type { CommandEnvelope } from 'agent-runtime-contracts';
 import {
   extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
@@ -5,7 +6,6 @@ import {
   resolveCycleCommandTarget,
   resolveCommandTargetForBootstrappedFlow,
   type AgentCommand,
-  type CommandEnvelope,
   type CommandRoutingTarget,
 } from 'agent-workflow-core';
 
@@ -13,7 +13,7 @@ import { type ClmmState, type ClmmUpdate } from '../context.js';
 
 type CommandTarget = CommandRoutingTarget;
 
-export function extractCommandEnvelope(messages: ClmmState['messages']): CommandEnvelope | null {
+export function extractCommandEnvelope(messages: ClmmState['messages']): CommandEnvelope<AgentCommand> | null {
   return extractCommandEnvelopeFromMessages(messages);
 }
 

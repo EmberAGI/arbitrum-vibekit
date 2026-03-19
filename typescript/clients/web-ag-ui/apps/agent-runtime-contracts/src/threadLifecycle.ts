@@ -1,4 +1,4 @@
-import { isTaskTerminalState, type TaskState } from './taskLifecycle.js';
+import { isTaskTerminalState, type TaskState } from './taskState.js';
 
 export type ThreadLifecyclePhase = 'prehire' | 'onboarding' | 'active' | 'firing' | 'inactive';
 

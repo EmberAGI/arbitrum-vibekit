@@ -1,5 +1,5 @@
 {
-  "name": "agent-workflow-core",
+  "name": "agent-runtime-contracts",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -25,7 +25,6 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "agent-runtime-contracts": "workspace:^",
-    "agent-runtime-langgraph": "workspace:^"
+    "@a2a-js/sdk": "^0.3.4"
   }
 }

@@ -5,7 +5,7 @@ import {
   buildNodeTransition,
   requestInterruptPayload,
   shouldPersistInputRequiredCheckpoint,
-} from 'agent-workflow-core';
+} from 'agent-runtime-contracts';
 import { z } from 'zod';
 
 import { resolvePendleChainIds, resolveStablecoinWhitelist } from '../../config/constants.js';
