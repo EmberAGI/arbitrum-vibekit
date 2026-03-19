@@ -2,6 +2,7 @@ import { EventType } from '@ag-ui/core';
 import type { AgentEvent } from '@mariozechner/pi-agent-core';
 import { describe, expect, it } from 'vitest';
 
+import type { PiRuntimeGatewayAgent } from './index.js';
 import { createPiRuntimeGatewayRuntime, createPiRuntimeGatewayService } from './index.js';
 
 type Listener = (event: AgentEvent) => void;
@@ -12,11 +13,15 @@ class ScriptedPiAgent {
 
   public readonly state = {
     messages: [],
+    isStreaming: false,
   };
 
   public abortCalled = false;
   public promptCalls: unknown[] = [];
   public continueCalls = 0;
+  public steerCalls: unknown[] = [];
+  public followUpCalls: unknown[] = [];
+  public sessionId: string | undefined;
 
   constructor(runEvents: AgentEvent[]) {
     this.runEvents = runEvents;
@@ -37,6 +42,14 @@ class ScriptedPiAgent {
   async continue(): Promise<void> {
     this.continueCalls += 1;
     this.emitAll();
+  }
+
+  steer(message: unknown): void {
+    this.steerCalls.push(message);
+  }
+
+  followUp(message: unknown): void {
+    this.followUpCalls.push(message);
   }
 
   abort(): void {
@@ -160,6 +173,7 @@ describe('pi gateway service integration', () => {
         },
       },
     ]);
+    expect(agent.sessionId).toBe('thread-1');
 
     const runEvents = await service.run({
       threadId: 'thread-1',
@@ -167,6 +181,7 @@ describe('pi gateway service integration', () => {
       messages: [{ id: 'msg-1', role: 'user', content: 'Connect now' }],
     });
 
+    expect(agent.sessionId).toBe('thread-1');
     expect(agent.promptCalls).toHaveLength(1);
     expect(runEvents).toContainEqual({
       type: EventType.RUN_STARTED,
@@ -247,5 +262,156 @@ describe('pi gateway service integration', () => {
     expect(agent.abortCalled).toBe(true);
     await expect(service.control.inspectHealth()).resolves.toEqual({ status: 'ok' });
     await expect(service.control.listExecutions()).resolves.toEqual(['exec-1']);
+  });
+
+  it('queues active-run user input through Pi steering instead of re-prompting the agent', async () => {
+    const agent = new ScriptedPiAgent([]);
+    agent.state.isStreaming = true;
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      now: () => 123,
+      getSession: () => ({
+        thread: { id: 'thread-2' },
+        execution: { id: 'exec-2', status: 'working', statusMessage: 'Awaiting steering' },
+      }),
+    });
+
+    const events = await runtime.run({
+      threadId: 'thread-2',
+      runId: 'run-2',
+      messages: [{ id: 'msg-2', role: 'user', content: 'Adjust course' }],
+    });
+
+    expect(agent.sessionId).toBe('thread-2');
+    expect(agent.promptCalls).toEqual([]);
+    expect(agent.continueCalls).toBe(0);
+    expect(agent.steerCalls).toEqual([
+      {
+        role: 'user',
+        content: 'Adjust course',
+        timestamp: 123,
+      },
+    ]);
+    expect(events).toEqual([
+      {
+        type: EventType.RUN_STARTED,
+        threadId: 'thread-2',
+        runId: 'run-2',
+      },
+      {
+        type: EventType.STATE_SNAPSHOT,
+        snapshot: {
+          thread: {
+            id: 'thread-2',
+            task: {
+              id: 'exec-2',
+              taskStatus: {
+                state: 'working',
+                message: 'Awaiting steering',
+              },
+            },
+            projection: {
+              source: 'pi-runtime-gateway',
+              canonicalIds: {
+                piThreadId: 'thread-2',
+                piExecutionId: 'exec-2',
+              },
+            },
+          },
+        },
+      },
+      {
+        type: EventType.RUN_FINISHED,
+        threadId: 'thread-2',
+        runId: 'run-2',
+        result: {
+          executionId: 'exec-2',
+          status: 'working',
+        },
+      },
+    ]);
+  });
+
+  it('queues active-run user input through Pi follow-up when steering is unavailable', async () => {
+    const followUpCalls: unknown[] = [];
+    const agent: PiRuntimeGatewayAgent & { followUp: (message: unknown) => void } = {
+      state: {
+        messages: [],
+        isStreaming: true,
+      },
+      sessionId: undefined,
+      subscribe: () => () => undefined,
+      prompt: async () => {
+        throw new Error('prompt should not run while follow-up queueing is available');
+      },
+      continue: async () => undefined,
+      abort: () => undefined,
+      followUp: (message: unknown) => {
+        followUpCalls.push(message);
+      },
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      now: () => 321,
+      getSession: () => ({
+        thread: { id: 'thread-3' },
+        execution: { id: 'exec-3', status: 'working', statusMessage: 'Awaiting follow-up' },
+      }),
+    });
+
+    const events = await runtime.run({
+      threadId: 'thread-3',
+      runId: 'run-3',
+      messages: [{ id: 'msg-3', role: 'user', content: 'Queue this next' }],
+    });
+
+    expect(agent.sessionId).toBe('thread-3');
+    expect(followUpCalls).toEqual([
+      {
+        role: 'user',
+        content: 'Queue this next',
+        timestamp: 321,
+      },
+    ]);
+    expect(events).toEqual([
+      {
+        type: EventType.RUN_STARTED,
+        threadId: 'thread-3',
+        runId: 'run-3',
+      },
+      {
+        type: EventType.STATE_SNAPSHOT,
+        snapshot: {
+          thread: {
+            id: 'thread-3',
+            task: {
+              id: 'exec-3',
+              taskStatus: {
+                state: 'working',
+                message: 'Awaiting follow-up',
+              },
+            },
+            projection: {
+              source: 'pi-runtime-gateway',
+              canonicalIds: {
+                piThreadId: 'thread-3',
+                piExecutionId: 'exec-3',
+              },
+            },
+          },
+        },
+      },
+      {
+        type: EventType.RUN_FINISHED,
+        threadId: 'thread-3',
+        runId: 'run-3',
+        result: {
+          executionId: 'exec-3',
+          status: 'working',
+        },
+      },
+    ]);
   });
 });

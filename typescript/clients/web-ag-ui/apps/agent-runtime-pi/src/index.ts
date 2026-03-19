@@ -6,8 +6,8 @@ import {
   type RunStartedEvent,
   type StateSnapshotEvent,
 } from '@ag-ui/core';
-import { Agent, type AgentEvent, type AgentMessage, type AgentTool } from '@mariozechner/pi-agent-core';
-import type { Model, ToolResultMessage } from '@mariozechner/pi-ai';
+import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
+import type { Message, Model, ToolResultMessage } from '@mariozechner/pi-ai';
 import { mergeThreadPatchForEmit, type TaskState } from 'agent-runtime-contracts';
 import { resolvePostgresBootstrapPlan, type PostgresBootstrapPlan } from 'agent-runtime-postgres';
 
@@ -74,6 +74,45 @@ export type PiRuntimeGatewaySession = {
   threadPatch?: Record<string, unknown>;
 };
 
+export type PiRuntimeGatewayRuntimeNoteMessage = {
+  role: 'pi-runtime-note';
+  threadId: string;
+  executionId: string;
+  text: string;
+  timestamp: number;
+};
+
+export type PiRuntimeGatewayArtifactMessage = {
+  role: 'pi-artifact';
+  threadId: string;
+  executionId: string;
+  channel: 'current' | 'activity';
+  artifactId: string;
+  data: unknown;
+  timestamp: number;
+};
+
+export type PiRuntimeGatewayA2UiMessage = {
+  role: 'pi-a2ui';
+  threadId: string;
+  executionId: string;
+  payload: PiRuntimeGatewayA2UiPayload;
+  timestamp: number;
+};
+
+export type PiRuntimeGatewayContextMessage =
+  | PiRuntimeGatewayRuntimeNoteMessage
+  | PiRuntimeGatewayArtifactMessage
+  | PiRuntimeGatewayA2UiMessage;
+
+declare module '@mariozechner/pi-agent-core' {
+  interface CustomAgentMessages {
+    'pi-runtime-note': PiRuntimeGatewayRuntimeNoteMessage;
+    'pi-artifact': PiRuntimeGatewayArtifactMessage;
+    'pi-a2ui': PiRuntimeGatewayA2UiMessage;
+  }
+}
+
 export type PiRuntimeGatewayRuntime = {
   connect: (request: PiRuntimeGatewayConnectRequest) => Promise<BaseEvent[]>;
   run: (request: PiRuntimeGatewayRunRequest) => Promise<BaseEvent[]>;
@@ -92,7 +131,11 @@ export type PiRuntimeGatewayService = {
   control: PiRuntimeGatewayControlPlane;
 };
 
-export type PiRuntimeGatewayAgent = Pick<Agent, 'subscribe' | 'prompt' | 'continue' | 'abort' | 'state'>;
+export type PiRuntimeGatewayAgent = Pick<Agent, 'subscribe' | 'prompt' | 'continue' | 'abort' | 'state'> & {
+  sessionId?: string;
+  steer?: (message: AgentMessage) => void;
+  followUp?: (message: AgentMessage) => void;
+};
 
 export type PiRuntimeGatewayFoundation = {
   agent: Agent;
@@ -115,6 +158,20 @@ const EMPTY_USAGE = {
 } as const;
 
 const asBaseEvent = <TEvent extends BaseEvent>(event: TEvent): BaseEvent => event;
+
+const isPiRuntimeGatewayRuntimeNoteMessage = (message: AgentMessage): message is PiRuntimeGatewayRuntimeNoteMessage =>
+  getMessageRole(message) === 'pi-runtime-note';
+
+const isPiRuntimeGatewayArtifactMessage = (message: AgentMessage): message is PiRuntimeGatewayArtifactMessage =>
+  getMessageRole(message) === 'pi-artifact';
+
+const isPiRuntimeGatewayA2UiMessage = (message: AgentMessage): message is PiRuntimeGatewayA2UiMessage =>
+  getMessageRole(message) === 'pi-a2ui';
+
+const isLlmCompatibleMessage = (message: AgentMessage): message is Message => {
+  const role = getMessageRole(message);
+  return role === 'user' || role === 'assistant' || role === 'toolResult';
+};
 
 const mapExecutionStatusToTaskState = (status: PiRuntimeGatewayExecutionStatus): TaskState => {
   switch (status) {
@@ -154,6 +211,94 @@ const resolveProjectedMessageId = (executionId: string, message: AgentMessage, f
   const role = getMessageRole(message);
   const timestamp = getMessageTimestamp(message) ?? fallbackIndex;
   return `pi:${executionId}:${role}:${timestamp}`;
+};
+
+const buildExecutionStatusText = (session: PiRuntimeGatewaySession): string =>
+  [
+    `Thread ${session.thread.id} execution ${session.execution.id} is ${session.execution.status}.`,
+    session.execution.statusMessage,
+  ]
+    .filter((part): part is string => typeof part === 'string' && part.length > 0)
+    .join(' ');
+
+export const buildPiRuntimeGatewayContextMessages = (params: {
+  session: PiRuntimeGatewaySession;
+  now?: () => number;
+}): PiRuntimeGatewayContextMessage[] => {
+  const now = params.now ?? (() => Date.now());
+  const timestamp = now();
+
+  return [
+    {
+      role: 'pi-runtime-note',
+      threadId: params.session.thread.id,
+      executionId: params.session.execution.id,
+      text: buildExecutionStatusText(params.session),
+      timestamp,
+    },
+    ...(params.session.artifacts?.current
+      ? [
+          {
+            role: 'pi-artifact' as const,
+            threadId: params.session.thread.id,
+            executionId: params.session.execution.id,
+            channel: 'current' as const,
+            artifactId: params.session.artifacts.current.artifactId,
+            data: params.session.artifacts.current.data,
+            timestamp,
+          },
+        ]
+      : []),
+    ...(params.session.artifacts?.activity
+      ? [
+          {
+            role: 'pi-artifact' as const,
+            threadId: params.session.thread.id,
+            executionId: params.session.execution.id,
+            channel: 'activity' as const,
+            artifactId: params.session.artifacts.activity.artifactId,
+            data: params.session.artifacts.activity.data,
+            timestamp,
+          },
+        ]
+      : []),
+    ...(params.session.a2ui
+      ? [
+          {
+            role: 'pi-a2ui' as const,
+            threadId: params.session.thread.id,
+            executionId: params.session.execution.id,
+            payload: params.session.a2ui,
+            timestamp,
+          },
+        ]
+      : []),
+  ];
+};
+
+export const convertPiRuntimeGatewayMessagesToLlm = (
+  messages: AgentMessage[],
+  delegate?: (messages: AgentMessage[]) => Message[] | Promise<Message[]>,
+): Message[] | Promise<Message[]> => {
+  const preprocessedMessages = messages.flatMap((message): AgentMessage[] => {
+    if (isPiRuntimeGatewayRuntimeNoteMessage(message)) {
+      return [
+        {
+          role: 'user',
+          content: `<pi-runtime-gateway>${message.text}</pi-runtime-gateway>`,
+          timestamp: message.timestamp,
+        },
+      ];
+    }
+
+    if (isPiRuntimeGatewayArtifactMessage(message) || isPiRuntimeGatewayA2UiMessage(message)) {
+      return [];
+    }
+
+    return [message];
+  });
+
+  return delegate ? delegate(preprocessedMessages) : preprocessedMessages.filter(isLlmCompatibleMessage);
 };
 
 const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => number): AgentMessage[] =>
@@ -404,13 +549,41 @@ export const createPiRuntimeGatewayFoundation = (params: {
   systemPrompt: string;
   tools?: AgentTool[];
   databaseUrl?: string;
+  agentOptions?: AgentOptions;
+  getSessionContext?: () => PiRuntimeGatewaySession | undefined;
+  now?: () => number;
 }): PiRuntimeGatewayFoundation => {
-  const agent = new Agent();
-  agent.setModel(params.model);
-  agent.setSystemPrompt(params.systemPrompt);
-  if (params.tools) {
-    agent.setTools(params.tools);
-  }
+  const now = params.now ?? (() => Date.now());
+  const transformContext =
+    params.getSessionContext || params.agentOptions?.transformContext
+      ? async (messages: AgentMessage[], signal?: AbortSignal) => {
+          const transformedMessages = params.agentOptions?.transformContext
+            ? await params.agentOptions.transformContext(messages, signal)
+            : messages;
+          const session = params.getSessionContext?.();
+          return session
+            ? [
+                ...transformedMessages,
+                ...buildPiRuntimeGatewayContextMessages({
+                  session,
+                  now,
+                }),
+              ]
+            : transformedMessages;
+        }
+      : undefined;
+
+  const agent = new Agent({
+    ...params.agentOptions,
+    convertToLlm: (messages) => convertPiRuntimeGatewayMessagesToLlm(messages, params.agentOptions?.convertToLlm),
+    transformContext,
+    initialState: {
+      ...params.agentOptions?.initialState,
+      model: params.model,
+      systemPrompt: params.systemPrompt,
+      ...(params.tools ? { tools: params.tools } : {}),
+    },
+  });
 
   return {
     agent,
@@ -426,6 +599,9 @@ export const createPiRuntimeGatewayRuntime = (params: {
   now?: () => number;
 }): PiRuntimeGatewayRuntime => {
   const now = params.now ?? (() => Date.now());
+  const syncAgentSessionId = (threadId: string): void => {
+    params.agent.sessionId = threadId;
+  };
 
   const buildSnapshotEvent = (session: PiRuntimeGatewaySession): StateSnapshotEvent => ({
     type: EventType.STATE_SNAPSHOT,
@@ -433,11 +609,13 @@ export const createPiRuntimeGatewayRuntime = (params: {
   });
 
   return {
-    connect: async () => {
+    connect: async (request) => {
+      syncAgentSessionId(request.threadId);
       const session = params.getSession();
       return [buildSnapshotEvent(session)];
     },
     run: async (request) => {
+      syncAgentSessionId(request.threadId);
       const capturedEvents: AgentEvent[] = [];
       const unsubscribe = params.agent.subscribe((event) => {
         capturedEvents.push(event);
@@ -445,7 +623,22 @@ export const createPiRuntimeGatewayRuntime = (params: {
 
       try {
         if (request.messages && request.messages.length > 0) {
-          await params.agent.prompt(convertAgUiMessagesToPiMessages(request.messages, now));
+          const promptMessages = convertAgUiMessagesToPiMessages(request.messages, now);
+          if (params.agent.state.isStreaming) {
+            if (params.agent.steer) {
+              for (const message of promptMessages) {
+                params.agent.steer(message);
+              }
+            } else if (params.agent.followUp) {
+              for (const message of promptMessages) {
+                params.agent.followUp(message);
+              }
+            } else {
+              await params.agent.prompt(promptMessages);
+            }
+          } else {
+            await params.agent.prompt(promptMessages);
+          }
         } else {
           await params.agent.continue();
         }
