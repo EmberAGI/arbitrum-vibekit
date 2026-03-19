@@ -1,3 +1,5 @@
+import type { TaskState as A2ATaskState } from '@a2a-js/sdk';
+
 export const TASK_STATES = [
   'submitted',
   'working',
@@ -5,12 +7,14 @@ export const TASK_STATES = [
   'completed',
   'canceled',
   'failed',
+  'rejected',
   'auth-required',
+  'unknown',
 ] as const;
 
-export type TaskState = (typeof TASK_STATES)[number];
+export type TaskState = A2ATaskState;
 
-const TERMINAL_TASK_STATES = new Set<TaskState>(['completed', 'failed', 'canceled']);
+const TERMINAL_TASK_STATES = new Set<TaskState>(['completed', 'failed', 'canceled', 'rejected']);
 const ACTIVE_TASK_STATES = new Set<TaskState>(['submitted', 'working', 'input-required', 'auth-required']);
 
 export function isTaskTerminalState(state: string | TaskState): boolean {
