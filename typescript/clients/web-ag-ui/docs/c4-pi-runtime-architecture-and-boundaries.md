@@ -188,6 +188,36 @@ Examples:
 - DeFi agents may use domain modules with lifecycle terms such as hire/setup/sync/fire.
 - Other agent types may define different lifecycle vocabularies without changing the core runtime model.
 
+### Domain-Module SPI
+
+Every Pi-owned domain module should define one explicit SPI surface:
+
+- commands:
+  - user- or automation-triggered domain commands such as `hire`, `setup`, `sync`, and `fire`
+- lifecycle:
+  - domain phases, terminal phases, and allowed command-driven transitions
+- interrupts:
+  - domain-owned interrupt schemas and the rule for whether they surface into the root thread
+- projection hooks:
+  - `projectThread`
+  - `buildCurrentArtifact`
+  - `buildActivityArtifact`
+  - `buildA2Ui`
+- automation policy hooks:
+  - domain-specific decisions about whether automation may enqueue or resume work
+- runtime boundary:
+  - an explicit statement of what the domain module owns versus what remains in the core Pi runtime
+
+For the first DeFi lifecycle module, the boundary is:
+
+| Owned by DeFi domain module | Owned by core Pi runtime |
+| --- | --- |
+| `hire/setup/sync/fire` command vocabulary | `PiThread`, `PiExecution`, `PiAutomation`, `AutomationRun` |
+| DeFi lifecycle phases and transitions | durable persistence and restart boundaries |
+| DeFi-specific interrupt schemas | interrupt delivery and resurfacing plumbing |
+| thread/artifact/A2UI projection rules for DeFi state | canonical execution identity and protocol projections |
+| sync automation policy decisions | scheduler, outbox/dedupe, and operator control-plane infrastructure |
+
 ## 6. Projection model
 
 ```mermaid
