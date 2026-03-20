@@ -11,7 +11,7 @@ export {
   DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH,
   mapPiAgentEventsToAgUiEvents,
   PiRuntimeGatewayHttpAgent,
-} from 'agent-runtime-pi';
+} from '../lib/pi/dist/index.js';
 export type {
   PiRuntimeGatewayA2UiMessage,
   PiRuntimeGatewayA2UiPayload,
@@ -32,4 +32,4 @@ export type {
   PiRuntimeGatewayService,
   PiRuntimeGatewaySession,
   PiRuntimeGatewayStopRequest,
-} from 'agent-runtime-pi';
+} from '../lib/pi/dist/index.js';
