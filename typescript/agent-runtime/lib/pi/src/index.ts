@@ -7,7 +7,7 @@ import {
   type StateSnapshotEvent,
 } from '@ag-ui/core';
 import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
-import type { Message, Model, ToolResultMessage } from '@mariozechner/pi-ai';
+import type { Api, Message, Model, ToolResultMessage } from '@mariozechner/pi-ai';
 import { mergeThreadPatchForEmit, type TaskState } from 'agent-runtime-contracts';
 import { resolvePostgresBootstrapPlan, type PostgresBootstrapPlan } from 'agent-runtime-postgres';
 
@@ -545,7 +545,7 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
 };
 
 export const createPiRuntimeGatewayFoundation = (params: {
-  model: Model<any>;
+  model: Model<Api>;
   systemPrompt: string;
   tools?: AgentTool[];
   databaseUrl?: string;
@@ -609,10 +609,10 @@ export const createPiRuntimeGatewayRuntime = (params: {
   });
 
   return {
-    connect: async (request) => {
+    connect: (request) => {
       syncAgentSessionId(request.threadId);
       const session = params.getSession();
-      return [buildSnapshotEvent(session)];
+      return Promise.resolve([buildSnapshotEvent(session)]);
     },
     run: async (request) => {
       syncAgentSessionId(request.threadId);
@@ -672,9 +672,9 @@ export const createPiRuntimeGatewayRuntime = (params: {
 
       return events;
     },
-    stop: async (request) => {
+    stop: (request) => {
       params.agent.abort();
-      return [
+      return Promise.resolve([
         asBaseEvent({
           type: EventType.RUN_FINISHED,
           threadId: request.threadId,
@@ -683,7 +683,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
             status: 'aborted',
           },
         } satisfies RunFinishedEvent),
-      ];
+      ]);
     },
   };
 };

@@ -95,6 +95,50 @@ describe("resolveAffectedPackages", () => {
     expect(result.selectedPackageNames).toEqual([]);
   });
 
+  it("treats the top-level agent-runtime tree as the deepest owning package set and expands to facade dependents", () => {
+    const packages: WorkspacePackage[] = [
+      {
+        name: "agent-runtime",
+        rootRelativeDir: "agent-runtime",
+        workspaceDependencies: ["agent-runtime-contracts", "agent-runtime-pi"],
+      },
+      {
+        name: "agent-runtime-contracts",
+        rootRelativeDir: "agent-runtime/lib/contracts",
+        workspaceDependencies: [],
+      },
+      {
+        name: "agent-runtime-pi",
+        rootRelativeDir: "agent-runtime/lib/pi",
+        workspaceDependencies: ["agent-runtime-contracts", "agent-runtime-postgres"],
+      },
+      {
+        name: "agent-runtime-postgres",
+        rootRelativeDir: "agent-runtime/lib/postgres",
+        workspaceDependencies: ["agent-runtime-contracts"],
+      },
+      {
+        name: "langgraph-js-starter",
+        rootRelativeDir: "clients/web-ag-ui",
+        workspaceDependencies: [],
+      },
+    ];
+
+    const result = resolveAffectedPackages({
+      changedFiles: ["agent-runtime/lib/contracts/src/index.ts"],
+      globalInvalidators: [],
+      packages,
+    });
+
+    expect(result.scope).toBe("partial");
+    expect(result.selectedPackageNames).toEqual([
+      "agent-runtime",
+      "agent-runtime-contracts",
+      "agent-runtime-pi",
+      "agent-runtime-postgres",
+    ]);
+  });
+
   it("discovers workspace packages and internal dependencies from pnpm-workspace.yaml", async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), "affected-packages-"));
 
@@ -193,6 +237,21 @@ describe("resolveAffectedPackages", () => {
     } finally {
       await rm(workspaceRoot, { force: true, recursive: true });
     }
+  });
+
+  it("discovers the agent-runtime package family from the top-level runtime directory layout", async () => {
+    const workspaceRoot = path.resolve(import.meta.dirname, "../..");
+
+    const packages = await discoverWorkspacePackages(workspaceRoot);
+    const packageDirsByName = new Map(
+      packages.map((pkg) => [pkg.name, pkg.rootRelativeDir] as const),
+    );
+
+    expect(packageDirsByName.get("agent-runtime")).toBe("agent-runtime");
+    expect(packageDirsByName.get("agent-runtime-contracts")).toBe("agent-runtime/lib/contracts");
+    expect(packageDirsByName.get("agent-runtime-pi")).toBe("agent-runtime/lib/pi");
+    expect(packageDirsByName.get("agent-runtime-postgres")).toBe("agent-runtime/lib/postgres");
+    expect(packageDirsByName.get("agent-runtime-langgraph")).toBe("clients/web-ag-ui/apps/agent-runtime-langgraph");
   });
 
   it("treats global invalidator prefixes as full-workspace changes", async () => {

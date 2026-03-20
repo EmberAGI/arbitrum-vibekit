@@ -12,7 +12,7 @@ function getLastMessageContent(messages: unknown): string | null {
     return null;
   }
 
-  const list = Array.isArray(messages) ? messages : [messages];
+  const list: unknown[] = Array.isArray(messages) ? messages : [messages];
   if (list.length === 0) {
     return null;
   }

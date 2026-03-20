@@ -1,4 +1,6 @@
 packages:
+  - 'agent-runtime'
+  - 'agent-runtime/lib/*'
   - 'lib/*'
   - 'community/*/*'
   - 'examples/*'
