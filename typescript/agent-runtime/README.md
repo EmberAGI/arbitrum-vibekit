@@ -4,6 +4,14 @@
 
 Consumers should depend on `agent-runtime` instead of wiring the internal runtime-family packages together directly.
 
+## Directory layout
+
+- `agent-runtime/`: public builder-facing facade package
+- `agent-runtime/lib/contracts`: runtime-neutral contracts and projection-safe shared helpers
+- `agent-runtime/lib/pi`: Pi gateway implementation and builder-facing runtime factories
+- `agent-runtime/lib/postgres`: Postgres bootstrap, persistence, recovery, and transaction helpers
+- `agent-runtime/lib/langgraph`: LangGraph-specific helpers that remain outside the public Pi facade
+
 ## Public facade responsibilities
 
 - Re-export the shared runtime-neutral contracts needed at the AG-UI and runtime boundary.

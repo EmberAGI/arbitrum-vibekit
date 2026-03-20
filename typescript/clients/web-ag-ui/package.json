@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "../../agent-runtime",
+    "../../agent-runtime/lib/*"
   ],
   "scripts": {
     "dev": "turbo run dev",
