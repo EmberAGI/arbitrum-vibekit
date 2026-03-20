@@ -1,4 +1,4 @@
-export * from 'agent-runtime-contracts';
+export * from '../lib/contracts/dist/index.js';
 export {
   buildPiA2UiActivityEvent,
   buildPiRuntimeGatewayContextMessages,

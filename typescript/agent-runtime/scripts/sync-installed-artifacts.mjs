@@ -5,20 +5,39 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDir, '..');
 const pnpmStoreRoot = path.resolve(packageRoot, '..', 'node_modules', '.pnpm');
-const packageName = 'agent-runtime';
-const packageDirName = 'agent-runtime';
-const artifactDirs = ['dist', path.join('lib', 'pi', 'dist')];
+const packageSpecs = [
+  {
+    packageName: 'agent-runtime',
+    packageRoot,
+    artifactDirs: ['dist', path.join('lib', 'contracts', 'dist'), path.join('lib', 'pi', 'dist')],
+  },
+  {
+    packageName: 'agent-runtime-contracts',
+    packageRoot: path.join(packageRoot, 'lib', 'contracts'),
+    artifactDirs: ['dist'],
+  },
+  {
+    packageName: 'agent-runtime-postgres',
+    packageRoot: path.join(packageRoot, 'lib', 'postgres'),
+    artifactDirs: ['dist'],
+  },
+  {
+    packageName: 'agent-runtime-pi',
+    packageRoot: path.join(packageRoot, 'lib', 'pi'),
+    artifactDirs: ['dist'],
+  },
+];
 
-async function listPackageSnapshots() {
+async function listPackageSnapshots(packageName) {
   const entries = await readdir(pnpmStoreRoot, { withFileTypes: true });
 
   return entries
     .filter((entry) => entry.isDirectory() && entry.name.startsWith(`${packageName}@`))
-    .map((entry) => path.join(pnpmStoreRoot, entry.name, 'node_modules', packageDirName));
+    .map((entry) => path.join(pnpmStoreRoot, entry.name, 'node_modules', packageName));
 }
 
-async function copyArtifactDir(relativeDir, targetRoot) {
-  const sourceDir = path.join(packageRoot, relativeDir);
+async function copyArtifactDir(sourceRoot, relativeDir, targetRoot) {
+  const sourceDir = path.join(sourceRoot, relativeDir);
   const sourceStats = await stat(sourceDir);
 
   if (!sourceStats.isDirectory()) {
@@ -31,10 +50,16 @@ async function copyArtifactDir(relativeDir, targetRoot) {
   await cp(sourceDir, targetDir, { recursive: true, force: true });
 }
 
-const snapshotDirs = await listPackageSnapshots();
-
 await Promise.all(
-  snapshotDirs.map(async (snapshotDir) => {
-    await Promise.all(artifactDirs.map((relativeDir) => copyArtifactDir(relativeDir, snapshotDir)));
+  packageSpecs.map(async ({ packageName, packageRoot: sourceRoot, artifactDirs }) => {
+    const snapshotDirs = await listPackageSnapshots(packageName);
+
+    await Promise.all(
+      snapshotDirs.map(async (snapshotDir) => {
+        await Promise.all(
+          artifactDirs.map((relativeDir) => copyArtifactDir(sourceRoot, relativeDir, snapshotDir)),
+        );
+      }),
+    );
   }),
 );
