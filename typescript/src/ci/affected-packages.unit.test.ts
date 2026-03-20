@@ -251,7 +251,7 @@ describe("resolveAffectedPackages", () => {
     expect(packageDirsByName.get("agent-runtime-contracts")).toBe("agent-runtime/lib/contracts");
     expect(packageDirsByName.get("agent-runtime-pi")).toBe("agent-runtime/lib/pi");
     expect(packageDirsByName.get("agent-runtime-postgres")).toBe("agent-runtime/lib/postgres");
-    expect(packageDirsByName.get("agent-runtime-langgraph")).toBe("agent-runtime/lib/langgraph");
+    expect(packageDirsByName.get("agent-runtime-langgraph")).toBe("clients/web-ag-ui/apps/agent-runtime-langgraph");
   });
 
   it("treats global invalidator prefixes as full-workspace changes", async () => {

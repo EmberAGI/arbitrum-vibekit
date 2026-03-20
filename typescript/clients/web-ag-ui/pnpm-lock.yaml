@@ -91,7 +91,7 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.9(@types/node@22.19.7)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.8.2)
 
-  ../../agent-runtime/lib/langgraph:
+  apps/agent-runtime-langgraph:
     dependencies:
       '@langchain/langgraph':
         specifier: 1.0.2
@@ -175,7 +175,7 @@ importers:
         version: link:../../../../agent-runtime/lib/contracts
       agent-runtime-langgraph:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/langgraph
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
         version: link:../agent-workflow-core
@@ -275,7 +275,7 @@ importers:
         version: link:../../../../agent-runtime/lib/contracts
       agent-runtime-langgraph:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/langgraph
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
         version: link:../agent-workflow-core
@@ -378,7 +378,7 @@ importers:
         version: link:../../../../agent-runtime/lib/contracts
       agent-runtime-langgraph:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/langgraph
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
         version: link:../agent-workflow-core
@@ -484,7 +484,7 @@ importers:
         version: link:../../../../agent-runtime/lib/contracts
       agent-runtime-langgraph:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/langgraph
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
         version: link:../agent-workflow-core
@@ -563,7 +563,7 @@ importers:
         version: link:../../../../agent-runtime/lib/contracts
       agent-runtime-langgraph:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/langgraph
+        version: link:../agent-runtime-langgraph
     devDependencies:
       '@types/node':
         specifier: ^22.19.2

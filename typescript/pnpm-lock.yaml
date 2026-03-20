@@ -288,7 +288,7 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.2)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
 
-  agent-runtime/lib/langgraph:
+  clients/web-ag-ui/apps/agent-runtime-langgraph:
     dependencies:
       '@langchain/langgraph':
         specifier: 1.0.2
@@ -535,7 +535,7 @@ importers:
         version: link:../../../../agent-runtime/lib/contracts
       agent-runtime-langgraph:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/langgraph
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
         version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(express@5.1.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
@@ -635,7 +635,7 @@ importers:
         version: link:../../../../agent-runtime/lib/contracts
       agent-runtime-langgraph:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/langgraph
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
         version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(express@5.1.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
@@ -738,7 +738,7 @@ importers:
         version: link:../../../../agent-runtime/lib/contracts
       agent-runtime-langgraph:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/langgraph
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
         version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(express@5.1.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
@@ -844,7 +844,7 @@ importers:
         version: link:../../../../agent-runtime/lib/contracts
       agent-runtime-langgraph:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/langgraph
+        version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
         version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(express@5.1.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
@@ -923,7 +923,7 @@ importers:
         version: link:../../../../agent-runtime/lib/contracts
       agent-runtime-langgraph:
         specifier: workspace:^
-        version: file:agent-runtime/lib/langgraph(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
+        version: file:clients/web-ag-ui/apps/agent-runtime-langgraph(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
     devDependencies:
       '@types/node':
         specifier: ^22.19.2
@@ -9405,8 +9405,8 @@ packages:
   agent-runtime-contracts@file:agent-runtime/lib/contracts:
     resolution: {directory: agent-runtime/lib/contracts, type: directory}
 
-  agent-runtime-langgraph@file:agent-runtime/lib/langgraph:
-    resolution: {directory: agent-runtime/lib/langgraph, type: directory}
+  agent-runtime-langgraph@file:clients/web-ag-ui/apps/agent-runtime-langgraph:
+    resolution: {directory: clients/web-ag-ui/apps/agent-runtime-langgraph, type: directory}
 
   agent-runtime-pi@file:agent-runtime/lib/pi:
     resolution: {directory: agent-runtime/lib/pi, type: directory}
@@ -31652,7 +31652,7 @@ snapshots:
     transitivePeerDependencies:
       - express
 
-  agent-runtime-langgraph@file:agent-runtime/lib/langgraph(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5):
+  agent-runtime-langgraph@file:clients/web-ag-ui/apps/agent-runtime-langgraph(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5):
     dependencies:
       '@langchain/langgraph': 1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
     transitivePeerDependencies:
@@ -31688,7 +31688,7 @@ snapshots:
   agent-workflow-core@file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(express@5.1.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5):
     dependencies:
       agent-runtime-contracts: file:agent-runtime/lib/contracts(express@5.1.0)
-      agent-runtime-langgraph: file:agent-runtime/lib/langgraph(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
+      agent-runtime-langgraph: file:clients/web-ag-ui/apps/agent-runtime-langgraph(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
     transitivePeerDependencies:
       - '@langchain/core'
       - express
