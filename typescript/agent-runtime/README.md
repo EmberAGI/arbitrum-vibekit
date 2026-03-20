@@ -10,7 +10,6 @@ Consumers should depend on `agent-runtime` instead of wiring the internal runtim
 - `agent-runtime/lib/contracts`: runtime-neutral contracts and projection-safe shared helpers
 - `agent-runtime/lib/pi`: Pi gateway implementation and builder-facing runtime factories
 - `agent-runtime/lib/postgres`: Postgres bootstrap, persistence, recovery, and transaction helpers
-- `clients/web-ag-ui/apps/agent-runtime-langgraph`: LangGraph-specific helpers for the existing web-ag-ui agent apps
 
 ## Public facade responsibilities
 
@@ -22,10 +21,3 @@ Consumers should depend on `agent-runtime` instead of wiring the internal runtim
 - `agent-runtime-contracts`: runtime-neutral contracts and projection-safe shared helpers.
 - `agent-runtime-pi`: Pi gateway implementation and builder-facing runtime factories.
 - `agent-runtime-postgres`: Postgres bootstrap, persistence, recovery, and transaction helpers that support the Pi runtime implementation.
-
-## Explicitly outside this package family
-
-- `agent-runtime-langgraph`
-- `agent-workflow-core`
-
-Those packages remain outside the Pi runtime facade unless later work intentionally adopts them. `agent-runtime-langgraph` stays colocated with the existing `clients/web-ag-ui/apps/*` LangGraph agents rather than under `typescript/agent-runtime/`.
