@@ -6,6 +6,7 @@
     "build:runtime-deps": "pnpm --dir ../../../.. --filter agent-runtime build",
     "dev": "next dev",
     "build": "next build --webpack",
+    "prelint": "pnpm build:runtime-deps",
     "predev": "pnpm build:runtime-deps",
     "prebuild": "pnpm build:runtime-deps",
     "start": "next start",

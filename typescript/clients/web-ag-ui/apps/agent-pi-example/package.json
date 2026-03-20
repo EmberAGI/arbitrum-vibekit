@@ -12,6 +12,7 @@
   "scripts": {
     "build:runtime-deps": "pnpm --dir ../../../.. --filter agent-runtime build",
     "dev": "tsx src/server.ts",
+    "prelint": "pnpm build:runtime-deps",
     "predev": "pnpm build:runtime-deps",
     "prebuild": "pnpm build:runtime-deps",
     "prestart": "pnpm build:runtime-deps",

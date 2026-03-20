@@ -5,6 +5,7 @@
   "main": "dist/agent.js",
   "type": "module",
   "scripts": {
+    "build:runtime-deps": "pnpm --dir ../../../.. --filter agent-runtime-contracts build",
     "dev": "bash ../../scripts/langgraph-dev.sh 8126",
     "start": "bash ../../scripts/langgraph-dev.sh 8126",
     "build": "tsc --project tsconfig.json",
@@ -19,6 +20,7 @@
     "test:ci": "pnpm test:unit && pnpm test:int",
     "lint": "eslint \"src\" --ext .ts",
     "lint:fix": "eslint \"src\" --ext .ts --fix",
+    "prelint": "pnpm build:runtime-deps",
     "typecheck": "tsc --noEmit --project tsconfig.eslint.json",
     "format": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --write",
     "format:check": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --check"

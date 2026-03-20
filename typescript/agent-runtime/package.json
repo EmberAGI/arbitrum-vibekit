@@ -22,6 +22,7 @@
     "lint:fix": "eslint \"src\" --ext .ts --fix",
     "format": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --write",
     "format:check": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --check",
+    "prelint": "pnpm build:deps",
     "prebuild": "pnpm build:deps",
     "pretest:unit": "pnpm build:deps",
     "test": "pnpm test:unit",
