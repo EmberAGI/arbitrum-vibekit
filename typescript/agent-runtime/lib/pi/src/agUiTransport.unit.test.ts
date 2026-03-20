@@ -80,7 +80,7 @@ async function collectEvents(source$: {
       },
       error: (error) => {
         subscription.unsubscribe();
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       },
       complete: () => {
         subscription.unsubscribe();

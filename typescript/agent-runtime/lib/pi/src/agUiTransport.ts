@@ -1,8 +1,7 @@
 import { HttpAgent, runHttpRequest, transformHttpEventStream } from '@ag-ui/client';
-type HttpAgentConfig = import('@ag-ui/client').HttpAgentConfig;
-type RunAgentInput = import('@ag-ui/client').RunAgentInput;
-type PiRuntimeGatewayRunRequest = import('./index.js').PiRuntimeGatewayRunRequest;
-type PiRuntimeGatewayService = import('./index.js').PiRuntimeGatewayService;
+import type { HttpAgentConfig, RunAgentInput } from '@ag-ui/client';
+
+import type { PiRuntimeGatewayRunRequest, PiRuntimeGatewayService } from './index.js';
 
 export const DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH = '/ag-ui';
 
