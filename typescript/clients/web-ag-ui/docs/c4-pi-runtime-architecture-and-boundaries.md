@@ -57,6 +57,10 @@ Related docs:
    - React views consume only `UiState`
 14. React/view code must contain zero agent business logic and zero agent-side invariant enforcement.
 15. Client-side invariants are limited to projection/view-model concerns such as authority selection, stale-event rejection, ordering guards, and local transient UI state.
+16. Reusable Pi AG-UI HTTP adapter logic belongs in the `agent-runtime` package family, not in bespoke per-agent app code.
+17. Any Pi-capable `HttpAgent` transport helper required to consume the Pi AG-UI surface also belongs in the `agent-runtime` package family, not in `apps/web`.
+18. Concrete Pi-backed agent apps should primarily assemble agent/domain behavior and runtime configuration; they should not re-implement generic AG-UI route parsing, SSE framing, or HTTP request adaptation.
+19. The CopilotKit route may instantiate runtime-owned transport helpers, but it must remain protocol routing only and must not own Pi-specific transport behavior.
 
 ## 3. System context
 
@@ -138,8 +142,8 @@ Container responsibilities:
 
 - `web-ag-ui` view layer: render-only, consumes `UiState` only
 - `web-ag-ui` projection layer: derives `UiState` from AG-UI `ThreadState` payloads plus local transient UI state
-- CopilotKit route: protocol routing only
-- Pi AG-UI service: adapter boundary from Pi runtime to AG-UI/A2UI
+- CopilotKit route: protocol routing only and runtime registration; it does not own Pi-specific transport behavior
+- Pi AG-UI service: adapter boundary from Pi runtime to AG-UI/A2UI, owned by the shared `agent-runtime` package family rather than reimplemented per agent app
 - `@mariozechner/pi-agent-core`: foundational in-turn agent loop, tool execution, and emitted event stream
 - `@mariozechner/pi-ai`: provider/model/tool-calling substrate beneath the Pi agent core
 - Pi runtime core: canonical ownership of threads, executions, automations, and automation runs
@@ -151,6 +155,20 @@ Important web constraint:
 
 - web projection code may defend against stale/out-of-order transport behavior
 - web must not enforce agent business rules or become the source of domain truth
+
+### 4.1 Package Ownership Clarification
+
+- The `agent-runtime` package family owns the reusable Pi AG-UI transport layer on both sides of the HTTP boundary:
+  - runtime-side AG-UI HTTP adapter/server helpers
+  - Pi-capable `HttpAgent` transport helpers needed by web-side consumers
+- Concrete Pi-backed `apps/agent*` own:
+  - domain-specific agent construction
+  - runtime configuration
+  - process/bootstrap wiring that is specific to that app
+- `apps/web` owns:
+  - runtime registration and endpoint configuration
+  - protocol-level routing through CopilotKit
+  - no Pi-specific transport implementation beyond consuming runtime-owned helpers
 
 ## 5. Domain model
 
