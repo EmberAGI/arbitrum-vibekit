@@ -46,6 +46,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.0.18",
+    "agent-pi-example": "workspace:^",
     "eslint": "^9",
     "eslint-config-next": "16.0.8",
     "jsdom": "^28.1.0",

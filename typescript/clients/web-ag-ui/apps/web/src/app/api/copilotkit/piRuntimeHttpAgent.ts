@@ -48,21 +48,26 @@ export class PiRuntimeHttpAgent extends HttpAgent {
   }
 
   override abortRun(): void {
+    const agentId = this.agentId;
+    const threadId = this.threadId;
+    const activeRunId = this.activeRunId;
+    const headers = this.headers;
+
     super.abortRun();
 
-    if (!this.agentId || !this.threadId || !this.activeRunId || typeof fetch === 'undefined') {
+    if (!agentId || !threadId || !activeRunId || typeof fetch === 'undefined') {
       return;
     }
 
-    void fetch(`${this.runtimeUrl}/agent/${encodeURIComponent(this.agentId)}/stop`, {
+    void fetch(`${this.runtimeUrl}/agent/${encodeURIComponent(agentId)}/stop`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...this.headers,
+        ...headers,
       },
       body: JSON.stringify({
-        threadId: this.threadId,
-        runId: this.activeRunId,
+        threadId,
+        runId: activeRunId,
       }),
     }).catch(() => undefined);
   }
