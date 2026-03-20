@@ -471,6 +471,25 @@ importers:
         specifier: ^4.0.8
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.9(@types/node@22.19.7)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.8.2)
 
+  apps/agent-runtime:
+    dependencies:
+      agent-runtime-contracts:
+        specifier: workspace:^
+        version: link:../agent-runtime-contracts
+      agent-runtime-pi:
+        specifier: workspace:^
+        version: link:../agent-runtime-pi
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.2
+        version: 22.19.7
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.9(@types/node@22.19.7)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.8.2)
+
   apps/agent-runtime-contracts:
     dependencies:
       '@a2a-js/sdk':
