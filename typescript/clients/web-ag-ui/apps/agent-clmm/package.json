@@ -63,5 +63,10 @@
     "uuid": "^13.0.0",
     "viem": "^2.26.3",
     "zod": "^4.3.5"
+  },
+  "dependenciesMeta": {
+    "agent-runtime-contracts": {
+      "injected": false
+    }
   }
 }

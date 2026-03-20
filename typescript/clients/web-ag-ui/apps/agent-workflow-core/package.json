@@ -24,6 +24,11 @@
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   },
+  "dependenciesMeta": {
+    "agent-runtime-contracts": {
+      "injected": false
+    }
+  },
   "dependencies": {
     "agent-runtime-contracts": "workspace:^",
     "agent-runtime-langgraph": "workspace:^"

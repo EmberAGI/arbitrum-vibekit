@@ -10,7 +10,12 @@
     "./ag-ui-server": "./src/agUiServer.ts"
   },
   "scripts": {
+    "build:runtime-deps": "pnpm --dir ../../../.. --filter agent-runtime build",
     "dev": "tsx src/server.ts",
+    "predev": "pnpm build:runtime-deps",
+    "prebuild": "pnpm build:runtime-deps",
+    "prestart": "pnpm build:runtime-deps",
+    "pretest:unit": "pnpm build:runtime-deps",
     "start": "tsx src/server.ts",
     "build": "tsc --project tsconfig.json",
     "test": "pnpm test:unit",
@@ -20,6 +25,11 @@
   },
   "dependencies": {
     "agent-runtime": "workspace:^"
+  },
+  "dependenciesMeta": {
+    "agent-runtime": {
+      "injected": false
+    }
   },
   "devDependencies": {
     "@types/node": "^22.19.2",

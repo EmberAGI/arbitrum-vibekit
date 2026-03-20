@@ -10,11 +10,26 @@ describe('agent-runtime facade', () => {
       readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
     ) as {
       name?: string;
+      exports?: Record<string, unknown>;
+      main?: string;
       dependencies?: Record<string, string>;
       scripts?: Record<string, string>;
+      types?: string;
     };
 
     expect(packageJson.name).toBe('agent-runtime');
+    expect(packageJson.main).toBe('dist/index.js');
+    expect(packageJson.types).toBe('dist/index.d.ts');
+    expect(packageJson.exports).toMatchObject({
+      '.': {
+        default: './dist/index.js',
+        types: './dist/index.d.ts',
+      },
+      './pi-transport': {
+        default: './dist/piTransport.js',
+        types: './dist/piTransport.d.ts',
+      },
+    });
     expect(packageJson.dependencies).toMatchObject({
       'agent-runtime-contracts': 'workspace:^',
       'agent-runtime-pi': 'workspace:^',
@@ -23,8 +38,10 @@ describe('agent-runtime facade', () => {
     expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-langgraph');
     expect(packageJson.dependencies).not.toHaveProperty('agent-workflow-core');
     expect(packageJson.scripts).toMatchObject({
+      'build:deps': expect.any(String),
       build: expect.any(String),
       lint: expect.any(String),
+      prebuild: expect.any(String),
       test: expect.any(String),
       'test:ci': expect.any(String),
     });
