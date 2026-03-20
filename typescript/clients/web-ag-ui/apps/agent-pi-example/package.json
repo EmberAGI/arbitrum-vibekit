@@ -1,0 +1,26 @@
+{
+  "name": "agent-pi-example",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/server.ts",
+  "types": "src/server.ts",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "tsc --project tsconfig.json",
+    "test": "pnpm test:unit",
+    "test:unit": "vitest run",
+    "test:watch": "vitest watch",
+    "test:ci": "pnpm test:unit"
+  },
+  "dependencies": {
+    "agent-runtime": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.2",
+    "tsx": "catalog:",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
