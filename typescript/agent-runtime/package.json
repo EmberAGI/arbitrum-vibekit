@@ -17,7 +17,7 @@
   },
   "scripts": {
     "build:deps": "pnpm --dir .. --filter agent-runtime-contracts --filter agent-runtime-pi build",
-    "build": "tsc --project tsconfig.json",
+    "build": "tsc --project tsconfig.json && node ./scripts/sync-installed-artifacts.mjs",
     "lint": "eslint \"src\" --ext .ts",
     "lint:fix": "eslint \"src\" --ext .ts --fix",
     "format": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --write",
