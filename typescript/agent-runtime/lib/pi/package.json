@@ -6,7 +6,11 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./pi-transport": {
+      "types": "./src/piTransport.d.ts",
+      "default": "./src/piTransport.js"
+    }
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
@@ -21,6 +25,7 @@
     "test:ci": "pnpm test:unit && pnpm test:int"
   },
   "dependencies": {
+    "@ag-ui/client": "0.0.42",
     "@ag-ui/core": "0.0.42",
     "@mariozechner/pi-agent-core": "0.60.0",
     "@mariozechner/pi-ai": "0.60.0",

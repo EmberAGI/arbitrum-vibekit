@@ -19,9 +19,9 @@ vi.mock('@copilotkit/runtime/langgraph', () => ({
   LangGraphAgent: MockLangGraphAgent,
 }));
 
-vi.mock('./piRuntimeHttpAgent', () => {
+vi.mock('agent-runtime/pi-transport', () => {
   return {
-    PiRuntimeHttpAgent: MockPiRuntimeHttpAgent,
+    PiRuntimeGatewayHttpAgent: MockPiRuntimeHttpAgent,
   };
 });
 

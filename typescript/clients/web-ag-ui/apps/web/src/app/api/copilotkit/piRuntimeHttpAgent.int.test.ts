@@ -2,16 +2,15 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { AddressInfo } from 'node:net';
 
 import { type RunAgentInput } from '@ag-ui/client';
+import { type PiRuntimeGatewayService } from 'agent-runtime';
+import { createPiRuntimeGatewayAgUiHandler, PiRuntimeGatewayHttpAgent } from 'agent-runtime/pi-transport';
 import { lastValueFrom, toArray } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  createPiExampleAgUiHandler,
   createPiExampleGatewayService,
   PI_EXAMPLE_AGENT_ID,
   PI_EXAMPLE_AG_UI_BASE_PATH,
 } from 'agent-pi-example/ag-ui-server';
-
-import { PiRuntimeHttpAgent } from './piRuntimeHttpAgent';
 
 type RecordedRequest = {
   method: string;
@@ -74,7 +73,7 @@ async function writeNodeResponse(response: Response, target: ServerResponse): Pr
   target.end(body);
 }
 
-describe('PiRuntimeHttpAgent integration', () => {
+describe('PiRuntimeGatewayHttpAgent integration', () => {
   let server: Server;
   let runtimeUrl: string;
   let requests: RecordedRequest[];
@@ -82,9 +81,11 @@ describe('PiRuntimeHttpAgent integration', () => {
   beforeEach(async () => {
     requests = [];
 
-    const handler = createPiExampleAgUiHandler({
+    const service: PiRuntimeGatewayService = createPiExampleGatewayService();
+    const handler = createPiRuntimeGatewayAgUiHandler({
       agentId: PI_EXAMPLE_AGENT_ID,
-      service: createPiExampleGatewayService(),
+      service,
+      basePath: PI_EXAMPLE_AG_UI_BASE_PATH,
     });
 
     server = createServer(async (request, response) => {
@@ -142,7 +143,7 @@ describe('PiRuntimeHttpAgent integration', () => {
   });
 
   it('talks to the live Pi example app over AG-UI connect, run, and stop endpoints', async () => {
-    const agent = new PiRuntimeHttpAgent({
+    const agent = new PiRuntimeGatewayHttpAgent({
       agentId: PI_EXAMPLE_AGENT_ID,
       runtimeUrl,
     });

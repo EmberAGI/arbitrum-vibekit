@@ -16,6 +16,7 @@ describe('agent-runtime-pi package contract', () => {
 
     expect(packageJson.name).toBe('agent-runtime-pi');
     expect(packageJson.dependencies).toMatchObject({
+      '@ag-ui/client': '0.0.42',
       '@mariozechner/pi-agent-core': expect.any(String),
       '@mariozechner/pi-ai': expect.any(String),
       'agent-runtime-contracts': 'workspace:^',

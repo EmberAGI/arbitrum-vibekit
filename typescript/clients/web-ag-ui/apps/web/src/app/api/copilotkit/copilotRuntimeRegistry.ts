@@ -1,6 +1,6 @@
 import { CopilotRuntime } from '@copilotkit/runtime';
 import { LangGraphAgent } from '@copilotkit/runtime/langgraph';
-import { PiRuntimeHttpAgent } from './piRuntimeHttpAgent';
+import { PiRuntimeGatewayHttpAgent } from 'agent-runtime/pi-transport';
 
 export const CLMM_AGENT_NAME = 'agent-clmm';
 export const PENDLE_AGENT_NAME = 'agent-pendle';
@@ -34,7 +34,7 @@ export function buildCopilotRuntimeAgents(env: RuntimeEnv) {
     }),
     ...(env.PI_AGENT_DEPLOYMENT_URL
       ? {
-          [PI_EXAMPLE_AGENT_NAME]: new PiRuntimeHttpAgent({
+          [PI_EXAMPLE_AGENT_NAME]: new PiRuntimeGatewayHttpAgent({
             agentId: PI_EXAMPLE_AGENT_NAME,
             runtimeUrl: env.PI_AGENT_DEPLOYMENT_URL,
           }),

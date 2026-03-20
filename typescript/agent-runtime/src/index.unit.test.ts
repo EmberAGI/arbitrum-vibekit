@@ -34,7 +34,9 @@ describe('agent-runtime facade', () => {
     expect(agentRuntime.TASK_STATES).toContain('working');
     expect(typeof agentRuntime.defineAgentDomainModule).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayFoundation).toBe('function');
+    expect(typeof agentRuntime.createPiRuntimeGatewayAgUiHandler).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayRuntime).toBe('function');
+    expect(typeof agentRuntime.PiRuntimeGatewayHttpAgent).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayService).toBe('function');
 
     expect('resolvePostgresBootstrapPlan' in agentRuntime).toBe(false);
