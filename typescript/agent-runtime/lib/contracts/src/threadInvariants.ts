@@ -124,7 +124,7 @@ const resolveNormalizedThreadTask = (input: {
 };
 
 export function shouldPersistInputRequiredCheckpoint(input: {
-  currentTaskState?: TaskState | string | null;
+  currentTaskState?: TaskState | null;
   currentTaskMessage?: string | null;
   currentOnboardingKey?: string | null;
   nextOnboardingKey?: string | null;

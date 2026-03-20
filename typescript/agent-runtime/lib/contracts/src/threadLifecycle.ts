@@ -4,7 +4,7 @@ export type ThreadLifecyclePhase = 'prehire' | 'onboarding' | 'active' | 'firing
 
 export const resolveThreadLifecyclePhase = (input: {
   previousPhase?: ThreadLifecyclePhase;
-  taskState?: string | TaskState | null;
+  taskState?: TaskState | null;
   onboardingFlowStatus?: string | null;
   onboardingStep?: number | null;
   explicitLifecyclePhase?: ThreadLifecyclePhase;
@@ -14,7 +14,7 @@ export const resolveThreadLifecyclePhase = (input: {
   fireRequested?: boolean;
 }): ThreadLifecyclePhase => {
   const taskState = input.taskState ?? null;
-  const hasTerminalTask = typeof taskState === 'string' && isTaskTerminalState(taskState);
+  const hasTerminalTask = taskState !== null && isTaskTerminalState(taskState);
   const fireRequested =
     input.fireRequested === true || input.explicitLifecyclePhase === 'firing';
 

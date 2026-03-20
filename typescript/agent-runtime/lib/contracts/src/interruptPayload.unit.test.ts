@@ -30,11 +30,13 @@ describe('interruptPayload', () => {
   it('requests interrupt payloads and returns both raw and decoded values', async () => {
     const result = await requestInterruptPayload({
       request: { type: 'input-request' },
-      interrupt: async () =>
+      interrupt: () =>
+        Promise.resolve(
         JSON.stringify({
           outcome: 'signed',
           approvals: 2,
         }),
+        ),
     });
 
     expect(result.raw).toBe('{"outcome":"signed","approvals":2}');
