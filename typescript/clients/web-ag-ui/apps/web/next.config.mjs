@@ -4,6 +4,7 @@ const nextConfig = {
     DELEGATIONS_BYPASS: process.env.DELEGATIONS_BYPASS,
   },
   serverExternalPackages: ['@copilotkit/runtime'],
+  transpilePackages: ['agent-runtime', 'agent-runtime-pi'],
 };
 
 export default nextConfig;
