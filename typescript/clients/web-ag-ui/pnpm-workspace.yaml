@@ -1,7 +1,5 @@
 packages:
   - "apps/*"
-  - "../../agent-runtime"
-  - "../../agent-runtime/lib/*"
 
 catalog:
   prettier: ^3.6.2

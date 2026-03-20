@@ -3,19 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "../../agent-runtime",
-    "../../agent-runtime/lib/*"
+    "apps/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
-    "dev:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true turbo run dev",
+    "dev": "pnpm --dir ../.. exec turbo run dev --filter='./clients/web-ag-ui/apps/*'",
+    "dev:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true pnpm --dir ../.. exec turbo run dev --filter='./clients/web-ag-ui/apps/*'",
     "qa": "bash scripts/qa.sh",
-    "build": "turbo run build",
+    "build": "pnpm --dir ../.. exec turbo run build --filter='./clients/web-ag-ui/apps/*'",
     "qa:web": "pnpm build && pnpm start",
-    "start": "turbo run start",
-    "start:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true turbo run start",
-    "lint": "turbo run lint",
+    "start": "pnpm --dir ../.. exec turbo run start --filter='./clients/web-ag-ui/apps/*'",
+    "start:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true pnpm --dir ../.. exec turbo run start --filter='./clients/web-ag-ui/apps/*'",
+    "lint": "pnpm --dir ../.. exec turbo run lint --filter='./clients/web-ag-ui/apps/*'",
     "test": "pnpm -r --filter \"./apps/*\" run test",
     "test:unit": "pnpm -r --filter \"./apps/*\" run test:unit",
     "test:int": "pnpm -r --filter \"./apps/*\" run test:int",
@@ -28,8 +26,7 @@
     "@langchain/langgraph-cli": "^1.0.4",
     "eslint": "^9.39.1",
     "eslint-config-next": "^16.0.8",
-    "next": "16.0.8",
-    "turbo": "^2.3.3"
+    "next": "16.0.8"
   },
   "packageManager": "pnpm@10.7.0",
   "engines": {
