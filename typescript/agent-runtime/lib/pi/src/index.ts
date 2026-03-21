@@ -9,7 +9,23 @@ import {
 import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
 import type { Api, Message, Model, ToolResultMessage } from '@mariozechner/pi-ai';
 import { mergeThreadPatchForEmit, type TaskState } from 'agent-runtime-contracts';
-import { resolvePostgresBootstrapPlan, type PostgresBootstrapPlan } from 'agent-runtime-postgres';
+import {
+  buildPiRuntimeInspectionSnapshot,
+  buildPiRuntimeMaintenancePlan,
+  resolvePostgresBootstrapPlan,
+  type PiAutomationRecord,
+  type PiAutomationRunRecord,
+  type PiExecutionEventRecord,
+  type PiExecutionRecord,
+  type PiOutboxRecoveryRecord,
+  type PiRestartInterruptRecord,
+  type PiRuntimeMaintenancePlan,
+  type PiRuntimeRetentionPolicy,
+  type PiSchedulerLeaseRecord,
+  type PiThreadActivityRecord,
+  type PiThreadRecord,
+  type PostgresBootstrapPlan,
+} from 'agent-runtime-postgres';
 export {
   createPiRuntimeGatewayAgUiHandler,
   DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH,
@@ -127,7 +143,13 @@ export type PiRuntimeGatewayRuntime = {
 
 export type PiRuntimeGatewayControlPlane = {
   inspectHealth: () => Promise<unknown>;
+  listThreads: () => Promise<unknown>;
   listExecutions: () => Promise<unknown>;
+  listAutomations: () => Promise<unknown>;
+  listAutomationRuns: () => Promise<unknown>;
+  inspectScheduler: () => Promise<unknown>;
+  inspectOutbox: () => Promise<unknown>;
+  inspectMaintenance: () => Promise<unknown>;
 };
 
 export type PiRuntimeGatewayService = {
@@ -147,6 +169,25 @@ export type PiRuntimeGatewayFoundation = {
   agent: Agent;
   bootstrapPlan: PostgresBootstrapPlan;
 };
+
+export type PiRuntimeGatewayInspectionState = {
+  threads: readonly PiThreadRecord[];
+  executions: readonly PiExecutionRecord[];
+  automations: readonly PiAutomationRecord[];
+  automationRuns: readonly PiAutomationRunRecord[];
+  interrupts: readonly PiRestartInterruptRecord[];
+  leases: readonly PiSchedulerLeaseRecord[];
+  outboxIntents: readonly PiOutboxRecoveryRecord[];
+  executionEvents: readonly PiExecutionEventRecord[];
+  threadActivities: readonly PiThreadActivityRecord[];
+};
+
+export const DEFAULT_PI_RUNTIME_GATEWAY_RETENTION = {
+  completedExecutionMs: 7 * 24 * 60 * 60 * 1000,
+  completedAutomationRunMs: 7 * 24 * 60 * 60 * 1000,
+  executionEventMs: 7 * 24 * 60 * 60 * 1000,
+  threadActivityMs: 7 * 24 * 60 * 60 * 1000,
+} as const satisfies PiRuntimeRetentionPolicy;
 
 const EMPTY_USAGE = {
   input: 0,
@@ -694,6 +735,37 @@ export const createPiRuntimeGatewayRuntime = (params: {
   };
 };
 
+export const createCanonicalPiRuntimeGatewayControlPlane = (params: {
+  loadInspectionState: () => Promise<PiRuntimeGatewayInspectionState>;
+  retention?: PiRuntimeRetentionPolicy;
+  now?: () => Date;
+}): PiRuntimeGatewayControlPlane => {
+  const now = params.now ?? (() => new Date());
+  const retention = params.retention ?? DEFAULT_PI_RUNTIME_GATEWAY_RETENTION;
+
+  const loadSnapshot = async () =>
+    buildPiRuntimeInspectionSnapshot({
+      now: now(),
+      ...(await params.loadInspectionState()),
+    });
+
+  return {
+    inspectHealth: async () => (await loadSnapshot()).health,
+    listThreads: async () => (await loadSnapshot()).threads,
+    listExecutions: async () => (await loadSnapshot()).executions,
+    listAutomations: async () => (await loadSnapshot()).automations,
+    listAutomationRuns: async () => (await loadSnapshot()).automationRuns,
+    inspectScheduler: async () => (await loadSnapshot()).scheduler,
+    inspectOutbox: async () => (await loadSnapshot()).outbox,
+    inspectMaintenance: async (): Promise<PiRuntimeMaintenancePlan> =>
+      buildPiRuntimeMaintenancePlan({
+        now: now(),
+        snapshot: await loadSnapshot(),
+        retention,
+      }),
+  };
+};
+
 export const createPiRuntimeGatewayService = (params: {
   runtime: PiRuntimeGatewayRuntime;
   controlPlane: PiRuntimeGatewayControlPlane;
@@ -703,6 +775,12 @@ export const createPiRuntimeGatewayService = (params: {
   stop: (request) => params.runtime.stop(request),
   control: {
     inspectHealth: () => params.controlPlane.inspectHealth(),
+    listThreads: () => params.controlPlane.listThreads(),
     listExecutions: () => params.controlPlane.listExecutions(),
+    listAutomations: () => params.controlPlane.listAutomations(),
+    listAutomationRuns: () => params.controlPlane.listAutomationRuns(),
+    inspectScheduler: () => params.controlPlane.inspectScheduler(),
+    inspectOutbox: () => params.controlPlane.inspectOutbox(),
+    inspectMaintenance: () => params.controlPlane.inspectMaintenance(),
   },
 });

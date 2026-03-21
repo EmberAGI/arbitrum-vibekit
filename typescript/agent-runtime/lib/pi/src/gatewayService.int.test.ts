@@ -121,7 +121,16 @@ describe('pi gateway service integration', () => {
       }),
       controlPlane: {
         inspectHealth: async () => ({ status: 'ok' as const }),
+        listThreads: async () => ['thread-1'],
         listExecutions: async () => ['exec-1'],
+        listAutomations: async () => ['automation-1'],
+        listAutomationRuns: async () => ['run-1'],
+        inspectScheduler: async () => ({ dueAutomationIds: ['automation-1'], leases: [] }),
+        inspectOutbox: async () => ({ dueOutboxIds: ['outbox-1'], intents: [] }),
+        inspectMaintenance: async () => ({
+          recovery: { automationIdsToResume: ['automation-1'] },
+          archival: { executionIds: [] },
+        }),
       },
     });
 
@@ -261,7 +270,22 @@ describe('pi gateway service integration', () => {
     ]);
     expect(agent.abortCalled).toBe(true);
     await expect(service.control.inspectHealth()).resolves.toEqual({ status: 'ok' });
+    await expect(service.control.listThreads()).resolves.toEqual(['thread-1']);
     await expect(service.control.listExecutions()).resolves.toEqual(['exec-1']);
+    await expect(service.control.listAutomations()).resolves.toEqual(['automation-1']);
+    await expect(service.control.listAutomationRuns()).resolves.toEqual(['run-1']);
+    await expect(service.control.inspectScheduler()).resolves.toEqual({
+      dueAutomationIds: ['automation-1'],
+      leases: [],
+    });
+    await expect(service.control.inspectOutbox()).resolves.toEqual({
+      dueOutboxIds: ['outbox-1'],
+      intents: [],
+    });
+    await expect(service.control.inspectMaintenance()).resolves.toEqual({
+      recovery: { automationIdsToResume: ['automation-1'] },
+      archival: { executionIds: [] },
+    });
   });
 
   it('queues active-run user input through Pi steering instead of re-prompting the agent', async () => {
