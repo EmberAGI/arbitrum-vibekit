@@ -327,6 +327,9 @@ importers:
       agent-runtime-contracts:
         specifier: workspace:^
         version: link:../contracts
+      pg:
+        specifier: ^8.20.0
+        version: 8.20.0
     dependenciesMeta:
       agent-runtime-contracts:
         injected: false
@@ -508,7 +511,7 @@ importers:
     dependencies:
       '@copilotkit/sdk-js':
         specifier: 1.50.1
-        version: 1.50.1(@langchain/community@0.3.58(72b434b24738304ef305b433d560b0f2))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@langchain/langgraph@1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5))(langchain@0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)))(typescript@5.9.3)(zod@4.3.5)
+        version: 1.50.1(@langchain/community@0.3.58(676f7100054ebd982c2321457317b5de))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@langchain/langgraph@1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5))(langchain@0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)))(typescript@5.9.3)(zod@4.3.5)
       '@copilotkit/shared':
         specifier: 1.50.1
         version: 1.50.1
@@ -611,7 +614,7 @@ importers:
     dependencies:
       '@copilotkit/sdk-js':
         specifier: 1.50.1
-        version: 1.50.1(@langchain/community@0.3.58(72b434b24738304ef305b433d560b0f2))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@langchain/langgraph@1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5))(langchain@0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)))(typescript@5.9.3)(zod@4.3.5)
+        version: 1.50.1(@langchain/community@0.3.58(676f7100054ebd982c2321457317b5de))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@langchain/langgraph@1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5))(langchain@0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)))(typescript@5.9.3)(zod@4.3.5)
       '@copilotkit/shared':
         specifier: ^1.50.1
         version: 1.50.1
@@ -717,7 +720,7 @@ importers:
     dependencies:
       '@copilotkit/sdk-js':
         specifier: 1.50.1
-        version: 1.50.1(@langchain/community@0.3.58(72b434b24738304ef305b433d560b0f2))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@langchain/langgraph@1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5))(langchain@0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)))(typescript@5.9.3)(zod@4.3.5)
+        version: 1.50.1(@langchain/community@0.3.58(676f7100054ebd982c2321457317b5de))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@langchain/langgraph@1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5))(langchain@0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)))(typescript@5.9.3)(zod@4.3.5)
       '@copilotkit/shared':
         specifier: 1.50.1
         version: 1.50.1
@@ -826,7 +829,7 @@ importers:
     dependencies:
       '@copilotkit/sdk-js':
         specifier: 1.50.1
-        version: 1.50.1(@langchain/community@0.3.58(72b434b24738304ef305b433d560b0f2))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@langchain/langgraph@1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5))(langchain@0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)))(typescript@5.9.3)(zod@4.3.5)
+        version: 1.50.1(@langchain/community@0.3.58(676f7100054ebd982c2321457317b5de))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@langchain/langgraph@1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5))(langchain@0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)))(typescript@5.9.3)(zod@4.3.5)
       '@copilotkit/shared':
         specifier: 1.50.1
         version: 1.50.1
@@ -1001,7 +1004,7 @@ importers:
         version: 1.50.1(@types/mdast@4.0.4)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(graphql@16.12.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@3.25.76)
       '@copilotkit/runtime':
         specifier: 1.50.1
-        version: 1.50.1(patch_hash=ca033b53ad6b46deacd60a5cd04f1f8f6f774cb29f859bfe60943af732e4cef2)(d898990d0ccba1a748e6b78b1378eff5)
+        version: 1.50.1(patch_hash=ca033b53ad6b46deacd60a5cd04f1f8f6f774cb29f859bfe60943af732e4cef2)(d73dc5aa48fb1a34712e08429d9501ce)
       '@copilotkit/shared':
         specifier: 1.50.1
         version: 1.50.1
@@ -1211,7 +1214,7 @@ importers:
         version: 17.2.3
       drizzle-orm:
         specifier: ^0.34.0
-        version: 0.34.1(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.0)(@types/pg@8.20.0)(@types/react@18.3.26)(@vercel/postgres@0.10.0(utf-8-validate@5.0.10))(postgres@3.4.7)(react@19.0.0-rc-45804af1-20241021)
+        version: 0.34.1(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.0)(@types/pg@8.20.0)(@types/react@18.3.26)(@vercel/postgres@0.10.0(utf-8-validate@5.0.10))(pg@8.20.0)(postgres@3.4.7)(react@19.0.0-rc-45804af1-20241021)
       fast-deep-equal:
         specifier: ^3.1.3
         version: 3.1.3
@@ -15105,6 +15108,12 @@ packages:
       ox:
         optional: true
 
+  pg-cloudflare@1.3.0:
+    resolution: {integrity: sha512-6lswVVSztmHiRtD6I8hw4qP/nDm1EJbKMRhf3HCYaqud7frGysPv7FYJ5noZQdhQtN2xJnimfMtvQq21pdbzyQ==}
+
+  pg-connection-string@2.12.0:
+    resolution: {integrity: sha512-U7qg+bpswf3Cs5xLzRqbXbQl85ng0mfSV/J0nnA31MCLgvEaAo7CIhmeyrmJpOr7o+zm0rXK+hNnT5l9RHkCkQ==}
+
   pg-int8@1.0.1:
     resolution: {integrity: sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==}
     engines: {node: '>=4.0.0'}
@@ -15113,8 +15122,16 @@ packages:
     resolution: {integrity: sha512-BM/Thnrw5jm2kKLE5uJkXqqExRUY/toLHda65XgFTBTFYZyopbKjBe29Ii3RbkvlsMoFwD+tHeGaCjjv0gHlyw==}
     engines: {node: '>=4'}
 
+  pg-pool@3.13.0:
+    resolution: {integrity: sha512-gB+R+Xud1gLFuRD/QgOIgGOBE2KCQPaPwkzBBGC9oG69pHTkhQeIuejVIk3/cnDyX39av2AxomQiyPT13WKHQA==}
+    peerDependencies:
+      pg: '>=8.0'
+
   pg-protocol@1.10.3:
     resolution: {integrity: sha512-6DIBgBQaTKDJyxnXaLiLR8wBpQQcGWuAESkRBX/t6OwA8YsqP+iVSiond2EDy6Y/dsGk8rh/jtax3js5NeV7JQ==}
+
+  pg-protocol@1.13.0:
+    resolution: {integrity: sha512-zzdvXfS6v89r6v7OcFCHfHlyG/wvry1ALxZo4LqgUoy7W9xhBDMaqOuMiF3qEV45VqsN6rdlcehHrfDtlCPc8w==}
 
   pg-types@2.2.0:
     resolution: {integrity: sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==}
@@ -15123,6 +15140,18 @@ packages:
   pg-types@4.1.0:
     resolution: {integrity: sha512-o2XFanIMy/3+mThw69O8d4n1E5zsLhdO+OPqswezu7Z5ekP4hYDqlDjlmOpYMbzY2Br0ufCwJLdDIXeNVwcWFg==}
     engines: {node: '>=10'}
+
+  pg@8.20.0:
+    resolution: {integrity: sha512-ldhMxz2r8fl/6QkXnBD3CR9/xg694oT6DZQ2s6c/RI28OjtSOpxnPrUCGOBJ46RCUxcWdx3p6kw/xnDHjKvaRA==}
+    engines: {node: '>= 16.0.0'}
+    peerDependencies:
+      pg-native: '>=3.0.1'
+    peerDependenciesMeta:
+      pg-native:
+        optional: true
+
+  pgpass@1.0.5:
+    resolution: {integrity: sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -20441,7 +20470,7 @@ snapshots:
       - encoding
       - graphql
 
-  '@copilotkit/runtime@1.50.1(patch_hash=ca033b53ad6b46deacd60a5cd04f1f8f6f774cb29f859bfe60943af732e4cef2)(d898990d0ccba1a748e6b78b1378eff5)':
+  '@copilotkit/runtime@1.50.1(patch_hash=ca033b53ad6b46deacd60a5cd04f1f8f6f774cb29f859bfe60943af732e4cef2)(d73dc5aa48fb1a34712e08429d9501ce)':
     dependencies:
       '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       '@ag-ui/core': 0.0.42
@@ -20469,7 +20498,7 @@ snapshots:
     optionalDependencies:
       '@anthropic-ai/sdk': 0.57.0
       '@langchain/aws': 0.1.15(@langchain/core@0.3.78(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)))
-      '@langchain/community': 0.3.58(eb7cdf53a7a70586e9c62584ff6dac2c)
+      '@langchain/community': 0.3.58(163417ec5eea8ad830596c609498aed2)
       '@langchain/google-gauth': 0.1.8(@langchain/core@0.3.78(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)))(zod@3.25.76)
       '@langchain/langgraph-sdk': 1.0.3(@langchain/core@0.3.78(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@langchain/openai': 1.1.3(@langchain/core@0.3.78(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))
@@ -20486,10 +20515,10 @@ snapshots:
       - react-dom
       - supports-color
 
-  '@copilotkit/sdk-js@1.50.1(@langchain/community@0.3.58(72b434b24738304ef305b433d560b0f2))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@langchain/langgraph@1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5))(langchain@0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)))(typescript@5.9.3)(zod@4.3.5)':
+  '@copilotkit/sdk-js@1.50.1(@langchain/community@0.3.58(676f7100054ebd982c2321457317b5de))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@langchain/langgraph@1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5))(langchain@0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)))(typescript@5.9.3)(zod@4.3.5)':
     dependencies:
       '@copilotkit/shared': 1.50.1
-      '@langchain/community': 0.3.58(72b434b24738304ef305b433d560b0f2)
+      '@langchain/community': 0.3.58(676f7100054ebd982c2321457317b5de)
       '@langchain/core': 1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))
       '@langchain/langgraph': 1.0.2(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
       langchain: 0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))
@@ -22105,65 +22134,7 @@ snapshots:
       - aws-crt
     optional: true
 
-  '@langchain/community@0.3.58(72b434b24738304ef305b433d560b0f2)':
-    dependencies:
-      '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.56.0)(bufferutil@4.0.9)(deepmerge@4.3.1)(dotenv@17.2.3)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(utf-8-validate@5.0.10)(zod@4.3.5)
-      '@ibm-cloud/watsonx-ai': 1.7.5
-      '@langchain/core': 1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))
-      '@langchain/openai': 0.4.9(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))
-      '@langchain/weaviate': 0.2.3(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))
-      binary-extensions: 2.3.0
-      flat: 5.0.2
-      ibm-cloud-sdk-core: 5.4.5
-      js-yaml: 4.1.1
-      langchain: 0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))
-      langsmith: 0.3.73(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))
-      math-expression-evaluator: 2.0.7
-      openai: 6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
-      uuid: 10.0.0
-      zod: 3.25.76
-    optionalDependencies:
-      '@aws-crypto/sha256-js': 5.2.0
-      '@aws-sdk/client-bedrock-agent-runtime': 3.948.0
-      '@aws-sdk/client-bedrock-runtime': 3.1013.0
-      '@aws-sdk/client-kendra': 3.948.0
-      '@aws-sdk/credential-provider-node': 3.972.23
-      '@browserbasehq/sdk': 2.6.0
-      '@neondatabase/serverless': 0.9.5
-      '@smithy/util-utf8': 2.3.0
-      '@vercel/postgres': 0.10.0(utf-8-validate@5.0.10)
-      cheerio: 1.1.2
-      fast-xml-parser: 5.5.6
-      google-auth-library: 10.6.2
-      ignore: 5.3.2
-      jsdom: 28.1.0(@noble/hashes@1.8.0)
-      jsonwebtoken: 9.0.3
-      lodash: 4.17.21
-      playwright: 1.56.0
-      weaviate-client: 3.10.0
-      ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-    transitivePeerDependencies:
-      - '@langchain/anthropic'
-      - '@langchain/aws'
-      - '@langchain/cerebras'
-      - '@langchain/cohere'
-      - '@langchain/deepseek'
-      - '@langchain/google-genai'
-      - '@langchain/google-vertexai'
-      - '@langchain/google-vertexai-web'
-      - '@langchain/groq'
-      - '@langchain/mistralai'
-      - '@langchain/ollama'
-      - '@langchain/xai'
-      - '@opentelemetry/api'
-      - '@opentelemetry/exporter-trace-otlp-proto'
-      - '@opentelemetry/sdk-trace-base'
-      - axios
-      - encoding
-      - handlebars
-      - peggy
-
-  '@langchain/community@0.3.58(eb7cdf53a7a70586e9c62584ff6dac2c)':
+  '@langchain/community@0.3.58(163417ec5eea8ad830596c609498aed2)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.56.0)(bufferutil@4.0.9)(deepmerge@4.3.1)(dotenv@17.2.3)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(utf-8-validate@5.0.10)(zod@3.25.76)
       '@ibm-cloud/watsonx-ai': 1.7.5
@@ -22197,6 +22168,7 @@ snapshots:
       jsdom: 28.1.0(@noble/hashes@1.8.0)
       jsonwebtoken: 9.0.3
       lodash: 4.17.21
+      pg: 8.20.0
       playwright: 1.56.0
       weaviate-client: 3.10.0
       ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)
@@ -22221,6 +22193,65 @@ snapshots:
       - handlebars
       - peggy
     optional: true
+
+  '@langchain/community@0.3.58(676f7100054ebd982c2321457317b5de)':
+    dependencies:
+      '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.56.0)(bufferutil@4.0.9)(deepmerge@4.3.1)(dotenv@17.2.3)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(utf-8-validate@5.0.10)(zod@4.3.5)
+      '@ibm-cloud/watsonx-ai': 1.7.5
+      '@langchain/core': 1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))
+      '@langchain/openai': 0.4.9(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+      '@langchain/weaviate': 0.2.3(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))
+      binary-extensions: 2.3.0
+      flat: 5.0.2
+      ibm-cloud-sdk-core: 5.4.5
+      js-yaml: 4.1.1
+      langchain: 0.3.36(@langchain/aws@0.1.15(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))))(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(@opentelemetry/api@1.9.0)(axios@1.12.2(debug@4.4.3))(cheerio@1.1.2)(handlebars@4.7.8)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+      langsmith: 0.3.73(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5))
+      math-expression-evaluator: 2.0.7
+      openai: 6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
+      uuid: 10.0.0
+      zod: 3.25.76
+    optionalDependencies:
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/client-bedrock-agent-runtime': 3.948.0
+      '@aws-sdk/client-bedrock-runtime': 3.1013.0
+      '@aws-sdk/client-kendra': 3.948.0
+      '@aws-sdk/credential-provider-node': 3.972.23
+      '@browserbasehq/sdk': 2.6.0
+      '@neondatabase/serverless': 0.9.5
+      '@smithy/util-utf8': 2.3.0
+      '@vercel/postgres': 0.10.0(utf-8-validate@5.0.10)
+      cheerio: 1.1.2
+      fast-xml-parser: 5.5.6
+      google-auth-library: 10.6.2
+      ignore: 5.3.2
+      jsdom: 28.1.0(@noble/hashes@1.8.0)
+      jsonwebtoken: 9.0.3
+      lodash: 4.17.21
+      pg: 8.20.0
+      playwright: 1.56.0
+      weaviate-client: 3.10.0
+      ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+    transitivePeerDependencies:
+      - '@langchain/anthropic'
+      - '@langchain/aws'
+      - '@langchain/cerebras'
+      - '@langchain/cohere'
+      - '@langchain/deepseek'
+      - '@langchain/google-genai'
+      - '@langchain/google-vertexai'
+      - '@langchain/google-vertexai-web'
+      - '@langchain/groq'
+      - '@langchain/mistralai'
+      - '@langchain/ollama'
+      - '@langchain/xai'
+      - '@opentelemetry/api'
+      - '@opentelemetry/exporter-trace-otlp-proto'
+      - '@opentelemetry/sdk-trace-base'
+      - axios
+      - encoding
+      - handlebars
+      - peggy
 
   '@langchain/core@0.3.78(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))':
     dependencies:
@@ -33850,13 +33881,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.34.1(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.0)(@types/pg@8.20.0)(@types/react@18.3.26)(@vercel/postgres@0.10.0(utf-8-validate@5.0.10))(postgres@3.4.7)(react@19.0.0-rc-45804af1-20241021):
+  drizzle-orm@0.34.1(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.0)(@types/pg@8.20.0)(@types/react@18.3.26)(@vercel/postgres@0.10.0(utf-8-validate@5.0.10))(pg@8.20.0)(postgres@3.4.7)(react@19.0.0-rc-45804af1-20241021):
     optionalDependencies:
       '@neondatabase/serverless': 0.9.5
       '@opentelemetry/api': 1.9.0
       '@types/pg': 8.20.0
       '@types/react': 18.3.26
       '@vercel/postgres': 0.10.0(utf-8-validate@5.0.10)
+      pg: 8.20.0
       postgres: 3.4.7
       react: 19.0.0-rc-45804af1-20241021
 
@@ -39532,11 +39564,22 @@ snapshots:
     optionalDependencies:
       ox: 0.8.6(typescript@5.9.3)(zod@4.3.5)
 
+  pg-cloudflare@1.3.0:
+    optional: true
+
+  pg-connection-string@2.12.0: {}
+
   pg-int8@1.0.1: {}
 
   pg-numeric@1.0.2: {}
 
+  pg-pool@3.13.0(pg@8.20.0):
+    dependencies:
+      pg: 8.20.0
+
   pg-protocol@1.10.3: {}
+
+  pg-protocol@1.13.0: {}
 
   pg-types@2.2.0:
     dependencies:
@@ -39555,6 +39598,20 @@ snapshots:
       postgres-date: 2.1.0
       postgres-interval: 3.0.0
       postgres-range: 1.1.4
+
+  pg@8.20.0:
+    dependencies:
+      pg-connection-string: 2.12.0
+      pg-pool: 3.13.0(pg@8.20.0)
+      pg-protocol: 1.13.0
+      pg-types: 2.2.0
+      pgpass: 1.0.5
+    optionalDependencies:
+      pg-cloudflare: 1.3.0
+
+  pgpass@1.0.5:
+    dependencies:
+      split2: 4.2.0
 
   picocolors@1.1.1: {}
 
