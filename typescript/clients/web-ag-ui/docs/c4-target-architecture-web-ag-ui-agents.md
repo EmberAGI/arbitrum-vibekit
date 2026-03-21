@@ -141,11 +141,17 @@ Explicit non-goal container:
 - `CopilotKit Runtime Route` (`/api/copilotkit`):
   - The only server route used by web for agent communication.
   - Exposes AG-UI `connect`, `run`, and `stop` semantics used by web.
+  - For standalone Pi-backed agents, imports runtime-owned transport helpers rather than defining Pi-specific transport behavior locally.
 
 - `Agent Registry`:
   - Maps agent ids to runtime endpoints and capabilities.
   - Provides metadata only; does not mirror thread state.
   - Must support multiple runtime families cleanly, including standalone Pi gateway-backed agents registered through `HttpAgent` rather than in-process runtime embedding.
+
+- Pi-backed runtime package ownership:
+  - The `agent-runtime` package family owns the reusable Pi AG-UI HTTP adapter/server layer.
+  - The `agent-runtime` package family also owns the Pi-capable `HttpAgent` implementation used by `apps/web` to consume that AG-UI surface.
+  - Concrete Pi-backed agent apps should mostly provide domain/runtime assembly and app-specific bootstrap, not reimplement generic AG-UI transport glue.
 
 ### 5.3 Agent runtime components (shared pattern)
 

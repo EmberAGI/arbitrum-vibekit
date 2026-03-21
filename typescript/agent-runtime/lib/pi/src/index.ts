@@ -10,6 +10,12 @@ import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type Agen
 import type { Api, Message, Model, ToolResultMessage } from '@mariozechner/pi-ai';
 import { mergeThreadPatchForEmit, type TaskState } from 'agent-runtime-contracts';
 import { resolvePostgresBootstrapPlan, type PostgresBootstrapPlan } from 'agent-runtime-postgres';
+export {
+  createPiRuntimeGatewayAgUiHandler,
+  DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH,
+  PiRuntimeGatewayHttpAgent,
+} from './agUiTransport.js';
+export type { PiRuntimeGatewayAgUiHandlerOptions, PiRuntimeGatewayHttpAgentConfig } from './agUiTransport.js';
 
 export type PiRuntimeGatewayConnectRequest = {
   threadId: string;

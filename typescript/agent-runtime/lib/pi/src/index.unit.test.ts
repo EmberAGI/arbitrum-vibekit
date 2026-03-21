@@ -10,20 +10,38 @@ describe('agent-runtime-pi package contract', () => {
       readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
     ) as {
       name?: string;
+      exports?: Record<string, unknown>;
+      main?: string;
       dependencies?: Record<string, string>;
       scripts?: Record<string, string>;
+      types?: string;
     };
 
     expect(packageJson.name).toBe('agent-runtime-pi');
+    expect(packageJson.main).toBe('dist/index.js');
+    expect(packageJson.types).toBe('dist/index.d.ts');
+    expect(packageJson.exports).toMatchObject({
+      '.': {
+        default: './dist/index.js',
+        types: './dist/index.d.ts',
+      },
+      './pi-transport': {
+        default: './dist/piTransport.js',
+        types: './dist/piTransport.d.ts',
+      },
+    });
     expect(packageJson.dependencies).toMatchObject({
+      '@ag-ui/client': '0.0.42',
       '@mariozechner/pi-agent-core': expect.any(String),
       '@mariozechner/pi-ai': expect.any(String),
       'agent-runtime-contracts': 'workspace:^',
       'agent-runtime-postgres': 'workspace:^',
     });
     expect(packageJson.scripts).toMatchObject({
+      'build:deps': expect.any(String),
       build: expect.any(String),
       lint: expect.any(String),
+      prebuild: expect.any(String),
       test: expect.any(String),
       'test:ci': expect.any(String),
     });

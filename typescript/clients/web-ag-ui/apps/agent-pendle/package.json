@@ -5,6 +5,7 @@
   "main": "dist/agent.js",
   "type": "module",
   "scripts": {
+    "build:runtime-deps": "pnpm --dir ../../../.. --filter agent-runtime-contracts build",
     "dev": "bash ../../scripts/langgraph-dev.sh 8125",
     "start": "bash ../../scripts/langgraph-dev.sh 8125",
     "build": "tsc --project tsconfig.json",
@@ -19,6 +20,7 @@
     "test:record-mocks": "bash -lc 'ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec tsx --env-file=\"$ENV_FILE\" tests/utils/record-onchain-actions-mocks.ts'",
     "lint": "eslint \"src\" --ext .ts",
     "lint:fix": "eslint \"src\" --ext .ts --fix",
+    "prelint": "pnpm build:runtime-deps",
     "typecheck": "tsc --noEmit --project tsconfig.eslint.json",
     "format": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --write",
     "format:check": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --check",
@@ -66,5 +68,10 @@
     "uuid": "^13.0.0",
     "viem": "catalog:",
     "zod": "^4.3.5"
+  },
+  "dependenciesMeta": {
+    "agent-runtime-contracts": {
+      "injected": false
+    }
   }
 }

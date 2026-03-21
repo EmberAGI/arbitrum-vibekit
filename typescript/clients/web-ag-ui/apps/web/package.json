@@ -3,17 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "build:runtime-deps": "pnpm --dir ../../../.. --filter agent-runtime build",
     "dev": "next dev",
     "build": "next build --webpack",
+    "prelint": "pnpm build:runtime-deps",
+    "predev": "pnpm build:runtime-deps",
+    "prebuild": "pnpm build:runtime-deps",
     "start": "next start",
-    "qa": "next build --webpack && next start",
+    "qa": "pnpm build && next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --write",
     "format:check": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --check",
     "test": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
     "test:watch": "vitest watch --config vitest.config.unit.ts",
+    "pretest:e2e": "pnpm build:runtime-deps",
+    "pretest:unit": "pnpm build:runtime-deps",
     "test:unit": "bash -lc 'ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec node --env-file=\"$ENV_FILE\" ./node_modules/vitest/vitest.mjs run --config vitest.config.unit.ts \"$@\"' --",
+    "pretest:int": "pnpm build:runtime-deps",
     "test:int": "bash -lc 'ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec node --env-file=\"$ENV_FILE\" ./node_modules/vitest/vitest.mjs run --config vitest.config.int.ts \"$@\"' --",
     "test:e2e": "bash -lc 'ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec node --env-file=\"$ENV_FILE\" ./node_modules/vitest/vitest.mjs run --config vitest.config.e2e.ts --no-file-parallelism --maxConcurrency=1 \"$@\"' --",
     "test:ci": "pnpm test:unit && pnpm test:int",
@@ -27,6 +34,7 @@
     "@metamask/delegation-toolkit": "^0.13.0",
     "@privy-io/react-auth": "^3.9.0",
     "@tanstack/react-query": "^5.90.12",
+    "agent-runtime": "workspace:^",
     "lucide-react": "^0.561.0",
     "next": "16.0.8",
     "react": "^19.2.1",
@@ -46,6 +54,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.0.18",
+    "agent-pi-example": "workspace:^",
     "eslint": "^9",
     "eslint-config-next": "16.0.8",
     "jsdom": "^28.1.0",
@@ -54,5 +63,13 @@
     "typescript": "^5",
     "vite-tsconfig-paths": "^6.0.5",
     "vitest": "^4.0.18"
+  },
+  "dependenciesMeta": {
+    "agent-pi-example": {
+      "injected": false
+    },
+    "agent-runtime": {
+      "injected": false
+    }
   }
 }
