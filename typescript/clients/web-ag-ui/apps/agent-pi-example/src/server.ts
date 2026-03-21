@@ -1,9 +1,8 @@
 import http from 'node:http';
-import type { PiRuntimeGatewayService } from 'agent-runtime';
-import { createPiExampleAgUiHandler, createPiExampleGatewayService, PI_EXAMPLE_AGENT_ID } from './agUiServer.js';
+import { createPiExampleAgUiHandler, PI_EXAMPLE_AGENT_ID } from './agUiServer.js';
+import { preparePiExampleServer } from './startup.js';
 
-const port = Number.parseInt(process.env.PORT ?? '3410', 10);
-const service: PiRuntimeGatewayService = createPiExampleGatewayService();
+const { bootstrap, port, service } = await preparePiExampleServer();
 const handler = createPiExampleAgUiHandler({
   agentId: PI_EXAMPLE_AGENT_ID,
   service,
@@ -58,5 +57,12 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(port, () => {
-  console.log(`agent-pi-example listening on http://127.0.0.1:${port}`);
+  console.log(
+    [
+      `agent-pi-example listening on http://127.0.0.1:${port}`,
+      bootstrap
+        ? `database=${bootstrap.databaseUrl} mode=${bootstrap.bootstrapPlan.mode} startedLocalDocker=${String(bootstrap.startedLocalDocker)}`
+        : 'database=unknown',
+    ].join(' '),
+  );
 });

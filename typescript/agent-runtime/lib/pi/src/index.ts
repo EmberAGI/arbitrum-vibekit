@@ -7,7 +7,7 @@ import {
   type StateSnapshotEvent,
 } from '@ag-ui/core';
 import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
-import type { Api, Message, Model, ToolResultMessage } from '@mariozechner/pi-ai';
+import { createAssistantMessageEventStream, type Api, type Message, type Model, type ToolResultMessage } from '@mariozechner/pi-ai';
 import { mergeThreadPatchForEmit, type TaskState } from 'agent-runtime-contracts';
 import {
   buildPiRuntimeInspectionSnapshot,
@@ -32,6 +32,19 @@ export {
   PiRuntimeGatewayHttpAgent,
 } from './agUiTransport.js';
 export type { PiRuntimeGatewayAgUiHandlerOptions, PiRuntimeGatewayHttpAgentConfig } from './agUiTransport.js';
+export {
+  buildPiRuntimeDirectExecutionRecordIds,
+  ensurePiRuntimePostgresReady,
+  loadPiRuntimeInspectionState,
+  persistPiRuntimeDirectExecution,
+} from 'agent-runtime-postgres';
+export type {
+  EnsuredPiRuntimePostgres,
+  EnsurePiRuntimePostgresReadyOptions,
+  LoadedPiRuntimeInspectionState,
+  LoadPiRuntimeInspectionStateOptions,
+  PersistPiRuntimeDirectExecutionOptions,
+} from 'agent-runtime-postgres';
 
 export type PiRuntimeGatewayConnectRequest = {
   threadId: string;
@@ -203,6 +216,33 @@ const EMPTY_USAGE = {
     total: 0,
   },
 } as const;
+
+export const createPiRuntimeGatewayMockStream = (
+  responseText: string,
+): NonNullable<AgentOptions['streamFn']> => {
+  return async (model) => {
+    const stream = createAssistantMessageEventStream();
+
+    queueMicrotask(() => {
+      stream.push({
+        type: 'done',
+        reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: responseText }],
+          api: model.api,
+          provider: model.provider,
+          model: model.id,
+          usage: EMPTY_USAGE,
+          stopReason: 'stop',
+          timestamp: Date.now(),
+        },
+      });
+    });
+
+    return stream;
+  };
+};
 
 const asBaseEvent = <TEvent extends BaseEvent>(event: TEvent): BaseEvent => event;
 

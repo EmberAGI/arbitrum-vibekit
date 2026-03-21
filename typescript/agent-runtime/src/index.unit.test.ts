@@ -52,8 +52,10 @@ describe('agent-runtime facade', () => {
     expect(typeof agentRuntime.defineAgentDomainModule).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayFoundation).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayAgUiHandler).toBe('function');
+    expect(typeof agentRuntime.buildPiRuntimeDirectExecutionRecordIds).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayRuntime).toBe('function');
     expect(typeof agentRuntime.createCanonicalPiRuntimeGatewayControlPlane).toBe('function');
+    expect(typeof agentRuntime.ensurePiRuntimePostgresReady).toBe('function');
     expect(typeof agentRuntime.PiRuntimeGatewayHttpAgent).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayService).toBe('function');
     expect(agentRuntime.DEFAULT_PI_RUNTIME_GATEWAY_RETENTION).toMatchObject({

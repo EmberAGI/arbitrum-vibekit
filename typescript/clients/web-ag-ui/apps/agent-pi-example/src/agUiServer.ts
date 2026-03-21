@@ -1,12 +1,19 @@
+import { randomUUID } from 'node:crypto';
+
 import {
+  buildPiRuntimeDirectExecutionRecordIds,
   createCanonicalPiRuntimeGatewayControlPlane,
   createPiRuntimeGatewayAgUiHandler,
   createPiRuntimeGatewayRuntime,
   createPiRuntimeGatewayService,
-  type PiRuntimeGatewayAgent,
+  ensurePiRuntimePostgresReady,
+  loadPiRuntimeInspectionState,
+  persistPiRuntimeDirectExecution,
+  type PiRuntimeGatewayFoundation,
   type PiRuntimeGatewayInspectionState,
   type PiRuntimeGatewayService,
 } from 'agent-runtime';
+import { createPiExampleGatewayFoundation, type PiExampleGatewayEnv } from './piExampleFoundation.js';
 
 export const PI_EXAMPLE_AGENT_ID = 'agent-pi-example';
 export const PI_EXAMPLE_AG_UI_BASE_PATH = '/ag-ui';
@@ -18,158 +25,88 @@ type PiExampleAgUiHandlerOptions = {
   basePath?: string;
 };
 
-function buildPiExampleInspectionState(threadId: string): PiRuntimeGatewayInspectionState {
-  const activeExecutionId = `pi-example:${threadId}`;
+type PiExampleGatewayServiceOptions = {
+  env?: PiExampleGatewayEnv;
+  foundation?: PiRuntimeGatewayFoundation;
+  persistence?: {
+    ensureReady?: () => Promise<void>;
+    persistDirectExecution?: (params: {
+      threadKey: string;
+      threadId: string;
+      executionId: string;
+      interruptId: string;
+      artifactId: string;
+      activityId: string;
+      now: Date;
+    }) => Promise<void>;
+    loadInspectionState?: () => Promise<PiRuntimeGatewayInspectionState>;
+  };
+};
+
+function buildDirectExecutionIds(threadKey: string) {
+  const stableIds = buildPiRuntimeDirectExecutionRecordIds(threadKey);
 
   return {
-    threads: [
-      {
-        threadId,
-        threadKey: threadId,
-        status: 'active',
-        threadState: { threadId },
-        createdAt: new Date('2026-03-20T00:00:00.000Z'),
-        updatedAt: new Date('2026-03-20T00:00:00.000Z'),
-      },
-    ],
-    executions: [
-      {
-        executionId: activeExecutionId,
-        threadId,
-        automationRunId: null,
-        status: 'working',
-        source: 'user',
-        currentInterruptId: null,
-        createdAt: new Date('2026-03-20T00:00:00.000Z'),
-        updatedAt: new Date('2026-03-20T00:00:00.000Z'),
-        completedAt: null,
-      },
-      {
-        executionId: 'exec-automation-1',
-        threadId,
-        automationRunId: 'run-1',
-        status: 'interrupted',
-        source: 'automation',
-        currentInterruptId: 'interrupt-1',
-        createdAt: new Date('2026-03-19T23:58:00.000Z'),
-        updatedAt: new Date('2026-03-19T23:59:00.000Z'),
-        completedAt: null,
-      },
-      {
-        executionId: 'exec-completed-1',
-        threadId,
-        automationRunId: null,
-        status: 'completed',
-        source: 'system',
-        currentInterruptId: null,
-        createdAt: new Date('2026-03-10T00:00:00.000Z'),
-        updatedAt: new Date('2026-03-11T00:00:00.000Z'),
-        completedAt: new Date('2026-03-11T00:00:00.000Z'),
-      },
-    ],
-    automations: [
-      {
-        automationId: 'automation-1',
-        threadId,
-        commandName: 'sync',
-        cadence: '0 * * * *',
-        schedulePayload: { command: 'sync' },
-        suspended: false,
-        nextRunAt: new Date('2026-03-19T23:55:00.000Z'),
-        createdAt: new Date('2026-03-19T00:00:00.000Z'),
-        updatedAt: new Date('2026-03-19T23:55:00.000Z'),
-      },
-    ],
-    automationRuns: [
-      {
-        runId: 'run-1',
-        automationId: 'automation-1',
-        threadId,
-        executionId: 'exec-automation-1',
-        status: 'scheduled',
-        scheduledAt: new Date('2026-03-19T23:55:00.000Z'),
-        startedAt: null,
-        completedAt: null,
-      },
-      {
-        runId: 'run-completed-1',
-        automationId: 'automation-1',
-        threadId,
-        executionId: 'exec-completed-1',
-        status: 'completed',
-        scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
-        startedAt: new Date('2026-03-10T00:01:00.000Z'),
-        completedAt: new Date('2026-03-10T00:10:00.000Z'),
-      },
-    ],
-    interrupts: [
-      {
-        interruptId: 'interrupt-1',
-        executionId: 'exec-automation-1',
-        threadId,
-        status: 'pending',
-        surfacedInThread: true,
-      },
-    ],
-    leases: [
-      {
-        automationId: 'automation-1',
-        ownerId: 'worker-a',
-        leaseExpiresAt: new Date('2026-03-19T23:56:00.000Z'),
-        lastHeartbeatAt: new Date('2026-03-19T23:55:30.000Z'),
-      },
-    ],
-    outboxIntents: [
-      {
-        outboxId: 'outbox-1',
-        status: 'pending',
-        availableAt: new Date('2026-03-19T23:57:00.000Z'),
-        deliveredAt: null,
-      },
-    ],
-    executionEvents: [
-      {
-        eventId: 'event-archive-1',
-        executionId: 'exec-completed-1',
-        threadId,
-        eventKind: 'completed',
-        createdAt: new Date('2026-03-10T00:20:00.000Z'),
-      },
-    ],
-    threadActivities: [
-      {
-        activityId: 'activity-archive-1',
-        threadId,
-        executionId: 'exec-completed-1',
-        activityKind: 'summary',
-        createdAt: new Date('2026-03-10T00:30:00.000Z'),
-      },
-    ],
+    ...stableIds,
+    activityId: randomUUID(),
   };
 }
 
-export function createPiExampleGatewayService(): PiRuntimeGatewayService {
-  const agent: PiRuntimeGatewayAgent = {
-    sessionId: undefined,
-    state: {
-      systemPrompt: '',
-      model: {} as PiRuntimeGatewayAgent['state']['model'],
-      thinkingLevel: 'off',
-      tools: [],
-      messages: [],
-      isStreaming: false,
-      streamMessage: null,
-      pendingToolCalls: new Set<string>(),
-    },
-    subscribe: () => () => undefined,
-    prompt: async () => undefined,
-    continue: async () => undefined,
-    steer: () => undefined,
-    followUp: () => undefined,
-    abort: () => undefined,
+export function createPiExampleGatewayService(options: PiExampleGatewayServiceOptions = {}): PiRuntimeGatewayService {
+  const foundation = options.foundation ?? createPiExampleGatewayFoundation(options.env);
+  const agent = foundation.agent;
+  const databaseUrl = foundation.bootstrapPlan.databaseUrl;
+  let ensuredReady: Promise<void> | null = null;
+  const ensureReady =
+    options.persistence?.ensureReady ??
+    (() => {
+      ensuredReady ??= ensurePiRuntimePostgresReady({
+        env: options.env,
+      }).then(() => undefined);
+      return ensuredReady;
+    });
+  const persistDirectExecution =
+    options.persistence?.persistDirectExecution ??
+    (async (params: {
+      threadKey: string;
+      threadId: string;
+      executionId: string;
+      interruptId: string;
+      artifactId: string;
+      activityId: string;
+      now: Date;
+    }) => {
+      await persistPiRuntimeDirectExecution({
+        databaseUrl,
+        threadId: params.threadId,
+        threadKey: params.threadKey,
+        threadState: { threadId: params.threadKey },
+        executionId: params.executionId,
+        interruptId: params.interruptId,
+        artifactId: params.artifactId,
+        activityId: params.activityId,
+        now: params.now,
+      });
+    });
+  const loadInspectionState =
+    options.persistence?.loadInspectionState ??
+    (async () =>
+      await loadPiRuntimeInspectionState({
+        databaseUrl,
+      }));
+
+  const persistThreadExecution = async (threadKey: string): Promise<void> => {
+    await ensureReady();
+    const now = new Date();
+    const ids = buildDirectExecutionIds(threadKey);
+    await persistDirectExecution({
+      threadKey,
+      now,
+      ...ids,
+    });
   };
 
-  const runtime = createPiRuntimeGatewayRuntime({
+  const baseRuntime = createPiRuntimeGatewayRuntime({
     agent,
     getSession: () => {
       const threadId = agent.sessionId ?? 'thread-1';
@@ -184,12 +121,25 @@ export function createPiExampleGatewayService(): PiRuntimeGatewayService {
   });
 
   const controlPlane = createCanonicalPiRuntimeGatewayControlPlane({
-    loadInspectionState: async () => buildPiExampleInspectionState(agent.sessionId ?? 'thread-1'),
+    loadInspectionState: async () => {
+      await ensureReady();
+      return await loadInspectionState();
+    },
     now: () => PI_EXAMPLE_NOW,
   });
 
   return createPiRuntimeGatewayService({
-    runtime,
+    runtime: {
+      connect: async (request) => {
+        await persistThreadExecution(request.threadId);
+        return await baseRuntime.connect(request);
+      },
+      run: async (request) => {
+        await persistThreadExecution(request.threadId);
+        return await baseRuntime.run(request);
+      },
+      stop: (request) => baseRuntime.stop(request),
+    },
     controlPlane,
   });
 }
