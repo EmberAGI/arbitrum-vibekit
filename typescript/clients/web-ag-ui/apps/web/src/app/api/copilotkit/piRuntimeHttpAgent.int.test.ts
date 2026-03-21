@@ -4,7 +4,7 @@ import { AddressInfo } from 'node:net';
 import { type RunAgentInput } from '@ag-ui/client';
 import { type PiRuntimeGatewayService } from 'agent-runtime';
 import { createPiRuntimeGatewayAgUiHandler, PiRuntimeGatewayHttpAgent } from 'agent-runtime/pi-transport';
-import { lastValueFrom, toArray } from 'rxjs';
+import { filter, firstValueFrom, lastValueFrom, toArray } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createPiExampleGatewayService,
@@ -31,8 +31,28 @@ function createInput(overrides: Partial<RunAgentInput> = {}): RunAgentInput {
   };
 }
 
+function createRunInput(overrides: Partial<RunAgentInput> = {}): RunAgentInput {
+  return createInput({
+    messages: [
+      {
+        id: 'message-1',
+        role: 'user',
+        content: 'Say hello from the Pi example integration test.',
+      },
+    ],
+    ...overrides,
+  });
+}
+
 async function collectEvents(source$: { pipe: typeof import('rxjs').Observable.prototype.pipe }) {
   return lastValueFrom(source$.pipe(toArray()));
+}
+
+async function waitForEvent<T extends { type?: string }>(
+  source$: { pipe: typeof import('rxjs').Observable.prototype.pipe },
+  type: string,
+) {
+  return firstValueFrom(source$.pipe(filter((event: T) => event.type === type)));
 }
 
 async function waitForAssertion(assertion: () => void, timeoutMs = 1_000): Promise<void> {
@@ -81,7 +101,27 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
   beforeEach(async () => {
     requests = [];
 
-    const service: PiRuntimeGatewayService = createPiExampleGatewayService();
+    const service: PiRuntimeGatewayService = createPiExampleGatewayService({
+      env: {
+        OPENROUTER_API_KEY: 'test-openrouter-key',
+        PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
+      },
+      persistence: {
+        ensureReady: async () => undefined,
+        persistDirectExecution: async () => undefined,
+        loadInspectionState: async () => ({
+          threads: [],
+          executions: [],
+          automations: [],
+          automationRuns: [],
+          interrupts: [],
+          leases: [],
+          outboxIntents: [],
+          executionEvents: [],
+          threadActivities: [],
+        }),
+      },
+    });
     const handler = createPiRuntimeGatewayAgUiHandler({
       agentId: PI_EXAMPLE_AGENT_ID,
       service,
@@ -148,11 +188,12 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
       runtimeUrl,
     });
 
-    const connectEvents = await collectEvents(agent.connect(createInput()));
-    const runEvents = await collectEvents(agent.run(createInput()));
+    const connectSnapshot = await waitForEvent(agent.connect(createInput()), 'STATE_SNAPSHOT');
+    const runInput = createRunInput();
+    const runEvents = await collectEvents(agent.run(runInput));
     agent.abortRun();
 
-    expect(connectEvents).toContainEqual(
+    expect(connectSnapshot).toEqual(
       expect.objectContaining({
         type: 'STATE_SNAPSHOT',
         snapshot: expect.objectContaining({
@@ -187,7 +228,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
           expect.objectContaining({
             method: 'POST',
             pathname: `${PI_EXAMPLE_AG_UI_BASE_PATH}/agent/${PI_EXAMPLE_AGENT_ID}/run`,
-            body: JSON.stringify(createInput()),
+            body: JSON.stringify(runInput),
           }),
           expect.objectContaining({
             method: 'POST',

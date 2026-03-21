@@ -5,6 +5,14 @@
   "type": "module",
   "main": "src/server.ts",
   "types": "src/server.ts",
+  "files": [
+    "src",
+    "dist",
+    "README.md",
+    ".env.example",
+    "tsconfig.json",
+    "tests/setup"
+  ],
   "exports": {
     ".": "./src/server.ts",
     "./ag-ui-server": "./src/agUiServer.ts"
