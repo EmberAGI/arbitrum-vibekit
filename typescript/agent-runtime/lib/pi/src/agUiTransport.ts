@@ -73,6 +73,16 @@ function parseRunRequest(body: Record<string, unknown>): PiRuntimeGatewayRunRequ
 
 export function createPiRuntimeGatewayAgUiHandler(options: PiRuntimeGatewayAgUiHandlerOptions) {
   const basePath = (options.basePath ?? DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH).replace(/\/$/, '');
+  const controlRoutes: Record<string, () => Promise<unknown>> = {
+    [`${basePath}/control/health`]: () => options.service.control.inspectHealth(),
+    [`${basePath}/control/threads`]: () => options.service.control.listThreads(),
+    [`${basePath}/control/executions`]: () => options.service.control.listExecutions(),
+    [`${basePath}/control/automations`]: () => options.service.control.listAutomations(),
+    [`${basePath}/control/automation-runs`]: () => options.service.control.listAutomationRuns(),
+    [`${basePath}/control/scheduler`]: () => options.service.control.inspectScheduler(),
+    [`${basePath}/control/outbox`]: () => options.service.control.inspectOutbox(),
+    [`${basePath}/control/maintenance`]: () => options.service.control.inspectMaintenance(),
+  };
 
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
@@ -80,6 +90,10 @@ export function createPiRuntimeGatewayAgUiHandler(options: PiRuntimeGatewayAgUiH
 
     if (request.method === 'GET' && pathname === `${basePath}/health`) {
       return jsonResponse(await options.service.control.inspectHealth());
+    }
+
+    if (request.method === 'GET' && pathname in controlRoutes) {
+      return jsonResponse(await controlRoutes[pathname]!());
     }
 
     const endpoint = new RegExp(`^${basePath}/agent/([^/]+)/(connect|run|stop)$`).exec(pathname);

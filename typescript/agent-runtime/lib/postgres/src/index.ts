@@ -35,3 +35,16 @@ export {
   type PiRestartInterruptRecord,
   type PiRestartRecoveryPlan,
 } from './recovery.js';
+export {
+  buildPiRuntimeInspectionSnapshot,
+  buildPiRuntimeMaintenancePlan,
+  type PiAutomationRecord,
+  type PiAutomationRunRecord,
+  type PiExecutionEventRecord,
+  type PiExecutionRecord,
+  type PiRuntimeInspectionSnapshot,
+  type PiRuntimeMaintenancePlan,
+  type PiRuntimeRetentionPolicy,
+  type PiThreadActivityRecord,
+  type PiThreadRecord,
+} from './operatorControl.js';

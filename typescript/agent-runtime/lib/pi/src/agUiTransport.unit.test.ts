@@ -37,7 +37,16 @@ function createStubService() {
     stop: stop as PiRuntimeGatewayService['stop'],
     control: {
       inspectHealth: async () => ({ status: 'ok' }),
+      listThreads: async () => [{ threadId: 'thread-1' }],
       listExecutions: async () => [],
+      listAutomations: async () => [{ automationId: 'automation-1' }],
+      listAutomationRuns: async () => [{ runId: 'run-1' }],
+      inspectScheduler: async () => ({ dueAutomationIds: ['automation-1'], leases: [] }),
+      inspectOutbox: async () => ({ dueOutboxIds: ['outbox-1'], intents: [] }),
+      inspectMaintenance: async () => ({
+        recovery: { automationIdsToResume: ['automation-1'] },
+        archival: { executionIds: [] },
+      }),
     },
   };
 
@@ -131,6 +140,13 @@ describe('Pi AG-UI transport helpers', () => {
         headers: { 'content-type': 'application/json' },
       }),
     );
+    const healthResponse = await handler(new Request('http://localhost/ag-ui/control/health'));
+    const threadsResponse = await handler(new Request('http://localhost/ag-ui/control/threads'));
+    const automationsResponse = await handler(new Request('http://localhost/ag-ui/control/automations'));
+    const automationRunsResponse = await handler(new Request('http://localhost/ag-ui/control/automation-runs'));
+    const schedulerResponse = await handler(new Request('http://localhost/ag-ui/control/scheduler'));
+    const outboxResponse = await handler(new Request('http://localhost/ag-ui/control/outbox'));
+    const maintenanceResponse = await handler(new Request('http://localhost/ag-ui/control/maintenance'));
 
     expect(connect).toHaveBeenCalledWith({ threadId: 'thread-1' });
     expect(run).toHaveBeenCalledWith({
@@ -145,6 +161,13 @@ describe('Pi AG-UI transport helpers', () => {
     expect(connectResponse.headers.get('content-type')).toContain('text/event-stream');
     await expect(runResponse.text()).resolves.toContain('"status":"completed"');
     await expect(stopResponse.text()).resolves.toContain('"status":"aborted"');
+    await expect(healthResponse.text()).resolves.toContain('"status":"ok"');
+    await expect(threadsResponse.text()).resolves.toContain('"threadId":"thread-1"');
+    await expect(automationsResponse.text()).resolves.toContain('"automationId":"automation-1"');
+    await expect(automationRunsResponse.text()).resolves.toContain('"runId":"run-1"');
+    await expect(schedulerResponse.text()).resolves.toContain('"dueAutomationIds":["automation-1"]');
+    await expect(outboxResponse.text()).resolves.toContain('"dueOutboxIds":["outbox-1"]');
+    await expect(maintenanceResponse.text()).resolves.toContain('"automationIdsToResume":["automation-1"]');
   });
 
   it('uses HttpAgent semantics while targeting Pi connect and stop endpoints', async () => {

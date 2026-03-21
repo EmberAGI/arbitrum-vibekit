@@ -34,7 +34,13 @@ function createStubService() {
     stop: stop as PiRuntimeGatewayService['stop'],
     control: {
       inspectHealth: async () => ({ status: 'ok' }),
+      listThreads: async () => [{ threadId: 'thread-1' }],
       listExecutions: async () => [],
+      listAutomations: async () => [{ automationId: 'automation-1' }],
+      listAutomationRuns: async () => [{ runId: 'run-1' }],
+      inspectScheduler: async () => ({ dueAutomationIds: [], leases: [] }),
+      inspectOutbox: async () => ({ dueOutboxIds: [], intents: [] }),
+      inspectMaintenance: async () => ({ recovery: {}, archival: {} }),
     },
   };
 
@@ -102,5 +108,17 @@ describe('createPiExampleAgUiHandler', () => {
     });
     await expect(runResponse.text()).resolves.toContain('"status":"completed"');
     await expect(stopResponse.text()).resolves.toContain('"status":"aborted"');
+  });
+
+  it('serves control-plane reads for the Pi example agent', async () => {
+    const { service } = createStubService();
+    const handler = createPiExampleAgUiHandler({
+      agentId: 'agent-pi-example',
+      service,
+    });
+
+    const response = await handler(new Request('http://localhost/ag-ui/control/threads'));
+
+    await expect(response.text()).resolves.toContain('"threadId":"thread-1"');
   });
 });

@@ -1,9 +1,9 @@
 import {
+  createCanonicalPiRuntimeGatewayControlPlane,
   createPiRuntimeGatewayAgUiHandler,
   createPiRuntimeGatewayRuntime,
   createPiRuntimeGatewayService,
   type PiRuntimeGatewayAgent,
-  type PiRuntimeGatewayControlPlane,
   type PiRuntimeGatewayService,
 } from 'agent-runtime';
 
@@ -17,11 +17,6 @@ type PiExampleAgUiHandlerOptions = {
 };
 
 export function createPiExampleGatewayService(): PiRuntimeGatewayService {
-  const controlPlane: PiRuntimeGatewayControlPlane = {
-    inspectHealth: async () => ({ status: 'ok' }),
-    listExecutions: async () => [],
-  };
-
   const agent: PiRuntimeGatewayAgent = {
     sessionId: undefined,
     state: {
@@ -52,6 +47,45 @@ export function createPiExampleGatewayService(): PiRuntimeGatewayService {
           id: `pi-example:${threadId}`,
           status: 'working',
         },
+      };
+    },
+  });
+
+  const controlPlane = createCanonicalPiRuntimeGatewayControlPlane({
+    loadInspectionState: async () => {
+      const threadId = agent.sessionId ?? 'thread-1';
+      const executionId = `pi-example:${threadId}`;
+      return {
+        threads: [
+          {
+            threadId,
+            threadKey: threadId,
+            status: 'active',
+            threadState: { threadId },
+            createdAt: new Date('2026-03-20T00:00:00.000Z'),
+            updatedAt: new Date('2026-03-20T00:00:00.000Z'),
+          },
+        ],
+        executions: [
+          {
+            executionId,
+            threadId,
+            automationRunId: null,
+            status: 'working',
+            source: 'user',
+            currentInterruptId: null,
+            createdAt: new Date('2026-03-20T00:00:00.000Z'),
+            updatedAt: new Date('2026-03-20T00:00:00.000Z'),
+            completedAt: null,
+          },
+        ],
+        automations: [],
+        automationRuns: [],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
       };
     },
   });
