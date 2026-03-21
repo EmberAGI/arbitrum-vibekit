@@ -220,7 +220,7 @@ const EMPTY_USAGE = {
 export const createPiRuntimeGatewayMockStream = (
   responseText: string,
 ): NonNullable<AgentOptions['streamFn']> => {
-  return async (model) => {
+  return (model) => {
     const stream = createAssistantMessageEventStream();
 
     queueMicrotask(() => {

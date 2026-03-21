@@ -1,6 +1,5 @@
 import { Client } from 'pg';
 
-import { buildPersistDirectExecutionStatements, type PostgresStatement } from './transactions.js';
 import type {
   PiAutomationRecord,
   PiAutomationRunRecord,
@@ -12,6 +11,7 @@ import type {
 import type { PiOutboxRecoveryRecord } from './outbox.js';
 import type { PiRestartInterruptRecord } from './recovery.js';
 import type { PiSchedulerLeaseRecord } from './schedulerLease.js';
+import { buildPersistDirectExecutionStatements, type PostgresStatement } from './transactions.js';
 
 type QueryRows = (sql: string) => Promise<readonly Record<string, unknown>[]>;
 
