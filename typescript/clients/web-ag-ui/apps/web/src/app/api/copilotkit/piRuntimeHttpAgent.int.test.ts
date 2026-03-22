@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { AddressInfo } from 'node:net';
 
-import { type RunAgentInput } from '@ag-ui/client';
+import { type RunAgentInput, verifyEvents } from '@ag-ui/client';
 import { type PiRuntimeGatewayService } from 'agent-runtime';
 import { createPiRuntimeGatewayAgUiHandler, PiRuntimeGatewayHttpAgent } from 'agent-runtime/pi-transport';
 import { filter, firstValueFrom, lastValueFrom, toArray } from 'rxjs';
@@ -188,12 +188,19 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
       runtimeUrl,
     });
 
-    const connectSnapshot = await waitForEvent(agent.connect(createInput()), 'STATE_SNAPSHOT');
+    const connectEvents = await collectEvents(agent.connect(createInput()).pipe(verifyEvents()));
     const runInput = createRunInput();
     const runEvents = await collectEvents(agent.run(runInput));
     agent.abortRun();
 
-    expect(connectSnapshot).toEqual(
+    expect(connectEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'RUN_STARTED',
+        threadId: 'thread-1',
+        runId: 'run-1',
+      }),
+    );
+    expect(connectEvents).toContainEqual(
       expect.objectContaining({
         type: 'STATE_SNAPSHOT',
         snapshot: expect.objectContaining({
@@ -201,6 +208,13 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
             id: 'thread-1',
           }),
         }),
+      }),
+    );
+    expect(connectEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'RUN_FINISHED',
+        threadId: 'thread-1',
+        runId: 'run-1',
       }),
     );
     expect(runEvents).toContainEqual(

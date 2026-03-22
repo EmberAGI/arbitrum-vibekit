@@ -121,7 +121,14 @@ export function createPiRuntimeGatewayAgUiHandler(options: PiRuntimeGatewayAgUiH
         return jsonResponse({ error: 'Expected threadId.' }, 400);
       }
 
-      return sseResponse(await options.service.connect({ threadId }));
+      const runId = readStringField(body, 'runId');
+
+      return sseResponse(
+        await options.service.connect({
+          threadId,
+          ...(runId ? { runId } : {}),
+        }),
+      );
     }
 
     if (action === 'run') {

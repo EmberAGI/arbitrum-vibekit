@@ -48,6 +48,7 @@ export type {
 
 export type PiRuntimeGatewayConnectRequest = {
   threadId: string;
+  runId?: string;
 };
 
 export type PiRuntimeGatewayRunRequest = {
@@ -699,7 +700,24 @@ export const createPiRuntimeGatewayRuntime = (params: {
     connect: (request) => {
       syncAgentSessionId(request.threadId);
       const session = params.getSession();
-      return Promise.resolve([buildSnapshotEvent(session)]);
+      const runId = request.runId ?? `connect:${request.threadId}`;
+      return Promise.resolve([
+        asBaseEvent({
+          type: EventType.RUN_STARTED,
+          threadId: request.threadId,
+          runId,
+        } satisfies RunStartedEvent),
+        buildSnapshotEvent(session),
+        asBaseEvent({
+          type: EventType.RUN_FINISHED,
+          threadId: request.threadId,
+          runId,
+          result: {
+            executionId: session.execution.id,
+            status: session.execution.status,
+          },
+        } satisfies RunFinishedEvent),
+      ]);
     },
     run: async (request) => {
       syncAgentSessionId(request.threadId);

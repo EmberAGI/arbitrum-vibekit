@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { verifyEvents } from '@ag-ui/client';
 
 import {
   createPiRuntimeGatewayAgUiHandler,
@@ -181,6 +182,14 @@ describe('Pi AG-UI transport helpers', () => {
             runId: 'run-1',
           },
           {
+            type: 'STATE_SNAPSHOT',
+            snapshot: {
+              thread: {
+                id: 'thread-1',
+              },
+            },
+          },
+          {
             type: 'RUN_FINISHED',
             threadId: 'thread-1',
             runId: 'run-1',
@@ -206,7 +215,7 @@ describe('Pi AG-UI transport helpers', () => {
       runtimeUrl: 'http://pi-agent-example:3410/ag-ui',
     });
 
-    const connectEvents = await collectEvents(agent.connect(createInput()));
+    const connectEvents = await collectEvents(agent.connect(createInput()).pipe(verifyEvents()));
     await collectEvents(agent.run(createInput()));
     agent.abortRun();
     await Promise.resolve();
@@ -219,7 +228,11 @@ describe('Pi AG-UI transport helpers', () => {
         body: JSON.stringify(createInput()),
       }),
     );
-    expect(connectEvents.map((event) => (event as { type: string }).type)).toEqual(['RUN_STARTED', 'RUN_FINISHED']);
+    expect(connectEvents.map((event) => (event as { type: string }).type)).toEqual([
+      'RUN_STARTED',
+      'STATE_SNAPSHOT',
+      'RUN_FINISHED',
+    ]);
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
       'http://pi-agent-example:3410/ag-ui/agent/agent-pi-example/stop',

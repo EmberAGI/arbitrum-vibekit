@@ -49,7 +49,7 @@ describe('agent-runtime-pi package contract', () => {
 
   it('creates an AG-UI gateway surface without collapsing operator controls into runtime commands', async () => {
     const runtime = {
-      connect: vi.fn(async () => [{ type: 'STATE_SNAPSHOT' }]),
+      connect: vi.fn(async () => [{ type: 'RUN_STARTED' }, { type: 'STATE_SNAPSHOT' }, { type: 'RUN_FINISHED' }]),
       run: vi.fn(async () => [{ type: 'RUN_STARTED' }]),
       stop: vi.fn(async () => undefined),
     };
@@ -86,7 +86,11 @@ describe('agent-runtime-pi package contract', () => {
     });
     expect(service).not.toHaveProperty('inspectHealth');
 
-    await expect(service.connect({ threadId: 'thread-1' })).resolves.toEqual([{ type: 'STATE_SNAPSHOT' }]);
+    await expect(service.connect({ threadId: 'thread-1' })).resolves.toEqual([
+      { type: 'RUN_STARTED' },
+      { type: 'STATE_SNAPSHOT' },
+      { type: 'RUN_FINISHED' },
+    ]);
     await expect(service.run({ threadId: 'thread-1', runId: 'run-1' })).resolves.toEqual([{ type: 'RUN_STARTED' }]);
     await expect(service.stop({ threadId: 'thread-1', runId: 'run-1' })).resolves.toBeUndefined();
     await expect(service.control.inspectHealth()).resolves.toEqual({ status: 'ok' });

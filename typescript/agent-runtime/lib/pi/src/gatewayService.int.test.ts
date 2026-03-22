@@ -136,6 +136,11 @@ describe('pi gateway service integration', () => {
 
     await expect(service.connect({ threadId: 'thread-1' })).resolves.toEqual([
       {
+        type: EventType.RUN_STARTED,
+        threadId: 'thread-1',
+        runId: 'connect:thread-1',
+      },
+      {
         type: EventType.STATE_SNAPSHOT,
         snapshot: {
           thread: {
@@ -179,6 +184,15 @@ describe('pi gateway service integration', () => {
               current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
             },
           },
+        },
+      },
+      {
+        type: EventType.RUN_FINISHED,
+        threadId: 'thread-1',
+        runId: 'connect:thread-1',
+        result: {
+          executionId: 'exec-1',
+          status: 'working',
         },
       },
     ]);
