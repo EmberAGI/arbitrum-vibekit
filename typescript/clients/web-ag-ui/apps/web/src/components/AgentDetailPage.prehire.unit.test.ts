@@ -82,6 +82,65 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('Total Users');
   });
 
+  it('keeps pre-hire chat disabled for non-Pi agents', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-clmm',
+        agentName: 'Camelot CLMM',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toMatch(new RegExp('<button[^>]*disabled[^>]*>\\s*Chat\\s*</button>'));
+  });
+
+  it('enables pre-hire chat for the Pi example agent', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-pi-example',
+        agentName: 'Pi Example Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        initialTab: 'chat',
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
+    expect(html).not.toMatch(new RegExp('<button[^>]*disabled[^>]*>\\s*Chat\\s*</button>'));
+    expect(html).toContain('Send message');
+  });
+
   it('renders metrics tab as disabled while onboarding is in progress', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {

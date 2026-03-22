@@ -9,6 +9,7 @@ import {
   defaultProfile,
   defaultSettings,
   defaultUiState,
+  initialAgentState,
 } from '../types/agent';
 
 const AgentContext = createContext<UseAgentConnectionResult | null>(null);
@@ -27,6 +28,7 @@ const inactiveAgent: UseAgentConnectionResult = {
   activity: defaultActivity,
   transactionHistory: [],
   events: [],
+  messages: initialAgentState.messages ?? [],
   settings: defaultSettings,
   isHired: false,
   isActive: false,
@@ -37,6 +39,7 @@ const inactiveAgent: UseAgentConnectionResult = {
   runHire: () => undefined,
   runFire: () => undefined,
   runSync: () => undefined,
+  sendChatMessage: () => undefined,
   resolveInterrupt: () => undefined,
   updateSettings: () => undefined,
   saveSettings: () => undefined,

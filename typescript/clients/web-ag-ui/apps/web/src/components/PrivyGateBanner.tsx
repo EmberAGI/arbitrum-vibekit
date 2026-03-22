@@ -3,15 +3,31 @@
 import { AlertCircle } from 'lucide-react';
 import { useLogin } from '@privy-io/react-auth';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
-import { resolveAgentThreadWalletAddress } from '@/utils/agentThread';
+import { resolveAgentThreadWalletAddress, supportsAnonymousAgentThread } from '@/utils/agentThread';
 import { usePathname } from 'next/navigation';
+
+function resolveRouteAgentId(pathname: string | null): string | null {
+  if (!pathname) {
+    return null;
+  }
+
+  const segments = pathname.split('/').filter(Boolean);
+  const hireAgentsIndex = segments.indexOf('hire-agents');
+  if (hireAgentsIndex === -1) {
+    return null;
+  }
+
+  return segments[hireAgentsIndex + 1] ?? null;
+}
 
 export function PrivyGateBanner() {
   const { login } = useLogin();
   const { privyWallet } = usePrivyWalletClient();
   const pathname = usePathname();
   const threadWalletAddress = resolveAgentThreadWalletAddress(privyWallet?.address);
-  const needsSignIn = !threadWalletAddress;
+  const routeAgentId = resolveRouteAgentId(pathname);
+  const canUseAnonymousThread = routeAgentId ? supportsAnonymousAgentThread(routeAgentId) : false;
+  const needsSignIn = !threadWalletAddress && !canUseAnonymousThread;
   const isHireAgents = pathname?.startsWith('/hire-agents') ?? false;
 
   if (!needsSignIn) {

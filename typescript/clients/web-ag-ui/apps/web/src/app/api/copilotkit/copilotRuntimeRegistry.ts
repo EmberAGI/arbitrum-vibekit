@@ -7,6 +7,7 @@ export const PENDLE_AGENT_NAME = 'agent-pendle';
 export const GMX_ALLORA_AGENT_NAME = 'agent-gmx-allora';
 export const STARTER_AGENT_NAME = 'starterAgent';
 export const PI_EXAMPLE_AGENT_NAME = 'agent-pi-example';
+const DEFAULT_PI_AGENT_DEPLOYMENT_URL = 'http://127.0.0.1:3410/ag-ui';
 
 type RuntimeEnv = Record<string, string | undefined>;
 
@@ -32,11 +33,11 @@ export function buildCopilotRuntimeAgents(env: RuntimeEnv) {
       graphId: STARTER_AGENT_NAME,
       langsmithApiKey: env.LANGSMITH_API_KEY || '',
     }),
-    ...(env.PI_AGENT_DEPLOYMENT_URL
+    ...((env.PI_AGENT_DEPLOYMENT_URL || DEFAULT_PI_AGENT_DEPLOYMENT_URL)
       ? {
           [PI_EXAMPLE_AGENT_NAME]: new PiRuntimeGatewayHttpAgent({
             agentId: PI_EXAMPLE_AGENT_NAME,
-            runtimeUrl: env.PI_AGENT_DEPLOYMENT_URL,
+            runtimeUrl: env.PI_AGENT_DEPLOYMENT_URL || DEFAULT_PI_AGENT_DEPLOYMENT_URL,
           }),
         }
       : {}),

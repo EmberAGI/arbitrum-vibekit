@@ -12,6 +12,7 @@ import {
   Check,
   RefreshCw,
 } from 'lucide-react';
+import type { Message } from '@ag-ui/core';
 import { formatUnits } from 'viem';
 import { useCallback, useMemo, useState, type FormEvent } from 'react';
 import type {
@@ -117,8 +118,10 @@ interface AgentDetailPageProps {
   transactions?: Transaction[];
   telemetry?: TelemetryItem[];
   events?: ClmmEvent[];
+  messages?: Message[];
   // Settings
   settings?: AgentSettings;
+  onSendChatMessage?: (content: string) => void;
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
   onSettingsSave?: (updates: Partial<AgentSettings>) => void;
 }
@@ -221,6 +224,49 @@ function asFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function parseCommandMessage(content: string): string | null {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    if (!('command' in parsed)) return null;
+    const command = (parsed as { command?: unknown }).command;
+    if (command === 'hire') return 'Submitted hire request.';
+    if (command === 'fire') return 'Submitted fire request.';
+    if (command === 'sync') return 'Requested a runtime sync.';
+    if (command === 'resume') return 'Submitted onboarding response.';
+    return typeof command === 'string' ? `Submitted ${command} request.` : null;
+  } catch {
+    return null;
+  }
+}
+
+function getMessageText(message: Message): string {
+  if (typeof message.content === 'string') {
+    return parseCommandMessage(message.content) ?? message.content;
+  }
+
+  if (Array.isArray(message.content)) {
+    return message.content
+      .map((item) => {
+        if (item.type === 'text') {
+          return item.text;
+        }
+        return item.filename ?? item.url ?? item.mimeType;
+      })
+      .join('\n')
+      .trim();
+  }
+
+  return '';
+}
+
+function getMessageRoleLabel(message: Message): string {
+  if (message.role === 'assistant') return 'Agent';
+  if (message.role === 'tool') return 'Tool';
+  if (message.role === 'activity') return 'Activity';
+  return 'You';
+}
+
 function FloatingErrorToast(props: {
   title: string;
   message: string;
@@ -286,16 +332,20 @@ export function AgentDetailPage({
   transactions = [],
   telemetry = [],
   events = [],
+  messages = [],
   settings,
+  onSendChatMessage,
   onSettingsChange,
   onSettingsSave,
 }: AgentDetailPageProps) {
   const showPostHireLayout = isHired || Boolean(isFiring);
+  const chatEnabled = agentId === 'agent-pi-example';
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (showPostHireLayout ? 'blockers' : 'metrics'),
   );
   const [hasUserSelectedTab, setHasUserSelectedTab] = useState(Boolean(initialTab));
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
+  const [chatDraft, setChatDraft] = useState('');
   const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
   const isOnboardingActive = resolveOnboardingActive({
     activeInterruptPresent: Boolean(activeInterrupt),
@@ -308,6 +358,24 @@ export function AgentDetailPage({
     setHasUserSelectedTab(true);
     setActiveTab(tab);
   }, []);
+  const handleHire = useCallback(() => {
+    if (chatEnabled) {
+      selectTab('chat');
+    }
+    onHire();
+  }, [chatEnabled, onHire, selectTab]);
+  const handleChatSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const trimmed = chatDraft.trim();
+      if (trimmed.length === 0) {
+        return;
+      }
+      onSendChatMessage?.(trimmed);
+      setChatDraft('');
+    },
+    [chatDraft, onSendChatMessage],
+  );
 
   const resolvedTab: TabType = forceBlockersTab
     ? 'blockers'
@@ -488,6 +556,19 @@ export function AgentDetailPage({
     return stars;
   };
 
+  const chatTab = chatEnabled ? (
+    <AgentChatTab
+      agentName={agentName}
+      isHired={isHired}
+      isHiring={isHiring}
+      messages={messages}
+      chatDraft={chatDraft}
+      onChatDraftChange={setChatDraft}
+      onSubmit={handleChatSubmit}
+      isComposerEnabled={typeof onSendChatMessage === 'function'}
+    />
+  ) : null;
+
   // Use the upgraded layout only for hired agents. Pre-hire must remain stable even
   // while detail sync is still loading, otherwise the Hire CTA can disappear.
   if (showPostHireLayout) {
@@ -514,7 +595,11 @@ export function AgentDetailPage({
         >
           Activity
         </TabButton>
-        <TabButton active={resolvedTab === 'chat'} onClick={() => {}} disabled>
+        <TabButton
+          active={resolvedTab === 'chat'}
+          onClick={() => selectTab('chat')}
+          disabled={!chatEnabled}
+        >
           Chat
         </TabButton>
       </div>
@@ -584,6 +669,8 @@ export function AgentDetailPage({
             }
           />
         )}
+
+        {resolvedTab === 'chat' && chatTab}
       </>
     );
 
@@ -662,7 +749,7 @@ export function AgentDetailPage({
                       </div>
                     ) : (
                       <button
-                        onClick={onHire}
+                        onClick={handleHire}
                         disabled={isHiring}
                         className={[
                           CTA_SIZE_MD_FULL,
@@ -886,7 +973,7 @@ export function AgentDetailPage({
               </div>
 
               <button
-                onClick={onHire}
+                onClick={handleHire}
                 disabled={isHiring}
                 className={[
                   CTA_SIZE_MD_FULL,
@@ -1050,87 +1137,108 @@ export function AgentDetailPage({
         <div className="mt-10 border-b border-white/10 flex items-center gap-6">
           <button
             type="button"
-            className="px-1 pb-3 text-sm font-medium text-[#fd6731] border-b-2 border-[#fd6731] -mb-px"
-            aria-current="page"
+            onClick={() => selectTab('metrics')}
+            className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
+              resolvedTab === 'metrics'
+                ? 'text-[#fd6731] border-[#fd6731]'
+                : 'text-gray-500 border-transparent hover:text-white'
+            }`}
+            aria-current={resolvedTab === 'metrics' ? 'page' : undefined}
           >
             Metrics
           </button>
-          <button type="button" disabled className="px-1 pb-3 text-sm font-medium text-gray-600">
+          <button
+            type="button"
+            onClick={() => selectTab('chat')}
+            disabled={!chatEnabled}
+            className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
+              !chatEnabled
+                ? 'text-gray-600 border-transparent'
+                : resolvedTab === 'chat'
+                  ? 'text-[#fd6731] border-[#fd6731]'
+                  : 'text-gray-400 border-transparent hover:text-white'
+            }`}
+          >
             Chat
           </button>
         </div>
 
         <div className="mt-6">
-          {/* Pre-hire should still show the same chart cards across agents (CLMM/Pendle/GMX)
-             so the page doesn't feel "empty" before hire. */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-sm font-semibold text-white">APY Change</div>
-                  <div className="text-xs text-gray-500 mt-1">Latest vs previous snapshot</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-semibold text-teal-400">
-                    <LoadingValue
-                      isLoaded={hasLoadedView}
-                      skeletonClassName="h-7 w-20"
-                      loadedClassName="text-teal-400"
-                      value={formatPercent(currentApy)}
-                    />
+          {resolvedTab === 'chat' ? chatTab : null}
+          {resolvedTab === 'metrics' ? (
+            <>
+              {/* Pre-hire should still show the same chart cards across agents (CLMM/Pendle/GMX)
+                 so the page doesn't feel "empty" before hire. */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-white">APY Change</div>
+                      <div className="text-xs text-gray-500 mt-1">Latest vs previous snapshot</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-semibold text-teal-400">
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-7 w-20"
+                          loadedClassName="text-teal-400"
+                          value={formatPercent(currentApy)}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {currentApy !== undefined && previousApy !== undefined
+                          ? formatPercent(currentApy - previousApy, 1)
+                          : '—'}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500">
-                    {currentApy !== undefined && previousApy !== undefined
-                      ? formatPercent(currentApy - previousApy, 1)
-                      : '—'}
-                  </div>
+                  <Sparkline
+                    values={makeMockSeries({
+                      seedKey: `${agentId}:apy`,
+                      points: 24,
+                      start: metrics.apy ?? 18,
+                      drift: 0.02,
+                      noise: 0.35,
+                      min: 0,
+                      max: 120,
+                    })}
+                  />
                 </div>
-              </div>
-              <Sparkline
-                values={makeMockSeries({
-                  seedKey: `${agentId}:apy`,
-                  points: 24,
-                  start: metrics.apy ?? 18,
-                  drift: 0.02,
-                  noise: 0.35,
-                  min: 0,
-                  max: 120,
-                })}
-              />
-            </div>
 
-            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-sm font-semibold text-white">Total Users</div>
-                  <div className="text-xs text-gray-500 mt-1">All time</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-semibold text-white">
-                    <LoadingValue
-                      isLoaded={hasLoadedView}
-                      skeletonClassName="h-7 w-24"
-                      loadedClassName="text-white"
-                      value={formatNumber(profile.totalUsers)}
-                    />
+                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-white">Total Users</div>
+                      <div className="text-xs text-gray-500 mt-1">All time</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-semibold text-white">
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-7 w-24"
+                          loadedClassName="text-white"
+                          value={formatNumber(profile.totalUsers)}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-500">—</div>
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500">—</div>
+                  <Sparkline
+                    values={makeMockSeries({
+                      seedKey: `${agentId}:users`,
+                      points: 24,
+                      start: Math.max(50, profile.totalUsers ?? 5000) * 0.6,
+                      drift: Math.max(1, (profile.totalUsers ?? 5000) / 400),
+                      noise: Math.max(2, (profile.totalUsers ?? 5000) / 250),
+                      min: 0,
+                    })}
+                    strokeClassName="stroke-purple-300"
+                    fillClassName="fill-purple-400/10"
+                  />
                 </div>
               </div>
-              <Sparkline
-                values={makeMockSeries({
-                  seedKey: `${agentId}:users`,
-                  points: 24,
-                  start: Math.max(50, profile.totalUsers ?? 5000) * 0.6,
-                  drift: Math.max(1, (profile.totalUsers ?? 5000) / 400),
-                  noise: Math.max(2, (profile.totalUsers ?? 5000) / 250),
-                  min: 0,
-                })}
-                strokeClassName="stroke-purple-300"
-                fillClassName="fill-purple-400/10"
-              />
-            </div>
-          </div>
+            </>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1163,6 +1271,92 @@ function TabButton({ active, onClick, children, disabled, highlight }: TabButton
     >
       {children}
     </button>
+  );
+}
+
+function AgentChatTab(props: {
+  agentName: string;
+  isHired: boolean;
+  isHiring: boolean;
+  messages: Message[];
+  chatDraft: string;
+  onChatDraftChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  isComposerEnabled: boolean;
+}) {
+  const visibleMessages = props.messages
+    .map((message) => ({
+      id: message.id,
+      label: getMessageRoleLabel(message),
+      text: getMessageText(message),
+      role: message.role,
+    }))
+    .filter((message) => message.text.length > 0);
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+      <div className="border-b border-white/10 px-5 py-4">
+        <div className="text-[12px] uppercase tracking-[0.14em] text-white/60">Chat</div>
+        <div className="mt-1 text-sm text-gray-400">
+          {props.isHired
+            ? `Talk directly with ${props.agentName}.`
+            : `Talk with ${props.agentName} before hiring.`}
+        </div>
+      </div>
+
+      <div className="space-y-3 px-5 py-5">
+        {visibleMessages.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-[#131313] px-4 py-5 text-sm text-gray-400">
+            {props.isHiring
+              ? 'Submitting hire request...'
+              : 'Send a message to start a live Pi runtime conversation.'}
+          </div>
+        ) : (
+          visibleMessages.map((message) => (
+            <div
+              key={message.id}
+              className={`rounded-2xl px-4 py-3 ${
+                message.role === 'assistant'
+                  ? 'bg-[#111827] text-blue-50'
+                  : message.role === 'user'
+                    ? 'bg-[#1c1917] text-orange-50'
+                    : 'bg-[#161616] text-white'
+              }`}
+            >
+              <div className="text-[11px] uppercase tracking-[0.14em] text-white/45">
+                {message.label}
+              </div>
+              <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{message.text}</div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <form onSubmit={props.onSubmit} className="border-t border-white/10 px-5 py-4">
+        <label className="block text-[12px] uppercase tracking-[0.14em] text-white/50">
+          Message
+        </label>
+        <textarea
+          value={props.chatDraft}
+          onChange={(event) => props.onChatDraftChange(event.target.value)}
+          rows={4}
+          placeholder="Ask the Pi example agent to explain what it can do."
+          className="mt-3 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 py-3 text-sm text-white outline-none transition focus:border-[#fd6731]"
+        />
+        <div className="mt-3 flex items-center justify-between gap-4">
+          <div className="text-xs text-gray-500">
+            {props.isHired ? 'Live chat stays on the same thread.' : 'Chat works before and after hire.'}
+          </div>
+          <button
+            type="submit"
+            disabled={!props.isComposerEnabled || props.chatDraft.trim().length === 0}
+            className="h-10 px-4 rounded-full text-[13px] font-medium inline-flex items-center justify-center bg-[#fd6731] text-white disabled:bg-white/10 disabled:text-white/35"
+          >
+            Send message
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 

@@ -427,6 +427,41 @@ describe('useAgentConnection integration', () => {
     expect(mocks.runAgent).toHaveBeenCalledWith({ agent: mocks.agent });
   });
 
+  it('sendChatMessage dispatches a plain user message and runs the agent', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    const chatApi = latestValue as unknown as {
+      sendChatMessage: (content: string) => void;
+    };
+
+    chatApi.sendChatMessage('Hello from the chat tab');
+    await flushEffects();
+
+    const chatMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
+      | { content?: string; role?: string }
+      | undefined;
+
+    expect(chatMessage).toEqual(
+      expect.objectContaining({
+        role: 'user',
+        content: 'Hello from the chat tab',
+      }),
+    );
+    expect(mocks.runAgent).toHaveBeenCalledWith({ agent: mocks.agent });
+  });
+
   it('keeps sync pending until AG-UI state confirms the applied mutation id', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;

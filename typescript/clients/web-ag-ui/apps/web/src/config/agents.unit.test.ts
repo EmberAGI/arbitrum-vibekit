@@ -11,8 +11,11 @@ import {
 describe('agents config', () => {
   it('returns registered agent config and feature ordering', () => {
     const clmm = getAgentConfig('agent-clmm');
+    const piExample = getAgentConfig('agent-pi-example');
     expect(clmm.name).toBe('Camelot CLMM');
+    expect(piExample.name).toBe('Pi Example Agent');
     expect(isRegisteredAgentId('agent-clmm')).toBe(true);
+    expect(isRegisteredAgentId('agent-pi-example')).toBe(true);
 
     const featured = getFeaturedAgents();
     expect(featured.map((agent) => agent.id)).toEqual(['agent-clmm', 'agent-pendle', 'agent-gmx-allora']);

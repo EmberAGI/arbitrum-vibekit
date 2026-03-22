@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { getAgentThreadId, resolveAgentThreadWalletAddress } from './agentThread';
+import {
+  ensureAnonymousAgentThreadId,
+  getAgentThreadId,
+  resolveAgentThreadWalletAddress,
+  supportsAnonymousAgentThread,
+} from './agentThread';
 
 const ORIGINAL_DELEGATIONS_BYPASS = process.env.NEXT_PUBLIC_DELEGATIONS_BYPASS;
 const ORIGINAL_WALLET_BYPASS_ADDRESS = process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS;
@@ -71,5 +76,35 @@ describe('agentThread wallet resolution', () => {
 
     expect(first).toBeTruthy();
     expect(second).toBe(first);
+  });
+
+  it('allocates and reuses an anonymous browser-scoped thread for the Pi example agent', () => {
+    const storage = new Map<string, string>();
+    const first = ensureAnonymousAgentThreadId('agent-pi-example', {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => {
+        storage.set(key, value);
+      },
+    });
+    const second = ensureAnonymousAgentThreadId('agent-pi-example', {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => {
+        storage.set(key, value);
+      },
+    });
+
+    expect(supportsAnonymousAgentThread('agent-pi-example')).toBe(true);
+    expect(first).toBeTruthy();
+    expect(second).toBe(first);
+  });
+
+  it('does not allocate anonymous threads for non-Pi agents', () => {
+    expect(supportsAnonymousAgentThread('agent-clmm')).toBe(false);
+    expect(
+      ensureAnonymousAgentThreadId('agent-clmm', {
+        getItem: () => null,
+        setItem: () => undefined,
+      }),
+    ).toBeNull();
   });
 });

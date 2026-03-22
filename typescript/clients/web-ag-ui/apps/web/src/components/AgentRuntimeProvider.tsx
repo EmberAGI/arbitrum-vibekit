@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { CopilotKit } from '@copilotkit/react-core';
 
@@ -10,7 +10,11 @@ import { AgentProvider, InactiveAgentProvider, useAgent } from '../contexts/Agen
 import { projectAgentListUpdate } from '../contexts/agentListProjection';
 import { useAgentList } from '../contexts/AgentListContext';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
-import { getAgentThreadId, resolveAgentThreadWalletAddress } from '../utils/agentThread';
+import {
+  ensureAnonymousAgentThreadId,
+  getAgentThreadId,
+  resolveAgentThreadWalletAddress,
+} from '../utils/agentThread';
 
 function AgentListRuntimeBridge() {
   const agent = useAgent();
@@ -79,6 +83,7 @@ function resolveAgentIdFromPath(pathname: string | null): string | null {
 export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { privyWallet } = usePrivyWalletClient();
+  const [anonymousThreadId, setAnonymousThreadId] = useState<string | null>(null);
 
   const agentId = useMemo(() => {
     const pathAgentId = resolveAgentIdFromPath(pathname);
@@ -89,12 +94,22 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   const threadWalletAddress = resolveAgentThreadWalletAddress(privyWallet?.address);
+  const walletThreadId = agentId ? getAgentThreadId(agentId, threadWalletAddress) : null;
+
+  useEffect(() => {
+    if (!agentId || walletThreadId) {
+      setAnonymousThreadId(null);
+      return;
+    }
+
+    setAnonymousThreadId(ensureAnonymousAgentThreadId(agentId));
+  }, [agentId, walletThreadId]);
 
   if (!agentId) {
     return <InactiveAgentProvider>{children}</InactiveAgentProvider>;
   }
 
-  const threadId = getAgentThreadId(agentId, threadWalletAddress);
+  const threadId = walletThreadId ?? anonymousThreadId;
 
   if (!threadId) {
     return <InactiveAgentProvider>{children}</InactiveAgentProvider>;

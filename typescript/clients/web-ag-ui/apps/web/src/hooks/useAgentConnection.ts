@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import type { Message } from '@ag-ui/core';
 import { useCopilotContext, useLangGraphInterruptRender } from '@copilotkit/react-core';
 import {
   useAgent,
@@ -58,6 +59,21 @@ import {
 
 const CONNECT_BUSY_RETRY_MS = 2_000;
 
+function messagesEqual(left: Message[], right: Message[]): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftMessage = left[index];
+    const rightMessage = right[index];
+    if (leftMessage.id !== rightMessage.id) return false;
+    if (leftMessage.role !== rightMessage.role) return false;
+    if (JSON.stringify(leftMessage.content) !== JSON.stringify(rightMessage.content)) return false;
+  }
+
+  return true;
+}
+
 export type {
   ThreadSnapshot,
   ThreadState,
@@ -92,6 +108,7 @@ export interface UseAgentConnectionResult {
   activity: ThreadActivity;
   transactionHistory: Transaction[];
   events: ClmmEvent[];
+  messages: Message[];
   settings: AgentSettings;
 
   // Derived state
@@ -108,6 +125,7 @@ export interface UseAgentConnectionResult {
   runHire: () => void;
   runFire: () => void;
   runSync: () => void;
+  sendChatMessage: (content: string) => void;
   resolveInterrupt: (
     input:
       | OperatorConfigInput
@@ -151,6 +169,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     clientMutationId: null,
   });
   const [uiError, setUiError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const lastConnectedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
   const threadIdRef = useRef<string | undefined>(undefined);
@@ -341,6 +360,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       typeof value === 'object' &&
       Object.keys(value as Record<string, unknown>).length > 0,
     );
+  }, []);
+
+  const syncMessages = useCallback((nextMessages: unknown) => {
+    const normalized = Array.isArray(nextMessages) ? (nextMessages as Message[]) : [];
+    setMessages((current) => (messagesEqual(current, normalized) ? current : normalized));
   }, []);
 
   const extractAppliedMutationId = useCallback((value: unknown): string | null => {
@@ -629,6 +653,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           currentThreadId: threadIdRef.current ?? null,
         });
         messagesSnapshotRef.current = true;
+        syncMessages(payload.messages);
+      },
+      onMessagesChanged: (payload) => {
+        if (!isCurrentThreadEvent(payload)) return;
+        syncMessages(payload.messages);
       },
     });
 
@@ -641,6 +670,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     hasStateValues,
     logConnectEvent,
     setRunInFlight,
+    syncMessages,
   ]);
 
   // Initial sync when thread is established - runs once per agent instance
@@ -961,6 +991,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const settings = currentState.settings ?? defaultSettings;
 
   useEffect(() => {
+    syncMessages(currentState.messages);
+  }, [currentState.messages, syncMessages, threadId]);
+
+  useEffect(() => {
     emitConnectTrace('state-applied', {
       taskId: threadState.task?.id ?? null,
       taskState: threadState.task?.taskStatus.state ?? null,
@@ -1125,6 +1159,39 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     setTimeout(() => setIsFiring(false), 3000);
   }, [copilotkit, isFiring, threadId]);
 
+  const sendChatMessage = useCallback(
+    (content: string) => {
+      const trimmed = content.trim();
+      if (trimmed.length === 0) {
+        return;
+      }
+
+      setUiError(null);
+      const scheduler = commandSchedulerRef.current;
+      if (!scheduler) {
+        setUiError('Unable to send a message right now. Please retry.');
+        return;
+      }
+
+      const accepted = scheduler.dispatchCustom({
+        command: 'chat',
+        run: async (currentAgent) => {
+          currentAgent.addMessage({
+            id: v7(),
+            role: 'user',
+            content: trimmed,
+          });
+          await copilotkit.runAgent({ agent: currentAgent });
+        },
+      });
+
+      if (!accepted) {
+        setUiError('Unable to send a message while another run is active.');
+      }
+    },
+    [copilotkit],
+  );
+
   const clearUiError = useCallback(() => setUiError(null), []);
   const effectiveActiveInterrupt = selectActiveInterrupt({
     streamInterrupt: activeInterrupt ?? null,
@@ -1245,6 +1312,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     activity,
     transactionHistory,
     events,
+    messages,
     settings,
     isHired,
     isActive,
@@ -1255,6 +1323,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     runHire,
     runFire,
     runSync,
+    sendChatMessage,
     resolveInterrupt,
     updateSettings,
     saveSettings,
