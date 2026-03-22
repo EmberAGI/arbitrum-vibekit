@@ -19,6 +19,12 @@ export {
   persistPiRuntimeDirectExecution,
   PiRuntimeGatewayHttpAgent,
 } from '../lib/pi/dist/index.js';
+export {
+  buildPersistAutomationDispatchStatements,
+  buildPersistInterruptCheckpointStatements,
+  buildPiRuntimeStableUuid,
+  executePostgresStatements,
+} from '../lib/postgres/dist/index.js';
 export type {
   EnsuredPiRuntimePostgres,
   EnsurePiRuntimePostgresReadyOptions,
@@ -46,3 +52,4 @@ export type {
   PiRuntimeGatewayStopRequest,
   PersistPiRuntimeDirectExecutionOptions,
 } from '../lib/pi/dist/index.js';
+export type { ExecutePostgresStatements } from '../lib/postgres/dist/index.js';

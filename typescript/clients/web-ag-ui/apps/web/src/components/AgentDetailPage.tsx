@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import type { Message } from '@ag-ui/core';
 import { formatUnits } from 'viem';
-import { useCallback, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type {
   AgentProfile,
   AgentMetrics,
@@ -63,6 +63,12 @@ import {
 import { resolveBlockersInterruptView } from './agentBlockersInterrupt';
 import { resolveCurrentSetupStep } from './agentCurrentSetupStep';
 import { resolveSetupSteps } from './agentSetupSteps';
+import {
+  buildPiExampleInterruptA2UiView,
+  buildPiExampleStatusA2UiView,
+  PiExampleA2UiCard,
+  type PiExampleA2UiView,
+} from './piExampleA2ui';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -262,9 +268,125 @@ function getMessageText(message: Message): string {
 
 function getMessageRoleLabel(message: Message): string {
   if (message.role === 'assistant') return 'Agent';
+  if (message.role === 'reasoning') return 'Reasoning';
   if (message.role === 'tool') return 'Tool';
   if (message.role === 'activity') return 'Activity';
   return 'You';
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+type PiExampleChatCard = {
+  id: string;
+  label: 'Artifact' | 'A2UI';
+  view: PiExampleA2UiView;
+  actionKind?: 'submit-operator-note';
+};
+
+function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
+  return events.flatMap((event, index): PiExampleChatCard[] => {
+    if (event.type === 'artifact') {
+      const artifactData = asRecord(event.artifact?.data);
+      if (artifactData?.type === 'automation-status') {
+        const status = typeof artifactData.status === 'string' ? artifactData.status : 'unknown';
+        const command = typeof artifactData.command === 'string' ? artifactData.command : 'sync';
+        const detail = typeof artifactData.detail === 'string' ? artifactData.detail : 'Automation status updated.';
+        return [
+          {
+            id: `artifact-${event.artifact?.artifactId ?? index}`,
+            label: 'Artifact',
+            view: buildPiExampleStatusA2UiView({
+              title: `Automation ${status}`,
+              body: `${command}: ${detail}`,
+            }),
+          },
+        ];
+      }
+
+      if (artifactData?.type === 'interrupt-status') {
+        const message = typeof artifactData.message === 'string' ? artifactData.message : 'Awaiting operator input.';
+        return [
+          {
+            id: `interrupt-artifact-${event.artifact?.artifactId ?? index}`,
+            label: 'Artifact',
+            view: buildPiExampleStatusA2UiView({
+              title: 'Interrupt checkpoint',
+              body: message,
+            }),
+          },
+        ];
+      }
+
+      return [];
+    }
+
+    if (event.type !== 'dispatch-response') {
+      return [];
+    }
+
+    return event.parts.flatMap((part, partIndex): PiExampleChatCard[] => {
+      if (part.kind !== 'a2ui') {
+        return [];
+      }
+
+      const payloadEnvelope = asRecord(asRecord(part.data)?.payload);
+      if (!payloadEnvelope) {
+        return [];
+      }
+
+      if (payloadEnvelope.kind === 'automation-status') {
+        const payload = asRecord(payloadEnvelope.payload);
+        if (!payload) {
+          return [];
+        }
+
+        const status = typeof payload.status === 'string' ? payload.status : 'unknown';
+        const command = typeof payload.command === 'string' ? payload.command : 'sync';
+        const detail = typeof payload.detail === 'string' ? payload.detail : 'Automation status updated.';
+        return [
+          {
+            id: `automation-a2ui-${index}-${partIndex}`,
+            label: 'A2UI',
+            view: buildPiExampleStatusA2UiView({
+              title: `Automation ${status}`,
+              body: `${command}: ${detail}`,
+            }),
+          },
+        ];
+      }
+
+      if (payloadEnvelope.kind === 'interrupt') {
+        const payload = asRecord(payloadEnvelope.payload);
+        if (!payload) {
+          return [];
+        }
+
+        return [
+          {
+            id: `interrupt-a2ui-${index}-${partIndex}`,
+            label: 'A2UI',
+            actionKind: 'submit-operator-note',
+            view: buildPiExampleInterruptA2UiView({
+              title: 'Operator input required',
+              message:
+                typeof payload.message === 'string'
+                  ? payload.message
+                  : 'Provide a short operator note to continue.',
+              inputLabel:
+                typeof payload.inputLabel === 'string' ? payload.inputLabel : 'Operator note',
+              submitLabel:
+                typeof payload.submitLabel === 'string' ? payload.submitLabel : 'Continue agent loop',
+              artifactId: typeof payload.artifactId === 'string' ? payload.artifactId : undefined,
+            }),
+          },
+        ];
+      }
+
+      return [];
+    });
+  });
 }
 
 function FloatingErrorToast(props: {
@@ -364,17 +486,30 @@ export function AgentDetailPage({
     }
     onHire();
   }, [chatEnabled, onHire, selectTab]);
+  const submitChatDraft = useCallback(() => {
+    const trimmed = chatDraft.trim();
+    if (trimmed.length === 0) {
+      return;
+    }
+    onSendChatMessage?.(trimmed);
+    setChatDraft('');
+  }, [chatDraft, onSendChatMessage]);
   const handleChatSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      const trimmed = chatDraft.trim();
-      if (trimmed.length === 0) {
+      submitChatDraft();
+    },
+    [submitChatDraft],
+  );
+  const handleChatKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key !== 'Enter' || event.shiftKey) {
         return;
       }
-      onSendChatMessage?.(trimmed);
-      setChatDraft('');
+      event.preventDefault();
+      submitChatDraft();
     },
-    [chatDraft, onSendChatMessage],
+    [submitChatDraft],
   );
 
   const resolvedTab: TabType = forceBlockersTab
@@ -562,10 +697,13 @@ export function AgentDetailPage({
       isHired={isHired}
       isHiring={isHiring}
       messages={messages}
+      activityEvents={events}
       chatDraft={chatDraft}
       onChatDraftChange={setChatDraft}
       onSubmit={handleChatSubmit}
+      onChatKeyDown={handleChatKeyDown}
       isComposerEnabled={typeof onSendChatMessage === 'function'}
+      onSendChatMessage={onSendChatMessage}
     />
   ) : null;
 
@@ -1279,10 +1417,13 @@ function AgentChatTab(props: {
   isHired: boolean;
   isHiring: boolean;
   messages: Message[];
+  activityEvents: ClmmEvent[];
   chatDraft: string;
   onChatDraftChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onChatKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   isComposerEnabled: boolean;
+  onSendChatMessage?: (content: string) => void;
 }) {
   const visibleMessages = props.messages
     .map((message) => ({
@@ -1292,6 +1433,7 @@ function AgentChatTab(props: {
       role: message.role,
     }))
     .filter((message) => message.text.length > 0);
+  const activityCards = buildPiExampleChatCards(props.activityEvents);
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
@@ -1318,6 +1460,8 @@ function AgentChatTab(props: {
               className={`rounded-2xl px-4 py-3 ${
                 message.role === 'assistant'
                   ? 'bg-[#111827] text-blue-50'
+                  : message.role === 'reasoning'
+                    ? 'border border-violet-400/20 bg-[#1f1630] text-violet-50'
                   : message.role === 'user'
                     ? 'bg-[#1c1917] text-orange-50'
                     : 'bg-[#161616] text-white'
@@ -1330,6 +1474,38 @@ function AgentChatTab(props: {
             </div>
           ))
         )}
+
+        {activityCards.map((card) => (
+          <div key={card.id} className="rounded-2xl border border-white/10 bg-[#171717] px-4 py-4">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-white/45">
+              {card.label}
+            </div>
+            <div className="mt-2">
+              <PiExampleA2UiCard
+                view={card.view}
+                onAction={(action) => {
+                  if (
+                    card.actionKind !== 'submit-operator-note' ||
+                    action.actionName !== 'submitOperatorNote' ||
+                    !props.onSendChatMessage
+                  ) {
+                    return;
+                  }
+
+                  const note =
+                    typeof action.context?.operatorNote === 'string'
+                      ? action.context.operatorNote.trim()
+                      : '';
+                  if (note.length === 0) {
+                    return;
+                  }
+
+                  props.onSendChatMessage(`Operator note: ${note}`);
+                }}
+              />
+            </div>
+          </div>
+        ))}
       </div>
 
       <form onSubmit={props.onSubmit} className="border-t border-white/10 px-5 py-4">
@@ -1339,6 +1515,7 @@ function AgentChatTab(props: {
         <textarea
           value={props.chatDraft}
           onChange={(event) => props.onChatDraftChange(event.target.value)}
+          onKeyDown={props.onChatKeyDown}
           rows={4}
           placeholder="Ask the Pi example agent to explain what it can do."
           className="mt-3 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 py-3 text-sm text-white outline-none transition focus:border-[#fd6731]"

@@ -1,19 +1,28 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  buildPersistAutomationDispatchStatements,
+  buildPersistInterruptCheckpointStatements,
   buildPiRuntimeDirectExecutionRecordIds,
+  buildPiRuntimeStableUuid,
   createCanonicalPiRuntimeGatewayControlPlane,
   createPiRuntimeGatewayAgUiHandler,
   createPiRuntimeGatewayRuntime,
   createPiRuntimeGatewayService,
   ensurePiRuntimePostgresReady,
+  executePostgresStatements,
   loadPiRuntimeInspectionState,
   persistPiRuntimeDirectExecution,
   type PiRuntimeGatewayFoundation,
   type PiRuntimeGatewayInspectionState,
   type PiRuntimeGatewayService,
 } from 'agent-runtime';
-import { createPiExampleGatewayFoundation, type PiExampleGatewayEnv } from './piExampleFoundation.js';
+import {
+  createPiExampleGatewayFoundation,
+  type PiExampleGatewayEnv,
+  type PiExampleGatewayFoundationOptions,
+} from './piExampleFoundation.js';
+import { createPiExampleRuntimeStateStore } from './runtimeState.js';
 
 export const PI_EXAMPLE_AGENT_ID = 'agent-pi-example';
 export const PI_EXAMPLE_AG_UI_BASE_PATH = '/ag-ui';
@@ -40,6 +49,21 @@ type PiExampleGatewayServiceOptions = {
       now: Date;
     }) => Promise<void>;
     loadInspectionState?: () => Promise<PiRuntimeGatewayInspectionState>;
+    scheduleAutomation?: (params: {
+      threadKey: string;
+      command: string;
+      minutes: number;
+    }) => Promise<{
+      automationId: string;
+      runId: string;
+      artifactId: string;
+    }>;
+    requestInterrupt?: (params: {
+      threadKey: string;
+      message: string;
+    }) => Promise<{
+      artifactId: string;
+    }>;
   };
 };
 
@@ -53,9 +77,7 @@ function buildDirectExecutionIds(threadKey: string) {
 }
 
 export function createPiExampleGatewayService(options: PiExampleGatewayServiceOptions = {}): PiRuntimeGatewayService {
-  const foundation = options.foundation ?? createPiExampleGatewayFoundation(options.env);
-  const agent = foundation.agent;
-  const databaseUrl = foundation.bootstrapPlan.databaseUrl;
+  const runtimeState = createPiExampleRuntimeStateStore();
   let ensuredReady: Promise<void> | null = null;
   const ensureReady =
     options.persistence?.ensureReady ??
@@ -94,6 +116,79 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       await loadPiRuntimeInspectionState({
         databaseUrl,
       }));
+  const scheduleAutomation =
+    options.persistence?.scheduleAutomation ??
+    (async (params: {
+      threadKey: string;
+      command: string;
+      minutes: number;
+    }) => {
+      await ensureReady();
+      const directExecutionIds = buildPiRuntimeDirectExecutionRecordIds(params.threadKey);
+      const automationId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation`);
+      const runId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-run`);
+      const executionId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-execution`);
+      const activityId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-activity`);
+      const artifactId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-artifact`);
+      const now = new Date();
+
+      await executePostgresStatements(
+        databaseUrl,
+        buildPersistAutomationDispatchStatements({
+          automationId,
+          runId,
+          executionId,
+          threadId: directExecutionIds.threadId,
+          activityId,
+          leaseOwnerId: buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:lease-owner`),
+          now,
+          nextRunAt: new Date(now.getTime() + params.minutes * 60 * 1000),
+          leaseExpiresAt: new Date(now.getTime() + 60 * 1000),
+        }),
+      );
+
+      return {
+        automationId,
+        runId,
+        artifactId,
+      };
+    });
+  const requestInterrupt =
+    options.persistence?.requestInterrupt ??
+    (async (params: {
+      threadKey: string;
+      message: string;
+    }) => {
+      await ensureReady();
+      const directExecutionIds = buildPiRuntimeDirectExecutionRecordIds(params.threadKey);
+      const artifactId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:interrupt-artifact`);
+
+      await executePostgresStatements(
+        databaseUrl,
+        buildPersistInterruptCheckpointStatements({
+          executionId: directExecutionIds.executionId,
+          interruptId: buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:interrupt`),
+          artifactId,
+          activityId: buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:interrupt-activity`),
+          threadId: directExecutionIds.threadId,
+          now: new Date(),
+        }),
+      );
+
+      return {
+        artifactId,
+      };
+    });
+  const foundationOptions: PiExampleGatewayFoundationOptions = {
+    runtimeState,
+    persistence: {
+      scheduleAutomation,
+      requestInterrupt,
+    },
+  };
+  const foundation = options.foundation ?? createPiExampleGatewayFoundation(options.env, foundationOptions);
+  const agent = foundation.agent;
+  const databaseUrl = foundation.bootstrapPlan.databaseUrl;
 
   const persistThreadExecution = async (threadKey: string): Promise<void> => {
     await ensureReady();
@@ -108,16 +203,7 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
 
   const baseRuntime = createPiRuntimeGatewayRuntime({
     agent,
-    getSession: () => {
-      const threadId = agent.sessionId ?? 'thread-1';
-      return {
-        thread: { id: threadId },
-        execution: {
-          id: `pi-example:${threadId}`,
-          status: 'working',
-        },
-      };
-    },
+    getSession: (threadId) => runtimeState.getSession(threadId),
   });
 
   const controlPlane = createCanonicalPiRuntimeGatewayControlPlane({
@@ -136,6 +222,7 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       },
       run: async (request) => {
         await persistThreadExecution(request.threadId);
+        runtimeState.resumeFromUserInput(request.threadId);
         return await baseRuntime.run(request);
       },
       stop: (request) => baseRuntime.stop(request),

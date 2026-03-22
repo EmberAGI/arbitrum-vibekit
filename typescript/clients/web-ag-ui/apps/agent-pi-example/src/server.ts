@@ -37,6 +37,27 @@ function toHeaders(headers: http.IncomingHttpHeaders): Headers {
   return result;
 }
 
+async function writeNodeResponse(response: Response, target: http.ServerResponse): Promise<void> {
+  target.writeHead(response.status, Object.fromEntries(response.headers.entries()));
+
+  if (!response.body) {
+    target.end();
+    return;
+  }
+
+  const reader = response.body.getReader();
+
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) {
+      target.end();
+      return;
+    }
+
+    target.write(Buffer.from(chunk.value));
+  }
+}
+
 const server = http.createServer(async (request, response) => {
   const origin = `http://${request.headers.host ?? `127.0.0.1:${port}`}`;
   const url = new URL(request.url ?? '/', origin);
@@ -51,9 +72,7 @@ const server = http.createServer(async (request, response) => {
         : new Uint8Array(body),
   });
   const webResponse = await handler(webRequest);
-
-  response.writeHead(webResponse.status, Object.fromEntries(webResponse.headers.entries()));
-  response.end(Buffer.from(await webResponse.arrayBuffer()));
+  await writeNodeResponse(webResponse, response);
 });
 
 server.listen(port, () => {

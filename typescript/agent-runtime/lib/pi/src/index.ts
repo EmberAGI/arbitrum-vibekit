@@ -150,9 +150,9 @@ declare module '@mariozechner/pi-agent-core' {
 }
 
 export type PiRuntimeGatewayRuntime = {
-  connect: (request: PiRuntimeGatewayConnectRequest) => Promise<BaseEvent[]>;
-  run: (request: PiRuntimeGatewayRunRequest) => Promise<BaseEvent[]>;
-  stop: (request: PiRuntimeGatewayStopRequest) => Promise<BaseEvent[]>;
+  connect: (request: PiRuntimeGatewayConnectRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
+  run: (request: PiRuntimeGatewayRunRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
+  stop: (request: PiRuntimeGatewayStopRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
 };
 
 export type PiRuntimeGatewayControlPlane = {
@@ -172,6 +172,8 @@ export type PiRuntimeGatewayService = {
   stop: PiRuntimeGatewayRuntime['stop'];
   control: PiRuntimeGatewayControlPlane;
 };
+
+export type PiRuntimeGatewayEventSource = readonly BaseEvent[] | AsyncIterable<BaseEvent>;
 
 export type PiRuntimeGatewayAgent = Pick<Agent, 'subscribe' | 'prompt' | 'continue' | 'abort' | 'state'> & {
   sessionId?: string;
@@ -300,6 +302,12 @@ const resolveProjectedMessageId = (executionId: string, message: AgentMessage, f
   const timestamp = getMessageTimestamp(message) ?? fallbackIndex;
   return `pi:${executionId}:${role}:${timestamp}`;
 };
+
+const resolveProjectedReasoningMessageId = (
+  executionId: string,
+  assistantMessageId: string,
+  contentIndex: number,
+): string => `pi:${executionId}:reasoning:${assistantMessageId}:${contentIndex}`;
 
 const buildExecutionStatusText = (session: PiRuntimeGatewaySession): string =>
   [
@@ -522,12 +530,23 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
   executionId: string;
   events: AgentEvent[];
 }): BaseEvent[] => {
+  const projector = createPiAgentEventProjector(params.executionId);
+  return params.events.flatMap((event) => projector.project(event));
+};
+
+function createPiAgentEventProjector(executionId: string): {
+  project: (event: AgentEvent) => BaseEvent[];
+} {
   const mapped: BaseEvent[] = [];
   const seenToolStarts = new Set<string>();
+  const openReasoningMessageIds = new Set<string>();
   let currentMessageId: string | null = null;
   let fallbackIndex = 0;
 
-  for (const event of params.events) {
+  return {
+    project: (event) => {
+      mapped.length = 0;
+
     switch (event.type) {
       case 'agent_start':
         mapped.push(asBaseEvent({ type: EventType.STEP_STARTED, stepName: 'pi-agent' }));
@@ -543,7 +562,7 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
         break;
       case 'message_start': {
         fallbackIndex += 1;
-        currentMessageId = resolveProjectedMessageId(params.executionId, event.message, fallbackIndex);
+        currentMessageId = resolveProjectedMessageId(executionId, event.message, fallbackIndex);
         const role = getMessageRole(event.message);
         if (role === 'assistant' || role === 'user') {
           mapped.push(asBaseEvent({
@@ -557,7 +576,7 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
       case 'message_update': {
         const messageId =
           currentMessageId ??
-          resolveProjectedMessageId(params.executionId, event.message, fallbackIndex + 1);
+          resolveProjectedMessageId(executionId, event.message, fallbackIndex + 1);
         const detail = event.assistantMessageEvent;
 
         if (detail.type === 'text_delta') {
@@ -566,6 +585,70 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
             messageId,
             delta: detail.delta,
           }));
+        }
+
+        if (detail.type === 'thinking_start') {
+          const reasoningMessageId = resolveProjectedReasoningMessageId(
+            executionId,
+            messageId,
+            detail.contentIndex,
+          );
+          if (!openReasoningMessageIds.has(reasoningMessageId)) {
+            openReasoningMessageIds.add(reasoningMessageId);
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_START,
+              messageId: reasoningMessageId,
+            }));
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_MESSAGE_START,
+              messageId: reasoningMessageId,
+              role: 'reasoning',
+            }));
+          }
+        }
+
+        if (detail.type === 'thinking_delta') {
+          const reasoningMessageId = resolveProjectedReasoningMessageId(
+            executionId,
+            messageId,
+            detail.contentIndex,
+          );
+          if (!openReasoningMessageIds.has(reasoningMessageId)) {
+            openReasoningMessageIds.add(reasoningMessageId);
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_START,
+              messageId: reasoningMessageId,
+            }));
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_MESSAGE_START,
+              messageId: reasoningMessageId,
+              role: 'reasoning',
+            }));
+          }
+          mapped.push(asBaseEvent({
+            type: EventType.REASONING_MESSAGE_CONTENT,
+            messageId: reasoningMessageId,
+            delta: detail.delta,
+          }));
+        }
+
+        if (detail.type === 'thinking_end') {
+          const reasoningMessageId = resolveProjectedReasoningMessageId(
+            executionId,
+            messageId,
+            detail.contentIndex,
+          );
+          if (openReasoningMessageIds.has(reasoningMessageId)) {
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_MESSAGE_END,
+              messageId: reasoningMessageId,
+            }));
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_END,
+              messageId: reasoningMessageId,
+            }));
+            openReasoningMessageIds.delete(reasoningMessageId);
+          }
         }
 
         if (detail.type === 'toolcall_delta') {
@@ -581,7 +664,7 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
           }
           mapped.push(asBaseEvent({
             type: EventType.TOOL_CALL_ARGS,
-            toolCallId: toolCall?.type === 'toolCall' ? toolCall.id : `pi:${params.executionId}:tool-call`,
+            toolCallId: toolCall?.type === 'toolCall' ? toolCall.id : `pi:${executionId}:tool-call`,
             delta: detail.delta,
           }));
         }
@@ -606,7 +689,7 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
       case 'tool_execution_end':
         mapped.push(asBaseEvent({
           type: EventType.TOOL_CALL_RESULT,
-          messageId: `pi:${params.executionId}:tool-result:${event.toolCallId}`,
+          messageId: `pi:${executionId}:tool-result:${event.toolCallId}`,
           toolCallId: event.toolCallId,
           content: stringifyUnknown(event.result),
           role: 'tool',
@@ -627,10 +710,80 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
       default:
         break;
     }
-  }
 
-  return mapped;
-};
+      return [...mapped];
+    },
+  };
+}
+
+function createAsyncEventStream<T>(run: (controller: {
+  push: (value: T) => void;
+  close: () => void;
+  fail: (error: unknown) => void;
+}) => Promise<void> | void): AsyncIterable<T> {
+  const values: T[] = [];
+  const readers: Array<{
+    resolve: (result: IteratorResult<T>) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+  let done = false;
+  let failure: unknown = null;
+
+  const flushValue = (value: T) => {
+    const reader = readers.shift();
+    if (reader) {
+      reader.resolve({ value, done: false });
+      return;
+    }
+
+    values.push(value);
+  };
+
+  const close = () => {
+    if (done) return;
+    done = true;
+    while (readers.length > 0) {
+      readers.shift()!.resolve({ value: undefined, done: true });
+    }
+  };
+
+  const fail = (error: unknown) => {
+    if (done) return;
+    done = true;
+    failure = error;
+    while (readers.length > 0) {
+      readers.shift()!.reject(error);
+    }
+  };
+
+  queueMicrotask(() => {
+    Promise.resolve(run({ push: flushValue, close, fail })).catch(fail);
+  });
+
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        next() {
+          if (values.length > 0) {
+            return Promise.resolve({ value: values.shift()!, done: false });
+          }
+
+          if (failure !== null) {
+            return Promise.reject(failure);
+          }
+
+          if (done) {
+            return Promise.resolve({ value: undefined, done: true });
+          }
+
+          return new Promise<IteratorResult<T>>((resolve, reject) => {
+            readers.push({ resolve, reject });
+          });
+        },
+      };
+    },
+  };
+}
 
 export const createPiRuntimeGatewayFoundation = (params: {
   model: Model<Api>;
@@ -683,7 +836,7 @@ export const createPiRuntimeGatewayFoundation = (params: {
 
 export const createPiRuntimeGatewayRuntime = (params: {
   agent: PiRuntimeGatewayAgent;
-  getSession: () => PiRuntimeGatewaySession;
+  getSession: (threadId: string) => PiRuntimeGatewaySession;
   now?: () => number;
 }): PiRuntimeGatewayRuntime => {
   const now = params.now ?? (() => Date.now());
@@ -699,7 +852,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
   return {
     connect: (request) => {
       syncAgentSessionId(request.threadId);
-      const session = params.getSession();
+      const session = params.getSession(request.threadId);
       const runId = request.runId ?? `connect:${request.threadId}`;
       return Promise.resolve([
         asBaseEvent({
@@ -721,61 +874,62 @@ export const createPiRuntimeGatewayRuntime = (params: {
     },
     run: async (request) => {
       syncAgentSessionId(request.threadId);
-      const capturedEvents: AgentEvent[] = [];
-      const unsubscribe = params.agent.subscribe((event) => {
-        capturedEvents.push(event);
-      });
+      const executionId = params.getSession(request.threadId).execution.id;
+      const projector = createPiAgentEventProjector(executionId);
 
-      try {
-        if (request.messages && request.messages.length > 0) {
-          const promptMessages = convertAgUiMessagesToPiMessages(request.messages, now);
-          if (params.agent.state.isStreaming) {
-            if (params.agent.steer) {
-              for (const message of promptMessages) {
-                params.agent.steer(message);
-              }
-            } else if (params.agent.followUp) {
-              for (const message of promptMessages) {
-                params.agent.followUp(message);
+      return createAsyncEventStream<BaseEvent>(async (controller) => {
+        controller.push(asBaseEvent({
+          type: EventType.RUN_STARTED,
+          threadId: request.threadId,
+          runId: request.runId,
+        } satisfies RunStartedEvent));
+
+        const unsubscribe = params.agent.subscribe((event) => {
+          for (const projectedEvent of projector.project(event)) {
+            controller.push(projectedEvent);
+          }
+        });
+
+        try {
+          if (request.messages && request.messages.length > 0) {
+            const promptMessages = convertAgUiMessagesToPiMessages(request.messages, now);
+            if (params.agent.state.isStreaming) {
+              if (params.agent.steer) {
+                for (const message of promptMessages) {
+                  params.agent.steer(message);
+                }
+              } else if (params.agent.followUp) {
+                for (const message of promptMessages) {
+                  params.agent.followUp(message);
+                }
+              } else {
+                await params.agent.prompt(promptMessages);
               }
             } else {
               await params.agent.prompt(promptMessages);
             }
           } else {
-            await params.agent.prompt(promptMessages);
+            await params.agent.continue();
           }
-        } else {
-          await params.agent.continue();
+
+          const session = params.getSession(request.threadId);
+          controller.push(buildSnapshotEvent(session));
+          controller.push(asBaseEvent({
+            type: EventType.RUN_FINISHED,
+            threadId: request.threadId,
+            runId: request.runId,
+            result: {
+              executionId: session.execution.id,
+              status: session.execution.status,
+            },
+          } satisfies RunFinishedEvent));
+          controller.close();
+        } catch (error) {
+          controller.fail(error);
+        } finally {
+          unsubscribe();
         }
-      } finally {
-        unsubscribe();
-      }
-
-      const session = params.getSession();
-      const events: BaseEvent[] = [
-        asBaseEvent({
-          type: EventType.RUN_STARTED,
-          threadId: request.threadId,
-          runId: request.runId,
-        } satisfies RunStartedEvent),
-        ...mapPiAgentEventsToAgUiEvents({
-          executionId: session.execution.id,
-          events: capturedEvents,
-        }),
-        buildSnapshotEvent(session),
-      ];
-
-      events.push(asBaseEvent({
-        type: EventType.RUN_FINISHED,
-        threadId: request.threadId,
-        runId: request.runId,
-        result: {
-          executionId: session.execution.id,
-          status: session.execution.status,
-        },
-      } satisfies RunFinishedEvent));
-
-      return events;
+      });
     },
     stop: (request) => {
       params.agent.abort();

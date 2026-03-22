@@ -141,6 +141,156 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('Send message');
   });
 
+  it('renders reasoning messages in the Pi example chat transcript', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-pi-example',
+        agentName: 'Pi Example Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        initialTab: 'chat',
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        messages: [
+          {
+            id: 'reasoning-1',
+            role: 'reasoning',
+            content: 'Analyzing the request before answering.',
+          } as never,
+        ],
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('Reasoning');
+    expect(html).toContain('Analyzing the request before answering.');
+  });
+
+  it('renders Pi automation status artifacts and A2UI cards in the chat transcript', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-pi-example',
+        agentName: 'Pi Example Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        initialTab: 'chat',
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        events: [
+          {
+            type: 'artifact',
+            artifact: {
+              artifactId: 'automation-artifact',
+              data: {
+                type: 'automation-status',
+                status: 'scheduled',
+                command: 'sync',
+                detail: 'Scheduled sync every 5 minutes.',
+              },
+            },
+          },
+          {
+            type: 'dispatch-response',
+            parts: [
+              {
+                kind: 'a2ui',
+                data: {
+                  payload: {
+                    kind: 'automation-status',
+                    payload: {
+                      status: 'scheduled',
+                      command: 'sync',
+                      detail: 'Scheduled sync every 5 minutes.',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('Artifact');
+    expect(html).toContain('A2UI');
+    expect(html).toContain('pi-example-a2ui-view');
+  });
+
+  it('renders Pi interrupt A2UI controls in the chat transcript', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-pi-example',
+        agentName: 'Pi Example Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        initialTab: 'chat',
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        events: [
+          {
+            type: 'dispatch-response',
+            parts: [
+              {
+                kind: 'a2ui',
+                data: {
+                  payload: {
+                    kind: 'interrupt',
+                    payload: {
+                      message: 'Please provide a short operator note to continue.',
+                      submitLabel: 'Continue agent loop',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        onSendChatMessage: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('A2UI');
+    expect(html).toContain('pi-example-a2ui-view');
+  });
+
   it('renders metrics tab as disabled while onboarding is in progress', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {

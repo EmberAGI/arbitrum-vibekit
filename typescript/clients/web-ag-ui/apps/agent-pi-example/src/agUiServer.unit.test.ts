@@ -50,6 +50,19 @@ function createStubService() {
   return { service, connect, run, stop };
 }
 
+async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): Promise<T[]> {
+  if (Array.isArray(source)) {
+    return [...source];
+  }
+
+  const events: T[] = [];
+  for await (const event of source) {
+    events.push(event);
+  }
+
+  return events;
+}
+
 describe('createPiExampleAgUiHandler', () => {
   it('requires real Pi foundation env for default service startup', () => {
     expect(() => createPiExampleGatewayService()).toThrow('OPENROUTER_API_KEY');
@@ -209,6 +222,82 @@ describe('createPiExampleAgUiHandler', () => {
         interruptIdsToResurface: ['interrupt-1'],
       },
     });
+  });
+
+  it('surfaces runtime-state automation artifacts after a mocked tool-backed run', async () => {
+    const service = createPiExampleGatewayService({
+      env: {
+        OPENROUTER_API_KEY: 'test-openrouter-key',
+        PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
+      },
+      persistence: {
+        ensureReady: async () => undefined,
+        persistDirectExecution: async () => undefined,
+        scheduleAutomation: async () => ({
+          automationId: 'automation-1',
+          runId: 'run-1',
+          artifactId: 'artifact-1',
+        }),
+        requestInterrupt: async () => ({
+          artifactId: 'interrupt-artifact-1',
+        }),
+        loadInspectionState: async () => ({
+          threads: [],
+          executions: [],
+          automations: [],
+          automationRuns: [],
+          interrupts: [],
+          leases: [],
+          outboxIntents: [],
+          executionEvents: [],
+          threadActivities: [],
+        }),
+      },
+    });
+
+    const runEvents = await collectEventSource(
+      await service.run({
+        threadId: 'thread-1',
+        runId: 'run-schedule',
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'Please schedule sync automation.',
+          },
+        ],
+      }),
+    );
+
+    expect(runEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'STATE_SNAPSHOT',
+        snapshot: expect.objectContaining({
+          thread: expect.objectContaining({
+            artifacts: expect.objectContaining({
+              current: expect.objectContaining({
+                data: expect.objectContaining({
+                  type: 'automation-status',
+                  status: 'scheduled',
+                  command: 'sync',
+                }),
+              }),
+            }),
+            activity: expect.objectContaining({
+              events: expect.arrayContaining([
+                expect.objectContaining({
+                  parts: expect.arrayContaining([
+                    expect.objectContaining({
+                      kind: 'a2ui',
+                    }),
+                  ]),
+                }),
+              ]),
+            }),
+          }),
+        }),
+      }),
+    );
   });
 
   it('surfaces canonical automation, scheduler, outbox, and maintenance state for operator validation', async () => {

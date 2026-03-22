@@ -2,9 +2,10 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { AddressInfo } from 'node:net';
 
 import { type RunAgentInput, verifyEvents } from '@ag-ui/client';
+import { EventType, type BaseEvent } from '@ag-ui/core';
 import { type PiRuntimeGatewayService } from 'agent-runtime';
 import { createPiRuntimeGatewayAgUiHandler, PiRuntimeGatewayHttpAgent } from 'agent-runtime/pi-transport';
-import { filter, firstValueFrom, lastValueFrom, toArray } from 'rxjs';
+import { lastValueFrom, toArray } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createPiExampleGatewayService,
@@ -44,15 +45,21 @@ function createRunInput(overrides: Partial<RunAgentInput> = {}): RunAgentInput {
   });
 }
 
-async function collectEvents(source$: { pipe: typeof import('rxjs').Observable.prototype.pipe }) {
-  return lastValueFrom(source$.pipe(toArray()));
+function createPromptRunInput(prompt: string, overrides: Partial<RunAgentInput> = {}): RunAgentInput {
+  return createInput({
+    messages: [
+      {
+        id: 'message-1',
+        role: 'user',
+        content: prompt,
+      },
+    ],
+    ...overrides,
+  });
 }
 
-async function waitForEvent<T extends { type?: string }>(
-  source$: { pipe: typeof import('rxjs').Observable.prototype.pipe },
-  type: string,
-) {
-  return firstValueFrom(source$.pipe(filter((event: T) => event.type === type)));
+async function collectEvents(source$: { pipe: typeof import('rxjs').Observable.prototype.pipe }) {
+  return lastValueFrom(source$.pipe(toArray()));
 }
 
 async function waitForAssertion(assertion: () => void, timeoutMs = 1_000): Promise<void> {
@@ -93,6 +100,10 @@ async function writeNodeResponse(response: Response, target: ServerResponse): Pr
   target.end(body);
 }
 
+function findStateSnapshot(events: BaseEvent[]) {
+  return [...events].reverse().find((event) => event.type === EventType.STATE_SNAPSHOT);
+}
+
 describe('PiRuntimeGatewayHttpAgent integration', () => {
   let server: Server;
   let runtimeUrl: string;
@@ -109,6 +120,14 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
       persistence: {
         ensureReady: async () => undefined,
         persistDirectExecution: async () => undefined,
+        scheduleAutomation: async () => ({
+          automationId: 'automation-1',
+          runId: 'run-1',
+          artifactId: 'artifact-1',
+        }),
+        requestInterrupt: async () => ({
+          artifactId: 'interrupt-artifact-1',
+        }),
         loadInspectionState: async () => ({
           threads: [],
           executions: [],
@@ -190,7 +209,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
 
     const connectEvents = await collectEvents(agent.connect(createInput()).pipe(verifyEvents()));
     const runInput = createRunInput();
-    const runEvents = await collectEvents(agent.run(runInput));
+    const runEvents = await collectEvents(agent.run(runInput).pipe(verifyEvents()));
     agent.abortRun();
 
     expect(connectEvents).toContainEqual(
@@ -231,6 +250,20 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
         runId: 'run-1',
       }),
     );
+    expect(runEvents).toContainEqual(
+      expect.objectContaining({
+        type: EventType.REASONING_START,
+      }),
+    );
+    expect(runEvents).toContainEqual(
+      expect.objectContaining({
+        type: EventType.REASONING_MESSAGE_START,
+        role: 'reasoning',
+      }),
+    );
+    expect(
+      runEvents.filter((event) => event.type === EventType.TEXT_MESSAGE_CONTENT),
+    ).toHaveLength(2);
     await waitForAssertion(() => {
       expect(requests).toEqual(
         expect.arrayContaining([
@@ -255,5 +288,215 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
         ]),
       );
     });
+  });
+
+  it('emits live AG-UI tool lifecycle events and automation artifacts when the Pi loop schedules and runs automation', async () => {
+    const agent = new PiRuntimeGatewayHttpAgent({
+      agentId: PI_EXAMPLE_AGENT_ID,
+      runtimeUrl,
+    });
+
+    const runEvents = await collectEvents(
+      agent
+        .run(createPromptRunInput('Please schedule sync automation.', { runId: 'run-schedule' }))
+        .pipe(verifyEvents()),
+    );
+
+    expect(runEvents).toContainEqual(
+      expect.objectContaining({
+        type: EventType.TOOL_CALL_START,
+        toolCallName: 'schedule_sync_automation',
+      }),
+    );
+    expect(runEvents).toContainEqual(
+      expect.objectContaining({
+        type: EventType.TOOL_CALL_END,
+        toolCallId: 'pi-example-tool-schedule',
+      }),
+    );
+    expect(
+      runEvents.filter((event) => event.type === EventType.TOOL_CALL_ARGS),
+    ).not.toHaveLength(0);
+
+    expect(findStateSnapshot(runEvents)).toEqual(
+      expect.objectContaining({
+        type: EventType.STATE_SNAPSHOT,
+        snapshot: expect.objectContaining({
+          thread: expect.objectContaining({
+            task: expect.objectContaining({
+              taskStatus: expect.objectContaining({
+                state: 'working',
+              }),
+            }),
+            artifacts: expect.objectContaining({
+              current: expect.objectContaining({
+                data: expect.objectContaining({
+                  type: 'automation-status',
+                  status: 'scheduled',
+                  command: 'sync',
+                }),
+              }),
+            }),
+            activity: expect.objectContaining({
+              events: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'dispatch-response',
+                  parts: expect.arrayContaining([
+                    expect.objectContaining({
+                      kind: 'a2ui',
+                    }),
+                  ]),
+                }),
+              ]),
+            }),
+          }),
+        }),
+      }),
+    );
+
+    const automationRunEvents = await collectEvents(
+      agent
+        .run(
+          createPromptRunInput('Please run scheduled automation now.', {
+            runId: 'run-automation',
+          }),
+        )
+        .pipe(verifyEvents()),
+    );
+
+    expect(automationRunEvents).toContainEqual(
+      expect.objectContaining({
+        type: EventType.TOOL_CALL_START,
+        toolCallName: 'run_sync_automation',
+      }),
+    );
+    expect(findStateSnapshot(automationRunEvents)).toEqual(
+      expect.objectContaining({
+        type: EventType.STATE_SNAPSHOT,
+        snapshot: expect.objectContaining({
+          thread: expect.objectContaining({
+            task: expect.objectContaining({
+              taskStatus: expect.objectContaining({
+                state: 'completed',
+              }),
+            }),
+            artifacts: expect.objectContaining({
+              current: expect.objectContaining({
+                data: expect.objectContaining({
+                  type: 'automation-status',
+                  status: 'completed',
+                  command: 'sync',
+                }),
+              }),
+            }),
+            activity: expect.objectContaining({
+              events: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'dispatch-response',
+                  parts: expect.arrayContaining([
+                    expect.objectContaining({
+                      kind: 'a2ui',
+                    }),
+                  ]),
+                }),
+              ]),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('surfaces an interrupt A2UI payload and clears it after the operator replies on the same thread', async () => {
+    const agent = new PiRuntimeGatewayHttpAgent({
+      agentId: PI_EXAMPLE_AGENT_ID,
+      runtimeUrl,
+    });
+
+    const interruptEvents = await collectEvents(
+      agent
+        .run(
+          createPromptRunInput('Please request operator input.', {
+            runId: 'run-interrupt',
+          }),
+        )
+        .pipe(verifyEvents()),
+    );
+
+    expect(interruptEvents).toContainEqual(
+      expect.objectContaining({
+        type: EventType.TOOL_CALL_START,
+        toolCallName: 'request_operator_input',
+      }),
+    );
+    expect(findStateSnapshot(interruptEvents)).toEqual(
+      expect.objectContaining({
+        type: EventType.STATE_SNAPSHOT,
+        snapshot: expect.objectContaining({
+          thread: expect.objectContaining({
+            task: expect.objectContaining({
+              taskStatus: expect.objectContaining({
+                state: 'input-required',
+              }),
+            }),
+            activity: expect.objectContaining({
+              events: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'dispatch-response',
+                  parts: expect.arrayContaining([
+                    expect.objectContaining({
+                      kind: 'a2ui',
+                    }),
+                  ]),
+                }),
+              ]),
+            }),
+          }),
+        }),
+      }),
+    );
+
+    const resumedEvents = await collectEvents(
+      agent
+        .run(
+          createPromptRunInput('Operator note: Use the safe automation window.', {
+            runId: 'run-resume',
+          }),
+        )
+        .pipe(verifyEvents()),
+    );
+
+    expect(findStateSnapshot(resumedEvents)).toEqual(
+      expect.objectContaining({
+        type: EventType.STATE_SNAPSHOT,
+        snapshot: expect.objectContaining({
+          thread: expect.objectContaining({
+            task: expect.objectContaining({
+              taskStatus: expect.objectContaining({
+                state: 'working',
+                message: 'Operator input received. Continuing the Pi loop.',
+              }),
+            }),
+            artifacts: expect.objectContaining({
+              current: expect.objectContaining({
+                data: expect.objectContaining({
+                  type: 'interrupt-status',
+                  status: 'resolved',
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+    expect(findStateSnapshot(resumedEvents)).toEqual(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          thread: expect.not.objectContaining({
+            activity: expect.anything(),
+          }),
+        }),
+      }),
+    );
   });
 });
