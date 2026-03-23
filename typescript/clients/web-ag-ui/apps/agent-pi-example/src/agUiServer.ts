@@ -129,9 +129,9 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       await ensureReady();
       const directExecutionIds = buildPiRuntimeDirectExecutionRecordIds(params.threadKey);
       const automationId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation`);
-      const runId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-run`);
-      const executionId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-execution`);
-      const activityId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-activity`);
+      const runId = randomUUID();
+      const executionId = randomUUID();
+      const activityId = randomUUID();
       const artifactId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-artifact`);
       const now = getNow();
 

@@ -490,6 +490,353 @@ export const projectPiAgentMessagesToAgUiMessages = (params: {
   });
 };
 
+const mergeAgUiMessages = (baseMessages: readonly AgUiMessage[], incomingMessages: readonly AgUiMessage[]): AgUiMessage[] => {
+  const merged = [...baseMessages];
+  const indexById = new Map<string, number>();
+
+  for (const [index, message] of merged.entries()) {
+    indexById.set(message.id, index);
+  }
+
+  for (const message of incomingMessages) {
+    const existingIndex = indexById.get(message.id);
+    if (existingIndex === undefined) {
+      indexById.set(message.id, merged.length);
+      merged.push(message);
+      continue;
+    }
+
+    merged[existingIndex] = message;
+  }
+
+  return merged;
+};
+
+type PersistedTextMessageStartEvent = {
+  type: EventType.TEXT_MESSAGE_START;
+  messageId: string;
+  role: string;
+};
+
+type PersistedTextMessageContentEvent = {
+  type: EventType.TEXT_MESSAGE_CONTENT;
+  messageId: string;
+  delta: string;
+};
+
+type PersistedReasoningMessageStartEvent = {
+  type: EventType.REASONING_MESSAGE_START;
+  messageId: string;
+};
+
+type PersistedReasoningMessageContentEvent = {
+  type: EventType.REASONING_MESSAGE_CONTENT;
+  messageId: string;
+  delta: string;
+};
+
+type PersistedToolCallStartEvent = {
+  type: EventType.TOOL_CALL_START;
+  toolCallId: string;
+  toolCallName: string;
+  parentMessageId?: string;
+};
+
+type PersistedToolCallArgsEvent = {
+  type: EventType.TOOL_CALL_ARGS;
+  toolCallId: string;
+  delta: string;
+};
+
+type PersistedToolCallResultEvent = {
+  type: EventType.TOOL_CALL_RESULT;
+  messageId: string;
+  toolCallId: string;
+  content: string;
+  error?: string;
+};
+
+const isBaseEventRecord = (event: BaseEvent): event is BaseEvent & Record<string, unknown> =>
+  typeof event === 'object' && event !== null;
+
+const isPersistedTextMessageStartEvent = (event: BaseEvent): event is PersistedTextMessageStartEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.TEXT_MESSAGE_START &&
+  typeof event.messageId === 'string' &&
+  typeof event.role === 'string';
+
+const isPersistedTextMessageContentEvent = (event: BaseEvent): event is PersistedTextMessageContentEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.TEXT_MESSAGE_CONTENT &&
+  typeof event.messageId === 'string' &&
+  typeof event.delta === 'string';
+
+const isPersistedReasoningMessageStartEvent = (event: BaseEvent): event is PersistedReasoningMessageStartEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.REASONING_MESSAGE_START &&
+  typeof event.messageId === 'string';
+
+const isPersistedReasoningMessageContentEvent = (event: BaseEvent): event is PersistedReasoningMessageContentEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.REASONING_MESSAGE_CONTENT &&
+  typeof event.messageId === 'string' &&
+  typeof event.delta === 'string';
+
+const isPersistedToolCallStartEvent = (event: BaseEvent): event is PersistedToolCallStartEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.TOOL_CALL_START &&
+  typeof event.toolCallId === 'string' &&
+  typeof event.toolCallName === 'string' &&
+  (!('parentMessageId' in event) || typeof event.parentMessageId === 'string');
+
+const isPersistedToolCallArgsEvent = (event: BaseEvent): event is PersistedToolCallArgsEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.TOOL_CALL_ARGS &&
+  typeof event.toolCallId === 'string' &&
+  typeof event.delta === 'string';
+
+const isPersistedToolCallResultEvent = (event: BaseEvent): event is PersistedToolCallResultEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.TOOL_CALL_RESULT &&
+  typeof event.messageId === 'string' &&
+  typeof event.toolCallId === 'string' &&
+  typeof event.content === 'string' &&
+  (!('error' in event) || typeof event.error === 'string');
+
+const applyProjectedRunEventsToMessages = (
+  baseMessages: readonly AgUiMessage[],
+  projectedEvents: readonly BaseEvent[],
+): AgUiMessage[] => {
+  const messages = [...baseMessages];
+  const indexById = new Map(messages.map((message, index) => [message.id, index]));
+
+  const upsertMessage = (message: AgUiMessage): void => {
+    const existingIndex = indexById.get(message.id);
+    if (existingIndex === undefined) {
+      indexById.set(message.id, messages.length);
+      messages.push(message);
+      return;
+    }
+
+    messages[existingIndex] = message;
+  };
+
+  const updateMessage = (
+    messageId: string,
+    create: () => AgUiMessage,
+    update: (message: AgUiMessage) => AgUiMessage,
+  ): void => {
+    const existingIndex = indexById.get(messageId);
+    if (existingIndex === undefined) {
+      const created = create();
+      indexById.set(messageId, messages.length);
+      messages.push(update(created));
+      return;
+    }
+
+    messages[existingIndex] = update(messages[existingIndex]!);
+  };
+
+  const updateAssistantToolCall = (
+    messageId: string,
+    toolCallId: string,
+    update: (toolCall: {
+      id: string;
+      type: 'function';
+      function: {
+        name: string;
+        arguments: string;
+      };
+    }) => {
+      id: string;
+      type: 'function';
+      function: {
+        name: string;
+        arguments: string;
+      };
+    },
+    defaults?: {
+      name: string;
+      arguments: string;
+    },
+  ): void => {
+    updateMessage(
+      messageId,
+      () => ({
+        id: messageId,
+        role: 'assistant',
+        toolCalls: [],
+      }),
+      (message) => {
+        const toolCalls = message.role === 'assistant' && Array.isArray(message.toolCalls) ? [...message.toolCalls] : [];
+        const existingToolCallIndex = toolCalls.findIndex((toolCall) => toolCall.id === toolCallId);
+        const baselineToolCall =
+          existingToolCallIndex === -1
+            ? {
+                id: toolCallId,
+                type: 'function' as const,
+                function: {
+                  name: defaults?.name ?? 'pi-tool-call',
+                  arguments: defaults?.arguments ?? '',
+                },
+              }
+            : toolCalls[existingToolCallIndex]!;
+        const nextToolCall = update(baselineToolCall);
+
+        if (existingToolCallIndex === -1) {
+          toolCalls.push(nextToolCall);
+        } else {
+          toolCalls[existingToolCallIndex] = nextToolCall;
+        }
+
+        return {
+          ...(message.role === 'assistant'
+            ? message
+            : {
+                id: messageId,
+                role: 'assistant' as const,
+              }),
+          toolCalls,
+        };
+      },
+    );
+  };
+
+  for (const event of projectedEvents) {
+    if (isPersistedTextMessageStartEvent(event)) {
+      const role = event.role;
+      if (role === 'assistant' || role === 'user') {
+        updateMessage(
+          event.messageId,
+          () => ({
+            id: event.messageId,
+            role,
+            content: '',
+          }),
+          (message) =>
+            role === 'assistant'
+              ? {
+                  id: event.messageId,
+                  role: 'assistant',
+                  content: typeof message.content === 'string' ? message.content : '',
+                  ...(message.role === 'assistant' && Array.isArray(message.toolCalls)
+                    ? { toolCalls: message.toolCalls }
+                    : {}),
+                }
+              : {
+                  id: event.messageId,
+                  role: 'user',
+                  content: typeof message.content === 'string' ? message.content : '',
+                },
+        );
+      }
+      continue;
+    }
+
+    if (isPersistedTextMessageContentEvent(event)) {
+      updateMessage(
+        event.messageId,
+        () => ({
+          id: event.messageId,
+          role: 'assistant',
+          content: '',
+        }),
+        (message) => ({
+          id: event.messageId,
+          role: 'assistant',
+          content: `${typeof message.content === 'string' ? message.content : ''}${event.delta}`,
+          ...(message.role === 'assistant' && Array.isArray(message.toolCalls)
+            ? { toolCalls: message.toolCalls }
+            : {}),
+        }),
+      );
+      continue;
+    }
+
+    if (isPersistedReasoningMessageStartEvent(event)) {
+      upsertMessage({
+        id: event.messageId,
+        role: 'reasoning',
+        content: '',
+      });
+      continue;
+    }
+
+    if (isPersistedReasoningMessageContentEvent(event)) {
+      updateMessage(
+        event.messageId,
+        () => ({
+          id: event.messageId,
+          role: 'reasoning',
+          content: '',
+        }),
+        (message) => ({
+          ...message,
+          role: 'reasoning',
+          content: `${typeof message.content === 'string' ? message.content : ''}${event.delta}`,
+        }),
+      );
+      continue;
+    }
+
+    if (isPersistedToolCallStartEvent(event)) {
+      if (event.parentMessageId) {
+        updateAssistantToolCall(
+          event.parentMessageId,
+          event.toolCallId,
+          () => ({
+            id: event.toolCallId,
+            type: 'function',
+            function: {
+              name: event.toolCallName,
+              arguments: '',
+            },
+          }),
+          {
+            name: event.toolCallName,
+            arguments: '',
+          },
+        );
+      }
+      continue;
+    }
+
+    if (isPersistedToolCallArgsEvent(event)) {
+      for (const [messageId, index] of indexById.entries()) {
+        const candidate = messages[index];
+        if (candidate?.role !== 'assistant' || !Array.isArray(candidate.toolCalls)) {
+          continue;
+        }
+        const toolCall = candidate.toolCalls.find((value) => value.id === event.toolCallId);
+        if (!toolCall) {
+          continue;
+        }
+        updateAssistantToolCall(messageId, event.toolCallId, (currentToolCall) => ({
+          ...currentToolCall,
+          function: {
+            ...currentToolCall.function,
+            arguments: `${currentToolCall.function.arguments}${event.delta}`,
+          },
+        }));
+        break;
+      }
+      continue;
+    }
+
+    if (isPersistedToolCallResultEvent(event)) {
+      upsertMessage({
+        id: event.messageId,
+        role: 'tool',
+        toolCallId: event.toolCallId,
+        content: event.content,
+        ...(typeof event.error === 'string' ? { error: event.error } : {}),
+      });
+    }
+  }
+
+  return messages;
+};
+
 const buildExecutionStatusText = (session: PiRuntimeGatewaySession): string =>
   [
     `Thread ${session.thread.id} execution ${session.execution.id} is ${session.execution.status}.`,
@@ -1041,17 +1388,17 @@ export const createPiRuntimeGatewayRuntime = (params: {
           messages: session.messages,
         }
       : null;
-  const syncProjectedMessages = (threadId: string): PiRuntimeGatewaySession => {
+  const persistRunTranscript = (threadId: string, requestMessages: readonly AgUiMessage[], projectedEvents: readonly BaseEvent[]) => {
     if (!params.updateSession) {
       return params.getSession(threadId);
     }
 
     return params.updateSession(threadId, (session) => ({
       ...session,
-      messages: projectPiAgentMessagesToAgUiMessages({
-        executionId: session.execution.id,
-        messages: params.agent.state.messages,
-      }),
+      messages: applyProjectedRunEventsToMessages(
+        mergeAgUiMessages(session.messages ?? [], requestMessages),
+        projectedEvents,
+      ),
     }));
   };
 
@@ -1084,6 +1431,8 @@ export const createPiRuntimeGatewayRuntime = (params: {
       syncAgentSessionId(request.threadId);
       const executionId = params.getSession(request.threadId).execution.id;
       const projector = createPiAgentEventProjector(executionId);
+      const projectedRunEvents: BaseEvent[] = [];
+      const requestMessages = request.messages ?? [];
 
       return createAsyncEventStream<BaseEvent>(async (controller) => {
         controller.push(asBaseEvent({
@@ -1094,6 +1443,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
 
         const unsubscribe = params.agent.subscribe((event) => {
           for (const projectedEvent of projector.project(event)) {
+            projectedRunEvents.push(projectedEvent);
             controller.push(projectedEvent);
           }
         });
@@ -1120,7 +1470,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
             await params.agent.continue();
           }
 
-          const session = syncProjectedMessages(request.threadId);
+          const session = persistRunTranscript(request.threadId, requestMessages, projectedRunEvents);
           controller.push(buildSnapshotEvent(session));
           const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);
           if (messagesSnapshotEvent) {

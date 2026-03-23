@@ -369,6 +369,110 @@ describe('pi gateway service integration', () => {
     });
   });
 
+  it('persists the current run transcript from request messages and projected events instead of stale agent state', async () => {
+    const staleAssistantMessage = {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Hello again.' }],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: 1,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+    const freshAssistantMessage = {
+      ...staleAssistantMessage,
+      content: [],
+      timestamp: 2,
+    };
+    const agent = new ScriptedPiAgent([
+      { type: 'agent_start' },
+      { type: 'turn_start' },
+      { type: 'message_start', message: freshAssistantMessage },
+      {
+        type: 'message_update',
+        message: freshAssistantMessage,
+        assistantMessageEvent: {
+          type: 'text_delta',
+          contentIndex: 0,
+          delta: 'Scheduled sync every minute.',
+          partial: freshAssistantMessage,
+        },
+      },
+      { type: 'message_end', message: freshAssistantMessage },
+      { type: 'turn_end', message: freshAssistantMessage, toolResults: [] },
+      { type: 'agent_end', messages: [freshAssistantMessage] },
+    ]);
+    agent.state.messages = [
+      {
+        role: 'user',
+        content: 'hi',
+        timestamp: 0,
+      },
+      staleAssistantMessage,
+    ];
+
+    let session = {
+      thread: { id: 'thread-1' },
+      execution: { id: 'exec-1', status: 'working' as const },
+      messages: [
+        {
+          id: 'user-hi',
+          role: 'user' as const,
+          content: 'hi',
+        },
+      ],
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-1',
+        runId: 'run-2',
+        messages: [
+          {
+            id: 'user-schedule',
+            role: 'user',
+            content: 'Schedule a sync every minute.',
+          },
+        ],
+      }),
+    );
+
+    expect(session.messages).toEqual([
+      {
+        id: 'user-hi',
+        role: 'user',
+        content: 'hi',
+      },
+      {
+        id: 'user-schedule',
+        role: 'user',
+        content: 'Schedule a sync every minute.',
+      },
+      {
+        id: 'pi:exec-1:assistant:2',
+        role: 'assistant',
+        content: 'Scheduled sync every minute.',
+      },
+    ]);
+  });
+
   it('queues active-run user input through Pi steering instead of re-prompting the agent', async () => {
     const agent = new ScriptedPiAgent([]);
     agent.state.isStreaming = true;
