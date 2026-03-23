@@ -73,13 +73,19 @@ export type PiRuntimeGatewayA2UiPayload = {
   payload: unknown;
 };
 
-export type PiRuntimeGatewayActivityEvent = {
-  type: 'dispatch-response';
-  parts: Array<{
-    kind: string;
-    data: unknown;
-  }>;
-};
+export type PiRuntimeGatewayActivityEvent =
+  | {
+      type: 'dispatch-response';
+      parts: Array<{
+        kind: string;
+        data: unknown;
+      }>;
+    }
+  | {
+      type: 'artifact';
+      artifact: PiRuntimeGatewayArtifact;
+      append?: boolean;
+    };
 
 export type PiRuntimeGatewayExecutionStatus =
   | 'queued'
@@ -109,6 +115,7 @@ export type PiRuntimeGatewaySession = {
     activity?: PiRuntimeGatewayArtifact;
   };
   a2ui?: PiRuntimeGatewayA2UiPayload;
+  activityEvents?: PiRuntimeGatewayActivityEvent[];
   threadPatch?: Record<string, unknown>;
 };
 
@@ -982,15 +989,29 @@ const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => num
   });
 
 export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Record<string, unknown> => {
-  const activityEvents: PiRuntimeGatewayActivityEvent[] = params.a2ui
-    ? [
-        buildPiA2UiActivityEvent({
-          threadId: params.thread.id,
-          executionId: params.execution.id,
-          payload: params.a2ui,
-        }),
-      ]
-    : [];
+  const activityEvents: PiRuntimeGatewayActivityEvent[] =
+    params.activityEvents && params.activityEvents.length > 0
+      ? [...params.activityEvents]
+      : [
+          ...(params.artifacts?.activity
+            ? [
+                {
+                  type: 'artifact',
+                  artifact: params.artifacts.activity,
+                  append: true,
+                } satisfies PiRuntimeGatewayActivityEvent,
+              ]
+            : []),
+          ...(params.a2ui
+            ? [
+                buildPiA2UiActivityEvent({
+                  threadId: params.thread.id,
+                  executionId: params.execution.id,
+                  payload: params.a2ui,
+                }),
+              ]
+            : []),
+        ];
 
   const baseThread = {
     id: params.thread.id,
@@ -1054,6 +1075,41 @@ export const buildPiA2UiActivityEvent = (params: {
     },
   ],
 });
+
+export const buildPiRuntimeGatewayConnectEvents = (params: {
+  threadId: string;
+  runId: string;
+  session: PiRuntimeGatewaySession;
+}): BaseEvent[] => {
+  const messagesSnapshotEvent: MessagesSnapshotEvent | null = params.session.messages
+    ? {
+        type: EventType.MESSAGES_SNAPSHOT,
+        messages: params.session.messages,
+      }
+    : null;
+
+  return [
+    asBaseEvent({
+      type: EventType.RUN_STARTED,
+      threadId: params.threadId,
+      runId: params.runId,
+    } satisfies RunStartedEvent),
+    {
+      type: EventType.STATE_SNAPSHOT,
+      snapshot: buildPiThreadStateSnapshot(params.session),
+    } satisfies StateSnapshotEvent,
+    ...(messagesSnapshotEvent ? [messagesSnapshotEvent] : []),
+    asBaseEvent({
+      type: EventType.RUN_FINISHED,
+      threadId: params.threadId,
+      runId: params.runId,
+      result: {
+        executionId: params.session.execution.id,
+        status: params.session.execution.status,
+      },
+    } satisfies RunFinishedEvent),
+  ];
+};
 
 export const mapPiAgentEventsToAgUiEvents = (params: {
   executionId: string;
@@ -1407,25 +1463,13 @@ export const createPiRuntimeGatewayRuntime = (params: {
       syncAgentSessionId(request.threadId);
       const session = params.getSession(request.threadId);
       const runId = request.runId ?? `connect:${request.threadId}`;
-      const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);
-      return Promise.resolve([
-        asBaseEvent({
-          type: EventType.RUN_STARTED,
+      return Promise.resolve(
+        buildPiRuntimeGatewayConnectEvents({
           threadId: request.threadId,
           runId,
-        } satisfies RunStartedEvent),
-        buildSnapshotEvent(session),
-        ...(messagesSnapshotEvent ? [messagesSnapshotEvent] : []),
-        asBaseEvent({
-          type: EventType.RUN_FINISHED,
-          threadId: request.threadId,
-          runId,
-          result: {
-            executionId: session.execution.id,
-            status: session.execution.status,
-          },
-        } satisfies RunFinishedEvent),
-      ]);
+          session,
+        }),
+      );
     },
     run: (request) => {
       syncAgentSessionId(request.threadId);

@@ -80,11 +80,28 @@ export async function runPiExampleAutomationSchedulerTick(
     }
 
     const nextRunAt = new Date(now.getTime() + minutes * 60 * 1000);
-    const nextRunId = buildPiRuntimeStableUuid(`pi-example:${automationId}:run:${nextRunAt.toISOString()}`);
-    const nextExecutionId = buildPiRuntimeStableUuid(`pi-example:${automationId}:execution:${nextRunAt.toISOString()}`);
-    const eventId = buildPiRuntimeStableUuid(`pi-example:${automationId}:event:${now.toISOString()}`);
-    const activityId = buildPiRuntimeStableUuid(`pi-example:${automationId}:activity:${now.toISOString()}`);
-    const artifactId = buildPiRuntimeStableUuid(`pi-example:${thread.threadKey}:automation-artifact`);
+    const nextRunId = buildPiRuntimeStableUuid('automation-run', `pi-example:${automationId}:run:${nextRunAt.toISOString()}`);
+    const nextExecutionId = buildPiRuntimeStableUuid(
+      'execution',
+      `pi-example:${automationId}:execution:${nextRunAt.toISOString()}`,
+    );
+    const eventId = buildPiRuntimeStableUuid('execution-event', `pi-example:${automationId}:event:${now.toISOString()}`);
+    const activityId = buildPiRuntimeStableUuid('activity', `pi-example:${automationId}:activity:${now.toISOString()}`);
+    const artifactId = buildPiRuntimeStableUuid('artifact', `pi-example:${thread.threadKey}:automation-artifact`);
+
+    applyAutomationStatusUpdate({
+      runtimeState: options.runtimeState,
+      threadKey: thread.threadKey,
+      artifactId,
+      automationId,
+      executionId: scheduledRun.executionId,
+      activityRunId: scheduledRun.runId,
+      status: 'running',
+      command: automation.commandName,
+      minutes,
+      detail: `Running automation ${automation.commandName}.`,
+      emitConnectUpdate: true,
+    });
 
     await executeStatements(
       options.databaseUrl,
@@ -110,12 +127,13 @@ export async function runPiExampleAutomationSchedulerTick(
       threadKey: thread.threadKey,
       artifactId,
       automationId,
+      executionId: scheduledRun.executionId,
       activityRunId: scheduledRun.runId,
-      nextRunId,
       status: 'completed',
       command: automation.commandName,
       minutes,
       detail: `Automation ${automation.commandName} executed successfully.`,
+      emitConnectUpdate: true,
     });
     executedAutomationIds.push(automationId);
   }

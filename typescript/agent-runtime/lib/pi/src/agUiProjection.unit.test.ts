@@ -61,6 +61,11 @@ describe('pi AG-UI projection', () => {
           telemetry: [],
           events: [
             {
+              type: 'artifact',
+              append: true,
+              artifact: { artifactId: 'activity-artifact', data: { entries: 3 } },
+            },
+            {
               type: 'dispatch-response',
               parts: [
                 {

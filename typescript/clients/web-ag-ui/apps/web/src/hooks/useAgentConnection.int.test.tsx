@@ -393,7 +393,7 @@ describe('useAgentConnection integration', () => {
     }
   });
 
-  it('polls the Pi example detail connection so background automation updates can surface', async () => {
+  it('does not force Pi detail reconnect polling once connect is attached', async () => {
     vi.useFakeTimers();
 
     try {
@@ -407,8 +407,7 @@ describe('useAgentConnection integration', () => {
       await vi.advanceTimersByTimeAsync(5_000);
       await flushEffects();
 
-      expect(mocks.connectAgent).toHaveBeenCalledTimes(2);
-      expect(mocks.connectAgent).toHaveBeenLastCalledWith({ agent: mocks.agent });
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }

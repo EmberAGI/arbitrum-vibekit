@@ -2,6 +2,7 @@ import type { PiRuntimeGatewayService } from 'agent-runtime';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createPiExampleAgUiHandler, createPiExampleGatewayService } from './agUiServer';
+import { applyAutomationStatusUpdate, createPiExampleRuntimeStateStore } from './runtimeState.js';
 
 const STABLE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -236,6 +237,7 @@ describe('createPiExampleAgUiHandler', () => {
         scheduleAutomation: async () => ({
           automationId: 'automation-1',
           runId: 'run-1',
+          executionId: 'exec-1',
           artifactId: 'artifact-1',
         }),
         requestInterrupt: async () => ({
@@ -337,26 +339,143 @@ describe('createPiExampleAgUiHandler', () => {
       }),
     );
 
-    const connectEvents = await collectEventSource(
-      await service.connect({
-        threadId: 'thread-1',
-      }),
-    );
+    const connectSource = await service.connect({
+      threadId: 'thread-1',
+    });
+    expect(Array.isArray(connectSource)).toBe(false);
+    const iterator = (connectSource as AsyncIterable<unknown>)[Symbol.asyncIterator]();
 
-    expect(connectEvents).toContainEqual(
+    await expect(iterator.next()).resolves.toEqual(
       expect.objectContaining({
-        type: 'MESSAGES_SNAPSHOT',
-        messages: expect.arrayContaining([
-          expect.objectContaining({
-            role: 'user',
-            content: 'What can you do?',
-          }),
-          expect.objectContaining({
-            role: 'assistant',
-          }),
-        ]),
+        done: false,
+        value: expect.objectContaining({
+          type: 'RUN_STARTED',
+        }),
       }),
     );
+    await expect(iterator.next()).resolves.toEqual(
+      expect.objectContaining({
+        done: false,
+        value: expect.objectContaining({
+          type: 'STATE_SNAPSHOT',
+        }),
+      }),
+    );
+    await expect(iterator.next()).resolves.toEqual(
+      expect.objectContaining({
+        done: false,
+        value: expect.objectContaining({
+          type: 'MESSAGES_SNAPSHOT',
+          messages: expect.arrayContaining([
+            expect.objectContaining({
+              role: 'user',
+              content: 'What can you do?',
+            }),
+            expect.objectContaining({
+              role: 'assistant',
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('keeps connect attached and emits a later background automation execution as a synthetic AG-UI run', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const runtimeState = createPiExampleRuntimeStateStore();
+      const service = createPiExampleGatewayService({
+        env: {
+          OPENROUTER_API_KEY: 'test-openrouter-key',
+          PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
+        },
+        runtimeState,
+        persistence: {
+          ensureReady: async () => undefined,
+          persistDirectExecution: async () => undefined,
+          loadInspectionState: async () => ({
+            threads: [],
+            executions: [],
+            automations: [],
+            automationRuns: [],
+            interrupts: [],
+            leases: [],
+            outboxIntents: [],
+            executionEvents: [],
+            threadActivities: [],
+          }),
+        },
+      });
+
+      const connectSource = await service.connect({ threadId: 'thread-1' });
+      expect(Array.isArray(connectSource)).toBe(false);
+      const iterator = (connectSource as AsyncIterable<unknown>)[Symbol.asyncIterator]();
+
+      await expect(iterator.next()).resolves.toEqual({
+        done: false,
+        value: {
+          type: 'RUN_STARTED',
+          threadId: 'thread-1',
+          runId: 'connect:thread-1',
+        },
+      });
+      await expect(iterator.next()).resolves.toEqual(
+        expect.objectContaining({
+          done: false,
+          value: expect.objectContaining({
+            type: 'STATE_SNAPSHOT',
+          }),
+        }),
+      );
+      await expect(iterator.next()).resolves.toEqual(
+        expect.objectContaining({
+          done: false,
+          value: expect.objectContaining({
+            type: 'MESSAGES_SNAPSHOT',
+          }),
+        }),
+      );
+      await expect(iterator.next()).resolves.toEqual(
+        expect.objectContaining({
+          done: false,
+          value: expect.objectContaining({
+            type: 'RUN_FINISHED',
+            threadId: 'thread-1',
+            runId: 'connect:thread-1',
+          }),
+        }),
+      );
+
+      const nextEvent = iterator.next();
+
+      applyAutomationStatusUpdate({
+        runtimeState,
+        threadKey: 'thread-1',
+        artifactId: 'artifact-1',
+        automationId: 'automation-1',
+        executionId: 'exec-automation-1',
+        activityRunId: 'run-automation-1',
+        status: 'completed',
+        command: 'sync',
+        minutes: 1,
+        detail: 'Automation sync executed successfully.',
+        emitConnectUpdate: true,
+      });
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      await expect(nextEvent).resolves.toEqual({
+        done: false,
+        value: {
+          type: 'RUN_STARTED',
+          threadId: 'thread-1',
+          runId: 'run-automation-1',
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('surfaces canonical automation, scheduler, outbox, and maintenance state for operator validation', async () => {

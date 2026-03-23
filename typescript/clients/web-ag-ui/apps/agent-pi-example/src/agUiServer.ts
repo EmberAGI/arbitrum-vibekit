@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  buildPiRuntimeGatewayConnectEvents,
   buildPersistAutomationDispatchStatements,
   buildPersistInterruptCheckpointStatements,
   buildPiRuntimeDirectExecutionRecordIds,
@@ -27,6 +28,7 @@ import { createPiExampleRuntimeStateStore, type PiExampleRuntimeStateStore } fro
 
 export const PI_EXAMPLE_AGENT_ID = 'agent-pi-example';
 export const PI_EXAMPLE_AG_UI_BASE_PATH = '/ag-ui';
+const PI_EXAMPLE_CONNECT_POLL_MS = 1_000;
 
 type PiExampleAgUiHandlerOptions = {
   agentId: string;
@@ -58,6 +60,7 @@ type PiExampleGatewayServiceOptions = {
     }) => Promise<{
       automationId: string;
       runId: string;
+      executionId: string;
       artifactId: string;
     }>;
     requestInterrupt?: (params: {
@@ -128,11 +131,11 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
     }) => {
       await ensureReady();
       const directExecutionIds = buildPiRuntimeDirectExecutionRecordIds(params.threadKey);
-      const automationId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation`);
+      const automationId = buildPiRuntimeStableUuid('automation', `pi-example:${params.threadKey}:automation`);
       const runId = randomUUID();
       const executionId = randomUUID();
       const activityId = randomUUID();
-      const artifactId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-artifact`);
+      const artifactId = buildPiRuntimeStableUuid('artifact', `pi-example:${params.threadKey}:automation-artifact`);
       const now = getNow();
 
       await executePostgresStatements(
@@ -148,7 +151,7 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
             minutes: params.minutes,
           },
           activityId,
-          leaseOwnerId: buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:lease-owner`),
+          leaseOwnerId: buildPiRuntimeStableUuid('lease-owner', `pi-example:${params.threadKey}:lease-owner`),
           now,
           nextRunAt: new Date(now.getTime() + params.minutes * 60 * 1000),
           leaseExpiresAt: new Date(now.getTime() + 60 * 1000),
@@ -158,6 +161,7 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       return {
         automationId,
         runId,
+        executionId,
         artifactId,
       };
     });
@@ -169,15 +173,15 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
     }) => {
       await ensureReady();
       const directExecutionIds = buildPiRuntimeDirectExecutionRecordIds(params.threadKey);
-      const artifactId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:interrupt-artifact`);
+      const artifactId = buildPiRuntimeStableUuid('artifact', `pi-example:${params.threadKey}:interrupt-artifact`);
 
       await executePostgresStatements(
         databaseUrl,
         buildPersistInterruptCheckpointStatements({
           executionId: directExecutionIds.executionId,
-          interruptId: buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:interrupt`),
+          interruptId: buildPiRuntimeStableUuid('interrupt', `pi-example:${params.threadKey}:interrupt`),
           artifactId,
-          activityId: buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:interrupt-activity`),
+          activityId: buildPiRuntimeStableUuid('activity', `pi-example:${params.threadKey}:interrupt-activity`),
           threadId: directExecutionIds.threadId,
           now: getNow(),
         }),
@@ -227,7 +231,35 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
     runtime: {
       connect: async (request) => {
         await persistThreadExecution(request.threadId);
-        return await baseRuntime.connect(request);
+        let lastConnectRevision = runtimeState.getLatestConnectRevision(request.threadId);
+
+        return (async function* () {
+          for (const event of buildPiRuntimeGatewayConnectEvents({
+            threadId: request.threadId,
+            runId: request.runId ?? `connect:${request.threadId}`,
+            session: runtimeState.getSession(request.threadId),
+          })) {
+            yield event;
+          }
+
+          while (true) {
+            await new Promise((resolve) => {
+              setTimeout(resolve, PI_EXAMPLE_CONNECT_POLL_MS);
+            });
+
+            const connectUpdates = runtimeState.listConnectUpdates(request.threadId, lastConnectRevision);
+            for (const update of connectUpdates) {
+              lastConnectRevision = update.revision;
+              for (const event of buildPiRuntimeGatewayConnectEvents({
+                threadId: request.threadId,
+                runId: update.runId,
+                session: update.session,
+              })) {
+                yield event;
+              }
+            }
+          }
+        })();
       },
       run: async (request) => {
         await persistThreadExecution(request.threadId);

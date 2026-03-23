@@ -75,7 +75,7 @@ describe('createPiExampleGatewayFoundation', () => {
 
     expect(runtimeState.getSession('thread-1')).toMatchObject({
       execution: {
-        status: 'working',
+        status: 'queued',
         statusMessage: 'Scheduled sync every 5 minutes.',
       },
       automation: {

@@ -59,6 +59,7 @@ export type PiExampleGatewayFoundationOptions = {
     }) => Promise<{
       automationId: string;
       runId: string;
+      executionId: string;
       artifactId: string;
     }>;
     requestInterrupt?: (params: {
@@ -68,6 +69,15 @@ export type PiExampleGatewayFoundationOptions = {
       artifactId: string;
     }>;
   };
+};
+
+type ScheduleAutomationArgs = {
+  command: string;
+  minutes: number;
+};
+
+type RequestOperatorInputArgs = {
+  message: string;
 };
 
 function requireEnvValue(value: string | undefined, name: keyof PiExampleGatewayEnv): string {
@@ -115,7 +125,7 @@ function getUserText(message: Message): string {
   }
 
   return message.content
-    .filter((part) => part.type === 'text')
+    .filter((part): part is Extract<Message['content'][number], { type: 'text' }> => part.type === 'text')
     .map((part) => part.text)
     .join(' ');
 }
@@ -253,9 +263,13 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
     const latestMessage = [...context.messages].reverse().find(isMeaningfulContextMessage);
 
     if (latestMessage?.role === 'toolResult') {
+      const toolResultText = latestMessage.content
+        .filter((part): part is Extract<typeof latestMessage.content[number], { type: 'text' }> => part.type === 'text')
+        .map((part) => part.text)
+        .join(' ');
       return createMockTextStream({
         model,
-        text: `Tool ${latestMessage.toolName} completed. ${latestMessage.content.map((part) => part.text).join(' ')}`.trim(),
+        text: `Tool ${latestMessage.toolName} completed. ${toolResultText}`.trim(),
         reasoning: `Summarizing the ${latestMessage.toolName} result for the user.`,
       });
     }
@@ -332,25 +346,28 @@ function createPiExampleTools(params: {
         minutes: Type.Number({ minimum: 1, default: 5 }),
       }),
       execute: async (_toolCallId, args) => {
+        const toolArgs = args as ScheduleAutomationArgs;
         const threadKey = params.resolveThreadKey();
         const persisted = await params.persistence?.scheduleAutomation?.({
           threadKey,
-          command: args.command,
-          minutes: args.minutes,
+          command: toolArgs.command,
+          minutes: toolArgs.minutes,
         });
         const automationId = persisted?.automationId ?? `automation:${threadKey}`;
         const runId = persisted?.runId ?? `run:${threadKey}`;
+        const executionId = persisted?.executionId ?? `execution:${threadKey}`;
         const artifactId = persisted?.artifactId ?? `artifact:${threadKey}:automation`;
-        const detail = `Scheduled ${args.command} every ${args.minutes} minutes.`;
+        const detail = `Scheduled ${toolArgs.command} every ${toolArgs.minutes} minutes.`;
         applyAutomationStatusUpdate({
           runtimeState: params.runtimeState,
           threadKey,
           artifactId,
           automationId,
+          executionId,
           activityRunId: runId,
           status: 'scheduled',
-          command: args.command,
-          minutes: args.minutes,
+          command: toolArgs.command,
+          minutes: toolArgs.minutes,
           detail,
         });
 
@@ -373,21 +390,23 @@ function createPiExampleTools(params: {
         minutes: Type.Number({ minimum: 1, default: 5 }),
       }),
       execute: async (_toolCallId, args) => {
+        const toolArgs = args as ScheduleAutomationArgs;
         const threadKey = params.resolveThreadKey();
         const session = params.runtimeState.getSession(threadKey);
         const automationId = session.automation?.id ?? `automation:${threadKey}`;
         const runId = session.automation?.runId ?? `run:${threadKey}`;
         const artifactId = session.artifacts?.current?.artifactId ?? `artifact:${threadKey}:automation`;
-        const detail = `Automation ${args.command} executed successfully.`;
+        const detail = `Automation ${toolArgs.command} executed successfully.`;
         applyAutomationStatusUpdate({
           runtimeState: params.runtimeState,
           threadKey,
           artifactId,
           automationId,
+          executionId: session.execution.id,
           activityRunId: runId,
           status: 'completed',
-          command: args.command,
-          minutes: args.minutes,
+          command: toolArgs.command,
+          minutes: toolArgs.minutes,
           detail,
         });
 
@@ -411,15 +430,16 @@ function createPiExampleTools(params: {
         }),
       }),
       execute: async (_toolCallId, args) => {
+        const toolArgs = args as RequestOperatorInputArgs;
         const threadKey = params.resolveThreadKey();
         const persisted = await params.persistence?.requestInterrupt?.({
           threadKey,
-          message: args.message,
+          message: toolArgs.message,
         });
         const artifactId = persisted?.artifactId ?? `artifact:${threadKey}:interrupt`;
         const artifact = buildInterruptArtifact({
           artifactId,
-          message: args.message,
+          message: toolArgs.message,
         });
 
         params.runtimeState.updateSession(threadKey, (session) => ({
@@ -427,7 +447,7 @@ function createPiExampleTools(params: {
           execution: {
             ...session.execution,
             status: 'interrupted',
-            statusMessage: args.message,
+            statusMessage: toolArgs.message,
           },
           artifacts: {
             current: artifact,
@@ -435,12 +455,12 @@ function createPiExampleTools(params: {
           },
           a2ui: buildInterruptA2Ui({
             artifactId,
-            message: args.message,
+            message: toolArgs.message,
           }),
         }));
 
         return {
-          content: [{ type: 'text', text: args.message }],
+          content: [{ type: 'text', text: toolArgs.message }],
           details: {
             status: 'interrupted',
             artifactId,

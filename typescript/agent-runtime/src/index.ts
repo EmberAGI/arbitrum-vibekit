@@ -2,6 +2,7 @@ export * from '../lib/contracts/dist/index.js';
 export {
   buildPiA2UiActivityEvent,
   buildPiRuntimeDirectExecutionRecordIds,
+  buildPiRuntimeGatewayConnectEvents,
   buildPiRuntimeGatewayContextMessages,
   buildPiThreadStateSnapshot,
   createPiRuntimeGatewayMockStream,

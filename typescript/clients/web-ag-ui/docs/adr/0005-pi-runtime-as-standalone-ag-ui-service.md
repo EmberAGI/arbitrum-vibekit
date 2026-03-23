@@ -48,6 +48,10 @@ The architecture rules are:
 - Pi reconnect and attach flows must replay transcript state from Pi-owned thread/session state:
   - chat history belongs to Pi, not to web-local fallback state
   - Pi-backed AG-UI replay surfaces must include enough transcript state for web rehydration, including thread-state message history and AG-UI message snapshots when available
+- Pi attach flows are long-lived runtime responsibilities, not React polling responsibilities:
+  - Pi `connect` must emit an initial synthetic snapshot run for the open thread and then continue surfacing later Pi-owned background changes on that same attach stream
+  - background automation executions must be projected as AG-UI-visible run activity from Pi-owned state
+  - web must keep at most one active `connect` for the currently open agent/thread and must not add redundant reconnect polling to simulate runtime updates
 - React views and page-level UI composition must not enforce agent business rules or agent-side invariants.
 - Web-side logic is limited to projection/view-model responsibilities such as authority selection, stale-event rejection, ordering guards, and local transient UI state.
 - Web must not preserve or invent durable transcript history locally to compensate for incomplete Pi snapshots; if reconnect replay is wrong, the fix belongs in Pi-owned state and projection.
