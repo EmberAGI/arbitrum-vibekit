@@ -392,7 +392,7 @@ function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
         const detail = typeof artifactData.detail === 'string' ? artifactData.detail : 'Automation status updated.';
         return [
           {
-            id: `artifact-${event.artifact?.artifactId ?? index}`,
+            id: `artifact-${event.artifact?.artifactId ?? 'unknown'}-${index}`,
             label: 'Artifact',
             view: buildPiExampleStatusA2UiView({
               title: `Automation ${status}`,
@@ -406,7 +406,7 @@ function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
         const message = typeof artifactData.message === 'string' ? artifactData.message : 'Awaiting operator input.';
         return [
           {
-            id: `interrupt-artifact-${event.artifact?.artifactId ?? index}`,
+            id: `interrupt-artifact-${event.artifact?.artifactId ?? 'unknown'}-${index}`,
             label: 'Artifact',
             view: buildPiExampleStatusA2UiView({
               title: 'Interrupt checkpoint',

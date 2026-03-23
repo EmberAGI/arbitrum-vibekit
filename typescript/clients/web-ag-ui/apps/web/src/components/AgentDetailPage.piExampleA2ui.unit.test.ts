@@ -59,6 +59,7 @@ function renderPiExamplePage(
 
 describe('AgentDetailPage Pi example A2UI rendering', () => {
   let container: HTMLDivElement;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   const previousActEnvironment = (globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
   }).IS_REACT_ACT_ENVIRONMENT;
@@ -71,6 +72,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
     ).IS_REACT_ACT_ENVIRONMENT = true;
     container = document.createElement('div');
     document.body.appendChild(container);
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -79,6 +81,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
       }
     ).IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    consoleErrorSpy.mockRestore();
     container.remove();
   });
 
@@ -184,6 +187,47 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
     });
 
     expect(onSendChatMessage).toHaveBeenCalledWith('Operator note: Use the safe automation window');
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('renders repeated automation artifact history without duplicate React child keys', () => {
+    const root = renderPiExamplePage(container, {
+      events: [
+        {
+          type: 'artifact',
+          artifact: {
+            artifactId: 'automation-artifact',
+            data: {
+              type: 'automation-status',
+              status: 'running',
+              command: 'sync',
+              detail: 'Running automation sync.',
+            },
+          },
+        },
+        {
+          type: 'artifact',
+          artifact: {
+            artifactId: 'automation-artifact',
+            data: {
+              type: 'automation-status',
+              status: 'completed',
+              command: 'sync',
+              detail: 'Automation sync executed successfully.',
+            },
+          },
+        },
+      ] as never,
+    });
+
+    expect(container.textContent).toContain('Running automation sync.');
+    expect(container.textContent).toContain('Automation sync executed successfully.');
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Encountered two children with the same key'),
+    );
 
     act(() => {
       root.unmount();
