@@ -1,4 +1,5 @@
 import React from 'react';
+import type { Message } from '@ag-ui/core';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -176,6 +177,54 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
 
     expect(html).toContain('Reasoning');
     expect(html).toContain('Analyzing the request before answering.');
+  });
+
+  it('keeps reasoning ahead of its linked assistant response in the transcript', () => {
+    const messages: Message[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Here is the final answer.',
+      },
+      {
+        id: 'reasoning-1',
+        role: 'reasoning',
+        content: 'Thinking through the request first.',
+        parentMessageId: 'assistant-1',
+      },
+    ];
+
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-pi-example',
+        agentName: 'Pi Example Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        initialTab: 'chat',
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        messages,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('Thinking through the request first.');
+    expect(html).toContain('Here is the final answer.');
+    expect(html.indexOf('Thinking through the request first.')).toBeLessThan(
+      html.indexOf('Here is the final answer.'),
+    );
   });
 
   it('renders Pi automation status artifacts and A2UI cards in the chat transcript', () => {

@@ -274,6 +274,69 @@ function getMessageRoleLabel(message: Message): string {
   return 'You';
 }
 
+type VisibleChatMessage = {
+  id: string;
+  label: string;
+  text: string;
+  role: Message['role'];
+  parentMessageId?: string;
+  originalIndex: number;
+};
+
+function orderVisibleChatMessages(messages: Message[]): VisibleChatMessage[] {
+  const visibleMessages = messages
+    .map(
+      (message, originalIndex): VisibleChatMessage => ({
+        id: message.id,
+        label: getMessageRoleLabel(message),
+        text: getMessageText(message),
+        role: message.role,
+        parentMessageId: message.parentMessageId,
+        originalIndex,
+      }),
+    )
+    .filter((message) => message.text.length > 0);
+
+  const visibleMessageIds = new Set(visibleMessages.map((message) => message.id));
+  const reasoningByParentId = new Map<string, VisibleChatMessage[]>();
+
+  for (const message of visibleMessages) {
+    if (message.role !== 'reasoning' || !message.parentMessageId || !visibleMessageIds.has(message.parentMessageId)) {
+      continue;
+    }
+
+    const groupedMessages = reasoningByParentId.get(message.parentMessageId) ?? [];
+    groupedMessages.push(message);
+    reasoningByParentId.set(message.parentMessageId, groupedMessages);
+  }
+
+  const orderedMessages: VisibleChatMessage[] = [];
+  const appendedMessageIds = new Set<string>();
+
+  for (const message of visibleMessages) {
+    if (message.parentMessageId && reasoningByParentId.has(message.parentMessageId)) {
+      continue;
+    }
+
+    const reasoningMessages = reasoningByParentId.get(message.id) ?? [];
+    for (const reasoningMessage of reasoningMessages.sort((left, right) => left.originalIndex - right.originalIndex)) {
+      if (appendedMessageIds.has(reasoningMessage.id)) {
+        continue;
+      }
+      orderedMessages.push(reasoningMessage);
+      appendedMessageIds.add(reasoningMessage.id);
+    }
+
+    if (appendedMessageIds.has(message.id)) {
+      continue;
+    }
+    orderedMessages.push(message);
+    appendedMessageIds.add(message.id);
+  }
+
+  return orderedMessages;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
 }
@@ -1425,14 +1488,7 @@ function AgentChatTab(props: {
   isComposerEnabled: boolean;
   onSendChatMessage?: (content: string) => void;
 }) {
-  const visibleMessages = props.messages
-    .map((message) => ({
-      id: message.id,
-      label: getMessageRoleLabel(message),
-      text: getMessageText(message),
-      role: message.role,
-    }))
-    .filter((message) => message.text.length > 0);
+  const visibleMessages = useMemo(() => orderVisibleChatMessages(props.messages), [props.messages]);
   const activityCards = buildPiExampleChatCards(props.activityEvents);
 
   return (
