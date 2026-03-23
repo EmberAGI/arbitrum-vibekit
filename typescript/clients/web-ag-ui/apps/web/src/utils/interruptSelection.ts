@@ -39,4 +39,4 @@ export const normalizeAgentInterrupt = (value: unknown): AgentInterrupt | null =
 export const selectActiveInterrupt = (params: {
   streamInterrupt: AgentInterrupt | null;
   syncPendingInterrupt: AgentInterrupt | null;
-}): AgentInterrupt | null => params.streamInterrupt;
+}): AgentInterrupt | null => params.streamInterrupt ?? params.syncPendingInterrupt;

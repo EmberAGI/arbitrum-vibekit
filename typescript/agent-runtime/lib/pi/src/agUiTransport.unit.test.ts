@@ -171,6 +171,41 @@ describe('Pi AG-UI transport helpers', () => {
     await expect(maintenanceResponse.text()).resolves.toContain('"automationIdsToResume":["automation-1"]');
   });
 
+  it('preserves explicit resume commands on AG-UI run requests', async () => {
+    const { service, run } = createStubService();
+    const handler = createPiRuntimeGatewayAgUiHandler({
+      agentId: 'agent-pi-example',
+      service,
+      basePath: '/ag-ui',
+    });
+
+    await handler(
+      new Request('http://localhost/ag-ui/agent/agent-pi-example/run', {
+        method: 'POST',
+        body: JSON.stringify({
+          threadId: 'thread-1',
+          runId: 'run-resume',
+          forwardedProps: {
+            command: {
+              resume: '{"outcome":"signed"}',
+            },
+          },
+        }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    expect(run).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      runId: 'run-resume',
+      forwardedProps: {
+        command: {
+          resume: '{"outcome":"signed"}',
+        },
+      },
+    });
+  });
+
   it('uses HttpAgent semantics while targeting Pi connect and stop endpoints', async () => {
     const fetchMock = vi
       .fn()

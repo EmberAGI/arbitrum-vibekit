@@ -1523,6 +1523,123 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.uiError).toBeNull();
   });
 
+  it('derives a persisted interrupt from synced thread activity when no stream interrupt is active', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onRunInitialized?.({
+      input: { threadId: 'thread-1' },
+      state: {
+        thread: {
+          task: {
+            id: 'exec-1',
+            taskStatus: {
+              state: 'input-required',
+              message: 'Provide a short operator note to continue.',
+            },
+          },
+          activity: {
+            events: [
+              {
+                type: 'dispatch-response',
+                parts: [
+                  {
+                    kind: 'a2ui',
+                    data: {
+                      payload: {
+                        kind: 'interrupt',
+                        payload: {
+                          type: 'operator-config-request',
+                          message: 'Provide a short operator note to continue.',
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+    await flushEffects();
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.activeInterrupt).toEqual({
+      type: 'operator-config-request',
+      message: 'Provide a short operator note to continue.',
+    });
+  });
+
+  it('routes Pi operator-note interrupt resolution through explicit resume payloads', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.interruptState.activeInterrupt = {
+      type: 'operator-config-request',
+      message: 'Provide a short operator note to continue.',
+    };
+    mocks.interruptState.canResolve = false;
+    const resumeRun = vi.fn(async () => undefined);
+    mocks.agent.runAgent = resumeRun;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.resolveInterrupt({
+      operatorNote: 'Use the safe automation window',
+    });
+    await flushEffects();
+
+    expect(resumeRun).toHaveBeenCalledWith({
+      forwardedProps: {
+        command: {
+          resume: JSON.stringify({
+            operatorNote: 'Use the safe automation window',
+          }),
+        },
+      },
+    });
+    expect(latestValue?.uiError).toBeNull();
+  });
+
   it('surfaces an error when interrupt fallback cannot resume through agent.runAgent', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 

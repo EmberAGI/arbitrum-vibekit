@@ -56,6 +56,11 @@ export type PiRuntimeGatewayRunRequest = {
   threadId: string;
   runId: string;
   messages?: AgUiMessage[];
+  forwardedProps?: {
+    command?: {
+      resume?: string;
+    };
+  };
 };
 
 export type PiRuntimeGatewayStopRequest = {
@@ -988,6 +993,14 @@ const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => num
     }
   });
 
+const buildResumePromptMessages = (resumePayload: string, now: () => number): AgentMessage[] => [
+  {
+    role: 'user',
+    content: resumePayload,
+    timestamp: now(),
+  },
+];
+
 export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Record<string, unknown> => {
   const activityEvents: PiRuntimeGatewayActivityEvent[] =
     params.activityEvents && params.activityEvents.length > 0
@@ -1477,6 +1490,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
       const projector = createPiAgentEventProjector(executionId);
       const projectedRunEvents: BaseEvent[] = [];
       const requestMessages = request.messages ?? [];
+      const resumePayload = request.forwardedProps?.command?.resume;
 
       return createAsyncEventStream<BaseEvent>(async (controller) => {
         controller.push(asBaseEvent({
@@ -1493,8 +1507,11 @@ export const createPiRuntimeGatewayRuntime = (params: {
         });
 
         try {
-          if (request.messages && request.messages.length > 0) {
-            const promptMessages = convertAgUiMessagesToPiMessages(request.messages, now);
+          if ((request.messages && request.messages.length > 0) || typeof resumePayload === 'string') {
+            const promptMessages =
+              typeof resumePayload === 'string'
+                ? buildResumePromptMessages(resumePayload, now)
+                : convertAgUiMessagesToPiMessages(request.messages ?? [], now);
             if (params.agent.state.isStreaming) {
               if (params.agent.steer) {
                 for (const message of promptMessages) {

@@ -624,6 +624,80 @@ describe('pi gateway service integration', () => {
     ]);
   });
 
+  it('routes explicit resume payloads through Pi prompt instead of continue()', async () => {
+    const agent = new ScriptedPiAgent([]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      now: () => 456,
+      getSession: () => ({
+        thread: { id: 'thread-5' },
+        execution: { id: 'exec-5', status: 'interrupted', statusMessage: 'Awaiting explicit resume' },
+      }),
+    });
+
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-5',
+        runId: 'run-5',
+        forwardedProps: {
+          command: {
+            resume: '{"operatorNote":"safe window approved"}',
+          },
+        },
+      }),
+    );
+
+    expect(agent.promptCalls).toEqual([
+      [
+        {
+          role: 'user',
+          content: '{"operatorNote":"safe window approved"}',
+          timestamp: 456,
+        },
+      ],
+    ]);
+    expect(agent.continueCalls).toBe(0);
+    expect(events).toEqual([
+      {
+        type: EventType.RUN_STARTED,
+        threadId: 'thread-5',
+        runId: 'run-5',
+      },
+      {
+        type: EventType.STATE_SNAPSHOT,
+        snapshot: {
+          thread: {
+            id: 'thread-5',
+            task: {
+              id: 'exec-5',
+              taskStatus: {
+                state: 'input-required',
+                message: 'Awaiting explicit resume',
+              },
+            },
+            projection: {
+              source: 'pi-runtime-gateway',
+              canonicalIds: {
+                piThreadId: 'thread-5',
+                piExecutionId: 'exec-5',
+              },
+            },
+          },
+        },
+      },
+      {
+        type: EventType.RUN_FINISHED,
+        threadId: 'thread-5',
+        runId: 'run-5',
+        result: {
+          executionId: 'exec-5',
+          status: 'interrupted',
+        },
+      },
+    ]);
+  });
+
   it('streams text events before the Pi prompt fully completes', async () => {
     let releasePrompt: (() => void) | null = null;
     const assistantMessage = {

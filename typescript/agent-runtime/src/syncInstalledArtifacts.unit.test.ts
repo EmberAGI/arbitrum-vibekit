@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { copyArtifactDir } from './syncInstalledArtifacts.js';
@@ -70,5 +73,14 @@ describe('syncInstalledArtifacts', () => {
     expect(cp).toHaveBeenCalledTimes(2);
     expect(cp).toHaveBeenNthCalledWith(1, '/source/dist', '/target/dist', { recursive: true, force: true });
     expect(cp).toHaveBeenNthCalledWith(2, '/source/dist', '/target/dist', { recursive: true, force: true });
+  });
+
+  it('syncs postgres dist artifacts into installed agent-runtime snapshots', () => {
+    const scriptSource = readFileSync(
+      path.resolve(import.meta.dirname, '../scripts/sync-installed-artifacts.mjs'),
+      'utf8',
+    );
+
+    expect(scriptSource.includes("path.join('lib', 'postgres', 'dist')")).toBe(true);
   });
 });
