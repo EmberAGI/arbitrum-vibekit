@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import type { Message } from '@ag-ui/core';
 import { formatUnits } from 'viem';
-import { useCallback, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type {
   AgentProfile,
   AgentMetrics,
@@ -281,9 +281,34 @@ type VisibleChatMessage = {
   role: Message['role'];
   parentMessageId?: string;
   originalIndex: number;
+  appearanceOrder: number;
 };
 
-function orderVisibleChatMessages(messages: Message[]): VisibleChatMessage[] {
+type VisibleMessageOrderEntry = {
+  nextOrder: number;
+  orderById: Map<string, number>;
+};
+
+const visibleMessageOrderCache = new Map<string, VisibleMessageOrderEntry>();
+
+function getVisibleMessageOrderEntry(cacheKey: string): VisibleMessageOrderEntry {
+  const existing = visibleMessageOrderCache.get(cacheKey);
+  if (existing) {
+    return existing;
+  }
+
+  const created: VisibleMessageOrderEntry = {
+    nextOrder: 0,
+    orderById: new Map<string, number>(),
+  };
+  visibleMessageOrderCache.set(cacheKey, created);
+  return created;
+}
+
+function orderVisibleChatMessages(
+  messages: Message[],
+  appearanceOrderById: ReadonlyMap<string, number>,
+): VisibleChatMessage[] {
   const visibleMessages = messages
     .map(
       (message, originalIndex): VisibleChatMessage => ({
@@ -293,14 +318,20 @@ function orderVisibleChatMessages(messages: Message[]): VisibleChatMessage[] {
         role: message.role,
         parentMessageId: message.parentMessageId,
         originalIndex,
+        appearanceOrder: appearanceOrderById.get(message.id) ?? Number.MAX_SAFE_INTEGER,
       }),
     )
     .filter((message) => message.text.length > 0);
 
-  const visibleMessageIds = new Set(visibleMessages.map((message) => message.id));
+  const rankedVisibleMessages = [...visibleMessages].sort(
+    (left, right) =>
+      left.appearanceOrder - right.appearanceOrder || left.originalIndex - right.originalIndex,
+  );
+
+  const visibleMessageIds = new Set(rankedVisibleMessages.map((message) => message.id));
   const reasoningByParentId = new Map<string, VisibleChatMessage[]>();
 
-  for (const message of visibleMessages) {
+  for (const message of rankedVisibleMessages) {
     if (message.role !== 'reasoning' || !message.parentMessageId || !visibleMessageIds.has(message.parentMessageId)) {
       continue;
     }
@@ -313,13 +344,16 @@ function orderVisibleChatMessages(messages: Message[]): VisibleChatMessage[] {
   const orderedMessages: VisibleChatMessage[] = [];
   const appendedMessageIds = new Set<string>();
 
-  for (const message of visibleMessages) {
+  for (const message of rankedVisibleMessages) {
     if (message.parentMessageId && reasoningByParentId.has(message.parentMessageId)) {
       continue;
     }
 
     const reasoningMessages = reasoningByParentId.get(message.id) ?? [];
-    for (const reasoningMessage of reasoningMessages.sort((left, right) => left.originalIndex - right.originalIndex)) {
+    for (const reasoningMessage of reasoningMessages.sort(
+      (left, right) =>
+        left.appearanceOrder - right.appearanceOrder || left.originalIndex - right.originalIndex,
+    )) {
       if (appendedMessageIds.has(reasoningMessage.id)) {
         continue;
       }
@@ -1488,7 +1522,45 @@ function AgentChatTab(props: {
   isComposerEnabled: boolean;
   onSendChatMessage?: (content: string) => void;
 }) {
-  const visibleMessages = useMemo(() => orderVisibleChatMessages(props.messages), [props.messages]);
+  const visibleMessageOrderCacheKey = useId();
+  useEffect(() => {
+    return () => {
+      visibleMessageOrderCache.delete(visibleMessageOrderCacheKey);
+    };
+  }, [visibleMessageOrderCacheKey]);
+
+  const visibleMessages = useMemo(() => {
+    const visibleMessageOrderEntry = getVisibleMessageOrderEntry(visibleMessageOrderCacheKey);
+    const allMessageIds = new Set(props.messages.map((message) => message.id));
+    for (const messageId of [...visibleMessageOrderEntry.orderById.keys()]) {
+      if (!allMessageIds.has(messageId)) {
+        visibleMessageOrderEntry.orderById.delete(messageId);
+      }
+    }
+
+    const nextVisibleMessages = props.messages
+      .map((message) => ({
+        id: message.id,
+        text: getMessageText(message),
+      }))
+      .filter((message) => message.text.length > 0);
+
+    if (props.messages.length === 0) {
+      visibleMessageOrderEntry.orderById.clear();
+      visibleMessageOrderEntry.nextOrder = 0;
+      return [];
+    }
+
+    for (const message of nextVisibleMessages) {
+      if (visibleMessageOrderEntry.orderById.has(message.id)) {
+        continue;
+      }
+      visibleMessageOrderEntry.orderById.set(message.id, visibleMessageOrderEntry.nextOrder);
+      visibleMessageOrderEntry.nextOrder += 1;
+    }
+
+    return orderVisibleChatMessages(props.messages, visibleMessageOrderEntry.orderById);
+  }, [props.messages, visibleMessageOrderCacheKey]);
   const activityCards = buildPiExampleChatCards(props.activityEvents);
 
   return (
