@@ -17,6 +17,7 @@ import {
   type PiRuntimeGatewayInspectionState,
   type PiRuntimeGatewayService,
 } from 'agent-runtime';
+
 import {
   createPiExampleGatewayFoundation,
   type PiExampleGatewayEnv,
@@ -211,6 +212,7 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
   const baseRuntime = createPiRuntimeGatewayRuntime({
     agent,
     getSession: (threadId) => runtimeState.getSession(threadId),
+    updateSession: (threadId, update) => runtimeState.updateSession(threadId, update),
   });
 
   const controlPlane = createCanonicalPiRuntimeGatewayControlPlane({

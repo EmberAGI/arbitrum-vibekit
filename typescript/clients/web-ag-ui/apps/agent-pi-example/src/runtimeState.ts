@@ -8,6 +8,7 @@ function buildDefaultSession(threadKey: string): PiRuntimeGatewaySession {
       status: 'working',
       statusMessage: 'Ready for a live Pi-native conversation.',
     },
+    messages: [],
   };
 }
 

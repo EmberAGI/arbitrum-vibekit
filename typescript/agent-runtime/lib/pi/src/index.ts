@@ -2,6 +2,7 @@ import {
   EventType,
   type BaseEvent,
   type Message as AgUiMessage,
+  type MessagesSnapshotEvent,
   type RunFinishedEvent,
   type RunStartedEvent,
   type StateSnapshotEvent,
@@ -98,6 +99,7 @@ export type PiRuntimeGatewaySession = {
     status: PiRuntimeGatewayExecutionStatus;
     statusMessage?: string;
   };
+  messages?: AgUiMessage[];
   automation?: {
     id: string;
     runId?: string;
@@ -297,6 +299,24 @@ const getMessageTimestamp = (message: AgentMessage): number | string | undefined
     ? (message.timestamp as number | string | undefined)
     : undefined;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isTextPart = (value: unknown): value is { type: 'text'; text: string } =>
+  isRecord(value) && value.type === 'text' && typeof value.text === 'string';
+
+const isThinkingPart = (value: unknown): value is { type: 'thinking'; thinking: string } =>
+  isRecord(value) && value.type === 'thinking' && typeof value.thinking === 'string';
+
+const isToolCallPart = (
+  value: unknown,
+): value is { type: 'toolCall'; id: string; name: string; arguments: unknown } =>
+  isRecord(value) &&
+  value.type === 'toolCall' &&
+  typeof value.id === 'string' &&
+  typeof value.name === 'string' &&
+  'arguments' in value;
+
 const resolveProjectedMessageId = (executionId: string, message: AgentMessage, fallbackIndex: number): string => {
   const role = getMessageRole(message);
   const timestamp = getMessageTimestamp(message) ?? fallbackIndex;
@@ -308,6 +328,167 @@ const resolveProjectedReasoningMessageId = (
   assistantMessageId: string,
   contentIndex: number,
 ): string => `pi:${executionId}:reasoning:${assistantMessageId}:${contentIndex}`;
+
+const getTextContent = (message: AgentMessage): string | undefined => {
+  if (typeof message !== 'object' || message === null || !('content' in message)) {
+    return undefined;
+  }
+
+  const { content } = message as { content?: unknown };
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+
+  const text = content
+    .flatMap((part) => (isTextPart(part) ? [part.text] : []))
+    .join('');
+
+  return text.length > 0 ? text : undefined;
+};
+
+const getAssistantToolCalls = (message: AgentMessage): Array<{
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}> => {
+  if (typeof message !== 'object' || message === null || !('content' in message)) {
+    return [];
+  }
+
+  const { content } = message as { content?: unknown };
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  return content.flatMap((part) => {
+    if (!isToolCallPart(part)) {
+      return [];
+    }
+
+    return [
+      {
+        id: part.id,
+        type: 'function',
+        function: {
+          name: part.name,
+          arguments: JSON.stringify(part.arguments),
+        },
+      },
+    ];
+  });
+};
+
+const getReasoningMessages = (params: {
+  executionId: string;
+  assistantMessageId: string;
+  message: AgentMessage;
+}): AgUiMessage[] => {
+  if (typeof params.message !== 'object' || params.message === null || !('content' in params.message)) {
+    return [];
+  }
+
+  const { content } = params.message as { content?: unknown };
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  return content.flatMap((part, index) => {
+    if (!isThinkingPart(part)) {
+      return [];
+    }
+
+    return [
+      {
+        id: resolveProjectedReasoningMessageId(params.executionId, params.assistantMessageId, index),
+        role: 'reasoning',
+        content: part.thinking,
+      } satisfies AgUiMessage,
+    ];
+  });
+};
+
+export const projectPiAgentMessagesToAgUiMessages = (params: {
+  executionId: string;
+  messages: AgentMessage[];
+}): AgUiMessage[] => {
+  let fallbackIndex = 0;
+
+  return params.messages.flatMap((message): AgUiMessage[] => {
+    if (
+      isPiRuntimeGatewayRuntimeNoteMessage(message) ||
+      isPiRuntimeGatewayArtifactMessage(message) ||
+      isPiRuntimeGatewayA2UiMessage(message)
+    ) {
+      return [];
+    }
+
+    fallbackIndex += 1;
+    const id = resolveProjectedMessageId(params.executionId, message, fallbackIndex);
+    const role = getMessageRole(message);
+
+    switch (role) {
+      case 'user':
+        return [
+          {
+            id,
+            role: 'user',
+            content: getTextContent(message) ?? '',
+          },
+        ];
+      case 'assistant': {
+        const reasoningMessages = getReasoningMessages({
+          executionId: params.executionId,
+          assistantMessageId: id,
+          message,
+        });
+        const toolCalls = getAssistantToolCalls(message);
+        const content = getTextContent(message);
+
+        return [
+          ...reasoningMessages,
+          {
+            id,
+            role: 'assistant',
+            ...(content ? { content } : {}),
+            ...(toolCalls.length > 0 ? { toolCalls } : {}),
+          },
+        ];
+      }
+      case 'toolResult':
+        return [
+          {
+            id,
+            role: 'tool',
+            toolCallId:
+              typeof message === 'object' &&
+              message !== null &&
+              'toolCallId' in message &&
+              typeof message.toolCallId === 'string'
+                ? message.toolCallId
+                : 'pi-tool-call',
+            content: getTextContent(message) ?? '',
+            ...(
+              typeof message === 'object' &&
+              message !== null &&
+              'isError' in message &&
+              message.isError === true
+                ? { error: getTextContent(message) ?? 'Tool execution failed.' }
+                : {}
+            ),
+          },
+        ];
+      default:
+        return [];
+    }
+  });
+};
 
 const buildExecutionStatusText = (session: PiRuntimeGatewaySession): string =>
   [
@@ -498,6 +679,7 @@ export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Rec
           },
         }
       : {}),
+    ...(params.messages ? { messages: params.messages } : {}),
   };
 
   return {
@@ -727,7 +909,7 @@ function createAsyncEventStream<T>(run: (controller: {
     reject: (error: unknown) => void;
   }> = [];
   let done = false;
-  let failure: unknown = null;
+  let failure: Error | null = null;
 
   const flushValue = (value: T) => {
     const reader = readers.shift();
@@ -750,9 +932,9 @@ function createAsyncEventStream<T>(run: (controller: {
   const fail = (error: unknown) => {
     if (done) return;
     done = true;
-    failure = error;
+    failure = error instanceof Error ? error : new Error(String(error));
     while (readers.length > 0) {
-      readers.shift()!.reject(error);
+      readers.shift()!.reject(failure);
     }
   };
 
@@ -837,6 +1019,10 @@ export const createPiRuntimeGatewayFoundation = (params: {
 export const createPiRuntimeGatewayRuntime = (params: {
   agent: PiRuntimeGatewayAgent;
   getSession: (threadId: string) => PiRuntimeGatewaySession;
+  updateSession?: (
+    threadId: string,
+    update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
+  ) => PiRuntimeGatewaySession;
   now?: () => number;
 }): PiRuntimeGatewayRuntime => {
   const now = params.now ?? (() => Date.now());
@@ -848,12 +1034,33 @@ export const createPiRuntimeGatewayRuntime = (params: {
     type: EventType.STATE_SNAPSHOT,
     snapshot: buildPiThreadStateSnapshot(session),
   });
+  const buildMessagesSnapshotEvent = (session: PiRuntimeGatewaySession): MessagesSnapshotEvent | null =>
+    session.messages
+      ? {
+          type: EventType.MESSAGES_SNAPSHOT,
+          messages: session.messages,
+        }
+      : null;
+  const syncProjectedMessages = (threadId: string): PiRuntimeGatewaySession => {
+    if (!params.updateSession) {
+      return params.getSession(threadId);
+    }
+
+    return params.updateSession(threadId, (session) => ({
+      ...session,
+      messages: projectPiAgentMessagesToAgUiMessages({
+        executionId: session.execution.id,
+        messages: params.agent.state.messages,
+      }),
+    }));
+  };
 
   return {
     connect: (request) => {
       syncAgentSessionId(request.threadId);
       const session = params.getSession(request.threadId);
       const runId = request.runId ?? `connect:${request.threadId}`;
+      const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);
       return Promise.resolve([
         asBaseEvent({
           type: EventType.RUN_STARTED,
@@ -861,6 +1068,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
           runId,
         } satisfies RunStartedEvent),
         buildSnapshotEvent(session),
+        ...(messagesSnapshotEvent ? [messagesSnapshotEvent] : []),
         asBaseEvent({
           type: EventType.RUN_FINISHED,
           threadId: request.threadId,
@@ -872,7 +1080,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
         } satisfies RunFinishedEvent),
       ]);
     },
-    run: async (request) => {
+    run: (request) => {
       syncAgentSessionId(request.threadId);
       const executionId = params.getSession(request.threadId).execution.id;
       const projector = createPiAgentEventProjector(executionId);
@@ -912,8 +1120,12 @@ export const createPiRuntimeGatewayRuntime = (params: {
             await params.agent.continue();
           }
 
-          const session = params.getSession(request.threadId);
+          const session = syncProjectedMessages(request.threadId);
           controller.push(buildSnapshotEvent(session));
+          const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);
+          if (messagesSnapshotEvent) {
+            controller.push(messagesSnapshotEvent);
+          }
           controller.push(asBaseEvent({
             type: EventType.RUN_FINISHED,
             threadId: request.threadId,

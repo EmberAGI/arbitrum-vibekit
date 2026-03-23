@@ -300,6 +300,65 @@ describe('createPiExampleAgUiHandler', () => {
     );
   });
 
+  it('replays transcript messages from Pi-owned runtime state on reconnect after a mocked run', async () => {
+    const service = createPiExampleGatewayService({
+      env: {
+        OPENROUTER_API_KEY: 'test-openrouter-key',
+        PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
+      },
+      persistence: {
+        ensureReady: async () => undefined,
+        persistDirectExecution: async () => undefined,
+        loadInspectionState: async () => ({
+          threads: [],
+          executions: [],
+          automations: [],
+          automationRuns: [],
+          interrupts: [],
+          leases: [],
+          outboxIntents: [],
+          executionEvents: [],
+          threadActivities: [],
+        }),
+      },
+    });
+
+    await collectEventSource(
+      await service.run({
+        threadId: 'thread-1',
+        runId: 'run-transcript',
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'What can you do?',
+          },
+        ],
+      }),
+    );
+
+    const connectEvents = await collectEventSource(
+      await service.connect({
+        threadId: 'thread-1',
+      }),
+    );
+
+    expect(connectEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'MESSAGES_SNAPSHOT',
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: 'What can you do?',
+          }),
+          expect.objectContaining({
+            role: 'assistant',
+          }),
+        ]),
+      }),
+    );
+  });
+
   it('surfaces canonical automation, scheduler, outbox, and maintenance state for operator validation', async () => {
     const persistedInspectionState = {
       threads: [

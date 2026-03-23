@@ -18,6 +18,13 @@ describe('pi AG-UI projection', () => {
           status: 'interrupted',
           statusMessage: 'Waiting for wallet confirmation.',
         },
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'Please continue.',
+          },
+        ],
         automation: { id: 'auto-1', runId: 'auto-run-1' },
         artifacts: {
           current: { artifactId: 'current-artifact', data: { phase: 'setup' } },
@@ -71,6 +78,13 @@ describe('pi AG-UI projection', () => {
             },
           ],
         },
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'Please continue.',
+          },
+        ],
         artifacts: {
           current: { artifactId: 'current-artifact', data: { phase: 'setup' } },
           activity: { artifactId: 'activity-artifact', data: { entries: 3 } },

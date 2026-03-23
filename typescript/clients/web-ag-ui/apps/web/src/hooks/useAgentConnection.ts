@@ -181,7 +181,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     threadId: undefined,
     runId: null,
   });
-  const messagesSnapshotRef = useRef(false);
   const runInFlightRef = useRef(false);
   const commandSchedulerRef = useRef<ReturnType<typeof createAgentCommandScheduler<HookAgent>> | null>(
     null,
@@ -653,7 +652,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           inputRunId: getInputRunId(payload),
           currentThreadId: threadIdRef.current ?? null,
         });
-        messagesSnapshotRef.current = true;
         syncMessages(payload.messages);
       },
       onMessagesChanged: (payload) => {
@@ -816,7 +814,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     setRunInFlight(false);
     lastConnectedThreadRef.current = null;
     activeRunRef.current = { threadId, runId: null };
-    messagesSnapshotRef.current = false;
     commandSchedulerRef.current?.reset();
     clearConnectRetryTimer();
   }, [threadId, clearConnectRetryTimer, setRunInFlight]);
@@ -1015,9 +1012,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   useEffect(() => {
     if (!Array.isArray(currentState.messages)) {
-      return;
-    }
-    if (messagesSnapshotRef.current && currentState.messages.length === 0) {
       return;
     }
     syncMessages(currentState.messages);

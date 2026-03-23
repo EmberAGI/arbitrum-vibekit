@@ -815,7 +815,7 @@ describe('useAgentConnection integration', () => {
     expect(latestState?.thread?.task?.taskStatus?.state).toBe('input-required');
   });
 
-  it('preserves loaded chat messages across a Pi same-thread reconnect snapshot without message history', async () => {
+  it('reflects an empty Pi reconnect transcript instead of preserving stale local messages', async () => {
     let subscriber: AgentSubscriber | undefined;
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
@@ -868,6 +868,7 @@ describe('useAgentConnection integration', () => {
           },
         },
       },
+      messages: [],
     };
 
     await act(async () => {
@@ -882,13 +883,7 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
 
-    expect(latestValue?.messages).toEqual([
-      expect.objectContaining({
-        id: 'assistant-1',
-        role: 'assistant',
-        content: 'Scheduled sync every minute.',
-      }),
-    ]);
+    expect(latestValue?.messages).toEqual([]);
   });
 
   it('keeps local run ownership gated until active-thread terminal events are observed', async () => {

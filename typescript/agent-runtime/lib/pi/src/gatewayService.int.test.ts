@@ -126,6 +126,18 @@ describe('pi gateway service integration', () => {
         getSession: () => ({
           thread: { id: 'thread-1' },
           execution: { id: 'exec-1', status: 'working', statusMessage: 'Pi is connected.' },
+          messages: [
+            {
+              id: 'user-msg-1',
+              role: 'user',
+              content: 'Connect now',
+            },
+            {
+              id: 'assistant-msg-1',
+              role: 'assistant',
+              content: 'Pi is connected.',
+            },
+          ],
           artifacts: {
             current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
           },
@@ -196,11 +208,38 @@ describe('pi gateway service integration', () => {
                 },
               ],
             },
+            messages: [
+              {
+                id: 'user-msg-1',
+                role: 'user',
+                content: 'Connect now',
+              },
+              {
+                id: 'assistant-msg-1',
+                role: 'assistant',
+                content: 'Pi is connected.',
+              },
+            ],
             artifacts: {
               current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
             },
           },
         },
+      },
+      {
+        type: EventType.MESSAGES_SNAPSHOT,
+        messages: [
+          {
+            id: 'user-msg-1',
+            role: 'user',
+            content: 'Connect now',
+          },
+          {
+            id: 'assistant-msg-1',
+            role: 'assistant',
+            content: 'Pi is connected.',
+          },
+        ],
       },
       {
         type: EventType.RUN_FINISHED,
@@ -272,6 +311,18 @@ describe('pi gateway service integration', () => {
               },
             ],
           },
+          messages: [
+            {
+              id: 'user-msg-1',
+              role: 'user',
+              content: 'Connect now',
+            },
+            {
+              id: 'assistant-msg-1',
+              role: 'assistant',
+              content: 'Pi is connected.',
+            },
+          ],
           artifacts: {
             current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
           },
