@@ -1162,6 +1162,131 @@ describe('pollCycleNode (integration)', () => {
     }
   });
 
+  it('confirms the close before reopening during execute-mode flips', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            chainId: '42161',
+            key: '0xpos-short',
+            contractKey: '0xposition-short',
+            account: '0xwallet',
+            marketAddress: '0xmarket',
+            sizeInUsd: '16000000000000000000000000000000',
+            sizeInTokens: '0.01',
+            collateralAmount: '50',
+            pendingBorrowingFeesUsd: '0',
+            increasedAtTime: '0',
+            decreasedAtTime: '0',
+            positionSide: 'short',
+            isLong: false,
+            fundingFeeAmount: '0',
+            claimableLongTokenAmount: '0',
+            claimableShortTokenAmount: '0',
+            isOpening: false,
+            pnl: '0',
+            positionFeeAmount: '0',
+            traderDiscountAmount: '0',
+            uiFeeAmount: '0',
+            collateralToken: {
+              tokenUid: { chainId: '42161', address: '0xusdc' },
+              name: 'USD Coin',
+              symbol: 'USDC',
+              isNative: false,
+              decimals: 6,
+              iconUri: null,
+              isVetted: true,
+            },
+          },
+        ]);
+      createPerpetualCloseMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0xclose', data: '0xclose01', value: '0', chainId: '42161' }],
+      });
+      createPerpetualShortMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0xopen', data: '0xopen01', value: '0', chainId: '42161' }],
+      });
+      getPerpetualLifecycleMock
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          status: 'executed',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:00.000Z',
+        })
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+          orderKey: '0x4444444444444444444444444444444444444444444444444444444444444444',
+          status: 'executed',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:05.000Z',
+        });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValueOnce(
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+            )
+            .mockResolvedValueOnce(
+              '0x3333333333333333333333333333333333333333333333333333333333333333',
+            ),
+        },
+        public: {
+          waitForTransactionReceipt: vi
+            .fn()
+            .mockResolvedValueOnce({
+              status: 'success',
+              transactionHash:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
+            })
+            .mockResolvedValueOnce({
+              status: 'success',
+              transactionHash:
+                '0x3333333333333333333333333333333333333333333333333333333333333333',
+            }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 48000;
+      state.thread.metrics.assumedPositionSide = 'long';
+
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+      expect(getPerpetualLifecycleMock).toHaveBeenNthCalledWith(1, {
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      });
+      expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
+      expect(createPerpetualCloseMock).toHaveBeenCalledBefore(createPerpetualShortMock);
+      expect(update.thread?.metrics.assumedPositionSide).toBe('short');
+      expect(update.thread?.metrics.pendingPositionSync).toBeUndefined();
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
+
   it('retries open trade immediately after pending sync guard resolves as cancelled', async () => {
     const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
     try {
