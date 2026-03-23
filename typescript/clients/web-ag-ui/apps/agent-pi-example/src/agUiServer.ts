@@ -22,11 +22,10 @@ import {
   type PiExampleGatewayEnv,
   type PiExampleGatewayFoundationOptions,
 } from './piExampleFoundation.js';
-import { createPiExampleRuntimeStateStore } from './runtimeState.js';
+import { createPiExampleRuntimeStateStore, type PiExampleRuntimeStateStore } from './runtimeState.js';
 
 export const PI_EXAMPLE_AGENT_ID = 'agent-pi-example';
 export const PI_EXAMPLE_AG_UI_BASE_PATH = '/ag-ui';
-const PI_EXAMPLE_NOW = new Date('2026-03-20T00:00:00.000Z');
 
 type PiExampleAgUiHandlerOptions = {
   agentId: string;
@@ -37,6 +36,8 @@ type PiExampleAgUiHandlerOptions = {
 type PiExampleGatewayServiceOptions = {
   env?: PiExampleGatewayEnv;
   foundation?: PiRuntimeGatewayFoundation;
+  runtimeState?: PiExampleRuntimeStateStore;
+  now?: () => Date;
   persistence?: {
     ensureReady?: () => Promise<void>;
     persistDirectExecution?: (params: {
@@ -77,7 +78,8 @@ function buildDirectExecutionIds(threadKey: string) {
 }
 
 export function createPiExampleGatewayService(options: PiExampleGatewayServiceOptions = {}): PiRuntimeGatewayService {
-  const runtimeState = createPiExampleRuntimeStateStore();
+  const runtimeState = options.runtimeState ?? createPiExampleRuntimeStateStore();
+  const getNow = options.now ?? (() => new Date());
   let ensuredReady: Promise<void> | null = null;
   const ensureReady =
     options.persistence?.ensureReady ??
@@ -130,7 +132,7 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       const executionId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-execution`);
       const activityId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-activity`);
       const artifactId = buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:automation-artifact`);
-      const now = new Date();
+      const now = getNow();
 
       await executePostgresStatements(
         databaseUrl,
@@ -139,6 +141,11 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
           runId,
           executionId,
           threadId: directExecutionIds.threadId,
+          commandName: params.command,
+          schedulePayload: {
+            command: params.command,
+            minutes: params.minutes,
+          },
           activityId,
           leaseOwnerId: buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:lease-owner`),
           now,
@@ -171,7 +178,7 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
           artifactId,
           activityId: buildPiRuntimeStableUuid(`pi-example:${params.threadKey}:interrupt-activity`),
           threadId: directExecutionIds.threadId,
-          now: new Date(),
+          now: getNow(),
         }),
       );
 
@@ -192,7 +199,7 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
 
   const persistThreadExecution = async (threadKey: string): Promise<void> => {
     await ensureReady();
-    const now = new Date();
+    const now = getNow();
     const ids = buildDirectExecutionIds(threadKey);
     await persistDirectExecution({
       threadKey,
@@ -211,7 +218,7 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       await ensureReady();
       return await loadInspectionState();
     },
-    now: () => PI_EXAMPLE_NOW,
+    now: getNow,
   });
 
   return createPiRuntimeGatewayService({

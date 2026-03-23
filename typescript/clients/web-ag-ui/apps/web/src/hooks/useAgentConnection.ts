@@ -58,6 +58,7 @@ import {
 } from '../utils/interruptSelection';
 
 const CONNECT_BUSY_RETRY_MS = 2_000;
+const PI_EXAMPLE_DETAIL_REFRESH_MS = 5_000;
 
 function messagesEqual(left: Message[], right: Message[]): boolean {
   if (left === right) return true;
@@ -949,6 +950,29 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     getAgentDebugId,
     logConnectEvent,
   ]);
+
+  useEffect(() => {
+    if (agentId !== 'agent-pi-example') return;
+    if (!threadId || !agent) return;
+    if (runtimeStatus !== CopilotKitCoreRuntimeConnectionStatus.Connected) return;
+
+    const timer = window.setInterval(() => {
+      const currentAgent = agentRef.current;
+      if (!currentAgent) {
+        return;
+      }
+      if (runInFlightRef.current || isAgentRunning(currentAgent)) {
+        return;
+      }
+
+      lastConnectedThreadRef.current = null;
+      setConnectRetryTick((value) => value + 1);
+    }, PI_EXAMPLE_DETAIL_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [agent, agentId, runtimeStatus, threadId]);
 
   // Extract state with defaults
   const currentState =

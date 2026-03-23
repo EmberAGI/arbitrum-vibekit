@@ -58,6 +58,8 @@ export function buildPersistAutomationDispatchStatements(params: {
   runId: string;
   executionId: string;
   threadId: string;
+  commandName: string;
+  schedulePayload: Record<string, unknown>;
   activityId: string;
   leaseOwnerId: string;
   now: Date;
@@ -68,12 +70,22 @@ export function buildPersistAutomationDispatchStatements(params: {
     buildStatement(
       'pi_automations',
       'insert into pi_automations (id, thread_id, command_name, cadence, schedule_payload, suspended, next_run_at, created_at, updated_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) on conflict (id) do update set next_run_at = excluded.next_run_at, updated_at = excluded.updated_at',
-      [params.automationId, params.threadId, 'sync', 'interval', '{}', false, params.nextRunAt, params.now, params.now],
+      [
+        params.automationId,
+        params.threadId,
+        params.commandName,
+        'interval',
+        JSON.stringify(params.schedulePayload),
+        false,
+        params.nextRunAt,
+        params.now,
+        params.now,
+      ],
     ),
     buildStatement(
       'pi_automation_runs',
       'insert into pi_automation_runs (id, automation_id, thread_id, execution_id, status, scheduled_at, started_at, completed_at) values ($1, $2, $3, $4, $5, $6, $7, null)',
-      [params.runId, params.automationId, params.threadId, params.executionId, 'scheduled', params.now, params.now],
+      [params.runId, params.automationId, params.threadId, params.executionId, 'scheduled', params.now, null],
     ),
     buildStatement(
       'pi_executions',
@@ -89,6 +101,87 @@ export function buildPersistAutomationDispatchStatements(params: {
       'pi_thread_activity',
       'insert into pi_thread_activity (id, thread_id, execution_id, activity_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
       [params.activityId, params.threadId, params.executionId, 'automation-dispatch', '{}', params.now],
+    ),
+  ];
+}
+
+export function buildCompleteAutomationExecutionStatements(params: {
+  automationId: string;
+  currentRunId: string;
+  currentExecutionId: string;
+  nextRunId: string;
+  nextExecutionId: string;
+  threadId: string;
+  commandName: string;
+  schedulePayload: Record<string, unknown>;
+  eventId: string;
+  activityId: string;
+  now: Date;
+  nextRunAt: Date;
+  leaseExpiresAt: Date;
+}): PostgresStatement[] {
+  return [
+    buildStatement(
+      'pi_automation_runs',
+      'update pi_automation_runs set status = $1, started_at = coalesce(started_at, $2), completed_at = $3 where id = $4',
+      ['completed', params.now, params.now, params.currentRunId],
+    ),
+    buildStatement(
+      'pi_executions',
+      'update pi_executions set status = $1, updated_at = $2, completed_at = $3 where id = $4',
+      ['completed', params.now, params.now, params.currentExecutionId],
+    ),
+    buildStatement(
+      'pi_automations',
+      'update pi_automations set next_run_at = $1, updated_at = $2 where id = $3',
+      [params.nextRunAt, params.now, params.automationId],
+    ),
+    buildStatement(
+      'pi_automation_runs',
+      'insert into pi_automation_runs (id, automation_id, thread_id, execution_id, status, scheduled_at, started_at, completed_at) values ($1, $2, $3, $4, $5, $6, $7, null)',
+      [params.nextRunId, params.automationId, params.threadId, params.nextExecutionId, 'scheduled', params.now, null],
+    ),
+    buildStatement(
+      'pi_executions',
+      'insert into pi_executions (id, thread_id, automation_run_id, status, source, current_interrupt_id, created_at, updated_at, completed_at) values ($1, $2, $3, $4, $5, null, $6, $7, null) on conflict (id) do update set status = excluded.status, updated_at = excluded.updated_at',
+      [params.nextExecutionId, params.threadId, params.nextRunId, 'queued', 'automation', params.now, params.now],
+    ),
+    buildStatement(
+      'pi_scheduler_leases',
+      'insert into pi_scheduler_leases (automation_id, owner_id, lease_expires_at, last_heartbeat_at) values ($1, $2, $3, $4) on conflict (automation_id) do update set owner_id = excluded.owner_id, lease_expires_at = excluded.lease_expires_at, last_heartbeat_at = excluded.last_heartbeat_at',
+      [params.automationId, `scheduler:${params.commandName}`, params.leaseExpiresAt, params.now],
+    ),
+    buildStatement(
+      'pi_execution_events',
+      'insert into pi_execution_events (id, execution_id, thread_id, event_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
+      [
+        params.eventId,
+        params.currentExecutionId,
+        params.threadId,
+        'automation-executed',
+        JSON.stringify({
+          automationId: params.automationId,
+          nextRunId: params.nextRunId,
+          nextExecutionId: params.nextExecutionId,
+          schedulePayload: params.schedulePayload,
+        }),
+        params.now,
+      ],
+    ),
+    buildStatement(
+      'pi_thread_activity',
+      'insert into pi_thread_activity (id, thread_id, execution_id, activity_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
+      [
+        params.activityId,
+        params.threadId,
+        params.currentExecutionId,
+        'automation-executed',
+        JSON.stringify({
+          automationId: params.automationId,
+          nextRunAt: params.nextRunAt,
+        }),
+        params.now,
+      ],
     ),
   ];
 }

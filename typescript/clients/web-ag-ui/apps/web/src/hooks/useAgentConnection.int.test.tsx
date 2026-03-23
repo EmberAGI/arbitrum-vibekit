@@ -393,6 +393,27 @@ describe('useAgentConnection integration', () => {
     }
   });
 
+  it('polls the Pi example detail connection so background automation updates can surface', async () => {
+    vi.useFakeTimers();
+
+    try {
+      await act(async () => {
+        root.render(<TestHarness agentId="agent-pi-example" />);
+      });
+      await flushEffects();
+
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await flushEffects();
+
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(2);
+      expect(mocks.connectAgent).toHaveBeenLastCalledWith({ agent: mocks.agent });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('saveSettings mutates local state and dispatches sync through AG-UI run', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 

@@ -5,6 +5,7 @@ import {
 import { Type, createAssistantMessageEventStream, type Message } from '@mariozechner/pi-ai';
 
 import {
+  applyAutomationStatusUpdate,
   buildAutomationA2Ui,
   buildAutomationArtifact,
   buildInterruptA2Ui,
@@ -341,40 +342,17 @@ function createPiExampleTools(params: {
         const runId = persisted?.runId ?? `run:${threadKey}`;
         const artifactId = persisted?.artifactId ?? `artifact:${threadKey}:automation`;
         const detail = `Scheduled ${args.command} every ${args.minutes} minutes.`;
-        const artifact = buildAutomationArtifact({
+        applyAutomationStatusUpdate({
+          runtimeState: params.runtimeState,
+          threadKey,
           artifactId,
           automationId,
-          runId,
+          activityRunId: runId,
           status: 'scheduled',
           command: args.command,
           minutes: args.minutes,
           detail,
         });
-
-        params.runtimeState.updateSession(threadKey, (session) => ({
-          ...session,
-          execution: {
-            ...session.execution,
-            status: 'working',
-            statusMessage: detail,
-          },
-          automation: {
-            id: automationId,
-            runId,
-          },
-          artifacts: {
-            current: artifact,
-            activity: artifact,
-          },
-          a2ui: buildAutomationA2Ui({
-            automationId,
-            runId,
-            status: 'scheduled',
-            command: args.command,
-            minutes: args.minutes,
-            detail,
-          }),
-        }));
 
         return {
           content: [{ type: 'text', text: detail }],
@@ -401,40 +379,17 @@ function createPiExampleTools(params: {
         const runId = session.automation?.runId ?? `run:${threadKey}`;
         const artifactId = session.artifacts?.current?.artifactId ?? `artifact:${threadKey}:automation`;
         const detail = `Automation ${args.command} executed successfully.`;
-        const artifact = buildAutomationArtifact({
+        applyAutomationStatusUpdate({
+          runtimeState: params.runtimeState,
+          threadKey,
           artifactId,
           automationId,
-          runId,
+          activityRunId: runId,
           status: 'completed',
           command: args.command,
           minutes: args.minutes,
           detail,
         });
-
-        params.runtimeState.updateSession(threadKey, (currentSession) => ({
-          ...currentSession,
-          execution: {
-            ...currentSession.execution,
-            status: 'completed',
-            statusMessage: detail,
-          },
-          automation: {
-            id: automationId,
-            runId,
-          },
-          artifacts: {
-            current: artifact,
-            activity: artifact,
-          },
-          a2ui: buildAutomationA2Ui({
-            automationId,
-            runId,
-            status: 'completed',
-            command: args.command,
-            minutes: args.minutes,
-            detail,
-          }),
-        }));
 
         return {
           content: [{ type: 'text', text: detail }],

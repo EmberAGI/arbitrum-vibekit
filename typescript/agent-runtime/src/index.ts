@@ -20,8 +20,10 @@ export {
   PiRuntimeGatewayHttpAgent,
 } from '../lib/pi/dist/index.js';
 export {
+  buildCompleteAutomationExecutionStatements,
   buildPersistAutomationDispatchStatements,
   buildPersistInterruptCheckpointStatements,
+  recoverDueAutomations,
   buildPiRuntimeStableUuid,
   executePostgresStatements,
 } from '../lib/postgres/dist/index.js';

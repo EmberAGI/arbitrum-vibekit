@@ -20,6 +20,8 @@ export type PiExampleRuntimeStateStore = {
   resumeFromUserInput: (threadKey: string) => PiRuntimeGatewaySession;
 };
 
+type AutomationStatus = 'scheduled' | 'running' | 'completed';
+
 export function createPiExampleRuntimeStateStore(): PiExampleRuntimeStateStore {
   const sessions = new Map<string, PiRuntimeGatewaySession>();
 
@@ -82,7 +84,7 @@ export function buildAutomationArtifact(params: {
   artifactId: string;
   automationId: string;
   runId: string;
-  status: 'scheduled' | 'running' | 'completed';
+  status: AutomationStatus;
   command: string;
   minutes: number;
   detail: string;
@@ -104,7 +106,7 @@ export function buildAutomationArtifact(params: {
 export function buildAutomationA2Ui(params: {
   automationId: string;
   runId: string;
-  status: 'scheduled' | 'running' | 'completed';
+  status: AutomationStatus;
   command: string;
   minutes: number;
   detail: string;
@@ -150,4 +152,52 @@ export function buildInterruptA2Ui(params: {
       submitLabel: 'Continue agent loop',
     },
   };
+}
+
+export function applyAutomationStatusUpdate(params: {
+  runtimeState: PiExampleRuntimeStateStore;
+  threadKey: string;
+  artifactId: string;
+  automationId: string;
+  activityRunId: string;
+  nextRunId?: string;
+  status: AutomationStatus;
+  command: string;
+  minutes: number;
+  detail: string;
+}): PiRuntimeGatewaySession {
+  const artifact = buildAutomationArtifact({
+    artifactId: params.artifactId,
+    automationId: params.automationId,
+    runId: params.activityRunId,
+    status: params.status,
+    command: params.command,
+    minutes: params.minutes,
+    detail: params.detail,
+  });
+
+  return params.runtimeState.updateSession(params.threadKey, (session) => ({
+    ...session,
+    execution: {
+      ...session.execution,
+      status: params.status === 'completed' ? 'completed' : 'working',
+      statusMessage: params.detail,
+    },
+    automation: {
+      id: params.automationId,
+      runId: params.nextRunId ?? params.activityRunId,
+    },
+    artifacts: {
+      current: artifact,
+      activity: artifact,
+    },
+    a2ui: buildAutomationA2Ui({
+      automationId: params.automationId,
+      runId: params.activityRunId,
+      status: params.status,
+      command: params.command,
+      minutes: params.minutes,
+      detail: params.detail,
+    }),
+  }));
 }
