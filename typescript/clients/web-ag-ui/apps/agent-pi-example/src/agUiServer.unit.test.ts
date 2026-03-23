@@ -380,102 +380,130 @@ describe('createPiExampleAgUiHandler', () => {
     );
   });
 
-  it('keeps connect attached and emits a later background automation execution as a synthetic AG-UI run', async () => {
-    vi.useFakeTimers();
+  it('keeps connect attached and streams a later user run through the same connection', async () => {
+    const runtimeState = createPiExampleRuntimeStateStore();
+    const service = createPiExampleGatewayService({
+      env: {
+        OPENROUTER_API_KEY: 'test-openrouter-key',
+        PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
+      },
+      runtimeState,
+      persistence: {
+        ensureReady: async () => undefined,
+        persistDirectExecution: async () => undefined,
+        loadInspectionState: async () => ({
+          threads: [],
+          executions: [],
+          automations: [],
+          automationRuns: [],
+          interrupts: [],
+          leases: [],
+          outboxIntents: [],
+          executionEvents: [],
+          threadActivities: [],
+        }),
+      },
+    });
 
-    try {
-      const runtimeState = createPiExampleRuntimeStateStore();
-      const service = createPiExampleGatewayService({
-        env: {
-          OPENROUTER_API_KEY: 'test-openrouter-key',
-          PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
-        },
-        runtimeState,
-        persistence: {
-          ensureReady: async () => undefined,
-          persistDirectExecution: async () => undefined,
-          loadInspectionState: async () => ({
-            threads: [],
-            executions: [],
-            automations: [],
-            automationRuns: [],
-            interrupts: [],
-            leases: [],
-            outboxIntents: [],
-            executionEvents: [],
-            threadActivities: [],
-          }),
-        },
-      });
+    const connectSource = await service.connect({ threadId: 'thread-1' });
+    expect(Array.isArray(connectSource)).toBe(false);
+    const iterator = (connectSource as AsyncIterable<unknown>)[Symbol.asyncIterator]();
 
-      const connectSource = await service.connect({ threadId: 'thread-1' });
-      expect(Array.isArray(connectSource)).toBe(false);
-      const iterator = (connectSource as AsyncIterable<unknown>)[Symbol.asyncIterator]();
+    await iterator.next();
+    await iterator.next();
+    await iterator.next();
+    await iterator.next();
 
-      await expect(iterator.next()).resolves.toEqual({
+    const firstAttachedEvent = iterator.next();
+    const runEvents = await collectEventSource(
+      await service.run({
+        threadId: 'thread-1',
+        runId: 'run-follow-up',
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'What can you do?',
+          },
+        ],
+      }),
+    );
+
+    await expect(firstAttachedEvent).resolves.toEqual(
+      expect.objectContaining({
         done: false,
-        value: {
+        value: expect.objectContaining({
           type: 'RUN_STARTED',
-          threadId: 'thread-1',
-          runId: 'connect:thread-1',
-        },
-      });
-      await expect(iterator.next()).resolves.toEqual(
-        expect.objectContaining({
-          done: false,
-          value: expect.objectContaining({
-            type: 'STATE_SNAPSHOT',
-          }),
+          runId: 'run-follow-up',
         }),
-      );
-      await expect(iterator.next()).resolves.toEqual(
-        expect.objectContaining({
-          done: false,
-          value: expect.objectContaining({
-            type: 'MESSAGES_SNAPSHOT',
-          }),
+      }),
+    );
+    expect(runEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'RUN_STARTED',
+        runId: 'run-follow-up',
+      }),
+    );
+  });
+
+  it('emits later background automation activity on the attached connect stream without polling delay', async () => {
+    const runtimeState = createPiExampleRuntimeStateStore();
+    const service = createPiExampleGatewayService({
+      env: {
+        OPENROUTER_API_KEY: 'test-openrouter-key',
+        PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
+      },
+      runtimeState,
+      persistence: {
+        ensureReady: async () => undefined,
+        persistDirectExecution: async () => undefined,
+        loadInspectionState: async () => ({
+          threads: [],
+          executions: [],
+          automations: [],
+          automationRuns: [],
+          interrupts: [],
+          leases: [],
+          outboxIntents: [],
+          executionEvents: [],
+          threadActivities: [],
         }),
-      );
-      await expect(iterator.next()).resolves.toEqual(
-        expect.objectContaining({
-          done: false,
-          value: expect.objectContaining({
-            type: 'RUN_FINISHED',
-            threadId: 'thread-1',
-            runId: 'connect:thread-1',
-          }),
-        }),
-      );
+      },
+    });
 
-      const nextEvent = iterator.next();
+    const connectSource = await service.connect({ threadId: 'thread-1' });
+    expect(Array.isArray(connectSource)).toBe(false);
+    const iterator = (connectSource as AsyncIterable<unknown>)[Symbol.asyncIterator]();
 
-      applyAutomationStatusUpdate({
-        runtimeState,
-        threadKey: 'thread-1',
-        artifactId: 'artifact-1',
-        automationId: 'automation-1',
-        executionId: 'exec-automation-1',
-        activityRunId: 'run-automation-1',
-        status: 'completed',
-        command: 'sync',
-        minutes: 1,
-        detail: 'Automation sync executed successfully.',
-        emitConnectUpdate: true,
-      });
+    await iterator.next();
+    await iterator.next();
+    await iterator.next();
+    await iterator.next();
 
-      await vi.advanceTimersByTimeAsync(1_000);
+    const nextEvent = iterator.next();
 
-      await expect(nextEvent).resolves.toEqual({
-        done: false,
-        value: {
-          type: 'RUN_STARTED',
-          threadId: 'thread-1',
-          runId: 'run-automation-1',
-        },
-      });
-    } finally {
-      vi.useRealTimers();
-    }
+    applyAutomationStatusUpdate({
+      runtimeState,
+      threadKey: 'thread-1',
+      artifactId: 'artifact-1',
+      automationId: 'automation-1',
+      executionId: 'exec-automation-1',
+      activityRunId: 'run-automation-1',
+      status: 'completed',
+      command: 'sync',
+      minutes: 1,
+      detail: 'Automation sync executed successfully.',
+      emitConnectUpdate: true,
+    });
+
+    await expect(nextEvent).resolves.toEqual({
+      done: false,
+      value: {
+        type: 'RUN_STARTED',
+        threadId: 'thread-1',
+        runId: 'run-automation-1',
+      },
+    });
   });
 
   it('surfaces canonical automation, scheduler, outbox, and maintenance state for operator validation', async () => {
