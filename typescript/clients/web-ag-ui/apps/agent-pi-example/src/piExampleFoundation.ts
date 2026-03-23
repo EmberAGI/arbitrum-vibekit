@@ -1,13 +1,11 @@
+import { Type, createAssistantMessageEventStream, type Message } from '@mariozechner/pi-ai';
 import {
   createPiRuntimeGatewayFoundation,
   type PiRuntimeGatewayFoundation,
 } from 'agent-runtime';
-import { Type, createAssistantMessageEventStream, type Message } from '@mariozechner/pi-ai';
 
 import {
   applyAutomationStatusUpdate,
-  buildAutomationA2Ui,
-  buildAutomationArtifact,
   buildInterruptA2Ui,
   buildInterruptArtifact,
   createPiExampleRuntimeStateStore,
@@ -54,13 +52,42 @@ export type PiExampleGatewayFoundationOptions = {
   persistence?: {
     scheduleAutomation?: (params: {
       threadKey: string;
-      command: string;
-      minutes: number;
+      title: string;
+      instruction: string;
+      schedule: Record<string, unknown>;
     }) => Promise<{
       automationId: string;
       runId: string;
       executionId: string;
       artifactId: string;
+      title: string;
+      schedule: Record<string, unknown>;
+      nextRunAt: string | null;
+    }>;
+    listAutomations?: (params: {
+      threadKey: string;
+      state?: string;
+      limit?: number;
+    }) => Promise<
+      Array<{
+        id: string;
+        title: string;
+        status: 'active' | 'completed' | 'canceled';
+        schedule: Record<string, unknown>;
+        nextRunAt: string | null;
+        lastRunAt: string | null;
+        lastRunStatus: string | null;
+      }>
+    >;
+    cancelAutomation?: (params: {
+      threadKey: string;
+      automationId: string;
+    }) => Promise<{
+      automationId: string;
+      artifactId: string;
+      title: string;
+      instruction: string;
+      schedule: Record<string, unknown>;
     }>;
     requestInterrupt?: (params: {
       threadKey: string;
@@ -72,13 +99,65 @@ export type PiExampleGatewayFoundationOptions = {
 };
 
 type ScheduleAutomationArgs = {
-  command: string;
-  minutes: number;
+  title: string;
+  instruction: string;
+  schedule: {
+    kind: string;
+    intervalMinutes?: number;
+    at?: string;
+    cron?: string;
+    timezone?: string;
+  };
+};
+
+type ListAutomationsArgs = {
+  state?: 'active' | 'completed' | 'canceled' | 'all';
+  limit?: number;
+};
+
+type CancelAutomationArgs = {
+  automationId: string;
 };
 
 type RequestOperatorInputArgs = {
   message: string;
 };
+
+function inferAutomationCommand(params: {
+  instruction: string;
+  title: string;
+}): string {
+  const instruction = params.instruction.trim();
+  if (instruction.length > 0) {
+    return instruction;
+  }
+  return params.title.trim() || 'automation';
+}
+
+function getScheduleMinutes(schedule: ScheduleAutomationArgs['schedule']): number {
+  return schedule.kind === 'every' && typeof schedule.intervalMinutes === 'number' && schedule.intervalMinutes > 0
+    ? schedule.intervalMinutes
+    : 5;
+}
+
+function describeScheduledAutomation(params: {
+  command: string;
+  schedule: ScheduleAutomationArgs['schedule'];
+}): string {
+  if (params.schedule.kind === 'at' && typeof params.schedule.at === 'string') {
+    return `Scheduled ${params.command} at ${params.schedule.at}.`;
+  }
+
+  if (params.schedule.kind === 'cron' && typeof params.schedule.cron === 'string') {
+    return `Scheduled ${params.command} on cron ${params.schedule.cron}.`;
+  }
+
+  return `Scheduled ${params.command} every ${getScheduleMinutes(params.schedule)} minutes.`;
+}
+
+function describeCanceledAutomation(title: string): string {
+  return `Canceled automation ${title}.`;
+}
 
 function requireEnvValue(value: string | undefined, name: keyof PiExampleGatewayEnv): string {
   const normalized = value?.trim();
@@ -292,22 +371,39 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
       });
     }
 
-    if (latestUserText.includes('run automation') || latestUserText.includes('run scheduled')) {
+    if (latestUserText.includes('cancel') || latestUserText.includes('stop automation')) {
       return createMockToolStream({
         model,
-        toolName: 'run_sync_automation',
-        toolCallId: 'pi-example-tool-run',
-        args: { command: 'sync', minutes: 5 },
-        reasoning: 'Running the scheduled automation so the user can inspect live events.',
+        toolName: 'automation.cancel',
+        toolCallId: 'pi-example-tool-cancel',
+        args: { automationId: 'automation:thread-1' },
+        reasoning: 'Canceling the saved automation the user no longer wants running.',
+      });
+    }
+
+    if (latestUserText.includes('list') && latestUserText.includes('automation')) {
+      return createMockToolStream({
+        model,
+        toolName: 'automation.list',
+        toolCallId: 'pi-example-tool-list',
+        args: { state: 'active', limit: 20 },
+        reasoning: 'Listing saved automations so the user can inspect the current schedule state.',
       });
     }
 
     if (latestUserText.includes('schedule') || latestUserText.includes('"command":"sync"')) {
       return createMockToolStream({
         model,
-        toolName: 'schedule_sync_automation',
+        toolName: 'automation.schedule',
         toolCallId: 'pi-example-tool-schedule',
-        args: { command: 'sync', minutes: 5 },
+        args: {
+          title: 'Sync every 5 minutes',
+          instruction: 'sync',
+          schedule: {
+            kind: 'every',
+            intervalMinutes: 5,
+          },
+        },
         reasoning: 'Scheduling the requested automation before responding.',
       });
     }
@@ -338,26 +434,39 @@ function createPiExampleTools(params: {
 }): PiExampleGatewayTool[] {
   return [
     {
-      name: 'schedule_sync_automation',
-      label: 'Schedule Sync Automation',
-      description: 'Schedule a recurring sync automation and surface its current status via AG-UI artifacts and A2UI.',
+      name: 'automation.schedule',
+      label: 'Automation Schedule',
+      description: 'Create a new saved automation for this thread and surface its current status via AG-UI artifacts and A2UI.',
       parameters: Type.Object({
-        command: Type.String({ default: 'sync' }),
-        minutes: Type.Number({ minimum: 1, default: 5 }),
+        title: Type.String(),
+        instruction: Type.String(),
+        schedule: Type.Object({
+          kind: Type.String(),
+          intervalMinutes: Type.Number({ minimum: 1, default: 5 }),
+        }),
       }),
       execute: async (_toolCallId, args) => {
         const toolArgs = args as ScheduleAutomationArgs;
         const threadKey = params.resolveThreadKey();
+        const command = inferAutomationCommand({
+          instruction: toolArgs.instruction,
+          title: toolArgs.title,
+        });
+        const minutes = getScheduleMinutes(toolArgs.schedule);
         const persisted = await params.persistence?.scheduleAutomation?.({
           threadKey,
-          command: toolArgs.command,
-          minutes: toolArgs.minutes,
+          title: toolArgs.title,
+          instruction: toolArgs.instruction,
+          schedule: toolArgs.schedule,
         });
         const automationId = persisted?.automationId ?? `automation:${threadKey}`;
         const runId = persisted?.runId ?? `run:${threadKey}`;
         const executionId = persisted?.executionId ?? `execution:${threadKey}`;
         const artifactId = persisted?.artifactId ?? `artifact:${threadKey}:automation`;
-        const detail = `Scheduled ${toolArgs.command} every ${toolArgs.minutes} minutes.`;
+        const detail = describeScheduledAutomation({
+          command,
+          schedule: toolArgs.schedule,
+        });
         applyAutomationStatusUpdate({
           runtimeState: params.runtimeState,
           threadKey,
@@ -366,56 +475,116 @@ function createPiExampleTools(params: {
           executionId,
           activityRunId: runId,
           status: 'scheduled',
-          command: toolArgs.command,
-          minutes: toolArgs.minutes,
+          command,
+          minutes,
           detail,
         });
 
         return {
           content: [{ type: 'text', text: detail }],
           details: {
-            automationId,
-            runId,
-            status: 'scheduled',
+            automation: {
+              id: automationId,
+              title: persisted?.title ?? toolArgs.title,
+              status: 'active',
+              schedule: persisted?.schedule ?? toolArgs.schedule,
+              nextRunAt: persisted?.nextRunAt ?? null,
+            },
           },
         };
       },
     },
     {
-      name: 'run_sync_automation',
-      label: 'Run Sync Automation',
-      description: 'Emit a live automation run status update for the current Pi thread.',
+      name: 'automation.list',
+      label: 'Automation List',
+      description: 'List saved automations visible to the current thread without appending noisy thread activity by default.',
       parameters: Type.Object({
-        command: Type.String({ default: 'sync' }),
-        minutes: Type.Number({ minimum: 1, default: 5 }),
+        state: Type.String({ default: 'active' }),
+        limit: Type.Number({ minimum: 1, default: 20 }),
       }),
       execute: async (_toolCallId, args) => {
-        const toolArgs = args as ScheduleAutomationArgs;
+        const toolArgs = args as ListAutomationsArgs;
         const threadKey = params.resolveThreadKey();
         const session = params.runtimeState.getSession(threadKey);
-        const automationId = session.automation?.id ?? `automation:${threadKey}`;
-        const runId = session.automation?.runId ?? `run:${threadKey}`;
-        const artifactId = session.artifacts?.current?.artifactId ?? `artifact:${threadKey}:automation`;
-        const detail = `Automation ${toolArgs.command} executed successfully.`;
+        const automations =
+          (await params.persistence?.listAutomations?.({
+            threadKey,
+            state: toolArgs.state,
+            limit: toolArgs.limit,
+          })) ??
+          (session.automation
+            ? [
+                {
+                  id: session.automation.id,
+                  title: 'Sync every 5 minutes',
+                  status: 'active' as const,
+                  schedule: { kind: 'every', intervalMinutes: 5 },
+                  nextRunAt: null,
+                  lastRunAt: null,
+                  lastRunStatus: null,
+                },
+              ]
+            : []);
+        const detail =
+          automations.length === 0
+            ? 'No saved automations.'
+            : `Found ${automations.length} automation${automations.length === 1 ? '' : 's'}: ${automations
+                .map((automation) => `${automation.title} (${automation.status})`)
+                .join(', ')}.`;
+
+        return {
+          content: [{ type: 'text', text: detail }],
+          details: {
+            automations,
+          },
+        };
+      },
+    },
+    {
+      name: 'automation.cancel',
+      label: 'Automation Cancel',
+      description: 'Cancel a saved automation so it does not fire again and surface the canceled state in AG-UI.',
+      parameters: Type.Object({
+        automationId: Type.String(),
+      }),
+      execute: async (_toolCallId, args) => {
+        const toolArgs = args as CancelAutomationArgs;
+        const threadKey = params.resolveThreadKey();
+        const session = params.runtimeState.getSession(threadKey);
+        const persisted = await params.persistence?.cancelAutomation?.({
+          threadKey,
+          automationId: toolArgs.automationId,
+        });
+        const automationId = persisted?.automationId ?? session.automation?.id ?? toolArgs.automationId;
+        const artifactId = persisted?.artifactId ?? session.artifacts?.current?.artifactId ?? `artifact:${threadKey}:automation`;
+        const title = persisted?.title ?? 'Sync every 5 minutes';
+        const command = inferAutomationCommand({
+          instruction: persisted?.instruction ?? 'sync',
+          title,
+        });
+        const schedule = (persisted?.schedule ?? { kind: 'every', intervalMinutes: 5 }) as ScheduleAutomationArgs['schedule'];
+        const detail = describeCanceledAutomation(title);
         applyAutomationStatusUpdate({
           runtimeState: params.runtimeState,
           threadKey,
           artifactId,
           automationId,
           executionId: session.execution.id,
-          activityRunId: runId,
-          status: 'completed',
-          command: toolArgs.command,
-          minutes: toolArgs.minutes,
+          activityRunId: session.automation?.runId ?? `run:${threadKey}`,
+          status: 'canceled',
+          command,
+          minutes: getScheduleMinutes(schedule),
           detail,
         });
 
         return {
           content: [{ type: 'text', text: detail }],
           details: {
-            automationId,
-            runId,
-            status: 'completed',
+            automation: {
+              id: automationId,
+              title,
+              status: 'canceled',
+            },
           },
         };
       },

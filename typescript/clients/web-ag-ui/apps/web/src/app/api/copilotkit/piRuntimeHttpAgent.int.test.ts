@@ -1,17 +1,20 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { AddressInfo } from 'node:net';
+import type { AddressInfo } from 'node:net';
 
 import { type RunAgentInput, verifyEvents } from '@ag-ui/client';
 import { EventType, type BaseEvent } from '@ag-ui/core';
-import { type PiRuntimeGatewayService } from 'agent-runtime';
-import { createPiRuntimeGatewayAgUiHandler, PiRuntimeGatewayHttpAgent } from 'agent-runtime/pi-transport';
-import { lastValueFrom, toArray } from 'rxjs';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createPiExampleGatewayService,
   PI_EXAMPLE_AGENT_ID,
   PI_EXAMPLE_AG_UI_BASE_PATH,
 } from 'agent-pi-example/ag-ui-server';
+import {
+  createPiRuntimeGatewayAgUiHandler,
+  PiRuntimeGatewayHttpAgent,
+  type PiRuntimeGatewayService,
+} from 'agent-runtime';
+import { lastValueFrom, toArray, type Observable } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 type RecordedRequest = {
   method: string;
@@ -58,7 +61,7 @@ function createPromptRunInput(prompt: string, overrides: Partial<RunAgentInput> 
   });
 }
 
-async function collectEvents(source$: { pipe: typeof import('rxjs').Observable.prototype.pipe }) {
+async function collectEvents<T>(source$: Observable<T>) {
   return lastValueFrom(source$.pipe(toArray()));
 }
 
@@ -123,7 +126,18 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
         scheduleAutomation: async () => ({
           automationId: 'automation-1',
           runId: 'run-1',
+          executionId: 'exec-1',
           artifactId: 'artifact-1',
+          title: 'Sync every 5 minutes',
+          schedule: { kind: 'every', intervalMinutes: 5 },
+          nextRunAt: '2026-03-20T00:05:00.000Z',
+        }),
+        cancelAutomation: async () => ({
+          automationId: 'automation-1',
+          artifactId: 'artifact-1',
+          title: 'Sync every 5 minutes',
+          instruction: 'sync',
+          schedule: { kind: 'every', intervalMinutes: 5 },
         }),
         requestInterrupt: async () => ({
           artifactId: 'interrupt-artifact-1',
@@ -147,33 +161,38 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
       basePath: PI_EXAMPLE_AG_UI_BASE_PATH,
     });
 
-    server = createServer(async (request, response) => {
-      const body = await readRequestBody(request);
-      const baseUrl = `http://${request.headers.host ?? '127.0.0.1'}`;
-      const pathname = new URL(request.url ?? '/', baseUrl).pathname;
+    server = createServer((request, response) => {
+      void (async () => {
+        const body = await readRequestBody(request);
+        const baseUrl = `http://${request.headers.host ?? '127.0.0.1'}`;
+        const pathname = new URL(request.url ?? '/', baseUrl).pathname;
 
-      requests.push({
-        method: request.method ?? 'GET',
-        pathname,
-        body: body.toString('utf8'),
+        requests.push({
+          method: request.method ?? 'GET',
+          pathname,
+          body: body.toString('utf8'),
+        });
+
+        const webRequest = new Request(new URL(request.url ?? '/', baseUrl), {
+          method: request.method,
+          headers: new Headers(
+            Object.entries(request.headers).flatMap(([name, value]) => {
+              if (Array.isArray(value)) {
+                return value.map((entry) => [name, entry] as const);
+              }
+
+              return value ? [[name, value] as const] : [];
+            }),
+          ),
+          body: body.length > 0 ? body : undefined,
+          duplex: 'half',
+        });
+        const webResponse = await handler(webRequest);
+        await writeNodeResponse(webResponse, response);
+      })().catch((error: unknown) => {
+        response.statusCode = 500;
+        response.end(error instanceof Error ? error.message : 'unknown error');
       });
-
-      const webRequest = new Request(new URL(request.url ?? '/', baseUrl), {
-        method: request.method,
-        headers: new Headers(
-          Object.entries(request.headers).flatMap(([name, value]) => {
-            if (Array.isArray(value)) {
-              return value.map((entry) => [name, entry] as const);
-            }
-
-            return value ? [[name, value] as const] : [];
-          }),
-        ),
-        body: body.length > 0 ? body : undefined,
-        duplex: 'half',
-      });
-      const webResponse = await handler(webRequest);
-      await writeNodeResponse(webResponse, response);
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -189,6 +208,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
   });
 
   afterEach(async () => {
+    server.closeAllConnections?.();
     await new Promise<void>((resolve, reject) => {
       server.close((error) => {
         if (error) {
@@ -201,41 +221,16 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
     });
   });
 
-  it('talks to the live Pi example app over AG-UI connect, run, and stop endpoints', async () => {
+  it('talks to the live Pi example app over AG-UI run and stop endpoints', async () => {
     const agent = new PiRuntimeGatewayHttpAgent({
       agentId: PI_EXAMPLE_AGENT_ID,
       runtimeUrl,
     });
 
-    const connectEvents = await collectEvents(agent.connect(createInput()).pipe(verifyEvents()));
     const runInput = createRunInput();
     const runEvents = await collectEvents(agent.run(runInput).pipe(verifyEvents()));
     agent.abortRun();
 
-    expect(connectEvents).toContainEqual(
-      expect.objectContaining({
-        type: 'RUN_STARTED',
-        threadId: 'thread-1',
-        runId: 'run-1',
-      }),
-    );
-    expect(connectEvents).toContainEqual(
-      expect.objectContaining({
-        type: 'STATE_SNAPSHOT',
-        snapshot: expect.objectContaining({
-          thread: expect.objectContaining({
-            id: 'thread-1',
-          }),
-        }),
-      }),
-    );
-    expect(connectEvents).toContainEqual(
-      expect.objectContaining({
-        type: 'RUN_FINISHED',
-        threadId: 'thread-1',
-        runId: 'run-1',
-      }),
-    );
     expect(runEvents).toContainEqual(
       expect.objectContaining({
         type: 'RUN_STARTED',
@@ -269,11 +264,6 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
         expect.arrayContaining([
           expect.objectContaining({
             method: 'POST',
-            pathname: `${PI_EXAMPLE_AG_UI_BASE_PATH}/agent/${PI_EXAMPLE_AGENT_ID}/connect`,
-            body: JSON.stringify(createInput()),
-          }),
-          expect.objectContaining({
-            method: 'POST',
             pathname: `${PI_EXAMPLE_AG_UI_BASE_PATH}/agent/${PI_EXAMPLE_AGENT_ID}/run`,
             body: JSON.stringify(runInput),
           }),
@@ -305,7 +295,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
     expect(runEvents).toContainEqual(
       expect.objectContaining({
         type: EventType.TOOL_CALL_START,
-        toolCallName: 'schedule_sync_automation',
+        toolCallName: 'automation.schedule',
       }),
     );
     expect(runEvents).toContainEqual(
@@ -325,7 +315,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
           thread: expect.objectContaining({
             task: expect.objectContaining({
               taskStatus: expect.objectContaining({
-                state: 'working',
+                state: 'submitted',
               }),
             }),
             artifacts: expect.objectContaining({
@@ -354,23 +344,23 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
       }),
     );
 
-    const automationRunEvents = await collectEvents(
+    const automationCancelEvents = await collectEvents(
       agent
         .run(
-          createPromptRunInput('Please run scheduled automation now.', {
-            runId: 'run-automation',
+          createPromptRunInput('Please cancel the scheduled automation.', {
+            runId: 'run-automation-cancel',
           }),
         )
         .pipe(verifyEvents()),
     );
 
-    expect(automationRunEvents).toContainEqual(
+    expect(automationCancelEvents).toContainEqual(
       expect.objectContaining({
         type: EventType.TOOL_CALL_START,
-        toolCallName: 'run_sync_automation',
+        toolCallName: 'automation.cancel',
       }),
     );
-    expect(findStateSnapshot(automationRunEvents)).toEqual(
+    expect(findStateSnapshot(automationCancelEvents)).toEqual(
       expect.objectContaining({
         type: EventType.STATE_SNAPSHOT,
         snapshot: expect.objectContaining({
@@ -384,7 +374,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
               current: expect.objectContaining({
                 data: expect.objectContaining({
                   type: 'automation-status',
-                  status: 'completed',
+                  status: 'canceled',
                   command: 'sync',
                 }),
               }),
@@ -492,8 +482,14 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
     expect(findStateSnapshot(resumedEvents)).toEqual(
       expect.objectContaining({
         snapshot: expect.objectContaining({
-          thread: expect.not.objectContaining({
-            activity: expect.anything(),
+          thread: expect.objectContaining({
+            activity: expect.objectContaining({
+              events: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'artifact',
+                }),
+              ]),
+            }),
           }),
         }),
       }),

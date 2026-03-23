@@ -21,6 +21,7 @@ export {
   PiRuntimeGatewayHttpAgent,
 } from '../lib/pi/dist/index.js';
 export {
+  buildCancelAutomationStatements,
   buildCompleteAutomationExecutionStatements,
   buildPersistAutomationDispatchStatements,
   buildPersistInterruptCheckpointStatements,

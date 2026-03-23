@@ -26,6 +26,7 @@ export {
   type PostgresBootstrapPlan,
 } from './bootstrap.js';
 export {
+  buildCancelAutomationStatements,
   buildCompleteAutomationExecutionStatements,
   buildPersistAutomationDispatchStatements,
   buildPersistDirectExecutionStatements,

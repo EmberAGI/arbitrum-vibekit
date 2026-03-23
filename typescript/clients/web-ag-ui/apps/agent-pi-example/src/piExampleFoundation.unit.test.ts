@@ -24,8 +24,9 @@ describe('createPiExampleGatewayFoundation', () => {
     });
     expect(foundation.agent.state.thinkingLevel).toBe('low');
     expect(foundation.agent.state.tools.map((tool) => tool.name)).toEqual([
-      'schedule_sync_automation',
-      'run_sync_automation',
+      'automation.schedule',
+      'automation.list',
+      'automation.cancel',
       'request_operator_input',
     ]);
     expect(foundation.agent.state.systemPrompt).toContain('Pi-native');
@@ -53,7 +54,7 @@ describe('createPiExampleGatewayFoundation', () => {
       content: [
         {
           type: 'text',
-          text: expect.stringContaining('Tool schedule_sync_automation completed.'),
+          text: expect.stringContaining('Tool automation.schedule completed.'),
         },
       ],
     });
@@ -79,8 +80,8 @@ describe('createPiExampleGatewayFoundation', () => {
         statusMessage: 'Scheduled sync every 5 minutes.',
       },
       automation: {
-        id: 'automation:thread-1',
-        runId: 'run:thread-1',
+        id: expect.any(String),
+        runId: expect.any(String),
       },
       artifacts: {
         current: {
@@ -97,7 +98,7 @@ describe('createPiExampleGatewayFoundation', () => {
     });
   });
 
-  it('routes run requests to the automation-run tool instead of rescheduling', async () => {
+  it('lists existing automations without mutating the current automation artifact', async () => {
     const runtimeState = createPiExampleRuntimeStateStore();
     const foundation = createPiExampleGatewayFoundation(
       {
@@ -110,18 +111,47 @@ describe('createPiExampleGatewayFoundation', () => {
     );
 
     await foundation.agent.prompt('Please schedule sync automation.');
-    await foundation.agent.prompt('Please run scheduled automation now.');
+    const beforeList = runtimeState.getSession('thread-1');
+    await foundation.agent.prompt('Please list my automations.');
+    const afterList = runtimeState.getSession('thread-1');
+
+    expect(foundation.agent.state.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      content: [
+        {
+          type: 'text',
+          text: expect.stringContaining('Tool automation.list completed.'),
+        },
+      ],
+    });
+    expect(afterList).toEqual(beforeList);
+  });
+
+  it('routes cancellation requests to the canonical automation cancel tool', async () => {
+    const runtimeState = createPiExampleRuntimeStateStore();
+    const foundation = createPiExampleGatewayFoundation(
+      {
+        E2E_PROFILE: 'mocked',
+      },
+      {
+        runtimeState,
+        resolveThreadKey: () => 'thread-1',
+      },
+    );
+
+    await foundation.agent.prompt('Please schedule sync automation.');
+    await foundation.agent.prompt('Please cancel the scheduled sync.');
 
     expect(runtimeState.getSession('thread-1')).toMatchObject({
       execution: {
         status: 'completed',
-        statusMessage: 'Automation sync executed successfully.',
+        statusMessage: 'Canceled automation Sync every 5 minutes.',
       },
       artifacts: {
         current: {
           data: {
             type: 'automation-status',
-            status: 'completed',
+            status: 'canceled',
             command: 'sync',
           },
         },
@@ -129,7 +159,7 @@ describe('createPiExampleGatewayFoundation', () => {
       a2ui: {
         kind: 'automation-status',
         payload: expect.objectContaining({
-          status: 'completed',
+          status: 'canceled',
         }),
       },
     });

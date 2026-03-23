@@ -186,6 +186,82 @@ export function buildCompleteAutomationExecutionStatements(params: {
   ];
 }
 
+export function buildCancelAutomationStatements(params: {
+  automationId: string;
+  currentRunId: string | null;
+  currentExecutionId: string | null;
+  threadId: string;
+  eventId: string;
+  activityId: string;
+  now: Date;
+}): PostgresStatement[] {
+  const statements: PostgresStatement[] = [
+    buildStatement(
+      'pi_automations',
+      'update pi_automations set suspended = $1, next_run_at = $2, updated_at = $3 where id = $4',
+      [true, null, params.now, params.automationId],
+    ),
+  ];
+
+  if (params.currentRunId !== null) {
+    statements.push(
+      buildStatement(
+        'pi_automation_runs',
+        "update pi_automation_runs set status = $1, completed_at = $2 where id = $3 and status = 'scheduled'",
+        ['canceled', params.now, params.currentRunId],
+      ),
+    );
+  }
+
+  if (params.currentExecutionId !== null) {
+    statements.push(
+      buildStatement(
+        'pi_executions',
+        'update pi_executions set status = $1, updated_at = $2, completed_at = $3 where id = $4',
+        ['completed', params.now, params.now, params.currentExecutionId],
+      ),
+    );
+  }
+
+  statements.push(
+    buildStatement(
+      'pi_scheduler_leases',
+      'delete from pi_scheduler_leases where automation_id = $1',
+      [params.automationId],
+    ),
+    buildStatement(
+      'pi_execution_events',
+      'insert into pi_execution_events (id, execution_id, thread_id, event_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
+      [
+        params.eventId,
+        params.currentExecutionId,
+        params.threadId,
+        'automation-canceled',
+        JSON.stringify({
+          automationId: params.automationId,
+        }),
+        params.now,
+      ],
+    ),
+    buildStatement(
+      'pi_thread_activity',
+      'insert into pi_thread_activity (id, thread_id, execution_id, activity_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
+      [
+        params.activityId,
+        params.threadId,
+        params.currentExecutionId,
+        'automation-canceled',
+        JSON.stringify({
+          automationId: params.automationId,
+        }),
+        params.now,
+      ],
+    ),
+  );
+
+  return statements;
+}
+
 export function buildPersistInterruptCheckpointStatements(params: {
   executionId: string;
   interruptId: string;

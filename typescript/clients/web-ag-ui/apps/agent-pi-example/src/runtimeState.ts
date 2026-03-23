@@ -75,7 +75,15 @@ export type PiExampleRuntimeStateStore = {
   resumeFromUserInput: (threadKey: string) => PiRuntimeGatewaySession;
 };
 
-type AutomationStatus = 'scheduled' | 'running' | 'completed';
+function cloneBaseEvents(events: readonly BaseEvent[]): BaseEvent[] {
+  const clonedEvents: BaseEvent[] = [];
+  for (const event of events) {
+    clonedEvents.push(event);
+  }
+  return clonedEvents;
+}
+
+type AutomationStatus = 'scheduled' | 'running' | 'completed' | 'canceled';
 
 function mapAutomationStatusToExecutionStatus(
   status: AutomationStatus,
@@ -86,6 +94,7 @@ function mapAutomationStatusToExecutionStatus(
     case 'running':
       return 'working';
     case 'completed':
+    case 'canceled':
       return 'completed';
   }
 }
@@ -171,8 +180,8 @@ export function createPiExampleRuntimeStateStore(): PiExampleRuntimeStateStore {
       }
     },
     publishAttachedEventSource: async (threadKey, source) => {
-      const events = Array.isArray(source)
-        ? [...source]
+      const events: BaseEvent[] = Array.isArray(source)
+        ? cloneBaseEvents(source)
         : await (async () => {
             const collected: BaseEvent[] = [];
             for await (const event of source) {
