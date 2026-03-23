@@ -287,6 +287,12 @@ type VisibleChatMessage = {
 type VisibleMessageOrderEntry = {
   nextOrder: number;
   orderById: Map<string, number>;
+  previousVisibleMessages: Array<{
+    id: string;
+    role: Message['role'];
+    text: string;
+    appearanceOrder: number;
+  }>;
 };
 
 const visibleMessageOrderCache = new Map<string, VisibleMessageOrderEntry>();
@@ -300,9 +306,17 @@ function getVisibleMessageOrderEntry(cacheKey: string): VisibleMessageOrderEntry
   const created: VisibleMessageOrderEntry = {
     nextOrder: 0,
     orderById: new Map<string, number>(),
+    previousVisibleMessages: [],
   };
   visibleMessageOrderCache.set(cacheKey, created);
   return created;
+}
+
+function buildVisibleMessageReplacementKey(message: {
+  role: Message['role'];
+  text: string;
+}): string {
+  return `${message.role}\u0000${message.text}`;
 }
 
 function orderVisibleChatMessages(
@@ -1541,6 +1555,7 @@ function AgentChatTab(props: {
     const nextVisibleMessages = props.messages
       .map((message) => ({
         id: message.id,
+        role: message.role,
         text: getMessageText(message),
       }))
       .filter((message) => message.text.length > 0);
@@ -1548,18 +1563,52 @@ function AgentChatTab(props: {
     if (props.messages.length === 0) {
       visibleMessageOrderEntry.orderById.clear();
       visibleMessageOrderEntry.nextOrder = 0;
+      visibleMessageOrderEntry.previousVisibleMessages = [];
       return [];
+    }
+
+    const nextVisibleMessageIds = new Set(nextVisibleMessages.map((message) => message.id));
+    const reusableOrdersByKey = new Map<string, number[]>();
+
+    for (const previousMessage of visibleMessageOrderEntry.previousVisibleMessages) {
+      if (nextVisibleMessageIds.has(previousMessage.id)) {
+        continue;
+      }
+
+      const replacementKey = buildVisibleMessageReplacementKey(previousMessage);
+      const reusableOrders = reusableOrdersByKey.get(replacementKey) ?? [];
+      reusableOrders.push(previousMessage.appearanceOrder);
+      reusableOrdersByKey.set(replacementKey, reusableOrders);
+    }
+
+    for (const reusableOrders of reusableOrdersByKey.values()) {
+      reusableOrders.sort((left, right) => left - right);
     }
 
     for (const message of nextVisibleMessages) {
       if (visibleMessageOrderEntry.orderById.has(message.id)) {
         continue;
       }
+
+      const replacementKey = buildVisibleMessageReplacementKey(message);
+      const reusableOrders = reusableOrdersByKey.get(replacementKey);
+      const reusableOrder = reusableOrders?.shift();
+      if (reusableOrder !== undefined) {
+        visibleMessageOrderEntry.orderById.set(message.id, reusableOrder);
+        continue;
+      }
+
       visibleMessageOrderEntry.orderById.set(message.id, visibleMessageOrderEntry.nextOrder);
       visibleMessageOrderEntry.nextOrder += 1;
     }
-
-    return orderVisibleChatMessages(props.messages, visibleMessageOrderEntry.orderById);
+    const orderedMessages = orderVisibleChatMessages(props.messages, visibleMessageOrderEntry.orderById);
+    visibleMessageOrderEntry.previousVisibleMessages = orderedMessages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      text: message.text,
+      appearanceOrder: message.appearanceOrder,
+    }));
+    return orderedMessages;
   }, [props.messages, visibleMessageOrderCacheKey]);
   const activityCards = buildPiExampleChatCards(props.activityEvents);
 

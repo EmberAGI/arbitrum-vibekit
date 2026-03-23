@@ -122,4 +122,47 @@ describe('AgentDetailPage transcript ordering', () => {
       root.unmount();
     });
   });
+
+  it('keeps a canonical user message ahead of a new assistant reply when the user message id changes', () => {
+    const root = createRoot(container);
+    const initialMessages: Message[] = [
+      {
+        id: 'user-temp-1',
+        role: 'user',
+        content: 'Schedule a sync every minute.',
+      },
+    ];
+
+    act(() => {
+      root.render(renderPage(initialMessages));
+    });
+
+    const updatedMessages: Message[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Scheduled a sync every minute.',
+      },
+      {
+        id: 'user-canonical-1',
+        role: 'user',
+        content: 'Schedule a sync every minute.',
+      },
+    ];
+
+    act(() => {
+      root.render(renderPage(updatedMessages));
+    });
+
+    const transcriptText = container.textContent ?? '';
+    expect(transcriptText).toContain('Schedule a sync every minute.');
+    expect(transcriptText).toContain('Scheduled a sync every minute.');
+    expect(transcriptText.indexOf('Schedule a sync every minute.')).toBeLessThan(
+      transcriptText.indexOf('Scheduled a sync every minute.'),
+    );
+
+    act(() => {
+      root.unmount();
+    });
+  });
 });
