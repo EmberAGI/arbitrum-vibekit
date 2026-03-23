@@ -816,6 +816,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     setRunInFlight(false);
     lastConnectedThreadRef.current = null;
     activeRunRef.current = { threadId, runId: null };
+    messagesSnapshotRef.current = false;
     commandSchedulerRef.current?.reset();
     clearConnectRetryTimer();
   }, [threadId, clearConnectRetryTimer, setRunInFlight]);
@@ -850,7 +851,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     });
 
     lastConnectedThreadRef.current = null;
-    messagesSnapshotRef.current = false;
     clearConnectRetryTimer();
   }, [
     agent,
@@ -883,7 +883,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       currentAgent.threadId = threadId;
       lastConnectedThreadRef.current = threadId;
       disconnectRequestKeyRef.current = null;
-      messagesSnapshotRef.current = false;
 
       const hasConnectAgent = typeof currentAgent.connectAgent === 'function';
 
@@ -1015,6 +1014,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const settings = currentState.settings ?? defaultSettings;
 
   useEffect(() => {
+    if (!Array.isArray(currentState.messages)) {
+      return;
+    }
+    if (messagesSnapshotRef.current && currentState.messages.length === 0) {
+      return;
+    }
     syncMessages(currentState.messages);
   }, [currentState.messages, syncMessages, threadId]);
 

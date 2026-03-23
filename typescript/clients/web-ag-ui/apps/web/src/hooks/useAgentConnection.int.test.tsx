@@ -815,6 +815,82 @@ describe('useAgentConnection integration', () => {
     expect(latestState?.thread?.task?.taskStatus?.state).toBe('input-required');
   });
 
+  it('preserves loaded chat messages across a Pi same-thread reconnect snapshot without message history', async () => {
+    let subscriber: AgentSubscriber | undefined;
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onMessagesSnapshotEvent?.({
+      input: { threadId: 'thread-1' },
+      messages: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'Scheduled sync every minute.',
+        },
+      ],
+    });
+    await flushEffects();
+
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Scheduled sync every minute.',
+      }),
+    ]);
+
+    mocks.agent.state = {
+      thread: {
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'completed',
+            message: 'Automation sync executed successfully.',
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Scheduled sync every minute.',
+      }),
+    ]);
+  });
+
   it('keeps local run ownership gated until active-thread terminal events are observed', async () => {
     let subscriber: AgentSubscriber | undefined;
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
