@@ -449,6 +449,14 @@ describe('useAgentConnection integration', () => {
 
   it('sendChatMessage dispatches a plain user message and runs the agent', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
 
     await act(async () => {
       root.render(
@@ -479,6 +487,27 @@ describe('useAgentConnection integration', () => {
         content: 'Hello from the chat tab',
       }),
     );
+    expect(latestValue?.messages).toEqual([]);
+
+    subscriber?.onMessagesSnapshotEvent?.({
+      input: { threadId: 'thread-1' },
+      messages: [
+        {
+          id: chatMessage?.id as string,
+          role: 'user',
+          content: 'Hello from the chat tab',
+        },
+      ],
+    });
+    await flushEffects();
+
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: expect.any(String),
+        role: 'user',
+        content: 'Hello from the chat tab',
+      }),
+    ]);
     expect(mocks.runAgent).toHaveBeenCalledWith({ agent: mocks.agent });
   });
 

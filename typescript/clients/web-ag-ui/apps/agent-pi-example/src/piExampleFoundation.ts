@@ -12,10 +12,14 @@ import {
   type PiExampleRuntimeStateStore,
 } from './runtimeState.js';
 
-const DEFAULT_PI_AGENT_MODEL = 'openai/gpt-5-mini';
+const DEFAULT_PI_AGENT_MODEL = 'openai/gpt-5.4-mini';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+const AUTOMATION_SCHEDULE_TOOL = 'automation_schedule';
+const AUTOMATION_LIST_TOOL = 'automation_list';
+const AUTOMATION_CANCEL_TOOL = 'automation_cancel';
+const REQUEST_OPERATOR_INPUT_TOOL = 'request_operator_input';
 const PI_EXAMPLE_SYSTEM_PROMPT =
-  'You are a Pi-native local smoke-test agent. Respond clearly, keep track of the active thread state, use your automation and operator-input tools when appropriate, and prefer short direct answers unless the user asks for more depth.';
+  'You are a Pi-native local smoke-test agent. Respond clearly, keep track of the active thread state, use your automation and operator-input tools when appropriate, and prefer short direct answers unless the user asks for more depth. The automation platform supports every-minute schedules; when the user asks for an automation every minute, treat that as valid and do not claim the platform forces a 5-minute minimum.';
 
 const EMPTY_USAGE = {
   input: 0,
@@ -158,6 +162,26 @@ function describeScheduledAutomation(params: {
 
 function describeCanceledAutomation(title: string): string {
   return `Canceled automation ${title}.`;
+}
+
+function buildAutomationTitle(params: {
+  command: string;
+  schedule: ScheduleAutomationArgs['schedule'];
+}): string {
+  if (params.schedule.kind === 'at' && typeof params.schedule.at === 'string') {
+    return `${params.command} at ${params.schedule.at}`;
+  }
+
+  if (params.schedule.kind === 'cron' && typeof params.schedule.cron === 'string') {
+    return `${params.command} cron ${params.schedule.cron}`;
+  }
+
+  return `${params.command} every ${getScheduleMinutes(params.schedule)} minutes`;
+}
+
+function readPersistedTitle(title: string | undefined): string | null {
+  const normalized = title?.trim();
+  return normalized && normalized.length > 0 ? normalized : null;
 }
 
 function requireEnvValue(value: string | undefined, name: keyof PiExampleGatewayEnv): string {
@@ -375,7 +399,7 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
     if (latestUserText.includes('cancel') || latestUserText.includes('stop automation')) {
       return createMockToolStream({
         model,
-        toolName: 'automation.cancel',
+        toolName: AUTOMATION_CANCEL_TOOL,
         toolCallId: 'pi-example-tool-cancel',
         args: { automationId: 'automation:thread-1' },
         reasoning: 'Canceling the saved automation the user no longer wants running.',
@@ -385,7 +409,7 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
     if (latestUserText.includes('list') && latestUserText.includes('automation')) {
       return createMockToolStream({
         model,
-        toolName: 'automation.list',
+        toolName: AUTOMATION_LIST_TOOL,
         toolCallId: 'pi-example-tool-list',
         args: { state: 'active', limit: 20 },
         reasoning: 'Listing saved automations so the user can inspect the current schedule state.',
@@ -395,7 +419,7 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
     if (latestUserText.includes('schedule') || latestUserText.includes('"command":"sync"')) {
       return createMockToolStream({
         model,
-        toolName: 'automation.schedule',
+        toolName: AUTOMATION_SCHEDULE_TOOL,
         toolCallId: 'pi-example-tool-schedule',
         args: {
           title: 'Sync every 5 minutes',
@@ -412,7 +436,7 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
     if (latestUserText.includes('interrupt') || latestUserText.includes('operator input')) {
       return createMockToolStream({
         model,
-        toolName: 'request_operator_input',
+        toolName: REQUEST_OPERATOR_INPUT_TOOL,
         toolCallId: 'pi-example-tool-interrupt',
         args: { message: 'Please provide a short operator note to continue.' },
         reasoning: 'Requesting operator input through A2UI before proceeding.',
@@ -435,9 +459,10 @@ function createPiExampleTools(params: {
 }): PiExampleGatewayTool[] {
   return [
     {
-      name: 'automation.schedule',
+      name: AUTOMATION_SCHEDULE_TOOL,
       label: 'Automation Schedule',
-      description: 'Create a new saved automation for this thread and surface its current status via AG-UI artifacts and A2UI.',
+      description:
+        'Create a new saved automation for this thread and surface its current status via AG-UI artifacts and A2UI. Every-minute schedules are valid when `schedule.intervalMinutes` is 1 or greater.',
       parameters: Type.Object({
         title: Type.String(),
         instruction: Type.String(),
@@ -468,6 +493,12 @@ function createPiExampleTools(params: {
           command,
           schedule: toolArgs.schedule,
         });
+        const title =
+          readPersistedTitle(persisted?.title) ??
+          buildAutomationTitle({
+            command,
+            schedule: persisted?.schedule ?? toolArgs.schedule,
+          });
         applyAutomationStatusUpdate({
           runtimeState: params.runtimeState,
           threadKey,
@@ -486,7 +517,7 @@ function createPiExampleTools(params: {
           details: {
             automation: {
               id: automationId,
-              title: persisted?.title ?? toolArgs.title,
+              title,
               status: 'active',
               schedule: persisted?.schedule ?? toolArgs.schedule,
               nextRunAt: persisted?.nextRunAt ?? null,
@@ -496,7 +527,7 @@ function createPiExampleTools(params: {
       },
     },
     {
-      name: 'automation.list',
+      name: AUTOMATION_LIST_TOOL,
       label: 'Automation List',
       description: 'List saved automations visible to the current thread without appending noisy thread activity by default.',
       parameters: Type.Object({
@@ -517,9 +548,15 @@ function createPiExampleTools(params: {
             ? [
                 {
                   id: session.automation.id,
-                  title: 'Sync every 5 minutes',
+                  title: buildAutomationTitle({
+                    command: 'sync',
+                    schedule: {
+                      kind: 'every',
+                      intervalMinutes: session.automation.minutes,
+                    },
+                  }),
                   status: 'active' as const,
-                  schedule: { kind: 'every', intervalMinutes: 5 },
+                  schedule: { kind: 'every', intervalMinutes: session.automation.minutes },
                   nextRunAt: null,
                   lastRunAt: null,
                   lastRunStatus: null,
@@ -542,7 +579,7 @@ function createPiExampleTools(params: {
       },
     },
     {
-      name: 'automation.cancel',
+      name: AUTOMATION_CANCEL_TOOL,
       label: 'Automation Cancel',
       description: 'Cancel a saved automation so it does not fire again and surface the canceled state in AG-UI.',
       parameters: Type.Object({
@@ -558,12 +595,17 @@ function createPiExampleTools(params: {
         });
         const automationId = persisted?.automationId ?? session.automation?.id ?? toolArgs.automationId;
         const artifactId = persisted?.artifactId ?? session.artifacts?.current?.artifactId ?? `artifact:${threadKey}:automation`;
-        const title = persisted?.title ?? 'Sync every 5 minutes';
+        const schedule = (persisted?.schedule ?? { kind: 'every', intervalMinutes: 5 }) as ScheduleAutomationArgs['schedule'];
         const command = inferAutomationCommand({
           instruction: persisted?.instruction ?? 'sync',
-          title,
+          title: persisted?.title ?? '',
         });
-        const schedule = (persisted?.schedule ?? { kind: 'every', intervalMinutes: 5 }) as ScheduleAutomationArgs['schedule'];
+        const title =
+          readPersistedTitle(persisted?.title) ??
+          buildAutomationTitle({
+            command,
+            schedule,
+          });
         const detail = describeCanceledAutomation(title);
         applyAutomationStatusUpdate({
           runtimeState: params.runtimeState,
@@ -591,7 +633,7 @@ function createPiExampleTools(params: {
       },
     },
     {
-      name: 'request_operator_input',
+      name: REQUEST_OPERATOR_INPUT_TOOL,
       label: 'Request Operator Input',
       description: 'Pause the Pi thread for operator input and surface a chat-thread A2UI form for resolution.',
       parameters: Type.Object({

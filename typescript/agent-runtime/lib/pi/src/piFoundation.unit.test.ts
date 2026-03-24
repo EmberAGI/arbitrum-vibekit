@@ -1,6 +1,7 @@
 import { Agent } from '@mariozechner/pi-agent-core';
 import {
   EventStream,
+  Type,
   type AssistantMessage,
   type AssistantMessageEvent,
   type Message,
@@ -160,5 +161,26 @@ describe('pi gateway foundation', () => {
         timestamp: 456,
       },
     ]);
+  });
+
+  it('fails fast when tools use non-portable names', () => {
+    expect(() =>
+      createPiRuntimeGatewayFoundation({
+        model: createModel('test-model'),
+        systemPrompt: 'You are Pi.',
+        tools: [
+          {
+            name: 'automation.schedule',
+            description: 'Invalid for cross-provider tool naming.',
+            parameters: Type.Object({}),
+            execute: async () => ({
+              content: [{ type: 'text' as const, text: 'unused' }],
+            }),
+          },
+        ],
+      }),
+    ).toThrow(
+      'Invalid Pi tool name(s): automation.schedule. Tool names must match ^[a-zA-Z0-9_-]+$ for cross-provider compatibility.',
+    );
   });
 });

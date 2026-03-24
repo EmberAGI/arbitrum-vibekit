@@ -1239,6 +1239,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         },
       });
 
+      if (accepted) {
+        return;
+      }
+
       if (!accepted) {
         setUiError('Unable to send a message while another run is active.');
       }

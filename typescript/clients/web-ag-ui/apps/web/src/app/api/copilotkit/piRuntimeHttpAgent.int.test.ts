@@ -306,7 +306,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
     expect(runEvents).toContainEqual(
       expect.objectContaining({
         type: EventType.TOOL_CALL_START,
-        toolCallName: 'automation.schedule',
+        toolCallName: 'automation_schedule',
       }),
     );
     expect(runEvents).toContainEqual(
@@ -368,7 +368,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
     expect(automationCancelEvents).toContainEqual(
       expect.objectContaining({
         type: EventType.TOOL_CALL_START,
-        toolCallName: 'automation.cancel',
+        toolCallName: 'automation_cancel',
       }),
     );
     expect(findStateSnapshot(automationCancelEvents)).toEqual(

@@ -234,6 +234,37 @@ const EMPTY_USAGE = {
   },
 } as const;
 
+const shouldDebugPiGateway = process.env.PI_GATEWAY_DEBUG === 'true';
+const PORTABLE_PI_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+function logPiGatewayDebug(message: string, detail?: unknown): void {
+  if (!shouldDebugPiGateway) {
+    return;
+  }
+
+  console.info('[pi-gateway][debug]', {
+    ts: new Date().toISOString(),
+    message,
+    ...(detail === undefined ? {} : { detail }),
+  });
+}
+
+function validatePiGatewayToolNames(model: Model<Api>, tools: readonly AgentTool[] | undefined): void {
+  if (!tools || tools.length === 0) {
+    return;
+  }
+
+  const invalidToolNames = tools.map((tool) => tool.name).filter((name) => !PORTABLE_PI_TOOL_NAME_PATTERN.test(name));
+
+  if (invalidToolNames.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    `Invalid Pi tool name(s): ${invalidToolNames.join(', ')}. Tool names must match ^[a-zA-Z0-9_-]+$ for cross-provider compatibility.`,
+  );
+}
+
 export const createPiRuntimeGatewayMockStream = (
   responseText: string,
 ): NonNullable<AgentOptions['streamFn']> => {
@@ -1393,6 +1424,7 @@ export const createPiRuntimeGatewayFoundation = (params: {
   now?: () => number;
 }): PiRuntimeGatewayFoundation => {
   const now = params.now ?? (() => Date.now());
+  validatePiGatewayToolNames(params.model, params.tools);
   const transformContext =
     params.getSessionContext || params.agentOptions?.transformContext
       ? async (messages: AgentMessage[], signal?: AbortSignal) => {
@@ -1457,6 +1489,16 @@ export const createPiRuntimeGatewayRuntime = (params: {
           messages: session.messages,
         }
       : null;
+  const persistRequestMessages = (threadId: string, requestMessages: readonly AgUiMessage[]) => {
+    if (requestMessages.length === 0 || !params.updateSession) {
+      return params.getSession(threadId);
+    }
+
+    return params.updateSession(threadId, (session) => ({
+      ...session,
+      messages: mergeAgUiMessages(session.messages ?? [], requestMessages),
+    }));
+  };
   const persistRunTranscript = (threadId: string, requestMessages: readonly AgUiMessage[], projectedEvents: readonly BaseEvent[]) => {
     if (!params.updateSession) {
       return params.getSession(threadId);
@@ -1493,15 +1535,28 @@ export const createPiRuntimeGatewayRuntime = (params: {
       const resumePayload = request.forwardedProps?.command?.resume;
 
       return createAsyncEventStream<BaseEvent>(async (controller) => {
+        logPiGatewayDebug('run start', {
+          threadId: request.threadId,
+          runId: request.runId,
+          messageCount: request.messages?.length ?? 0,
+          hasResumePayload: typeof resumePayload === 'string',
+        });
         controller.push(asBaseEvent({
           type: EventType.RUN_STARTED,
           threadId: request.threadId,
           runId: request.runId,
         } satisfies RunStartedEvent));
+        const requestSession = persistRequestMessages(request.threadId, requestMessages);
+        const requestMessagesSnapshotEvent = buildMessagesSnapshotEvent(requestSession);
+        if (requestMessagesSnapshotEvent) {
+          controller.push(requestMessagesSnapshotEvent);
+        }
 
         const unsubscribe = params.agent.subscribe((event) => {
+          logPiGatewayDebug('raw agent event', event);
           for (const projectedEvent of projector.project(event)) {
             projectedRunEvents.push(projectedEvent);
+            logPiGatewayDebug('projected ag-ui event', projectedEvent);
             controller.push(projectedEvent);
           }
         });
@@ -1532,6 +1587,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
           }
 
           const session = persistRunTranscript(request.threadId, requestMessages, projectedRunEvents);
+          logPiGatewayDebug('run session after transcript persist', session);
           controller.push(buildSnapshotEvent(session));
           const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);
           if (messagesSnapshotEvent) {

@@ -33,7 +33,7 @@
     "test:ci": "pnpm test:unit"
   },
   "dependencies": {
-    "@mariozechner/pi-ai": "0.60.0",
+    "@mariozechner/pi-ai": "0.62.0",
     "agent-runtime": "workspace:^"
   },
   "dependenciesMeta": {
