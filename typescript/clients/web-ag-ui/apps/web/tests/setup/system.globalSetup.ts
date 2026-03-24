@@ -245,6 +245,7 @@ function normalizeOnchainActionsApiUrl(value: string): string {
 
 export default async function systemGlobalSetup(): Promise<Cleanup> {
   const webAppDir = resolveWebAppDir();
+  const piExampleAppDir = path.resolve(webAppDir, '..', 'agent-pi-example');
   const profile = resolveE2EProfile();
   process.env['E2E_PROFILE'] = profile;
 
@@ -321,7 +322,30 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
       predicate: (res) => res.status === 404 || res.ok,
     });
 
-    // 4) Start the web app server.
+    // 4) Start the Pi example runtime so the web app can expose the Pi-backed agent.
+    const piPort = await getFreePort();
+    const piBaseUrl = `http://127.0.0.1:${piPort}`;
+    const piRuntimeUrl = `${piBaseUrl}/ag-ui`;
+    process.env.PI_AGENT_DEPLOYMENT_URL = piRuntimeUrl;
+
+    const piExample = spawnProcess({
+      cwd: piExampleAppDir,
+      args: ['dev'],
+      env: {
+        ...process.env,
+        PORT: String(piPort),
+      },
+    });
+    cleanups.push(piExample.cleanup);
+
+    await waitForHttp({
+      url: `${piRuntimeUrl}/health`,
+      timeoutMs: 60_000,
+      child: piExample.child,
+      childOutput: piExample.output,
+    });
+
+    // 5) Start the web app server.
     const webPort = await getFreePort();
     const webBaseUrl = `http://127.0.0.1:${webPort}`;
     process.env.WEB_E2E_BASE_URL = webBaseUrl;
@@ -350,6 +374,7 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
         // Keep other agents from failing if the UI touches them.
         LANGGRAPH_DEPLOYMENT_URL: langgraphBaseUrl,
         LANGGRAPH_PENDLE_DEPLOYMENT_URL: langgraphBaseUrl,
+        PI_AGENT_DEPLOYMENT_URL: piRuntimeUrl,
       },
     });
     cleanups.push(web.cleanup);
@@ -365,6 +390,7 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
       e2eProfile: profile,
       webBaseUrl,
       langgraphBaseUrl,
+      piRuntimeUrl,
       onchainActionsApiUrl: onchainApiUrl,
       alloraApiBaseUrl: alloraBaseUrl,
     });

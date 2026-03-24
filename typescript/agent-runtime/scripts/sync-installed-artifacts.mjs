@@ -1,6 +1,8 @@
-import { cp, mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { copyArtifactDir } from '../dist/syncInstalledArtifacts.js';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDir, '..');
@@ -36,20 +38,6 @@ async function listPackageSnapshots(packageName) {
     .map((entry) => path.join(pnpmStoreRoot, entry.name, 'node_modules', packageName));
 }
 
-async function copyArtifactDir(sourceRoot, relativeDir, targetRoot) {
-  const sourceDir = path.join(sourceRoot, relativeDir);
-  const sourceStats = await stat(sourceDir);
-
-  if (!sourceStats.isDirectory()) {
-    return;
-  }
-
-  const targetDir = path.join(targetRoot, relativeDir);
-  await mkdir(path.dirname(targetDir), { recursive: true });
-  await rm(targetDir, { recursive: true, force: true });
-  await cp(sourceDir, targetDir, { recursive: true, force: true });
-}
-
 await Promise.all(
   packageSpecs.map(async ({ packageName, packageRoot: sourceRoot, artifactDirs }) => {
     const snapshotDirs = await listPackageSnapshots(packageName);
@@ -57,7 +45,13 @@ await Promise.all(
     await Promise.all(
       snapshotDirs.map(async (snapshotDir) => {
         await Promise.all(
-          artifactDirs.map((relativeDir) => copyArtifactDir(sourceRoot, relativeDir, snapshotDir)),
+          artifactDirs.map((relativeDir) =>
+            copyArtifactDir({
+              sourceRoot,
+              relativeDir,
+              targetRoot: snapshotDir,
+            }),
+          ),
         );
       }),
     );
