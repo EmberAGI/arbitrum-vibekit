@@ -65,20 +65,58 @@ describe('Pi example AG-UI system (web + runtime + control plane)', () => {
     });
 
     const runResult = await runAgent.runAgent(undefined, runSubscriber);
+    const threadsResponse = await fetch(`${piRuntimeUrl}/control/threads`);
+    const executionsResponse = await fetch(`${piRuntimeUrl}/control/executions`);
     const schedulerResponse = await fetch(`${piRuntimeUrl}/control/scheduler`);
     const maintenanceResponse = await fetch(`${piRuntimeUrl}/control/maintenance`);
+    const threadsBody = (await threadsResponse.json()) as Array<{
+      threadId: string;
+      threadKey: string;
+      threadState: { threadId?: string };
+    }>;
+    const executionsBody = (await executionsResponse.json()) as Array<{
+      executionId: string;
+      threadId: string;
+      source: string;
+      currentInterruptId: string | null;
+    }>;
     const schedulerBody = await schedulerResponse.text();
-    const maintenanceBody = await maintenanceResponse.text();
+    const maintenanceBody = (await maintenanceResponse.json()) as {
+      recovery: {
+        automationIdsToResume: string[];
+        executionIdsToResume: string[];
+        outboxIdsToReplay: string[];
+        interruptIdsToResurface: string[];
+      };
+    };
+    const persistedThread = threadsBody.find((thread) => thread.threadKey === threadId);
+    const persistedExecution = executionsBody.find((execution) => execution.threadId === persistedThread?.threadId);
 
     expect(runErrorMessage).toBeNull();
     expect(sawRunFinished).toBe(true);
     expect(Array.isArray(runResult.newMessages)).toBe(true);
+    expect(threadsResponse.ok).toBe(true);
+    expect(executionsResponse.ok).toBe(true);
     expect(schedulerResponse.ok).toBe(true);
     expect(maintenanceResponse.ok).toBe(true);
-    expect(schedulerBody).toContain('"dueAutomationIds":["automation-1"]');
-    expect(maintenanceBody).toContain(`"executionIdsToResume":["pi-example:${threadId}"]`);
-    expect(maintenanceBody).toContain('"automationIdsToResume":["automation-1"]');
-    expect(maintenanceBody).toContain('"interruptIdsToResurface":["interrupt-1"]');
-    expect(maintenanceBody).toContain('"outboxIdsToReplay":["outbox-1"]');
+    expect(persistedThread).toMatchObject({
+      threadKey: threadId,
+      threadState: {
+        threadId,
+      },
+    });
+    expect(executionsBody).toContainEqual(
+      expect.objectContaining({
+        threadId: persistedThread?.threadId,
+        source: 'user',
+        currentInterruptId: expect.any(String),
+      }),
+    );
+    expect(persistedExecution?.currentInterruptId).toEqual(expect.any(String));
+    expect(schedulerBody).toContain('"dueAutomationIds":[]');
+    expect(maintenanceBody.recovery.executionIdsToResume).toEqual([]);
+    expect(maintenanceBody.recovery.automationIdsToResume).toEqual([]);
+    expect(maintenanceBody.recovery.outboxIdsToReplay).toEqual([]);
+    expect(maintenanceBody.recovery.interruptIdsToResurface).toContain(persistedExecution?.currentInterruptId ?? '');
   });
 });

@@ -1,8 +1,11 @@
 export * from '../lib/contracts/dist/index.js';
 export {
   buildPiA2UiActivityEvent,
+  buildPiRuntimeDirectExecutionRecordIds,
+  buildPiRuntimeGatewayConnectEvents,
   buildPiRuntimeGatewayContextMessages,
   buildPiThreadStateSnapshot,
+  createPiRuntimeGatewayMockStream,
   convertPiRuntimeGatewayMessagesToLlm,
   createCanonicalPiRuntimeGatewayControlPlane,
   createPiRuntimeGatewayAgUiHandler,
@@ -11,10 +14,26 @@ export {
   createPiRuntimeGatewayService,
   DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH,
   DEFAULT_PI_RUNTIME_GATEWAY_RETENTION,
+  ensurePiRuntimePostgresReady,
+  loadPiRuntimeInspectionState,
   mapPiAgentEventsToAgUiEvents,
+  persistPiRuntimeDirectExecution,
   PiRuntimeGatewayHttpAgent,
 } from '../lib/pi/dist/index.js';
+export {
+  buildCancelAutomationStatements,
+  buildCompleteAutomationExecutionStatements,
+  buildPersistAutomationDispatchStatements,
+  buildPersistInterruptCheckpointStatements,
+  recoverDueAutomations,
+  buildPiRuntimeStableUuid,
+  executePostgresStatements,
+} from '../lib/postgres/dist/index.js';
 export type {
+  EnsuredPiRuntimePostgres,
+  EnsurePiRuntimePostgresReadyOptions,
+  LoadedPiRuntimeInspectionState,
+  LoadPiRuntimeInspectionStateOptions,
   PiRuntimeGatewayA2UiMessage,
   PiRuntimeGatewayA2UiPayload,
   PiRuntimeGatewayActivityEvent,
@@ -35,4 +54,6 @@ export type {
   PiRuntimeGatewayService,
   PiRuntimeGatewaySession,
   PiRuntimeGatewayStopRequest,
+  PersistPiRuntimeDirectExecutionOptions,
 } from '../lib/pi/dist/index.js';
+export type { ExecutePostgresStatements } from '../lib/postgres/dist/index.js';

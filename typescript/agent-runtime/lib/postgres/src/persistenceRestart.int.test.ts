@@ -31,6 +31,8 @@ describe('persistence + restart integration', () => {
       runId: 'run-1',
       executionId: 'exec-queued',
       threadId: 'thread-1',
+      commandName: 'sync',
+      schedulePayload: { command: 'sync', minutes: 5 },
       activityId: 'activity-automation',
       leaseOwnerId: 'worker-a',
       now,

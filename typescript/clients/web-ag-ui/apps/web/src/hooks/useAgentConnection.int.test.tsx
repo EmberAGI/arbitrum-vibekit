@@ -393,6 +393,26 @@ describe('useAgentConnection integration', () => {
     }
   });
 
+  it('does not force Pi detail reconnect polling once connect is attached', async () => {
+    vi.useFakeTimers();
+
+    try {
+      await act(async () => {
+        root.render(<TestHarness agentId="agent-pi-example" />);
+      });
+      await flushEffects();
+
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await flushEffects();
+
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('saveSettings mutates local state and dispatches sync through AG-UI run', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
@@ -424,6 +444,41 @@ describe('useAgentConnection integration', () => {
     expect(syncMessage?.role).toBe('user');
     expect(parsedMessage?.command).toBe('sync');
     expect(typeof parsedMessage?.clientMutationId).toBe('string');
+    expect(mocks.runAgent).toHaveBeenCalledWith({ agent: mocks.agent });
+  });
+
+  it('sendChatMessage dispatches a plain user message and runs the agent', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    const chatApi = latestValue as unknown as {
+      sendChatMessage: (content: string) => void;
+    };
+
+    chatApi.sendChatMessage('Hello from the chat tab');
+    await flushEffects();
+
+    const chatMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
+      | { content?: string; role?: string }
+      | undefined;
+
+    expect(chatMessage).toEqual(
+      expect.objectContaining({
+        role: 'user',
+        content: 'Hello from the chat tab',
+      }),
+    );
     expect(mocks.runAgent).toHaveBeenCalledWith({ agent: mocks.agent });
   });
 
@@ -757,6 +812,99 @@ describe('useAgentConnection integration', () => {
       | { thread?: { task?: { taskStatus?: { state?: string } } } }
       | undefined;
     expect(latestState?.thread?.task?.taskStatus?.state).toBe('input-required');
+  });
+
+  it('reflects an empty Pi reconnect transcript instead of preserving stale local messages', async () => {
+    let subscriber: AgentSubscriber | undefined;
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onMessagesSnapshotEvent?.({
+      input: { threadId: 'thread-1' },
+      messages: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'Scheduled sync every minute.',
+        },
+      ],
+    });
+    await flushEffects();
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Scheduled sync every minute.',
+      }),
+    ]);
+
+    mocks.agent.state = {
+      thread: {
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'completed',
+            message: 'Automation sync executed successfully.',
+          },
+        },
+      },
+      messages: [],
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.messages).toEqual([]);
   });
 
   it('keeps local run ownership gated until active-thread terminal events are observed', async () => {

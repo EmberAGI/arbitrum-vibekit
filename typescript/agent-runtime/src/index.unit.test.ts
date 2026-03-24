@@ -52,8 +52,10 @@ describe('agent-runtime facade', () => {
     expect(typeof agentRuntime.defineAgentDomainModule).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayFoundation).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayAgUiHandler).toBe('function');
+    expect(typeof agentRuntime.buildPiRuntimeDirectExecutionRecordIds).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayRuntime).toBe('function');
     expect(typeof agentRuntime.createCanonicalPiRuntimeGatewayControlPlane).toBe('function');
+    expect(typeof agentRuntime.ensurePiRuntimePostgresReady).toBe('function');
     expect(typeof agentRuntime.PiRuntimeGatewayHttpAgent).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayService).toBe('function');
     expect(agentRuntime.DEFAULT_PI_RUNTIME_GATEWAY_RETENTION).toMatchObject({
@@ -68,5 +70,14 @@ describe('agent-runtime facade', () => {
     expect('loadLangGraphApiCheckpointer' in agentRuntime).toBe(false);
     expect('pruneCheckpointerState' in agentRuntime).toBe(false);
     expect('isLangGraphBusyStatus' in agentRuntime).toBe(false);
+  });
+
+  it('syncs postgres artifacts into installed agent-runtime snapshots for clean workspace consumers', () => {
+    const syncScript = readFileSync(
+      new URL('../scripts/sync-installed-artifacts.mjs', import.meta.url),
+      'utf8',
+    );
+
+    expect(syncScript).toContain("path.join('lib', 'postgres', 'dist')");
   });
 });

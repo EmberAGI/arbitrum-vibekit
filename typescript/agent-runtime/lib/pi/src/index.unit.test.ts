@@ -4,6 +4,18 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createCanonicalPiRuntimeGatewayControlPlane, createPiRuntimeGatewayService } from './index.js';
 
+async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): Promise<T[]> {
+  if (Array.isArray(source)) {
+    return [...source];
+  }
+
+  const events: T[] = [];
+  for await (const event of source) {
+    events.push(event);
+  }
+  return events;
+}
+
 describe('agent-runtime-pi package contract', () => {
   it('anchors the gateway service on the real Pi foundation and shared runtime layers', () => {
     const packageJson = JSON.parse(
@@ -31,7 +43,7 @@ describe('agent-runtime-pi package contract', () => {
       },
     });
     expect(packageJson.dependencies).toMatchObject({
-      '@ag-ui/client': '0.0.42',
+      '@ag-ui/client': '0.0.47',
       '@mariozechner/pi-agent-core': expect.any(String),
       '@mariozechner/pi-ai': expect.any(String),
       'agent-runtime-contracts': 'workspace:^',
@@ -49,7 +61,7 @@ describe('agent-runtime-pi package contract', () => {
 
   it('creates an AG-UI gateway surface without collapsing operator controls into runtime commands', async () => {
     const runtime = {
-      connect: vi.fn(async () => [{ type: 'STATE_SNAPSHOT' }]),
+      connect: vi.fn(async () => [{ type: 'RUN_STARTED' }, { type: 'STATE_SNAPSHOT' }, { type: 'RUN_FINISHED' }]),
       run: vi.fn(async () => [{ type: 'RUN_STARTED' }]),
       stop: vi.fn(async () => undefined),
     };
@@ -86,8 +98,14 @@ describe('agent-runtime-pi package contract', () => {
     });
     expect(service).not.toHaveProperty('inspectHealth');
 
-    await expect(service.connect({ threadId: 'thread-1' })).resolves.toEqual([{ type: 'STATE_SNAPSHOT' }]);
-    await expect(service.run({ threadId: 'thread-1', runId: 'run-1' })).resolves.toEqual([{ type: 'RUN_STARTED' }]);
+    await expect(service.connect({ threadId: 'thread-1' })).resolves.toEqual([
+      { type: 'RUN_STARTED' },
+      { type: 'STATE_SNAPSHOT' },
+      { type: 'RUN_FINISHED' },
+    ]);
+    await expect(collectEventSource(await service.run({ threadId: 'thread-1', runId: 'run-1' }))).resolves.toEqual([
+      { type: 'RUN_STARTED' },
+    ]);
     await expect(service.stop({ threadId: 'thread-1', runId: 'run-1' })).resolves.toBeUndefined();
     await expect(service.control.inspectHealth()).resolves.toEqual({ status: 'ok' });
     await expect(service.control.listThreads()).resolves.toEqual(['thread-1']);

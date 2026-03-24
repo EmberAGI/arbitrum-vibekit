@@ -12,8 +12,9 @@ import {
   Check,
   RefreshCw,
 } from 'lucide-react';
+import type { Message } from '@ag-ui/core';
 import { formatUnits } from 'viem';
-import { useCallback, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type {
   AgentProfile,
   AgentMetrics,
@@ -62,6 +63,12 @@ import {
 import { resolveBlockersInterruptView } from './agentBlockersInterrupt';
 import { resolveCurrentSetupStep } from './agentCurrentSetupStep';
 import { resolveSetupSteps } from './agentSetupSteps';
+import {
+  buildPiExampleInterruptA2UiView,
+  buildPiExampleStatusA2UiView,
+  PiExampleA2UiCard,
+  type PiExampleA2UiView,
+} from './piExampleA2ui';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -117,8 +124,10 @@ interface AgentDetailPageProps {
   transactions?: Transaction[];
   telemetry?: TelemetryItem[];
   events?: ClmmEvent[];
+  messages?: Message[];
   // Settings
   settings?: AgentSettings;
+  onSendChatMessage?: (content: string) => void;
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
   onSettingsSave?: (updates: Partial<AgentSettings>) => void;
 }
@@ -221,6 +230,283 @@ function asFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function parseCommandMessage(content: string): string | null {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    if (!('command' in parsed)) return null;
+    const command = (parsed as { command?: unknown }).command;
+    if (command === 'hire') return 'Submitted hire request.';
+    if (command === 'fire') return 'Submitted fire request.';
+    if (command === 'sync') return 'Requested a runtime sync.';
+    if (command === 'resume') return 'Submitted onboarding response.';
+    return typeof command === 'string' ? `Submitted ${command} request.` : null;
+  } catch {
+    return null;
+  }
+}
+
+function getMessageText(message: Message): string {
+  if (typeof message.content === 'string') {
+    return parseCommandMessage(message.content) ?? message.content;
+  }
+
+  if (Array.isArray(message.content)) {
+    return message.content
+      .map((item) => {
+        if (item.type === 'text') {
+          return item.text;
+        }
+        return item.filename ?? item.url ?? item.mimeType;
+      })
+      .join('\n')
+      .trim();
+  }
+
+  return '';
+}
+
+function getMessageRoleLabel(message: Message): string {
+  if (message.role === 'assistant') return 'Agent';
+  if (message.role === 'reasoning') return 'Reasoning';
+  if (message.role === 'tool') return 'Tool';
+  if (message.role === 'activity') return 'Activity';
+  return 'You';
+}
+
+type VisibleChatMessage = {
+  id: string;
+  label: string;
+  text: string;
+  role: Message['role'];
+  parentMessageId?: string;
+  originalIndex: number;
+  appearanceOrder: number;
+};
+
+type VisibleMessageOrderEntry = {
+  nextOrder: number;
+  orderById: Map<string, number>;
+  previousVisibleMessages: Array<{
+    id: string;
+    role: Message['role'];
+    text: string;
+    appearanceOrder: number;
+  }>;
+};
+
+const visibleMessageOrderCache = new Map<string, VisibleMessageOrderEntry>();
+
+function getVisibleMessageOrderEntry(cacheKey: string): VisibleMessageOrderEntry {
+  const existing = visibleMessageOrderCache.get(cacheKey);
+  if (existing) {
+    return existing;
+  }
+
+  const created: VisibleMessageOrderEntry = {
+    nextOrder: 0,
+    orderById: new Map<string, number>(),
+    previousVisibleMessages: [],
+  };
+  visibleMessageOrderCache.set(cacheKey, created);
+  return created;
+}
+
+function buildVisibleMessageReplacementKey(message: {
+  role: Message['role'];
+  text: string;
+}): string {
+  return `${message.role}\u0000${message.text}`;
+}
+
+function getParentMessageId(message: Message): string | undefined {
+  if (!('parentMessageId' in message)) {
+    return undefined;
+  }
+  return typeof message.parentMessageId === 'string' ? message.parentMessageId : undefined;
+}
+
+function orderVisibleChatMessages(
+  messages: Message[],
+  appearanceOrderById: ReadonlyMap<string, number>,
+): VisibleChatMessage[] {
+  const visibleMessages = messages
+    .map(
+      (message, originalIndex): VisibleChatMessage => ({
+        id: message.id,
+        label: getMessageRoleLabel(message),
+        text: getMessageText(message),
+        role: message.role,
+        parentMessageId: getParentMessageId(message),
+        originalIndex,
+        appearanceOrder: appearanceOrderById.get(message.id) ?? Number.MAX_SAFE_INTEGER,
+      }),
+    )
+    .filter((message) => message.text.length > 0);
+
+  const rankedVisibleMessages = [...visibleMessages].sort(
+    (left, right) =>
+      left.appearanceOrder - right.appearanceOrder || left.originalIndex - right.originalIndex,
+  );
+
+  const visibleMessageIds = new Set(rankedVisibleMessages.map((message) => message.id));
+  const reasoningByParentId = new Map<string, VisibleChatMessage[]>();
+
+  for (const message of rankedVisibleMessages) {
+    if (message.role !== 'reasoning' || !message.parentMessageId || !visibleMessageIds.has(message.parentMessageId)) {
+      continue;
+    }
+
+    const groupedMessages = reasoningByParentId.get(message.parentMessageId) ?? [];
+    groupedMessages.push(message);
+    reasoningByParentId.set(message.parentMessageId, groupedMessages);
+  }
+
+  const orderedMessages: VisibleChatMessage[] = [];
+  const appendedMessageIds = new Set<string>();
+
+  for (const message of rankedVisibleMessages) {
+    if (message.parentMessageId && reasoningByParentId.has(message.parentMessageId)) {
+      continue;
+    }
+
+    const reasoningMessages = reasoningByParentId.get(message.id) ?? [];
+    for (const reasoningMessage of reasoningMessages.sort(
+      (left, right) =>
+        left.appearanceOrder - right.appearanceOrder || left.originalIndex - right.originalIndex,
+    )) {
+      if (appendedMessageIds.has(reasoningMessage.id)) {
+        continue;
+      }
+      orderedMessages.push(reasoningMessage);
+      appendedMessageIds.add(reasoningMessage.id);
+    }
+
+    if (appendedMessageIds.has(message.id)) {
+      continue;
+    }
+    orderedMessages.push(message);
+    appendedMessageIds.add(message.id);
+  }
+
+  return orderedMessages;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+type PiExampleChatCard = {
+  id: string;
+  label: 'Artifact' | 'A2UI';
+  view: PiExampleA2UiView;
+  actionKind?: 'submit-operator-note';
+};
+
+function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
+  return events.flatMap((event, index): PiExampleChatCard[] => {
+    if (event.type === 'artifact') {
+      const artifactData = asRecord(event.artifact?.data);
+      if (artifactData?.type === 'automation-status') {
+        const status = typeof artifactData.status === 'string' ? artifactData.status : 'unknown';
+        const command = typeof artifactData.command === 'string' ? artifactData.command : 'sync';
+        const detail = typeof artifactData.detail === 'string' ? artifactData.detail : 'Automation status updated.';
+        return [
+          {
+            id: `artifact-${event.artifact?.artifactId ?? 'unknown'}-${index}`,
+            label: 'Artifact',
+            view: buildPiExampleStatusA2UiView({
+              title: `Automation ${status}`,
+              body: `${command}: ${detail}`,
+            }),
+          },
+        ];
+      }
+
+      if (artifactData?.type === 'interrupt-status') {
+        const message = typeof artifactData.message === 'string' ? artifactData.message : 'Awaiting operator input.';
+        return [
+          {
+            id: `interrupt-artifact-${event.artifact?.artifactId ?? 'unknown'}-${index}`,
+            label: 'Artifact',
+            view: buildPiExampleStatusA2UiView({
+              title: 'Interrupt checkpoint',
+              body: message,
+            }),
+          },
+        ];
+      }
+
+      return [];
+    }
+
+    if (event.type !== 'dispatch-response') {
+      return [];
+    }
+
+    return event.parts.flatMap((part, partIndex): PiExampleChatCard[] => {
+      if (part.kind !== 'a2ui') {
+        return [];
+      }
+
+      const payloadEnvelope = asRecord(asRecord(part.data)?.payload);
+      if (!payloadEnvelope) {
+        return [];
+      }
+
+      if (payloadEnvelope.kind === 'automation-status') {
+        const payload = asRecord(payloadEnvelope.payload);
+        if (!payload) {
+          return [];
+        }
+
+        const status = typeof payload.status === 'string' ? payload.status : 'unknown';
+        const command = typeof payload.command === 'string' ? payload.command : 'sync';
+        const detail = typeof payload.detail === 'string' ? payload.detail : 'Automation status updated.';
+        return [
+          {
+            id: `automation-a2ui-${index}-${partIndex}`,
+            label: 'A2UI',
+            view: buildPiExampleStatusA2UiView({
+              title: `Automation ${status}`,
+              body: `${command}: ${detail}`,
+            }),
+          },
+        ];
+      }
+
+      if (payloadEnvelope.kind === 'interrupt') {
+        const payload = asRecord(payloadEnvelope.payload);
+        if (!payload) {
+          return [];
+        }
+
+        return [
+          {
+            id: `interrupt-a2ui-${index}-${partIndex}`,
+            label: 'A2UI',
+            actionKind: 'submit-operator-note',
+            view: buildPiExampleInterruptA2UiView({
+              title: 'Operator input required',
+              message:
+                typeof payload.message === 'string'
+                  ? payload.message
+                  : 'Provide a short operator note to continue.',
+              inputLabel:
+                typeof payload.inputLabel === 'string' ? payload.inputLabel : 'Operator note',
+              submitLabel:
+                typeof payload.submitLabel === 'string' ? payload.submitLabel : 'Continue agent loop',
+              artifactId: typeof payload.artifactId === 'string' ? payload.artifactId : undefined,
+            }),
+          },
+        ];
+      }
+
+      return [];
+    });
+  });
+}
+
 function FloatingErrorToast(props: {
   title: string;
   message: string;
@@ -286,16 +572,20 @@ export function AgentDetailPage({
   transactions = [],
   telemetry = [],
   events = [],
+  messages = [],
   settings,
+  onSendChatMessage,
   onSettingsChange,
   onSettingsSave,
 }: AgentDetailPageProps) {
   const showPostHireLayout = isHired || Boolean(isFiring);
+  const chatEnabled = agentId === 'agent-pi-example';
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (showPostHireLayout ? 'blockers' : 'metrics'),
   );
   const [hasUserSelectedTab, setHasUserSelectedTab] = useState(Boolean(initialTab));
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
+  const [chatDraft, setChatDraft] = useState('');
   const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
   const isOnboardingActive = resolveOnboardingActive({
     activeInterruptPresent: Boolean(activeInterrupt),
@@ -308,6 +598,37 @@ export function AgentDetailPage({
     setHasUserSelectedTab(true);
     setActiveTab(tab);
   }, []);
+  const handleHire = useCallback(() => {
+    if (chatEnabled) {
+      selectTab('chat');
+    }
+    onHire();
+  }, [chatEnabled, onHire, selectTab]);
+  const submitChatDraft = useCallback(() => {
+    const trimmed = chatDraft.trim();
+    if (trimmed.length === 0) {
+      return;
+    }
+    onSendChatMessage?.(trimmed);
+    setChatDraft('');
+  }, [chatDraft, onSendChatMessage]);
+  const handleChatSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      submitChatDraft();
+    },
+    [submitChatDraft],
+  );
+  const handleChatKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key !== 'Enter' || event.shiftKey) {
+        return;
+      }
+      event.preventDefault();
+      submitChatDraft();
+    },
+    [submitChatDraft],
+  );
 
   const resolvedTab: TabType = forceBlockersTab
     ? 'blockers'
@@ -488,6 +809,22 @@ export function AgentDetailPage({
     return stars;
   };
 
+  const chatTab = chatEnabled ? (
+    <AgentChatTab
+      agentName={agentName}
+      isHired={isHired}
+      isHiring={isHiring}
+      messages={messages}
+      activityEvents={events}
+      chatDraft={chatDraft}
+      onChatDraftChange={setChatDraft}
+      onSubmit={handleChatSubmit}
+      onChatKeyDown={handleChatKeyDown}
+      isComposerEnabled={typeof onSendChatMessage === 'function'}
+      onSendChatMessage={onSendChatMessage}
+    />
+  ) : null;
+
   // Use the upgraded layout only for hired agents. Pre-hire must remain stable even
   // while detail sync is still loading, otherwise the Hire CTA can disappear.
   if (showPostHireLayout) {
@@ -514,7 +851,11 @@ export function AgentDetailPage({
         >
           Activity
         </TabButton>
-        <TabButton active={resolvedTab === 'chat'} onClick={() => {}} disabled>
+        <TabButton
+          active={resolvedTab === 'chat'}
+          onClick={() => selectTab('chat')}
+          disabled={!chatEnabled}
+        >
           Chat
         </TabButton>
       </div>
@@ -584,6 +925,8 @@ export function AgentDetailPage({
             }
           />
         )}
+
+        {resolvedTab === 'chat' && chatTab}
       </>
     );
 
@@ -662,7 +1005,7 @@ export function AgentDetailPage({
                       </div>
                     ) : (
                       <button
-                        onClick={onHire}
+                        onClick={handleHire}
                         disabled={isHiring}
                         className={[
                           CTA_SIZE_MD_FULL,
@@ -886,7 +1229,7 @@ export function AgentDetailPage({
               </div>
 
               <button
-                onClick={onHire}
+                onClick={handleHire}
                 disabled={isHiring}
                 className={[
                   CTA_SIZE_MD_FULL,
@@ -1050,87 +1393,108 @@ export function AgentDetailPage({
         <div className="mt-10 border-b border-white/10 flex items-center gap-6">
           <button
             type="button"
-            className="px-1 pb-3 text-sm font-medium text-[#fd6731] border-b-2 border-[#fd6731] -mb-px"
-            aria-current="page"
+            onClick={() => selectTab('metrics')}
+            className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
+              resolvedTab === 'metrics'
+                ? 'text-[#fd6731] border-[#fd6731]'
+                : 'text-gray-500 border-transparent hover:text-white'
+            }`}
+            aria-current={resolvedTab === 'metrics' ? 'page' : undefined}
           >
             Metrics
           </button>
-          <button type="button" disabled className="px-1 pb-3 text-sm font-medium text-gray-600">
+          <button
+            type="button"
+            onClick={() => selectTab('chat')}
+            disabled={!chatEnabled}
+            className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
+              !chatEnabled
+                ? 'text-gray-600 border-transparent'
+                : resolvedTab === 'chat'
+                  ? 'text-[#fd6731] border-[#fd6731]'
+                  : 'text-gray-400 border-transparent hover:text-white'
+            }`}
+          >
             Chat
           </button>
         </div>
 
         <div className="mt-6">
-          {/* Pre-hire should still show the same chart cards across agents (CLMM/Pendle/GMX)
-             so the page doesn't feel "empty" before hire. */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-sm font-semibold text-white">APY Change</div>
-                  <div className="text-xs text-gray-500 mt-1">Latest vs previous snapshot</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-semibold text-teal-400">
-                    <LoadingValue
-                      isLoaded={hasLoadedView}
-                      skeletonClassName="h-7 w-20"
-                      loadedClassName="text-teal-400"
-                      value={formatPercent(currentApy)}
-                    />
+          {resolvedTab === 'chat' ? chatTab : null}
+          {resolvedTab === 'metrics' ? (
+            <>
+              {/* Pre-hire should still show the same chart cards across agents (CLMM/Pendle/GMX)
+                 so the page doesn't feel "empty" before hire. */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-white">APY Change</div>
+                      <div className="text-xs text-gray-500 mt-1">Latest vs previous snapshot</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-semibold text-teal-400">
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-7 w-20"
+                          loadedClassName="text-teal-400"
+                          value={formatPercent(currentApy)}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {currentApy !== undefined && previousApy !== undefined
+                          ? formatPercent(currentApy - previousApy, 1)
+                          : '—'}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500">
-                    {currentApy !== undefined && previousApy !== undefined
-                      ? formatPercent(currentApy - previousApy, 1)
-                      : '—'}
-                  </div>
+                  <Sparkline
+                    values={makeMockSeries({
+                      seedKey: `${agentId}:apy`,
+                      points: 24,
+                      start: metrics.apy ?? 18,
+                      drift: 0.02,
+                      noise: 0.35,
+                      min: 0,
+                      max: 120,
+                    })}
+                  />
                 </div>
-              </div>
-              <Sparkline
-                values={makeMockSeries({
-                  seedKey: `${agentId}:apy`,
-                  points: 24,
-                  start: metrics.apy ?? 18,
-                  drift: 0.02,
-                  noise: 0.35,
-                  min: 0,
-                  max: 120,
-                })}
-              />
-            </div>
 
-            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-sm font-semibold text-white">Total Users</div>
-                  <div className="text-xs text-gray-500 mt-1">All time</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-semibold text-white">
-                    <LoadingValue
-                      isLoaded={hasLoadedView}
-                      skeletonClassName="h-7 w-24"
-                      loadedClassName="text-white"
-                      value={formatNumber(profile.totalUsers)}
-                    />
+                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-white">Total Users</div>
+                      <div className="text-xs text-gray-500 mt-1">All time</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-semibold text-white">
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-7 w-24"
+                          loadedClassName="text-white"
+                          value={formatNumber(profile.totalUsers)}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-500">—</div>
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500">—</div>
+                  <Sparkline
+                    values={makeMockSeries({
+                      seedKey: `${agentId}:users`,
+                      points: 24,
+                      start: Math.max(50, profile.totalUsers ?? 5000) * 0.6,
+                      drift: Math.max(1, (profile.totalUsers ?? 5000) / 400),
+                      noise: Math.max(2, (profile.totalUsers ?? 5000) / 250),
+                      min: 0,
+                    })}
+                    strokeClassName="stroke-purple-300"
+                    fillClassName="fill-purple-400/10"
+                  />
                 </div>
               </div>
-              <Sparkline
-                values={makeMockSeries({
-                  seedKey: `${agentId}:users`,
-                  points: 24,
-                  start: Math.max(50, profile.totalUsers ?? 5000) * 0.6,
-                  drift: Math.max(1, (profile.totalUsers ?? 5000) / 400),
-                  noise: Math.max(2, (profile.totalUsers ?? 5000) / 250),
-                  min: 0,
-                })}
-                strokeClassName="stroke-purple-300"
-                fillClassName="fill-purple-400/10"
-              />
-            </div>
-          </div>
+            </>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1163,6 +1527,197 @@ function TabButton({ active, onClick, children, disabled, highlight }: TabButton
     >
       {children}
     </button>
+  );
+}
+
+function AgentChatTab(props: {
+  agentName: string;
+  isHired: boolean;
+  isHiring: boolean;
+  messages: Message[];
+  activityEvents: ClmmEvent[];
+  chatDraft: string;
+  onChatDraftChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onChatKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  isComposerEnabled: boolean;
+  onSendChatMessage?: (content: string) => void;
+}) {
+  const visibleMessageOrderCacheKey = useId();
+  useEffect(() => {
+    return () => {
+      visibleMessageOrderCache.delete(visibleMessageOrderCacheKey);
+    };
+  }, [visibleMessageOrderCacheKey]);
+
+  const visibleMessages = useMemo(() => {
+    const visibleMessageOrderEntry = getVisibleMessageOrderEntry(visibleMessageOrderCacheKey);
+    const allMessageIds = new Set(props.messages.map((message) => message.id));
+    for (const messageId of [...visibleMessageOrderEntry.orderById.keys()]) {
+      if (!allMessageIds.has(messageId)) {
+        visibleMessageOrderEntry.orderById.delete(messageId);
+      }
+    }
+
+    const nextVisibleMessages = props.messages
+      .map((message) => ({
+        id: message.id,
+        role: message.role,
+        text: getMessageText(message),
+      }))
+      .filter((message) => message.text.length > 0);
+
+    if (props.messages.length === 0) {
+      visibleMessageOrderEntry.orderById.clear();
+      visibleMessageOrderEntry.nextOrder = 0;
+      visibleMessageOrderEntry.previousVisibleMessages = [];
+      return [];
+    }
+
+    const nextVisibleMessageIds = new Set(nextVisibleMessages.map((message) => message.id));
+    const reusableOrdersByKey = new Map<string, number[]>();
+
+    for (const previousMessage of visibleMessageOrderEntry.previousVisibleMessages) {
+      if (nextVisibleMessageIds.has(previousMessage.id)) {
+        continue;
+      }
+
+      const replacementKey = buildVisibleMessageReplacementKey(previousMessage);
+      const reusableOrders = reusableOrdersByKey.get(replacementKey) ?? [];
+      reusableOrders.push(previousMessage.appearanceOrder);
+      reusableOrdersByKey.set(replacementKey, reusableOrders);
+    }
+
+    for (const reusableOrders of reusableOrdersByKey.values()) {
+      reusableOrders.sort((left, right) => left - right);
+    }
+
+    for (const message of nextVisibleMessages) {
+      if (visibleMessageOrderEntry.orderById.has(message.id)) {
+        continue;
+      }
+
+      const replacementKey = buildVisibleMessageReplacementKey(message);
+      const reusableOrders = reusableOrdersByKey.get(replacementKey);
+      const reusableOrder = reusableOrders?.shift();
+      if (reusableOrder !== undefined) {
+        visibleMessageOrderEntry.orderById.set(message.id, reusableOrder);
+        continue;
+      }
+
+      visibleMessageOrderEntry.orderById.set(message.id, visibleMessageOrderEntry.nextOrder);
+      visibleMessageOrderEntry.nextOrder += 1;
+    }
+    const orderedMessages = orderVisibleChatMessages(props.messages, visibleMessageOrderEntry.orderById);
+    visibleMessageOrderEntry.previousVisibleMessages = orderedMessages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      text: message.text,
+      appearanceOrder: message.appearanceOrder,
+    }));
+    return orderedMessages;
+  }, [props.messages, visibleMessageOrderCacheKey]);
+  const activityCards = buildPiExampleChatCards(props.activityEvents);
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+      <div className="border-b border-white/10 px-5 py-4">
+        <div className="text-[12px] uppercase tracking-[0.14em] text-white/60">Chat</div>
+        <div className="mt-1 text-sm text-gray-400">
+          {props.isHired
+            ? `Talk directly with ${props.agentName}.`
+            : `Talk with ${props.agentName} before hiring.`}
+        </div>
+      </div>
+
+      <div className="space-y-3 px-5 py-5">
+        {visibleMessages.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-[#131313] px-4 py-5 text-sm text-gray-400">
+            {props.isHiring
+              ? 'Submitting hire request...'
+              : 'Send a message to start a live Pi runtime conversation.'}
+          </div>
+        ) : (
+          visibleMessages.map((message) => (
+            <div
+              key={message.id}
+              className={`rounded-2xl px-4 py-3 ${
+                message.role === 'assistant'
+                  ? 'bg-[#111827] text-blue-50'
+                  : message.role === 'reasoning'
+                    ? 'border border-violet-400/20 bg-[#1f1630] text-violet-50'
+                  : message.role === 'user'
+                    ? 'bg-[#1c1917] text-orange-50'
+                    : 'bg-[#161616] text-white'
+              }`}
+            >
+              <div className="text-[11px] uppercase tracking-[0.14em] text-white/45">
+                {message.label}
+              </div>
+              <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{message.text}</div>
+            </div>
+          ))
+        )}
+
+        {activityCards.map((card) => (
+          <div key={card.id} className="rounded-2xl border border-white/10 bg-[#171717] px-4 py-4">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-white/45">
+              {card.label}
+            </div>
+            <div className="mt-2">
+              <PiExampleA2UiCard
+                view={card.view}
+                onAction={(action) => {
+                  if (
+                    card.actionKind !== 'submit-operator-note' ||
+                    action.actionName !== 'submitOperatorNote' ||
+                    !props.onSendChatMessage
+                  ) {
+                    return;
+                  }
+
+                  const note =
+                    typeof action.context?.operatorNote === 'string'
+                      ? action.context.operatorNote.trim()
+                      : '';
+                  if (note.length === 0) {
+                    return;
+                  }
+
+                  props.onSendChatMessage(`Operator note: ${note}`);
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={props.onSubmit} className="border-t border-white/10 px-5 py-4">
+        <label className="block text-[12px] uppercase tracking-[0.14em] text-white/50">
+          Message
+        </label>
+        <textarea
+          value={props.chatDraft}
+          onChange={(event) => props.onChatDraftChange(event.target.value)}
+          onKeyDown={props.onChatKeyDown}
+          rows={4}
+          placeholder="Ask the Pi example agent to explain what it can do."
+          className="mt-3 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 py-3 text-sm text-white outline-none transition focus:border-[#fd6731]"
+        />
+        <div className="mt-3 flex items-center justify-between gap-4">
+          <div className="text-xs text-gray-500">
+            {props.isHired ? 'Live chat stays on the same thread.' : 'Chat works before and after hire.'}
+          </div>
+          <button
+            type="submit"
+            disabled={!props.isComposerEnabled || props.chatDraft.trim().length === 0}
+            className="h-10 px-4 rounded-full text-[13px] font-medium inline-flex items-center justify-center bg-[#fd6731] text-white disabled:bg-white/10 disabled:text-white/35"
+          >
+            Send message
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 

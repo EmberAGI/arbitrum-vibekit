@@ -81,4 +81,18 @@ describe('buildCopilotRuntimeAgents', () => {
     ]);
     expect(agents['agent-pi-example']).toBeInstanceOf(MockPiRuntimeHttpAgent);
   });
+
+  it('defaults the Pi example runtime URL for local development', async () => {
+    const { buildCopilotRuntimeAgents } = await import('./copilotRuntimeRegistry');
+
+    const agents = buildCopilotRuntimeAgents({
+      LANGSMITH_API_KEY: 'test-langsmith-key',
+    });
+
+    expect(agents['agent-pi-example']).toBeInstanceOf(MockPiRuntimeHttpAgent);
+    expect(piRuntimeHttpAgentConfigs).toContainEqual({
+      agentId: 'agent-pi-example',
+      runtimeUrl: 'http://127.0.0.1:3410/ag-ui',
+    });
+  });
 });

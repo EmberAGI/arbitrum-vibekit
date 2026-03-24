@@ -18,6 +18,13 @@ describe('pi AG-UI projection', () => {
           status: 'interrupted',
           statusMessage: 'Waiting for wallet confirmation.',
         },
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'Please continue.',
+          },
+        ],
         automation: { id: 'auto-1', runId: 'auto-run-1' },
         artifacts: {
           current: { artifactId: 'current-artifact', data: { phase: 'setup' } },
@@ -54,6 +61,11 @@ describe('pi AG-UI projection', () => {
           telemetry: [],
           events: [
             {
+              type: 'artifact',
+              append: true,
+              artifact: { artifactId: 'activity-artifact', data: { entries: 3 } },
+            },
+            {
               type: 'dispatch-response',
               parts: [
                 {
@@ -71,6 +83,13 @@ describe('pi AG-UI projection', () => {
             },
           ],
         },
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'Please continue.',
+          },
+        ],
         artifacts: {
           current: { artifactId: 'current-artifact', data: { phase: 'setup' } },
           activity: { artifactId: 'activity-artifact', data: { entries: 3 } },
@@ -181,6 +200,99 @@ describe('pi AG-UI projection', () => {
       },
       { type: EventType.STEP_FINISHED, stepName: 'turn' },
       { type: EventType.STEP_FINISHED, stepName: 'pi-agent' },
+    ]);
+  });
+
+  it('maps pi thinking stream events into AG-UI reasoning events', () => {
+    const assistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: 1,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const events: AgentEvent[] = [
+      { type: 'message_start', message: assistantMessage },
+      {
+        type: 'message_update',
+        message: assistantMessage,
+        assistantMessageEvent: {
+          type: 'thinking_start',
+          contentIndex: 0,
+          partial: assistantMessage,
+        },
+      },
+      {
+        type: 'message_update',
+        message: assistantMessage,
+        assistantMessageEvent: {
+          type: 'thinking_delta',
+          contentIndex: 0,
+          delta: 'Analyzing the request.',
+          partial: assistantMessage,
+        },
+      },
+      {
+        type: 'message_update',
+        message: assistantMessage,
+        assistantMessageEvent: {
+          type: 'thinking_end',
+          contentIndex: 0,
+          content: 'Analyzing the request.',
+          partial: assistantMessage,
+        },
+      },
+      { type: 'message_end', message: assistantMessage },
+    ];
+
+    expect(
+      mapPiAgentEventsToAgUiEvents({
+        executionId: 'exec-reasoning',
+        events,
+      }),
+    ).toEqual([
+      {
+        type: EventType.TEXT_MESSAGE_START,
+        messageId: 'pi:exec-reasoning:assistant:1',
+        role: 'assistant',
+      },
+      {
+        type: EventType.REASONING_START,
+        messageId: 'pi:exec-reasoning:reasoning:pi:exec-reasoning:assistant:1:0',
+      },
+      {
+        type: EventType.REASONING_MESSAGE_START,
+        messageId: 'pi:exec-reasoning:reasoning:pi:exec-reasoning:assistant:1:0',
+        role: 'reasoning',
+      },
+      {
+        type: EventType.REASONING_MESSAGE_CONTENT,
+        messageId: 'pi:exec-reasoning:reasoning:pi:exec-reasoning:assistant:1:0',
+        delta: 'Analyzing the request.',
+      },
+      {
+        type: EventType.REASONING_MESSAGE_END,
+        messageId: 'pi:exec-reasoning:reasoning:pi:exec-reasoning:assistant:1:0',
+      },
+      {
+        type: EventType.REASONING_END,
+        messageId: 'pi:exec-reasoning:reasoning:pi:exec-reasoning:assistant:1:0',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_END,
+        messageId: 'pi:exec-reasoning:assistant:1',
+      },
     ]);
   });
 

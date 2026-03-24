@@ -1,7 +1,7 @@
 import { HttpAgent, runHttpRequest, transformHttpEventStream } from '@ag-ui/client';
 import type { HttpAgentConfig, RunAgentInput } from '@ag-ui/client';
 
-import type { PiRuntimeGatewayRunRequest, PiRuntimeGatewayService } from './index.js';
+import type { PiRuntimeGatewayEventSource, PiRuntimeGatewayRunRequest, PiRuntimeGatewayService } from './index.js';
 
 export const DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH = '/ag-ui';
 
@@ -45,8 +45,23 @@ function jsonResponse(payload: unknown, status = 200): Response {
   });
 }
 
-function sseResponse(events: unknown[]): Response {
-  const body = events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
+function sseResponse(events: PiRuntimeGatewayEventSource): Response {
+  const encoder = new TextEncoder();
+  const body = Array.isArray(events)
+    ? events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')
+    : new ReadableStream<Uint8Array>({
+        async start(controller) {
+          try {
+            for await (const event of events) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            }
+            controller.close();
+          } catch (error) {
+            controller.error(error);
+          }
+        },
+      });
+
   return new Response(body, {
     status: 200,
     headers: {
@@ -121,7 +136,14 @@ export function createPiRuntimeGatewayAgUiHandler(options: PiRuntimeGatewayAgUiH
         return jsonResponse({ error: 'Expected threadId.' }, 400);
       }
 
-      return sseResponse(await options.service.connect({ threadId }));
+      const runId = readStringField(body, 'runId');
+
+      return sseResponse(
+        await options.service.connect({
+          threadId,
+          ...(runId ? { runId } : {}),
+        }),
+      );
     }
 
     if (action === 'run') {

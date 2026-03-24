@@ -19,10 +19,15 @@ export {
   type PiOutboxRecoveryRecord,
 } from './outbox.js';
 export {
+  ensurePiRuntimePostgresReady,
   resolvePostgresBootstrapPlan,
+  type EnsuredPiRuntimePostgres,
+  type EnsurePiRuntimePostgresReadyOptions,
   type PostgresBootstrapPlan,
 } from './bootstrap.js';
 export {
+  buildCancelAutomationStatements,
+  buildCompleteAutomationExecutionStatements,
   buildPersistAutomationDispatchStatements,
   buildPersistDirectExecutionStatements,
   buildPersistInterruptCheckpointStatements,
@@ -36,6 +41,10 @@ export {
   type PiRestartRecoveryPlan,
 } from './recovery.js';
 export {
+  buildPiRuntimeDirectExecutionRecordIds,
+  buildPiRuntimeStableUuid,
+} from './identifiers.js';
+export {
   buildPiRuntimeInspectionSnapshot,
   buildPiRuntimeMaintenancePlan,
   type PiAutomationRecord,
@@ -48,3 +57,12 @@ export {
   type PiThreadActivityRecord,
   type PiThreadRecord,
 } from './operatorControl.js';
+export {
+  executePostgresStatements,
+  loadPiRuntimeInspectionState,
+  persistPiRuntimeDirectExecution,
+  type ExecutePostgresStatements,
+  type LoadedPiRuntimeInspectionState,
+  type LoadPiRuntimeInspectionStateOptions,
+  type PersistPiRuntimeDirectExecutionOptions,
+} from './store.js';

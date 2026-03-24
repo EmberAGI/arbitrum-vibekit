@@ -2,12 +2,13 @@ import {
   EventType,
   type BaseEvent,
   type Message as AgUiMessage,
+  type MessagesSnapshotEvent,
   type RunFinishedEvent,
   type RunStartedEvent,
   type StateSnapshotEvent,
 } from '@ag-ui/core';
 import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
-import type { Api, Message, Model, ToolResultMessage } from '@mariozechner/pi-ai';
+import { createAssistantMessageEventStream, type Api, type Message, type Model, type ToolResultMessage } from '@mariozechner/pi-ai';
 import { mergeThreadPatchForEmit, type TaskState } from 'agent-runtime-contracts';
 import {
   buildPiRuntimeInspectionSnapshot,
@@ -32,9 +33,23 @@ export {
   PiRuntimeGatewayHttpAgent,
 } from './agUiTransport.js';
 export type { PiRuntimeGatewayAgUiHandlerOptions, PiRuntimeGatewayHttpAgentConfig } from './agUiTransport.js';
+export {
+  buildPiRuntimeDirectExecutionRecordIds,
+  ensurePiRuntimePostgresReady,
+  loadPiRuntimeInspectionState,
+  persistPiRuntimeDirectExecution,
+} from 'agent-runtime-postgres';
+export type {
+  EnsuredPiRuntimePostgres,
+  EnsurePiRuntimePostgresReadyOptions,
+  LoadedPiRuntimeInspectionState,
+  LoadPiRuntimeInspectionStateOptions,
+  PersistPiRuntimeDirectExecutionOptions,
+} from 'agent-runtime-postgres';
 
 export type PiRuntimeGatewayConnectRequest = {
   threadId: string;
+  runId?: string;
 };
 
 export type PiRuntimeGatewayRunRequest = {
@@ -58,13 +73,19 @@ export type PiRuntimeGatewayA2UiPayload = {
   payload: unknown;
 };
 
-export type PiRuntimeGatewayActivityEvent = {
-  type: 'dispatch-response';
-  parts: Array<{
-    kind: string;
-    data: unknown;
-  }>;
-};
+export type PiRuntimeGatewayActivityEvent =
+  | {
+      type: 'dispatch-response';
+      parts: Array<{
+        kind: string;
+        data: unknown;
+      }>;
+    }
+  | {
+      type: 'artifact';
+      artifact: PiRuntimeGatewayArtifact;
+      append?: boolean;
+    };
 
 export type PiRuntimeGatewayExecutionStatus =
   | 'queued'
@@ -84,6 +105,7 @@ export type PiRuntimeGatewaySession = {
     status: PiRuntimeGatewayExecutionStatus;
     statusMessage?: string;
   };
+  messages?: AgUiMessage[];
   automation?: {
     id: string;
     runId?: string;
@@ -93,6 +115,7 @@ export type PiRuntimeGatewaySession = {
     activity?: PiRuntimeGatewayArtifact;
   };
   a2ui?: PiRuntimeGatewayA2UiPayload;
+  activityEvents?: PiRuntimeGatewayActivityEvent[];
   threadPatch?: Record<string, unknown>;
 };
 
@@ -136,9 +159,9 @@ declare module '@mariozechner/pi-agent-core' {
 }
 
 export type PiRuntimeGatewayRuntime = {
-  connect: (request: PiRuntimeGatewayConnectRequest) => Promise<BaseEvent[]>;
-  run: (request: PiRuntimeGatewayRunRequest) => Promise<BaseEvent[]>;
-  stop: (request: PiRuntimeGatewayStopRequest) => Promise<BaseEvent[]>;
+  connect: (request: PiRuntimeGatewayConnectRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
+  run: (request: PiRuntimeGatewayRunRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
+  stop: (request: PiRuntimeGatewayStopRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
 };
 
 export type PiRuntimeGatewayControlPlane = {
@@ -158,6 +181,8 @@ export type PiRuntimeGatewayService = {
   stop: PiRuntimeGatewayRuntime['stop'];
   control: PiRuntimeGatewayControlPlane;
 };
+
+export type PiRuntimeGatewayEventSource = readonly BaseEvent[] | AsyncIterable<BaseEvent>;
 
 export type PiRuntimeGatewayAgent = Pick<Agent, 'subscribe' | 'prompt' | 'continue' | 'abort' | 'state'> & {
   sessionId?: string;
@@ -203,6 +228,33 @@ const EMPTY_USAGE = {
     total: 0,
   },
 } as const;
+
+export const createPiRuntimeGatewayMockStream = (
+  responseText: string,
+): NonNullable<AgentOptions['streamFn']> => {
+  return (model) => {
+    const stream = createAssistantMessageEventStream();
+
+    queueMicrotask(() => {
+      stream.push({
+        type: 'done',
+        reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: responseText }],
+          api: model.api,
+          provider: model.provider,
+          model: model.id,
+          usage: EMPTY_USAGE,
+          stopReason: 'stop',
+          timestamp: Date.now(),
+        },
+      });
+    });
+
+    return stream;
+  };
+};
 
 const asBaseEvent = <TEvent extends BaseEvent>(event: TEvent): BaseEvent => event;
 
@@ -254,10 +306,542 @@ const getMessageTimestamp = (message: AgentMessage): number | string | undefined
     ? (message.timestamp as number | string | undefined)
     : undefined;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isTextPart = (value: unknown): value is { type: 'text'; text: string } =>
+  isRecord(value) && value.type === 'text' && typeof value.text === 'string';
+
+const isThinkingPart = (value: unknown): value is { type: 'thinking'; thinking: string } =>
+  isRecord(value) && value.type === 'thinking' && typeof value.thinking === 'string';
+
+const isToolCallPart = (
+  value: unknown,
+): value is { type: 'toolCall'; id: string; name: string; arguments: unknown } =>
+  isRecord(value) &&
+  value.type === 'toolCall' &&
+  typeof value.id === 'string' &&
+  typeof value.name === 'string' &&
+  'arguments' in value;
+
 const resolveProjectedMessageId = (executionId: string, message: AgentMessage, fallbackIndex: number): string => {
   const role = getMessageRole(message);
   const timestamp = getMessageTimestamp(message) ?? fallbackIndex;
   return `pi:${executionId}:${role}:${timestamp}`;
+};
+
+const resolveProjectedReasoningMessageId = (
+  executionId: string,
+  assistantMessageId: string,
+  contentIndex: number,
+): string => `pi:${executionId}:reasoning:${assistantMessageId}:${contentIndex}`;
+
+const getTextContent = (message: AgentMessage): string | undefined => {
+  if (typeof message !== 'object' || message === null || !('content' in message)) {
+    return undefined;
+  }
+
+  const { content } = message as { content?: unknown };
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+
+  const text = content
+    .flatMap((part) => (isTextPart(part) ? [part.text] : []))
+    .join('');
+
+  return text.length > 0 ? text : undefined;
+};
+
+const getAssistantToolCalls = (message: AgentMessage): Array<{
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}> => {
+  if (typeof message !== 'object' || message === null || !('content' in message)) {
+    return [];
+  }
+
+  const { content } = message as { content?: unknown };
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  return content.flatMap((part) => {
+    if (!isToolCallPart(part)) {
+      return [];
+    }
+
+    return [
+      {
+        id: part.id,
+        type: 'function',
+        function: {
+          name: part.name,
+          arguments: JSON.stringify(part.arguments),
+        },
+      },
+    ];
+  });
+};
+
+const getReasoningMessages = (params: {
+  executionId: string;
+  assistantMessageId: string;
+  message: AgentMessage;
+}): AgUiMessage[] => {
+  if (typeof params.message !== 'object' || params.message === null || !('content' in params.message)) {
+    return [];
+  }
+
+  const { content } = params.message as { content?: unknown };
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  return content.flatMap((part, index) => {
+    if (!isThinkingPart(part)) {
+      return [];
+    }
+
+    return [
+      {
+        id: resolveProjectedReasoningMessageId(params.executionId, params.assistantMessageId, index),
+        role: 'reasoning',
+        content: part.thinking,
+      } satisfies AgUiMessage,
+    ];
+  });
+};
+
+export const projectPiAgentMessagesToAgUiMessages = (params: {
+  executionId: string;
+  messages: AgentMessage[];
+}): AgUiMessage[] => {
+  let fallbackIndex = 0;
+
+  return params.messages.flatMap((message): AgUiMessage[] => {
+    if (
+      isPiRuntimeGatewayRuntimeNoteMessage(message) ||
+      isPiRuntimeGatewayArtifactMessage(message) ||
+      isPiRuntimeGatewayA2UiMessage(message)
+    ) {
+      return [];
+    }
+
+    fallbackIndex += 1;
+    const id = resolveProjectedMessageId(params.executionId, message, fallbackIndex);
+    const role = getMessageRole(message);
+
+    switch (role) {
+      case 'user':
+        return [
+          {
+            id,
+            role: 'user',
+            content: getTextContent(message) ?? '',
+          },
+        ];
+      case 'assistant': {
+        const reasoningMessages = getReasoningMessages({
+          executionId: params.executionId,
+          assistantMessageId: id,
+          message,
+        });
+        const toolCalls = getAssistantToolCalls(message);
+        const content = getTextContent(message);
+
+        return [
+          ...reasoningMessages,
+          {
+            id,
+            role: 'assistant',
+            ...(content ? { content } : {}),
+            ...(toolCalls.length > 0 ? { toolCalls } : {}),
+          },
+        ];
+      }
+      case 'toolResult':
+        return [
+          {
+            id,
+            role: 'tool',
+            toolCallId:
+              typeof message === 'object' &&
+              message !== null &&
+              'toolCallId' in message &&
+              typeof message.toolCallId === 'string'
+                ? message.toolCallId
+                : 'pi-tool-call',
+            content: getTextContent(message) ?? '',
+            ...(
+              typeof message === 'object' &&
+              message !== null &&
+              'isError' in message &&
+              message.isError === true
+                ? { error: getTextContent(message) ?? 'Tool execution failed.' }
+                : {}
+            ),
+          },
+        ];
+      default:
+        return [];
+    }
+  });
+};
+
+const mergeAgUiMessages = (baseMessages: readonly AgUiMessage[], incomingMessages: readonly AgUiMessage[]): AgUiMessage[] => {
+  const merged = [...baseMessages];
+  const indexById = new Map<string, number>();
+
+  for (const [index, message] of merged.entries()) {
+    indexById.set(message.id, index);
+  }
+
+  for (const message of incomingMessages) {
+    const existingIndex = indexById.get(message.id);
+    if (existingIndex === undefined) {
+      indexById.set(message.id, merged.length);
+      merged.push(message);
+      continue;
+    }
+
+    merged[existingIndex] = message;
+  }
+
+  return merged;
+};
+
+type PersistedTextMessageStartEvent = {
+  type: EventType.TEXT_MESSAGE_START;
+  messageId: string;
+  role: string;
+};
+
+type PersistedTextMessageContentEvent = {
+  type: EventType.TEXT_MESSAGE_CONTENT;
+  messageId: string;
+  delta: string;
+};
+
+type PersistedReasoningMessageStartEvent = {
+  type: EventType.REASONING_MESSAGE_START;
+  messageId: string;
+};
+
+type PersistedReasoningMessageContentEvent = {
+  type: EventType.REASONING_MESSAGE_CONTENT;
+  messageId: string;
+  delta: string;
+};
+
+type PersistedToolCallStartEvent = {
+  type: EventType.TOOL_CALL_START;
+  toolCallId: string;
+  toolCallName: string;
+  parentMessageId?: string;
+};
+
+type PersistedToolCallArgsEvent = {
+  type: EventType.TOOL_CALL_ARGS;
+  toolCallId: string;
+  delta: string;
+};
+
+type PersistedToolCallResultEvent = {
+  type: EventType.TOOL_CALL_RESULT;
+  messageId: string;
+  toolCallId: string;
+  content: string;
+  error?: string;
+};
+
+const isBaseEventRecord = (event: BaseEvent): event is BaseEvent & Record<string, unknown> =>
+  typeof event === 'object' && event !== null;
+
+const isPersistedTextMessageStartEvent = (event: BaseEvent): event is PersistedTextMessageStartEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.TEXT_MESSAGE_START &&
+  typeof event.messageId === 'string' &&
+  typeof event.role === 'string';
+
+const isPersistedTextMessageContentEvent = (event: BaseEvent): event is PersistedTextMessageContentEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.TEXT_MESSAGE_CONTENT &&
+  typeof event.messageId === 'string' &&
+  typeof event.delta === 'string';
+
+const isPersistedReasoningMessageStartEvent = (event: BaseEvent): event is PersistedReasoningMessageStartEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.REASONING_MESSAGE_START &&
+  typeof event.messageId === 'string';
+
+const isPersistedReasoningMessageContentEvent = (event: BaseEvent): event is PersistedReasoningMessageContentEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.REASONING_MESSAGE_CONTENT &&
+  typeof event.messageId === 'string' &&
+  typeof event.delta === 'string';
+
+const isPersistedToolCallStartEvent = (event: BaseEvent): event is PersistedToolCallStartEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.TOOL_CALL_START &&
+  typeof event.toolCallId === 'string' &&
+  typeof event.toolCallName === 'string' &&
+  (!('parentMessageId' in event) || typeof event.parentMessageId === 'string');
+
+const isPersistedToolCallArgsEvent = (event: BaseEvent): event is PersistedToolCallArgsEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.TOOL_CALL_ARGS &&
+  typeof event.toolCallId === 'string' &&
+  typeof event.delta === 'string';
+
+const isPersistedToolCallResultEvent = (event: BaseEvent): event is PersistedToolCallResultEvent =>
+  isBaseEventRecord(event) &&
+  event.type === EventType.TOOL_CALL_RESULT &&
+  typeof event.messageId === 'string' &&
+  typeof event.toolCallId === 'string' &&
+  typeof event.content === 'string' &&
+  (!('error' in event) || typeof event.error === 'string');
+
+const applyProjectedRunEventsToMessages = (
+  baseMessages: readonly AgUiMessage[],
+  projectedEvents: readonly BaseEvent[],
+): AgUiMessage[] => {
+  const messages = [...baseMessages];
+  const indexById = new Map(messages.map((message, index) => [message.id, index]));
+
+  const upsertMessage = (message: AgUiMessage): void => {
+    const existingIndex = indexById.get(message.id);
+    if (existingIndex === undefined) {
+      indexById.set(message.id, messages.length);
+      messages.push(message);
+      return;
+    }
+
+    messages[existingIndex] = message;
+  };
+
+  const updateMessage = (
+    messageId: string,
+    create: () => AgUiMessage,
+    update: (message: AgUiMessage) => AgUiMessage,
+  ): void => {
+    const existingIndex = indexById.get(messageId);
+    if (existingIndex === undefined) {
+      const created = create();
+      indexById.set(messageId, messages.length);
+      messages.push(update(created));
+      return;
+    }
+
+    messages[existingIndex] = update(messages[existingIndex]!);
+  };
+
+  const updateAssistantToolCall = (
+    messageId: string,
+    toolCallId: string,
+    update: (toolCall: {
+      id: string;
+      type: 'function';
+      function: {
+        name: string;
+        arguments: string;
+      };
+    }) => {
+      id: string;
+      type: 'function';
+      function: {
+        name: string;
+        arguments: string;
+      };
+    },
+    defaults?: {
+      name: string;
+      arguments: string;
+    },
+  ): void => {
+    updateMessage(
+      messageId,
+      () => ({
+        id: messageId,
+        role: 'assistant',
+        toolCalls: [],
+      }),
+      (message) => {
+        const toolCalls = message.role === 'assistant' && Array.isArray(message.toolCalls) ? [...message.toolCalls] : [];
+        const existingToolCallIndex = toolCalls.findIndex((toolCall) => toolCall.id === toolCallId);
+        const baselineToolCall =
+          existingToolCallIndex === -1
+            ? {
+                id: toolCallId,
+                type: 'function' as const,
+                function: {
+                  name: defaults?.name ?? 'pi-tool-call',
+                  arguments: defaults?.arguments ?? '',
+                },
+              }
+            : toolCalls[existingToolCallIndex]!;
+        const nextToolCall = update(baselineToolCall);
+
+        if (existingToolCallIndex === -1) {
+          toolCalls.push(nextToolCall);
+        } else {
+          toolCalls[existingToolCallIndex] = nextToolCall;
+        }
+
+        return {
+          ...(message.role === 'assistant'
+            ? message
+            : {
+                id: messageId,
+                role: 'assistant' as const,
+              }),
+          toolCalls,
+        };
+      },
+    );
+  };
+
+  for (const event of projectedEvents) {
+    if (isPersistedTextMessageStartEvent(event)) {
+      const role = event.role;
+      if (role === 'assistant' || role === 'user') {
+        updateMessage(
+          event.messageId,
+          () => ({
+            id: event.messageId,
+            role,
+            content: '',
+          }),
+          (message) =>
+            role === 'assistant'
+              ? {
+                  id: event.messageId,
+                  role: 'assistant',
+                  content: typeof message.content === 'string' ? message.content : '',
+                  ...(message.role === 'assistant' && Array.isArray(message.toolCalls)
+                    ? { toolCalls: message.toolCalls }
+                    : {}),
+                }
+              : {
+                  id: event.messageId,
+                  role: 'user',
+                  content: typeof message.content === 'string' ? message.content : '',
+                },
+        );
+      }
+      continue;
+    }
+
+    if (isPersistedTextMessageContentEvent(event)) {
+      updateMessage(
+        event.messageId,
+        () => ({
+          id: event.messageId,
+          role: 'assistant',
+          content: '',
+        }),
+        (message) => ({
+          id: event.messageId,
+          role: 'assistant',
+          content: `${typeof message.content === 'string' ? message.content : ''}${event.delta}`,
+          ...(message.role === 'assistant' && Array.isArray(message.toolCalls)
+            ? { toolCalls: message.toolCalls }
+            : {}),
+        }),
+      );
+      continue;
+    }
+
+    if (isPersistedReasoningMessageStartEvent(event)) {
+      upsertMessage({
+        id: event.messageId,
+        role: 'reasoning',
+        content: '',
+      });
+      continue;
+    }
+
+    if (isPersistedReasoningMessageContentEvent(event)) {
+      updateMessage(
+        event.messageId,
+        () => ({
+          id: event.messageId,
+          role: 'reasoning',
+          content: '',
+        }),
+        (message) => ({
+          ...message,
+          role: 'reasoning',
+          content: `${typeof message.content === 'string' ? message.content : ''}${event.delta}`,
+        }),
+      );
+      continue;
+    }
+
+    if (isPersistedToolCallStartEvent(event)) {
+      if (event.parentMessageId) {
+        updateAssistantToolCall(
+          event.parentMessageId,
+          event.toolCallId,
+          () => ({
+            id: event.toolCallId,
+            type: 'function',
+            function: {
+              name: event.toolCallName,
+              arguments: '',
+            },
+          }),
+          {
+            name: event.toolCallName,
+            arguments: '',
+          },
+        );
+      }
+      continue;
+    }
+
+    if (isPersistedToolCallArgsEvent(event)) {
+      for (const [messageId, index] of indexById.entries()) {
+        const candidate = messages[index];
+        if (candidate?.role !== 'assistant' || !Array.isArray(candidate.toolCalls)) {
+          continue;
+        }
+        const toolCall = candidate.toolCalls.find((value) => value.id === event.toolCallId);
+        if (!toolCall) {
+          continue;
+        }
+        updateAssistantToolCall(messageId, event.toolCallId, (currentToolCall) => ({
+          ...currentToolCall,
+          function: {
+            ...currentToolCall.function,
+            arguments: `${currentToolCall.function.arguments}${event.delta}`,
+          },
+        }));
+        break;
+      }
+      continue;
+    }
+
+    if (isPersistedToolCallResultEvent(event)) {
+      upsertMessage({
+        id: event.messageId,
+        role: 'tool',
+        toolCallId: event.toolCallId,
+        content: event.content,
+        ...(typeof event.error === 'string' ? { error: event.error } : {}),
+      });
+    }
+  }
+
+  return messages;
 };
 
 const buildExecutionStatusText = (session: PiRuntimeGatewaySession): string =>
@@ -405,15 +989,29 @@ const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => num
   });
 
 export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Record<string, unknown> => {
-  const activityEvents: PiRuntimeGatewayActivityEvent[] = params.a2ui
-    ? [
-        buildPiA2UiActivityEvent({
-          threadId: params.thread.id,
-          executionId: params.execution.id,
-          payload: params.a2ui,
-        }),
-      ]
-    : [];
+  const activityEvents: PiRuntimeGatewayActivityEvent[] =
+    params.activityEvents && params.activityEvents.length > 0
+      ? [...params.activityEvents]
+      : [
+          ...(params.artifacts?.activity
+            ? [
+                {
+                  type: 'artifact',
+                  artifact: params.artifacts.activity,
+                  append: true,
+                } satisfies PiRuntimeGatewayActivityEvent,
+              ]
+            : []),
+          ...(params.a2ui
+            ? [
+                buildPiA2UiActivityEvent({
+                  threadId: params.thread.id,
+                  executionId: params.execution.id,
+                  payload: params.a2ui,
+                }),
+              ]
+            : []),
+        ];
 
   const baseThread = {
     id: params.thread.id,
@@ -449,6 +1047,7 @@ export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Rec
           },
         }
       : {}),
+    ...(params.messages ? { messages: params.messages } : {}),
   };
 
   return {
@@ -477,16 +1076,62 @@ export const buildPiA2UiActivityEvent = (params: {
   ],
 });
 
+export const buildPiRuntimeGatewayConnectEvents = (params: {
+  threadId: string;
+  runId: string;
+  session: PiRuntimeGatewaySession;
+}): BaseEvent[] => {
+  const messagesSnapshotEvent: MessagesSnapshotEvent | null = params.session.messages
+    ? {
+        type: EventType.MESSAGES_SNAPSHOT,
+        messages: params.session.messages,
+      }
+    : null;
+
+  return [
+    asBaseEvent({
+      type: EventType.RUN_STARTED,
+      threadId: params.threadId,
+      runId: params.runId,
+    } satisfies RunStartedEvent),
+    {
+      type: EventType.STATE_SNAPSHOT,
+      snapshot: buildPiThreadStateSnapshot(params.session),
+    } satisfies StateSnapshotEvent,
+    ...(messagesSnapshotEvent ? [messagesSnapshotEvent] : []),
+    asBaseEvent({
+      type: EventType.RUN_FINISHED,
+      threadId: params.threadId,
+      runId: params.runId,
+      result: {
+        executionId: params.session.execution.id,
+        status: params.session.execution.status,
+      },
+    } satisfies RunFinishedEvent),
+  ];
+};
+
 export const mapPiAgentEventsToAgUiEvents = (params: {
   executionId: string;
   events: AgentEvent[];
 }): BaseEvent[] => {
+  const projector = createPiAgentEventProjector(params.executionId);
+  return params.events.flatMap((event) => projector.project(event));
+};
+
+function createPiAgentEventProjector(executionId: string): {
+  project: (event: AgentEvent) => BaseEvent[];
+} {
   const mapped: BaseEvent[] = [];
   const seenToolStarts = new Set<string>();
+  const openReasoningMessageIds = new Set<string>();
   let currentMessageId: string | null = null;
   let fallbackIndex = 0;
 
-  for (const event of params.events) {
+  return {
+    project: (event) => {
+      mapped.length = 0;
+
     switch (event.type) {
       case 'agent_start':
         mapped.push(asBaseEvent({ type: EventType.STEP_STARTED, stepName: 'pi-agent' }));
@@ -502,7 +1147,7 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
         break;
       case 'message_start': {
         fallbackIndex += 1;
-        currentMessageId = resolveProjectedMessageId(params.executionId, event.message, fallbackIndex);
+        currentMessageId = resolveProjectedMessageId(executionId, event.message, fallbackIndex);
         const role = getMessageRole(event.message);
         if (role === 'assistant' || role === 'user') {
           mapped.push(asBaseEvent({
@@ -516,7 +1161,7 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
       case 'message_update': {
         const messageId =
           currentMessageId ??
-          resolveProjectedMessageId(params.executionId, event.message, fallbackIndex + 1);
+          resolveProjectedMessageId(executionId, event.message, fallbackIndex + 1);
         const detail = event.assistantMessageEvent;
 
         if (detail.type === 'text_delta') {
@@ -525,6 +1170,70 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
             messageId,
             delta: detail.delta,
           }));
+        }
+
+        if (detail.type === 'thinking_start') {
+          const reasoningMessageId = resolveProjectedReasoningMessageId(
+            executionId,
+            messageId,
+            detail.contentIndex,
+          );
+          if (!openReasoningMessageIds.has(reasoningMessageId)) {
+            openReasoningMessageIds.add(reasoningMessageId);
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_START,
+              messageId: reasoningMessageId,
+            }));
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_MESSAGE_START,
+              messageId: reasoningMessageId,
+              role: 'reasoning',
+            }));
+          }
+        }
+
+        if (detail.type === 'thinking_delta') {
+          const reasoningMessageId = resolveProjectedReasoningMessageId(
+            executionId,
+            messageId,
+            detail.contentIndex,
+          );
+          if (!openReasoningMessageIds.has(reasoningMessageId)) {
+            openReasoningMessageIds.add(reasoningMessageId);
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_START,
+              messageId: reasoningMessageId,
+            }));
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_MESSAGE_START,
+              messageId: reasoningMessageId,
+              role: 'reasoning',
+            }));
+          }
+          mapped.push(asBaseEvent({
+            type: EventType.REASONING_MESSAGE_CONTENT,
+            messageId: reasoningMessageId,
+            delta: detail.delta,
+          }));
+        }
+
+        if (detail.type === 'thinking_end') {
+          const reasoningMessageId = resolveProjectedReasoningMessageId(
+            executionId,
+            messageId,
+            detail.contentIndex,
+          );
+          if (openReasoningMessageIds.has(reasoningMessageId)) {
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_MESSAGE_END,
+              messageId: reasoningMessageId,
+            }));
+            mapped.push(asBaseEvent({
+              type: EventType.REASONING_END,
+              messageId: reasoningMessageId,
+            }));
+            openReasoningMessageIds.delete(reasoningMessageId);
+          }
         }
 
         if (detail.type === 'toolcall_delta') {
@@ -540,7 +1249,7 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
           }
           mapped.push(asBaseEvent({
             type: EventType.TOOL_CALL_ARGS,
-            toolCallId: toolCall?.type === 'toolCall' ? toolCall.id : `pi:${params.executionId}:tool-call`,
+            toolCallId: toolCall?.type === 'toolCall' ? toolCall.id : `pi:${executionId}:tool-call`,
             delta: detail.delta,
           }));
         }
@@ -565,7 +1274,7 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
       case 'tool_execution_end':
         mapped.push(asBaseEvent({
           type: EventType.TOOL_CALL_RESULT,
-          messageId: `pi:${params.executionId}:tool-result:${event.toolCallId}`,
+          messageId: `pi:${executionId}:tool-result:${event.toolCallId}`,
           toolCallId: event.toolCallId,
           content: stringifyUnknown(event.result),
           role: 'tool',
@@ -586,10 +1295,80 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
       default:
         break;
     }
-  }
 
-  return mapped;
-};
+      return [...mapped];
+    },
+  };
+}
+
+function createAsyncEventStream<T>(run: (controller: {
+  push: (value: T) => void;
+  close: () => void;
+  fail: (error: unknown) => void;
+}) => Promise<void> | void): AsyncIterable<T> {
+  const values: T[] = [];
+  const readers: Array<{
+    resolve: (result: IteratorResult<T>) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+  let done = false;
+  let failure: Error | null = null;
+
+  const flushValue = (value: T) => {
+    const reader = readers.shift();
+    if (reader) {
+      reader.resolve({ value, done: false });
+      return;
+    }
+
+    values.push(value);
+  };
+
+  const close = () => {
+    if (done) return;
+    done = true;
+    while (readers.length > 0) {
+      readers.shift()!.resolve({ value: undefined, done: true });
+    }
+  };
+
+  const fail = (error: unknown) => {
+    if (done) return;
+    done = true;
+    failure = error instanceof Error ? error : new Error(String(error));
+    while (readers.length > 0) {
+      readers.shift()!.reject(failure);
+    }
+  };
+
+  queueMicrotask(() => {
+    Promise.resolve(run({ push: flushValue, close, fail })).catch(fail);
+  });
+
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        next() {
+          if (values.length > 0) {
+            return Promise.resolve({ value: values.shift()!, done: false });
+          }
+
+          if (failure !== null) {
+            return Promise.reject(failure);
+          }
+
+          if (done) {
+            return Promise.resolve({ value: undefined, done: true });
+          }
+
+          return new Promise<IteratorResult<T>>((resolve, reject) => {
+            readers.push({ resolve, reject });
+          });
+        },
+      };
+    },
+  };
+}
 
 export const createPiRuntimeGatewayFoundation = (params: {
   model: Model<Api>;
@@ -642,7 +1421,11 @@ export const createPiRuntimeGatewayFoundation = (params: {
 
 export const createPiRuntimeGatewayRuntime = (params: {
   agent: PiRuntimeGatewayAgent;
-  getSession: () => PiRuntimeGatewaySession;
+  getSession: (threadId: string) => PiRuntimeGatewaySession;
+  updateSession?: (
+    threadId: string,
+    update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
+  ) => PiRuntimeGatewaySession;
   now?: () => number;
 }): PiRuntimeGatewayRuntime => {
   const now = params.now ?? (() => Date.now());
@@ -654,70 +1437,105 @@ export const createPiRuntimeGatewayRuntime = (params: {
     type: EventType.STATE_SNAPSHOT,
     snapshot: buildPiThreadStateSnapshot(session),
   });
+  const buildMessagesSnapshotEvent = (session: PiRuntimeGatewaySession): MessagesSnapshotEvent | null =>
+    session.messages
+      ? {
+          type: EventType.MESSAGES_SNAPSHOT,
+          messages: session.messages,
+        }
+      : null;
+  const persistRunTranscript = (threadId: string, requestMessages: readonly AgUiMessage[], projectedEvents: readonly BaseEvent[]) => {
+    if (!params.updateSession) {
+      return params.getSession(threadId);
+    }
+
+    return params.updateSession(threadId, (session) => ({
+      ...session,
+      messages: applyProjectedRunEventsToMessages(
+        mergeAgUiMessages(session.messages ?? [], requestMessages),
+        projectedEvents,
+      ),
+    }));
+  };
 
   return {
     connect: (request) => {
       syncAgentSessionId(request.threadId);
-      const session = params.getSession();
-      return Promise.resolve([buildSnapshotEvent(session)]);
+      const session = params.getSession(request.threadId);
+      const runId = request.runId ?? `connect:${request.threadId}`;
+      return Promise.resolve(
+        buildPiRuntimeGatewayConnectEvents({
+          threadId: request.threadId,
+          runId,
+          session,
+        }),
+      );
     },
-    run: async (request) => {
+    run: (request) => {
       syncAgentSessionId(request.threadId);
-      const capturedEvents: AgentEvent[] = [];
-      const unsubscribe = params.agent.subscribe((event) => {
-        capturedEvents.push(event);
-      });
+      const executionId = params.getSession(request.threadId).execution.id;
+      const projector = createPiAgentEventProjector(executionId);
+      const projectedRunEvents: BaseEvent[] = [];
+      const requestMessages = request.messages ?? [];
 
-      try {
-        if (request.messages && request.messages.length > 0) {
-          const promptMessages = convertAgUiMessagesToPiMessages(request.messages, now);
-          if (params.agent.state.isStreaming) {
-            if (params.agent.steer) {
-              for (const message of promptMessages) {
-                params.agent.steer(message);
-              }
-            } else if (params.agent.followUp) {
-              for (const message of promptMessages) {
-                params.agent.followUp(message);
+      return createAsyncEventStream<BaseEvent>(async (controller) => {
+        controller.push(asBaseEvent({
+          type: EventType.RUN_STARTED,
+          threadId: request.threadId,
+          runId: request.runId,
+        } satisfies RunStartedEvent));
+
+        const unsubscribe = params.agent.subscribe((event) => {
+          for (const projectedEvent of projector.project(event)) {
+            projectedRunEvents.push(projectedEvent);
+            controller.push(projectedEvent);
+          }
+        });
+
+        try {
+          if (request.messages && request.messages.length > 0) {
+            const promptMessages = convertAgUiMessagesToPiMessages(request.messages, now);
+            if (params.agent.state.isStreaming) {
+              if (params.agent.steer) {
+                for (const message of promptMessages) {
+                  params.agent.steer(message);
+                }
+              } else if (params.agent.followUp) {
+                for (const message of promptMessages) {
+                  params.agent.followUp(message);
+                }
+              } else {
+                await params.agent.prompt(promptMessages);
               }
             } else {
               await params.agent.prompt(promptMessages);
             }
           } else {
-            await params.agent.prompt(promptMessages);
+            await params.agent.continue();
           }
-        } else {
-          await params.agent.continue();
+
+          const session = persistRunTranscript(request.threadId, requestMessages, projectedRunEvents);
+          controller.push(buildSnapshotEvent(session));
+          const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);
+          if (messagesSnapshotEvent) {
+            controller.push(messagesSnapshotEvent);
+          }
+          controller.push(asBaseEvent({
+            type: EventType.RUN_FINISHED,
+            threadId: request.threadId,
+            runId: request.runId,
+            result: {
+              executionId: session.execution.id,
+              status: session.execution.status,
+            },
+          } satisfies RunFinishedEvent));
+          controller.close();
+        } catch (error) {
+          controller.fail(error);
+        } finally {
+          unsubscribe();
         }
-      } finally {
-        unsubscribe();
-      }
-
-      const session = params.getSession();
-      const events: BaseEvent[] = [
-        asBaseEvent({
-          type: EventType.RUN_STARTED,
-          threadId: request.threadId,
-          runId: request.runId,
-        } satisfies RunStartedEvent),
-        ...mapPiAgentEventsToAgUiEvents({
-          executionId: session.execution.id,
-          events: capturedEvents,
-        }),
-        buildSnapshotEvent(session),
-      ];
-
-      events.push(asBaseEvent({
-        type: EventType.RUN_FINISHED,
-        threadId: request.threadId,
-        runId: request.runId,
-        result: {
-          executionId: session.execution.id,
-          status: session.execution.status,
-        },
-      } satisfies RunFinishedEvent));
-
-      return events;
+      });
     },
     stop: (request) => {
       params.agent.abort();

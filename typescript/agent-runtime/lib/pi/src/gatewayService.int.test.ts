@@ -8,7 +8,7 @@ import { createPiRuntimeGatewayRuntime, createPiRuntimeGatewayService } from './
 type Listener = (event: AgentEvent) => void;
 
 class ScriptedPiAgent {
-  private readonly listeners = new Set<Listener>();
+  protected readonly listeners = new Set<Listener>();
   private readonly runEvents: AgentEvent[];
 
   public readonly state = {
@@ -56,13 +56,29 @@ class ScriptedPiAgent {
     this.abortCalled = true;
   }
 
-  private emitAll(): void {
-    for (const event of this.runEvents) {
-      for (const listener of this.listeners) {
-        listener(event);
-      }
+  protected emit(event: AgentEvent): void {
+    for (const listener of this.listeners) {
+      listener(event);
     }
   }
+
+  private emitAll(): void {
+    for (const event of this.runEvents) {
+      this.emit(event);
+    }
+  }
+}
+
+async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): Promise<T[]> {
+  if (Array.isArray(source)) {
+    return [...source];
+  }
+
+  const events: T[] = [];
+  for await (const event of source) {
+    events.push(event);
+  }
+  return events;
 }
 
 describe('pi gateway service integration', () => {
@@ -110,6 +126,18 @@ describe('pi gateway service integration', () => {
         getSession: () => ({
           thread: { id: 'thread-1' },
           execution: { id: 'exec-1', status: 'working', statusMessage: 'Pi is connected.' },
+          messages: [
+            {
+              id: 'user-msg-1',
+              role: 'user',
+              content: 'Connect now',
+            },
+            {
+              id: 'assistant-msg-1',
+              role: 'assistant',
+              content: 'Pi is connected.',
+            },
+          ],
           artifacts: {
             current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
           },
@@ -135,6 +163,11 @@ describe('pi gateway service integration', () => {
     });
 
     await expect(service.connect({ threadId: 'thread-1' })).resolves.toEqual([
+      {
+        type: EventType.RUN_STARTED,
+        threadId: 'thread-1',
+        runId: 'connect:thread-1',
+      },
       {
         type: EventType.STATE_SNAPSHOT,
         snapshot: {
@@ -175,20 +208,56 @@ describe('pi gateway service integration', () => {
                 },
               ],
             },
+            messages: [
+              {
+                id: 'user-msg-1',
+                role: 'user',
+                content: 'Connect now',
+              },
+              {
+                id: 'assistant-msg-1',
+                role: 'assistant',
+                content: 'Pi is connected.',
+              },
+            ],
             artifacts: {
               current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
             },
           },
         },
       },
+      {
+        type: EventType.MESSAGES_SNAPSHOT,
+        messages: [
+          {
+            id: 'user-msg-1',
+            role: 'user',
+            content: 'Connect now',
+          },
+          {
+            id: 'assistant-msg-1',
+            role: 'assistant',
+            content: 'Pi is connected.',
+          },
+        ],
+      },
+      {
+        type: EventType.RUN_FINISHED,
+        threadId: 'thread-1',
+        runId: 'connect:thread-1',
+        result: {
+          executionId: 'exec-1',
+          status: 'working',
+        },
+      },
     ]);
     expect(agent.sessionId).toBe('thread-1');
 
-    const runEvents = await service.run({
+    const runEvents = await collectEventSource(await service.run({
       threadId: 'thread-1',
       runId: 'run-1',
       messages: [{ id: 'msg-1', role: 'user', content: 'Connect now' }],
-    });
+    }));
 
     expect(agent.sessionId).toBe('thread-1');
     expect(agent.promptCalls).toHaveLength(1);
@@ -242,6 +311,18 @@ describe('pi gateway service integration', () => {
               },
             ],
           },
+          messages: [
+            {
+              id: 'user-msg-1',
+              role: 'user',
+              content: 'Connect now',
+            },
+            {
+              id: 'assistant-msg-1',
+              role: 'assistant',
+              content: 'Pi is connected.',
+            },
+          ],
           artifacts: {
             current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
           },
@@ -288,6 +369,110 @@ describe('pi gateway service integration', () => {
     });
   });
 
+  it('persists the current run transcript from request messages and projected events instead of stale agent state', async () => {
+    const staleAssistantMessage = {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Hello again.' }],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: 1,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+    const freshAssistantMessage = {
+      ...staleAssistantMessage,
+      content: [],
+      timestamp: 2,
+    };
+    const agent = new ScriptedPiAgent([
+      { type: 'agent_start' },
+      { type: 'turn_start' },
+      { type: 'message_start', message: freshAssistantMessage },
+      {
+        type: 'message_update',
+        message: freshAssistantMessage,
+        assistantMessageEvent: {
+          type: 'text_delta',
+          contentIndex: 0,
+          delta: 'Scheduled sync every minute.',
+          partial: freshAssistantMessage,
+        },
+      },
+      { type: 'message_end', message: freshAssistantMessage },
+      { type: 'turn_end', message: freshAssistantMessage, toolResults: [] },
+      { type: 'agent_end', messages: [freshAssistantMessage] },
+    ]);
+    agent.state.messages = [
+      {
+        role: 'user',
+        content: 'hi',
+        timestamp: 0,
+      },
+      staleAssistantMessage,
+    ];
+
+    let session = {
+      thread: { id: 'thread-1' },
+      execution: { id: 'exec-1', status: 'working' as const },
+      messages: [
+        {
+          id: 'user-hi',
+          role: 'user' as const,
+          content: 'hi',
+        },
+      ],
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-1',
+        runId: 'run-2',
+        messages: [
+          {
+            id: 'user-schedule',
+            role: 'user',
+            content: 'Schedule a sync every minute.',
+          },
+        ],
+      }),
+    );
+
+    expect(session.messages).toEqual([
+      {
+        id: 'user-hi',
+        role: 'user',
+        content: 'hi',
+      },
+      {
+        id: 'user-schedule',
+        role: 'user',
+        content: 'Schedule a sync every minute.',
+      },
+      {
+        id: 'pi:exec-1:assistant:2',
+        role: 'assistant',
+        content: 'Scheduled sync every minute.',
+      },
+    ]);
+  });
+
   it('queues active-run user input through Pi steering instead of re-prompting the agent', async () => {
     const agent = new ScriptedPiAgent([]);
     agent.state.isStreaming = true;
@@ -301,11 +486,11 @@ describe('pi gateway service integration', () => {
       }),
     });
 
-    const events = await runtime.run({
+    const events = await collectEventSource(await runtime.run({
       threadId: 'thread-2',
       runId: 'run-2',
       messages: [{ id: 'msg-2', role: 'user', content: 'Adjust course' }],
-    });
+    }));
 
     expect(agent.sessionId).toBe('thread-2');
     expect(agent.promptCalls).toEqual([]);
@@ -385,11 +570,11 @@ describe('pi gateway service integration', () => {
       }),
     });
 
-    const events = await runtime.run({
+    const events = await collectEventSource(await runtime.run({
       threadId: 'thread-3',
       runId: 'run-3',
       messages: [{ id: 'msg-3', role: 'user', content: 'Queue this next' }],
-    });
+    }));
 
     expect(agent.sessionId).toBe('thread-3');
     expect(followUpCalls).toEqual([
@@ -437,5 +622,100 @@ describe('pi gateway service integration', () => {
         },
       },
     ]);
+  });
+
+  it('streams text events before the Pi prompt fully completes', async () => {
+    let releasePrompt: (() => void) | null = null;
+    const assistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: 1,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    class StreamingPiAgent extends ScriptedPiAgent {
+      override async prompt(messages: unknown): Promise<void> {
+        this.promptCalls.push(messages);
+        this.emit({ type: 'message_start', message: assistantMessage });
+        this.emit({
+          type: 'message_update',
+          message: assistantMessage,
+          assistantMessageEvent: {
+            type: 'text_delta',
+            contentIndex: 0,
+            delta: 'Streaming from Pi.',
+            partial: assistantMessage,
+          },
+        });
+
+        await new Promise<void>((resolve) => {
+          releasePrompt = resolve;
+        });
+
+        this.emit({ type: 'message_end', message: assistantMessage });
+      }
+    }
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent: new StreamingPiAgent([]),
+      getSession: () => ({
+        thread: { id: 'thread-4' },
+        execution: { id: 'exec-4', status: 'working', statusMessage: 'Streaming from Pi.' },
+      }),
+    });
+
+    const eventSource = await runtime.run({
+      threadId: 'thread-4',
+      runId: 'run-4',
+      messages: [{ id: 'msg-4', role: 'user', content: 'Stream now' }],
+    });
+    expect(Array.isArray(eventSource)).toBe(false);
+    const iterator = (eventSource as AsyncIterable<{ type: EventType }>)[Symbol.asyncIterator]();
+
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: {
+        type: EventType.RUN_STARTED,
+        threadId: 'thread-4',
+        runId: 'run-4',
+      },
+    });
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: {
+        type: EventType.TEXT_MESSAGE_START,
+        messageId: 'pi:exec-4:assistant:1',
+        role: 'assistant',
+      },
+    });
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        messageId: 'pi:exec-4:assistant:1',
+        delta: 'Streaming from Pi.',
+      },
+    });
+
+    releasePrompt?.();
+
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: {
+        type: EventType.TEXT_MESSAGE_END,
+        messageId: 'pi:exec-4:assistant:1',
+      },
+    });
   });
 });

@@ -79,6 +79,19 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     isFeatured: true,
     featuredRank: 3,
   },
+  'agent-pi-example': {
+    id: 'agent-pi-example',
+    name: 'Pi Example Agent',
+    description:
+      'Pi-native OpenRouter smoke-test agent with a real AG-UI transport, durable Postgres runtime state, and operator control-plane endpoints.',
+    creator: 'Ember AI Team',
+    creatorVerified: true,
+    avatar: '🧪',
+    avatarBg: 'linear-gradient(135deg, #0891b2 0%, #2563eb 100%)',
+    chains: ['Arbitrum'],
+    protocols: ['Pi Runtime', 'OpenRouter'],
+    tokens: ['USDC'],
+  },
 };
 
 export function getAgentConfig(agentId: string): AgentConfig {
