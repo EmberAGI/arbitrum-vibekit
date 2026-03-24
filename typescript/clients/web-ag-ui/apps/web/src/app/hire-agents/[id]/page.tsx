@@ -127,6 +127,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         telemetry={[]}
         events={[]}
         messages={EMPTY_MESSAGES}
+        messageSnapshotEpoch={0}
         settings={agent.settings}
         onSendChatMessage={() => undefined}
         onSettingsChange={() => undefined}
@@ -188,6 +189,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       telemetry={agent.activity.telemetry}
       events={agent.events}
       messages={agent.messages}
+      messageSnapshotEpoch={agent.messageSnapshotEpoch}
       settings={agent.settings}
       onSendChatMessage={agent.sendChatMessage}
       onSettingsChange={agent.updateSettings}

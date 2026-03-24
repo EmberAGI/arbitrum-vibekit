@@ -340,6 +340,75 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('pi-example-a2ui-view');
   });
 
+  it('keeps the Pi chat tab visible while the thread is input-required', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-pi-example',
+        agentName: 'Pi Example Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        initialTab: 'chat',
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        taskStatus: 'input-required',
+        activeInterrupt: {
+          type: 'operator-config-request',
+          message: 'Please provide a short operator note to continue.',
+        } as never,
+        messages: [
+          {
+            id: 'user-1',
+            role: 'user',
+            content: 'Create an automation every minute.',
+          },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'What should the automation do every minute?',
+          },
+        ],
+        events: [
+          {
+            type: 'dispatch-response',
+            parts: [
+              {
+                kind: 'a2ui',
+                data: {
+                  payload: {
+                    kind: 'interrupt',
+                    payload: {
+                      message: 'Please provide a short operator note to continue.',
+                      submitLabel: 'Continue agent loop',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        onSendChatMessage: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('Create an automation every minute.');
+    expect(html).toContain('What should the automation do every minute?');
+    expect(html).toContain('pi-example-a2ui-view');
+    expect(html).toContain('Send message');
+  });
+
   it('renders metrics tab as disabled while onboarding is in progress', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {

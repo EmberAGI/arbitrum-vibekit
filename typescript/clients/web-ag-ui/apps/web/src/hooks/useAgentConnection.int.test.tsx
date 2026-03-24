@@ -449,6 +449,14 @@ describe('useAgentConnection integration', () => {
 
   it('sendChatMessage dispatches a plain user message and runs the agent', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
 
     await act(async () => {
       root.render(
@@ -479,6 +487,27 @@ describe('useAgentConnection integration', () => {
         content: 'Hello from the chat tab',
       }),
     );
+    expect(latestValue?.messages).toEqual([]);
+
+    subscriber?.onMessagesSnapshotEvent?.({
+      input: { threadId: 'thread-1' },
+      messages: [
+        {
+          id: chatMessage?.id as string,
+          role: 'user',
+          content: 'Hello from the chat tab',
+        },
+      ],
+    });
+    await flushEffects();
+
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: expect.any(String),
+        role: 'user',
+        content: 'Hello from the chat tab',
+      }),
+    ]);
     expect(mocks.runAgent).toHaveBeenCalledWith({ agent: mocks.agent });
   });
 
@@ -1516,6 +1545,123 @@ describe('useAgentConnection integration', () => {
             poolAddress: '0x0000000000000000000000000000000000000001',
             walletAddress: '0x0000000000000000000000000000000000000002',
             baseContributionUsd: 100,
+          }),
+        },
+      },
+    });
+    expect(latestValue?.uiError).toBeNull();
+  });
+
+  it('derives a persisted interrupt from synced thread activity when no stream interrupt is active', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onRunInitialized?.({
+      input: { threadId: 'thread-1' },
+      state: {
+        thread: {
+          task: {
+            id: 'exec-1',
+            taskStatus: {
+              state: 'input-required',
+              message: 'Provide a short operator note to continue.',
+            },
+          },
+          activity: {
+            events: [
+              {
+                type: 'dispatch-response',
+                parts: [
+                  {
+                    kind: 'a2ui',
+                    data: {
+                      payload: {
+                        kind: 'interrupt',
+                        payload: {
+                          type: 'operator-config-request',
+                          message: 'Provide a short operator note to continue.',
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+    await flushEffects();
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.activeInterrupt).toEqual({
+      type: 'operator-config-request',
+      message: 'Provide a short operator note to continue.',
+    });
+  });
+
+  it('routes Pi operator-note interrupt resolution through explicit resume payloads', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.interruptState.activeInterrupt = {
+      type: 'operator-config-request',
+      message: 'Provide a short operator note to continue.',
+    };
+    mocks.interruptState.canResolve = false;
+    const resumeRun = vi.fn(async () => undefined);
+    mocks.agent.runAgent = resumeRun;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.resolveInterrupt({
+      operatorNote: 'Use the safe automation window',
+    });
+    await flushEffects();
+
+    expect(resumeRun).toHaveBeenCalledWith({
+      forwardedProps: {
+        command: {
+          resume: JSON.stringify({
+            operatorNote: 'Use the safe automation window',
           }),
         },
       },

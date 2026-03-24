@@ -497,7 +497,9 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       },
       run: async (request) => {
         await persistThreadExecution(request.threadId);
-        runtimeState.resumeFromUserInput(request.threadId);
+        if (typeof request.forwardedProps?.command?.resume === 'string') {
+          runtimeState.resumeFromUserInput(request.threadId);
+        }
         runtimeState.startAttachedRun(request.threadId, request.runId);
         return tapEventSource(
           await baseRuntime.run(request),

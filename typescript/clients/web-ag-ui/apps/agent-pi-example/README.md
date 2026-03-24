@@ -20,7 +20,7 @@ If you already have a Postgres instance, set `DATABASE_URL` and the shared boots
 ## Environment
 
 - `OPENROUTER_API_KEY`: required for live runs
-- `PI_AGENT_MODEL`: optional OpenRouter model id, defaults to `openai/gpt-5-mini`
+- `PI_AGENT_MODEL`: optional OpenRouter model id, defaults to `openai/gpt-5.4-mini`
 - `DATABASE_URL`: optional external Postgres URL
 - `PORT`: optional HTTP port, defaults to `3410`
 - `E2E_PROFILE=mocked` or `PI_AGENT_EXTERNAL_BOUNDARY_MODE=mocked`: test-only mode that keeps the real in-repo Pi runtime, transport, and Postgres stack while replacing only the external LLM boundary

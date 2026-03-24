@@ -302,6 +302,135 @@ describe('createPiExampleAgUiHandler', () => {
     );
   });
 
+  it('keeps interrupt state blocked on a normal chat run and resolves it only on an explicit resume run', async () => {
+    const service = createPiExampleGatewayService({
+      env: {
+        OPENROUTER_API_KEY: 'test-openrouter-key',
+        PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
+      },
+      persistence: {
+        ensureReady: async () => undefined,
+        persistDirectExecution: async () => undefined,
+        requestInterrupt: async () => ({
+          artifactId: 'interrupt-artifact-1',
+        }),
+        loadInspectionState: async () => ({
+          threads: [],
+          executions: [],
+          automations: [],
+          automationRuns: [],
+          interrupts: [],
+          leases: [],
+          outboxIntents: [],
+          executionEvents: [],
+          threadActivities: [],
+        }),
+      },
+    });
+
+    const interruptEvents = await collectEventSource(
+      await service.run({
+        threadId: 'thread-1',
+        runId: 'run-interrupt',
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'Please request operator input.',
+          },
+        ],
+      }),
+    );
+
+    expect(interruptEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'STATE_SNAPSHOT',
+        snapshot: expect.objectContaining({
+          thread: expect.objectContaining({
+            task: expect.objectContaining({
+              taskStatus: expect.objectContaining({
+                state: 'input-required',
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+
+    const genericRunEvents = await collectEventSource(
+      await service.run({
+        threadId: 'thread-1',
+        runId: 'run-generic-follow-up',
+        messages: [
+          {
+            id: 'message-2',
+            role: 'user',
+            content: 'Hello again without resolving anything.',
+          },
+        ],
+      }),
+    );
+
+    expect(genericRunEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'STATE_SNAPSHOT',
+        snapshot: expect.objectContaining({
+          thread: expect.objectContaining({
+            task: expect.objectContaining({
+              taskStatus: expect.objectContaining({
+                state: 'input-required',
+              }),
+            }),
+            artifacts: expect.objectContaining({
+              current: expect.objectContaining({
+                data: expect.objectContaining({
+                  type: 'interrupt-status',
+                  status: 'pending',
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+
+    const resumeEvents = await collectEventSource(
+      await service.run({
+        threadId: 'thread-1',
+        runId: 'run-explicit-resume',
+        forwardedProps: {
+          command: {
+            resume: '{"operatorNote":"safe window approved"}',
+          },
+        },
+      }),
+    );
+
+    expect(resumeEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'STATE_SNAPSHOT',
+        snapshot: expect.objectContaining({
+          thread: expect.objectContaining({
+            task: expect.objectContaining({
+              taskStatus: expect.objectContaining({
+                state: 'working',
+                message: 'Operator input received. Continuing the Pi loop.',
+              }),
+            }),
+            artifacts: expect.objectContaining({
+              current: expect.objectContaining({
+                data: expect.objectContaining({
+                  type: 'interrupt-status',
+                  status: 'resolved',
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it('replays transcript messages from Pi-owned runtime state on reconnect after a mocked run', async () => {
     const service = createPiExampleGatewayService({
       env: {

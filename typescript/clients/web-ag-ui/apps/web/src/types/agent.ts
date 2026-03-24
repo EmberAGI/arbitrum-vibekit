@@ -251,6 +251,10 @@ export interface GmxSetupInput {
   targetMarket: 'BTC' | 'ETH';
 }
 
+export interface PiOperatorNoteInput {
+  operatorNote: string;
+}
+
 export interface FundingTokenInput {
   fundingTokenAddress: `0x${string}`;
 }
@@ -392,7 +396,7 @@ export interface ThreadState {
   task?: Task;
   onboardingFlow?: OnboardingFlow;
   poolArtifact?: Artifact;
-  operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput;
+  operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput | PiOperatorNoteInput;
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: Pool;
   operatorConfig?: unknown;
@@ -428,7 +432,7 @@ export interface UiState {
   task?: Task;
   onboardingFlow?: OnboardingFlow;
   poolArtifact?: Artifact;
-  operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput;
+  operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput | PiOperatorNoteInput;
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: Pool;
   operatorConfig?: unknown;
