@@ -242,14 +242,14 @@ function logPiGatewayDebug(message: string, detail?: unknown): void {
     return;
   }
 
-  console.info('[pi-gateway][debug]', {
+  console.warn('[pi-gateway][debug]', {
     ts: new Date().toISOString(),
     message,
     ...(detail === undefined ? {} : { detail }),
   });
 }
 
-function validatePiGatewayToolNames(model: Model<Api>, tools: readonly AgentTool[] | undefined): void {
+function validatePiGatewayToolNames(_model: Model<Api>, tools: readonly AgentTool[] | undefined): void {
   if (!tools || tools.length === 0) {
     return;
   }

@@ -1570,6 +1570,12 @@ function AgentChatTab(props: {
       visibleMessageOrderCache.delete(visibleMessageOrderCacheKey);
     };
   }, [visibleMessageOrderCacheKey]);
+  useEffect(() => {
+    const visibleMessageOrderEntry = getVisibleMessageOrderEntry(visibleMessageOrderCacheKey);
+    visibleMessageOrderEntry.orderById.clear();
+    visibleMessageOrderEntry.nextOrder = 0;
+    visibleMessageOrderEntry.previousVisibleMessages = [];
+  }, [props.messageSnapshotEpoch, visibleMessageOrderCacheKey]);
 
   const visibleMessages = useMemo(() => {
     const visibleMessageOrderEntry = getVisibleMessageOrderEntry(visibleMessageOrderCacheKey);
@@ -1652,7 +1658,7 @@ function AgentChatTab(props: {
       appearanceOrder: message.appearanceOrder,
     }));
     return orderedMessages;
-  }, [props.messageSnapshotEpoch, props.messages, visibleMessageOrderCacheKey]);
+  }, [props.messages, visibleMessageOrderCacheKey]);
   const activityCards = buildPiExampleChatCards(props.activityEvents);
 
   return (

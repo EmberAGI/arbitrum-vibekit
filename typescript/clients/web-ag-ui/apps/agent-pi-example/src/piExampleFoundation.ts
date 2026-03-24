@@ -184,6 +184,30 @@ function readPersistedTitle(title: string | undefined): string | null {
   return normalized && normalized.length > 0 ? normalized : null;
 }
 
+function isScheduleArgsShape(value: Record<string, unknown> | undefined): value is ScheduleAutomationArgs['schedule'] {
+  return typeof value?.kind === 'string';
+}
+
+function coerceSchedule(
+  value: Record<string, unknown> | undefined,
+  fallback: ScheduleAutomationArgs['schedule'],
+): ScheduleAutomationArgs['schedule'] {
+  return isScheduleArgsShape(value) ? value : fallback;
+}
+
+function getSessionAutomationMinutes(session: ReturnType<PiExampleRuntimeStateStore['getSession']>): number | null {
+  const cadenceMinutes =
+    session.artifacts?.current?.data &&
+    typeof session.artifacts.current.data === 'object' &&
+    'cadenceMinutes' in session.artifacts.current.data
+      ? session.artifacts.current.data.cadenceMinutes
+      : null;
+
+  return typeof cadenceMinutes === 'number' && Number.isFinite(cadenceMinutes) && cadenceMinutes > 0
+    ? cadenceMinutes
+    : null;
+}
+
 function requireEnvValue(value: string | undefined, name: keyof PiExampleGatewayEnv): string {
   const normalized = value?.trim();
   if (!normalized) {
@@ -497,7 +521,7 @@ function createPiExampleTools(params: {
           readPersistedTitle(persisted?.title) ??
           buildAutomationTitle({
             command,
-            schedule: persisted?.schedule ?? toolArgs.schedule,
+            schedule: coerceSchedule(persisted?.schedule, toolArgs.schedule),
           });
         applyAutomationStatusUpdate({
           runtimeState: params.runtimeState,
@@ -538,13 +562,14 @@ function createPiExampleTools(params: {
         const toolArgs = args as ListAutomationsArgs;
         const threadKey = params.resolveThreadKey();
         const session = params.runtimeState.getSession(threadKey);
+        const sessionAutomationMinutes = getSessionAutomationMinutes(session);
         const automations =
           (await params.persistence?.listAutomations?.({
             threadKey,
             state: toolArgs.state,
             limit: toolArgs.limit,
           })) ??
-          (session.automation
+          (session.automation && sessionAutomationMinutes !== null
             ? [
                 {
                   id: session.automation.id,
@@ -552,11 +577,11 @@ function createPiExampleTools(params: {
                     command: 'sync',
                     schedule: {
                       kind: 'every',
-                      intervalMinutes: session.automation.minutes,
+                      intervalMinutes: sessionAutomationMinutes,
                     },
                   }),
                   status: 'active' as const,
-                  schedule: { kind: 'every', intervalMinutes: session.automation.minutes },
+                  schedule: { kind: 'every', intervalMinutes: sessionAutomationMinutes },
                   nextRunAt: null,
                   lastRunAt: null,
                   lastRunStatus: null,
@@ -595,7 +620,7 @@ function createPiExampleTools(params: {
         });
         const automationId = persisted?.automationId ?? session.automation?.id ?? toolArgs.automationId;
         const artifactId = persisted?.artifactId ?? session.artifacts?.current?.artifactId ?? `artifact:${threadKey}:automation`;
-        const schedule = (persisted?.schedule ?? { kind: 'every', intervalMinutes: 5 }) as ScheduleAutomationArgs['schedule'];
+        const schedule = coerceSchedule(persisted?.schedule, { kind: 'every', intervalMinutes: 5 });
         const command = inferAutomationCommand({
           instruction: persisted?.instruction ?? 'sync',
           title: persisted?.title ?? '',
