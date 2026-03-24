@@ -71,4 +71,13 @@ describe('agent-runtime facade', () => {
     expect('pruneCheckpointerState' in agentRuntime).toBe(false);
     expect('isLangGraphBusyStatus' in agentRuntime).toBe(false);
   });
+
+  it('syncs postgres artifacts into installed agent-runtime snapshots for clean workspace consumers', () => {
+    const syncScript = readFileSync(
+      new URL('../scripts/sync-installed-artifacts.mjs', import.meta.url),
+      'utf8',
+    );
+
+    expect(syncScript).toContain("path.join('lib', 'postgres', 'dist')");
+  });
 });

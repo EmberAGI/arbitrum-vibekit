@@ -473,6 +473,82 @@ describe('pi gateway service integration', () => {
     ]);
   });
 
+  it('emits a canonical request-message snapshot before streamed assistant output on run', async () => {
+    const assistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: 1,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const agent = new ScriptedPiAgent([
+      { type: 'agent_start' },
+      { type: 'turn_start' },
+      { type: 'message_start', message: assistantMessage },
+      {
+        type: 'message_update',
+        message: assistantMessage,
+        assistantMessageEvent: {
+          type: 'text_delta',
+          contentIndex: 0,
+          delta: 'Pi is connected.',
+          partial: assistantMessage,
+        },
+      },
+      { type: 'message_end', message: assistantMessage },
+      { type: 'turn_end', message: assistantMessage, toolResults: [] },
+      { type: 'agent_end', messages: [assistantMessage] },
+    ]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => ({
+        thread: { id: 'thread-1' },
+        execution: { id: 'exec-1', status: 'working', statusMessage: 'Pi is connected.' },
+        messages: [],
+      }),
+      updateSession: (_threadId, update) =>
+        update({
+          thread: { id: 'thread-1' },
+          execution: { id: 'exec-1', status: 'working', statusMessage: 'Pi is connected.' },
+          messages: [],
+        }),
+    });
+
+    const runEvents = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-1',
+        runId: 'run-1',
+        messages: [{ id: 'user-msg-1', role: 'user', content: 'Connect now' }],
+      }),
+    );
+
+    const firstRequestSnapshotIndex = runEvents.findIndex(
+      (event) =>
+        event.type === EventType.MESSAGES_SNAPSHOT &&
+        event.messages.length === 1 &&
+        event.messages[0]?.id === 'user-msg-1',
+    );
+    const firstAssistantDeltaIndex = runEvents.findIndex(
+      (event) => event.type === EventType.TEXT_MESSAGE_CONTENT && event.delta === 'Pi is connected.',
+    );
+
+    expect(firstRequestSnapshotIndex).toBeGreaterThan(-1);
+    expect(firstAssistantDeltaIndex).toBeGreaterThan(-1);
+    expect(firstRequestSnapshotIndex).toBeLessThan(firstAssistantDeltaIndex);
+  });
+
   it('queues active-run user input through Pi steering instead of re-prompting the agent', async () => {
     const agent = new ScriptedPiAgent([]);
     agent.state.isStreaming = true;
@@ -619,6 +695,80 @@ describe('pi gateway service integration', () => {
         result: {
           executionId: 'exec-3',
           status: 'working',
+        },
+      },
+    ]);
+  });
+
+  it('routes explicit resume payloads through Pi prompt instead of continue()', async () => {
+    const agent = new ScriptedPiAgent([]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      now: () => 456,
+      getSession: () => ({
+        thread: { id: 'thread-5' },
+        execution: { id: 'exec-5', status: 'interrupted', statusMessage: 'Awaiting explicit resume' },
+      }),
+    });
+
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-5',
+        runId: 'run-5',
+        forwardedProps: {
+          command: {
+            resume: '{"operatorNote":"safe window approved"}',
+          },
+        },
+      }),
+    );
+
+    expect(agent.promptCalls).toEqual([
+      [
+        {
+          role: 'user',
+          content: '{"operatorNote":"safe window approved"}',
+          timestamp: 456,
+        },
+      ],
+    ]);
+    expect(agent.continueCalls).toBe(0);
+    expect(events).toEqual([
+      {
+        type: EventType.RUN_STARTED,
+        threadId: 'thread-5',
+        runId: 'run-5',
+      },
+      {
+        type: EventType.STATE_SNAPSHOT,
+        snapshot: {
+          thread: {
+            id: 'thread-5',
+            task: {
+              id: 'exec-5',
+              taskStatus: {
+                state: 'input-required',
+                message: 'Awaiting explicit resume',
+              },
+            },
+            projection: {
+              source: 'pi-runtime-gateway',
+              canonicalIds: {
+                piThreadId: 'thread-5',
+                piExecutionId: 'exec-5',
+              },
+            },
+          },
+        },
+      },
+      {
+        type: EventType.RUN_FINISHED,
+        threadId: 'thread-5',
+        runId: 'run-5',
+        result: {
+          executionId: 'exec-5',
+          status: 'interrupted',
         },
       },
     ]);

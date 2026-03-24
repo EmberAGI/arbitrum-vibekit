@@ -1,12 +1,13 @@
 import {
+  buildPiRuntimeGatewayConnectEvents,
   buildPiA2UiActivityEvent,
   type PiRuntimeGatewayA2UiPayload,
   type PiRuntimeGatewayArtifact,
   type PiRuntimeGatewayActivityEvent,
   type PiRuntimeGatewaySession,
 } from 'agent-runtime';
-
-const MAX_CONNECT_UPDATES = 100;
+type BaseEvent = ReturnType<typeof buildPiRuntimeGatewayConnectEvents>[number];
+type PiExampleAttachedEventSource = readonly BaseEvent[] | AsyncIterable<BaseEvent>;
 
 function buildDefaultSession(threadKey: string): PiRuntimeGatewaySession {
   return {
@@ -43,16 +44,15 @@ function appendSessionActivityEvents(
   };
 }
 
-export type PiExampleRuntimeConnectUpdate = {
-  revision: number;
-  runId: string;
-  session: PiRuntimeGatewaySession;
-};
+type PiExampleAttachedEventListener = (event: BaseEvent) => void;
 
 type PiExampleRuntimeStateEntry = {
   session: PiRuntimeGatewaySession;
-  latestConnectRevision: number;
-  connectUpdates: PiExampleRuntimeConnectUpdate[];
+  attachedEventListeners: Set<PiExampleAttachedEventListener>;
+  activeAttachedRun: {
+    runId: string;
+    events: BaseEvent[];
+  } | null;
 };
 
 export type PiExampleRuntimeStateStore = {
@@ -61,17 +61,29 @@ export type PiExampleRuntimeStateStore = {
     threadKey: string,
     update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
   ) => PiRuntimeGatewaySession;
-  recordConnectUpdate: (
+  attachToThread: (
     threadKey: string,
-    runId: string,
-    update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
-  ) => PiRuntimeGatewaySession;
-  listConnectUpdates: (threadKey: string, afterRevision: number) => readonly PiExampleRuntimeConnectUpdate[];
-  getLatestConnectRevision: (threadKey: string) => number;
+    listener: PiExampleAttachedEventListener,
+  ) => {
+    detach: () => void;
+    activeRunEvents: readonly BaseEvent[];
+  };
+  startAttachedRun: (threadKey: string, runId: string) => void;
+  appendAttachedRunEvents: (threadKey: string, runId: string, events: readonly BaseEvent[]) => void;
+  finishAttachedRun: (threadKey: string, runId: string) => void;
+  publishAttachedEventSource: (threadKey: string, source: PiExampleAttachedEventSource) => Promise<void>;
   resumeFromUserInput: (threadKey: string) => PiRuntimeGatewaySession;
 };
 
-type AutomationStatus = 'scheduled' | 'running' | 'completed';
+function cloneBaseEvents(events: readonly BaseEvent[]): BaseEvent[] {
+  const clonedEvents: BaseEvent[] = [];
+  for (const event of events) {
+    clonedEvents.push(event);
+  }
+  return clonedEvents;
+}
+
+type AutomationStatus = 'scheduled' | 'running' | 'completed' | 'canceled';
 
 function mapAutomationStatusToExecutionStatus(
   status: AutomationStatus,
@@ -82,6 +94,7 @@ function mapAutomationStatusToExecutionStatus(
     case 'running':
       return 'working';
     case 'completed':
+    case 'canceled':
       return 'completed';
   }
 }
@@ -97,8 +110,8 @@ export function createPiExampleRuntimeStateStore(): PiExampleRuntimeStateStore {
 
     const created: PiExampleRuntimeStateEntry = {
       session: buildDefaultSession(threadKey),
-      latestConnectRevision: 0,
-      connectUpdates: [],
+      attachedEventListeners: new Set(),
+      activeAttachedRun: null,
     };
     sessions.set(threadKey, created);
     return created;
@@ -117,29 +130,71 @@ export function createPiExampleRuntimeStateStore(): PiExampleRuntimeStateStore {
       sessions.set(threadKey, entry);
       return nextSession;
     },
-    recordConnectUpdate: (threadKey, runId, update) => {
+    attachToThread: (threadKey, listener) => {
       const entry = getEntry(threadKey);
-      const nextSession = update(entry.session);
-      const nextRevision = entry.latestConnectRevision + 1;
-      sessions.set(threadKey, {
-        session: nextSession,
-        latestConnectRevision: nextRevision,
-        connectUpdates: [
-          ...entry.connectUpdates,
-          {
-            revision: nextRevision,
-            runId,
-            session: structuredClone(nextSession),
-          },
-        ].slice(-MAX_CONNECT_UPDATES),
-      });
-      return nextSession;
+      entry.attachedEventListeners.add(listener);
+      sessions.set(threadKey, entry);
+      return {
+        detach: () => {
+          const attachedEntry = getEntry(threadKey);
+          attachedEntry.attachedEventListeners.delete(listener);
+          sessions.set(threadKey, attachedEntry);
+        },
+        activeRunEvents: entry.activeAttachedRun ? [...entry.activeAttachedRun.events] : [],
+      };
     },
-    listConnectUpdates: (threadKey, afterRevision) => {
-      return getEntry(threadKey).connectUpdates.filter((update) => update.revision > afterRevision);
+    startAttachedRun: (threadKey, runId) => {
+      const entry = getEntry(threadKey);
+      entry.activeAttachedRun = {
+        runId,
+        events: [],
+      };
+      sessions.set(threadKey, entry);
     },
-    getLatestConnectRevision: (threadKey) => {
-      return getEntry(threadKey).latestConnectRevision;
+    appendAttachedRunEvents: (threadKey, runId, events) => {
+      if (events.length === 0) {
+        return;
+      }
+
+      const entry = getEntry(threadKey);
+      if (entry.activeAttachedRun?.runId === runId) {
+        entry.activeAttachedRun = {
+          runId,
+          events: [...entry.activeAttachedRun.events, ...events],
+        };
+      }
+
+      for (const event of events) {
+        for (const listener of entry.attachedEventListeners) {
+          listener(event);
+        }
+      }
+
+      sessions.set(threadKey, entry);
+    },
+    finishAttachedRun: (threadKey, runId) => {
+      const entry = getEntry(threadKey);
+      if (entry.activeAttachedRun?.runId === runId) {
+        entry.activeAttachedRun = null;
+        sessions.set(threadKey, entry);
+      }
+    },
+    publishAttachedEventSource: async (threadKey, source) => {
+      const events: BaseEvent[] = Array.isArray(source)
+        ? cloneBaseEvents(source)
+        : await (async () => {
+            const collected: BaseEvent[] = [];
+            for await (const event of source) {
+              collected.push(event);
+            }
+            return collected;
+          })();
+      const entry = getEntry(threadKey);
+      for (const event of events) {
+        for (const listener of entry.attachedEventListeners) {
+          listener(event);
+        }
+      }
     },
     resumeFromUserInput: (threadKey) => {
       const current = getSession(threadKey);
@@ -323,7 +378,16 @@ export function applyAutomationStatusUpdate(params: {
   };
 
   if (params.emitConnectUpdate) {
-    return params.runtimeState.recordConnectUpdate(params.threadKey, params.activityRunId, applyUpdate);
+    const nextSession = params.runtimeState.updateSession(params.threadKey, applyUpdate);
+    void params.runtimeState.publishAttachedEventSource(
+      params.threadKey,
+      buildPiRuntimeGatewayConnectEvents({
+        threadId: params.threadKey,
+        runId: params.activityRunId,
+        session: nextSession,
+      }),
+    );
+    return nextSession;
   }
 
   return params.runtimeState.updateSession(params.threadKey, applyUpdate);

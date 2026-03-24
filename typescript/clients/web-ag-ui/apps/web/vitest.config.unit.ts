@@ -11,7 +11,7 @@ export default defineConfig({
     environment: 'node',
     setupFiles,
     passWithNoTests: true,
-    include: ['src/**/*.unit.test.ts', 'tests/**/*.unit.test.ts'],
+    include: ['src/**/*.unit.test.ts', 'src/**/*.unit.test.tsx', 'tests/**/*.unit.test.ts', 'tests/**/*.unit.test.tsx'],
     coverage: {
       provider: 'v8',
       reportsDirectory: './coverage/unit',

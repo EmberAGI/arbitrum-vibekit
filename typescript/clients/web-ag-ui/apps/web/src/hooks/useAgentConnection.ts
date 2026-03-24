@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { Message } from '@ag-ui/core';
 import { useCopilotContext, useLangGraphInterruptRender } from '@copilotkit/react-core';
 import {
@@ -24,6 +24,7 @@ import {
   type OperatorConfigInput,
   type PendleSetupInput,
   type GmxSetupInput,
+  type PiOperatorNoteInput,
   type FundingTokenInput,
   type DelegationSigningResponse,
   type FundWalletAcknowledgement,
@@ -54,6 +55,7 @@ import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import { getAgentThreadId } from '../utils/agentThread';
 import {
   isAgentInterrupt,
+  normalizeAgentInterrupt,
   selectActiveInterrupt,
 } from '../utils/interruptSelection';
 
@@ -74,6 +76,45 @@ function messagesEqual(left: Message[], right: Message[]): boolean {
   return true;
 }
 
+function deriveSyncedInterrupt(threadState: ThreadSnapshot['thread']): AgentInterrupt | null {
+  if (threadState.task?.taskStatus?.state !== 'input-required') {
+    return null;
+  }
+
+  const events = threadState.activity?.events ?? [];
+
+  for (let eventIndex = events.length - 1; eventIndex >= 0; eventIndex -= 1) {
+    const event = events[eventIndex];
+    if (event?.type !== 'dispatch-response') {
+      continue;
+    }
+
+    for (let partIndex = event.parts.length - 1; partIndex >= 0; partIndex -= 1) {
+      const part = event.parts[partIndex];
+      if (part.kind !== 'a2ui') {
+        continue;
+      }
+
+      const payloadEnvelope =
+        typeof part.data === 'object' &&
+        part.data !== null &&
+        'payload' in part.data &&
+        typeof part.data.payload === 'object' &&
+        part.data.payload !== null
+          ? (part.data.payload as { kind?: unknown; payload?: unknown })
+          : null;
+
+      if (payloadEnvelope?.kind !== 'interrupt') {
+        continue;
+      }
+
+      return normalizeAgentInterrupt(payloadEnvelope.payload);
+    }
+  }
+
+  return null;
+}
+
 export type {
   ThreadSnapshot,
   ThreadState,
@@ -86,6 +127,7 @@ export type {
   OperatorConfigInput,
   PendleSetupInput,
   GmxSetupInput,
+  PiOperatorNoteInput,
   FundWalletAcknowledgement,
   FundingTokenInput,
   Transaction,
@@ -109,6 +151,7 @@ export interface UseAgentConnectionResult {
   transactionHistory: Transaction[];
   events: ClmmEvent[];
   messages: Message[];
+  messageSnapshotEpoch: number;
   settings: AgentSettings;
 
   // Derived state
@@ -131,6 +174,7 @@ export interface UseAgentConnectionResult {
       | OperatorConfigInput
       | PendleSetupInput
       | GmxSetupInput
+      | PiOperatorNoteInput
       | FundWalletAcknowledgement
       | FundingTokenInput
       | DelegationSigningResponse,
@@ -169,7 +213,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     clientMutationId: null,
   });
   const [uiError, setUiError] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messageSnapshotEpoch, setMessageSnapshotEpoch] = useState(0);
   const lastConnectedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
   const threadIdRef = useRef<string | undefined>(undefined);
@@ -359,11 +403,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       typeof value === 'object' &&
       Object.keys(value as Record<string, unknown>).length > 0,
     );
-  }, []);
-
-  const syncMessages = useCallback((nextMessages: unknown) => {
-    const normalized = Array.isArray(nextMessages) ? (nextMessages as Message[]) : [];
-    setMessages((current) => (messagesEqual(current, normalized) ? current : normalized));
   }, []);
 
   const extractAppliedMutationId = useCallback((value: unknown): string | null => {
@@ -598,6 +637,24 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       return (event as { snapshot?: unknown }).snapshot ?? null;
     };
 
+    const applyMessages = (nextMessages: unknown, options?: { resetVisibleOrder?: boolean }) => {
+      const normalized = Array.isArray(nextMessages) ? (nextMessages as Message[]) : [];
+      const previousState = hasStateValues(agent.state) ? (agent.state as ThreadSnapshot) : initialAgentState;
+      const previousMessages = Array.isArray(previousState.messages)
+        ? (previousState.messages as Message[])
+        : [];
+      if (messagesEqual(previousMessages, normalized)) {
+        return;
+      }
+      if (options?.resetVisibleOrder) {
+        setMessageSnapshotEpoch((current) => current + 1);
+      }
+      agent.setState({
+        ...previousState,
+        messages: normalized,
+      });
+    };
+
     const subscription = agent.subscribe({
       onRunStartedEvent: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
@@ -651,11 +708,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           inputRunId: getInputRunId(payload),
           currentThreadId: threadIdRef.current ?? null,
         });
-        syncMessages(payload.messages);
+        applyMessages(payload.messages, { resetVisibleOrder: true });
       },
       onMessagesChanged: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
-        syncMessages(payload.messages);
+        applyMessages(payload.messages);
       },
     });
 
@@ -668,7 +725,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     hasStateValues,
     logConnectEvent,
     setRunInFlight,
-    syncMessages,
   ]);
 
   // Initial sync when thread is established - runs once per agent instance
@@ -985,13 +1041,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           ? latestEvent.parts[0]?.kind ?? null
           : null;
   const settings = currentState.settings ?? defaultSettings;
-
-  useEffect(() => {
-    if (!Array.isArray(currentState.messages)) {
-      return;
-    }
-    syncMessages(currentState.messages);
-  }, [currentState.messages, syncMessages, threadId]);
+  const messages = useMemo(
+    () => (Array.isArray(currentState.messages) ? (currentState.messages as Message[]) : []),
+    [currentState.messages],
+  );
+  const syncedPendingInterrupt = deriveSyncedInterrupt(threadState);
 
   useEffect(() => {
     emitConnectTrace('state-applied', {
@@ -1172,17 +1226,22 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         return;
       }
 
+      const messageId = v7();
       const accepted = scheduler.dispatchCustom({
         command: 'chat',
         run: async (currentAgent) => {
           currentAgent.addMessage({
-            id: v7(),
+            id: messageId,
             role: 'user',
             content: trimmed,
           });
           await copilotkit.runAgent({ agent: currentAgent });
         },
       });
+
+      if (accepted) {
+        return;
+      }
 
       if (!accepted) {
         setUiError('Unable to send a message while another run is active.');
@@ -1194,7 +1253,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const clearUiError = useCallback(() => setUiError(null), []);
   const effectiveActiveInterrupt = selectActiveInterrupt({
     streamInterrupt: activeInterrupt ?? null,
-    syncPendingInterrupt: null,
+    syncPendingInterrupt: syncedPendingInterrupt,
   });
 
   const resolveInterrupt = useCallback(
@@ -1203,6 +1262,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         | OperatorConfigInput
         | PendleSetupInput
         | GmxSetupInput
+        | PiOperatorNoteInput
         | FundWalletAcknowledgement
         | FundingTokenInput
         | DelegationSigningResponse,
@@ -1312,6 +1372,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     transactionHistory,
     events,
     messages,
+    messageSnapshotEpoch,
     settings,
     isHired,
     isActive,

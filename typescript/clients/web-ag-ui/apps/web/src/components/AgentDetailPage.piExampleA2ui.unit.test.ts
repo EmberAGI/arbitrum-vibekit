@@ -130,8 +130,8 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
     });
   });
 
-  it('renders the interrupt flow through an A2UI text field and button, then sends the operator note', () => {
-    const onSendChatMessage = vi.fn();
+  it('renders the interrupt flow through an A2UI text field and button, then resolves through interrupt submit', () => {
+    const onInterruptSubmit = vi.fn();
     const root = renderPiExamplePage(container, {
       events: [
         {
@@ -155,7 +155,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
           ],
         },
       ] as never,
-      onSendChatMessage,
+      onInterruptSubmit,
     });
 
     expect(container.querySelector('.a2ui-textfield')).not.toBeNull();
@@ -186,7 +186,9 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
       submitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(onSendChatMessage).toHaveBeenCalledWith('Operator note: Use the safe automation window');
+    expect(onInterruptSubmit).toHaveBeenCalledWith({
+      operatorNote: 'Use the safe automation window',
+    });
 
     act(() => {
       root.unmount();

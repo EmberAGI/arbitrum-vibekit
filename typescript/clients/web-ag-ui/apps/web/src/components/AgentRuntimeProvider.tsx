@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { CopilotKit } from '@copilotkit/react-core';
 
@@ -83,7 +83,6 @@ function resolveAgentIdFromPath(pathname: string | null): string | null {
 export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { privyWallet } = usePrivyWalletClient();
-  const [anonymousThreadId, setAnonymousThreadId] = useState<string | null>(null);
 
   const agentId = useMemo(() => {
     const pathAgentId = resolveAgentIdFromPath(pathname);
@@ -95,14 +94,11 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
 
   const threadWalletAddress = resolveAgentThreadWalletAddress(privyWallet?.address);
   const walletThreadId = agentId ? getAgentThreadId(agentId, threadWalletAddress) : null;
-
-  useEffect(() => {
+  const anonymousThreadId = useMemo(() => {
     if (!agentId || walletThreadId) {
-      setAnonymousThreadId(null);
-      return;
+      return null;
     }
-
-    setAnonymousThreadId(ensureAnonymousAgentThreadId(agentId));
+    return ensureAnonymousAgentThreadId(agentId);
   }, [agentId, walletThreadId]);
 
   if (!agentId) {

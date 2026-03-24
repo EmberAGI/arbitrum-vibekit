@@ -79,10 +79,23 @@ function parseRunRequest(body: Record<string, unknown>): PiRuntimeGatewayRunRequ
     return jsonResponse({ error: 'Expected threadId and runId.' }, 400);
   }
 
+  const forwardedProps = isRecord(body.forwardedProps) ? body.forwardedProps : undefined;
+  const command = forwardedProps && isRecord(forwardedProps.command) ? forwardedProps.command : undefined;
+  const resume = command ? readStringField(command, 'resume') : undefined;
+
   return {
     threadId,
     runId,
     messages: Array.isArray(body.messages) ? (body.messages as PiRuntimeGatewayRunRequest['messages']) : undefined,
+    ...(resume
+      ? {
+          forwardedProps: {
+            command: {
+              resume,
+            },
+          },
+        }
+      : {}),
   };
 }
 

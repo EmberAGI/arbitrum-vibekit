@@ -46,7 +46,7 @@ function requireStatement(
 }
 
 describe('createPiExampleGatewayService schedule persistence', () => {
-  it('creates a fresh automation run and execution for each repeated schedule in the same thread', async () => {
+  it('creates a fresh automation definition for each canonical automation.schedule request', async () => {
     executePostgresStatementsMock.mockClear();
 
     const service = createPiExampleGatewayService({
@@ -118,7 +118,7 @@ describe('createPiExampleGatewayService schedule persistence', () => {
     const firstExecution = requireStatement(firstStatements, 'pi_executions');
     const secondExecution = requireStatement(secondStatements, 'pi_executions');
 
-    expect(firstAutomation.values[0]).toBe(secondAutomation.values[0]);
+    expect(firstAutomation.values[0]).not.toBe(secondAutomation.values[0]);
     expect(firstRun.values[0]).not.toBe(secondRun.values[0]);
     expect(firstExecution.values[0]).not.toBe(secondExecution.values[0]);
   });

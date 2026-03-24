@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildCancelAutomationStatements,
   buildCompleteAutomationExecutionStatements,
   buildPersistAutomationDispatchStatements,
   buildPersistDirectExecutionStatements,
@@ -115,6 +116,35 @@ describe('transactions', () => {
     expect(statements[5]?.text).toContain('insert into pi_scheduler_leases');
     expect(statements[6]?.text).toContain('insert into pi_execution_events');
     expect(statements[7]?.text).toContain('insert into pi_thread_activity');
+  });
+
+  it('builds the automation cancellation boundary across automation, run, execution, lease, event, and activity tables', () => {
+    const statements = buildCancelAutomationStatements({
+      automationId: 'auto-1',
+      currentRunId: 'run-1',
+      currentExecutionId: 'exec-1',
+      threadId: 'thread-1',
+      eventId: 'event-1',
+      activityId: 'activity-1',
+      now: new Date('2026-03-18T20:05:00.000Z'),
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_automations',
+      'pi_automation_runs',
+      'pi_executions',
+      'pi_scheduler_leases',
+      'pi_execution_events',
+      'pi_thread_activity',
+    ]);
+    expect(statements[0]?.text).toContain('update pi_automations');
+    expect(statements[0]?.text).toContain('suspended = $1');
+    expect(statements[1]?.text).toContain('update pi_automation_runs');
+    expect(statements[1]?.text).toContain("status = 'scheduled'");
+    expect(statements[2]?.text).toContain('update pi_executions');
+    expect(statements[3]?.text).toContain('delete from pi_scheduler_leases');
+    expect(statements[4]?.text).toContain('insert into pi_execution_events');
+    expect(statements[5]?.text).toContain('insert into pi_thread_activity');
   });
 
   it('builds interrupt checkpoint and outbox intent boundaries with the expected tables', () => {
