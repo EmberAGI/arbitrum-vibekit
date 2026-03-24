@@ -319,6 +319,13 @@ function buildVisibleMessageReplacementKey(message: {
   return `${message.role}\u0000${message.text}`;
 }
 
+function getParentMessageId(message: Message): string | undefined {
+  if (!('parentMessageId' in message)) {
+    return undefined;
+  }
+  return typeof message.parentMessageId === 'string' ? message.parentMessageId : undefined;
+}
+
 function orderVisibleChatMessages(
   messages: Message[],
   appearanceOrderById: ReadonlyMap<string, number>,
@@ -330,7 +337,7 @@ function orderVisibleChatMessages(
         label: getMessageRoleLabel(message),
         text: getMessageText(message),
         role: message.role,
-        parentMessageId: message.parentMessageId,
+        parentMessageId: getParentMessageId(message),
         originalIndex,
         appearanceOrder: appearanceOrderById.get(message.id) ?? Number.MAX_SAFE_INTEGER,
       }),

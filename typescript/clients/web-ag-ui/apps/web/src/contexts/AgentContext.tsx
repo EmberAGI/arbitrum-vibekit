@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, type ReactNode } from 'react';
+import type { Message } from '@ag-ui/core';
 import { useAgentConnection, type UseAgentConnectionResult } from '../hooks/useAgentConnection';
 import { DEFAULT_AGENT_ID, getAgentConfig } from '../config/agents';
 import {
@@ -13,6 +14,7 @@ import {
 } from '../types/agent';
 
 const AgentContext = createContext<UseAgentConnectionResult | null>(null);
+const emptyMessages: Message[] = [];
 
 const inactiveAgent: UseAgentConnectionResult = {
   config: getAgentConfig('inactive-agent'),
@@ -28,7 +30,9 @@ const inactiveAgent: UseAgentConnectionResult = {
   activity: defaultActivity,
   transactionHistory: [],
   events: [],
-  messages: initialAgentState.messages ?? [],
+  messages: Array.isArray(initialAgentState.messages)
+    ? (initialAgentState.messages as Message[])
+    : emptyMessages,
   settings: defaultSettings,
   isHired: false,
   isActive: false,

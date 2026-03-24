@@ -45,6 +45,7 @@ export type { PiExampleGatewayEnv };
 type PiExampleGatewayModel = Parameters<typeof createPiRuntimeGatewayFoundation>[0]['model'];
 type PiExampleGatewayTool = NonNullable<Parameters<typeof createPiRuntimeGatewayFoundation>[0]['tools']>[number];
 type PiExampleGatewayStream = NonNullable<NonNullable<Parameters<typeof createPiRuntimeGatewayFoundation>[0]['agentOptions']>['streamFn']>;
+type PiExampleGatewayToolParameters = PiExampleGatewayTool['parameters'];
 
 export type PiExampleGatewayFoundationOptions = {
   runtimeState?: PiExampleRuntimeStateStore;
@@ -444,7 +445,7 @@ function createPiExampleTools(params: {
           kind: Type.String(),
           intervalMinutes: Type.Number({ minimum: 1, default: 5 }),
         }),
-      }),
+      }) as unknown as PiExampleGatewayToolParameters,
       execute: async (_toolCallId, args) => {
         const toolArgs = args as ScheduleAutomationArgs;
         const threadKey = params.resolveThreadKey();
@@ -501,7 +502,7 @@ function createPiExampleTools(params: {
       parameters: Type.Object({
         state: Type.String({ default: 'active' }),
         limit: Type.Number({ minimum: 1, default: 20 }),
-      }),
+      }) as unknown as PiExampleGatewayToolParameters,
       execute: async (_toolCallId, args) => {
         const toolArgs = args as ListAutomationsArgs;
         const threadKey = params.resolveThreadKey();
@@ -546,7 +547,7 @@ function createPiExampleTools(params: {
       description: 'Cancel a saved automation so it does not fire again and surface the canceled state in AG-UI.',
       parameters: Type.Object({
         automationId: Type.String(),
-      }),
+      }) as unknown as PiExampleGatewayToolParameters,
       execute: async (_toolCallId, args) => {
         const toolArgs = args as CancelAutomationArgs;
         const threadKey = params.resolveThreadKey();
@@ -597,7 +598,7 @@ function createPiExampleTools(params: {
         message: Type.String({
           default: 'Please provide a short operator note to continue.',
         }),
-      }),
+      }) as unknown as PiExampleGatewayToolParameters,
       execute: async (_toolCallId, args) => {
         const toolArgs = args as RequestOperatorInputArgs;
         const threadKey = params.resolveThreadKey();
