@@ -1158,7 +1158,7 @@ export default function Home() {
                       </div>
                     )} */}
                     <div
-                      className={`flex-1 overflow-y-auto smooth-transition ${!!activeSession.parentSessionId ? '' : 'space-y-4 p-6'}`}
+                      className={`flex-1 overflow-y-auto smooth-transition ${activeSession.parentSessionId ? '' : 'space-y-4 p-6'}`}
                       style={{ backgroundColor: '#1a1a1a', minHeight: 0 }}
                     >
                       {(() => {

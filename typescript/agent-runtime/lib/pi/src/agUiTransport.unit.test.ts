@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { verifyEvents } from '@ag-ui/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createPiRuntimeGatewayAgUiHandler,

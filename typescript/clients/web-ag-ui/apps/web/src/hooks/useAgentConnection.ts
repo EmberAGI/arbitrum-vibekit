@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { Message } from '@ag-ui/core';
 import { useCopilotContext, useLangGraphInterruptRender } from '@copilotkit/react-core';
 import {
@@ -169,7 +169,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     clientMutationId: null,
   });
   const [uiError, setUiError] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
   const lastConnectedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
   const threadIdRef = useRef<string | undefined>(undefined);
@@ -359,11 +358,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       typeof value === 'object' &&
       Object.keys(value as Record<string, unknown>).length > 0,
     );
-  }, []);
-
-  const syncMessages = useCallback((nextMessages: unknown) => {
-    const normalized = Array.isArray(nextMessages) ? (nextMessages as Message[]) : [];
-    setMessages((current) => (messagesEqual(current, normalized) ? current : normalized));
   }, []);
 
   const extractAppliedMutationId = useCallback((value: unknown): string | null => {
@@ -598,6 +592,21 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       return (event as { snapshot?: unknown }).snapshot ?? null;
     };
 
+    const applyMessages = (nextMessages: unknown) => {
+      const normalized = Array.isArray(nextMessages) ? (nextMessages as Message[]) : [];
+      const previousState = hasStateValues(agent.state) ? (agent.state as ThreadSnapshot) : initialAgentState;
+      const previousMessages = Array.isArray(previousState.messages)
+        ? (previousState.messages as Message[])
+        : [];
+      if (messagesEqual(previousMessages, normalized)) {
+        return;
+      }
+      agent.setState({
+        ...previousState,
+        messages: normalized,
+      });
+    };
+
     const subscription = agent.subscribe({
       onRunStartedEvent: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
@@ -651,11 +660,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           inputRunId: getInputRunId(payload),
           currentThreadId: threadIdRef.current ?? null,
         });
-        syncMessages(payload.messages);
+        applyMessages(payload.messages);
       },
       onMessagesChanged: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
-        syncMessages(payload.messages);
+        applyMessages(payload.messages);
       },
     });
 
@@ -668,7 +677,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     hasStateValues,
     logConnectEvent,
     setRunInFlight,
-    syncMessages,
   ]);
 
   // Initial sync when thread is established - runs once per agent instance
@@ -985,13 +993,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           ? latestEvent.parts[0]?.kind ?? null
           : null;
   const settings = currentState.settings ?? defaultSettings;
-
-  useEffect(() => {
-    if (!Array.isArray(currentState.messages)) {
-      return;
-    }
-    syncMessages(currentState.messages);
-  }, [currentState.messages, syncMessages, threadId]);
+  const messages = useMemo(
+    () => (Array.isArray(currentState.messages) ? (currentState.messages as Message[]) : []),
+    [currentState.messages],
+  );
 
   useEffect(() => {
     emitConnectTrace('state-applied', {

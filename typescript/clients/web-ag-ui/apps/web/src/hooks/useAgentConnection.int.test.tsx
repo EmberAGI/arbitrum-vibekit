@@ -848,6 +848,17 @@ describe('useAgentConnection integration', () => {
       ],
     });
     await flushEffects();
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
 
     expect(latestValue?.messages).toEqual([
       expect.objectContaining({
@@ -870,6 +881,17 @@ describe('useAgentConnection integration', () => {
       messages: [],
     };
 
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
     await act(async () => {
       root.render(
         <CapturingHarness

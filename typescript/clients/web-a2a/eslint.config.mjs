@@ -1,34 +1,38 @@
-import { dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { FlatCompat } from '@eslint/eslintrc';
+import js from '@eslint/js';
+import globals from 'globals';
+import importPlugin from 'eslint-plugin-import';
+import reactHooks from 'eslint-plugin-react-hooks';
+import tseslint from 'typescript-eslint';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
-const eslintConfig = [
-  // Ignore patterns
+export default tseslint.config(
   {
-    ignores: ['node_modules/**', '.next/**', 'out/**', '*.config.*', 'next-env.d.ts'],
+    ignores: [
+      'node_modules/**',
+      '.next/**',
+      'out/**',
+      'coverage/**',
+      '*.config.*',
+      'next-env.d.ts',
+    ],
   },
-
-  ...compat.extends('next/core-web-vitals', 'next/typescript'),
-
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
   {
+    files: ['src/**/*.{ts,tsx}', '*.ts', '*.tsx'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+    plugins: {
+      import: importPlugin,
+      'react-hooks': reactHooks,
+    },
     rules: {
-      // Console logs allowed in Next.js app
       'no-console': 'off',
-
-      // Relax TypeScript strict rules to warnings for gradual migration
-      '@typescript-eslint/no-explicit-any': 'warn',
-
-      // Import organization - only warning to avoid blocking builds
       'import/order': 'off',
-
-      // Allow unused vars prefixed with underscore
+      '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
@@ -37,11 +41,8 @@ const eslintConfig = [
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-
-      // Disable rules that conflict with Next.js patterns or are too strict for current codebase
       'react-hooks/exhaustive-deps': 'warn',
+      '@typescript-eslint/require-await': 'off',
     },
   },
-];
-
-export default eslintConfig;
+);
