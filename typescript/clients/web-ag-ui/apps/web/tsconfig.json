@@ -25,6 +25,12 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "agent-runtime": [
+        "../../../../agent-runtime/dist/index"
+      ],
+      "agent-runtime/pi-transport": [
+        "../../../../agent-runtime/dist/piTransport"
       ]
     }
   },

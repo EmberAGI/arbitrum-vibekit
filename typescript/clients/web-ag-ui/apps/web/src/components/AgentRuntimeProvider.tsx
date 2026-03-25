@@ -15,6 +15,7 @@ import {
   getAgentThreadId,
   resolveAgentThreadWalletAddress,
 } from '../utils/agentThread';
+import { emitAgentConnectDebug } from '../utils/agentConnectDebug';
 
 function AgentListRuntimeBridge() {
   const agent = useAgent();
@@ -100,6 +101,29 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
     }
     return ensureAnonymousAgentThreadId(agentId);
   }, [agentId, walletThreadId]);
+
+  useEffect(() => {
+    emitAgentConnectDebug({
+      event: 'runtime-provider-state',
+      agentId: agentId ?? 'inactive-agent',
+      threadId: walletThreadId ?? anonymousThreadId ?? null,
+      payload: {
+        pathname,
+        privyWalletAddress: privyWallet?.address ?? null,
+        threadWalletAddress,
+        walletThreadId,
+        anonymousThreadId,
+        willUseInactiveProvider: !agentId || !(walletThreadId ?? anonymousThreadId),
+      },
+    });
+  }, [
+    agentId,
+    anonymousThreadId,
+    pathname,
+    privyWallet?.address,
+    threadWalletAddress,
+    walletThreadId,
+  ]);
 
   if (!agentId) {
     return <InactiveAgentProvider>{children}</InactiveAgentProvider>;

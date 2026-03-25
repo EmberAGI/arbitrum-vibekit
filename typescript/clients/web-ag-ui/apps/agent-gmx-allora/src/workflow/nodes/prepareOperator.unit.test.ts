@@ -9,9 +9,15 @@ import { prepareOperatorNode } from './prepareOperator.js';
 const { copilotkitEmitStateMock } = vi.hoisted(() => ({
   copilotkitEmitStateMock: vi.fn(),
 }));
+const { ensureCronForThreadMock } = vi.hoisted(() => ({
+  ensureCronForThreadMock: vi.fn(),
+}));
 
 vi.mock('@copilotkit/sdk-js/langgraph', () => ({
   copilotkitEmitState: copilotkitEmitStateMock,
+}));
+vi.mock('../cronScheduler.js', () => ({
+  ensureCronForThread: ensureCronForThreadMock,
 }));
 
 describe('prepareOperatorNode', () => {
@@ -19,6 +25,7 @@ describe('prepareOperatorNode', () => {
 
   afterEach(() => {
     copilotkitEmitStateMock.mockReset();
+    ensureCronForThreadMock.mockReset();
     if (previousAgentWallet === undefined) {
       delete process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'];
       return;
@@ -154,5 +161,53 @@ describe('prepareOperatorNode', () => {
 
     expect(result).toEqual({});
     expect(copilotkitEmitStateMock).not.toHaveBeenCalled();
+  });
+
+  it('arms cron scheduling when onboarding completes on an active thread', async () => {
+    process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = '0x3333333333333333333333333333333333333333';
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+    ensureCronForThreadMock.mockReturnValue({ stop: vi.fn() });
+
+    const state = {
+      private: {
+        pollIntervalMs: 60000,
+        cronScheduled: false,
+      },
+      thread: {
+        operatorInput: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          usdcAllocation: 100,
+          targetMarket: 'ETH',
+        },
+        fundingTokenInput: {
+          fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+        },
+        delegationsBypassActive: false,
+        delegationBundle: {
+          chainId: 42161,
+          delegationManager: '0x5555555555555555555555555555555555555555',
+          delegatorAddress: '0x1111111111111111111111111111111111111111',
+          delegateeAddress: '0x3333333333333333333333333333333333333333',
+          delegations: [],
+          intents: [],
+          descriptions: [],
+          warnings: [],
+        },
+        task: { id: 'task-1', taskStatus: { state: 'working' } },
+        activity: { telemetry: [], events: [] },
+        profile: {},
+        metrics: {},
+        transactionHistory: [],
+      },
+    } as unknown as ClmmState;
+
+    const result = await prepareOperatorNode(state, { configurable: { thread_id: 'thread-1' } });
+
+    expect(ensureCronForThreadMock).toHaveBeenCalledWith('thread-1', 60000);
+    expect(result).toMatchObject({
+      private: {
+        cronScheduled: true,
+      },
+    });
   });
 });

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const ONCHAIN_ACTIONS_ICON_REQUEST_TIMEOUT_MS = 1_500;
+
 function normalizeBaseUrl(value: string): string {
   const trimmed = value.trim();
 
@@ -82,7 +84,9 @@ export async function fetchOnchainActionsChainsPage(options: {
   if (options.page !== undefined) url.searchParams.set('page', String(options.page));
   if (options.cursor) url.searchParams.set('cursor', options.cursor);
 
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(ONCHAIN_ACTIONS_ICON_REQUEST_TIMEOUT_MS),
+  });
   return await parseJsonResponse(response, ChainsPageSchema);
 }
 
@@ -100,6 +104,8 @@ export async function fetchOnchainActionsTokensPage(options: {
     url.searchParams.append('chainIds', chainId);
   }
 
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(ONCHAIN_ACTIONS_ICON_REQUEST_TIMEOUT_MS),
+  });
   return await parseJsonResponse(response, TokensPageSchema);
 }

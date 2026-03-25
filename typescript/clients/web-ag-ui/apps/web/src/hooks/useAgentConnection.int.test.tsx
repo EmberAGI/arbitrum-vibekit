@@ -778,6 +778,110 @@ describe('useAgentConnection integration', () => {
     expect(latestState?.thread?.task?.taskStatus?.state).toBe('working');
   });
 
+  it('accepts a newly initialized run after an older run is already tracked', async () => {
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-gmx-allora" />);
+    });
+    await flushEffects();
+
+    expect(subscriber).toBeDefined();
+    mocks.agent.setState.mockClear();
+
+    subscriber?.onRunStartedEvent?.({
+      input: { threadId: 'thread-1', runId: 'run-old' },
+    });
+    await flushEffects();
+
+    subscriber?.onRunInitialized?.({
+      state: {
+        thread: {
+          onboardingFlow: {
+            status: 'in_progress',
+            revision: 2,
+            activeStepId: 'fund-wallet',
+            steps: [{ id: 'fund-wallet', title: 'Fund Wallet', status: 'active' }],
+          },
+          task: {
+            id: 'task-next',
+            taskStatus: {
+              state: 'input-required',
+              message: { content: 'Fund wallet and continue.' },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1', runId: 'run-new' },
+    });
+    await flushEffects();
+
+    expect(mocks.agent.setState).toHaveBeenCalledTimes(1);
+    const latestState = mocks.agent.setState.mock.calls.at(-1)?.[0] as
+      | {
+          thread?: {
+            onboardingFlow?: { activeStepId?: string };
+            task?: { id?: string; taskStatus?: { state?: string } };
+          };
+        }
+      | undefined;
+    expect(latestState?.thread?.task?.id).toBe('task-next');
+    expect(latestState?.thread?.task?.taskStatus?.state).toBe('input-required');
+    expect(latestState?.thread?.onboardingFlow?.activeStepId).toBe('fund-wallet');
+  });
+
+  it('keeps existing onboarding state when a run initializes with an empty state payload', async () => {
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    mocks.agent.state = {
+      thread: {
+        onboardingFlow: {
+          status: 'in_progress',
+          revision: 2,
+          activeStepId: 'fund-wallet',
+          steps: [{ id: 'fund-wallet', title: 'Fund Wallet', status: 'active' }],
+        },
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'input-required',
+            message: { content: 'Fund wallet and continue.' },
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-gmx-allora" />);
+    });
+    await flushEffects();
+
+    expect(subscriber).toBeDefined();
+    mocks.agent.setState.mockClear();
+
+    subscriber?.onRunInitialized?.({
+      state: {},
+      input: { threadId: 'thread-1', runId: 'run-empty' },
+    });
+    await flushEffects();
+
+    expect(mocks.agent.setState).not.toHaveBeenCalled();
+  });
+
   it('applies onboarding snapshots without run-id after completion state is applied', async () => {
     let subscriber: AgentSubscriber | undefined;
 
@@ -1508,7 +1612,7 @@ describe('useAgentConnection integration', () => {
     }
   });
 
-  it('resolves interrupt fallback through agent.runAgent when stream resolver is unavailable', async () => {
+  it('resolves interrupt fallback through CopilotKit runAgent when stream resolver is unavailable', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
     mocks.interruptState.activeInterrupt = {
@@ -1516,8 +1620,8 @@ describe('useAgentConnection integration', () => {
       message: 'Provide setup',
     };
     mocks.interruptState.canResolve = false;
-    const resumeRun = vi.fn(async () => undefined);
-    mocks.agent.runAgent = resumeRun;
+    const rawAgentRun = vi.fn(async () => undefined);
+    mocks.agent.runAgent = rawAgentRun;
 
     await act(async () => {
       root.render(
@@ -1538,7 +1642,8 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
 
-    expect(resumeRun).toHaveBeenCalledWith({
+    expect(mocks.runAgent).toHaveBeenCalledWith({
+      agent: mocks.agent,
       forwardedProps: {
         command: {
           resume: JSON.stringify({
@@ -1549,6 +1654,7 @@ describe('useAgentConnection integration', () => {
         },
       },
     });
+    expect(rawAgentRun).not.toHaveBeenCalled();
     expect(latestValue?.uiError).toBeNull();
   });
 
@@ -1629,7 +1735,95 @@ describe('useAgentConnection integration', () => {
     });
   });
 
-  it('routes Pi operator-note interrupt resolution through explicit resume payloads', async () => {
+  it('derives a persisted interrupt from LangGraph task interrupts when synced activity has no A2UI payload', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-gmx-allora"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onRunInitialized?.({
+      input: { threadId: 'thread-1' },
+      state: {
+        thread: {
+          task: {
+            id: 'exec-1',
+            taskStatus: {
+              state: 'input-required',
+              message: 'Select the GMX market and enter the USDC allocation for low-leverage trades.',
+            },
+          },
+          activity: {
+            events: [
+              {
+                type: 'status',
+                message: 'Awaiting market + allocation to continue onboarding.',
+                task: {
+                  id: 'exec-1',
+                  taskStatus: {
+                    state: 'input-required',
+                  },
+                },
+              },
+            ],
+          },
+        },
+        tasks: [
+          {
+            interrupts: [
+              {
+                value: {
+                  type: 'gmx-setup-request',
+                  message: 'Select the GMX market and enter the USDC allocation for low-leverage trades.',
+                  payloadSchema: {
+                    type: 'object',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      } as ReturnType<AgentSubscriber['onRunInitialized']> extends ((event: infer T) => unknown) ? T['state'] : never,
+    });
+    await flushEffects();
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-gmx-allora"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.activeInterrupt).toEqual({
+      type: 'gmx-setup-request',
+      message: 'Select the GMX market and enter the USDC allocation for low-leverage trades.',
+      payloadSchema: {
+        type: 'object',
+      },
+    });
+  });
+
+  it('routes Pi operator-note interrupt resolution through CopilotKit run orchestration with explicit resume payloads', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
     mocks.interruptState.activeInterrupt = {
@@ -1637,8 +1831,8 @@ describe('useAgentConnection integration', () => {
       message: 'Provide a short operator note to continue.',
     };
     mocks.interruptState.canResolve = false;
-    const resumeRun = vi.fn(async () => undefined);
-    mocks.agent.runAgent = resumeRun;
+    const rawAgentRun = vi.fn(async () => undefined);
+    mocks.agent.runAgent = rawAgentRun;
 
     await act(async () => {
       root.render(
@@ -1657,7 +1851,8 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
 
-    expect(resumeRun).toHaveBeenCalledWith({
+    expect(mocks.runAgent).toHaveBeenCalledWith({
+      agent: mocks.agent,
       forwardedProps: {
         command: {
           resume: JSON.stringify({
@@ -1666,10 +1861,86 @@ describe('useAgentConnection integration', () => {
         },
       },
     });
+    expect(rawAgentRun).not.toHaveBeenCalled();
     expect(latestValue?.uiError).toBeNull();
   });
 
-  it('surfaces an error when interrupt fallback cannot resume through agent.runAgent', async () => {
+  it('routes stream-backed interrupt resolution through scheduled CopilotKit run orchestration', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.interruptState.activeInterrupt = {
+      type: 'gmx-delegation-signing-request',
+      message: 'Review and approve the permissions needed to manage your GMX perps.',
+      chainId: 42161,
+      delegationManager: '0x0000000000000000000000000000000000000001',
+      delegatorAddress: '0x0000000000000000000000000000000000000002',
+      delegateeAddress: '0x0000000000000000000000000000000000000003',
+      delegationsToSign: [
+        {
+          delegate: '0x0000000000000000000000000000000000000003',
+          delegator: '0x0000000000000000000000000000000000000002',
+          authority: '0x',
+          caveats: [],
+          salt: '0x01',
+        },
+      ],
+      descriptions: ['delegate gmx actions'],
+      warnings: [],
+    };
+    mocks.interruptState.canResolve = true;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-gmx-allora"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.resolveInterrupt({
+      outcome: 'signed',
+      signedDelegations: [
+        {
+          delegate: '0x0000000000000000000000000000000000000003',
+          delegator: '0x0000000000000000000000000000000000000002',
+          authority: '0x',
+          caveats: [],
+          salt: '0x01',
+          signature: '0x1234',
+        },
+      ],
+    });
+    await flushEffects();
+
+    expect(mocks.runAgent).toHaveBeenCalledWith({
+      agent: mocks.agent,
+      forwardedProps: {
+        command: {
+          resume: JSON.stringify({
+            outcome: 'signed',
+            signedDelegations: [
+              {
+                delegate: '0x0000000000000000000000000000000000000003',
+                delegator: '0x0000000000000000000000000000000000000002',
+                authority: '0x',
+                caveats: [],
+                salt: '0x01',
+                signature: '0x1234',
+              },
+            ],
+          }),
+        },
+      },
+    });
+    expect(mocks.interruptState.resolve).not.toHaveBeenCalled();
+    expect(latestValue?.uiError).toBeNull();
+  });
+
+  it('surfaces an error when interrupt fallback cannot resume through CopilotKit runAgent', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
     mocks.interruptState.activeInterrupt = {
@@ -1677,7 +1948,7 @@ describe('useAgentConnection integration', () => {
       message: 'Provide setup',
     };
     mocks.interruptState.canResolve = false;
-    delete mocks.agent.runAgent;
+    mocks.runAgent.mockRejectedValueOnce(new Error('resume failed'));
 
     await act(async () => {
       root.render(

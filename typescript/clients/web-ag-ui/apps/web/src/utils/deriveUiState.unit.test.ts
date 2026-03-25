@@ -143,6 +143,42 @@ describe('deriveUiState', () => {
     expect(uiState.selectors.isActive).toBe(true);
   });
 
+  it('treats onboarding task progress as hired before lifecycle phase catches up', () => {
+    const threadState: ThreadState = {
+      ...defaultThreadState,
+      task: {
+        id: 'task-1',
+        taskStatus: {
+          state: 'input-required',
+          message: { content: 'Awaiting market + allocation to continue onboarding.' },
+        },
+      },
+      onboardingFlow: {
+        status: 'in_progress',
+        revision: 1,
+        activeStepId: 'setup',
+        steps: [{ id: 'setup', title: 'Strategy Config', status: 'active' }],
+      },
+    };
+
+    const uiState = deriveUiState({
+      threadState,
+      runtime: {
+        isConnected: true,
+        hasLoadedSnapshot: true,
+        commandInFlight: false,
+        syncPending: false,
+        pendingSyncMutationId: null,
+      },
+    });
+
+    expect(uiState.selectors.lifecyclePhase).toBe('prehire');
+    expect(uiState.selectors.effectiveTaskState).toBe('input-required');
+    expect(uiState.selectors.isOnboardingActive).toBe(true);
+    expect(uiState.selectors.isHired).toBe(true);
+    expect(uiState.selectors.isActive).toBe(true);
+  });
+
   it('normalizes firing interrupt-like failures into completed effective task state', () => {
     const threadState: ThreadState = {
       ...defaultThreadState,
