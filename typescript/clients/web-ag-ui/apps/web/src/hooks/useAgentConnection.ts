@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import type { Message } from '@ag-ui/core';
-import { useCopilotContext, useLangGraphInterruptRender } from '@copilotkit/react-core';
+import { useCopilotContext } from '@copilotkit/react-core';
 import {
   useAgent,
   useCopilotKit,
@@ -76,9 +76,30 @@ function messagesEqual(left: Message[], right: Message[]): boolean {
   return true;
 }
 
-function deriveSyncedInterrupt(threadState: ThreadSnapshot['thread']): AgentInterrupt | null {
-  if (threadState.task?.taskStatus?.state !== 'input-required') {
+function deriveSyncedInterrupt(state: ThreadSnapshot): AgentInterrupt | null {
+  const threadState = state.thread;
+
+  if (threadState?.task?.taskStatus?.state !== 'input-required') {
     return null;
+  }
+
+  const taskInterrupts = Array.isArray(state.tasks) ? state.tasks : [];
+
+  for (let taskIndex = taskInterrupts.length - 1; taskIndex >= 0; taskIndex -= 1) {
+    const task = taskInterrupts[taskIndex];
+    const interrupts = Array.isArray(task?.interrupts) ? task.interrupts : [];
+
+    for (let interruptIndex = interrupts.length - 1; interruptIndex >= 0; interruptIndex -= 1) {
+      const interrupt = interrupts[interruptIndex];
+      if (typeof interrupt !== 'object' || interrupt === null || !('value' in interrupt)) {
+        continue;
+      }
+
+      const normalizedInterrupt = normalizeAgentInterrupt(interrupt.value);
+      if (normalizedInterrupt) {
+        return normalizedInterrupt;
+      }
+    }
   }
 
   const events = threadState.activity?.events ?? [];
@@ -139,7 +160,7 @@ export interface UseAgentConnectionResult {
   isConnected: boolean;
   hasLoadedView: boolean;
   threadId: string | undefined;
-  interruptRenderer: ReturnType<typeof useLangGraphInterruptRender>;
+  interruptRenderer: ReactNode | null;
   uiError: string | null;
   clearUiError: () => void;
 
@@ -251,10 +272,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const threadId = getAgentThreadId(agentId, privyWallet?.address) ?? copilotThreadId;
   const runtimeStatus = copilotkit.runtimeConnectionStatus;
 
-  const { activeInterrupt, canResolve, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
+  const { activeInterrupt } = useLangGraphInterruptCustomUI<AgentInterrupt>({
     enabled: isAgentInterrupt,
   });
-  const interruptRenderer = useLangGraphInterruptRender(agent);
+  const interruptRenderer = null;
 
   const debugConnect = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === 'true';
 
@@ -572,6 +593,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           typeof statePayload === 'object' && statePayload !== null
             ? Object.keys(statePayload as Record<string, unknown>).slice(0, 20)
             : null,
+        hasTopLevelTasks:
+          typeof statePayload === 'object' &&
+          statePayload !== null &&
+          Array.isArray((statePayload as { tasks?: unknown[] }).tasks),
+        topLevelTaskCount:
+          typeof statePayload === 'object' &&
+          statePayload !== null &&
+          Array.isArray((statePayload as { tasks?: unknown[] }).tasks)
+            ? (statePayload as { tasks: unknown[] }).tasks.length
+            : null,
       });
       const appliedMutationId = extractAppliedMutationId(statePayload);
       const pendingSyncMutation = pendingSyncMutationRef.current;
@@ -608,24 +639,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           nextTaskState: projectedThread?.task?.taskStatus?.state ?? null,
           previousEventCount: previousThread?.activity?.events?.length ?? null,
           nextEventCount: projectedThread?.activity?.events?.length ?? null,
+          nextTopLevelTaskCount: Array.isArray(projectedState.tasks) ? projectedState.tasks.length : null,
         });
         agent.setState(projectedState);
         return;
       }
 
-      if (projectDetailStateFromPayload(agent.state)) {
-        emitConnectTrace('state-apply-noop', {
-          reason: 'no-projected-state-existing-state-kept',
-          currentThreadId: threadIdRef.current ?? null,
-        });
-        return;
-      }
-
-      emitConnectTrace('state-apply-reset', {
-        reason: 'no-projected-state-reset-to-initial',
+      emitConnectTrace('state-apply-noop', {
+        reason: 'no-projected-state-existing-state-kept',
         currentThreadId: threadIdRef.current ?? null,
       });
-      agent.setState(initialAgentState);
     };
 
     const extractSnapshotState = (payload: unknown): unknown => {
@@ -666,7 +689,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       onRunFailed: (payload) => clearRunFlag(payload),
       onRunFinalized: (payload) => clearRunFlag(payload),
       onRunInitialized: (payload) => {
-        const accepted = shouldApplyRunScopedState(payload);
+        const accepted = isCurrentThreadEvent(payload);
         emitConnectTrace('run-initialized', {
           accepted,
           inputThreadId: getInputThreadId(payload),
@@ -1045,8 +1068,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     () => (Array.isArray(currentState.messages) ? (currentState.messages as Message[]) : []),
     [currentState.messages],
   );
-  const syncedPendingInterrupt = deriveSyncedInterrupt(threadState);
-
+  const syncedPendingInterrupt = deriveSyncedInterrupt(currentState);
   useEffect(() => {
     emitConnectTrace('state-applied', {
       taskId: threadState.task?.id ?? null,
@@ -1256,6 +1278,27 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     syncPendingInterrupt: syncedPendingInterrupt,
   });
 
+  useEffect(() => {
+    if (!debugConnect) return;
+
+    emitConnectTrace('interrupt-selection', {
+      hasTopLevelTasks: Array.isArray(currentState.tasks),
+      topLevelTaskCount: Array.isArray(currentState.tasks) ? currentState.tasks.length : 0,
+      taskState: threadState.task?.taskStatus?.state ?? null,
+      streamInterruptType: activeInterrupt?.type ?? null,
+      syncedInterruptType: syncedPendingInterrupt?.type ?? null,
+      effectiveInterruptType: effectiveActiveInterrupt?.type ?? null,
+    });
+  }, [
+    activeInterrupt?.type,
+    currentState.tasks,
+    debugConnect,
+    effectiveActiveInterrupt?.type,
+    emitConnectTrace,
+    syncedPendingInterrupt?.type,
+    threadState.task?.taskStatus?.state,
+  ]);
+
   const resolveInterrupt = useCallback(
     (
       input:
@@ -1269,19 +1312,18 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     ) => {
       const serializedInput = JSON.stringify(input);
       const interruptType = effectiveActiveInterrupt?.type;
-      const hasStreamInterrupt = activeInterrupt !== null;
-
-      if (hasStreamInterrupt && canResolve()) {
-        resolve(serializedInput);
-        scheduleCycleAfterInterruptResolution({
-          interruptType,
-          runCommand,
-        });
-        return;
-      }
-
+      emitConnectTrace('interrupt-submit-attempt', {
+        interruptType: interruptType ?? null,
+        runInFlight: runInFlightRef.current,
+        hasScheduler: commandSchedulerRef.current !== null,
+        payloadLength: serializedInput.length,
+      });
       const scheduler = commandSchedulerRef.current;
       if (!scheduler) {
+        emitConnectTrace('interrupt-submit-missing-scheduler', {
+          interruptType: interruptType ?? null,
+          runInFlight: runInFlightRef.current,
+        });
         setUiError('Unable to submit onboarding input right now. Please retry.');
         return;
       }
@@ -1289,13 +1331,28 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       const accepted = scheduler.dispatchCustom({
         command: 'resume',
         run: async (currentAgent) => {
+          emitConnectTrace('interrupt-submit-run-start', {
+            interruptType: interruptType ?? null,
+            runInFlight: runInFlightRef.current,
+          });
           const resumed = await resumeInterruptViaAgent({
-            agent: currentAgent as Parameters<typeof resumeInterruptViaAgent>[0]['agent'],
+            agent: currentAgent,
             resumePayload: serializedInput,
+            runResume: ({ agent: resumeAgent, payload }) =>
+              copilotkit.runAgent({
+                agent: resumeAgent,
+                forwardedProps: payload.forwardedProps,
+              }),
           });
           if (!resumed) {
+            emitConnectTrace('interrupt-submit-run-returned-false', {
+              interruptType: interruptType ?? null,
+            });
             throw new Error('Unable to submit onboarding input right now. Please retry.');
           }
+          emitConnectTrace('interrupt-submit-run-complete', {
+            interruptType: interruptType ?? null,
+          });
           scheduleCycleAfterInterruptResolution({
             interruptType,
             runCommand,
@@ -1304,11 +1361,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       });
 
       if (!accepted) {
+        emitConnectTrace('interrupt-submit-scheduler-rejected', {
+          interruptType: interruptType ?? null,
+          runInFlight: runInFlightRef.current,
+        });
         setUiError('Unable to submit onboarding input right now. Please retry.');
         return;
       }
+
+      emitConnectTrace('interrupt-submit-dispatched', {
+        interruptType: interruptType ?? null,
+        runInFlight: runInFlightRef.current,
+      });
     },
-    [activeInterrupt, canResolve, effectiveActiveInterrupt?.type, resolve, runCommand],
+    [copilotkit, effectiveActiveInterrupt?.type, emitConnectTrace, runCommand],
   );
 
   // Local settings mutation helper; caller decides whether to enqueue a sync run.

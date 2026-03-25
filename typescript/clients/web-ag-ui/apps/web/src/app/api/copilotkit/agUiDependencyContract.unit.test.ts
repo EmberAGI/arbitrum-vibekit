@@ -28,12 +28,15 @@ function createEventStream(events: unknown[]) {
 }
 
 describe('CopilotKit AG-UI dependency contract', () => {
-  it('resolves current AG-UI versions through all browser-facing CopilotKit packages', () => {
-    const browserPackages = [
+  it('resolves the current AG-UI client through CopilotKit packages that own the AG-UI boundary', () => {
+    const rootAgUiClientRoot = packageRootFromEntry(require.resolve('@ag-ui/client'));
+    const expectedAgUiClientVersion = JSON.parse(
+      fs.readFileSync(path.join(rootAgUiClientRoot, 'package.json'), 'utf8'),
+    ) as { version: string };
+
+    const agUiBoundaryPackages = [
       { label: '@copilotkit/react-core', resolver: createRequire(require.resolve('@copilotkit/react-core')) },
-      { label: '@copilotkit/react-ui', resolver: createRequire(require.resolve('@copilotkit/react-ui')) },
       { label: '@copilotkit/runtime', resolver: createRequire(require.resolve('@copilotkit/runtime')) },
-      { label: '@copilotkit/shared', resolver: createRequire(require.resolve('@copilotkit/shared')) },
       { label: '@copilotkitnext/core', resolver: createRequire(require.resolve('@copilotkitnext/core')) },
       {
         label: '@copilotkitnext/react via @copilotkit/react-ui',
@@ -61,20 +64,26 @@ describe('CopilotKit AG-UI dependency contract', () => {
       },
     ];
 
-    for (const pkg of browserPackages) {
+    for (const pkg of agUiBoundaryPackages) {
       const agUiClientEntry = pkg.resolver.resolve('@ag-ui/client');
       const agUiClientRoot = packageRootFromEntry(agUiClientEntry);
       const agUiClientPackageJson = JSON.parse(
         fs.readFileSync(path.join(agUiClientRoot, 'package.json'), 'utf8'),
       ) as { version: string };
 
-      expect(agUiClientPackageJson.version, `${pkg.label} should use the current AG-UI client`).toBe(
-        '0.0.47',
-      );
+      expect(
+        agUiClientPackageJson.version,
+        `${pkg.label} should use the current AG-UI client`,
+      ).toBe(expectedAgUiClientVersion.version);
     }
   });
 
   it('resolves an AG-UI client through react-core that accepts reasoning events', async () => {
+    const rootAgUiClientRoot = packageRootFromEntry(require.resolve('@ag-ui/client'));
+    const expectedAgUiClientVersion = JSON.parse(
+      fs.readFileSync(path.join(rootAgUiClientRoot, 'package.json'), 'utf8'),
+    ) as { version: string };
+
     const reactCoreEntry = require.resolve('@copilotkit/react-core');
     const reactCoreRequire = createRequire(reactCoreEntry);
     const agUiClientEntry = reactCoreRequire.resolve('@ag-ui/client');
@@ -162,7 +171,7 @@ describe('CopilotKit AG-UI dependency contract', () => {
       agUiClientModule.transformHttpEventStream(source$).pipe(toArray()),
     );
 
-    expect(agUiClientPackageJson.version).toBe('0.0.47');
+    expect(agUiClientPackageJson.version).toBe(expectedAgUiClientVersion.version);
     expect(events.map((event) => event.type)).toEqual([
       EventType.RUN_STARTED,
       EventType.REASONING_START,

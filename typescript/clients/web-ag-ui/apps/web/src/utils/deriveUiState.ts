@@ -68,7 +68,13 @@ export function deriveUiState(params: {
     taskMessage: extractTaskMessage(threadState),
   }) ?? null;
   const isHired =
-    lifecyclePhase === 'onboarding' || lifecyclePhase === 'active' || lifecyclePhase === 'firing';
+    lifecyclePhase === 'onboarding' ||
+    lifecyclePhase === 'active' ||
+    lifecyclePhase === 'firing' ||
+    threadState.onboardingFlow?.status === 'in_progress' ||
+    effectiveTaskState === 'input-required' ||
+    effectiveTaskState === 'working' ||
+    effectiveTaskState === 'submitted';
   const isOnboardingActive = resolveOnboardingActive({
     onboardingStatus: threadState.onboardingFlow?.status,
     effectiveTaskState,

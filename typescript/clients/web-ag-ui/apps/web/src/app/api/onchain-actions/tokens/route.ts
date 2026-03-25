@@ -12,17 +12,33 @@ export async function GET(request: Request) {
   const cursor = url.searchParams.get('cursor');
   const chainIds = url.searchParams.getAll('chainIds');
 
-  const result = await fetchOnchainActionsTokensPage({
-    baseUrl: resolveOnchainActionsBaseUrl(),
-    page: page ? Number(page) : undefined,
-    cursor: cursor || undefined,
-    chainIds: chainIds.length > 0 ? chainIds : undefined,
-  });
+  try {
+    const result = await fetchOnchainActionsTokensPage({
+      baseUrl: resolveOnchainActionsBaseUrl(),
+      page: page ? Number(page) : undefined,
+      cursor: cursor || undefined,
+      chainIds: chainIds.length > 0 ? chainIds : undefined,
+    });
 
-  return NextResponse.json(result, {
-    headers: {
-      'Cache-Control': 'no-store',
-    },
-  });
+    return NextResponse.json(result, {
+      headers: {
+        'Cache-Control': 'no-store',
+      },
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        tokens: [],
+        cursor: '',
+        currentPage: page ? Number(page) : 1,
+        totalPages: 1,
+        totalItems: 0,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      },
+    );
+  }
 }
-

@@ -64,6 +64,7 @@ import {
 import { resolveBlockersInterruptView } from './agentBlockersInterrupt';
 import { resolveCurrentSetupStep } from './agentCurrentSetupStep';
 import { resolveSetupSteps } from './agentSetupSteps';
+import { emitAgentConnectDebug } from '../utils/agentConnectDebug';
 import {
   buildPiExampleInterruptA2UiView,
   buildPiExampleStatusA2UiView,
@@ -2192,6 +2193,20 @@ function AgentBlockersTab({
     event.preventDefault();
     setError(null);
 
+    emitAgentConnectDebug({
+      event: 'gmx-setup-submit-attempt',
+      agentId,
+      payload: {
+        interruptType: activeInterrupt?.type ?? null,
+        isWalletLoading,
+        walletError: walletError?.message ?? null,
+        hasPrivyWallet: Boolean(privyWallet?.address),
+        connectedWalletAddress: connectedWalletAddress || null,
+        targetMarket,
+        baseContributionUsd,
+      },
+    });
+
     const operatorWalletAddress =
       privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
 
@@ -2237,6 +2252,16 @@ function AgentBlockersTab({
     const baseContributionNumber = parsedContribution;
     onSettingsChange?.({ amount: baseContributionNumber });
 
+    emitAgentConnectDebug({
+      event: 'gmx-setup-submit-dispatch',
+      agentId,
+      payload: {
+        walletAddress: operatorWalletAddress,
+        targetMarket,
+        baseContributionUsd: baseContributionNumber,
+      },
+    });
+
     onInterruptSubmit?.({
       walletAddress: operatorWalletAddress as `0x${string}`,
       baseContributionUsd: baseContributionNumber,
@@ -2259,6 +2284,36 @@ function AgentBlockersTab({
   const showGmxSetupForm = blockersInterruptView.kind === 'gmx-setup';
   const showFundingTokenForm = blockersInterruptView.kind === 'funding-token';
   const showDelegationSigningForm = blockersInterruptView.kind === 'delegation-signing';
+
+  useEffect(() => {
+    if (!showGmxSetupForm) return;
+
+    emitAgentConnectDebug({
+      event: 'gmx-setup-form-state',
+      agentId,
+      payload: {
+        interruptType: activeInterrupt?.type ?? null,
+        isWalletLoading,
+        walletError: walletError?.message ?? null,
+        hasPrivyWallet: Boolean(privyWallet?.address),
+        connectedWalletAddress: connectedWalletAddress || null,
+        targetMarket,
+        baseContributionUsd,
+        error,
+      },
+    });
+  }, [
+    activeInterrupt?.type,
+    agentId,
+    baseContributionUsd,
+    connectedWalletAddress,
+    error,
+    isWalletLoading,
+    privyWallet?.address,
+    showGmxSetupForm,
+    targetMarket,
+    walletError?.message,
+  ]);
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
@@ -2348,6 +2403,17 @@ function AgentBlockersTab({
 
     setIsSigningDelegations(true);
     try {
+      emitAgentConnectDebug({
+        event: 'gmx-delegation-sign-attempt',
+        payload: {
+          interruptType: activeInterrupt?.type ?? null,
+          delegationCount: delegationsToSign.length,
+          chainId,
+          requiredChainId: interrupt.chainId,
+          hasWalletClient: Boolean(walletClient),
+          isWalletLoading,
+        },
+      });
       const signedDelegations = [];
       for (const delegation of delegationsToSign) {
         if (delegation.delegator.toLowerCase() !== requiredDelegatorAddress) {
@@ -2366,6 +2432,13 @@ function AgentBlockersTab({
       }
 
       const response: DelegationSigningResponse = { outcome: 'signed', signedDelegations };
+      emitAgentConnectDebug({
+        event: 'gmx-delegation-sign-dispatch',
+        payload: {
+          interruptType: activeInterrupt?.type ?? null,
+          signedDelegationCount: signedDelegations.length,
+        },
+      });
       onInterruptSubmit?.(response);
     } catch (signError: unknown) {
       const message =
@@ -2451,6 +2524,20 @@ function AgentBlockersTab({
                   <button
                     type="submit"
                     disabled={isWalletLoading}
+                    onClick={(event) => {
+                      emitAgentConnectDebug({
+                        event: 'gmx-setup-next-click',
+                        agentId,
+                        payload: {
+                          disabled: event.currentTarget.disabled,
+                          isWalletLoading,
+                          hasPrivyWallet: Boolean(privyWallet?.address),
+                          connectedWalletAddress: connectedWalletAddress || null,
+                          targetMarket,
+                          baseContributionUsd,
+                        },
+                      });
+                    }}
                     className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
                   >
                     Next
@@ -2526,7 +2613,22 @@ function AgentBlockersTab({
                 </div>
               </div>
             ) : showGmxSetupForm ? (
-              <form onSubmit={handleGmxSetupSubmit}>
+              <form
+                onSubmitCapture={() => {
+                  emitAgentConnectDebug({
+                    event: 'gmx-setup-form-submit-capture',
+                    agentId,
+                    payload: {
+                      isWalletLoading,
+                      hasPrivyWallet: Boolean(privyWallet?.address),
+                      connectedWalletAddress: connectedWalletAddress || null,
+                      targetMarket,
+                      baseContributionUsd,
+                    },
+                  });
+                }}
+                onSubmit={handleGmxSetupSubmit}
+              >
                 <h3 className="text-lg font-semibold text-white mb-4">GMX Allora Setup</h3>
                 {activeInterrupt?.message && (
                   <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>

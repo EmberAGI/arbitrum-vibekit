@@ -13,15 +13,23 @@ import {
   type ClmmState,
   type ClmmUpdate,
 } from '../context.js';
+import { ensureCronForThread } from '../cronScheduler.js';
 import { MARKETS } from '../seedData.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+type Configurable = {
+  configurable?: {
+    thread_id?: string;
+  };
+};
 
 export const prepareOperatorNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
+  const runtimeThreadId = (config as Configurable).configurable?.thread_id;
   logWarn('prepareOperator: node entered', {
+    threadId: runtimeThreadId,
     onboardingStatus: state.thread.onboardingFlow?.status,
     onboardingStep: state.thread.onboarding?.step,
     onboardingKey: state.thread.onboarding?.key,
@@ -197,6 +205,9 @@ export const prepareOperatorNode = async (
   });
 
   const events: ClmmEvent[] = [statusEvent];
+  const scheduledCron = runtimeThreadId
+    ? ensureCronForThread(runtimeThreadId, state.private.pollIntervalMs)
+    : undefined;
 
   const completedView = applyThreadPatch(state, {
     operatorConfig,
@@ -217,7 +228,7 @@ export const prepareOperatorNode = async (
   return {
     thread: completedView,
     private: {
-      cronScheduled: false,
+      cronScheduled: scheduledCron !== undefined || state.private.cronScheduled,
     },
   };
 };

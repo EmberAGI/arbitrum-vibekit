@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const langGraphAgentConfigs: Array<Record<string, unknown>> = [];
+const langGraphInterruptSnapshotAgentConfigs: Array<Record<string, unknown>> = [];
 const piRuntimeHttpAgentConfigs: Array<Record<string, unknown>> = [];
 
-class MockLangGraphAgent {
+class MockLangGraphInterruptSnapshotAgent {
   constructor(config: Record<string, unknown>) {
-    langGraphAgentConfigs.push(config);
+    langGraphInterruptSnapshotAgentConfigs.push(config);
   }
 }
 
@@ -15,8 +15,8 @@ class MockPiRuntimeHttpAgent {
   }
 }
 
-vi.mock('@copilotkit/runtime/langgraph', () => ({
-  LangGraphAgent: MockLangGraphAgent,
+vi.mock('./langGraphInterruptSnapshotAgent', () => ({
+  LangGraphInterruptSnapshotAgent: MockLangGraphInterruptSnapshotAgent,
 }));
 
 vi.mock('agent-runtime/pi-transport', () => {
@@ -27,11 +27,11 @@ vi.mock('agent-runtime/pi-transport', () => {
 
 describe('buildCopilotRuntimeAgents', () => {
   beforeEach(() => {
-    langGraphAgentConfigs.length = 0;
+    langGraphInterruptSnapshotAgentConfigs.length = 0;
     piRuntimeHttpAgentConfigs.length = 0;
   });
 
-  it('registers a Pi-backed AG-UI HTTP agent alongside the existing LangGraph agents', async () => {
+  it('registers LangGraph agents through the interrupt-preserving adapter and keeps Pi on the AG-UI HTTP runtime', async () => {
     const { buildCopilotRuntimeAgents } = await import('./copilotRuntimeRegistry');
 
     const agents = buildCopilotRuntimeAgents({
@@ -50,7 +50,7 @@ describe('buildCopilotRuntimeAgents', () => {
       'agent-pi-example',
     ]);
 
-    expect(langGraphAgentConfigs).toEqual([
+    expect(langGraphInterruptSnapshotAgentConfigs).toEqual([
       {
         deploymentUrl: 'http://langgraph-clmm:8124',
         graphId: 'agent-clmm',

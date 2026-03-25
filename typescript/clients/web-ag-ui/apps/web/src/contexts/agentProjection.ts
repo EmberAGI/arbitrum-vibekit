@@ -79,6 +79,10 @@ function mergeStatePayload(projected: ThreadSnapshot, incoming: Partial<ThreadSn
     };
   }
 
+  if (Array.isArray(incoming.tasks)) {
+    projected.tasks = incoming.tasks;
+  }
+
   projected.thread = {
     ...projected.thread,
     ...incomingThread,

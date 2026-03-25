@@ -11,17 +11,33 @@ export async function GET(request: Request) {
   const page = url.searchParams.get('page');
   const cursor = url.searchParams.get('cursor');
 
-  const result = await fetchOnchainActionsChainsPage({
-    baseUrl: resolveOnchainActionsBaseUrl(),
-    page: page ? Number(page) : undefined,
-    cursor: cursor || undefined,
-  });
+  try {
+    const result = await fetchOnchainActionsChainsPage({
+      baseUrl: resolveOnchainActionsBaseUrl(),
+      page: page ? Number(page) : undefined,
+      cursor: cursor || undefined,
+    });
 
-  return NextResponse.json(result, {
-    headers: {
-      // This endpoint is just a CORS-safe proxy for client use.
-      'Cache-Control': 'no-store',
-    },
-  });
+    return NextResponse.json(result, {
+      headers: {
+        // This endpoint is just a CORS-safe proxy for client use.
+        'Cache-Control': 'no-store',
+      },
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        chains: [],
+        cursor: '',
+        currentPage: page ? Number(page) : 1,
+        totalPages: 1,
+        totalItems: 0,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      },
+    );
+  }
 }
-

@@ -448,6 +448,14 @@ export interface UiState {
   selectors: UiSelectors;
 }
 
+export interface ThreadTaskInterrupt {
+  value?: unknown;
+}
+
+export interface ThreadTaskEntry {
+  interrupts?: ThreadTaskInterrupt[];
+}
+
 // AG-UI thread snapshot envelope
 export interface ThreadSnapshot {
   messages?: unknown[];
@@ -458,6 +466,7 @@ export interface ThreadSnapshot {
   settings: AgentSettings;
   private?: AgentPrivateState;
   thread: ThreadState;
+  tasks?: ThreadTaskEntry[];
 }
 
 // Simplified types for UI components

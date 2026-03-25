@@ -1,4 +1,6 @@
+import { appendFile, mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -54,6 +56,15 @@ export async function POST(req: NextRequest): Promise<Response> {
     requestId: randomUUID(),
     ...parsed.data,
   });
+
+  const logDir = path.join(process.cwd(), '.logs');
+  const logPath = path.join(logDir, 'agent-connect-debug.log');
+
+  void mkdir(logDir, { recursive: true })
+    .then(() => appendFile(logPath, `${JSON.stringify(parsed.data)}\n`, 'utf8'))
+    .catch(() => {
+      // best-effort local log sink only
+    });
 
   return Response.json({ ok: true });
 }
