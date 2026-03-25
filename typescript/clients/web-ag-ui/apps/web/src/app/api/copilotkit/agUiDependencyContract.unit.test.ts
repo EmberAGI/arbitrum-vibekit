@@ -29,6 +29,11 @@ function createEventStream(events: unknown[]) {
 
 describe('CopilotKit AG-UI dependency contract', () => {
   it('resolves current AG-UI versions through all browser-facing CopilotKit packages', () => {
+    const rootAgUiClientRoot = packageRootFromEntry(require.resolve('@ag-ui/client'));
+    const expectedAgUiClientVersion = JSON.parse(
+      fs.readFileSync(path.join(rootAgUiClientRoot, 'package.json'), 'utf8'),
+    ) as { version: string };
+
     const browserPackages = [
       { label: '@copilotkit/react-core', resolver: createRequire(require.resolve('@copilotkit/react-core')) },
       { label: '@copilotkit/react-ui', resolver: createRequire(require.resolve('@copilotkit/react-ui')) },
@@ -68,13 +73,19 @@ describe('CopilotKit AG-UI dependency contract', () => {
         fs.readFileSync(path.join(agUiClientRoot, 'package.json'), 'utf8'),
       ) as { version: string };
 
-      expect(agUiClientPackageJson.version, `${pkg.label} should use the current AG-UI client`).toBe(
-        '0.0.47',
-      );
+      expect(
+        agUiClientPackageJson.version,
+        `${pkg.label} should use the current AG-UI client`,
+      ).toBe(expectedAgUiClientVersion.version);
     }
   });
 
   it('resolves an AG-UI client through react-core that accepts reasoning events', async () => {
+    const rootAgUiClientRoot = packageRootFromEntry(require.resolve('@ag-ui/client'));
+    const expectedAgUiClientVersion = JSON.parse(
+      fs.readFileSync(path.join(rootAgUiClientRoot, 'package.json'), 'utf8'),
+    ) as { version: string };
+
     const reactCoreEntry = require.resolve('@copilotkit/react-core');
     const reactCoreRequire = createRequire(reactCoreEntry);
     const agUiClientEntry = reactCoreRequire.resolve('@ag-ui/client');
@@ -162,7 +173,7 @@ describe('CopilotKit AG-UI dependency contract', () => {
       agUiClientModule.transformHttpEventStream(source$).pipe(toArray()),
     );
 
-    expect(agUiClientPackageJson.version).toBe('0.0.47');
+    expect(agUiClientPackageJson.version).toBe(expectedAgUiClientVersion.version);
     expect(events.map((event) => event.type)).toEqual([
       EventType.RUN_STARTED,
       EventType.REASONING_START,
