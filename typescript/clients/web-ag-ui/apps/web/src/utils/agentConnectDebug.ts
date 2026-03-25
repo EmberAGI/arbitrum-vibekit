@@ -2,7 +2,7 @@
 
 type AgentConnectDebugPayload = {
   event: string;
-  agentId: string;
+  agentId?: string;
   threadId?: string | null;
   payload?: Record<string, unknown>;
 };
@@ -17,7 +17,7 @@ export function emitAgentConnectDebug(input: AgentConnectDebugPayload): void {
   const body = JSON.stringify({
     ts: new Date().toISOString(),
     event: input.event,
-    agentId: input.agentId,
+    agentId: input.agentId ?? null,
     threadId: input.threadId ?? null,
     path: typeof window === 'undefined' ? undefined : window.location.pathname,
     visibilityState: typeof document === 'undefined' ? undefined : document.visibilityState,

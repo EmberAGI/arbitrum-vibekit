@@ -1,10 +1,11 @@
 import type { State } from '@ag-ui/langgraph';
-import type { ThreadState } from '@langchain/langgraph-sdk';
 import { EventType, verifyEvents, type RunAgentInput } from '@ag-ui/client';
 import { Subject, lastValueFrom, toArray } from 'rxjs';
 import { describe, expect, it } from 'vitest';
 
 import { LangGraphInterruptSnapshotAgent } from './langGraphInterruptSnapshotAgent';
+
+type LangGraphThreadState = Parameters<LangGraphInterruptSnapshotAgent['getStateSnapshot']>[0];
 
 describe('LangGraphInterruptSnapshotAgent', () => {
   it('preserves top-level persisted task interrupts in projected snapshots', () => {
@@ -49,7 +50,7 @@ describe('LangGraphInterruptSnapshotAgent', () => {
           ],
         },
       ],
-    } as unknown as ThreadState<State>);
+    } as unknown as LangGraphThreadState);
 
     expect(snapshot).toMatchObject({
       thread: {
@@ -140,7 +141,7 @@ describe('LangGraphInterruptSnapshotAgent', () => {
             tasks: [],
             next: ['collectDelegations'],
             metadata: { writes: {} },
-          }) as ThreadState<State>,
+          }) as LangGraphThreadState,
       },
     });
 
@@ -238,7 +239,7 @@ describe('LangGraphInterruptSnapshotAgent', () => {
           tasks: [],
           next: ['collectDelegations'],
           metadata: { writes: {} },
-        } as ThreadState<State>,
+        } as LangGraphThreadState,
       },
       'thread-1',
       {

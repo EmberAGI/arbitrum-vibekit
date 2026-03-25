@@ -1,14 +1,9 @@
 import type { State } from '@ag-ui/langgraph';
-import type { ThreadState } from '@langchain/langgraph-sdk';
-import {
-  LangGraphAgent as CopilotKitLangGraphAgent,
-  type LangGraphAgentConfig,
-} from '@copilotkit/runtime/langgraph';
+import { LangGraphAgent as CopilotKitLangGraphAgent } from '@copilotkit/runtime/langgraph';
 
-type LangGraphStateSnapshot = State & {
-  tasks?: ThreadState<State>['tasks'];
-};
-
+type LangGraphAgentConfig = ConstructorParameters<typeof CopilotKitLangGraphAgent>[0];
+type LangGraphThreadState = Parameters<CopilotKitLangGraphAgent['getStateSnapshot']>[0];
+type LangGraphStateSnapshot = State & { tasks?: LangGraphThreadState['tasks'] };
 type PrepareStreamInput = Parameters<CopilotKitLangGraphAgent['prepareStream']>[0];
 type PrepareStreamMode = Parameters<CopilotKitLangGraphAgent['prepareStream']>[1];
 type PrepareStreamResult = Awaited<ReturnType<CopilotKitLangGraphAgent['prepareStream']>>;
@@ -17,7 +12,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function readInterruptTypesFromState(state: ThreadState<State> | undefined): string[] {
+function readInterruptTypesFromState(state: LangGraphThreadState | undefined): string[] {
   if (!state || !Array.isArray(state.tasks)) return [];
   return state.tasks.flatMap((task) =>
     Array.isArray(task.interrupts)
@@ -47,7 +42,7 @@ function readResumeShape(input: PrepareStreamInput): {
       hasResume: true,
       resumeType: 'string',
       resumePreview: resume.slice(0, 240),
-      commandKeys: Object.keys(command),
+      commandKeys: command ? Object.keys(command) : [],
     };
   }
 
@@ -56,7 +51,7 @@ function readResumeShape(input: PrepareStreamInput): {
       hasResume: true,
       resumeType: 'object',
       resumePreview: JSON.stringify(resume).slice(0, 240),
-      commandKeys: Object.keys(command),
+      commandKeys: command ? Object.keys(command) : [],
     };
   }
 
@@ -76,7 +71,7 @@ export class LangGraphInterruptSnapshotAgent extends CopilotKitLangGraphAgent {
     return new LangGraphInterruptSnapshotAgent(this.config);
   }
 
-  override getStateSnapshot(threadState: ThreadState<State>): LangGraphStateSnapshot {
+  override getStateSnapshot(threadState: LangGraphThreadState): LangGraphStateSnapshot {
     const snapshot = super.getStateSnapshot(threadState) as LangGraphStateSnapshot;
 
     if (!Array.isArray(threadState.tasks) || threadState.tasks.length === 0) {
