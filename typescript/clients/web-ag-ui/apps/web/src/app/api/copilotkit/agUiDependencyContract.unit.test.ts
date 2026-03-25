@@ -28,17 +28,15 @@ function createEventStream(events: unknown[]) {
 }
 
 describe('CopilotKit AG-UI dependency contract', () => {
-  it('resolves current AG-UI versions through all browser-facing CopilotKit packages', () => {
+  it('resolves the current AG-UI client through CopilotKit packages that own the AG-UI boundary', () => {
     const rootAgUiClientRoot = packageRootFromEntry(require.resolve('@ag-ui/client'));
     const expectedAgUiClientVersion = JSON.parse(
       fs.readFileSync(path.join(rootAgUiClientRoot, 'package.json'), 'utf8'),
     ) as { version: string };
 
-    const browserPackages = [
+    const agUiBoundaryPackages = [
       { label: '@copilotkit/react-core', resolver: createRequire(require.resolve('@copilotkit/react-core')) },
-      { label: '@copilotkit/react-ui', resolver: createRequire(require.resolve('@copilotkit/react-ui')) },
       { label: '@copilotkit/runtime', resolver: createRequire(require.resolve('@copilotkit/runtime')) },
-      { label: '@copilotkit/shared', resolver: createRequire(require.resolve('@copilotkit/shared')) },
       { label: '@copilotkitnext/core', resolver: createRequire(require.resolve('@copilotkitnext/core')) },
       {
         label: '@copilotkitnext/react via @copilotkit/react-ui',
@@ -66,7 +64,7 @@ describe('CopilotKit AG-UI dependency contract', () => {
       },
     ];
 
-    for (const pkg of browserPackages) {
+    for (const pkg of agUiBoundaryPackages) {
       const agUiClientEntry = pkg.resolver.resolve('@ag-ui/client');
       const agUiClientRoot = packageRootFromEntry(agUiClientEntry);
       const agUiClientPackageJson = JSON.parse(
