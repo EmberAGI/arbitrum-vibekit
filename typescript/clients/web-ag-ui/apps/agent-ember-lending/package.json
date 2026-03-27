@@ -33,6 +33,7 @@
     "test:ci": "pnpm test:unit"
   },
   "dependencies": {
+    "@emberagi/ember-lending-runtime": "file:../../vendor-private/ember-lending-runtime/emberagi-ember-lending-runtime-0.1.0.tgz",
     "agent-runtime": "workspace:^"
   },
   "dependenciesMeta": {

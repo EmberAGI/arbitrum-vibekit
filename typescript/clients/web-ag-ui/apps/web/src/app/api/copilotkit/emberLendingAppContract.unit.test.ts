@@ -24,6 +24,8 @@ describe('Ember lending app package contract', () => {
 
     expect(packageJson.name).toBe('agent-ember-lending');
     expect(packageJson.dependencies).toMatchObject({
+      '@emberagi/ember-lending-runtime':
+        'file:../../vendor-private/ember-lending-runtime/emberagi-ember-lending-runtime-0.1.0.tgz',
       'agent-runtime': 'workspace:^',
     });
     expect(packageJson.files).toEqual(expect.arrayContaining(['src', 'dist']));
