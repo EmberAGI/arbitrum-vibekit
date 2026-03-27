@@ -506,6 +506,71 @@ async function executeConfirmedFlipPlan(params: {
   };
 }
 
+async function confirmFlipReopenedPosition(params: {
+  onchainActionsClient: Pick<OnchainActionsClient, 'listPerpetualPositions'>;
+  walletAddress: `0x${string}`;
+  marketAddress: `0x${string}`;
+  expectedSide: 'long' | 'short';
+  runtimeThreadId: string | undefined;
+  runtimeCheckpointId: string | undefined;
+  runtimeCheckpointNamespace: string | undefined;
+  iteration: number;
+}): Promise<PerpetualPosition | undefined> {
+  const maxVerificationAttempts = resolveFlipCloseVerifyAttempts();
+  const verificationIntervalMs = resolveFlipCloseVerifyIntervalMs();
+  const normalizedTargetMarket = params.marketAddress.toLowerCase();
+  let reopenedPosition: PerpetualPosition | undefined;
+
+  for (let attempt = 1; attempt <= maxVerificationAttempts; attempt += 1) {
+    if (attempt > 1) {
+      await delay(verificationIntervalMs);
+    }
+
+    try {
+      const refreshedPositions = await params.onchainActionsClient.listPerpetualPositions({
+        walletAddress: params.walletAddress,
+        chainIds: [ARBITRUM_CHAIN_ID.toString()],
+      });
+      reopenedPosition = refreshedPositions.find(
+        (position) => position.marketAddress.toLowerCase() === normalizedTargetMarket,
+      );
+      const reopenedConfirmed =
+        hasOpenPosition(reopenedPosition) && reopenedPosition.positionSide === params.expectedSide;
+      logWarn('pollCycle: flip reopen verification snapshot', {
+        threadId: params.runtimeThreadId,
+        checkpointId: params.runtimeCheckpointId,
+        checkpointNamespace: params.runtimeCheckpointNamespace,
+        iteration: params.iteration,
+        attempt,
+        maxVerificationAttempts,
+        targetMarketAddress: normalizedTargetMarket,
+        expectedSide: params.expectedSide,
+        reopenedConfirmed,
+        matchedMarketPosition: Boolean(reopenedPosition),
+        matchedPositionSide: reopenedPosition?.positionSide,
+        matchedPositionSizeUsd: reopenedPosition?.sizeInUsd,
+      });
+      if (reopenedConfirmed) {
+        return reopenedPosition;
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarn('pollCycle: flip reopen verification positions query failed', {
+        threadId: params.runtimeThreadId,
+        checkpointId: params.runtimeCheckpointId,
+        checkpointNamespace: params.runtimeCheckpointNamespace,
+        iteration: params.iteration,
+        attempt,
+        maxVerificationAttempts,
+        error: message,
+      });
+      break;
+    }
+  }
+
+  return reopenedPosition;
+}
+
 async function maybeAutoFundExecutionFee(params: {
   onchainActionsClient: Pick<
     OnchainActionsClient,
@@ -1323,15 +1388,18 @@ export const pollCycleNode = async (
             position.positionSide === exposureAdjusted.side,
         )
       : undefined;
+  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
 
   const plannedExecutionPlan = buildPerpetualExecutionPlan({
     telemetry: exposureAdjusted,
+    txExecutionMode,
     chainId: ARBITRUM_CHAIN_ID.toString(),
     marketAddress: gmxMarketAddress as `0x${string}`,
     walletAddress: planBuilderWalletAddress,
     payTokenAddress: operatorConfig.fundingTokenAddress,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
-    currentPositionSide: decisionPreviousSide,
+    actualPositionSide: currentPositionSide,
+    assumedPositionSide: reconciledAssumedPositionSide ?? activePositionSyncGuard?.expectedSide,
     positionContractKey: positionForReduce?.contractKey,
     positionSizeInUsd: positionForReduce?.sizeInUsd,
   });
@@ -1357,6 +1425,7 @@ export const pollCycleNode = async (
     ? ({ action: 'none' } as const)
     : plannedExecutionPlan;
   const shouldDeferTradeForPositionSync =
+    txExecutionMode === 'execute' &&
     Boolean(activePositionSyncGuard) &&
     !currentMarketPosition &&
     executionPlan.action !== 'none';
@@ -1432,7 +1501,6 @@ export const pollCycleNode = async (
     }
   }
 
-  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
   const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
   if (executionPlan.action === 'none') {
     logWarn('pollCycle: execution plan is none; no order simulation/execution will be attempted', {
@@ -1726,19 +1794,6 @@ export const pollCycleNode = async (
     statusEvent = approvalStatus.statusEvent;
   }
 
-  const latestCycle =
-    approvalOnlyExecution
-      ? {
-          ...adjustedTelemetry,
-          action: 'hold' as const,
-          side: undefined,
-          leverage: undefined,
-          sizeUsd: undefined,
-          txHash: undefined,
-          reason: `${adjustedTelemetry.reason} Approval completed; waiting for executable GMX trade transaction.`,
-        }
-      : adjustedTelemetry;
-
   let positionAfterExecution = currentMarketPosition;
   if (executionCompletedSuccessfully && executionPlan.action !== 'none') {
     try {
@@ -1755,6 +1810,61 @@ export const pollCycleNode = async (
     }
   }
 
+  if (
+    executionCompletedSuccessfully &&
+    executionPlan.action === 'flip' &&
+    positionAfterExecution?.positionSide !== resolveFlipSide(executionPlan.closeRequest.positionSide)
+  ) {
+    positionAfterExecution = await confirmFlipReopenedPosition({
+      onchainActionsClient,
+      walletAddress: planBuilderWalletAddress,
+      marketAddress: normalizeHexAddress(gmxMarketAddress, 'market address'),
+      expectedSide: resolveFlipSide(executionPlan.closeRequest.positionSide),
+      runtimeThreadId,
+      runtimeCheckpointId,
+      runtimeCheckpointNamespace,
+      iteration,
+    });
+  }
+
+  const hasCompletedTradeEffect =
+    executionCompletedSuccessfully && executionPlan.action !== 'none' && !approvalOnlyExecution;
+  const executionAwaitingPositionConfirmation =
+    hasCompletedTradeEffect && lifecycleStatus === 'pending' && !positionAfterExecution;
+  const hasConfirmedTradeEffect = hasCompletedTradeEffect && !executionAwaitingPositionConfirmation;
+  const latestCycle = (() => {
+    if (approvalOnlyExecution) {
+      return {
+        ...adjustedTelemetry,
+        action: 'hold' as const,
+        side: undefined,
+        leverage: undefined,
+        sizeUsd: undefined,
+        txHash: undefined,
+        reason: `${adjustedTelemetry.reason} Approval completed; waiting for executable GMX trade transaction.`,
+      };
+    }
+
+    const txLinkedCycle = executionResult.lastTxHash
+      ? {
+          ...adjustedTelemetry,
+          txHash: executionResult.lastTxHash,
+        }
+      : adjustedTelemetry;
+
+    if (!hasConfirmedTradeEffect || executionPlan.action !== 'flip') {
+      return txLinkedCycle;
+    }
+
+    const previousSide = executionPlan.closeRequest.positionSide;
+    const nextSide = resolveFlipSide(previousSide);
+    return {
+      ...txLinkedCycle,
+      action: 'open' as const,
+      side: nextSide,
+      reason: `Signal direction flipped to ${nextSide}; closed ${previousSide} and reopened ${nextSide}.`,
+    };
+  })();
   const fallbackSizeUsd =
     approvalOnlyExecution
       ? undefined
@@ -1787,12 +1897,6 @@ export const pollCycleNode = async (
         : undefined,
     previous: state.thread.metrics.latestSnapshot,
   });
-
-  const hasCompletedTradeEffect =
-    executionCompletedSuccessfully && executionPlan.action !== 'none' && !approvalOnlyExecution;
-  const executionAwaitingPositionConfirmation =
-    hasCompletedTradeEffect && lifecycleStatus === 'pending' && !positionAfterExecution;
-  const hasConfirmedTradeEffect = hasCompletedTradeEffect && !executionAwaitingPositionConfirmation;
   const lifetimePnlUsd = positionAfterExecution
     ? parseUsdMetric(positionAfterExecution.pnl)
     : executionCompletedSuccessfully && executionPlan.action === 'close'
@@ -1802,6 +1906,10 @@ export const pollCycleNode = async (
   const nextPendingPositionSync: PositionSyncGuard | undefined = (():
     | PositionSyncGuard
     | undefined => {
+    if (txExecutionMode !== 'execute') {
+      return undefined;
+    }
+
     const activeGuardWithoutPosition = activePositionSyncGuard && !positionAfterExecution;
     if (!executionCompletedSuccessfully || executionPlan.action === 'none' || approvalOnlyExecution) {
       return activeGuardWithoutPosition ? activePositionSyncGuard : undefined;
@@ -1956,15 +2064,17 @@ export const pollCycleNode = async (
   };
 
   let cronScheduled = state.private.cronScheduled;
-  if (runtimeThreadId && !cronScheduled) {
+  if (runtimeThreadId) {
     const intervalMs = state.private.pollIntervalMs ?? resolvePollIntervalMs();
     ensureCronForThread(runtimeThreadId, intervalMs);
-    logInfo('Cron scheduled after first GMX cycle', {
-      threadId: runtimeThreadId,
-      checkpointId: runtimeCheckpointId,
-      checkpointNamespace: runtimeCheckpointNamespace,
-    });
-    cronScheduled = true;
+    if (!cronScheduled) {
+      logInfo('Cron scheduled after first GMX cycle', {
+        threadId: runtimeThreadId,
+        checkpointId: runtimeCheckpointId,
+        checkpointNamespace: runtimeCheckpointNamespace,
+      });
+      cronScheduled = true;
+    }
   }
 
   const finalAction = latestCycle.action;

@@ -88,12 +88,11 @@ ensure_mock_allora() {
   fi
 
   export ALLORA_API_BASE_URL="${ALLORA_API_BASE_URL:-http://127.0.0.1:5055}"
-  # Disable caching by default when using the mock so flips/stable windows are visible
-  # at the agent polling cadence. Override explicitly if you want caching.
+  # Disable caching by default when using the mock so 30s cycle-window flips are
+  # visible at the agent polling cadence. Override explicitly if you want caching.
   export ALLORA_8H_INFERENCE_CACHE_TTL_MS="${ALLORA_8H_INFERENCE_CACHE_TTL_MS:-0}"
   export ALLORA_INFERENCE_CACHE_TTL_MS="${ALLORA_INFERENCE_CACHE_TTL_MS:-0}"
-  # Keep signals stable for a few cycles, but flip quickly enough for manual QA.
-  export ALLORA_MOCK_STABLE_WINDOW_REQUESTS="${ALLORA_MOCK_STABLE_WINDOW_REQUESTS:-2}"
+  export ALLORA_MOCK_CYCLE_MS="${ALLORA_MOCK_CYCLE_MS:-30000}"
 
   local health_url="${ALLORA_API_BASE_URL}/v2/allora/consumer/mock?allora_topic_id=14"
   if curl -fs -o /dev/null "$health_url"; then

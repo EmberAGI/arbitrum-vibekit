@@ -6,15 +6,32 @@ if (!Number.isFinite(port) || port <= 0) {
   throw new Error(`PORT must be a positive number (got: ${String(portRaw)})`);
 }
 
-const counters = {};
-const stableWindowRequestsRaw = process.env.ALLORA_MOCK_STABLE_WINDOW_REQUESTS;
-const stableWindowRequests = stableWindowRequestsRaw ? Number(stableWindowRequestsRaw) : 3;
-if (!Number.isFinite(stableWindowRequests) || stableWindowRequests <= 0) {
+const cycleMsRaw = process.env.ALLORA_MOCK_CYCLE_MS;
+const cycleMs = cycleMsRaw ? Number(cycleMsRaw) : 30_000;
+if (!Number.isFinite(cycleMs) || cycleMs <= 0) {
   throw new Error(
-    `ALLORA_MOCK_STABLE_WINDOW_REQUESTS must be a positive number (got: ${String(
-      stableWindowRequestsRaw,
+    `ALLORA_MOCK_CYCLE_MS must be a positive number (got: ${String(
+      cycleMsRaw,
     )})`,
   );
+}
+const firstRequestAtByTopic = {};
+
+function resolveCombinedValue(topicId) {
+  if (topicId !== '14' && topicId !== '2') {
+    return '100';
+  }
+
+  const firstRequestAt = firstRequestAtByTopic[topicId] ?? Date.now();
+  firstRequestAtByTopic[topicId] = firstRequestAt;
+
+  // Keep every request inside the same cycle window identical, then flip the
+  // fingerprint when the next 30s window begins. This makes QA deterministic
+  // even when multiple threads or retries consume extra requests between cycles.
+  const cycleIndex = Math.floor((Date.now() - firstRequestAt) / cycleMs);
+  const bucket = Math.floor(cycleIndex / 2);
+  const phase = cycleIndex % 2;
+  return phase === 0 ? String(1 + bucket) : String(100000 + bucket);
 }
 
 const server = http.createServer((req, res) => {
@@ -33,17 +50,7 @@ const server = http.createServer((req, res) => {
   }
 
   const topicId = url.searchParams.get('allora_topic_id') ?? '0';
-
-  // BTC=14, ETH=2 (8h feed); anything else is stable.
-  const combined = (() => {
-    if (topicId !== '14' && topicId !== '2') {
-      return '100';
-    }
-    const next = (counters[topicId] ?? 0) + 1;
-    counters[topicId] = next;
-    const phase = Math.floor((next - 1) / stableWindowRequests) % 2;
-    return phase === 0 ? '1' : '100000';
-  })();
+  const combined = resolveCombinedValue(topicId);
 
   // eslint-disable-next-line no-console
   console.log(`[mock-allora] topic=${topicId} -> ${combined}`);
