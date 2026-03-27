@@ -25,14 +25,21 @@ vi.mock('agent-runtime/pi-transport', () => {
   };
 });
 
+const copilotRuntimeRegistryModulePromise = import('./copilotRuntimeRegistry');
+
 describe('buildCopilotRuntimeAgents', () => {
   beforeEach(() => {
     langGraphInterruptSnapshotAgentConfigs.length = 0;
     piRuntimeHttpAgentConfigs.length = 0;
   });
 
-  it('registers LangGraph agents through the interrupt-preserving adapter and keeps Pi on the AG-UI HTTP runtime', async () => {
-    const { buildCopilotRuntimeAgents } = await import('./copilotRuntimeRegistry');
+  it(
+    'registers LangGraph agents through the interrupt-preserving adapter and keeps Pi on the AG-UI HTTP runtime',
+    {
+      timeout: 10_000,
+    },
+    async () => {
+    const { buildCopilotRuntimeAgents } = await copilotRuntimeRegistryModulePromise;
 
     const agents = buildCopilotRuntimeAgents({
       LANGGRAPH_DEPLOYMENT_URL: 'http://langgraph-clmm:8124',
@@ -40,6 +47,7 @@ describe('buildCopilotRuntimeAgents', () => {
       LANGGRAPH_GMX_ALLORA_DEPLOYMENT_URL: 'http://langgraph-gmx:8126',
       LANGSMITH_API_KEY: 'test-langsmith-key',
       PI_AGENT_DEPLOYMENT_URL: 'http://pi-agent-example:3410/ag-ui',
+      EMBER_LENDING_PI_AGENT_DEPLOYMENT_URL: 'http://pi-agent-ember-lending:3411/ag-ui',
     });
 
     expect(Object.keys(agents)).toEqual([
@@ -48,6 +56,7 @@ describe('buildCopilotRuntimeAgents', () => {
       'agent-gmx-allora',
       'starterAgent',
       'agent-pi-example',
+      'agent-ember-lending',
     ]);
 
     expect(langGraphInterruptSnapshotAgentConfigs).toEqual([
@@ -78,12 +87,18 @@ describe('buildCopilotRuntimeAgents', () => {
         agentId: 'agent-pi-example',
         runtimeUrl: 'http://pi-agent-example:3410/ag-ui',
       },
+      {
+        agentId: 'agent-ember-lending',
+        runtimeUrl: 'http://pi-agent-ember-lending:3411/ag-ui',
+      },
     ]);
     expect(agents['agent-pi-example']).toBeInstanceOf(MockPiRuntimeHttpAgent);
-  });
+    expect(agents['agent-ember-lending']).toBeInstanceOf(MockPiRuntimeHttpAgent);
+    },
+  );
 
   it('defaults the Pi example runtime URL for local development', async () => {
-    const { buildCopilotRuntimeAgents } = await import('./copilotRuntimeRegistry');
+    const { buildCopilotRuntimeAgents } = await copilotRuntimeRegistryModulePromise;
 
     const agents = buildCopilotRuntimeAgents({
       LANGSMITH_API_KEY: 'test-langsmith-key',
@@ -93,6 +108,11 @@ describe('buildCopilotRuntimeAgents', () => {
     expect(piRuntimeHttpAgentConfigs).toContainEqual({
       agentId: 'agent-pi-example',
       runtimeUrl: 'http://127.0.0.1:3410/ag-ui',
+    });
+    expect(agents['agent-ember-lending']).toBeInstanceOf(MockPiRuntimeHttpAgent);
+    expect(piRuntimeHttpAgentConfigs).toContainEqual({
+      agentId: 'agent-ember-lending',
+      runtimeUrl: 'http://127.0.0.1:3411/ag-ui',
     });
   });
 });

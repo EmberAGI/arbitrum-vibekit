@@ -108,6 +108,17 @@ describe('HireAgentsRoute integration', () => {
             iteration: 1,
           },
         },
+        'agent-ember-lending': {
+          synced: true,
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Pi Runtime', 'Ember'],
+            tokens: ['USDC'],
+          },
+          metrics: {
+            iteration: 5,
+          },
+        },
       },
     });
   });
@@ -118,12 +129,13 @@ describe('HireAgentsRoute integration', () => {
     expect(capturedProps).not.toBeNull();
     const props = capturedProps as HireAgentsRoutePropsCapture;
 
-    expect(props.agents).toHaveLength(4);
+    expect(props.agents).toHaveLength(5);
     expect(props.featuredAgents).toHaveLength(3);
 
     const clmm = props.agents.find((agent) => agent.id === 'agent-clmm');
     const pendle = props.agents.find((agent) => agent.id === 'agent-pendle');
     const piExample = props.agents.find((agent) => agent.id === 'agent-pi-example');
+    const emberLending = props.agents.find((agent) => agent.id === 'agent-ember-lending');
 
     expect(clmm?.chains).toEqual(['Arbitrum']);
     expect(clmm?.tokens).toEqual(['USDC', 'WETH', 'WBTC']);
@@ -140,6 +152,12 @@ describe('HireAgentsRoute integration', () => {
     expect(piExample?.tokens).toEqual(['USDC']);
     expect(piExample?.pointsTrend).toBe('up');
     expect(piExample?.trendMultiplier).toBe('1x');
+
+    expect(emberLending?.chains).toEqual(['Arbitrum']);
+    expect(emberLending?.protocols).toEqual(['Pi Runtime', 'Ember']);
+    expect(emberLending?.tokens).toEqual(['USDC']);
+    expect(emberLending?.pointsTrend).toBe('up');
+    expect(emberLending?.trendMultiplier).toBe('5x');
   });
 
   it('routes hire/view handlers to the correct detail URL', () => {

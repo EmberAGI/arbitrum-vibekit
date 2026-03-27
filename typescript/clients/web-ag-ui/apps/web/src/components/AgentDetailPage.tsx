@@ -38,6 +38,7 @@ import type {
   ClmmEvent,
 } from '../types/agent';
 import { getAgentConfig } from '../config/agents';
+import { isPiRuntimeAgentId } from '../config/piRuntimeAgents';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
 import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
@@ -597,7 +598,7 @@ export function AgentDetailPage({
   onSettingsSave,
 }: AgentDetailPageProps) {
   const showPostHireLayout = isHired || Boolean(isFiring);
-  const chatEnabled = agentId === 'agent-pi-example';
+  const chatEnabled = isPiRuntimeAgentId(agentId);
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (showPostHireLayout ? 'blockers' : 'metrics'),
   );

@@ -56,3 +56,4 @@ opencode.json
 .agent/
 typescript/lib/agent-node/*.zip
 typescript/clients/web/
+typescript/clients/web-ag-ui/vendor-private/ember-lending-runtime/*.tgz
