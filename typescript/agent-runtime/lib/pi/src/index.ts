@@ -7,8 +7,20 @@ import {
   type RunStartedEvent,
   type StateSnapshotEvent,
 } from '@ag-ui/core';
-import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
-import { createAssistantMessageEventStream, type Api, type Message, type Model, type ToolResultMessage } from '@mariozechner/pi-ai';
+import {
+  Agent,
+  type AgentEvent,
+  type AgentMessage,
+  type AgentOptions,
+  type AgentTool,
+} from '@mariozechner/pi-agent-core';
+import {
+  createAssistantMessageEventStream,
+  type Api,
+  type Message,
+  type Model,
+  type ToolResultMessage,
+} from '@mariozechner/pi-ai';
 import { mergeThreadPatchForEmit, type TaskState } from 'agent-runtime-contracts';
 import {
   buildPiRuntimeInspectionSnapshot,
@@ -32,7 +44,10 @@ export {
   DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH,
   PiRuntimeGatewayHttpAgent,
 } from './agUiTransport.js';
-export type { PiRuntimeGatewayAgUiHandlerOptions, PiRuntimeGatewayHttpAgentConfig } from './agUiTransport.js';
+export type {
+  PiRuntimeGatewayAgUiHandlerOptions,
+  PiRuntimeGatewayHttpAgentConfig,
+} from './agUiTransport.js';
 export {
   buildPiRuntimeDirectExecutionRecordIds,
   ensurePiRuntimePostgresReady,
@@ -101,10 +116,8 @@ export type PiRuntimeGatewayExecutionStatus =
   | 'canceled'
   | 'auth-required';
 
-export type PiRuntimeGatewaySession = {
-  thread: {
-    id: string;
-  };
+export type PiRuntimeGatewayThreadProjection = {
+  threadId: string;
   execution: {
     id: string;
     status: PiRuntimeGatewayExecutionStatus;
@@ -115,6 +128,20 @@ export type PiRuntimeGatewaySession = {
     id: string;
     runId?: string;
   };
+  currentArtifact?: PiRuntimeGatewayArtifact;
+  activityArtifact?: PiRuntimeGatewayArtifact;
+  a2ui?: PiRuntimeGatewayA2UiPayload;
+  activityEvents?: PiRuntimeGatewayActivityEvent[];
+  threadPatch?: Record<string, unknown>;
+};
+
+type PiRuntimeGatewaySession = {
+  thread: {
+    id: string;
+  };
+  execution: PiRuntimeGatewayThreadProjection['execution'];
+  messages?: PiRuntimeGatewayThreadProjection['messages'];
+  automation?: PiRuntimeGatewayThreadProjection['automation'];
   artifacts?: {
     current?: PiRuntimeGatewayArtifact;
     activity?: PiRuntimeGatewayArtifact;
@@ -164,9 +191,15 @@ declare module '@mariozechner/pi-agent-core' {
 }
 
 export type PiRuntimeGatewayRuntime = {
-  connect: (request: PiRuntimeGatewayConnectRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
-  run: (request: PiRuntimeGatewayRunRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
-  stop: (request: PiRuntimeGatewayStopRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
+  connect: (
+    request: PiRuntimeGatewayConnectRequest,
+  ) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
+  run: (
+    request: PiRuntimeGatewayRunRequest,
+  ) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
+  stop: (
+    request: PiRuntimeGatewayStopRequest,
+  ) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
 };
 
 export type PiRuntimeGatewayControlPlane = {
@@ -189,7 +222,36 @@ export type PiRuntimeGatewayService = {
 
 export type PiRuntimeGatewayEventSource = readonly BaseEvent[] | AsyncIterable<BaseEvent>;
 
-export type PiRuntimeGatewayAgent = Pick<Agent, 'subscribe' | 'prompt' | 'continue' | 'abort' | 'state'> & {
+export type PiRuntimeGatewayProjectionStore = {
+  getProjection: (threadId: string) => PiRuntimeGatewayThreadProjection;
+  updateProjection: (
+    threadId: string,
+    update: (projection: PiRuntimeGatewayThreadProjection) => PiRuntimeGatewayThreadProjection,
+  ) => PiRuntimeGatewayThreadProjection;
+  attachToThread: (
+    threadId: string,
+    listener: (event: BaseEvent) => void,
+  ) => {
+    detach: () => void;
+    activeRunEvents: readonly BaseEvent[];
+  };
+  startAttachedRun: (threadId: string, runId: string) => void;
+  appendAttachedRunEvents: (threadId: string, runId: string, events: readonly BaseEvent[]) => void;
+  finishAttachedRun: (threadId: string, runId: string) => void;
+  publishAttachedEventSource: (
+    threadId: string,
+    source: PiRuntimeGatewayEventSource,
+  ) => Promise<void>;
+};
+
+export type CreatePiRuntimeGatewayProjectionStoreOptions = {
+  createInitialProjection?: (threadId: string) => PiRuntimeGatewayThreadProjection;
+};
+
+export type PiRuntimeGatewayAgent = Pick<
+  Agent,
+  'subscribe' | 'prompt' | 'continue' | 'abort' | 'state'
+> & {
   sessionId?: string;
   steer?: (message: AgentMessage) => void;
   followUp?: (message: AgentMessage) => void;
@@ -249,12 +311,17 @@ function logPiGatewayDebug(message: string, detail?: unknown): void {
   });
 }
 
-function validatePiGatewayToolNames(_model: Model<Api>, tools: readonly AgentTool[] | undefined): void {
+function validatePiGatewayToolNames(
+  _model: Model<Api>,
+  tools: readonly AgentTool[] | undefined,
+): void {
   if (!tools || tools.length === 0) {
     return;
   }
 
-  const invalidToolNames = tools.map((tool) => tool.name).filter((name) => !PORTABLE_PI_TOOL_NAME_PATTERN.test(name));
+  const invalidToolNames = tools
+    .map((tool) => tool.name)
+    .filter((name) => !PORTABLE_PI_TOOL_NAME_PATTERN.test(name));
 
   if (invalidToolNames.length === 0) {
     return;
@@ -264,6 +331,155 @@ function validatePiGatewayToolNames(_model: Model<Api>, tools: readonly AgentToo
     `Invalid Pi tool name(s): ${invalidToolNames.join(', ')}. Tool names must match ^[a-zA-Z0-9_-]+$ for cross-provider compatibility.`,
   );
 }
+
+const createDefaultProjection = (threadId: string): PiRuntimeGatewayThreadProjection => ({
+  threadId,
+  execution: {
+    id: `pi-runtime:${threadId}`,
+    status: 'working',
+  },
+  messages: [],
+  activityEvents: [],
+});
+
+const buildSessionFromProjection = (
+  projection: PiRuntimeGatewayThreadProjection,
+): PiRuntimeGatewaySession => ({
+  thread: {
+    id: projection.threadId,
+  },
+  execution: projection.execution,
+  ...(projection.messages ? { messages: projection.messages } : {}),
+  ...(projection.automation ? { automation: projection.automation } : {}),
+  ...(projection.currentArtifact || projection.activityArtifact
+    ? {
+        artifacts: {
+          ...(projection.currentArtifact ? { current: projection.currentArtifact } : {}),
+          ...(projection.activityArtifact ? { activity: projection.activityArtifact } : {}),
+        },
+      }
+    : {}),
+  ...(projection.a2ui ? { a2ui: projection.a2ui } : {}),
+  ...(projection.activityEvents ? { activityEvents: projection.activityEvents } : {}),
+  ...(projection.threadPatch ? { threadPatch: projection.threadPatch } : {}),
+});
+
+type PiRuntimeGatewayProjectionStoreEntry = {
+  projection: PiRuntimeGatewayThreadProjection;
+  attachedEventListeners: Set<(event: BaseEvent) => void>;
+  activeAttachedRun: {
+    runId: string;
+    events: BaseEvent[];
+  } | null;
+};
+
+const cloneBaseEvents = (events: readonly BaseEvent[]): BaseEvent[] => {
+  const clonedEvents: BaseEvent[] = [];
+  for (const event of events) {
+    clonedEvents.push(event);
+  }
+  return clonedEvents;
+};
+
+export const createPiRuntimeGatewayProjectionStore = (
+  options: CreatePiRuntimeGatewayProjectionStoreOptions = {},
+): PiRuntimeGatewayProjectionStore => {
+  const projections = new Map<string, PiRuntimeGatewayProjectionStoreEntry>();
+
+  const getEntry = (threadId: string): PiRuntimeGatewayProjectionStoreEntry => {
+    const existing = projections.get(threadId);
+    if (existing) {
+      return existing;
+    }
+
+    const created: PiRuntimeGatewayProjectionStoreEntry = {
+      projection: (options.createInitialProjection ?? createDefaultProjection)(threadId),
+      attachedEventListeners: new Set(),
+      activeAttachedRun: null,
+    };
+    projections.set(threadId, created);
+    return created;
+  };
+
+  return {
+    getProjection: (threadId) => getEntry(threadId).projection,
+    updateProjection: (threadId, update) => {
+      const entry = getEntry(threadId);
+      const nextProjection = update(entry.projection);
+      entry.projection = nextProjection;
+      projections.set(threadId, entry);
+      return nextProjection;
+    },
+    attachToThread: (threadId, listener) => {
+      const entry = getEntry(threadId);
+      entry.attachedEventListeners.add(listener);
+      projections.set(threadId, entry);
+      return {
+        detach: () => {
+          const attachedEntry = getEntry(threadId);
+          attachedEntry.attachedEventListeners.delete(listener);
+          projections.set(threadId, attachedEntry);
+        },
+        activeRunEvents: entry.activeAttachedRun
+          ? cloneBaseEvents(entry.activeAttachedRun.events)
+          : [],
+      };
+    },
+    startAttachedRun: (threadId, runId) => {
+      const entry = getEntry(threadId);
+      entry.activeAttachedRun = {
+        runId,
+        events: [],
+      };
+      projections.set(threadId, entry);
+    },
+    appendAttachedRunEvents: (threadId, runId, events) => {
+      if (events.length === 0) {
+        return;
+      }
+
+      const entry = getEntry(threadId);
+      if (entry.activeAttachedRun?.runId === runId) {
+        entry.activeAttachedRun = {
+          runId,
+          events: [...entry.activeAttachedRun.events, ...events],
+        };
+      }
+
+      for (const event of events) {
+        for (const listener of entry.attachedEventListeners) {
+          listener(event);
+        }
+      }
+
+      projections.set(threadId, entry);
+    },
+    finishAttachedRun: (threadId, runId) => {
+      const entry = getEntry(threadId);
+      if (entry.activeAttachedRun?.runId === runId) {
+        entry.activeAttachedRun = null;
+        projections.set(threadId, entry);
+      }
+    },
+    publishAttachedEventSource: async (threadId, source) => {
+      const events: BaseEvent[] = Array.isArray(source)
+        ? cloneBaseEvents(source)
+        : await (async () => {
+            const collected: BaseEvent[] = [];
+            for await (const event of source) {
+              collected.push(event);
+            }
+            return collected;
+          })();
+      const entry = getEntry(threadId);
+      for (const event of events) {
+        for (const listener of entry.attachedEventListeners) {
+          listener(event);
+        }
+      }
+    },
+  };
+};
 
 export const createPiRuntimeGatewayMockStream = (
   responseText: string,
@@ -294,14 +510,17 @@ export const createPiRuntimeGatewayMockStream = (
 
 const asBaseEvent = <TEvent extends BaseEvent>(event: TEvent): BaseEvent => event;
 
-const isPiRuntimeGatewayRuntimeNoteMessage = (message: AgentMessage): message is PiRuntimeGatewayRuntimeNoteMessage =>
-  getMessageRole(message) === 'pi-runtime-note';
+const isPiRuntimeGatewayRuntimeNoteMessage = (
+  message: AgentMessage,
+): message is PiRuntimeGatewayRuntimeNoteMessage => getMessageRole(message) === 'pi-runtime-note';
 
-const isPiRuntimeGatewayArtifactMessage = (message: AgentMessage): message is PiRuntimeGatewayArtifactMessage =>
-  getMessageRole(message) === 'pi-artifact';
+const isPiRuntimeGatewayArtifactMessage = (
+  message: AgentMessage,
+): message is PiRuntimeGatewayArtifactMessage => getMessageRole(message) === 'pi-artifact';
 
-const isPiRuntimeGatewayA2UiMessage = (message: AgentMessage): message is PiRuntimeGatewayA2UiMessage =>
-  getMessageRole(message) === 'pi-a2ui';
+const isPiRuntimeGatewayA2UiMessage = (
+  message: AgentMessage,
+): message is PiRuntimeGatewayA2UiMessage => getMessageRole(message) === 'pi-a2ui';
 
 const isLlmCompatibleMessage = (message: AgentMessage): message is Message => {
   const role = getMessageRole(message);
@@ -333,7 +552,10 @@ const stringifyUnknown = (value: unknown): string => {
 };
 
 const getMessageRole = (message: AgentMessage): string =>
-  typeof message === 'object' && message !== null && 'role' in message && typeof message.role === 'string'
+  typeof message === 'object' &&
+  message !== null &&
+  'role' in message &&
+  typeof message.role === 'string'
     ? message.role
     : 'assistant';
 
@@ -360,7 +582,11 @@ const isToolCallPart = (
   typeof value.name === 'string' &&
   'arguments' in value;
 
-const resolveProjectedMessageId = (executionId: string, message: AgentMessage, fallbackIndex: number): string => {
+const resolveProjectedMessageId = (
+  executionId: string,
+  message: AgentMessage,
+  fallbackIndex: number,
+): string => {
   const role = getMessageRole(message);
   const timestamp = getMessageTimestamp(message) ?? fallbackIndex;
   return `pi:${executionId}:${role}:${timestamp}`;
@@ -386,14 +612,14 @@ const getTextContent = (message: AgentMessage): string | undefined => {
     return undefined;
   }
 
-  const text = content
-    .flatMap((part) => (isTextPart(part) ? [part.text] : []))
-    .join('');
+  const text = content.flatMap((part) => (isTextPart(part) ? [part.text] : [])).join('');
 
   return text.length > 0 ? text : undefined;
 };
 
-const getAssistantToolCalls = (message: AgentMessage): Array<{
+const getAssistantToolCalls = (
+  message: AgentMessage,
+): Array<{
   id: string;
   type: 'function';
   function: {
@@ -433,7 +659,11 @@ const getReasoningMessages = (params: {
   assistantMessageId: string;
   message: AgentMessage;
 }): AgUiMessage[] => {
-  if (typeof params.message !== 'object' || params.message === null || !('content' in params.message)) {
+  if (
+    typeof params.message !== 'object' ||
+    params.message === null ||
+    !('content' in params.message)
+  ) {
     return [];
   }
 
@@ -449,7 +679,11 @@ const getReasoningMessages = (params: {
 
     return [
       {
-        id: resolveProjectedReasoningMessageId(params.executionId, params.assistantMessageId, index),
+        id: resolveProjectedReasoningMessageId(
+          params.executionId,
+          params.assistantMessageId,
+          index,
+        ),
         role: 'reasoning',
         content: part.thinking,
       } satisfies AgUiMessage,
@@ -517,14 +751,12 @@ export const projectPiAgentMessagesToAgUiMessages = (params: {
                 ? message.toolCallId
                 : 'pi-tool-call',
             content: getTextContent(message) ?? '',
-            ...(
-              typeof message === 'object' &&
-              message !== null &&
-              'isError' in message &&
-              message.isError === true
-                ? { error: getTextContent(message) ?? 'Tool execution failed.' }
-                : {}
-            ),
+            ...(typeof message === 'object' &&
+            message !== null &&
+            'isError' in message &&
+            message.isError === true
+              ? { error: getTextContent(message) ?? 'Tool execution failed.' }
+              : {}),
           },
         ];
       default:
@@ -533,7 +765,10 @@ export const projectPiAgentMessagesToAgUiMessages = (params: {
   });
 };
 
-const mergeAgUiMessages = (baseMessages: readonly AgUiMessage[], incomingMessages: readonly AgUiMessage[]): AgUiMessage[] => {
+const mergeAgUiMessages = (
+  baseMessages: readonly AgUiMessage[],
+  incomingMessages: readonly AgUiMessage[],
+): AgUiMessage[] => {
   const merged = [...baseMessages];
   const indexById = new Map<string, number>();
 
@@ -602,24 +837,32 @@ type PersistedToolCallResultEvent = {
 const isBaseEventRecord = (event: BaseEvent): event is BaseEvent & Record<string, unknown> =>
   typeof event === 'object' && event !== null;
 
-const isPersistedTextMessageStartEvent = (event: BaseEvent): event is PersistedTextMessageStartEvent =>
+const isPersistedTextMessageStartEvent = (
+  event: BaseEvent,
+): event is PersistedTextMessageStartEvent =>
   isBaseEventRecord(event) &&
   event.type === EventType.TEXT_MESSAGE_START &&
   typeof event.messageId === 'string' &&
   typeof event.role === 'string';
 
-const isPersistedTextMessageContentEvent = (event: BaseEvent): event is PersistedTextMessageContentEvent =>
+const isPersistedTextMessageContentEvent = (
+  event: BaseEvent,
+): event is PersistedTextMessageContentEvent =>
   isBaseEventRecord(event) &&
   event.type === EventType.TEXT_MESSAGE_CONTENT &&
   typeof event.messageId === 'string' &&
   typeof event.delta === 'string';
 
-const isPersistedReasoningMessageStartEvent = (event: BaseEvent): event is PersistedReasoningMessageStartEvent =>
+const isPersistedReasoningMessageStartEvent = (
+  event: BaseEvent,
+): event is PersistedReasoningMessageStartEvent =>
   isBaseEventRecord(event) &&
   event.type === EventType.REASONING_MESSAGE_START &&
   typeof event.messageId === 'string';
 
-const isPersistedReasoningMessageContentEvent = (event: BaseEvent): event is PersistedReasoningMessageContentEvent =>
+const isPersistedReasoningMessageContentEvent = (
+  event: BaseEvent,
+): event is PersistedReasoningMessageContentEvent =>
   isBaseEventRecord(event) &&
   event.type === EventType.REASONING_MESSAGE_CONTENT &&
   typeof event.messageId === 'string' &&
@@ -711,7 +954,10 @@ const applyProjectedRunEventsToMessages = (
         toolCalls: [],
       }),
       (message) => {
-        const toolCalls = message.role === 'assistant' && Array.isArray(message.toolCalls) ? [...message.toolCalls] : [];
+        const toolCalls =
+          message.role === 'assistant' && Array.isArray(message.toolCalls)
+            ? [...message.toolCalls]
+            : [];
         const existingToolCallIndex = toolCalls.findIndex((toolCall) => toolCall.id === toolCallId);
         const baselineToolCall =
           existingToolCallIndex === -1
@@ -880,16 +1126,16 @@ const applyProjectedRunEventsToMessages = (
   return messages;
 };
 
-const buildExecutionStatusText = (session: PiRuntimeGatewaySession): string =>
+const buildExecutionStatusText = (projection: PiRuntimeGatewayThreadProjection): string =>
   [
-    `Thread ${session.thread.id} execution ${session.execution.id} is ${session.execution.status}.`,
-    session.execution.statusMessage,
+    `Thread ${projection.threadId} execution ${projection.execution.id} is ${projection.execution.status}.`,
+    projection.execution.statusMessage,
   ]
     .filter((part): part is string => typeof part === 'string' && part.length > 0)
     .join(' ');
 
 export const buildPiRuntimeGatewayContextMessages = (params: {
-  session: PiRuntimeGatewaySession;
+  projection: PiRuntimeGatewayThreadProjection;
   now?: () => number;
 }): PiRuntimeGatewayContextMessage[] => {
   const now = params.now ?? (() => Date.now());
@@ -898,44 +1144,44 @@ export const buildPiRuntimeGatewayContextMessages = (params: {
   return [
     {
       role: 'pi-runtime-note',
-      threadId: params.session.thread.id,
-      executionId: params.session.execution.id,
-      text: buildExecutionStatusText(params.session),
+      threadId: params.projection.threadId,
+      executionId: params.projection.execution.id,
+      text: buildExecutionStatusText(params.projection),
       timestamp,
     },
-    ...(params.session.artifacts?.current
+    ...(params.projection.currentArtifact
       ? [
           {
             role: 'pi-artifact' as const,
-            threadId: params.session.thread.id,
-            executionId: params.session.execution.id,
+            threadId: params.projection.threadId,
+            executionId: params.projection.execution.id,
             channel: 'current' as const,
-            artifactId: params.session.artifacts.current.artifactId,
-            data: params.session.artifacts.current.data,
+            artifactId: params.projection.currentArtifact.artifactId,
+            data: params.projection.currentArtifact.data,
             timestamp,
           },
         ]
       : []),
-    ...(params.session.artifacts?.activity
+    ...(params.projection.activityArtifact
       ? [
           {
             role: 'pi-artifact' as const,
-            threadId: params.session.thread.id,
-            executionId: params.session.execution.id,
+            threadId: params.projection.threadId,
+            executionId: params.projection.execution.id,
             channel: 'activity' as const,
-            artifactId: params.session.artifacts.activity.artifactId,
-            data: params.session.artifacts.activity.data,
+            artifactId: params.projection.activityArtifact.artifactId,
+            data: params.projection.activityArtifact.data,
             timestamp,
           },
         ]
       : []),
-    ...(params.session.a2ui
+    ...(params.projection.a2ui
       ? [
           {
             role: 'pi-a2ui' as const,
-            threadId: params.session.thread.id,
-            executionId: params.session.execution.id,
-            payload: params.session.a2ui,
+            threadId: params.projection.threadId,
+            executionId: params.projection.execution.id,
+            payload: params.projection.a2ui,
             timestamp,
           },
         ]
@@ -965,14 +1211,23 @@ export const convertPiRuntimeGatewayMessagesToLlm = (
     return [message];
   });
 
-  return delegate ? delegate(preprocessedMessages) : preprocessedMessages.filter(isLlmCompatibleMessage);
+  return delegate
+    ? delegate(preprocessedMessages)
+    : preprocessedMessages.filter(isLlmCompatibleMessage);
 };
 
-const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => number): AgentMessage[] =>
+const convertAgUiMessagesToPiMessages = (
+  messages: AgUiMessage[],
+  now: () => number,
+): AgentMessage[] =>
   messages.flatMap((message): AgentMessage[] => {
     switch (message.role) {
       case 'user': {
-        const content: string | Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }> =
+        const content:
+          | string
+          | Array<
+              { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
+            > =
           typeof message.content === 'string'
             ? message.content
             : message.content.map((part) =>
@@ -1032,16 +1287,18 @@ const buildResumePromptMessages = (resumePayload: string, now: () => number): Ag
   },
 ];
 
-export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Record<string, unknown> => {
+export const buildPiThreadStateSnapshot = (
+  params: PiRuntimeGatewayThreadProjection,
+): Record<string, unknown> => {
   const activityEvents: PiRuntimeGatewayActivityEvent[] =
     params.activityEvents && params.activityEvents.length > 0
       ? [...params.activityEvents]
       : [
-          ...(params.artifacts?.activity
+          ...(params.activityArtifact
             ? [
                 {
                   type: 'artifact',
-                  artifact: params.artifacts.activity,
+                  artifact: params.activityArtifact,
                   append: true,
                 } satisfies PiRuntimeGatewayActivityEvent,
               ]
@@ -1049,7 +1306,7 @@ export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Rec
           ...(params.a2ui
             ? [
                 buildPiA2UiActivityEvent({
-                  threadId: params.thread.id,
+                  threadId: params.threadId,
                   executionId: params.execution.id,
                   payload: params.a2ui,
                 }),
@@ -1058,7 +1315,7 @@ export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Rec
         ];
 
   const baseThread = {
-    id: params.thread.id,
+    id: params.threadId,
     task: {
       id: params.execution.id,
       taskStatus: {
@@ -1069,7 +1326,7 @@ export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Rec
     projection: {
       source: 'pi-runtime-gateway',
       canonicalIds: {
-        piThreadId: params.thread.id,
+        piThreadId: params.threadId,
         piExecutionId: params.execution.id,
         ...(params.automation?.id ? { piAutomationId: params.automation.id } : {}),
         ...(params.automation?.runId ? { automationRunId: params.automation.runId } : {}),
@@ -1083,11 +1340,11 @@ export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Rec
           },
         }
       : {}),
-    ...(params.artifacts
+    ...(params.currentArtifact || params.activityArtifact
       ? {
           artifacts: {
-            ...(params.artifacts.current ? { current: params.artifacts.current } : {}),
-            ...(params.artifacts.activity ? { activity: params.artifacts.activity } : {}),
+            ...(params.currentArtifact ? { current: params.currentArtifact } : {}),
+            ...(params.activityArtifact ? { activity: params.activityArtifact } : {}),
           },
         }
       : {}),
@@ -1123,12 +1380,12 @@ export const buildPiA2UiActivityEvent = (params: {
 export const buildPiRuntimeGatewayConnectEvents = (params: {
   threadId: string;
   runId: string;
-  session: PiRuntimeGatewaySession;
+  projection: PiRuntimeGatewayThreadProjection;
 }): BaseEvent[] => {
-  const messagesSnapshotEvent: MessagesSnapshotEvent | null = params.session.messages
+  const messagesSnapshotEvent: MessagesSnapshotEvent | null = params.projection.messages
     ? {
         type: EventType.MESSAGES_SNAPSHOT,
-        messages: params.session.messages,
+        messages: params.projection.messages,
       }
     : null;
 
@@ -1140,7 +1397,7 @@ export const buildPiRuntimeGatewayConnectEvents = (params: {
     } satisfies RunStartedEvent),
     {
       type: EventType.STATE_SNAPSHOT,
-      snapshot: buildPiThreadStateSnapshot(params.session),
+      snapshot: buildPiThreadStateSnapshot(params.projection),
     } satisfies StateSnapshotEvent,
     ...(messagesSnapshotEvent ? [messagesSnapshotEvent] : []),
     asBaseEvent({
@@ -1148,8 +1405,8 @@ export const buildPiRuntimeGatewayConnectEvents = (params: {
       threadId: params.threadId,
       runId: params.runId,
       result: {
-        executionId: params.session.execution.id,
-        status: params.session.execution.status,
+        executionId: params.projection.execution.id,
+        status: params.projection.execution.status,
       },
     } satisfies RunFinishedEvent),
   ];
@@ -1176,180 +1433,213 @@ function createPiAgentEventProjector(executionId: string): {
     project: (event) => {
       mapped.length = 0;
 
-    switch (event.type) {
-      case 'agent_start':
-        mapped.push(asBaseEvent({ type: EventType.STEP_STARTED, stepName: 'pi-agent' }));
-        break;
-      case 'agent_end':
-        mapped.push(asBaseEvent({ type: EventType.STEP_FINISHED, stepName: 'pi-agent' }));
-        break;
-      case 'turn_start':
-        mapped.push(asBaseEvent({ type: EventType.STEP_STARTED, stepName: 'turn' }));
-        break;
-      case 'turn_end':
-        mapped.push(asBaseEvent({ type: EventType.STEP_FINISHED, stepName: 'turn' }));
-        break;
-      case 'message_start': {
-        fallbackIndex += 1;
-        currentMessageId = resolveProjectedMessageId(executionId, event.message, fallbackIndex);
-        const role = getMessageRole(event.message);
-        if (role === 'assistant' || role === 'user') {
-          mapped.push(asBaseEvent({
-            type: EventType.TEXT_MESSAGE_START,
-            messageId: currentMessageId,
-            role,
-          }));
-        }
-        break;
-      }
-      case 'message_update': {
-        const messageId =
-          currentMessageId ??
-          resolveProjectedMessageId(executionId, event.message, fallbackIndex + 1);
-        const detail = event.assistantMessageEvent;
-
-        if (detail.type === 'text_delta') {
-          mapped.push(asBaseEvent({
-            type: EventType.TEXT_MESSAGE_CONTENT,
-            messageId,
-            delta: detail.delta,
-          }));
-        }
-
-        if (detail.type === 'thinking_start') {
-          const reasoningMessageId = resolveProjectedReasoningMessageId(
-            executionId,
-            messageId,
-            detail.contentIndex,
-          );
-          if (!openReasoningMessageIds.has(reasoningMessageId)) {
-            openReasoningMessageIds.add(reasoningMessageId);
-            mapped.push(asBaseEvent({
-              type: EventType.REASONING_START,
-              messageId: reasoningMessageId,
-            }));
-            mapped.push(asBaseEvent({
-              type: EventType.REASONING_MESSAGE_START,
-              messageId: reasoningMessageId,
-              role: 'reasoning',
-            }));
-          }
-        }
-
-        if (detail.type === 'thinking_delta') {
-          const reasoningMessageId = resolveProjectedReasoningMessageId(
-            executionId,
-            messageId,
-            detail.contentIndex,
-          );
-          if (!openReasoningMessageIds.has(reasoningMessageId)) {
-            openReasoningMessageIds.add(reasoningMessageId);
-            mapped.push(asBaseEvent({
-              type: EventType.REASONING_START,
-              messageId: reasoningMessageId,
-            }));
-            mapped.push(asBaseEvent({
-              type: EventType.REASONING_MESSAGE_START,
-              messageId: reasoningMessageId,
-              role: 'reasoning',
-            }));
-          }
-          mapped.push(asBaseEvent({
-            type: EventType.REASONING_MESSAGE_CONTENT,
-            messageId: reasoningMessageId,
-            delta: detail.delta,
-          }));
-        }
-
-        if (detail.type === 'thinking_end') {
-          const reasoningMessageId = resolveProjectedReasoningMessageId(
-            executionId,
-            messageId,
-            detail.contentIndex,
-          );
-          if (openReasoningMessageIds.has(reasoningMessageId)) {
-            mapped.push(asBaseEvent({
-              type: EventType.REASONING_MESSAGE_END,
-              messageId: reasoningMessageId,
-            }));
-            mapped.push(asBaseEvent({
-              type: EventType.REASONING_END,
-              messageId: reasoningMessageId,
-            }));
-            openReasoningMessageIds.delete(reasoningMessageId);
-          }
-        }
-
-        if (detail.type === 'toolcall_delta') {
-          const toolCall = detail.partial.content[detail.contentIndex];
-          if (toolCall?.type === 'toolCall' && !seenToolStarts.has(toolCall.id)) {
-            seenToolStarts.add(toolCall.id);
-            mapped.push(asBaseEvent({
-              type: EventType.TOOL_CALL_START,
-              toolCallId: toolCall.id,
-              toolCallName: toolCall.name,
-              parentMessageId: messageId,
-            }));
-          }
-          mapped.push(asBaseEvent({
-            type: EventType.TOOL_CALL_ARGS,
-            toolCallId: toolCall?.type === 'toolCall' ? toolCall.id : `pi:${executionId}:tool-call`,
-            delta: detail.delta,
-          }));
-        }
-
-        if (detail.type === 'toolcall_end') {
-          if (!seenToolStarts.has(detail.toolCall.id)) {
-            seenToolStarts.add(detail.toolCall.id);
-            mapped.push(asBaseEvent({
-              type: EventType.TOOL_CALL_START,
-              toolCallId: detail.toolCall.id,
-              toolCallName: detail.toolCall.name,
-              parentMessageId: messageId,
-            }));
-          }
-          mapped.push(asBaseEvent({
-            type: EventType.TOOL_CALL_END,
-            toolCallId: detail.toolCall.id,
-          }));
-        }
-        break;
-      }
-      case 'tool_execution_end':
-        mapped.push(asBaseEvent({
-          type: EventType.TOOL_CALL_RESULT,
-          messageId: `pi:${executionId}:tool-result:${event.toolCallId}`,
-          toolCallId: event.toolCallId,
-          content: stringifyUnknown(event.result),
-          role: 'tool',
-        }));
-        break;
-      case 'message_end':
-        if (currentMessageId) {
+      switch (event.type) {
+        case 'agent_start':
+          mapped.push(asBaseEvent({ type: EventType.STEP_STARTED, stepName: 'pi-agent' }));
+          break;
+        case 'agent_end':
+          mapped.push(asBaseEvent({ type: EventType.STEP_FINISHED, stepName: 'pi-agent' }));
+          break;
+        case 'turn_start':
+          mapped.push(asBaseEvent({ type: EventType.STEP_STARTED, stepName: 'turn' }));
+          break;
+        case 'turn_end':
+          mapped.push(asBaseEvent({ type: EventType.STEP_FINISHED, stepName: 'turn' }));
+          break;
+        case 'message_start': {
+          fallbackIndex += 1;
+          currentMessageId = resolveProjectedMessageId(executionId, event.message, fallbackIndex);
           const role = getMessageRole(event.message);
           if (role === 'assistant' || role === 'user') {
-            mapped.push(asBaseEvent({
-              type: EventType.TEXT_MESSAGE_END,
-              messageId: currentMessageId,
-            }));
+            mapped.push(
+              asBaseEvent({
+                type: EventType.TEXT_MESSAGE_START,
+                messageId: currentMessageId,
+                role,
+              }),
+            );
           }
+          break;
         }
-        currentMessageId = null;
-        break;
-      default:
-        break;
-    }
+        case 'message_update': {
+          const messageId =
+            currentMessageId ??
+            resolveProjectedMessageId(executionId, event.message, fallbackIndex + 1);
+          const detail = event.assistantMessageEvent;
+
+          if (detail.type === 'text_delta') {
+            mapped.push(
+              asBaseEvent({
+                type: EventType.TEXT_MESSAGE_CONTENT,
+                messageId,
+                delta: detail.delta,
+              }),
+            );
+          }
+
+          if (detail.type === 'thinking_start') {
+            const reasoningMessageId = resolveProjectedReasoningMessageId(
+              executionId,
+              messageId,
+              detail.contentIndex,
+            );
+            if (!openReasoningMessageIds.has(reasoningMessageId)) {
+              openReasoningMessageIds.add(reasoningMessageId);
+              mapped.push(
+                asBaseEvent({
+                  type: EventType.REASONING_START,
+                  messageId: reasoningMessageId,
+                }),
+              );
+              mapped.push(
+                asBaseEvent({
+                  type: EventType.REASONING_MESSAGE_START,
+                  messageId: reasoningMessageId,
+                  role: 'reasoning',
+                }),
+              );
+            }
+          }
+
+          if (detail.type === 'thinking_delta') {
+            const reasoningMessageId = resolveProjectedReasoningMessageId(
+              executionId,
+              messageId,
+              detail.contentIndex,
+            );
+            if (!openReasoningMessageIds.has(reasoningMessageId)) {
+              openReasoningMessageIds.add(reasoningMessageId);
+              mapped.push(
+                asBaseEvent({
+                  type: EventType.REASONING_START,
+                  messageId: reasoningMessageId,
+                }),
+              );
+              mapped.push(
+                asBaseEvent({
+                  type: EventType.REASONING_MESSAGE_START,
+                  messageId: reasoningMessageId,
+                  role: 'reasoning',
+                }),
+              );
+            }
+            mapped.push(
+              asBaseEvent({
+                type: EventType.REASONING_MESSAGE_CONTENT,
+                messageId: reasoningMessageId,
+                delta: detail.delta,
+              }),
+            );
+          }
+
+          if (detail.type === 'thinking_end') {
+            const reasoningMessageId = resolveProjectedReasoningMessageId(
+              executionId,
+              messageId,
+              detail.contentIndex,
+            );
+            if (openReasoningMessageIds.has(reasoningMessageId)) {
+              mapped.push(
+                asBaseEvent({
+                  type: EventType.REASONING_MESSAGE_END,
+                  messageId: reasoningMessageId,
+                }),
+              );
+              mapped.push(
+                asBaseEvent({
+                  type: EventType.REASONING_END,
+                  messageId: reasoningMessageId,
+                }),
+              );
+              openReasoningMessageIds.delete(reasoningMessageId);
+            }
+          }
+
+          if (detail.type === 'toolcall_delta') {
+            const toolCall = detail.partial.content[detail.contentIndex];
+            if (toolCall?.type === 'toolCall' && !seenToolStarts.has(toolCall.id)) {
+              seenToolStarts.add(toolCall.id);
+              mapped.push(
+                asBaseEvent({
+                  type: EventType.TOOL_CALL_START,
+                  toolCallId: toolCall.id,
+                  toolCallName: toolCall.name,
+                  parentMessageId: messageId,
+                }),
+              );
+            }
+            mapped.push(
+              asBaseEvent({
+                type: EventType.TOOL_CALL_ARGS,
+                toolCallId:
+                  toolCall?.type === 'toolCall' ? toolCall.id : `pi:${executionId}:tool-call`,
+                delta: detail.delta,
+              }),
+            );
+          }
+
+          if (detail.type === 'toolcall_end') {
+            if (!seenToolStarts.has(detail.toolCall.id)) {
+              seenToolStarts.add(detail.toolCall.id);
+              mapped.push(
+                asBaseEvent({
+                  type: EventType.TOOL_CALL_START,
+                  toolCallId: detail.toolCall.id,
+                  toolCallName: detail.toolCall.name,
+                  parentMessageId: messageId,
+                }),
+              );
+            }
+            mapped.push(
+              asBaseEvent({
+                type: EventType.TOOL_CALL_END,
+                toolCallId: detail.toolCall.id,
+              }),
+            );
+          }
+          break;
+        }
+        case 'tool_execution_end':
+          mapped.push(
+            asBaseEvent({
+              type: EventType.TOOL_CALL_RESULT,
+              messageId: `pi:${executionId}:tool-result:${event.toolCallId}`,
+              toolCallId: event.toolCallId,
+              content: stringifyUnknown(event.result),
+              role: 'tool',
+            }),
+          );
+          break;
+        case 'message_end':
+          if (currentMessageId) {
+            const role = getMessageRole(event.message);
+            if (role === 'assistant' || role === 'user') {
+              mapped.push(
+                asBaseEvent({
+                  type: EventType.TEXT_MESSAGE_END,
+                  messageId: currentMessageId,
+                }),
+              );
+            }
+          }
+          currentMessageId = null;
+          break;
+        default:
+          break;
+      }
 
       return [...mapped];
     },
   };
 }
 
-function createAsyncEventStream<T>(run: (controller: {
-  push: (value: T) => void;
-  close: () => void;
-  fail: (error: unknown) => void;
-}) => Promise<void> | void): AsyncIterable<T> {
+function createAsyncEventStream<T>(
+  run: (controller: {
+    push: (value: T) => void;
+    close: () => void;
+    fail: (error: unknown) => void;
+  }) => Promise<void> | void,
+): AsyncIterable<T> {
   const values: T[] = [];
   const readers: Array<{
     resolve: (result: IteratorResult<T>) => void;
@@ -1420,23 +1710,23 @@ export const createPiRuntimeGatewayFoundation = (params: {
   tools?: AgentTool[];
   databaseUrl?: string;
   agentOptions?: AgentOptions;
-  getSessionContext?: () => PiRuntimeGatewaySession | undefined;
+  getProjectionContext?: () => PiRuntimeGatewayThreadProjection | undefined;
   now?: () => number;
 }): PiRuntimeGatewayFoundation => {
   const now = params.now ?? (() => Date.now());
   validatePiGatewayToolNames(params.model, params.tools);
   const transformContext =
-    params.getSessionContext || params.agentOptions?.transformContext
+    params.getProjectionContext || params.agentOptions?.transformContext
       ? async (messages: AgentMessage[], signal?: AbortSignal) => {
           const transformedMessages = params.agentOptions?.transformContext
             ? await params.agentOptions.transformContext(messages, signal)
             : messages;
-          const session = params.getSessionContext?.();
-          return session
+          const projection = params.getProjectionContext?.();
+          return projection
             ? [
                 ...transformedMessages,
                 ...buildPiRuntimeGatewayContextMessages({
-                  session,
+                  projection,
                   now,
                 }),
               ]
@@ -1446,7 +1736,8 @@ export const createPiRuntimeGatewayFoundation = (params: {
 
   const agent = new Agent({
     ...params.agentOptions,
-    convertToLlm: (messages) => convertPiRuntimeGatewayMessagesToLlm(messages, params.agentOptions?.convertToLlm),
+    convertToLlm: (messages) =>
+      convertPiRuntimeGatewayMessagesToLlm(messages, params.agentOptions?.convertToLlm),
     transformContext,
     initialState: {
       ...params.agentOptions?.initialState,
@@ -1466,11 +1757,11 @@ export const createPiRuntimeGatewayFoundation = (params: {
 
 export const createPiRuntimeGatewayRuntime = (params: {
   agent: PiRuntimeGatewayAgent;
-  getSession: (threadId: string) => PiRuntimeGatewaySession;
-  updateSession?: (
+  getProjection: (threadId: string) => PiRuntimeGatewayThreadProjection;
+  updateProjection?: (
     threadId: string,
-    update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
-  ) => PiRuntimeGatewaySession;
+    update: (projection: PiRuntimeGatewayThreadProjection) => PiRuntimeGatewayThreadProjection,
+  ) => PiRuntimeGatewayThreadProjection;
   now?: () => number;
 }): PiRuntimeGatewayRuntime => {
   const now = params.now ?? (() => Date.now());
@@ -1478,36 +1769,44 @@ export const createPiRuntimeGatewayRuntime = (params: {
     params.agent.sessionId = threadId;
   };
 
-  const buildSnapshotEvent = (session: PiRuntimeGatewaySession): StateSnapshotEvent => ({
+  const buildSnapshotEvent = (
+    projection: PiRuntimeGatewayThreadProjection,
+  ): StateSnapshotEvent => ({
     type: EventType.STATE_SNAPSHOT,
-    snapshot: buildPiThreadStateSnapshot(session),
+    snapshot: buildPiThreadStateSnapshot(projection),
   });
-  const buildMessagesSnapshotEvent = (session: PiRuntimeGatewaySession): MessagesSnapshotEvent | null =>
-    session.messages
+  const buildMessagesSnapshotEvent = (
+    projection: PiRuntimeGatewayThreadProjection,
+  ): MessagesSnapshotEvent | null =>
+    projection.messages
       ? {
           type: EventType.MESSAGES_SNAPSHOT,
-          messages: session.messages,
+          messages: projection.messages,
         }
       : null;
   const persistRequestMessages = (threadId: string, requestMessages: readonly AgUiMessage[]) => {
-    if (requestMessages.length === 0 || !params.updateSession) {
-      return params.getSession(threadId);
+    if (requestMessages.length === 0 || !params.updateProjection) {
+      return params.getProjection(threadId);
     }
 
-    return params.updateSession(threadId, (session) => ({
-      ...session,
-      messages: mergeAgUiMessages(session.messages ?? [], requestMessages),
+    return params.updateProjection(threadId, (projection) => ({
+      ...projection,
+      messages: mergeAgUiMessages(projection.messages ?? [], requestMessages),
     }));
   };
-  const persistRunTranscript = (threadId: string, requestMessages: readonly AgUiMessage[], projectedEvents: readonly BaseEvent[]) => {
-    if (!params.updateSession) {
-      return params.getSession(threadId);
+  const persistRunTranscript = (
+    threadId: string,
+    requestMessages: readonly AgUiMessage[],
+    projectedEvents: readonly BaseEvent[],
+  ) => {
+    if (!params.updateProjection) {
+      return params.getProjection(threadId);
     }
 
-    return params.updateSession(threadId, (session) => ({
-      ...session,
+    return params.updateProjection(threadId, (projection) => ({
+      ...projection,
       messages: applyProjectedRunEventsToMessages(
-        mergeAgUiMessages(session.messages ?? [], requestMessages),
+        mergeAgUiMessages(projection.messages ?? [], requestMessages),
         projectedEvents,
       ),
     }));
@@ -1516,19 +1815,19 @@ export const createPiRuntimeGatewayRuntime = (params: {
   return {
     connect: (request) => {
       syncAgentSessionId(request.threadId);
-      const session = params.getSession(request.threadId);
+      const projection = params.getProjection(request.threadId);
       const runId = request.runId ?? `connect:${request.threadId}`;
       return Promise.resolve(
         buildPiRuntimeGatewayConnectEvents({
           threadId: request.threadId,
           runId,
-          session,
+          projection,
         }),
       );
     },
     run: (request) => {
       syncAgentSessionId(request.threadId);
-      const executionId = params.getSession(request.threadId).execution.id;
+      const executionId = params.getProjection(request.threadId).execution.id;
       const projector = createPiAgentEventProjector(executionId);
       const projectedRunEvents: BaseEvent[] = [];
       const requestMessages = request.messages ?? [];
@@ -1541,13 +1840,15 @@ export const createPiRuntimeGatewayRuntime = (params: {
           messageCount: request.messages?.length ?? 0,
           hasResumePayload: typeof resumePayload === 'string',
         });
-        controller.push(asBaseEvent({
-          type: EventType.RUN_STARTED,
-          threadId: request.threadId,
-          runId: request.runId,
-        } satisfies RunStartedEvent));
-        const requestSession = persistRequestMessages(request.threadId, requestMessages);
-        const requestMessagesSnapshotEvent = buildMessagesSnapshotEvent(requestSession);
+        controller.push(
+          asBaseEvent({
+            type: EventType.RUN_STARTED,
+            threadId: request.threadId,
+            runId: request.runId,
+          } satisfies RunStartedEvent),
+        );
+        const requestProjection = persistRequestMessages(request.threadId, requestMessages);
+        const requestMessagesSnapshotEvent = buildMessagesSnapshotEvent(requestProjection);
         if (requestMessagesSnapshotEvent) {
           controller.push(requestMessagesSnapshotEvent);
         }
@@ -1562,7 +1863,10 @@ export const createPiRuntimeGatewayRuntime = (params: {
         });
 
         try {
-          if ((request.messages && request.messages.length > 0) || typeof resumePayload === 'string') {
+          if (
+            (request.messages && request.messages.length > 0) ||
+            typeof resumePayload === 'string'
+          ) {
             const promptMessages =
               typeof resumePayload === 'string'
                 ? buildResumePromptMessages(resumePayload, now)
@@ -1586,22 +1890,28 @@ export const createPiRuntimeGatewayRuntime = (params: {
             await params.agent.continue();
           }
 
-          const session = persistRunTranscript(request.threadId, requestMessages, projectedRunEvents);
-          logPiGatewayDebug('run session after transcript persist', session);
-          controller.push(buildSnapshotEvent(session));
-          const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);
+          const projection = persistRunTranscript(
+            request.threadId,
+            requestMessages,
+            projectedRunEvents,
+          );
+          logPiGatewayDebug('run projection after transcript persist', projection);
+          controller.push(buildSnapshotEvent(projection));
+          const messagesSnapshotEvent = buildMessagesSnapshotEvent(projection);
           if (messagesSnapshotEvent) {
             controller.push(messagesSnapshotEvent);
           }
-          controller.push(asBaseEvent({
-            type: EventType.RUN_FINISHED,
-            threadId: request.threadId,
-            runId: request.runId,
-            result: {
-              executionId: session.execution.id,
-              status: session.execution.status,
-            },
-          } satisfies RunFinishedEvent));
+          controller.push(
+            asBaseEvent({
+              type: EventType.RUN_FINISHED,
+              threadId: request.threadId,
+              runId: request.runId,
+              result: {
+                executionId: projection.execution.id,
+                status: projection.execution.status,
+              },
+            } satisfies RunFinishedEvent),
+          );
           controller.close();
         } catch (error) {
           controller.fail(error);

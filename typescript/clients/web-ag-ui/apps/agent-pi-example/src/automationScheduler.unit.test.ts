@@ -89,7 +89,7 @@ describe('runPiExampleAutomationSchedulerTick', () => {
       ]),
     );
 
-    expect(runtimeState.getSession('thread-1')).toMatchObject({
+    expect(runtimeState.getProjection('thread-1')).toMatchObject({
       execution: {
         status: 'completed',
         statusMessage: 'Automation sync executed successfully.',
@@ -97,13 +97,11 @@ describe('runPiExampleAutomationSchedulerTick', () => {
       automation: {
         id: 'auto-1',
       },
-      artifacts: {
-        current: {
-          data: {
-            type: 'automation-status',
-            status: 'completed',
-            command: 'sync',
-          },
+      currentArtifact: {
+        data: {
+          type: 'automation-status',
+          status: 'completed',
+          command: 'sync',
         },
       },
       a2ui: {

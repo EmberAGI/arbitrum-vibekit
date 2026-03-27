@@ -115,16 +115,14 @@ describe('pi gateway foundation', () => {
       model: createModel('test-model'),
       systemPrompt: 'You are Pi.',
       now: () => 456,
-      getSessionContext: () => ({
-        thread: { id: 'thread-ctx' },
+      getProjectionContext: () => ({
+        threadId: 'thread-ctx',
         execution: {
           id: 'exec-ctx',
           status: 'interrupted',
           statusMessage: 'Waiting for wallet confirmation.',
         },
-        artifacts: {
-          current: { artifactId: 'artifact-1', data: { phase: 'setup' } },
-        },
+        currentArtifact: { artifactId: 'artifact-1', data: { phase: 'setup' } },
         a2ui: {
           kind: 'interrupt',
           payload: { type: 'operator-config-request' },

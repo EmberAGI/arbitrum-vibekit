@@ -1,8 +1,5 @@
 import { Type, createAssistantMessageEventStream, type Message } from '@mariozechner/pi-ai';
-import {
-  createPiRuntimeGatewayFoundation,
-  type PiRuntimeGatewayFoundation,
-} from 'agent-runtime';
+import { createPiRuntimeGatewayFoundation, type PiRuntimeGatewayFoundation } from 'agent-runtime';
 
 import {
   applyAutomationStatusUpdate,
@@ -47,8 +44,12 @@ type PiExampleGatewayEnv = NodeJS.ProcessEnv & {
 export type { PiExampleGatewayEnv };
 
 type PiExampleGatewayModel = Parameters<typeof createPiRuntimeGatewayFoundation>[0]['model'];
-type PiExampleGatewayTool = NonNullable<Parameters<typeof createPiRuntimeGatewayFoundation>[0]['tools']>[number];
-type PiExampleGatewayStream = NonNullable<NonNullable<Parameters<typeof createPiRuntimeGatewayFoundation>[0]['agentOptions']>['streamFn']>;
+type PiExampleGatewayTool = NonNullable<
+  Parameters<typeof createPiRuntimeGatewayFoundation>[0]['tools']
+>[number];
+type PiExampleGatewayStream = NonNullable<
+  NonNullable<Parameters<typeof createPiRuntimeGatewayFoundation>[0]['agentOptions']>['streamFn']
+>;
 type PiExampleGatewayToolParameters = PiExampleGatewayTool['parameters'];
 
 export type PiExampleGatewayFoundationOptions = {
@@ -69,11 +70,7 @@ export type PiExampleGatewayFoundationOptions = {
       schedule: Record<string, unknown>;
       nextRunAt: string | null;
     }>;
-    listAutomations?: (params: {
-      threadKey: string;
-      state?: string;
-      limit?: number;
-    }) => Promise<
+    listAutomations?: (params: { threadKey: string; state?: string; limit?: number }) => Promise<
       Array<{
         id: string;
         title: string;
@@ -84,20 +81,14 @@ export type PiExampleGatewayFoundationOptions = {
         lastRunStatus: string | null;
       }>
     >;
-    cancelAutomation?: (params: {
-      threadKey: string;
-      automationId: string;
-    }) => Promise<{
+    cancelAutomation?: (params: { threadKey: string; automationId: string }) => Promise<{
       automationId: string;
       artifactId: string;
       title: string;
       instruction: string;
       schedule: Record<string, unknown>;
     }>;
-    requestInterrupt?: (params: {
-      threadKey: string;
-      message: string;
-    }) => Promise<{
+    requestInterrupt?: (params: { threadKey: string; message: string }) => Promise<{
       artifactId: string;
     }>;
   };
@@ -128,10 +119,7 @@ type RequestOperatorInputArgs = {
   message: string;
 };
 
-function inferAutomationCommand(params: {
-  instruction: string;
-  title: string;
-}): string {
+function inferAutomationCommand(params: { instruction: string; title: string }): string {
   const instruction = params.instruction.trim();
   if (instruction.length > 0) {
     return instruction;
@@ -140,7 +128,9 @@ function inferAutomationCommand(params: {
 }
 
 function getScheduleMinutes(schedule: ScheduleAutomationArgs['schedule']): number {
-  return schedule.kind === 'every' && typeof schedule.intervalMinutes === 'number' && schedule.intervalMinutes > 0
+  return schedule.kind === 'every' &&
+    typeof schedule.intervalMinutes === 'number' &&
+    schedule.intervalMinutes > 0
     ? schedule.intervalMinutes
     : 5;
 }
@@ -184,7 +174,9 @@ function readPersistedTitle(title: string | undefined): string | null {
   return normalized && normalized.length > 0 ? normalized : null;
 }
 
-function isScheduleArgsShape(value: Record<string, unknown> | undefined): value is ScheduleAutomationArgs['schedule'] {
+function isScheduleArgsShape(
+  value: Record<string, unknown> | undefined,
+): value is ScheduleAutomationArgs['schedule'] {
   return typeof value?.kind === 'string';
 }
 
@@ -195,12 +187,14 @@ function coerceSchedule(
   return isScheduleArgsShape(value) ? value : fallback;
 }
 
-function getSessionAutomationMinutes(session: ReturnType<PiExampleRuntimeStateStore['getSession']>): number | null {
+function getSessionAutomationMinutes(
+  projection: ReturnType<PiExampleRuntimeStateStore['getProjection']>,
+): number | null {
   const cadenceMinutes =
-    session.artifacts?.current?.data &&
-    typeof session.artifacts.current.data === 'object' &&
-    'cadenceMinutes' in session.artifacts.current.data
-      ? session.artifacts.current.data.cadenceMinutes
+    projection.currentArtifact?.data &&
+    typeof projection.currentArtifact.data === 'object' &&
+    'cadenceMinutes' in projection.currentArtifact.data
+      ? projection.currentArtifact.data.cadenceMinutes
       : null;
 
   return typeof cadenceMinutes === 'number' && Number.isFinite(cadenceMinutes) && cadenceMinutes > 0
@@ -253,7 +247,9 @@ function getUserText(message: Message): string {
   }
 
   return message.content
-    .filter((part): part is Extract<Message['content'][number], { type: 'text' }> => part.type === 'text')
+    .filter(
+      (part): part is Extract<Message['content'][number], { type: 'text' }> => part.type === 'text',
+    )
     .map((part) => part.text)
     .join(' ');
 }
@@ -319,8 +315,18 @@ function createMockTextStream(params: {
       }),
     });
     stream.push({ type: 'thinking_start', contentIndex: 0, partial: message });
-    stream.push({ type: 'thinking_delta', contentIndex: 0, delta: params.reasoning, partial: message });
-    stream.push({ type: 'thinking_end', contentIndex: 0, content: params.reasoning, partial: message });
+    stream.push({
+      type: 'thinking_delta',
+      contentIndex: 0,
+      delta: params.reasoning,
+      partial: message,
+    });
+    stream.push({
+      type: 'thinking_end',
+      contentIndex: 0,
+      content: params.reasoning,
+      partial: message,
+    });
     stream.push({ type: 'text_start', contentIndex: 0, partial: message });
     for (const chunk of splitText(params.text)) {
       stream.push({ type: 'text_delta', contentIndex: 0, delta: chunk, partial: message });
@@ -365,8 +371,18 @@ function createMockToolStream(params: {
       }),
     });
     stream.push({ type: 'thinking_start', contentIndex: 0, partial: message });
-    stream.push({ type: 'thinking_delta', contentIndex: 0, delta: params.reasoning, partial: message });
-    stream.push({ type: 'thinking_end', contentIndex: 0, content: params.reasoning, partial: message });
+    stream.push({
+      type: 'thinking_delta',
+      contentIndex: 0,
+      delta: params.reasoning,
+      partial: message,
+    });
+    stream.push({
+      type: 'thinking_end',
+      contentIndex: 0,
+      content: params.reasoning,
+      partial: message,
+    });
     stream.push({ type: 'toolcall_start', contentIndex: 0, partial: message });
     stream.push({ type: 'toolcall_delta', contentIndex: 0, delta: argsJson, partial: message });
     stream.push({
@@ -392,7 +408,10 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
 
     if (latestMessage?.role === 'toolResult') {
       const toolResultText = latestMessage.content
-        .filter((part): part is Extract<typeof latestMessage.content[number], { type: 'text' }> => part.type === 'text')
+        .filter(
+          (part): part is Extract<(typeof latestMessage.content)[number], { type: 'text' }> =>
+            part.type === 'text',
+        )
         .map((part) => part.text)
         .join(' ');
       return createMockTextStream({
@@ -469,8 +488,7 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
 
     return createMockTextStream({
       model,
-      text:
-        'Pi example mocked response. I can stream text, expose reasoning, schedule automations, and request operator input.',
+      text: 'Pi example mocked response. I can stream text, expose reasoning, schedule automations, and request operator input.',
       reasoning: 'Explaining the mocked Pi example capabilities.',
     });
   };
@@ -553,7 +571,8 @@ function createPiExampleTools(params: {
     {
       name: AUTOMATION_LIST_TOOL,
       label: 'Automation List',
-      description: 'List saved automations visible to the current thread without appending noisy thread activity by default.',
+      description:
+        'List saved automations visible to the current thread without appending noisy thread activity by default.',
       parameters: Type.Object({
         state: Type.String({ default: 'active' }),
         limit: Type.Number({ minimum: 1, default: 20 }),
@@ -561,18 +580,18 @@ function createPiExampleTools(params: {
       execute: async (_toolCallId, args) => {
         const toolArgs = args as ListAutomationsArgs;
         const threadKey = params.resolveThreadKey();
-        const session = params.runtimeState.getSession(threadKey);
-        const sessionAutomationMinutes = getSessionAutomationMinutes(session);
+        const projection = params.runtimeState.getProjection(threadKey);
+        const sessionAutomationMinutes = getSessionAutomationMinutes(projection);
         const automations =
           (await params.persistence?.listAutomations?.({
             threadKey,
             state: toolArgs.state,
             limit: toolArgs.limit,
           })) ??
-          (session.automation && sessionAutomationMinutes !== null
+          (projection.automation && sessionAutomationMinutes !== null
             ? [
                 {
-                  id: session.automation.id,
+                  id: projection.automation.id,
                   title: buildAutomationTitle({
                     command: 'sync',
                     schedule: {
@@ -606,20 +625,25 @@ function createPiExampleTools(params: {
     {
       name: AUTOMATION_CANCEL_TOOL,
       label: 'Automation Cancel',
-      description: 'Cancel a saved automation so it does not fire again and surface the canceled state in AG-UI.',
+      description:
+        'Cancel a saved automation so it does not fire again and surface the canceled state in AG-UI.',
       parameters: Type.Object({
         automationId: Type.String(),
       }) as unknown as PiExampleGatewayToolParameters,
       execute: async (_toolCallId, args) => {
         const toolArgs = args as CancelAutomationArgs;
         const threadKey = params.resolveThreadKey();
-        const session = params.runtimeState.getSession(threadKey);
+        const projection = params.runtimeState.getProjection(threadKey);
         const persisted = await params.persistence?.cancelAutomation?.({
           threadKey,
           automationId: toolArgs.automationId,
         });
-        const automationId = persisted?.automationId ?? session.automation?.id ?? toolArgs.automationId;
-        const artifactId = persisted?.artifactId ?? session.artifacts?.current?.artifactId ?? `artifact:${threadKey}:automation`;
+        const automationId =
+          persisted?.automationId ?? projection.automation?.id ?? toolArgs.automationId;
+        const artifactId =
+          persisted?.artifactId ??
+          projection.currentArtifact?.artifactId ??
+          `artifact:${threadKey}:automation`;
         const schedule = coerceSchedule(persisted?.schedule, { kind: 'every', intervalMinutes: 5 });
         const command = inferAutomationCommand({
           instruction: persisted?.instruction ?? 'sync',
@@ -637,8 +661,8 @@ function createPiExampleTools(params: {
           threadKey,
           artifactId,
           automationId,
-          executionId: session.execution.id,
-          activityRunId: session.automation?.runId ?? `run:${threadKey}`,
+          executionId: projection.execution.id,
+          activityRunId: projection.automation?.runId ?? `run:${threadKey}`,
           status: 'canceled',
           command,
           minutes: getScheduleMinutes(schedule),
@@ -660,7 +684,8 @@ function createPiExampleTools(params: {
     {
       name: REQUEST_OPERATOR_INPUT_TOOL,
       label: 'Request Operator Input',
-      description: 'Pause the Pi thread for operator input and surface a chat-thread A2UI form for resolution.',
+      description:
+        'Pause the Pi thread for operator input and surface a chat-thread A2UI form for resolution.',
       parameters: Type.Object({
         message: Type.String({
           default: 'Please provide a short operator note to continue.',
@@ -679,17 +704,15 @@ function createPiExampleTools(params: {
           message: toolArgs.message,
         });
 
-        params.runtimeState.updateSession(threadKey, (session) => ({
-          ...session,
+        params.runtimeState.updateProjection(threadKey, (projection) => ({
+          ...projection,
           execution: {
-            ...session.execution,
+            ...projection.execution,
             status: 'interrupted',
             statusMessage: toolArgs.message,
           },
-          artifacts: {
-            current: artifact,
-            activity: artifact,
-          },
+          currentArtifact: artifact,
+          activityArtifact: artifact,
           a2ui: buildInterruptA2Ui({
             artifactId,
             message: toolArgs.message,
@@ -719,7 +742,8 @@ export function createPiExampleGatewayFoundation(
     : requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.PI_AGENT_MODEL?.trim() || DEFAULT_PI_AGENT_MODEL;
   let foundation: PiRuntimeGatewayFoundation | null = null;
-  const resolveThreadKey = () => options.resolveThreadKey?.() ?? foundation?.agent.sessionId ?? 'thread-1';
+  const resolveThreadKey = () =>
+    options.resolveThreadKey?.() ?? foundation?.agent.sessionId ?? 'thread-1';
 
   foundation = createPiRuntimeGatewayFoundation({
     model: createOpenRouterModel(modelId),
@@ -730,7 +754,7 @@ export function createPiExampleGatewayFoundation(
       runtimeState,
       persistence: options.persistence,
     }),
-    getSessionContext: () => runtimeState.getSession(resolveThreadKey()),
+    getProjectionContext: () => runtimeState.getProjection(resolveThreadKey()),
     agentOptions: {
       initialState: {
         thinkingLevel: 'low',
