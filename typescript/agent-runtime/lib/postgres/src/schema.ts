@@ -1,4 +1,4 @@
-import { piRuntimePersistenceModel } from 'agent-runtime-contracts';
+import { piRuntimePersistenceModel } from '../../contracts/dist/index.js';
 
 export type PiRuntimeColumnSchema = {
   name: string;
@@ -196,7 +196,9 @@ for (const table of piRuntimeTableSchemas) {
 }
 
 if (canonicalTableNames.size > 0) {
-  throw new Error(`Missing Postgres schema definitions for: ${Array.from(canonicalTableNames).join(', ')}`);
+  throw new Error(
+    `Missing Postgres schema definitions for: ${Array.from(canonicalTableNames).join(', ')}`,
+  );
 }
 
 const renderColumn = (column: PiRuntimeColumnSchema): string => {
@@ -210,7 +212,9 @@ export function buildCreatePiRuntimeSchemaSql(): string[] {
   for (const table of piRuntimeTableSchemas) {
     const columnSql = table.columns.map(renderColumn).join(', ');
     const primaryKeySql = `primary key (${table.primaryKey.join(', ')})`;
-    statements.push(`create table if not exists ${table.tableName} (${columnSql}, ${primaryKeySql});`);
+    statements.push(
+      `create table if not exists ${table.tableName} (${columnSql}, ${primaryKeySql});`,
+    );
 
     for (const index of table.uniqueIndexes ?? []) {
       statements.push(

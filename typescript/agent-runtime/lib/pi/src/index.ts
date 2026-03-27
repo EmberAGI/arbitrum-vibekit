@@ -21,7 +21,7 @@ import {
   type Model,
   type ToolResultMessage,
 } from '@mariozechner/pi-ai';
-import { mergeThreadPatchForEmit, type TaskState } from 'agent-runtime-contracts';
+import { mergeThreadPatchForEmit, type TaskState } from '../../contracts/dist/index.js';
 import {
   buildPiRuntimeInspectionSnapshot,
   buildPiRuntimeMaintenancePlan,
@@ -38,7 +38,7 @@ import {
   type PiThreadActivityRecord,
   type PiThreadRecord,
   type PostgresBootstrapPlan,
-} from 'agent-runtime-postgres';
+} from '../../postgres/dist/index.js';
 export {
   createPiRuntimeGatewayAgUiHandler,
   DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH,
@@ -53,14 +53,14 @@ export {
   ensurePiRuntimePostgresReady,
   loadPiRuntimeInspectionState,
   persistPiRuntimeDirectExecution,
-} from 'agent-runtime-postgres';
+} from '../../postgres/dist/index.js';
 export type {
   EnsuredPiRuntimePostgres,
   EnsurePiRuntimePostgresReadyOptions,
   LoadedPiRuntimeInspectionState,
   LoadPiRuntimeInspectionStateOptions,
   PersistPiRuntimeDirectExecutionOptions,
-} from 'agent-runtime-postgres';
+} from '../../postgres/dist/index.js';
 
 export type PiRuntimeGatewayConnectRequest = {
   threadId: string;

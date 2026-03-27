@@ -10,6 +10,7 @@ describe('agent-runtime facade', () => {
       readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
     ) as {
       name?: string;
+      files?: string[];
       exports?: Record<string, unknown>;
       main?: string;
       dependencies?: Record<string, string>;
@@ -20,6 +21,13 @@ describe('agent-runtime facade', () => {
     expect(packageJson.name).toBe('agent-runtime');
     expect(packageJson.main).toBe('dist/index.js');
     expect(packageJson.types).toBe('dist/index.d.ts');
+    expect(packageJson.files).toEqual([
+      'dist',
+      'lib/contracts/dist',
+      'lib/pi/dist',
+      'lib/postgres/dist',
+      'README.md',
+    ]);
     expect(packageJson.exports).toMatchObject({
       '.': {
         default: './dist/index.js',
@@ -31,9 +39,15 @@ describe('agent-runtime facade', () => {
       },
     });
     expect(packageJson.dependencies).toMatchObject({
-      'agent-runtime-contracts': 'workspace:^',
-      'agent-runtime-pi': 'workspace:^',
+      '@a2a-js/sdk': '^0.3.4',
+      '@ag-ui/client': '0.0.47',
+      '@ag-ui/core': '0.0.47',
+      '@mariozechner/pi-agent-core': '0.62.0',
+      '@mariozechner/pi-ai': '0.62.0',
+      pg: '^8.20.0',
     });
+    expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-contracts');
+    expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-pi');
     expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-postgres');
     expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-langgraph');
     expect(packageJson.dependencies).not.toHaveProperty('agent-workflow-core');
