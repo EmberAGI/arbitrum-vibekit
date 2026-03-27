@@ -5,6 +5,7 @@ export {
   buildPiRuntimeGatewayConnectEvents,
   buildPiRuntimeGatewayContextMessages,
   buildPiThreadStateSnapshot,
+  createPiRuntimeGatewayProjectionStore,
   createPiRuntimeGatewayMockStream,
   convertPiRuntimeGatewayMessagesToLlm,
   createCanonicalPiRuntimeGatewayControlPlane,
@@ -48,12 +49,14 @@ export type {
   PiRuntimeGatewayFoundation,
   PiRuntimeGatewayHttpAgentConfig,
   PiRuntimeGatewayInspectionState,
+  PiRuntimeGatewayProjectionStore,
   PiRuntimeGatewayRunRequest,
   PiRuntimeGatewayRuntime,
   PiRuntimeGatewayRuntimeNoteMessage,
   PiRuntimeGatewayService,
-  PiRuntimeGatewaySession,
   PiRuntimeGatewayStopRequest,
+  PiRuntimeGatewayThreadProjection,
   PersistPiRuntimeDirectExecutionOptions,
+  CreatePiRuntimeGatewayProjectionStoreOptions,
 } from '../lib/pi/dist/index.js';
 export type { ExecutePostgresStatements } from '../lib/postgres/dist/index.js';

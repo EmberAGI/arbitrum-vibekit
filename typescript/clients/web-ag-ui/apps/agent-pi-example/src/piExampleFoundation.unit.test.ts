@@ -75,7 +75,7 @@ describe('createPiExampleGatewayFoundation', () => {
 
     await foundation.agent.prompt('Please schedule sync automation.');
 
-    expect(runtimeState.getSession('thread-1')).toMatchObject({
+    expect(runtimeState.getProjection('thread-1')).toMatchObject({
       execution: {
         status: 'queued',
         statusMessage: 'Scheduled sync every 5 minutes.',
@@ -84,13 +84,11 @@ describe('createPiExampleGatewayFoundation', () => {
         id: expect.any(String),
         runId: expect.any(String),
       },
-      artifacts: {
-        current: {
-          data: {
-            type: 'automation-status',
-            status: 'scheduled',
-            command: 'sync',
-          },
+      currentArtifact: {
+        data: {
+          type: 'automation-status',
+          status: 'scheduled',
+          command: 'sync',
         },
       },
       a2ui: {
@@ -112,9 +110,9 @@ describe('createPiExampleGatewayFoundation', () => {
     );
 
     await foundation.agent.prompt('Please schedule sync automation.');
-    const beforeList = runtimeState.getSession('thread-1');
+    const beforeList = runtimeState.getProjection('thread-1');
     await foundation.agent.prompt('Please list my automations.');
-    const afterList = runtimeState.getSession('thread-1');
+    const afterList = runtimeState.getProjection('thread-1');
 
     expect(foundation.agent.state.messages.at(-1)).toMatchObject({
       role: 'assistant',
@@ -143,18 +141,16 @@ describe('createPiExampleGatewayFoundation', () => {
     await foundation.agent.prompt('Please schedule sync automation.');
     await foundation.agent.prompt('Please cancel the scheduled sync.');
 
-    expect(runtimeState.getSession('thread-1')).toMatchObject({
+    expect(runtimeState.getProjection('thread-1')).toMatchObject({
       execution: {
         status: 'completed',
         statusMessage: 'Canceled automation sync every 5 minutes.',
       },
-      artifacts: {
-        current: {
-          data: {
-            type: 'automation-status',
-            status: 'canceled',
-            command: 'sync',
-          },
+      currentArtifact: {
+        data: {
+          type: 'automation-status',
+          status: 'canceled',
+          command: 'sync',
         },
       },
       a2ui: {
@@ -227,7 +223,7 @@ describe('createPiExampleGatewayFoundation', () => {
       title: 'sync every 1 minutes',
       status: 'canceled',
     });
-    expect(runtimeState.getSession('thread-1')).toMatchObject({
+    expect(runtimeState.getProjection('thread-1')).toMatchObject({
       execution: {
         statusMessage: 'Canceled automation sync every 1 minutes.',
       },
