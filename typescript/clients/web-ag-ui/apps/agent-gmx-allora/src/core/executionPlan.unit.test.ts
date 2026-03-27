@@ -116,12 +116,13 @@ describe('buildPerpetualExecutionPlan', () => {
 
     const plan = buildPerpetualExecutionPlan({
       telemetry,
+      txExecutionMode: 'execute',
       chainId: '42161',
       marketAddress: '0xmarket',
       walletAddress: '0xwallet',
       payTokenAddress: '0xusdc',
       collateralTokenAddress: '0xusdc',
-      currentPositionSide: 'long',
+      actualPositionSide: 'long',
     });
 
     expect(plan).toEqual({
@@ -158,6 +159,7 @@ describe('buildPerpetualExecutionPlan', () => {
 
     const plan = buildPerpetualExecutionPlan({
       telemetry,
+      txExecutionMode: 'execute',
       chainId: '42161',
       marketAddress: '0xmarket',
       walletAddress: '0xwallet',
@@ -169,6 +171,43 @@ describe('buildPerpetualExecutionPlan', () => {
       action: 'close',
       request: {
         positionSide: 'short',
+      },
+    });
+  });
+
+  it('opens the target side directly when plan mode flips only a synthetic assumed position', () => {
+    const telemetry: GmxAlloraTelemetry = {
+      cycle: 4,
+      action: 'close',
+      reason: 'Direction flipped',
+      marketSymbol: 'BTC/USDC',
+      side: 'short',
+      leverage: 2,
+      sizeUsd: 180,
+      timestamp: '2026-02-05T12:15:00.000Z',
+    };
+
+    const plan = buildPerpetualExecutionPlan({
+      telemetry,
+      txExecutionMode: 'plan',
+      chainId: '42161',
+      marketAddress: '0xmarket',
+      walletAddress: '0xwallet',
+      payTokenAddress: '0xusdc',
+      collateralTokenAddress: '0xusdc',
+      assumedPositionSide: 'long',
+    });
+
+    expect(plan).toEqual({
+      action: 'short',
+      request: {
+        amount: '180000000',
+        walletAddress: '0xwallet',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
       },
     });
   });

@@ -25,6 +25,7 @@ function extractPollCycleUpdate(result: unknown): PollCycleUpdate {
 
 const {
   copilotkitEmitStateMock,
+  ensureCronForThreadMock,
   fetchAlloraInferenceMock,
   listPerpetualMarketsMock,
   listPerpetualPositionsMock,
@@ -40,6 +41,7 @@ const {
   getOnchainClientsMock,
 } = vi.hoisted(() => ({
   copilotkitEmitStateMock: vi.fn(async () => undefined),
+  ensureCronForThreadMock: vi.fn(),
   fetchAlloraInferenceMock: vi.fn<[], Promise<AlloraInference>>(),
   listPerpetualMarketsMock: vi.fn<[], Promise<PerpetualMarket[]>>(),
   listPerpetualPositionsMock: vi.fn<[], Promise<PerpetualPosition[]>>(),
@@ -87,7 +89,7 @@ vi.mock('../src/workflow/clientFactory.js', () => ({
 }));
 
 vi.mock('../src/workflow/cronScheduler.js', () => ({
-  ensureCronForThread: vi.fn(),
+  ensureCronForThread: ensureCronForThreadMock,
 }));
 
 function buildBaseState(): ClmmState {
@@ -222,6 +224,30 @@ describe('pollCycleNode (integration)', () => {
     getPerpetualLifecycleMock.mockReset();
     getOnchainClientsMock.mockReset();
     copilotkitEmitStateMock.mockReset();
+    ensureCronForThreadMock.mockReset();
+  });
+
+  it('re-arms cron scheduling after restart even when persisted state says cron was scheduled', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+    });
+    listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValue([]);
+    createPerpetualLongMock.mockResolvedValue({ transactions: [] });
+
+    const state = buildBaseState();
+    state.private.cronScheduled = true;
+    state.thread.metrics.previousPrice = 46000;
+
+    await pollCycleNode(state, {
+      configurable: {
+        thread_id: 'thread-1',
+      },
+    } as never);
+
+    expect(ensureCronForThreadMock).toHaveBeenCalledWith('thread-1', 5000);
   });
 
   it('falls back to cached state when Allora fetch fails transiently', async () => {
@@ -1476,124 +1502,185 @@ describe('pollCycleNode (integration)', () => {
   });
 
   it('closes and reopens within the same cycle when direction flips', async () => {
-    fetchAlloraInferenceMock.mockResolvedValueOnce({
-      topicId: 14,
-      combinedValue: 47000,
-      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
-    });
-    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
-    listPerpetualPositionsMock
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
-    createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
-    createPerpetualShortMock.mockResolvedValueOnce({ transactions: [] });
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'plan';
 
-    const state = buildBaseState();
-    state.thread.metrics.previousPrice = 48000;
-    state.thread.metrics.assumedPositionSide = 'long';
-    const result = await pollCycleNode(state, {});
-    const update = extractPollCycleUpdate(result);
-
-    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
-    expect(createPerpetualCloseMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        marketAddress: '0xmarket',
-        positionSide: 'long',
-      }),
-    );
-    expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
-    expect(createPerpetualShortMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        marketAddress: '0xmarket',
-        leverage: '2',
-      }),
-    );
-    expect(createPerpetualLongMock).not.toHaveBeenCalled();
-    expect(createPerpetualReduceMock).not.toHaveBeenCalled();
-    expect(update.thread?.metrics.pendingPositionSync).toMatchObject({
-      expectedSide: 'short',
-      sourceAction: 'flip',
-    });
-    expect(update.thread?.metrics.assumedPositionSide).toBe('short');
-  });
-
-  it('closes short and reopens long within the same cycle when direction flips bullish', async () => {
-    fetchAlloraInferenceMock.mockResolvedValueOnce({
-      topicId: 14,
-      combinedValue: 49000,
-      confidenceIntervalValues: [48000, 48500, 49000, 49500, 50000],
-    });
-    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
-    listPerpetualPositionsMock
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
-    createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
-    createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
-
-    const state = buildBaseState();
-    state.thread.metrics.previousPrice = 46000;
-    state.thread.metrics.assumedPositionSide = 'short';
-    const result = await pollCycleNode(state, {});
-    const update = extractPollCycleUpdate(result);
-
-    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
-    expect(createPerpetualCloseMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        marketAddress: '0xmarket',
-        positionSide: 'short',
-      }),
-    );
-    expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
-    expect(createPerpetualLongMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        marketAddress: '0xmarket',
-        leverage: '2',
-      }),
-    );
-    expect(createPerpetualShortMock).not.toHaveBeenCalled();
-    expect(createPerpetualReduceMock).not.toHaveBeenCalled();
-    expect(update.thread?.metrics.pendingPositionSync).toMatchObject({
-      expectedSide: 'long',
-      sourceAction: 'flip',
-    });
-    expect(update.thread?.metrics.assumedPositionSide).toBe('long');
-  });
-
-  it('skips a second trade when inference metrics are unchanged', async () => {
-    fetchAlloraInferenceMock
-      .mockResolvedValueOnce({
-        topicId: 14,
-        combinedValue: 47000,
-        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
-      })
-      .mockResolvedValueOnce({
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
         topicId: 14,
         combinedValue: 47000,
         confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
       });
-    listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
-    listPerpetualPositionsMock.mockResolvedValue([]);
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
+      createPerpetualShortMock.mockResolvedValueOnce({ transactions: [] });
 
-    const firstState = buildBaseState();
-    firstState.thread.metrics.previousPrice = 48000;
-    firstState.thread.metrics.assumedPositionSide = 'long';
-    const firstResult = await pollCycleNode(firstState, {});
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 48000;
+      state.thread.metrics.assumedPositionSide = 'long';
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
 
-    const firstUpdate = extractPollCycleUpdate(firstResult);
+      expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
+      expect(createPerpetualShortMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          marketAddress: '0xmarket',
+          leverage: '2',
+        }),
+      );
+      expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+      expect(createPerpetualLongMock).not.toHaveBeenCalled();
+      expect(createPerpetualReduceMock).not.toHaveBeenCalled();
+      expect(update.thread?.metrics.pendingPositionSync).toBeUndefined();
+      expect(update.thread?.metrics.assumedPositionSide).toBe('short');
+      expect(update.thread?.metrics.latestCycle?.reason).not.toContain(
+        'Awaiting GMX position index sync',
+      );
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
 
-    const secondState = buildBaseState();
-    secondState.thread.metrics = {
-      ...secondState.thread.metrics,
-      ...(firstUpdate.thread?.metrics ?? {}),
-    };
-    secondState.thread.metrics.assumedPositionSide = firstUpdate.thread?.metrics?.assumedPositionSide;
-    secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
-    secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
-    secondState.thread.metrics.cyclesSinceRebalance = 3;
+  it('closes short and reopens long within the same cycle when direction flips bullish', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'plan';
 
-    await pollCycleNode(secondState, {});
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 49000,
+        confidenceIntervalValues: [48000, 48500, 49000, 49500, 50000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
+      createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
 
-    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      state.thread.metrics.assumedPositionSide = 'short';
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
+      expect(createPerpetualLongMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          marketAddress: '0xmarket',
+          leverage: '2',
+        }),
+      );
+      expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+      expect(createPerpetualShortMock).not.toHaveBeenCalled();
+      expect(createPerpetualReduceMock).not.toHaveBeenCalled();
+      expect(update.thread?.metrics.pendingPositionSync).toBeUndefined();
+      expect(update.thread?.metrics.assumedPositionSide).toBe('long');
+      expect(update.thread?.metrics.latestCycle?.reason).not.toContain(
+        'Awaiting GMX position index sync',
+      );
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
+
+  it('does not defer opposite-side flips behind position-sync guards in plan mode', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'plan';
+
+      fetchAlloraInferenceMock
+        .mockResolvedValueOnce({
+          topicId: 14,
+          combinedValue: 47000,
+          confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+        })
+        .mockResolvedValueOnce({
+          topicId: 14,
+          combinedValue: 45000,
+          confidenceIntervalValues: [44000, 44500, 45000, 45500, 46000],
+        });
+      listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValue([]);
+      createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
+      createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
+      createPerpetualShortMock.mockResolvedValueOnce({ transactions: [] });
+
+      const firstState = buildBaseState();
+      firstState.thread.metrics.previousPrice = 46000;
+      const firstResult = await pollCycleNode(firstState, {});
+      const firstUpdate = extractPollCycleUpdate(firstResult);
+
+      const secondState = buildBaseState();
+      secondState.thread.metrics = {
+        ...secondState.thread.metrics,
+        ...(firstUpdate.thread?.metrics ?? {}),
+      };
+      secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
+      secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
+
+      const secondResult = await pollCycleNode(secondState, {});
+      const secondUpdate = extractPollCycleUpdate(secondResult);
+
+      expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
+      expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+      expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
+      expect(secondUpdate.thread?.metrics.latestCycle?.reason).not.toContain(
+        'Awaiting GMX position index sync',
+      );
+      expect(secondUpdate.thread?.metrics.assumedPositionSide).toBe('short');
+      expect(secondUpdate.thread?.metrics.pendingPositionSync).toBeUndefined();
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
+
+  it('skips a second trade when inference metrics are unchanged', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'plan';
+
+    try {
+      fetchAlloraInferenceMock
+        .mockResolvedValueOnce({
+          topicId: 14,
+          combinedValue: 47000,
+          confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+        })
+        .mockResolvedValueOnce({
+          topicId: 14,
+          combinedValue: 47000,
+          confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+        });
+      listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValue([]);
+
+      const firstState = buildBaseState();
+      firstState.thread.metrics.previousPrice = 48000;
+      firstState.thread.metrics.assumedPositionSide = 'long';
+      const firstResult = await pollCycleNode(firstState, {});
+
+      const firstUpdate = extractPollCycleUpdate(firstResult);
+
+      const secondState = buildBaseState();
+      secondState.thread.metrics = {
+        ...secondState.thread.metrics,
+        ...(firstUpdate.thread?.metrics ?? {}),
+      };
+      secondState.thread.metrics.assumedPositionSide = firstUpdate.thread?.metrics?.assumedPositionSide;
+      secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
+      secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
+      secondState.thread.metrics.cyclesSinceRebalance = 3;
+
+      await pollCycleNode(secondState, {});
+
+      expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+      expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
   });
 
   it('allows a second trade when inference metrics change', async () => {

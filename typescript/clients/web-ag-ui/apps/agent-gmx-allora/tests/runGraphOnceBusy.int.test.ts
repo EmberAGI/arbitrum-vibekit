@@ -210,6 +210,167 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
     expect(body.stream_resumable).toBe(false);
   });
 
+  it('recovers when a cron run stream hangs and allows the next tick to proceed', async () => {
+    process.env['LANGGRAPH_RUN_STREAM_TIMEOUT_MS'] = '10';
+    let runCounter = 0;
+
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: unknown) => {
+      const url = getUrl(input);
+      const method = getMethod(init);
+
+      if (url.endsWith('/threads') && method === 'POST') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1') && method === 'PATCH') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
+        return jsonResponse({ values: { thread: {} } });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
+        return jsonResponse({ checkpoint_id: 'cp-1' });
+      }
+      if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {
+        runCounter += 1;
+        return jsonResponse({ run_id: `run-${runCounter}` });
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-1/stream') && method === 'GET') {
+        return new Response(
+          new ReadableStream({
+            start() {
+              // Intentionally never closes to simulate the wedged cron run we saw live.
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-1/cancel') && method === 'POST') {
+        return new Response('', { status: 202 });
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-1') && method === 'GET') {
+        return jsonResponse({ run_id: 'run-1', status: 'cancelled' });
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-2/stream') && method === 'GET') {
+        return new Response('event: done\n\n', { status: 200 });
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-2') && method === 'GET') {
+        return jsonResponse({ run_id: 'run-2', status: 'success' });
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+      return await Promise.race([
+        promise,
+        new Promise<never>((_resolve, reject) => {
+          setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs);
+        }),
+      ]);
+    };
+
+    await expect(withTimeout(runGraphOnce('thread-1'), 250)).resolves.toBeUndefined();
+    await expect(withTimeout(runGraphOnce('thread-1'), 250)).resolves.toBeUndefined();
+
+    const cancelCalls = fetchMock.mock.calls.filter(([input, requestInit]) => {
+      return (
+        getUrl(input as string | URL | Request).endsWith('/threads/thread-1/runs/run-1/cancel') &&
+        getMethod(requestInit) === 'POST'
+      );
+    });
+    expect(cancelCalls).toHaveLength(1);
+
+    const runCreateCalls = fetchMock.mock.calls.filter(([input, requestInit]) => {
+      return (
+        getUrl(input as string | URL | Request).endsWith('/threads/thread-1/runs') &&
+        getMethod(requestInit) === 'POST'
+      );
+    });
+    expect(runCreateCalls).toHaveLength(2);
+  });
+
+  it('recovers even when stream cleanup cancel never resolves', async () => {
+    process.env['LANGGRAPH_RUN_STREAM_TIMEOUT_MS'] = '10';
+    let runCounter = 0;
+
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: unknown) => {
+      const url = getUrl(input);
+      const method = getMethod(init);
+
+      if (url.endsWith('/threads') && method === 'POST') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1') && method === 'PATCH') {
+        return jsonResponse({ thread_id: 'thread-1' });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'GET') {
+        return jsonResponse({ values: { thread: {} } });
+      }
+      if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
+        return jsonResponse({ checkpoint_id: 'cp-1' });
+      }
+      if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {
+        runCounter += 1;
+        return jsonResponse({ run_id: `run-${runCounter}` });
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-1/stream') && method === 'GET') {
+        return new Response(
+          new ReadableStream({
+            start() {
+              // Never emit or close.
+            },
+            cancel() {
+              return new Promise(() => undefined);
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-1/cancel') && method === 'POST') {
+        return new Response('', { status: 202 });
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-1') && method === 'GET') {
+        return jsonResponse({ run_id: 'run-1', status: 'cancelled' });
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-2/stream') && method === 'GET') {
+        return new Response('event: done\n\n', { status: 200 });
+      }
+      if (url.endsWith('/threads/thread-1/runs/run-2') && method === 'GET') {
+        return jsonResponse({ run_id: 'run-2', status: 'success' });
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+      return await Promise.race([
+        promise,
+        new Promise<never>((_resolve, reject) => {
+          setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs);
+        }),
+      ]);
+    };
+
+    await expect(withTimeout(runGraphOnce('thread-1'), 250)).resolves.toBeUndefined();
+    await expect(withTimeout(runGraphOnce('thread-1'), 250)).resolves.toBeUndefined();
+
+    const cancelCalls = fetchMock.mock.calls.filter(([input, requestInit]) => {
+      return (
+        getUrl(input as string | URL | Request).endsWith('/threads/thread-1/runs/run-1/cancel') &&
+        getMethod(requestInit) === 'POST'
+      );
+    });
+    expect(cancelCalls).toHaveLength(1);
+
+    const runCreateCalls = fetchMock.mock.calls.filter(([input, requestInit]) => {
+      return (
+        getUrl(input as string | URL | Request).endsWith('/threads/thread-1/runs') &&
+        getMethod(requestInit) === 'POST'
+      );
+    });
+    expect(runCreateCalls).toHaveLength(2);
+  });
+
   it('preserves inactive lifecycle for fire-terminal snapshots even when setup signals persist', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: unknown) => {
       const url = getUrl(input);

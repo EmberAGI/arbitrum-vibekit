@@ -1323,15 +1323,18 @@ export const pollCycleNode = async (
             position.positionSide === exposureAdjusted.side,
         )
       : undefined;
+  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
 
   const plannedExecutionPlan = buildPerpetualExecutionPlan({
     telemetry: exposureAdjusted,
+    txExecutionMode,
     chainId: ARBITRUM_CHAIN_ID.toString(),
     marketAddress: gmxMarketAddress as `0x${string}`,
     walletAddress: planBuilderWalletAddress,
     payTokenAddress: operatorConfig.fundingTokenAddress,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
-    currentPositionSide: decisionPreviousSide,
+    actualPositionSide: currentPositionSide,
+    assumedPositionSide: reconciledAssumedPositionSide ?? activePositionSyncGuard?.expectedSide,
     positionContractKey: positionForReduce?.contractKey,
     positionSizeInUsd: positionForReduce?.sizeInUsd,
   });
@@ -1357,6 +1360,7 @@ export const pollCycleNode = async (
     ? ({ action: 'none' } as const)
     : plannedExecutionPlan;
   const shouldDeferTradeForPositionSync =
+    txExecutionMode === 'execute' &&
     Boolean(activePositionSyncGuard) &&
     !currentMarketPosition &&
     executionPlan.action !== 'none';
@@ -1432,7 +1436,6 @@ export const pollCycleNode = async (
     }
   }
 
-  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
   const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
   if (executionPlan.action === 'none') {
     logWarn('pollCycle: execution plan is none; no order simulation/execution will be attempted', {
@@ -1802,6 +1805,10 @@ export const pollCycleNode = async (
   const nextPendingPositionSync: PositionSyncGuard | undefined = (():
     | PositionSyncGuard
     | undefined => {
+    if (txExecutionMode !== 'execute') {
+      return undefined;
+    }
+
     const activeGuardWithoutPosition = activePositionSyncGuard && !positionAfterExecution;
     if (!executionCompletedSuccessfully || executionPlan.action === 'none' || approvalOnlyExecution) {
       return activeGuardWithoutPosition ? activePositionSyncGuard : undefined;
@@ -1956,15 +1963,17 @@ export const pollCycleNode = async (
   };
 
   let cronScheduled = state.private.cronScheduled;
-  if (runtimeThreadId && !cronScheduled) {
+  if (runtimeThreadId) {
     const intervalMs = state.private.pollIntervalMs ?? resolvePollIntervalMs();
     ensureCronForThread(runtimeThreadId, intervalMs);
-    logInfo('Cron scheduled after first GMX cycle', {
-      threadId: runtimeThreadId,
-      checkpointId: runtimeCheckpointId,
-      checkpointNamespace: runtimeCheckpointNamespace,
-    });
-    cronScheduled = true;
+    if (!cronScheduled) {
+      logInfo('Cron scheduled after first GMX cycle', {
+        threadId: runtimeThreadId,
+        checkpointId: runtimeCheckpointId,
+        checkpointNamespace: runtimeCheckpointNamespace,
+      });
+      cronScheduled = true;
+    }
   }
 
   const finalAction = latestCycle.action;

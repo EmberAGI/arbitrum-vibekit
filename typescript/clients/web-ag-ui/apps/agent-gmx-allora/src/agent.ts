@@ -273,6 +273,14 @@ const RunResponseSchema = z
   .catchall(z.unknown());
 
 type RunStatus = string | undefined;
+const DEFAULT_RUN_STREAM_SILENCE_TIMEOUT_MS = 90_000;
+
+class RunStreamTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`LangGraph run stream produced no chunks for ${timeoutMs}ms`);
+    this.name = 'RunStreamTimeoutError';
+  }
+}
 
 function resolveLangGraphDeploymentUrl(): string {
   const raw = process.env['LANGGRAPH_DEPLOYMENT_URL'] ?? 'http://localhost:8126';
@@ -285,6 +293,20 @@ function resolveLangGraphGraphId(): string {
 
 function isStrictInactiveCycleProjectionAssertEnabled(): boolean {
   return process.env['AGENT_STRICT_INACTIVE_CYCLE_ASSERT'] === 'true';
+}
+
+function resolveRunStreamSilenceTimeoutMs(): number {
+  const raw = process.env['LANGGRAPH_RUN_STREAM_TIMEOUT_MS'];
+  if (!raw) {
+    return DEFAULT_RUN_STREAM_SILENCE_TIMEOUT_MS;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_RUN_STREAM_SILENCE_TIMEOUT_MS;
+  }
+
+  return Math.max(1, Math.trunc(parsed));
 }
 
 async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>): Promise<T> {
@@ -456,6 +478,57 @@ async function fetchRun(baseUrl: string, threadId: string, runId: string) {
   return parseJsonResponse(response, RunResponseSchema);
 }
 
+async function cancelRun(baseUrl: string, threadId: string, runId: string): Promise<void> {
+  const response = await fetch(`${baseUrl}/threads/${threadId}/runs/${runId}/cancel`, {
+    method: 'POST',
+  });
+
+  if (response.ok || response.status === 404) {
+    return;
+  }
+
+  const payloadText = await response.text().catch(() => 'No error body');
+  throw new Error(`LangGraph run cancel failed (${response.status}): ${payloadText}`);
+}
+
+async function drainRunStreamWithSilenceTimeout(
+  stream: ReadableStream<Uint8Array>,
+  timeoutMs: number,
+): Promise<void> {
+  const reader = stream.getReader();
+
+  try {
+    while (true) {
+      const result = await new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          reject(new RunStreamTimeoutError(timeoutMs));
+        }, timeoutMs);
+
+        void reader.read().then(
+          (value) => {
+            clearTimeout(timer);
+            resolve(value);
+          },
+          (error: unknown) => {
+            clearTimeout(timer);
+            reject(error);
+          },
+        );
+      });
+
+      if (result.done) {
+        return;
+      }
+    }
+  } finally {
+    try {
+      void reader.cancel();
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
+}
+
 async function waitForRunStreamCompletion(params: {
   baseUrl: string;
   threadId: string;
@@ -476,8 +549,20 @@ async function waitForRunStreamCompletion(params: {
 
   const stream = response.body;
   if (stream) {
-    for await (const chunk of stream) {
-      void chunk;
+    const timeoutMs = resolveRunStreamSilenceTimeoutMs();
+    try {
+      await drainRunStreamWithSilenceTimeout(stream, timeoutMs);
+    } catch (error) {
+      if (!(error instanceof RunStreamTimeoutError)) {
+        throw error;
+      }
+
+      console.warn('[cron] Run stream stalled; canceling run', {
+        threadId: params.threadId,
+        runId: params.runId,
+        timeoutMs,
+      });
+      await cancelRun(params.baseUrl, params.threadId, params.runId);
     }
   }
 
