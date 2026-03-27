@@ -116,11 +116,14 @@ overrides:
 
 patchedDependencies:
   '@ag-ui/langgraph@0.0.25':
-    hash: 281086b916a342599933894d2a3b902232a9f05165b5b706481b2f9474887285
+    hash: 7e5f8f30dcdd6a62eb4eb12f77e663254f4b1e3474f30402fc67d97b356b949e
     path: clients/web-ag-ui/patches/@ag-ui__langgraph@0.0.25.patch
   '@anolilab/multi-semantic-release':
     hash: 37fb738e9aae114d5abda608fb1e11ab03b55303eff8c81490efb4dc99ef338b
     path: patches/@anolilab__multi-semantic-release.patch
+  '@copilotkitnext/runtime@1.54.0':
+    hash: 6fdb15da05fbf241773a08848a9e47c117b97fb693ba933381ad8442a5d4c24f
+    path: patches/@copilotkitnext__runtime@1.54.0.patch
 
 importers:
 
@@ -1065,13 +1068,13 @@ importers:
         version: 0.0.48
       '@ag-ui/langgraph':
         specifier: 0.0.25
-        version: 0.0.25(patch_hash=281086b916a342599933894d2a3b902232a9f05165b5b706481b2f9474887285)(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.1(zod@3.25.76))
+        version: 0.0.25(patch_hash=7e5f8f30dcdd6a62eb4eb12f77e663254f4b1e3474f30402fc67d97b356b949e)(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.1(zod@3.25.76))
       '@copilotkitnext/core':
         specifier: 1.54.0
         version: 1.54.0(zod@3.25.76)
       '@copilotkitnext/runtime':
         specifier: 1.54.0
-        version: 1.54.0(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@ag-ui/encoder@0.0.48)(@cfworker/json-schema@4.1.1)(@copilotkitnext/shared@1.54.0)(bufferutil@4.0.9)(utf-8-validate@5.0.10)(zod@3.25.76)
+        version: 1.54.0(patch_hash=6fdb15da05fbf241773a08848a9e47c117b97fb693ba933381ad8442a5d4c24f)(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@ag-ui/encoder@0.0.48)(@cfworker/json-schema@4.1.1)(@copilotkitnext/shared@1.54.0)(bufferutil@4.0.9)(utf-8-validate@5.0.10)(zod@3.25.76)
       '@eslint/eslintrc':
         specifier: ^3
         version: 3.3.1
@@ -18644,7 +18647,7 @@ snapshots:
       '@ag-ui/core': 0.0.48
       '@ag-ui/proto': 0.0.48
 
-  '@ag-ui/langgraph@0.0.25(patch_hash=281086b916a342599933894d2a3b902232a9f05165b5b706481b2f9474887285)(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@opentelemetry/api@1.9.0)(openai@4.104.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.1(zod@3.25.76))':
+  '@ag-ui/langgraph@0.0.25(patch_hash=7e5f8f30dcdd6a62eb4eb12f77e663254f4b1e3474f30402fc67d97b356b949e)(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@opentelemetry/api@1.9.0)(openai@4.104.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.1(zod@3.25.76))':
     dependencies:
       '@ag-ui/client': 0.0.48
       '@ag-ui/core': 0.0.48
@@ -18665,7 +18668,7 @@ snapshots:
       - ws
       - zod-to-json-schema
 
-  '@ag-ui/langgraph@0.0.25(patch_hash=281086b916a342599933894d2a3b902232a9f05165b5b706481b2f9474887285)(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.1(zod@3.25.76))':
+  '@ag-ui/langgraph@0.0.25(patch_hash=7e5f8f30dcdd6a62eb4eb12f77e663254f4b1e3474f30402fc67d97b356b949e)(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.1(zod@3.25.76))':
     dependencies:
       '@ag-ui/client': 0.0.48
       '@ag-ui/core': 0.0.48
@@ -20746,12 +20749,12 @@ snapshots:
     dependencies:
       '@ag-ui/client': 0.0.48
       '@ag-ui/core': 0.0.48
-      '@ag-ui/langgraph': 0.0.25(patch_hash=281086b916a342599933894d2a3b902232a9f05165b5b706481b2f9474887285)(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@opentelemetry/api@1.9.0)(openai@4.104.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.1(zod@3.25.76))
+      '@ag-ui/langgraph': 0.0.25(patch_hash=7e5f8f30dcdd6a62eb4eb12f77e663254f4b1e3474f30402fc67d97b356b949e)(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@opentelemetry/api@1.9.0)(openai@4.104.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.1(zod@3.25.76))
       '@ai-sdk/anthropic': 3.0.64(zod@3.25.76)
       '@ai-sdk/openai': 3.0.48(zod@3.25.76)
       '@copilotkit/shared': 1.54.0(@ag-ui/core@0.0.48)
       '@copilotkitnext/agent': 1.54.0(@cfworker/json-schema@4.1.1)(hono@4.12.9)
-      '@copilotkitnext/runtime': 1.54.0(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@ag-ui/encoder@0.0.48)(@cfworker/json-schema@4.1.1)(@copilotkitnext/shared@1.54.0)(bufferutil@4.0.9)(utf-8-validate@5.0.10)(zod@3.25.76)
+      '@copilotkitnext/runtime': 1.54.0(patch_hash=6fdb15da05fbf241773a08848a9e47c117b97fb693ba933381ad8442a5d4c24f)(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@ag-ui/encoder@0.0.48)(@cfworker/json-schema@4.1.1)(@copilotkitnext/shared@1.54.0)(bufferutil@4.0.9)(utf-8-validate@5.0.10)(zod@3.25.76)
       '@graphql-yoga/plugin-defer-stream': 3.17.1(graphql-yoga@5.17.1(graphql@16.12.0))(graphql@16.12.0)
       '@hono/node-server': 1.19.9(hono@4.12.9)
       '@langchain/core': 0.3.80(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))
@@ -20892,7 +20895,7 @@ snapshots:
       - signal-polyfill
       - supports-color
 
-  '@copilotkitnext/runtime@1.54.0(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@ag-ui/encoder@0.0.48)(@cfworker/json-schema@4.1.1)(@copilotkitnext/shared@1.54.0)(bufferutil@4.0.9)(utf-8-validate@5.0.10)(zod@3.25.76)':
+  '@copilotkitnext/runtime@1.54.0(patch_hash=6fdb15da05fbf241773a08848a9e47c117b97fb693ba933381ad8442a5d4c24f)(@ag-ui/client@0.0.48)(@ag-ui/core@0.0.48)(@ag-ui/encoder@0.0.48)(@cfworker/json-schema@4.1.1)(@copilotkitnext/shared@1.54.0)(bufferutil@4.0.9)(utf-8-validate@5.0.10)(zod@3.25.76)':
     dependencies:
       '@ag-ui/a2ui-middleware': 0.0.2(@ag-ui/client@0.0.48)(rxjs@7.8.1)
       '@ag-ui/client': 0.0.48
@@ -34671,7 +34674,7 @@ snapshots:
       tinyglobby: 0.2.15
       unrs-resolver: 1.11.1
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1))
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.45.0(eslint@9.36.0(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@4.4.4)(eslint@9.39.2(jiti@2.6.1))
     transitivePeerDependencies:
       - supports-color
 
