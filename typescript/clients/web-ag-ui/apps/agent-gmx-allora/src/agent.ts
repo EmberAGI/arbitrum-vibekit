@@ -491,6 +491,14 @@ async function cancelRun(baseUrl: string, threadId: string, runId: string): Prom
   throw new Error(`LangGraph run cancel failed (${response.status}): ${payloadText}`);
 }
 
+function timeoutAfter(ms: number): Promise<never> {
+  return new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new RunStreamTimeoutError(ms));
+    }, ms);
+  });
+}
+
 async function drainRunStreamWithSilenceTimeout(
   stream: ReadableStream<Uint8Array>,
   timeoutMs: number,
@@ -499,22 +507,7 @@ async function drainRunStreamWithSilenceTimeout(
 
   try {
     while (true) {
-      const result = await new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          reject(new RunStreamTimeoutError(timeoutMs));
-        }, timeoutMs);
-
-        void reader.read().then(
-          (value) => {
-            clearTimeout(timer);
-            resolve(value);
-          },
-          (error: unknown) => {
-            clearTimeout(timer);
-            reject(error);
-          },
-        );
-      });
+      const result = await Promise.race([reader.read(), timeoutAfter(timeoutMs)]);
 
       if (result.done) {
         return;
