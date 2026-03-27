@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
 import { Annotation } from '@langchain/langgraph';
@@ -352,7 +354,7 @@ const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
   if (right.length >= left.length) {
     let isPrefix = true;
     for (let index = 0; index < left.length; index += 1) {
-      if (right[index] !== left[index]) {
+      if (!isDeepStrictEqual(right[index], left[index])) {
         isPrefix = false;
         break;
       }

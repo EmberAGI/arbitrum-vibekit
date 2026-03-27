@@ -1306,10 +1306,207 @@ describe('pollCycleNode (integration)', () => {
       });
       expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
       expect(createPerpetualCloseMock).toHaveBeenCalledBefore(createPerpetualShortMock);
+      expect(update.thread?.metrics.latestCycle).toMatchObject({
+        action: 'open',
+        side: 'short',
+        txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+      });
+      expect(update.thread?.metrics.latestCycle?.reason).toContain('reopened short');
+      expect(update.thread?.transactionHistory).toEqual([
+        expect.objectContaining({
+          cycle: 1,
+          action: 'open',
+          txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+          status: 'success',
+        }),
+      ]);
       expect(update.thread?.metrics.assumedPositionSide).toBe('short');
       expect(update.thread?.metrics.pendingPositionSync).toBeUndefined();
     } finally {
       process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
+
+  it('waits for the reopened flip side before leaving execute-mode state reconciliation pending', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    const originalVerifyAttempts = process.env['GMX_FIRE_CLOSE_VERIFY_ATTEMPTS'];
+    const originalVerifyInterval = process.env['GMX_FIRE_CLOSE_VERIFY_INTERVAL_MS'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+      process.env['GMX_FIRE_CLOSE_VERIFY_ATTEMPTS'] = '3';
+      process.env['GMX_FIRE_CLOSE_VERIFY_INTERVAL_MS'] = '0';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 49000,
+        confidenceIntervalValues: [48000, 48500, 49000, 49500, 50000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock
+        .mockResolvedValueOnce([
+          {
+            chainId: '42161',
+            key: '0xpos-short',
+            contractKey: '0xposition-short',
+            account: '0xwallet',
+            marketAddress: '0xmarket',
+            sizeInUsd: '16000000000000000000000000000000',
+            sizeInTokens: '0.01',
+            collateralAmount: '50',
+            pendingBorrowingFeesUsd: '0',
+            increasedAtTime: '0',
+            decreasedAtTime: '0',
+            positionSide: 'short',
+            isLong: false,
+            fundingFeeAmount: '0',
+            claimableLongTokenAmount: '0',
+            claimableShortTokenAmount: '0',
+            isOpening: false,
+            pnl: '0',
+            positionFeeAmount: '0',
+            traderDiscountAmount: '0',
+            uiFeeAmount: '0',
+            collateralToken: {
+              tokenUid: { chainId: '42161', address: '0xusdc' },
+              name: 'USD Coin',
+              symbol: 'USDC',
+              isNative: false,
+              decimals: 6,
+              iconUri: null,
+              isVetted: true,
+            },
+          },
+        ])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            chainId: '42161',
+            key: '0xpos-long',
+            contractKey: '0xposition-long',
+            account: '0xwallet',
+            marketAddress: '0xmarket',
+            sizeInUsd: '16000000000000000000000000000000',
+            sizeInTokens: '0.01',
+            collateralAmount: '50',
+            pendingBorrowingFeesUsd: '0',
+            increasedAtTime: '0',
+            decreasedAtTime: '0',
+            positionSide: 'long',
+            isLong: true,
+            fundingFeeAmount: '0',
+            claimableLongTokenAmount: '0',
+            claimableShortTokenAmount: '0',
+            isOpening: false,
+            pnl: '0',
+            positionFeeAmount: '0',
+            traderDiscountAmount: '0',
+            uiFeeAmount: '0',
+            collateralToken: {
+              tokenUid: { chainId: '42161', address: '0xusdc' },
+              name: 'USD Coin',
+              symbol: 'USDC',
+              isNative: false,
+              decimals: 6,
+              iconUri: null,
+              isVetted: true,
+            },
+          },
+        ]);
+      createPerpetualCloseMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0xclose', data: '0xclose01', value: '0', chainId: '42161' }],
+      });
+      createPerpetualLongMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0xopen', data: '0xopen01', value: '0', chainId: '42161' }],
+      });
+      getPerpetualLifecycleMock
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          status: 'executed',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:00.000Z',
+        })
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+          orderKey: '0x4444444444444444444444444444444444444444444444444444444444444444',
+          status: 'pending',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:05.000Z',
+        });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValueOnce(
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+            )
+            .mockResolvedValueOnce(
+              '0x3333333333333333333333333333333333333333333333333333333333333333',
+            ),
+        },
+        public: {
+          waitForTransactionReceipt: vi
+            .fn()
+            .mockResolvedValueOnce({
+              status: 'success',
+              transactionHash:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
+            })
+            .mockResolvedValueOnce({
+              status: 'success',
+              transactionHash:
+                '0x3333333333333333333333333333333333333333333333333333333333333333',
+            }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      state.thread.metrics.assumedPositionSide = 'short';
+
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(update.thread?.metrics.latestCycle).toMatchObject({
+        action: 'open',
+        side: 'long',
+        txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+      });
+      expect(update.thread?.metrics.latestCycle?.reason).toContain('reopened long');
+      expect(update.thread?.metrics.assumedPositionSide).toBe('long');
+      expect(update.thread?.metrics.pendingPositionSync).toBeUndefined();
+      expect(update.thread?.transactionHistory).toEqual([
+        expect.objectContaining({
+          cycle: 1,
+          action: 'open',
+          txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+          status: 'success',
+        }),
+      ]);
+    } finally {
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+      if (originalVerifyAttempts) {
+        process.env['GMX_FIRE_CLOSE_VERIFY_ATTEMPTS'] = originalVerifyAttempts;
+      } else {
+        delete process.env['GMX_FIRE_CLOSE_VERIFY_ATTEMPTS'];
+      }
+      if (originalVerifyInterval) {
+        process.env['GMX_FIRE_CLOSE_VERIFY_INTERVAL_MS'] = originalVerifyInterval;
+      } else {
+        delete process.env['GMX_FIRE_CLOSE_VERIFY_INTERVAL_MS'];
+      }
     }
   });
 
