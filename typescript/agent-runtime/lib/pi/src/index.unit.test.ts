@@ -2,7 +2,11 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { createCanonicalPiRuntimeGatewayControlPlane, createPiRuntimeGatewayService } from './index.js';
+import {
+  createCanonicalPiRuntimeGatewayControlPlane,
+  createPiRuntimeGatewayProjectionStore,
+  createPiRuntimeGatewayService,
+} from './index.js';
 
 async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): Promise<T[]> {
   if (Array.isArray(source)) {
@@ -61,7 +65,11 @@ describe('agent-runtime-pi package contract', () => {
 
   it('creates an AG-UI gateway surface without collapsing operator controls into runtime commands', async () => {
     const runtime = {
-      connect: vi.fn(async () => [{ type: 'RUN_STARTED' }, { type: 'STATE_SNAPSHOT' }, { type: 'RUN_FINISHED' }]),
+      connect: vi.fn(async () => [
+        { type: 'RUN_STARTED' },
+        { type: 'STATE_SNAPSHOT' },
+        { type: 'RUN_FINISHED' },
+      ]),
       run: vi.fn(async () => [{ type: 'RUN_STARTED' }]),
       stop: vi.fn(async () => undefined),
     };
@@ -103,9 +111,9 @@ describe('agent-runtime-pi package contract', () => {
       { type: 'STATE_SNAPSHOT' },
       { type: 'RUN_FINISHED' },
     ]);
-    await expect(collectEventSource(await service.run({ threadId: 'thread-1', runId: 'run-1' }))).resolves.toEqual([
-      { type: 'RUN_STARTED' },
-    ]);
+    await expect(
+      collectEventSource(await service.run({ threadId: 'thread-1', runId: 'run-1' })),
+    ).resolves.toEqual([{ type: 'RUN_STARTED' }]);
     await expect(service.stop({ threadId: 'thread-1', runId: 'run-1' })).resolves.toBeUndefined();
     await expect(service.control.inspectHealth()).resolves.toEqual({ status: 'ok' });
     await expect(service.control.listThreads()).resolves.toEqual(['thread-1']);
@@ -258,5 +266,56 @@ describe('agent-runtime-pi package contract', () => {
       },
     });
     expect(loadInspectionState).toHaveBeenCalled();
+  });
+
+  it('creates a projection store that lets consumers update public thread projections without constructing sessions', async () => {
+    const store = createPiRuntimeGatewayProjectionStore({
+      createInitialProjection: (threadId) => ({
+        threadId,
+        execution: {
+          id: `exec:${threadId}`,
+          status: 'working',
+          statusMessage: 'Ready.',
+        },
+        messages: [],
+      }),
+    });
+
+    const initial = store.getProjection('thread-1');
+    const updated = store.updateProjection('thread-1', (projection) => ({
+      ...projection,
+      currentArtifact: {
+        artifactId: 'artifact-1',
+        data: { phase: 'connected' },
+      },
+    }));
+    const receivedEvents: unknown[] = [];
+    const attachment = store.attachToThread('thread-1', (event) => {
+      receivedEvents.push(event);
+    });
+    const seedEvents = [
+      {
+        type: 'RUN_STARTED',
+        threadId: 'thread-1',
+        runId: 'run-1',
+      },
+    ] as const;
+
+    await store.publishAttachedEventSource('thread-1', seedEvents);
+
+    attachment.detach();
+
+    expect(initial).toMatchObject({
+      threadId: 'thread-1',
+      execution: {
+        id: 'exec:thread-1',
+        status: 'working',
+      },
+    });
+    expect(updated.currentArtifact).toEqual({
+      artifactId: 'artifact-1',
+      data: { phase: 'connected' },
+    });
+    expect(receivedEvents).toEqual(seedEvents);
   });
 });

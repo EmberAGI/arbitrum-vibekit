@@ -11,17 +11,15 @@ describe('pi runtime gateway context messages', () => {
     expect(
       buildPiRuntimeGatewayContextMessages({
         now: () => 123,
-        session: {
-          thread: { id: 'thread-1' },
+        projection: {
+          threadId: 'thread-1',
           execution: {
             id: 'exec-1',
             status: 'working',
             statusMessage: 'Waiting on tool output.',
           },
-          artifacts: {
-            current: { artifactId: 'artifact-current', data: { phase: 'current' } },
-            activity: { artifactId: 'artifact-activity', data: { phase: 'activity' } },
-          },
+          currentArtifact: { artifactId: 'artifact-current', data: { phase: 'current' } },
+          activityArtifact: { artifactId: 'artifact-activity', data: { phase: 'activity' } },
           a2ui: {
             kind: 'status-card',
             payload: { headline: 'Connected' },

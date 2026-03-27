@@ -50,6 +50,7 @@ describe('agent-runtime facade', () => {
   it('re-exports builder-facing contracts and Pi gateway factories without leaking LangGraph or workflow-core helpers', () => {
     expect(agentRuntime.TASK_STATES).toContain('working');
     expect(typeof agentRuntime.defineAgentDomainModule).toBe('function');
+    expect(typeof agentRuntime.createPiRuntimeGatewayProjectionStore).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayFoundation).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayAgUiHandler).toBe('function');
     expect(typeof agentRuntime.buildPiRuntimeDirectExecutionRecordIds).toBe('function');
@@ -70,6 +71,20 @@ describe('agent-runtime facade', () => {
     expect('loadLangGraphApiCheckpointer' in agentRuntime).toBe(false);
     expect('pruneCheckpointerState' in agentRuntime).toBe(false);
     expect('isLangGraphBusyStatus' in agentRuntime).toBe(false);
+  });
+
+  it('keeps session-shaped runtime internals out of the top-level builder-facing facade source', () => {
+    const facadeSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+
+    expect(facadeSource).not.toContain('PiRuntimeGatewaySession');
+  });
+
+  it('documents the projection-store builder path instead of session assembly', () => {
+    const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+
+    expect(readme).toContain('createPiRuntimeGatewayProjectionStore');
+    expect(readme).toContain('PiRuntimeGatewayThreadProjection');
+    expect(readme).not.toContain('PiRuntimeGatewaySession');
   });
 
   it('syncs postgres artifacts into installed agent-runtime snapshots for clean workspace consumers', () => {

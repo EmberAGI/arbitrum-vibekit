@@ -1,17 +1,18 @@
 import {
   buildPiRuntimeGatewayConnectEvents,
   buildPiA2UiActivityEvent,
+  createPiRuntimeGatewayProjectionStore,
   type PiRuntimeGatewayA2UiPayload,
   type PiRuntimeGatewayArtifact,
   type PiRuntimeGatewayActivityEvent,
-  type PiRuntimeGatewaySession,
+  type PiRuntimeGatewayProjectionStore,
+  type PiRuntimeGatewayThreadProjection,
 } from 'agent-runtime';
 type BaseEvent = ReturnType<typeof buildPiRuntimeGatewayConnectEvents>[number];
-type PiExampleAttachedEventSource = readonly BaseEvent[] | AsyncIterable<BaseEvent>;
 
-function buildDefaultSession(threadKey: string): PiRuntimeGatewaySession {
+function buildDefaultProjection(threadKey: string): PiRuntimeGatewayThreadProjection {
   return {
-    thread: { id: threadKey },
+    threadId: threadKey,
     execution: {
       id: `pi-example:${threadKey}`,
       status: 'working',
@@ -22,7 +23,9 @@ function buildDefaultSession(threadKey: string): PiRuntimeGatewaySession {
   };
 }
 
-function buildArtifactActivityEvent(artifact: PiRuntimeGatewayArtifact): PiRuntimeGatewayActivityEvent {
+function buildArtifactActivityEvent(
+  artifact: PiRuntimeGatewayArtifact,
+): PiRuntimeGatewayActivityEvent {
   return {
     type: 'artifact',
     artifact,
@@ -30,64 +33,29 @@ function buildArtifactActivityEvent(artifact: PiRuntimeGatewayArtifact): PiRunti
   };
 }
 
-function appendSessionActivityEvents(
-  session: PiRuntimeGatewaySession,
+function appendProjectionActivityEvents(
+  projection: PiRuntimeGatewayThreadProjection,
   events: readonly PiRuntimeGatewayActivityEvent[],
-): PiRuntimeGatewaySession {
+): PiRuntimeGatewayThreadProjection {
   if (events.length === 0) {
-    return session;
+    return projection;
   }
 
   return {
-    ...session,
-    activityEvents: [...(session.activityEvents ?? []), ...events],
+    ...projection,
+    activityEvents: [...(projection.activityEvents ?? []), ...events],
   };
 }
 
-type PiExampleAttachedEventListener = (event: BaseEvent) => void;
-
-type PiExampleRuntimeStateEntry = {
-  session: PiRuntimeGatewaySession;
-  attachedEventListeners: Set<PiExampleAttachedEventListener>;
-  activeAttachedRun: {
-    runId: string;
-    events: BaseEvent[];
-  } | null;
+export type PiExampleRuntimeStateStore = PiRuntimeGatewayProjectionStore & {
+  resumeFromUserInput: (threadKey: string) => PiRuntimeGatewayThreadProjection;
 };
-
-export type PiExampleRuntimeStateStore = {
-  getSession: (threadKey: string) => PiRuntimeGatewaySession;
-  updateSession: (
-    threadKey: string,
-    update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
-  ) => PiRuntimeGatewaySession;
-  attachToThread: (
-    threadKey: string,
-    listener: PiExampleAttachedEventListener,
-  ) => {
-    detach: () => void;
-    activeRunEvents: readonly BaseEvent[];
-  };
-  startAttachedRun: (threadKey: string, runId: string) => void;
-  appendAttachedRunEvents: (threadKey: string, runId: string, events: readonly BaseEvent[]) => void;
-  finishAttachedRun: (threadKey: string, runId: string) => void;
-  publishAttachedEventSource: (threadKey: string, source: PiExampleAttachedEventSource) => Promise<void>;
-  resumeFromUserInput: (threadKey: string) => PiRuntimeGatewaySession;
-};
-
-function cloneBaseEvents(events: readonly BaseEvent[]): BaseEvent[] {
-  const clonedEvents: BaseEvent[] = [];
-  for (const event of events) {
-    clonedEvents.push(event);
-  }
-  return clonedEvents;
-}
 
 type AutomationStatus = 'scheduled' | 'running' | 'completed' | 'canceled';
 
 function mapAutomationStatusToExecutionStatus(
   status: AutomationStatus,
-): PiRuntimeGatewaySession['execution']['status'] {
+): PiRuntimeGatewayThreadProjection['execution']['status'] {
   switch (status) {
     case 'scheduled':
       return 'queued';
@@ -100,111 +68,21 @@ function mapAutomationStatusToExecutionStatus(
 }
 
 export function createPiExampleRuntimeStateStore(): PiExampleRuntimeStateStore {
-  const sessions = new Map<string, PiExampleRuntimeStateEntry>();
-
-  const getEntry = (threadKey: string): PiExampleRuntimeStateEntry => {
-    const existing = sessions.get(threadKey);
-    if (existing) {
-      return existing;
-    }
-
-    const created: PiExampleRuntimeStateEntry = {
-      session: buildDefaultSession(threadKey),
-      attachedEventListeners: new Set(),
-      activeAttachedRun: null,
-    };
-    sessions.set(threadKey, created);
-    return created;
-  };
-
-  const getSession = (threadKey: string): PiRuntimeGatewaySession => {
-    return getEntry(threadKey).session;
-  };
+  const store = createPiRuntimeGatewayProjectionStore({
+    createInitialProjection: buildDefaultProjection,
+  });
 
   return {
-    getSession,
-    updateSession: (threadKey, update) => {
-      const entry = getEntry(threadKey);
-      const nextSession = update(entry.session);
-      entry.session = nextSession;
-      sessions.set(threadKey, entry);
-      return nextSession;
-    },
-    attachToThread: (threadKey, listener) => {
-      const entry = getEntry(threadKey);
-      entry.attachedEventListeners.add(listener);
-      sessions.set(threadKey, entry);
-      return {
-        detach: () => {
-          const attachedEntry = getEntry(threadKey);
-          attachedEntry.attachedEventListeners.delete(listener);
-          sessions.set(threadKey, attachedEntry);
-        },
-        activeRunEvents: entry.activeAttachedRun ? [...entry.activeAttachedRun.events] : [],
-      };
-    },
-    startAttachedRun: (threadKey, runId) => {
-      const entry = getEntry(threadKey);
-      entry.activeAttachedRun = {
-        runId,
-        events: [],
-      };
-      sessions.set(threadKey, entry);
-    },
-    appendAttachedRunEvents: (threadKey, runId, events) => {
-      if (events.length === 0) {
-        return;
-      }
-
-      const entry = getEntry(threadKey);
-      if (entry.activeAttachedRun?.runId === runId) {
-        entry.activeAttachedRun = {
-          runId,
-          events: [...entry.activeAttachedRun.events, ...events],
-        };
-      }
-
-      for (const event of events) {
-        for (const listener of entry.attachedEventListeners) {
-          listener(event);
-        }
-      }
-
-      sessions.set(threadKey, entry);
-    },
-    finishAttachedRun: (threadKey, runId) => {
-      const entry = getEntry(threadKey);
-      if (entry.activeAttachedRun?.runId === runId) {
-        entry.activeAttachedRun = null;
-        sessions.set(threadKey, entry);
-      }
-    },
-    publishAttachedEventSource: async (threadKey, source) => {
-      const events: BaseEvent[] = Array.isArray(source)
-        ? cloneBaseEvents(source)
-        : await (async () => {
-            const collected: BaseEvent[] = [];
-            for await (const event of source) {
-              collected.push(event);
-            }
-            return collected;
-          })();
-      const entry = getEntry(threadKey);
-      for (const event of events) {
-        for (const listener of entry.attachedEventListeners) {
-          listener(event);
-        }
-      }
-    },
+    ...store,
     resumeFromUserInput: (threadKey) => {
-      const current = getSession(threadKey);
+      const current = store.getProjection(threadKey);
       if (current.execution.status !== 'interrupted') {
         return current;
       }
 
-      const resolvedArtifact = current.artifacts?.current
+      const resolvedArtifact = current.currentArtifact
         ? {
-            artifactId: current.artifacts.current.artifactId,
+            artifactId: current.currentArtifact.artifactId,
             data: {
               type: 'interrupt-status',
               status: 'resolved',
@@ -219,22 +97,15 @@ export function createPiExampleRuntimeStateStore(): PiExampleRuntimeStateStore {
           status: 'working' as const,
           statusMessage: 'Operator input received. Continuing the Pi loop.',
         },
-        artifacts: current.artifacts
-          ? {
-              ...current.artifacts,
-              current: resolvedArtifact,
-              activity: current.artifacts.activity,
-            }
-          : undefined,
+        currentArtifact: resolvedArtifact,
+        activityArtifact: current.activityArtifact,
         a2ui: undefined,
       };
-      const nextSession = resolvedArtifact
-        ? appendSessionActivityEvents(resumed, [buildArtifactActivityEvent(resolvedArtifact)])
+      const nextProjection = resolvedArtifact
+        ? appendProjectionActivityEvents(resumed, [buildArtifactActivityEvent(resolvedArtifact)])
         : resumed;
-      const entry = getEntry(threadKey);
-      entry.session = nextSession;
-      sessions.set(threadKey, entry);
-      return nextSession;
+      store.updateProjection(threadKey, () => nextProjection);
+      return nextProjection;
     },
   };
 }
@@ -325,7 +196,7 @@ export function applyAutomationStatusUpdate(params: {
   minutes: number;
   detail: string;
   emitConnectUpdate?: boolean;
-}): PiRuntimeGatewaySession {
+}): PiRuntimeGatewayThreadProjection {
   const artifact = buildAutomationArtifact({
     artifactId: params.artifactId,
     automationId: params.automationId,
@@ -336,8 +207,10 @@ export function applyAutomationStatusUpdate(params: {
     detail: params.detail,
   });
 
-  const applyUpdate = (session: PiRuntimeGatewaySession): PiRuntimeGatewaySession => {
-    const executionId = params.executionId ?? session.execution.id;
+  const applyUpdate = (
+    projection: PiRuntimeGatewayThreadProjection,
+  ): PiRuntimeGatewayThreadProjection => {
+    const executionId = params.executionId ?? projection.execution.id;
     const a2ui = buildAutomationA2Ui({
       automationId: params.automationId,
       runId: params.activityRunId,
@@ -347,11 +220,11 @@ export function applyAutomationStatusUpdate(params: {
       detail: params.detail,
     });
 
-    return appendSessionActivityEvents(
+    return appendProjectionActivityEvents(
       {
-        ...session,
+        ...projection,
         execution: {
-          ...session.execution,
+          ...projection.execution,
           id: executionId,
           status: mapAutomationStatusToExecutionStatus(params.status),
           statusMessage: params.detail,
@@ -360,16 +233,14 @@ export function applyAutomationStatusUpdate(params: {
           id: params.automationId,
           runId: params.activityRunId,
         },
-        artifacts: {
-          current: artifact,
-          activity: artifact,
-        },
+        currentArtifact: artifact,
+        activityArtifact: artifact,
         a2ui,
       },
       [
         buildArtifactActivityEvent(artifact),
         buildPiA2UiActivityEvent({
-          threadId: session.thread.id,
+          threadId: projection.threadId,
           executionId,
           payload: a2ui,
         }),
@@ -378,17 +249,17 @@ export function applyAutomationStatusUpdate(params: {
   };
 
   if (params.emitConnectUpdate) {
-    const nextSession = params.runtimeState.updateSession(params.threadKey, applyUpdate);
+    const nextProjection = params.runtimeState.updateProjection(params.threadKey, applyUpdate);
     void params.runtimeState.publishAttachedEventSource(
       params.threadKey,
       buildPiRuntimeGatewayConnectEvents({
         threadId: params.threadKey,
         runId: params.activityRunId,
-        session: nextSession,
+        projection: nextProjection,
       }),
     );
-    return nextSession;
+    return nextProjection;
   }
 
-  return params.runtimeState.updateSession(params.threadKey, applyUpdate);
+  return params.runtimeState.updateProjection(params.threadKey, applyUpdate);
 }

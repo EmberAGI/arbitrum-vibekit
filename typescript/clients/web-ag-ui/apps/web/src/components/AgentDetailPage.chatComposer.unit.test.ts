@@ -104,4 +104,44 @@ describe('AgentDetailPage chat composer', () => {
       root.unmount();
     });
   });
+
+  it('enables the chat composer for the Ember lending Pi agent', () => {
+    const onSendChatMessage = vi.fn();
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        React.createElement(AgentDetailPage, {
+          agentId: 'agent-ember-lending',
+          agentName: 'Ember Lending Agent',
+          agentDescription: 'desc',
+          creatorName: 'Ember AI Team',
+          creatorVerified: true,
+          profile: {
+            chains: [],
+            protocols: [],
+            tokens: [],
+          },
+          metrics: {},
+          initialTab: 'chat',
+          isHired: false,
+          isHiring: false,
+          hasLoadedView: true,
+          onHire: () => {},
+          onFire: () => {},
+          onSync: () => {},
+          onBack: () => {},
+          allowedPools: [],
+          onSendChatMessage,
+        }),
+      );
+    });
+
+    const textarea = container.querySelector('textarea');
+    expect(textarea).not.toBeNull();
+
+    act(() => {
+      root.unmount();
+    });
+  });
 });

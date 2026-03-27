@@ -12,7 +12,7 @@ describe('pi AG-UI projection', () => {
   it('builds a thread snapshot that preserves canonical ids, task projection, artifacts, and activity-renderable A2UI payloads', () => {
     expect(
       buildPiThreadStateSnapshot({
-        thread: { id: 'thread-1' },
+        threadId: 'thread-1',
         execution: {
           id: 'exec-1',
           status: 'interrupted',
@@ -26,10 +26,8 @@ describe('pi AG-UI projection', () => {
           },
         ],
         automation: { id: 'auto-1', runId: 'auto-run-1' },
-        artifacts: {
-          current: { artifactId: 'current-artifact', data: { phase: 'setup' } },
-          activity: { artifactId: 'activity-artifact', data: { entries: 3 } },
-        },
+        currentArtifact: { artifactId: 'current-artifact', data: { phase: 'setup' } },
+        activityArtifact: { artifactId: 'activity-artifact', data: { entries: 3 } },
         a2ui: {
           kind: 'interrupt',
           payload: { type: 'operator-config-request', artifactId: 'current-artifact' },

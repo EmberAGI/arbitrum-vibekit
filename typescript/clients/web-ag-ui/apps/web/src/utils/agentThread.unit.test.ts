@@ -98,6 +98,26 @@ describe('agentThread wallet resolution', () => {
     expect(second).toBe(first);
   });
 
+  it('allocates and reuses an anonymous browser-scoped thread for the Ember lending Pi agent', () => {
+    const storage = new Map<string, string>();
+    const first = ensureAnonymousAgentThreadId('agent-ember-lending', {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => {
+        storage.set(key, value);
+      },
+    });
+    const second = ensureAnonymousAgentThreadId('agent-ember-lending', {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => {
+        storage.set(key, value);
+      },
+    });
+
+    expect(supportsAnonymousAgentThread('agent-ember-lending')).toBe(true);
+    expect(first).toBeTruthy();
+    expect(second).toBe(first);
+  });
+
   it('does not allocate anonymous threads for non-Pi agents', () => {
     expect(supportsAnonymousAgentThread('agent-clmm')).toBe(false);
     expect(

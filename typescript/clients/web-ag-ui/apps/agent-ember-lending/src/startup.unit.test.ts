@@ -1,0 +1,74 @@
+import type { PiRuntimeGatewayService } from 'agent-runtime';
+import { describe, expect, it, vi } from 'vitest';
+
+import { prepareEmberLendingServer } from './startup.js';
+
+function createStubService(): PiRuntimeGatewayService {
+  return {
+    connect: async () => [],
+    run: async () => [],
+    stop: async () => [],
+    control: {
+      inspectHealth: async () => ({ status: 'ok' }),
+      listThreads: async () => [],
+      listExecutions: async () => [],
+      listAutomations: async () => [],
+      listAutomationRuns: async () => [],
+      inspectScheduler: async () => ({ dueAutomationIds: [], leases: [] }),
+      inspectOutbox: async () => ({ dueOutboxIds: [], intents: [] }),
+      inspectMaintenance: async () => ({ recovery: {}, archival: {} }),
+    },
+  };
+}
+
+describe('prepareEmberLendingServer', () => {
+  it('ensures local runtime readiness before creating the private Ember lending service', async () => {
+    const service = createStubService();
+    const ensureReady = vi.fn(async () => ({
+      bootstrapPlan: {
+        mode: 'local-docker' as const,
+        databaseUrl: 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime',
+        startCommand:
+          'docker run --name pi-runtime-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=pi_runtime -p 55432:5432 -d postgres:17',
+      },
+      databaseUrl: 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime',
+      startedLocalDocker: true,
+    }));
+    const createService = vi.fn(async () => service);
+
+    await expect(
+      prepareEmberLendingServer({
+        env: {
+          PORT: '4011',
+          DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime',
+          EMBER_LENDING_RUNTIME_MODULE: '@private/ember-lending-runtime',
+        },
+        ensureReady,
+        createService,
+      }),
+    ).resolves.toEqual({
+      bootstrap: {
+        bootstrapPlan: {
+          mode: 'local-docker',
+          databaseUrl: 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime',
+          startCommand:
+            'docker run --name pi-runtime-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=pi_runtime -p 55432:5432 -d postgres:17',
+        },
+        databaseUrl: 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime',
+        startedLocalDocker: true,
+      },
+      port: 4011,
+      service,
+    });
+
+    expect(ensureReady).toHaveBeenCalledTimes(1);
+    expect(createService).toHaveBeenCalledWith({
+      env: {
+        PORT: '4011',
+        DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime',
+        EMBER_LENDING_RUNTIME_MODULE: '@private/ember-lending-runtime',
+      },
+    });
+    expect(ensureReady.mock.invocationCallOrder[0]).toBeLessThan(createService.mock.invocationCallOrder[0]);
+  });
+});

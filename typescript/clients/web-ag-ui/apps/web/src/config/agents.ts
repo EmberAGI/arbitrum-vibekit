@@ -1,3 +1,5 @@
+import { EMBER_LENDING_AGENT_ID, PI_EXAMPLE_AGENT_ID } from './piRuntimeAgents';
+
 // Agent registry - static metadata for available agents.
 // Runtime data (stats, metrics) comes from CopilotKit state.
 
@@ -79,8 +81,8 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     isFeatured: true,
     featuredRank: 3,
   },
-  'agent-pi-example': {
-    id: 'agent-pi-example',
+  [PI_EXAMPLE_AGENT_ID]: {
+    id: PI_EXAMPLE_AGENT_ID,
     name: 'Pi Example Agent',
     description:
       'Pi-native OpenRouter smoke-test agent with a real AG-UI transport, durable Postgres runtime state, and operator control-plane endpoints.',
@@ -90,6 +92,19 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     avatarBg: 'linear-gradient(135deg, #0891b2 0%, #2563eb 100%)',
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'OpenRouter'],
+    tokens: ['USDC'],
+  },
+  [EMBER_LENDING_AGENT_ID]: {
+    id: EMBER_LENDING_AGENT_ID,
+    name: 'Ember Lending Agent',
+    description:
+      'Ember-operated lending agent hosted through the Pi runtime boundary and exposed in the web AG-UI catalog.',
+    creator: 'Ember AI Team',
+    creatorVerified: true,
+    avatar: '🔥',
+    avatarBg: 'linear-gradient(135deg, #ea580c 0%, #dc2626 100%)',
+    chains: ['Arbitrum'],
+    protocols: ['Pi Runtime', 'Ember'],
     tokens: ['USDC'],
   },
 };

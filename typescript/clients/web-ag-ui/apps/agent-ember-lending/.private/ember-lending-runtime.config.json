@@ -1,0 +1,48 @@
+{
+  "agentWallet": "0xAGENT000000000000000000000000000000000001",
+  "network": "base",
+  "policySnapshotRef": "policy-ember-001",
+  "rpcUrl": "https://rpc.example.invalid",
+  "controllerPrivateKey": "0xcontrollerkey",
+  "redeemerPrivateKey": "0xredeemerkey",
+  "smartAccounts": {
+    "chainId": 8453,
+    "environment": {
+      "DelegationManager": "0x0000000000000000000000000000000000000001",
+      "EntryPoint": "0x0000000000000000000000000000000000000002",
+      "SimpleFactory": "0x0000000000000000000000000000000000000003",
+      "implementations": {
+        "Hybrid": "0x0000000000000000000000000000000000000004"
+      },
+      "caveatEnforcers": {
+        "AllowedTargets": "0x0000000000000000000000000000000000000005"
+      }
+    }
+  },
+  "planner": {
+    "url": "https://planner.example.invalid",
+    "authHeader": "Bearer planner-token",
+    "tokenUids": {
+      "USDC": {
+        "chainId": "8453",
+        "address": "0x00000000000000000000000000000000000000aa"
+      }
+    }
+  },
+  "rootDelegationHandoff": {
+    "handoff_id": "handoff-root-001",
+    "root_delegation_id": "root-user-001",
+    "user_id": "user_idle",
+    "user_wallet": "0xUSER000000000000000000000000000000000001",
+    "orchestrator_wallet": "0xORCH000000000000000000000000000000000001",
+    "network": "base",
+    "artifact_ref": "artifact-root-001",
+    "issued_at": "2026-03-22T00:00:00Z",
+    "activated_at": "2026-03-22T00:00:05Z",
+    "signer_kind": "delegation_toolkit",
+    "metadata": {
+      "delegation_manager": "0xDELEGATIONMANAGER001",
+      "authorization_transaction_hash": "0xupgrade001"
+    }
+  }
+}

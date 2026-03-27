@@ -25,7 +25,10 @@ import {
   type PiExampleGatewayEnv,
   type PiExampleGatewayFoundationOptions,
 } from './piExampleFoundation.js';
-import { createPiExampleRuntimeStateStore, type PiExampleRuntimeStateStore } from './runtimeState.js';
+import {
+  createPiExampleRuntimeStateStore,
+  type PiExampleRuntimeStateStore,
+} from './runtimeState.js';
 
 type BaseEvent = ReturnType<typeof buildPiRuntimeGatewayConnectEvents>[number];
 
@@ -69,11 +72,7 @@ type PiExampleGatewayServiceOptions = {
       schedule: Record<string, unknown>;
       nextRunAt: string | null;
     }>;
-    listAutomations?: (params: {
-      threadKey: string;
-      state?: string;
-      limit?: number;
-    }) => Promise<
+    listAutomations?: (params: { threadKey: string; state?: string; limit?: number }) => Promise<
       Array<{
         id: string;
         title: string;
@@ -84,20 +83,14 @@ type PiExampleGatewayServiceOptions = {
         lastRunStatus: string | null;
       }>
     >;
-    cancelAutomation?: (params: {
-      threadKey: string;
-      automationId: string;
-    }) => Promise<{
+    cancelAutomation?: (params: { threadKey: string; automationId: string }) => Promise<{
       automationId: string;
       artifactId: string;
       title: string;
       instruction: string;
       schedule: Record<string, unknown>;
     }>;
-    requestInterrupt?: (params: {
-      threadKey: string;
-      message: string;
-    }) => Promise<{
+    requestInterrupt?: (params: { threadKey: string; message: string }) => Promise<{
       artifactId: string;
     }>;
   };
@@ -229,7 +222,9 @@ function tapEventSource(
   };
 }
 
-export function createPiExampleGatewayService(options: PiExampleGatewayServiceOptions = {}): PiRuntimeGatewayService {
+export function createPiExampleGatewayService(
+  options: PiExampleGatewayServiceOptions = {},
+): PiRuntimeGatewayService {
   const runtimeState = options.runtimeState ?? createPiExampleRuntimeStateStore();
   const getNow = options.now ?? (() => new Date());
   let ensuredReady: Promise<void> | null = null;
@@ -284,10 +279,15 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       const runId = randomUUID();
       const executionId = randomUUID();
       const activityId = randomUUID();
-      const artifactId = buildPiRuntimeStableUuid('artifact', `pi-example:${params.threadKey}:automation-artifact`);
+      const artifactId = buildPiRuntimeStableUuid(
+        'artifact',
+        `pi-example:${params.threadKey}:automation-artifact`,
+      );
       const now = getNow();
-      const scheduleKind = typeof params.schedule.kind === 'string' ? params.schedule.kind : 'every';
-      const intervalMinutes = typeof params.schedule.intervalMinutes === 'number' ? params.schedule.intervalMinutes : 5;
+      const scheduleKind =
+        typeof params.schedule.kind === 'string' ? params.schedule.kind : 'every';
+      const intervalMinutes =
+        typeof params.schedule.intervalMinutes === 'number' ? params.schedule.intervalMinutes : 5;
       const nextRunAt =
         scheduleKind === 'at' && typeof params.schedule.at === 'string'
           ? new Date(params.schedule.at)
@@ -309,7 +309,10 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
             minutes: intervalMinutes,
           },
           activityId,
-          leaseOwnerId: buildPiRuntimeStableUuid('lease-owner', `pi-example:${params.threadKey}:lease-owner`),
+          leaseOwnerId: buildPiRuntimeStableUuid(
+            'lease-owner',
+            `pi-example:${params.threadKey}:lease-owner`,
+          ),
           now,
           nextRunAt,
           leaseExpiresAt: new Date(now.getTime() + 60 * 1000),
@@ -354,11 +357,13 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
                 : automation.commandName,
             status,
             schedule:
-              typeof automation.schedulePayload.schedule === 'object' && automation.schedulePayload.schedule !== null
+              typeof automation.schedulePayload.schedule === 'object' &&
+              automation.schedulePayload.schedule !== null
                 ? (automation.schedulePayload.schedule as Record<string, unknown>)
                 : { kind: 'every', intervalMinutes: automation.schedulePayload.minutes ?? 5 },
             nextRunAt: automation.nextRunAt?.toISOString() ?? null,
-            lastRunAt: latestRun?.completedAt?.toISOString() ?? latestRun?.scheduledAt.toISOString() ?? null,
+            lastRunAt:
+              latestRun?.completedAt?.toISOString() ?? latestRun?.scheduledAt.toISOString() ?? null,
             lastRunStatus: latestRun?.status ?? null,
           };
         })
@@ -377,7 +382,8 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       const inspectionState = await loadInspectionState();
       const threadId = buildPiRuntimeDirectExecutionRecordIds(params.threadKey).threadId;
       const automation = inspectionState.automations.find(
-        (candidate) => candidate.automationId === params.automationId && candidate.threadId === threadId,
+        (candidate) =>
+          candidate.automationId === params.automationId && candidate.threadId === threadId,
       );
       if (!automation) {
         throw new Error(`Unknown automation ${params.automationId}`);
@@ -403,7 +409,10 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
 
       return {
         automationId: params.automationId,
-        artifactId: buildPiRuntimeStableUuid('artifact', `pi-example:${params.threadKey}:automation-artifact`),
+        artifactId: buildPiRuntimeStableUuid(
+          'artifact',
+          `pi-example:${params.threadKey}:automation-artifact`,
+        ),
         title:
           typeof automation.schedulePayload.title === 'string'
             ? automation.schedulePayload.title
@@ -413,28 +422,35 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
             ? automation.schedulePayload.instruction
             : automation.commandName,
         schedule:
-          typeof automation.schedulePayload.schedule === 'object' && automation.schedulePayload.schedule !== null
+          typeof automation.schedulePayload.schedule === 'object' &&
+          automation.schedulePayload.schedule !== null
             ? (automation.schedulePayload.schedule as Record<string, unknown>)
             : { kind: 'every', intervalMinutes: automation.schedulePayload.minutes ?? 5 },
       };
     });
   const requestInterrupt =
     options.persistence?.requestInterrupt ??
-    (async (params: {
-      threadKey: string;
-      message: string;
-    }) => {
+    (async (params: { threadKey: string; message: string }) => {
       await ensureReady();
       const directExecutionIds = buildPiRuntimeDirectExecutionRecordIds(params.threadKey);
-      const artifactId = buildPiRuntimeStableUuid('artifact', `pi-example:${params.threadKey}:interrupt-artifact`);
+      const artifactId = buildPiRuntimeStableUuid(
+        'artifact',
+        `pi-example:${params.threadKey}:interrupt-artifact`,
+      );
 
       await executePostgresStatements(
         databaseUrl,
         buildPersistInterruptCheckpointStatements({
           executionId: directExecutionIds.executionId,
-          interruptId: buildPiRuntimeStableUuid('interrupt', `pi-example:${params.threadKey}:interrupt`),
+          interruptId: buildPiRuntimeStableUuid(
+            'interrupt',
+            `pi-example:${params.threadKey}:interrupt`,
+          ),
           artifactId,
-          activityId: buildPiRuntimeStableUuid('activity', `pi-example:${params.threadKey}:interrupt-activity`),
+          activityId: buildPiRuntimeStableUuid(
+            'activity',
+            `pi-example:${params.threadKey}:interrupt-activity`,
+          ),
           threadId: directExecutionIds.threadId,
           now: getNow(),
         }),
@@ -453,7 +469,8 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       requestInterrupt,
     },
   };
-  const foundation = options.foundation ?? createPiExampleGatewayFoundation(options.env, foundationOptions);
+  const foundation =
+    options.foundation ?? createPiExampleGatewayFoundation(options.env, foundationOptions);
   const agent = foundation.agent;
   const databaseUrl = foundation.bootstrapPlan.databaseUrl;
 
@@ -470,8 +487,8 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
 
   const baseRuntime = createPiRuntimeGatewayRuntime({
     agent,
-    getSession: (threadId) => runtimeState.getSession(threadId),
-    updateSession: (threadId, update) => runtimeState.updateSession(threadId, update),
+    getProjection: (threadId) => runtimeState.getProjection(threadId),
+    updateProjection: (threadId, update) => runtimeState.updateProjection(threadId, update),
   });
 
   const controlPlane = createCanonicalPiRuntimeGatewayControlPlane({
@@ -490,7 +507,7 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
           seedEvents: buildPiRuntimeGatewayConnectEvents({
             threadId: request.threadId,
             runId: request.runId ?? `connect:${request.threadId}`,
-            session: runtimeState.getSession(request.threadId),
+            projection: runtimeState.getProjection(request.threadId),
           }),
           attach: (push) => runtimeState.attachToThread(request.threadId, push),
         });

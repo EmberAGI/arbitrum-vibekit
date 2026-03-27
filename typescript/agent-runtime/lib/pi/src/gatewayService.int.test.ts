@@ -123,8 +123,8 @@ describe('pi gateway service integration', () => {
     const service = createPiRuntimeGatewayService({
       runtime: createPiRuntimeGatewayRuntime({
         agent,
-        getSession: () => ({
-          thread: { id: 'thread-1' },
+        getProjection: () => ({
+          threadId: 'thread-1',
           execution: { id: 'exec-1', status: 'working', statusMessage: 'Pi is connected.' },
           messages: [
             {
@@ -138,9 +138,7 @@ describe('pi gateway service integration', () => {
               content: 'Pi is connected.',
             },
           ],
-          artifacts: {
-            current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
-          },
+          currentArtifact: { artifactId: 'current-artifact', data: { phase: 'connected' } },
           a2ui: {
             kind: 'status-card',
             payload: { headline: 'Connected' },
@@ -253,11 +251,13 @@ describe('pi gateway service integration', () => {
     ]);
     expect(agent.sessionId).toBe('thread-1');
 
-    const runEvents = await collectEventSource(await service.run({
-      threadId: 'thread-1',
-      runId: 'run-1',
-      messages: [{ id: 'msg-1', role: 'user', content: 'Connect now' }],
-    }));
+    const runEvents = await collectEventSource(
+      await service.run({
+        threadId: 'thread-1',
+        runId: 'run-1',
+        messages: [{ id: 'msg-1', role: 'user', content: 'Connect now' }],
+      }),
+    );
 
     expect(agent.sessionId).toBe('thread-1');
     expect(agent.promptCalls).toHaveLength(1);
@@ -420,7 +420,7 @@ describe('pi gateway service integration', () => {
     ];
 
     let session = {
-      thread: { id: 'thread-1' },
+      threadId: 'thread-1',
       execution: { id: 'exec-1', status: 'working' as const },
       messages: [
         {
@@ -433,8 +433,8 @@ describe('pi gateway service integration', () => {
 
     const runtime = createPiRuntimeGatewayRuntime({
       agent,
-      getSession: () => session,
-      updateSession: (_threadId, update) => {
+      getProjection: () => session,
+      updateProjection: (_threadId, update) => {
         session = update(session);
         return session;
       },
@@ -513,14 +513,14 @@ describe('pi gateway service integration', () => {
 
     const runtime = createPiRuntimeGatewayRuntime({
       agent,
-      getSession: () => ({
-        thread: { id: 'thread-1' },
+      getProjection: () => ({
+        threadId: 'thread-1',
         execution: { id: 'exec-1', status: 'working', statusMessage: 'Pi is connected.' },
         messages: [],
       }),
-      updateSession: (_threadId, update) =>
+      updateProjection: (_threadId, update) =>
         update({
-          thread: { id: 'thread-1' },
+          threadId: 'thread-1',
           execution: { id: 'exec-1', status: 'working', statusMessage: 'Pi is connected.' },
           messages: [],
         }),
@@ -541,7 +541,8 @@ describe('pi gateway service integration', () => {
         event.messages[0]?.id === 'user-msg-1',
     );
     const firstAssistantDeltaIndex = runEvents.findIndex(
-      (event) => event.type === EventType.TEXT_MESSAGE_CONTENT && event.delta === 'Pi is connected.',
+      (event) =>
+        event.type === EventType.TEXT_MESSAGE_CONTENT && event.delta === 'Pi is connected.',
     );
 
     expect(firstRequestSnapshotIndex).toBeGreaterThan(-1);
@@ -556,17 +557,19 @@ describe('pi gateway service integration', () => {
     const runtime = createPiRuntimeGatewayRuntime({
       agent,
       now: () => 123,
-      getSession: () => ({
-        thread: { id: 'thread-2' },
+      getProjection: () => ({
+        threadId: 'thread-2',
         execution: { id: 'exec-2', status: 'working', statusMessage: 'Awaiting steering' },
       }),
     });
 
-    const events = await collectEventSource(await runtime.run({
-      threadId: 'thread-2',
-      runId: 'run-2',
-      messages: [{ id: 'msg-2', role: 'user', content: 'Adjust course' }],
-    }));
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-2',
+        runId: 'run-2',
+        messages: [{ id: 'msg-2', role: 'user', content: 'Adjust course' }],
+      }),
+    );
 
     expect(agent.sessionId).toBe('thread-2');
     expect(agent.promptCalls).toEqual([]);
@@ -640,17 +643,19 @@ describe('pi gateway service integration', () => {
     const runtime = createPiRuntimeGatewayRuntime({
       agent,
       now: () => 321,
-      getSession: () => ({
-        thread: { id: 'thread-3' },
+      getProjection: () => ({
+        threadId: 'thread-3',
         execution: { id: 'exec-3', status: 'working', statusMessage: 'Awaiting follow-up' },
       }),
     });
 
-    const events = await collectEventSource(await runtime.run({
-      threadId: 'thread-3',
-      runId: 'run-3',
-      messages: [{ id: 'msg-3', role: 'user', content: 'Queue this next' }],
-    }));
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-3',
+        runId: 'run-3',
+        messages: [{ id: 'msg-3', role: 'user', content: 'Queue this next' }],
+      }),
+    );
 
     expect(agent.sessionId).toBe('thread-3');
     expect(followUpCalls).toEqual([
@@ -706,9 +711,13 @@ describe('pi gateway service integration', () => {
     const runtime = createPiRuntimeGatewayRuntime({
       agent,
       now: () => 456,
-      getSession: () => ({
-        thread: { id: 'thread-5' },
-        execution: { id: 'exec-5', status: 'interrupted', statusMessage: 'Awaiting explicit resume' },
+      getProjection: () => ({
+        threadId: 'thread-5',
+        execution: {
+          id: 'exec-5',
+          status: 'interrupted',
+          statusMessage: 'Awaiting explicit resume',
+        },
       }),
     });
 
@@ -819,8 +828,8 @@ describe('pi gateway service integration', () => {
 
     const runtime = createPiRuntimeGatewayRuntime({
       agent: new StreamingPiAgent([]),
-      getSession: () => ({
-        thread: { id: 'thread-4' },
+      getProjection: () => ({
+        threadId: 'thread-4',
         execution: { id: 'exec-4', status: 'working', statusMessage: 'Streaming from Pi.' },
       }),
     });

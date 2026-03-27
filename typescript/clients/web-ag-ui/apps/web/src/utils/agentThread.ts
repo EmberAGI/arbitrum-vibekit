@@ -1,4 +1,5 @@
 import { v5 as uuidv5, v7 } from 'uuid';
+import { isPiRuntimeAgentId } from '../config/piRuntimeAgents';
 
 const HEX_ADDRESS_PATTERN = /^0x[a-f0-9]{40}$/;
 const DEFAULT_BYPASS_WALLET_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -41,7 +42,7 @@ export function getAgentThreadId(agentId: string, privyAddress?: string | null):
 }
 
 export function supportsAnonymousAgentThread(agentId: string): boolean {
-  return agentId === 'agent-pi-example';
+  return isPiRuntimeAgentId(agentId);
 }
 
 export function ensureAnonymousAgentThreadId(
