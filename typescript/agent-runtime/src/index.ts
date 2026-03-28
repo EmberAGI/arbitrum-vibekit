@@ -1970,6 +1970,7 @@ export type {
   PiRuntimeGatewayHttpAgentConfig,
   PiRuntimeGatewayInspectionState,
   PiRuntimeGatewayRunRequest,
+  PiRuntimeGatewayService,
   PiRuntimeGatewayRuntimeNoteMessage,
   PiRuntimeGatewayStopRequest,
   PersistPiRuntimeDirectExecutionOptions,

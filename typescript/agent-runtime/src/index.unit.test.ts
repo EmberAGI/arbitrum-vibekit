@@ -122,6 +122,7 @@ describe('agent-runtime facade', () => {
     expect(declarations).not.toContain('createPiRuntimeGatewayFoundationInternal');
     expect(declarations).not.toContain('Parameters<typeof createPiRuntimeGatewayFoundationInternal>');
     expect(declarations).not.toContain('ReturnType<typeof createPiRuntimeGatewayFoundationInternal>');
+    expect(source).toContain('PiRuntimeGatewayService,');
     expect(source).toContain('export type AgentRuntimeDomainContext');
     expect(source).toContain('export interface CreateAgentRuntimeOptions');
   });
