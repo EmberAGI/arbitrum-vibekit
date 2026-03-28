@@ -69,6 +69,21 @@ function buildDefaultLifecycleState(): PiExampleLifecycleState {
   };
 }
 
+function describePiExampleLifecycleCommand(
+  command: (typeof PI_EXAMPLE_COMMANDS)[number],
+): string {
+  switch (command) {
+    case 'hire':
+      return 'Move the agent from prehire into onboarding and request the operator note.';
+    case 'continue_onboarding':
+      return 'Keep onboarding active while collecting the remaining operator input.';
+    case 'complete_onboarding':
+      return 'Finish onboarding and promote the agent into the hired phase.';
+    case 'fire':
+      return 'End the lifecycle from any active phase and move the agent into fired.';
+  }
+}
+
 function createPiExampleDomain(): PiExampleDomainConfig {
   return {
     lifecycle: {
@@ -77,7 +92,7 @@ function createPiExampleDomain(): PiExampleDomainConfig {
       terminalPhases: ['fired'],
       commands: PI_EXAMPLE_COMMANDS.map((name) => ({
         name,
-        description: `${name} lifecycle operation.`,
+        description: describePiExampleLifecycleCommand(name),
       })),
       transitions: [
         {

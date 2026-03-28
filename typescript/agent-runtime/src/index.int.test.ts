@@ -288,6 +288,8 @@ describe('agent-runtime integration', () => {
   it('normalizes tool-driven lifecycle commands and interrupt resumes through the root builder service', async () => {
     let latestUserText = '';
     const observedSystemPrompts: string[] = [];
+    let observedDomainCommandToolDescription = '';
+    let observedDomainCommandNames: string[] = [];
     let sawSyntheticDomainContextMessage = false;
 
     const domain = createLifecycleDomain();
@@ -298,6 +300,28 @@ describe('agent-runtime integration', () => {
       agentOptions: {
         streamFn: (_model, context) => {
           observedSystemPrompts.push(context.systemPrompt ?? '');
+          const domainCommandTool = context.tools?.find(
+            (tool) => tool.name === AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
+          ) as
+            | {
+                description?: string;
+                parameters?: {
+                  properties?: {
+                    name?: {
+                      const?: string;
+                      anyOf?: Array<{ const?: string }>;
+                    };
+                  };
+                };
+              }
+            | undefined;
+          observedDomainCommandToolDescription = domainCommandTool?.description ?? '';
+          const nameSchema = domainCommandTool?.parameters?.properties?.name;
+          observedDomainCommandNames =
+            nameSchema?.anyOf?.flatMap((option) =>
+              typeof option.const === 'string' ? [option.const] : [],
+            ) ??
+            (typeof nameSchema?.const === 'string' ? [nameSchema.const] : []);
           sawSyntheticDomainContextMessage = context.messages.some((message: Message) => {
             if (message.role !== 'user') {
               return false;
@@ -364,6 +388,14 @@ describe('agent-runtime integration', () => {
     const hireSnapshot = hireEvents.find(isStateSnapshotEvent);
     expect(latestUserText).toBe('Please hire the agent.');
     expect(observedSystemPrompts).toContain('You are a lifecycle agent.\n\nLifecycle phase: prehire.');
+    expect(observedDomainCommandToolDescription).toContain('Available commands: hire (Start onboarding.)');
+    expect(observedDomainCommandToolDescription).toContain('complete_onboarding (Finish onboarding.)');
+    expect(observedDomainCommandNames).toEqual([
+      'hire',
+      'continue_onboarding',
+      'complete_onboarding',
+      'fire',
+    ]);
     expect(sawSyntheticDomainContextMessage).toBe(false);
     expect(hireSnapshot).toBeDefined();
     expect(hireSnapshot!.snapshot.thread.lifecycle).toMatchObject({

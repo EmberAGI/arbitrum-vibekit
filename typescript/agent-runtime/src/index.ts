@@ -222,6 +222,29 @@ function normalizeDomainSystemContextLines(
   return lines;
 }
 
+function buildDomainCommandToolDescription(lifecycle: AgentRuntimeDomainLifecycle): string {
+  const commandList = lifecycle.commands
+    .map((command) => `${command.name} (${command.description})`)
+    .join('; ');
+
+  return [
+    'Execute one of the declared domain lifecycle commands through the runtime-owned normalized operation pipeline.',
+    `Available commands: ${commandList}.`,
+  ].join(' ');
+}
+
+function buildDomainCommandNameSchema(
+  lifecycle: AgentRuntimeDomainLifecycle,
+): AgentRuntimeTool['parameters'] {
+  const literalSchemas = lifecycle.commands.map((command) =>
+    Type.Literal(command.name, {
+      description: command.description,
+    }),
+  );
+
+  return (literalSchemas.length === 1 ? literalSchemas[0] : Type.Union(literalSchemas)) as AgentRuntimeTool['parameters'];
+}
+
 function appendDomainSystemPromptContext(
   systemPrompt: string | undefined,
   lines: readonly string[],
@@ -1251,18 +1274,19 @@ export function createAgentRuntime<TState = unknown>(
       ? async (messages, signal) => await options.agentOptions!.transformContext!(messages, signal)
       : undefined;
   const streamFn: AgentRuntimeStreamFn | undefined =
-    options.agentOptions?.streamFn || domain?.systemContext
+    options.agentOptions?.streamFn || domain
       ? (model, context, streamOptions) => {
           const threadId = getActiveThreadId();
-          const lines =
-            threadId && domain?.systemContext
-              ? normalizeDomainSystemContextLines(
-                  domain.systemContext({
+          const lines = threadId && domain
+            ? [
+                ...normalizeDomainSystemContextLines(
+                  domain.systemContext?.({
                     threadId,
                     state: domainStateStore.get(threadId),
                   }),
-                )
-              : [];
+                ),
+              ]
+            : [];
           const nextContext = lines.length
             ? {
                 ...context,
@@ -1644,10 +1668,9 @@ export function createAgentRuntime<TState = unknown>(
       ? {
           name: AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
           label: 'Agent Runtime Domain Command',
-          description:
-            'Execute a declared domain lifecycle command through the runtime-owned normalized operation pipeline.',
+          description: buildDomainCommandToolDescription(domain.lifecycle),
           parameters: Type.Object({
-            name: Type.String(),
+            name: buildDomainCommandNameSchema(domain.lifecycle),
             inputJson: Type.String({ default: '{}' }),
           }) as AgentRuntimeTool['parameters'],
           execute: async (_toolCallId, args) => {
