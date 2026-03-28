@@ -1,5 +1,6 @@
 import { Type, createAssistantMessageEventStream, type Message } from '@mariozechner/pi-ai';
 import {
+  AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
   createAgentRuntime,
 } from 'agent-runtime';
 
@@ -254,9 +255,18 @@ function createPiExampleDomain(params: {
     },
     handleOperation: ({ operation, threadId }) => {
       const current = params.lifecycleStore.getState(threadId);
+      const buildLifecycleArtifact = (state: PiExampleLifecycleState) => ({
+        data: {
+          type: 'lifecycle-status',
+          phase: state.phase,
+          ...(state.onboardingStep ? { onboardingStep: state.onboardingStep } : {}),
+          ...(state.operatorNote ? { operatorNote: state.operatorNote } : {}),
+        },
+      });
 
       switch (operation.name) {
         case 'hire': {
+          const message = 'Please provide a short operator note to continue onboarding.';
           const nextState: PiExampleLifecycleState = {
             phase: 'onboarding',
             onboardingStep: 'operator-profile',
@@ -266,10 +276,20 @@ function createPiExampleDomain(params: {
           return {
             state: nextState,
             outputs: {
+              status: {
+                executionStatus: 'interrupted',
+                statusMessage: message,
+              },
               interrupt: {
                 type: 'operator-config',
                 surfacedInThread: true,
-                message: 'Please provide a short operator note to continue onboarding.',
+                message,
+              },
+              threadPatch: {
+                lifecycle: {
+                  phase: nextState.phase,
+                  onboardingStep: nextState.onboardingStep,
+                },
               },
             },
           };
@@ -291,13 +311,20 @@ function createPiExampleDomain(params: {
           return {
             state: nextState,
             outputs: {
+              status: {
+                executionStatus: 'working',
+                statusMessage: 'Operator note captured. Ready to complete onboarding.',
+              },
               artifacts: [
-                {
-                  type: 'lifecycle-status',
+                buildLifecycleArtifact(nextState),
+              ],
+              threadPatch: {
+                lifecycle: {
                   phase: nextState.phase,
                   onboardingStep: nextState.onboardingStep,
+                  operatorNote: nextState.operatorNote,
                 },
-              ],
+              },
             },
           };
         }
@@ -311,12 +338,18 @@ function createPiExampleDomain(params: {
           return {
             state: nextState,
             outputs: {
+              status: {
+                executionStatus: 'working',
+                statusMessage: 'Onboarding complete. Agent is hired.',
+              },
               artifacts: [
-                {
-                  type: 'lifecycle-status',
+                buildLifecycleArtifact(nextState),
+              ],
+              threadPatch: {
+                lifecycle: {
                   phase: nextState.phase,
                 },
-              ],
+              },
             },
           };
         }
@@ -330,12 +363,50 @@ function createPiExampleDomain(params: {
           return {
             state: nextState,
             outputs: {
+              status: {
+                executionStatus: 'completed',
+                statusMessage: 'Agent lifecycle completed.',
+              },
               artifacts: [
-                {
-                  type: 'lifecycle-status',
+                buildLifecycleArtifact(nextState),
+              ],
+              threadPatch: {
+                lifecycle: {
                   phase: nextState.phase,
                 },
-              ],
+              },
+            },
+          };
+        }
+        case 'operator-config': {
+          const operatorNote =
+            typeof operation.input === 'object' &&
+            operation.input !== null &&
+            'operatorNote' in operation.input &&
+            typeof operation.input.operatorNote === 'string'
+              ? operation.input.operatorNote
+              : current.operatorNote;
+          const nextState: PiExampleLifecycleState = {
+            phase: 'onboarding',
+            onboardingStep: 'delegation-note',
+            operatorNote: operatorNote ?? null,
+          };
+          params.lifecycleStore.setState(threadId, nextState);
+          return {
+            state: nextState,
+            outputs: {
+              status: {
+                executionStatus: 'working',
+                statusMessage: 'Operator note captured. Ready to complete onboarding.',
+              },
+              artifacts: [buildLifecycleArtifact(nextState)],
+              threadPatch: {
+                lifecycle: {
+                  phase: nextState.phase,
+                  onboardingStep: nextState.onboardingStep,
+                  operatorNote: nextState.operatorNote,
+                },
+              },
             },
           };
         }
@@ -697,6 +768,19 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
         toolCallId: 'pi-example-tool-interrupt',
         args: { message: 'Please provide a short operator note to continue.' },
         reasoning: 'Requesting operator input through A2UI before proceeding.',
+      });
+    }
+
+    if (latestUserText.includes('hire') || latestUserText.includes('onboarding')) {
+      return createMockToolStream({
+        model,
+        toolName: AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
+        toolCallId: 'pi-example-tool-domain-hire',
+        args: {
+          name: 'hire',
+          inputJson: '{}',
+        },
+        reasoning: 'Using the runtime-owned lifecycle command surface to start onboarding.',
       });
     }
 

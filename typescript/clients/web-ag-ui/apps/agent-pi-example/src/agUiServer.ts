@@ -110,6 +110,17 @@ function buildDirectExecutionIds(threadKey: string) {
   };
 }
 
+function hasDomainPendingInterrupt(session: ReturnType<PiExampleRuntimeStateStore['getSession']>): boolean {
+  const currentArtifact = session.artifacts?.current?.data;
+
+  return (
+    typeof currentArtifact === 'object' &&
+    currentArtifact !== null &&
+    'interruptType' in currentArtifact &&
+    typeof currentArtifact.interruptType === 'string'
+  );
+}
+
 function createAttachedEventStream(params: {
   seedEvents: readonly BaseEvent[];
   attach: (push: (event: BaseEvent) => void) => {
@@ -492,7 +503,10 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       },
       run: async (request) => {
         await persistThreadExecution(request.threadId);
-        if (typeof request.forwardedProps?.command?.resume === 'string') {
+        if (
+          typeof request.forwardedProps?.command?.resume === 'string' &&
+          !hasDomainPendingInterrupt(runtimeState.getSession(request.threadId))
+        ) {
           runtimeState.resumeFromUserInput(request.threadId);
         }
         runtimeState.startAttachedRun(request.threadId, request.runId);

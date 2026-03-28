@@ -58,6 +58,8 @@ export type PiRuntimeGatewayRunRequest = {
   messages?: AgUiMessage[];
   forwardedProps?: {
     command?: {
+      name?: string;
+      input?: unknown;
       resume?: string;
     };
   };

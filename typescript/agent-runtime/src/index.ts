@@ -1,9 +1,17 @@
+import { Type } from '@mariozechner/pi-ai';
+
 import {
+  buildPiA2UiActivityEvent as buildPiA2UiActivityEventInternal,
+  buildPiRuntimeGatewayConnectEvents as buildPiRuntimeGatewayConnectEventsInternal,
   createCanonicalPiRuntimeGatewayControlPlane as createCanonicalPiRuntimeGatewayControlPlaneInternal,
   createPiRuntimeGatewayFoundation as createPiRuntimeGatewayFoundationInternal,
   createPiRuntimeGatewayRuntime as createPiRuntimeGatewayRuntimeInternal,
   createPiRuntimeGatewayService as createPiRuntimeGatewayServiceInternal,
+  type PiRuntimeGatewayActivityEvent,
+  type PiRuntimeGatewayArtifact,
+  type PiRuntimeGatewayExecutionStatus,
   type PiRuntimeGatewayInspectionState,
+  type PiRuntimeGatewayRunRequest,
   type PiRuntimeGatewayRuntime,
   type PiRuntimeGatewayService,
   type PiRuntimeGatewaySession,
@@ -14,6 +22,9 @@ type AgentRuntimeTransformContext = NonNullable<
 >;
 type AgentRuntimeTransformMessages = Awaited<ReturnType<AgentRuntimeTransformContext>>;
 type AgentRuntimeTransformMessage = AgentRuntimeTransformMessages[number];
+type AgentRuntimeTool = NonNullable<
+  Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['tools']
+>[number];
 
 type AgentRuntimeDomainLifecycleCommand<TCommand extends string = string> = {
   name: TCommand;
@@ -57,6 +68,39 @@ type AgentRuntimeDomainOperation = {
   input?: unknown;
 };
 
+type AgentRuntimeDomainStatusOutput = {
+  executionStatus: PiRuntimeGatewayExecutionStatus;
+  statusMessage?: string;
+};
+
+type AgentRuntimeDomainArtifactOutput = {
+  channel?: 'current' | 'activity';
+  artifactId?: string;
+  data: unknown;
+  append?: boolean;
+};
+
+type AgentRuntimeDomainInterruptOutput = {
+  type: string;
+  surfacedInThread: boolean;
+  message: string;
+  inputLabel?: string;
+  submitLabel?: string;
+  artifactData?: unknown;
+};
+
+type AgentRuntimeDomainOutputs = {
+  status?: AgentRuntimeDomainStatusOutput;
+  artifacts?: readonly AgentRuntimeDomainArtifactOutput[];
+  interrupt?: AgentRuntimeDomainInterruptOutput;
+  threadPatch?: Record<string, unknown>;
+};
+
+type AgentRuntimeDomainOperationResult = {
+  state?: unknown;
+  outputs?: AgentRuntimeDomainOutputs;
+};
+
 type AgentRuntimeDomainConfig = {
   lifecycle: AgentRuntimeDomainLifecycle;
   systemContext?: (params: {
@@ -67,8 +111,19 @@ type AgentRuntimeDomainConfig = {
     operation: AgentRuntimeDomainOperation;
     threadId: string;
     session: PiRuntimeGatewaySession;
-  }) => unknown;
+  }) => AgentRuntimeDomainOperationResult | Promise<AgentRuntimeDomainOperationResult>;
 };
+
+type AgentRuntimeForwardedCommand = NonNullable<
+  NonNullable<PiRuntimeGatewayRunRequest['forwardedProps']>['command']
+>;
+
+type AgentRuntimeDomainCommandToolArgs = {
+  name: string;
+  inputJson: string;
+};
+
+export const AGENT_RUNTIME_DOMAIN_COMMAND_TOOL = 'agent_runtime_domain_command';
 
 function normalizeDomainSystemContextLines(
   contribution: string | readonly string[] | undefined,
@@ -96,6 +151,236 @@ function normalizeDomainSystemContextLines(
   return lines;
 }
 
+function readDirectCommandOperation(
+  command: AgentRuntimeForwardedCommand | undefined,
+): AgentRuntimeDomainOperation | null {
+  if (!command || typeof command.name !== 'string') {
+    return null;
+  }
+
+  const normalizedName = command.name.trim();
+  if (normalizedName.length === 0) {
+    return null;
+  }
+
+  return {
+    source: 'command',
+    name: normalizedName,
+    ...(Object.prototype.hasOwnProperty.call(command, 'input') ? { input: command.input } : {}),
+  };
+}
+
+function readInterruptOperation(params: {
+  command: AgentRuntimeForwardedCommand | undefined;
+  session: PiRuntimeGatewaySession;
+  domain: AgentRuntimeDomainConfig | undefined;
+}): AgentRuntimeDomainOperation | null {
+  const resumePayload = params.command?.resume;
+  if (typeof resumePayload !== 'string' || !params.domain?.handleOperation) {
+    return null;
+  }
+
+  const currentArtifact = params.session.artifacts?.current?.data;
+  if (typeof currentArtifact !== 'object' || currentArtifact === null) {
+    return null;
+  }
+
+  const interruptType =
+    'interruptType' in currentArtifact && typeof currentArtifact.interruptType === 'string'
+      ? currentArtifact.interruptType
+      : null;
+  if (!interruptType) {
+    return null;
+  }
+
+  const isDeclaredInterrupt = params.domain.lifecycle.interrupts.some(
+    (candidate) => candidate.type === interruptType,
+  );
+  if (!isDeclaredInterrupt) {
+    return null;
+  }
+
+  return {
+    source: 'interrupt',
+    name: interruptType,
+    input: parseDomainCommandToolInput(resumePayload),
+  };
+}
+
+function parseDomainCommandToolArgs(args: unknown): AgentRuntimeDomainCommandToolArgs | null {
+  if (typeof args !== 'object' || args === null) {
+    return null;
+  }
+
+  const { inputJson, name } = args as {
+    inputJson?: unknown;
+    name?: unknown;
+  };
+
+  if (typeof name !== 'string') {
+    return null;
+  }
+
+  return {
+    name,
+    inputJson: typeof inputJson === 'string' ? inputJson : '{}',
+  };
+}
+
+function parseDomainCommandToolInput(inputJson: string): unknown {
+  const normalized = inputJson.trim();
+  return normalized.length === 0 ? {} : JSON.parse(normalized);
+}
+
+function buildDomainArtifact(params: {
+  artifact: AgentRuntimeDomainArtifactOutput;
+  threadId: string;
+  operationName: string;
+  now: () => number;
+}): PiRuntimeGatewayArtifact {
+  return {
+    artifactId:
+      params.artifact.artifactId ??
+      `domain-artifact:${params.threadId}:${params.operationName}:${params.now()}`,
+    data: params.artifact.data,
+  };
+}
+
+function buildInterruptArtifact(params: {
+  interrupt: AgentRuntimeDomainInterruptOutput;
+  threadId: string;
+  operationName: string;
+  now: () => number;
+}): PiRuntimeGatewayArtifact {
+  return {
+    artifactId: `domain-interrupt:${params.threadId}:${params.operationName}:${params.now()}`,
+    data:
+      params.interrupt.artifactData ?? {
+        type: 'interrupt-status',
+        interruptType: params.interrupt.type,
+        status: 'pending',
+        message: params.interrupt.message,
+      },
+  };
+}
+
+function mergeThreadPatch(
+  currentPatch: Record<string, unknown> | undefined,
+  nextPatch: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!currentPatch) {
+    return nextPatch;
+  }
+
+  if (!nextPatch) {
+    return currentPatch;
+  }
+
+  return {
+    ...currentPatch,
+    ...nextPatch,
+  };
+}
+
+function applyDomainOperationResult(params: {
+  threadId: string;
+  now: () => number;
+  operation: AgentRuntimeDomainOperation;
+  session: PiRuntimeGatewaySession;
+  result: AgentRuntimeDomainOperationResult;
+}): PiRuntimeGatewaySession {
+  const outputs = params.result.outputs;
+  if (!outputs) {
+    return params.session;
+  }
+
+  let nextArtifacts: PiRuntimeGatewaySession['artifacts'] = params.session.artifacts
+    ? {
+        ...params.session.artifacts,
+      }
+    : undefined;
+  const nextActivityEvents: PiRuntimeGatewayActivityEvent[] = params.session.activityEvents
+    ? [...params.session.activityEvents]
+    : [];
+  let nextA2Ui = params.session.a2ui;
+
+  for (const artifactOutput of outputs.artifacts ?? []) {
+    const artifact = buildDomainArtifact({
+      artifact: artifactOutput,
+      threadId: params.threadId,
+      operationName: params.operation.name,
+      now: params.now,
+    });
+    const channel = artifactOutput.channel ?? 'current';
+    const artifacts = nextArtifacts ?? {};
+    if (channel === 'activity') {
+      artifacts.activity = artifact;
+    } else {
+      artifacts.current = artifact;
+    }
+    nextArtifacts = artifacts;
+    nextActivityEvents.push({
+      type: 'artifact',
+      artifact,
+      ...(artifactOutput.append === true ? { append: true } : {}),
+    });
+  }
+
+  let executionStatus = outputs.status?.executionStatus ?? params.session.execution.status;
+  let executionStatusMessage = outputs.status?.statusMessage ?? params.session.execution.statusMessage;
+
+  if (outputs.interrupt) {
+    const interruptArtifact = buildInterruptArtifact({
+      interrupt: outputs.interrupt,
+      threadId: params.threadId,
+      operationName: params.operation.name,
+      now: params.now,
+    });
+    const artifacts = nextArtifacts ?? {};
+    artifacts.current = interruptArtifact;
+    nextArtifacts = artifacts;
+    nextActivityEvents.push({
+      type: 'artifact',
+      artifact: interruptArtifact,
+      append: true,
+    });
+    nextA2Ui = {
+      kind: 'interrupt',
+      payload: {
+        type: outputs.interrupt.type,
+        artifactId: interruptArtifact.artifactId,
+        message: outputs.interrupt.message,
+        inputLabel: outputs.interrupt.inputLabel ?? 'Provide input',
+        submitLabel: outputs.interrupt.submitLabel ?? 'Continue',
+      },
+    };
+    nextActivityEvents.push(
+      buildPiA2UiActivityEventInternal({
+        threadId: params.threadId,
+        executionId: params.session.execution.id,
+        payload: nextA2Ui,
+      }),
+    );
+    executionStatus = 'interrupted';
+    executionStatusMessage = outputs.interrupt.message;
+  } else if (outputs.status && outputs.status.executionStatus !== 'interrupted') {
+    nextA2Ui = undefined;
+  }
+
+  return {
+    ...params.session,
+    execution: {
+      ...params.session.execution,
+      status: executionStatus,
+      ...(executionStatusMessage ? { statusMessage: executionStatusMessage } : {}),
+    },
+    ...(nextArtifacts ? { artifacts: nextArtifacts } : {}),
+    ...(nextActivityEvents.length > 0 ? { activityEvents: nextActivityEvents } : {}),
+    ...(nextA2Ui ? { a2ui: nextA2Ui } : {}),
+    threadPatch: mergeThreadPatch(params.session.threadPatch, outputs.threadPatch),
+  };
+}
+
 type CreateAgentRuntimeOptions = Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0] & {
   sessions: {
     getSession: (threadId: string) => PiRuntimeGatewaySession;
@@ -121,6 +406,7 @@ type AgentRuntimeInstance = {
 };
 
 export function createAgentRuntime(options: CreateAgentRuntimeOptions): AgentRuntimeInstance {
+  const now = options.now ?? (() => Date.now());
   const transformContext: AgentRuntimeTransformContext | undefined =
     options.agentOptions?.transformContext || options.domain?.systemContext
       ? async (messages, signal) => {
@@ -145,32 +431,139 @@ export function createAgentRuntime(options: CreateAgentRuntimeOptions): AgentRun
           const domainContextMessages = lines.map<AgentRuntimeTransformMessage>((line) => ({
             role: 'user',
             content: `<agent-runtime-domain-context>${line}</agent-runtime-domain-context>`,
-            timestamp: options.now?.() ?? Date.now(),
+            timestamp: now(),
           }));
 
           return [...transformedMessages, ...domainContextMessages];
         }
       : undefined;
 
+  const runDomainOperation = async (
+    threadId: string,
+    operation: AgentRuntimeDomainOperation,
+  ): Promise<PiRuntimeGatewaySession> => {
+    if (!options.domain?.handleOperation) {
+      return options.sessions.getSession(threadId);
+    }
+
+    const session = options.sessions.getSession(threadId);
+    const result = await options.domain.handleOperation({
+      operation,
+      threadId,
+      session,
+    });
+
+    return options.sessions.updateSession
+      ? options.sessions.updateSession(threadId, (currentSession) =>
+          applyDomainOperationResult({
+            threadId,
+            now,
+            operation,
+            session: currentSession,
+            result,
+          }),
+        )
+      : applyDomainOperationResult({
+          threadId,
+          now,
+          operation,
+          session,
+          result,
+        });
+  };
+
+  const domainCommandTool: AgentRuntimeTool | null =
+    options.domain?.handleOperation && options.domain.lifecycle.commands.length > 0
+      ? {
+          name: AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
+          label: 'Agent Runtime Domain Command',
+          description:
+            'Execute a declared domain lifecycle command through the runtime-owned normalized operation pipeline.',
+          parameters: Type.Object({
+            name: Type.String(),
+            inputJson: Type.String({ default: '{}' }),
+          }) as AgentRuntimeTool['parameters'],
+          execute: async (_toolCallId, args) => {
+            const toolArgs = parseDomainCommandToolArgs(args);
+            if (!toolArgs) {
+              throw new Error('Domain command tool requires a command name.');
+            }
+
+            const sessionContext = options.getSessionContext?.();
+            if (!sessionContext) {
+              throw new Error('Domain command tool requires an active session context.');
+            }
+
+            const operation: AgentRuntimeDomainOperation = {
+              source: 'tool',
+              name: toolArgs.name.trim(),
+              input: parseDomainCommandToolInput(toolArgs.inputJson),
+            };
+            const session = await runDomainOperation(sessionContext.thread.id, operation);
+
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text:
+                    session.execution.statusMessage ??
+                    `Executed domain command ${operation.name}.`,
+                },
+              ],
+              details: {
+                operation: {
+                  name: operation.name,
+                },
+              },
+            };
+          },
+        }
+      : null;
+
   const foundation = createPiRuntimeGatewayFoundationInternal({
     model: options.model,
     systemPrompt: options.systemPrompt,
-    tools: options.tools,
+    tools: domainCommandTool ? [...(options.tools ?? []), domainCommandTool] : options.tools,
     databaseUrl: options.databaseUrl,
     agentOptions: {
       ...options.agentOptions,
       ...(transformContext ? { transformContext } : {}),
     },
     getSessionContext: options.getSessionContext,
-    now: options.now,
+    now,
   });
 
   const runtime = createPiRuntimeGatewayRuntimeInternal({
     agent: foundation.agent,
     getSession: options.sessions.getSession,
     updateSession: options.sessions.updateSession,
-    now: options.now,
+    now,
   });
+
+  const runtimeWithDomain: PiRuntimeGatewayRuntime = {
+    ...runtime,
+    run: async (request) => {
+      const session = options.sessions.getSession(request.threadId);
+      const operation =
+        readDirectCommandOperation(request.forwardedProps?.command) ??
+        readInterruptOperation({
+          command: request.forwardedProps?.command,
+          session,
+          domain: options.domain,
+        });
+      if (!operation || !options.domain?.handleOperation) {
+        return await runtime.run(request);
+      }
+
+      const nextSession = await runDomainOperation(request.threadId, operation);
+
+      return buildPiRuntimeGatewayConnectEventsInternal({
+        threadId: request.threadId,
+        runId: request.runId,
+        session: nextSession,
+      });
+    },
+  };
 
   const controlPlane = createCanonicalPiRuntimeGatewayControlPlaneInternal({
     loadInspectionState: options.controlPlane.loadInspectionState,
@@ -182,8 +575,8 @@ export function createAgentRuntime(options: CreateAgentRuntimeOptions): AgentRun
     bootstrapPlan: foundation.bootstrapPlan,
     service: createPiRuntimeGatewayServiceInternal({
       runtime: {
-        ...runtime,
-        ...options.runtime?.(runtime),
+        ...runtimeWithDomain,
+        ...options.runtime?.(runtimeWithDomain),
       },
       controlPlane,
     }),

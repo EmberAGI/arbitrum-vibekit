@@ -431,6 +431,206 @@ describe('createPiExampleAgUiHandler', () => {
     );
   });
 
+  it('routes direct lifecycle commands through the normalized domain operation pipeline', async () => {
+    const service = createPiExampleGatewayService({
+      env: {
+        OPENROUTER_API_KEY: 'test-openrouter-key',
+        PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
+      },
+      persistence: {
+        ensureReady: async () => undefined,
+        persistDirectExecution: async () => undefined,
+        loadInspectionState: async () => ({
+          threads: [],
+          executions: [],
+          automations: [],
+          automationRuns: [],
+          interrupts: [],
+          leases: [],
+          outboxIntents: [],
+          executionEvents: [],
+          threadActivities: [],
+        }),
+      },
+    });
+
+    const hireEvents = await collectEventSource(
+      await service.run({
+        threadId: 'thread-1',
+        runId: 'run-hire-command',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    expect(hireEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'STATE_SNAPSHOT',
+        snapshot: expect.objectContaining({
+          thread: expect.objectContaining({
+            lifecycle: expect.objectContaining({
+              phase: 'onboarding',
+              onboardingStep: 'operator-profile',
+            }),
+            task: expect.objectContaining({
+              taskStatus: expect.objectContaining({
+                state: 'input-required',
+                message: 'Please provide a short operator note to continue onboarding.',
+              }),
+            }),
+            artifacts: expect.objectContaining({
+              current: expect.objectContaining({
+                data: expect.objectContaining({
+                  type: 'interrupt-status',
+                  interruptType: 'operator-config',
+                  status: 'pending',
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('routes tool-driven lifecycle commands through the same normalized domain operation pipeline', async () => {
+    const service = createPiExampleGatewayService({
+      env: {
+        OPENROUTER_API_KEY: 'test-openrouter-key',
+        PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
+      },
+      persistence: {
+        ensureReady: async () => undefined,
+        persistDirectExecution: async () => undefined,
+        loadInspectionState: async () => ({
+          threads: [],
+          executions: [],
+          automations: [],
+          automationRuns: [],
+          interrupts: [],
+          leases: [],
+          outboxIntents: [],
+          executionEvents: [],
+          threadActivities: [],
+        }),
+      },
+    });
+
+    const hireEvents = await collectEventSource(
+      await service.run({
+        threadId: 'thread-1',
+        runId: 'run-hire-tool',
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'Please hire the agent and start onboarding.',
+          },
+        ],
+      }),
+    );
+
+    expect(hireEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'STATE_SNAPSHOT',
+        snapshot: expect.objectContaining({
+          thread: expect.objectContaining({
+            lifecycle: expect.objectContaining({
+              phase: 'onboarding',
+              onboardingStep: 'operator-profile',
+            }),
+            task: expect.objectContaining({
+              taskStatus: expect.objectContaining({
+                state: 'input-required',
+                message: 'Please provide a short operator note to continue onboarding.',
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('routes onboarding interrupt resolution back through the same normalized domain operation pipeline', async () => {
+    const service = createPiExampleGatewayService({
+      env: {
+        OPENROUTER_API_KEY: 'test-openrouter-key',
+        PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
+      },
+      persistence: {
+        ensureReady: async () => undefined,
+        persistDirectExecution: async () => undefined,
+        loadInspectionState: async () => ({
+          threads: [],
+          executions: [],
+          automations: [],
+          automationRuns: [],
+          interrupts: [],
+          leases: [],
+          outboxIntents: [],
+          executionEvents: [],
+          threadActivities: [],
+        }),
+      },
+    });
+
+    await collectEventSource(
+      await service.run({
+        threadId: 'thread-1',
+        runId: 'run-hire-command',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const resumeEvents = await collectEventSource(
+      await service.run({
+        threadId: 'thread-1',
+        runId: 'run-onboarding-resume',
+        forwardedProps: {
+          command: {
+            resume: '{"operatorNote":"safe window approved"}',
+          },
+        },
+      }),
+    );
+
+    expect(resumeEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'STATE_SNAPSHOT',
+        snapshot: expect.objectContaining({
+          thread: expect.objectContaining({
+            lifecycle: expect.objectContaining({
+              phase: 'onboarding',
+              onboardingStep: 'delegation-note',
+              operatorNote: 'safe window approved',
+            }),
+            task: expect.objectContaining({
+              taskStatus: expect.objectContaining({
+                state: 'working',
+                message: 'Operator note captured. Ready to complete onboarding.',
+              }),
+            }),
+            artifacts: expect.objectContaining({
+              current: expect.objectContaining({
+                data: expect.objectContaining({
+                  type: 'lifecycle-status',
+                  onboardingStep: 'delegation-note',
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it('replays transcript messages from Pi-owned runtime state on reconnect after a mocked run', async () => {
     const service = createPiExampleGatewayService({
       env: {
