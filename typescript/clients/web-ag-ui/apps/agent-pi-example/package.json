@@ -24,13 +24,15 @@
     "predev": "pnpm build:runtime-deps",
     "prebuild": "pnpm build:runtime-deps",
     "prestart": "pnpm build:runtime-deps",
+    "pretest:int": "pnpm build:runtime-deps",
     "pretest:unit": "pnpm build:runtime-deps",
     "start": "bash -lc 'ENV_FILE=.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.example; exec node --env-file=\"$ENV_FILE\" ./node_modules/tsx/dist/cli.mjs src/server.ts \"$@\"' --",
     "build": "tsc --project tsconfig.json",
-    "test": "pnpm test:unit",
+    "test": "pnpm test:unit && pnpm test:int",
+    "test:int": "vitest run --config vitest.config.int.ts",
     "test:unit": "vitest run",
     "test:watch": "vitest watch",
-    "test:ci": "pnpm test:unit"
+    "test:ci": "pnpm test:unit && pnpm test:int"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "0.62.0",
