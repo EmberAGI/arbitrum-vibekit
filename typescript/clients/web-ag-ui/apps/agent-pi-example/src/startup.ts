@@ -32,8 +32,16 @@ export async function preparePiExampleServer(
           },
         })))()) ?? null;
 
+  const serviceEnv =
+    !env.DATABASE_URL && bootstrap?.databaseUrl
+      ? {
+          ...env,
+          DATABASE_URL: bootstrap.databaseUrl,
+        }
+      : env;
+
   const service = (options.createService ?? createPiExampleGatewayService)({
-    env,
+    env: serviceEnv,
   });
 
   return {
