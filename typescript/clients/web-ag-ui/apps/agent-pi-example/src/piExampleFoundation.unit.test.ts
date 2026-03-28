@@ -32,7 +32,7 @@ describe('createPiExampleAgentConfig', () => {
     expect(config.domain?.lifecycle).toMatchObject({
       initialPhase: 'prehire',
       phases: ['prehire', 'onboarding', 'hired', 'fired'],
-      terminalPhases: ['fired'],
+      terminalPhases: [],
     });
     expect(config.agentOptions?.initialState).toMatchObject({
       thinkingLevel: 'low',
@@ -111,6 +111,9 @@ describe('createPiExampleAgentConfig', () => {
     expect(hireResult?.outputs).not.toHaveProperty('threadPatch');
     expect(hireResult?.outputs?.interrupt).not.toHaveProperty('inputLabel');
     expect(hireResult?.outputs?.interrupt).not.toHaveProperty('submitLabel');
+    expect(
+      config.domain?.lifecycle.transitions.find((transition) => transition.command === 'hire')?.from,
+    ).toEqual(['prehire', 'fired']);
 
     const onboardingResult = config.domain?.handleOperation?.({
       operation: {
@@ -156,6 +159,48 @@ describe('createPiExampleAgentConfig', () => {
       state: {
         phase: 'hired',
         operatorNote: 'ready for delegation',
+      },
+    });
+
+    const firedResult = config.domain?.handleOperation?.({
+      operation: {
+        source: 'tool',
+        name: 'fire',
+      },
+      threadId: 'thread-1',
+      state: hiredResult?.state,
+    });
+
+    expect(firedResult).toMatchObject({
+      state: {
+        phase: 'fired',
+        operatorNote: 'ready for delegation',
+      },
+      outputs: {
+        status: {
+          statusMessage: 'Agent moved to fired. Rehire is still available in this thread.',
+        },
+      },
+    });
+
+    expect(
+      config.domain?.handleOperation?.({
+        operation: {
+          source: 'tool',
+          name: 'hire',
+        },
+        threadId: 'thread-1',
+        state: {
+          phase: 'fired',
+          onboardingStep: null,
+          operatorNote: 'ready for delegation',
+        },
+      }),
+    ).toMatchObject({
+      state: {
+        phase: 'onboarding',
+        onboardingStep: 'operator-profile',
+        operatorNote: null,
       },
     });
   });

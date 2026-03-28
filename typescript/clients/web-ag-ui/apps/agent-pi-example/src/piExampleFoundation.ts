@@ -74,13 +74,13 @@ function describePiExampleLifecycleCommand(
 ): string {
   switch (command) {
     case 'hire':
-      return 'Move the agent from prehire into onboarding and request the operator note.';
+      return 'Move the agent into onboarding and request the operator note, including after a prior firing.';
     case 'continue_onboarding':
       return 'Keep onboarding active while collecting the remaining operator input.';
     case 'complete_onboarding':
       return 'Finish onboarding and promote the agent into the hired phase.';
     case 'fire':
-      return 'End the lifecycle from any active phase and move the agent into fired.';
+      return 'Move the agent into fired while keeping the thread available for a later rehire.';
   }
 }
 
@@ -89,7 +89,7 @@ function createPiExampleDomain(): PiExampleDomainConfig {
     lifecycle: {
       initialPhase: 'prehire',
       phases: PI_EXAMPLE_PHASES,
-      terminalPhases: ['fired'],
+      terminalPhases: [],
       commands: PI_EXAMPLE_COMMANDS.map((name) => ({
         name,
         description: describePiExampleLifecycleCommand(name),
@@ -97,9 +97,9 @@ function createPiExampleDomain(): PiExampleDomainConfig {
       transitions: [
         {
           command: 'hire',
-          from: ['prehire'],
+          from: ['prehire', 'fired'],
           to: 'onboarding',
-          description: 'Start onboarding and request the operator profile note.',
+          description: 'Start onboarding and request the operator profile note, including rehiring from fired.',
           interrupt: 'operator-config',
         },
         {
@@ -118,7 +118,7 @@ function createPiExampleDomain(): PiExampleDomainConfig {
           command: 'fire',
           from: ['prehire', 'onboarding', 'hired'],
           to: 'fired',
-          description: 'End the golden-example lifecycle.',
+          description: 'Move the golden-example lifecycle into fired without closing the thread permanently.',
         },
       ],
       interrupts: [
@@ -230,7 +230,7 @@ function createPiExampleDomain(): PiExampleDomainConfig {
             outputs: {
               status: {
                 executionStatus: 'completed',
-                statusMessage: 'Agent lifecycle ended.',
+                statusMessage: 'Agent moved to fired. Rehire is still available in this thread.',
               },
               artifacts: [buildLifecycleArtifact(nextState)],
             },
