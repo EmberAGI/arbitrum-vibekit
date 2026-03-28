@@ -16,7 +16,16 @@ The intended lifecycle example for this app is:
 
 - `prehire -> onboarding -> hired -> fired`
 
-During the current architecture transition, implementation details may still be moving toward that final shape. The durable direction is that this app should configure `agent-runtime`, not assemble low-level runtime internals itself.
+This app is the intended reference path: it should configure `agent-runtime`, not assemble low-level runtime internals itself.
+
+In particular, `agent-runtime` now owns:
+
+- session storage and projection assembly
+- runtime-scoped automation tools and background polling
+- operator-input interruption plumbing
+- AG-UI transport wiring and control-plane reads
+
+`agent-pi-example` supplies only domain behavior, model/prompt configuration, and server bootstrap.
 
 ## Local Startup
 
@@ -47,6 +56,6 @@ Normal validation should keep the in-repo Pi systems real:
 
 - Pi-backed runtime behavior
 - AG-UI transport and service boundary
-- Postgres-backed persistence and control-plane reads
+- Postgres-backed persistence, control-plane reads, and automation recovery
 
-Only external boundaries should be mocked or replayed. For the Pi example, that means tests may replace the OpenRouter LLM call, but they should not replace the internal runtime, service, or persistence layers with synthetic stand-ins.
+Only external boundaries should be mocked or replayed. For the Pi example, that means tests may replace the OpenRouter LLM call, but they should not replace the internal runtime driver with app-owned session, scheduler, or persistence stand-ins.

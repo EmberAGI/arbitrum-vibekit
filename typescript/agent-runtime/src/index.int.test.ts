@@ -9,18 +9,9 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
   createAgentRuntime,
-  type PiRuntimeGatewayInspectionState,
   type PiRuntimeGatewaySession,
   type PiRuntimeGatewayService,
 } from './index.js';
-
-type SessionStore = {
-  getSession: (threadId: string) => PiRuntimeGatewaySession;
-  updateSession: (
-    threadId: string,
-    update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
-  ) => PiRuntimeGatewaySession;
-};
 
 type GatewayEvent = Awaited<ReturnType<PiRuntimeGatewayService['run']>> extends
   | readonly (infer TEvent)[]
@@ -165,39 +156,6 @@ function isStateSnapshotEvent(event: GatewayEvent): event is StateSnapshotEvent 
   return typeof event === 'object' && event !== null && 'snapshot' in event;
 }
 
-function createSessionStore(): SessionStore {
-  const sessions = new Map<string, PiRuntimeGatewaySession>();
-
-  const getSession = (threadId: string): PiRuntimeGatewaySession => {
-    const existing = sessions.get(threadId);
-    if (existing) {
-      return existing;
-    }
-
-    const created: PiRuntimeGatewaySession = {
-      thread: { id: threadId },
-      execution: {
-        id: `exec:${threadId}`,
-        status: 'working',
-        statusMessage: 'Ready for integration testing.',
-      },
-      messages: [],
-      activityEvents: [],
-    };
-    sessions.set(threadId, created);
-    return created;
-  };
-
-  return {
-    getSession,
-    updateSession: (threadId, update) => {
-      const nextSession = update(getSession(threadId));
-      sessions.set(threadId, nextSession);
-      return nextSession;
-    },
-  };
-}
-
 function createLifecycleDomain() {
   const phases = new Map<string, LifecycleState>();
 
@@ -335,33 +293,33 @@ function createLifecycleDomain() {
 
 describe('agent-runtime integration', () => {
   it('normalizes tool-driven lifecycle commands and interrupt resumes through the root builder service', async () => {
-    const sessions = createSessionStore();
-    let currentThreadId = 'thread-1';
     let latestUserText = '';
+    const observedSystemPrompts: string[] = [];
+    let sawSyntheticDomainContextMessage = false;
 
     const domain = createLifecycleDomain();
     const runtime = createAgentRuntime({
       model: createModel('int-model'),
       systemPrompt: 'You are a lifecycle agent.',
-      sessions,
-      getSessionContext: () => sessions.getSession(currentThreadId),
-      controlPlane: {
-        loadInspectionState: (): Promise<PiRuntimeGatewayInspectionState> =>
-          Promise.resolve({
-          threads: [],
-          executions: [],
-          automations: [],
-          automationRuns: [],
-          interrupts: [],
-          leases: [],
-          outboxIntents: [],
-          executionEvents: [],
-          threadActivities: [],
-          }),
-      },
       domain,
       agentOptions: {
         streamFn: (_model, context) => {
+          observedSystemPrompts.push(context.systemPrompt ?? '');
+          sawSyntheticDomainContextMessage = context.messages.some((message: Message) => {
+            if (message.role !== 'user') {
+              return false;
+            }
+
+            const text =
+              typeof message.content === 'string'
+                ? message.content
+                : message.content
+                    .filter((part) => part.type === 'text')
+                    .map((part) => part.text)
+                    .join(' ');
+            return text.includes('<agent-runtime-domain-context>');
+          });
+
           const latestToolResult = [...context.messages]
             .reverse()
             .find((message: Message) => message.role === 'toolResult');
@@ -412,6 +370,8 @@ describe('agent-runtime integration', () => {
 
     const hireSnapshot = hireEvents.find(isStateSnapshotEvent);
     expect(latestUserText).toBe('Please hire the agent.');
+    expect(observedSystemPrompts).toContain('You are a lifecycle agent.\n\nLifecycle phase: prehire.');
+    expect(sawSyntheticDomainContextMessage).toBe(false);
     expect(hireSnapshot).toBeDefined();
     expect(hireSnapshot!.snapshot.thread.lifecycle).toMatchObject({
       phase: 'onboarding',
@@ -422,7 +382,6 @@ describe('agent-runtime integration', () => {
       message: 'Please provide a short operator note to continue onboarding.',
     });
 
-    currentThreadId = 'thread-1';
     const resumeEvents = await collectEventSource(
       await runtime.service.run({
         threadId: 'thread-1',

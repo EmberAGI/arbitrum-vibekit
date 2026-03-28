@@ -52,21 +52,6 @@ describe('agent-pi-example AG-UI integration', () => {
         OPENROUTER_API_KEY: 'test-openrouter-key',
         PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
       },
-      persistence: {
-        ensureReady: async () => undefined,
-        persistDirectExecution: async () => undefined,
-        loadInspectionState: async () => ({
-          threads: [],
-          executions: [],
-          automations: [],
-          automationRuns: [],
-          interrupts: [],
-          leases: [],
-          outboxIntents: [],
-          executionEvents: [],
-          threadActivities: [],
-        }),
-      },
     });
 
     const handler = createPiExampleAgUiHandler({

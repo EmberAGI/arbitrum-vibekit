@@ -39,6 +39,8 @@ The intended public shape is:
 - top-level `tools`
 - `domain` configuration
 
+Normal consumers should not pass public session stores, control-plane loaders, or background automation adapters into the blessed builder. Those concerns are runtime-owned internals.
+
 The `domain` extension surface is responsible for:
 
 - lifecycle declaration
@@ -56,6 +58,9 @@ The domain owns:
 `agent-runtime` owns:
 
 - runtime loop ownership
+- session storage and execution persistence
+- runtime-scoped automation tools and background work
+- operator-input interruption plumbing
 - transport ownership
 - projection assembly
 - structural contract enforcement
