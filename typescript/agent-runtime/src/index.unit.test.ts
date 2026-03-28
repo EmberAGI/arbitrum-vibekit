@@ -75,6 +75,13 @@ describe('agent-runtime facade', () => {
     expect('isLangGraphBusyStatus' in agentRuntime).toBe(false);
   });
 
+  it('does not let normal consumers override runtime ownership through the blessed builder options', () => {
+    const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+
+    expect(source).not.toContain('runtime?:');
+    expect(source).not.toContain('options.runtime?.(');
+  });
+
   it('syncs postgres artifacts into installed agent-runtime snapshots for clean workspace consumers', () => {
     const syncScript = readFileSync(
       new URL('../scripts/sync-installed-artifacts.mjs', import.meta.url),

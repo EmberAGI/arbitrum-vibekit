@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import {
   buildCancelAutomationStatements,
-  buildPiRuntimeGatewayConnectEvents,
   buildPersistAutomationDispatchStatements,
   buildPersistInterruptCheckpointStatements,
   buildPiRuntimeDirectExecutionRecordIds,
@@ -24,8 +23,6 @@ import {
   type PiExampleGatewayFoundationOptions,
 } from './piExampleFoundation.js';
 import { createPiExampleRuntimeStateStore, type PiExampleRuntimeStateStore } from './runtimeState.js';
-
-type BaseEvent = ReturnType<typeof buildPiRuntimeGatewayConnectEvents>[number];
 
 export const PI_EXAMPLE_AGENT_ID = 'agent-pi-example';
 export const PI_EXAMPLE_AG_UI_BASE_PATH = '/ag-ui';
@@ -107,134 +104,6 @@ function buildDirectExecutionIds(threadKey: string) {
   return {
     ...stableIds,
     activityId: randomUUID(),
-  };
-}
-
-function hasDomainPendingInterrupt(session: ReturnType<PiExampleRuntimeStateStore['getSession']>): boolean {
-  const currentArtifact = session.artifacts?.current?.data;
-
-  return (
-    typeof currentArtifact === 'object' &&
-    currentArtifact !== null &&
-    'interruptType' in currentArtifact &&
-    typeof currentArtifact.interruptType === 'string'
-  );
-}
-
-function createAttachedEventStream(params: {
-  seedEvents: readonly BaseEvent[];
-  attach: (push: (event: BaseEvent) => void) => {
-    detach: () => void;
-    activeRunEvents: readonly BaseEvent[];
-  };
-}): AsyncIterable<BaseEvent> {
-  const queue = [...params.seedEvents];
-  const readers: Array<{
-    resolve: (result: IteratorResult<BaseEvent>) => void;
-    reject: (error: unknown) => void;
-  }> = [];
-  let detached = false;
-
-  const flush = (event: BaseEvent) => {
-    const reader = readers.shift();
-    if (reader) {
-      reader.resolve({ value: event, done: false });
-      return;
-    }
-
-    queue.push(event);
-  };
-
-  const attachment = params.attach(flush);
-  for (const event of attachment.activeRunEvents) {
-    flush(event);
-  }
-
-  const detach = () => {
-    if (detached) {
-      return;
-    }
-
-    detached = true;
-    attachment.detach();
-    while (readers.length > 0) {
-      readers.shift()?.resolve({ value: undefined, done: true });
-    }
-  };
-
-  return {
-    [Symbol.asyncIterator]() {
-      return {
-        next() {
-          if (queue.length > 0) {
-            return Promise.resolve({
-              value: queue.shift()!,
-              done: false,
-            });
-          }
-
-          if (detached) {
-            return Promise.resolve({ value: undefined, done: true });
-          }
-
-          return new Promise<IteratorResult<BaseEvent>>((resolve, reject) => {
-            readers.push({ resolve, reject });
-          });
-        },
-        return() {
-          detach();
-          return Promise.resolve({ value: undefined, done: true });
-        },
-      };
-    },
-  };
-}
-
-function tapEventSource(
-  source: readonly BaseEvent[] | AsyncIterable<BaseEvent>,
-  onEvents: (events: readonly BaseEvent[]) => void,
-  onComplete?: () => void,
-): readonly BaseEvent[] | AsyncIterable<BaseEvent> {
-  if (Array.isArray(source)) {
-    onEvents(source);
-    onComplete?.();
-    const clonedEvents: BaseEvent[] = [];
-    for (let index = 0; index < source.length; index += 1) {
-      clonedEvents[index] = source[index] as BaseEvent;
-    }
-    return clonedEvents;
-  }
-
-  return {
-    [Symbol.asyncIterator]() {
-      const iterator = (source as AsyncIterable<BaseEvent>)[Symbol.asyncIterator]();
-
-      return {
-        async next() {
-          const result = await iterator.next();
-          if (!result.done) {
-            onEvents([result.value]);
-          } else {
-            onComplete?.();
-          }
-          return result;
-        },
-        async return() {
-          onComplete?.();
-          return typeof iterator.return === 'function'
-            ? await iterator.return()
-            : { value: undefined, done: true };
-        },
-        async throw(error: unknown) {
-          onComplete?.();
-          if (typeof iterator.throw === 'function') {
-            return await iterator.throw(error);
-          }
-
-          throw error;
-        },
-      };
-    },
   };
 }
 
@@ -481,6 +350,15 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
     sessions: {
       getSession: (threadId) => runtimeState.getSession(threadId),
       updateSession: (threadId, update) => runtimeState.updateSession(threadId, update),
+      attached: {
+        ensureThread: persistThreadExecution,
+        attachToThread: runtimeState.attachToThread,
+        startAttachedRun: runtimeState.startAttachedRun,
+        appendAttachedRunEvents: runtimeState.appendAttachedRunEvents,
+        finishAttachedRun: runtimeState.finishAttachedRun,
+        publishAttachedEventSource: runtimeState.publishAttachedEventSource,
+        resumeFromUserInput: runtimeState.resumeFromUserInput,
+      },
     },
     controlPlane: {
       loadInspectionState: async () => {
@@ -489,42 +367,6 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       },
       now: getNow,
     },
-    runtime: (baseRuntime) => ({
-      connect: async (request) => {
-        await persistThreadExecution(request.threadId);
-        return createAttachedEventStream({
-          seedEvents: buildPiRuntimeGatewayConnectEvents({
-            threadId: request.threadId,
-            runId: request.runId ?? `connect:${request.threadId}`,
-            session: runtimeState.getSession(request.threadId),
-          }),
-          attach: (push) => runtimeState.attachToThread(request.threadId, push),
-        });
-      },
-      run: async (request) => {
-        await persistThreadExecution(request.threadId);
-        if (
-          typeof request.forwardedProps?.command?.resume === 'string' &&
-          !hasDomainPendingInterrupt(runtimeState.getSession(request.threadId))
-        ) {
-          runtimeState.resumeFromUserInput(request.threadId);
-        }
-        runtimeState.startAttachedRun(request.threadId, request.runId);
-        return tapEventSource(
-          await baseRuntime.run(request),
-          (events) => runtimeState.appendAttachedRunEvents(request.threadId, request.runId, events),
-          () => runtimeState.finishAttachedRun(request.threadId, request.runId),
-        );
-      },
-      stop: async (request) =>
-        tapEventSource(
-          await baseRuntime.stop(request),
-          (events) => {
-            void runtimeState.publishAttachedEventSource(request.threadId, events);
-          },
-          () => runtimeState.finishAttachedRun(request.threadId, request.runId),
-        ),
-    }),
   }).service;
 }
 

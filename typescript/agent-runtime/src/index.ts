@@ -25,6 +25,8 @@ type AgentRuntimeTransformMessage = AgentRuntimeTransformMessages[number];
 type AgentRuntimeTool = NonNullable<
   Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['tools']
 >[number];
+type AgentRuntimeConnectEvent = ReturnType<typeof buildPiRuntimeGatewayConnectEventsInternal>[number];
+type AgentRuntimeAttachedEventSource = readonly AgentRuntimeConnectEvent[] | AsyncIterable<AgentRuntimeConnectEvent>;
 
 type AgentRuntimeDomainLifecycleCommand<TCommand extends string = string> = {
   name: TCommand;
@@ -121,6 +123,29 @@ type AgentRuntimeForwardedCommand = NonNullable<
 type AgentRuntimeDomainCommandToolArgs = {
   name: string;
   inputJson: string;
+};
+
+type AgentRuntimeAttachedSessions = {
+  ensureThread?: (threadId: string) => void | Promise<void>;
+  attachToThread: (
+    threadId: string,
+    listener: (event: AgentRuntimeConnectEvent) => void,
+  ) => {
+    detach: () => void;
+    activeRunEvents: readonly AgentRuntimeConnectEvent[];
+  };
+  startAttachedRun: (threadId: string, runId: string) => void;
+  appendAttachedRunEvents: (
+    threadId: string,
+    runId: string,
+    events: readonly AgentRuntimeConnectEvent[],
+  ) => void;
+  finishAttachedRun: (threadId: string, runId: string) => void;
+  publishAttachedEventSource: (
+    threadId: string,
+    source: AgentRuntimeAttachedEventSource,
+  ) => Promise<void>;
+  resumeFromUserInput?: (threadId: string) => PiRuntimeGatewaySession;
 };
 
 export const AGENT_RUNTIME_DOMAIN_COMMAND_TOOL = 'agent_runtime_domain_command';
@@ -381,6 +406,128 @@ function applyDomainOperationResult(params: {
   };
 }
 
+function createAttachedEventStream(params: {
+  seedEvents: readonly AgentRuntimeConnectEvent[];
+  attach: (push: (event: AgentRuntimeConnectEvent) => void) => {
+    detach: () => void;
+    activeRunEvents: readonly AgentRuntimeConnectEvent[];
+  };
+}): AsyncIterable<AgentRuntimeConnectEvent> {
+  const queue = [...params.seedEvents];
+  const readers: Array<{
+    resolve: (result: IteratorResult<AgentRuntimeConnectEvent>) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+  let detached = false;
+
+  const flush = (event: AgentRuntimeConnectEvent) => {
+    const reader = readers.shift();
+    if (reader) {
+      reader.resolve({ value: event, done: false });
+      return;
+    }
+
+    queue.push(event);
+  };
+
+  const attachment = params.attach(flush);
+  for (const event of attachment.activeRunEvents) {
+    flush(event);
+  }
+
+  const detach = () => {
+    if (detached) {
+      return;
+    }
+
+    detached = true;
+    attachment.detach();
+    while (readers.length > 0) {
+      readers.shift()?.resolve({ value: undefined, done: true });
+    }
+  };
+
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        next() {
+          if (queue.length > 0) {
+            return Promise.resolve({
+              value: queue.shift()!,
+              done: false,
+            });
+          }
+
+          if (detached) {
+            return Promise.resolve({ value: undefined, done: true });
+          }
+
+          return new Promise<IteratorResult<AgentRuntimeConnectEvent>>((resolve, reject) => {
+            readers.push({ resolve, reject });
+          });
+        },
+        return() {
+          detach();
+          return Promise.resolve({ value: undefined, done: true });
+        },
+      };
+    },
+  };
+}
+
+function cloneAttachedEvents(events: readonly AgentRuntimeConnectEvent[]): AgentRuntimeConnectEvent[] {
+  const clonedEvents: AgentRuntimeConnectEvent[] = [];
+  for (const event of events) {
+    clonedEvents.push(event);
+  }
+
+  return clonedEvents;
+}
+
+function tapAttachedEventSource(
+  source: AgentRuntimeAttachedEventSource,
+  onEvents: (events: readonly AgentRuntimeConnectEvent[]) => void,
+  onComplete?: () => void,
+): AgentRuntimeAttachedEventSource {
+  if (Array.isArray(source)) {
+    onEvents(source);
+    onComplete?.();
+    return cloneAttachedEvents(source);
+  }
+
+  return {
+    [Symbol.asyncIterator]() {
+      const iterator = (source as AsyncIterable<AgentRuntimeConnectEvent>)[Symbol.asyncIterator]();
+
+      return {
+        async next() {
+          const result = await iterator.next();
+          if (!result.done) {
+            onEvents([result.value]);
+          } else {
+            onComplete?.();
+          }
+          return result;
+        },
+        async return() {
+          onComplete?.();
+          return typeof iterator.return === 'function'
+            ? await iterator.return()
+            : { value: undefined, done: true };
+        },
+        async throw(error: unknown) {
+          onComplete?.();
+          if (typeof iterator.throw === 'function') {
+            return await iterator.throw(error);
+          }
+
+          throw error;
+        },
+      };
+    },
+  };
+}
+
 type CreateAgentRuntimeOptions = Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0] & {
   sessions: {
     getSession: (threadId: string) => PiRuntimeGatewaySession;
@@ -388,15 +535,13 @@ type CreateAgentRuntimeOptions = Parameters<typeof createPiRuntimeGatewayFoundat
       threadId: string,
       update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
     ) => PiRuntimeGatewaySession;
+    attached?: AgentRuntimeAttachedSessions;
   };
   controlPlane: {
     loadInspectionState: () => Promise<PiRuntimeGatewayInspectionState>;
     retention?: Parameters<typeof createCanonicalPiRuntimeGatewayControlPlaneInternal>[0]['retention'];
     now?: () => Date;
   };
-  runtime?: (
-    runtime: PiRuntimeGatewayRuntime,
-  ) => Partial<PiRuntimeGatewayRuntime>;
   domain?: AgentRuntimeDomainConfig;
 };
 
@@ -565,6 +710,53 @@ export function createAgentRuntime(options: CreateAgentRuntimeOptions): AgentRun
     },
   };
 
+  const runtimeWithAttachedSessions: PiRuntimeGatewayRuntime = options.sessions.attached
+    ? {
+        ...runtimeWithDomain,
+        connect: async (request) => {
+          await options.sessions.attached?.ensureThread?.(request.threadId);
+
+          return createAttachedEventStream({
+            seedEvents: buildPiRuntimeGatewayConnectEventsInternal({
+              threadId: request.threadId,
+              runId: request.runId ?? `connect:${request.threadId}`,
+              session: options.sessions.getSession(request.threadId),
+            }),
+            attach: (push) => options.sessions.attached!.attachToThread(request.threadId, push),
+          });
+        },
+        run: async (request) => {
+          await options.sessions.attached?.ensureThread?.(request.threadId);
+
+          const isDomainInterruptResume =
+            readInterruptOperation({
+              command: request.forwardedProps?.command,
+              session: options.sessions.getSession(request.threadId),
+              domain: options.domain,
+            }) !== null;
+          if (typeof request.forwardedProps?.command?.resume === 'string' && !isDomainInterruptResume) {
+            options.sessions.attached?.resumeFromUserInput?.(request.threadId);
+          }
+
+          options.sessions.attached?.startAttachedRun(request.threadId, request.runId);
+
+          return tapAttachedEventSource(
+            await runtimeWithDomain.run(request),
+            (events) => options.sessions.attached?.appendAttachedRunEvents(request.threadId, request.runId, events),
+            () => options.sessions.attached?.finishAttachedRun(request.threadId, request.runId),
+          );
+        },
+        stop: async (request) =>
+          tapAttachedEventSource(
+            await runtimeWithDomain.stop(request),
+            (events) => {
+              void options.sessions.attached?.publishAttachedEventSource(request.threadId, events);
+            },
+            () => options.sessions.attached?.finishAttachedRun(request.threadId, request.runId),
+          ),
+      }
+    : runtimeWithDomain;
+
   const controlPlane = createCanonicalPiRuntimeGatewayControlPlaneInternal({
     loadInspectionState: options.controlPlane.loadInspectionState,
     retention: options.controlPlane.retention,
@@ -574,10 +766,7 @@ export function createAgentRuntime(options: CreateAgentRuntimeOptions): AgentRun
   return {
     bootstrapPlan: foundation.bootstrapPlan,
     service: createPiRuntimeGatewayServiceInternal({
-      runtime: {
-        ...runtimeWithDomain,
-        ...options.runtime?.(runtimeWithDomain),
-      },
+      runtime: runtimeWithAttachedSessions,
       controlPlane,
     }),
   };
