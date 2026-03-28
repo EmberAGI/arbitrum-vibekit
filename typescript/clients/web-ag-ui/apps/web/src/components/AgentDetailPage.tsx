@@ -440,6 +440,29 @@ function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
         ];
       }
 
+      if (artifactData?.type === 'lifecycle-status') {
+        const phase = typeof artifactData.phase === 'string' ? artifactData.phase : 'unknown';
+        const onboardingStep =
+          typeof artifactData.onboardingStep === 'string' ? artifactData.onboardingStep : null;
+        const operatorNote =
+          typeof artifactData.operatorNote === 'string' ? artifactData.operatorNote : null;
+        const detailLines = [
+          onboardingStep ? `Step: ${onboardingStep}` : null,
+          operatorNote ? `Operator note: ${operatorNote}` : null,
+        ].filter((line): line is string => line !== null);
+
+        return [
+          {
+            id: `lifecycle-artifact-${event.artifact?.artifactId ?? 'unknown'}-${index}`,
+            label: 'Artifact',
+            view: buildPiExampleStatusA2UiView({
+              title: `Lifecycle ${phase}`,
+              body: detailLines.length > 0 ? detailLines.join('\n') : 'Lifecycle state updated.',
+            }),
+          },
+        ];
+      }
+
       if (artifactData?.type === 'interrupt-status') {
         const message = typeof artifactData.message === 'string' ? artifactData.message : 'Awaiting operator input.';
         return [

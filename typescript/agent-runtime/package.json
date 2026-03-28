@@ -24,11 +24,13 @@
     "format:check": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --check",
     "prelint": "pnpm build:deps",
     "prebuild": "pnpm build:deps",
+    "pretest:int": "pnpm build:deps",
     "pretest:unit": "pnpm build:deps",
-    "test": "pnpm test:unit",
+    "test": "pnpm test:unit && pnpm test:int",
+    "test:int": "vitest run --config vitest.config.int.ts",
     "test:watch": "vitest watch --config vitest.config.unit.ts",
     "test:unit": "vitest run --config vitest.config.unit.ts",
-    "test:ci": "pnpm test:unit"
+    "test:ci": "pnpm test:unit && pnpm test:int"
   },
   "devDependencies": {
     "@types/node": "^22.19.2",
@@ -44,6 +46,7 @@
     }
   },
   "dependencies": {
+    "@mariozechner/pi-ai": "0.62.0",
     "agent-runtime-contracts": "workspace:^",
     "agent-runtime-pi": "workspace:^"
   }

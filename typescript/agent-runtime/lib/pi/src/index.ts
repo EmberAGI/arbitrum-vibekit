@@ -27,6 +27,7 @@ import {
   type PiThreadRecord,
   type PostgresBootstrapPlan,
 } from 'agent-runtime-postgres';
+export type { AgentOptions, AgentTool } from '@mariozechner/pi-agent-core';
 export {
   createPiRuntimeGatewayAgUiHandler,
   DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH,
@@ -58,6 +59,8 @@ export type PiRuntimeGatewayRunRequest = {
   messages?: AgUiMessage[];
   forwardedProps?: {
     command?: {
+      name?: string;
+      input?: unknown;
       resume?: string;
     };
   };

@@ -82,16 +82,20 @@ function parseRunRequest(body: Record<string, unknown>): PiRuntimeGatewayRunRequ
   const forwardedProps = isRecord(body.forwardedProps) ? body.forwardedProps : undefined;
   const command = forwardedProps && isRecord(forwardedProps.command) ? forwardedProps.command : undefined;
   const resume = command ? readStringField(command, 'resume') : undefined;
+  const name = command ? readStringField(command, 'name') : undefined;
+  const input = command && Object.prototype.hasOwnProperty.call(command, 'input') ? command.input : undefined;
 
   return {
     threadId,
     runId,
     messages: Array.isArray(body.messages) ? (body.messages as PiRuntimeGatewayRunRequest['messages']) : undefined,
-    ...(resume
+    ...(resume || name
       ? {
           forwardedProps: {
             command: {
-              resume,
+              ...(name ? { name } : {}),
+              ...(Object.prototype.hasOwnProperty.call(command ?? {}, 'input') ? { input } : {}),
+              ...(resume ? { resume } : {}),
             },
           },
         }

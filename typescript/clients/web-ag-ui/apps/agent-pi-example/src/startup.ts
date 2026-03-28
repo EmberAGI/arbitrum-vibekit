@@ -2,15 +2,7 @@ import type { EnsuredPiRuntimePostgres, PiRuntimeGatewayService } from 'agent-ru
 import { ensurePiRuntimePostgresReady } from 'agent-runtime';
 
 import { createPiExampleGatewayService } from './agUiServer.js';
-import {
-  startPiExampleAutomationScheduler,
-  type PiExampleAutomationScheduler,
-} from './automationScheduler.js';
 import type { PiExampleGatewayEnv } from './piExampleFoundation.js';
-import {
-  createPiExampleRuntimeStateStore,
-  type PiExampleRuntimeStateStore,
-} from './runtimeState.js';
 
 type PiExampleServerEnv = PiExampleGatewayEnv & {
   PORT?: string;
@@ -19,14 +11,7 @@ type PiExampleServerEnv = PiExampleGatewayEnv & {
 type PreparePiExampleServerOptions = {
   env?: PiExampleServerEnv;
   ensureReady?: () => Promise<EnsuredPiRuntimePostgres | void>;
-  createService?: (options: {
-    env: PiExampleServerEnv;
-    runtimeState: PiExampleRuntimeStateStore;
-  }) => PiRuntimeGatewayService;
-  startScheduler?: (options: {
-    databaseUrl: string;
-    runtimeState: PiExampleRuntimeStateStore;
-  }) => PiExampleAutomationScheduler;
+  createService?: (options: { env: PiExampleServerEnv }) => PiRuntimeGatewayService;
 };
 
 export async function preparePiExampleServer(
@@ -35,10 +20,8 @@ export async function preparePiExampleServer(
   bootstrap: EnsuredPiRuntimePostgres | null;
   port: number;
   service: PiRuntimeGatewayService;
-  scheduler: PiExampleAutomationScheduler | null;
 }> {
   const env = options.env ?? process.env;
-  const runtimeState = createPiExampleRuntimeStateStore();
 
   const bootstrap =
     (await (options.ensureReady ??
@@ -49,21 +32,21 @@ export async function preparePiExampleServer(
           },
         })))()) ?? null;
 
+  const serviceEnv =
+    !env.DATABASE_URL && bootstrap?.databaseUrl
+      ? {
+          ...env,
+          DATABASE_URL: bootstrap.databaseUrl,
+        }
+      : env;
+
   const service = (options.createService ?? createPiExampleGatewayService)({
-    env,
-    runtimeState,
+    env: serviceEnv,
   });
-  const databaseUrl = bootstrap?.databaseUrl ?? env.DATABASE_URL ?? null;
 
   return {
     bootstrap,
     port: Number.parseInt(env.PORT ?? '3410', 10),
     service,
-    scheduler: databaseUrl
-      ? (options.startScheduler ?? startPiExampleAutomationScheduler)({
-          databaseUrl,
-          runtimeState,
-        })
-      : null,
   };
 }

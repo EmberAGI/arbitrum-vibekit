@@ -1,25 +1,18 @@
-import { Type, createAssistantMessageEventStream, type Message } from '@mariozechner/pi-ai';
+import { createAssistantMessageEventStream, type Message } from '@mariozechner/pi-ai';
 import {
-  createPiRuntimeGatewayFoundation,
-  type PiRuntimeGatewayFoundation,
+  AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL,
+  AGENT_RUNTIME_AUTOMATION_LIST_TOOL,
+  AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL,
+  AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
+  AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL,
+  type AgentRuntimeDomainConfig,
+  type CreateAgentRuntimeOptions,
 } from 'agent-runtime';
-
-import {
-  applyAutomationStatusUpdate,
-  buildInterruptA2Ui,
-  buildInterruptArtifact,
-  createPiExampleRuntimeStateStore,
-  type PiExampleRuntimeStateStore,
-} from './runtimeState.js';
 
 const DEFAULT_PI_AGENT_MODEL = 'openai/gpt-5.4-mini';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const AUTOMATION_SCHEDULE_TOOL = 'automation_schedule';
-const AUTOMATION_LIST_TOOL = 'automation_list';
-const AUTOMATION_CANCEL_TOOL = 'automation_cancel';
-const REQUEST_OPERATOR_INPUT_TOOL = 'request_operator_input';
 const PI_EXAMPLE_SYSTEM_PROMPT =
-  'You are a Pi-native local smoke-test agent. Respond clearly, keep track of the active thread state, use your automation and operator-input tools when appropriate, and prefer short direct answers unless the user asks for more depth. The automation platform supports every-minute schedules; when the user asks for an automation every minute, treat that as valid and do not claim the platform forces a 5-minute minimum.';
+  'You are the golden agent-runtime integration example. Respond clearly, track the current hiring lifecycle, and prefer short direct answers unless the user asks for more depth.';
 
 const EMPTY_USAGE = {
   input: 0,
@@ -46,166 +39,211 @@ type PiExampleGatewayEnv = NodeJS.ProcessEnv & {
 
 export type { PiExampleGatewayEnv };
 
-type PiExampleGatewayModel = Parameters<typeof createPiRuntimeGatewayFoundation>[0]['model'];
-type PiExampleGatewayTool = NonNullable<Parameters<typeof createPiRuntimeGatewayFoundation>[0]['tools']>[number];
-type PiExampleGatewayStream = NonNullable<NonNullable<Parameters<typeof createPiRuntimeGatewayFoundation>[0]['agentOptions']>['streamFn']>;
-type PiExampleGatewayToolParameters = PiExampleGatewayTool['parameters'];
+type PiExampleAgentRuntimeOptions = CreateAgentRuntimeOptions<PiExampleLifecycleState>;
+export type PiExampleAgentConfig = Pick<
+  PiExampleAgentRuntimeOptions,
+  'agentOptions' | 'databaseUrl' | 'domain' | 'model' | 'systemPrompt' | 'tools'
+>;
 
-export type PiExampleGatewayFoundationOptions = {
-  runtimeState?: PiExampleRuntimeStateStore;
-  resolveThreadKey?: () => string;
-  persistence?: {
-    scheduleAutomation?: (params: {
-      threadKey: string;
-      title: string;
-      instruction: string;
-      schedule: Record<string, unknown>;
-    }) => Promise<{
-      automationId: string;
-      runId: string;
-      executionId: string;
-      artifactId: string;
-      title: string;
-      schedule: Record<string, unknown>;
-      nextRunAt: string | null;
-    }>;
-    listAutomations?: (params: {
-      threadKey: string;
-      state?: string;
-      limit?: number;
-    }) => Promise<
-      Array<{
-        id: string;
-        title: string;
-        status: 'active' | 'completed' | 'canceled';
-        schedule: Record<string, unknown>;
-        nextRunAt: string | null;
-        lastRunAt: string | null;
-        lastRunStatus: string | null;
-      }>
-    >;
-    cancelAutomation?: (params: {
-      threadKey: string;
-      automationId: string;
-    }) => Promise<{
-      automationId: string;
-      artifactId: string;
-      title: string;
-      instruction: string;
-      schedule: Record<string, unknown>;
-    }>;
-    requestInterrupt?: (params: {
-      threadKey: string;
-      message: string;
-    }) => Promise<{
-      artifactId: string;
-    }>;
+type PiExampleGatewayModel = PiExampleAgentConfig['model'];
+type PiExampleGatewayStream = NonNullable<NonNullable<PiExampleAgentConfig['agentOptions']>['streamFn']>;
+
+const PI_EXAMPLE_PHASES = ['prehire', 'onboarding', 'hired', 'fired'] as const;
+const PI_EXAMPLE_COMMANDS = ['hire', 'continue_onboarding', 'complete_onboarding', 'fire'] as const;
+
+type PiExampleLifecyclePhase = (typeof PI_EXAMPLE_PHASES)[number];
+
+type PiExampleLifecycleState = {
+  phase: PiExampleLifecyclePhase;
+  onboardingStep: 'operator-profile' | 'delegation-note' | null;
+  operatorNote: string | null;
+};
+
+type PiExampleDomainConfig = AgentRuntimeDomainConfig<PiExampleLifecycleState>;
+
+function buildDefaultLifecycleState(): PiExampleLifecycleState {
+  return {
+    phase: 'prehire',
+    onboardingStep: null,
+    operatorNote: null,
   };
-};
+}
 
-type ScheduleAutomationArgs = {
-  title: string;
-  instruction: string;
-  schedule: {
-    kind: string;
-    intervalMinutes?: number;
-    at?: string;
-    cron?: string;
-    timezone?: string;
+function describePiExampleLifecycleCommand(
+  command: (typeof PI_EXAMPLE_COMMANDS)[number],
+): string {
+  switch (command) {
+    case 'hire':
+      return 'Move the agent into onboarding and request the operator note, including after a prior firing.';
+    case 'continue_onboarding':
+      return 'Keep onboarding active while collecting the remaining operator input.';
+    case 'complete_onboarding':
+      return 'Finish onboarding and promote the agent into the hired phase.';
+    case 'fire':
+      return 'Move the agent into fired while keeping the thread available for a later rehire.';
+  }
+}
+
+function createPiExampleDomain(): PiExampleDomainConfig {
+  return {
+    lifecycle: {
+      initialPhase: 'prehire',
+      phases: PI_EXAMPLE_PHASES,
+      terminalPhases: [],
+      commands: PI_EXAMPLE_COMMANDS.map((name) => ({
+        name,
+        description: describePiExampleLifecycleCommand(name),
+      })),
+      transitions: [
+        {
+          command: 'hire',
+          from: ['prehire', 'fired'],
+          to: 'onboarding',
+          description: 'Start onboarding and request the operator profile note, including rehiring from fired.',
+          interrupt: 'operator-config',
+        },
+        {
+          command: 'continue_onboarding',
+          from: ['onboarding'],
+          to: 'onboarding',
+          description: 'Keep onboarding open until the required operator note is supplied.',
+        },
+        {
+          command: 'complete_onboarding',
+          from: ['onboarding'],
+          to: 'hired',
+          description: 'Promote the agent into the hired phase once onboarding is satisfied.',
+        },
+        {
+          command: 'fire',
+          from: ['prehire', 'onboarding', 'hired'],
+          to: 'fired',
+          description: 'Move the golden-example lifecycle into fired without closing the thread permanently.',
+        },
+      ],
+      interrupts: [
+        {
+          type: 'operator-config',
+          description: 'Collect the operator note required during onboarding.',
+          surfacedInThread: true,
+        },
+      ],
+    },
+    systemContext: ({ state }) => {
+      const currentState = state ?? buildDefaultLifecycleState();
+      const context = [`Lifecycle phase: ${currentState.phase}.`];
+
+      if (currentState.phase === 'onboarding' && currentState.onboardingStep) {
+        context.push(`Onboarding step: ${currentState.onboardingStep}.`);
+      }
+
+      if (currentState.operatorNote) {
+        context.push(`Operator note captured: ${currentState.operatorNote}.`);
+      }
+
+      return context;
+    },
+    handleOperation: ({ operation, state }) => {
+      const current = state ?? buildDefaultLifecycleState();
+      const buildLifecycleArtifact = (state: PiExampleLifecycleState) => ({
+        data: {
+          type: 'lifecycle-status',
+          phase: state.phase,
+          ...(state.onboardingStep ? { onboardingStep: state.onboardingStep } : {}),
+          ...(state.operatorNote ? { operatorNote: state.operatorNote } : {}),
+        },
+      });
+
+      switch (operation.name) {
+        case 'hire': {
+          const message = 'Please provide a short operator note to continue onboarding.';
+          const nextState: PiExampleLifecycleState = {
+            phase: 'onboarding',
+            onboardingStep: 'operator-profile',
+            operatorNote: null,
+          };
+          return {
+            state: nextState,
+            outputs: {
+              status: {
+                executionStatus: 'interrupted',
+                statusMessage: message,
+              },
+              artifacts: [buildLifecycleArtifact(nextState)],
+              interrupt: {
+                type: 'operator-config',
+                surfacedInThread: true,
+                message,
+              },
+            },
+          };
+        }
+        case 'operator-config': {
+          const operatorNote =
+            typeof operation.input === 'object' &&
+            operation.input !== null &&
+            'operatorNote' in operation.input &&
+            typeof operation.input.operatorNote === 'string'
+              ? operation.input.operatorNote
+              : current.operatorNote;
+          const nextState: PiExampleLifecycleState = {
+            phase: 'onboarding',
+            onboardingStep: 'delegation-note',
+            operatorNote: operatorNote ?? null,
+          };
+          return {
+            state: nextState,
+            outputs: {
+              status: {
+                executionStatus: 'working',
+                statusMessage: 'Operator note captured. Ready to complete onboarding.',
+              },
+              artifacts: [buildLifecycleArtifact(nextState)],
+            },
+          };
+        }
+        case 'complete_onboarding': {
+          const nextState: PiExampleLifecycleState = {
+            phase: 'hired',
+            onboardingStep: null,
+            operatorNote: current.operatorNote,
+          };
+          return {
+            state: nextState,
+            outputs: {
+              status: {
+                executionStatus: 'completed',
+                statusMessage: 'Onboarding complete. Agent is now hired.',
+              },
+              artifacts: [buildLifecycleArtifact(nextState)],
+            },
+          };
+        }
+        case 'fire': {
+          const nextState: PiExampleLifecycleState = {
+            phase: 'fired',
+            onboardingStep: null,
+            operatorNote: current.operatorNote,
+          };
+          return {
+            state: nextState,
+            outputs: {
+              status: {
+                executionStatus: 'completed',
+                statusMessage: 'Agent moved to fired. Rehire is still available in this thread.',
+              },
+              artifacts: [buildLifecycleArtifact(nextState)],
+            },
+          };
+        }
+        default:
+          return {
+            state: current,
+            outputs: {},
+          };
+      }
+    },
   };
-};
-
-type ListAutomationsArgs = {
-  state?: 'active' | 'completed' | 'canceled' | 'all';
-  limit?: number;
-};
-
-type CancelAutomationArgs = {
-  automationId: string;
-};
-
-type RequestOperatorInputArgs = {
-  message: string;
-};
-
-function inferAutomationCommand(params: {
-  instruction: string;
-  title: string;
-}): string {
-  const instruction = params.instruction.trim();
-  if (instruction.length > 0) {
-    return instruction;
-  }
-  return params.title.trim() || 'automation';
-}
-
-function getScheduleMinutes(schedule: ScheduleAutomationArgs['schedule']): number {
-  return schedule.kind === 'every' && typeof schedule.intervalMinutes === 'number' && schedule.intervalMinutes > 0
-    ? schedule.intervalMinutes
-    : 5;
-}
-
-function describeScheduledAutomation(params: {
-  command: string;
-  schedule: ScheduleAutomationArgs['schedule'];
-}): string {
-  if (params.schedule.kind === 'at' && typeof params.schedule.at === 'string') {
-    return `Scheduled ${params.command} at ${params.schedule.at}.`;
-  }
-
-  if (params.schedule.kind === 'cron' && typeof params.schedule.cron === 'string') {
-    return `Scheduled ${params.command} on cron ${params.schedule.cron}.`;
-  }
-
-  return `Scheduled ${params.command} every ${getScheduleMinutes(params.schedule)} minutes.`;
-}
-
-function describeCanceledAutomation(title: string): string {
-  return `Canceled automation ${title}.`;
-}
-
-function buildAutomationTitle(params: {
-  command: string;
-  schedule: ScheduleAutomationArgs['schedule'];
-}): string {
-  if (params.schedule.kind === 'at' && typeof params.schedule.at === 'string') {
-    return `${params.command} at ${params.schedule.at}`;
-  }
-
-  if (params.schedule.kind === 'cron' && typeof params.schedule.cron === 'string') {
-    return `${params.command} cron ${params.schedule.cron}`;
-  }
-
-  return `${params.command} every ${getScheduleMinutes(params.schedule)} minutes`;
-}
-
-function readPersistedTitle(title: string | undefined): string | null {
-  const normalized = title?.trim();
-  return normalized && normalized.length > 0 ? normalized : null;
-}
-
-function isScheduleArgsShape(value: Record<string, unknown> | undefined): value is ScheduleAutomationArgs['schedule'] {
-  return typeof value?.kind === 'string';
-}
-
-function coerceSchedule(
-  value: Record<string, unknown> | undefined,
-  fallback: ScheduleAutomationArgs['schedule'],
-): ScheduleAutomationArgs['schedule'] {
-  return isScheduleArgsShape(value) ? value : fallback;
-}
-
-function getSessionAutomationMinutes(session: ReturnType<PiExampleRuntimeStateStore['getSession']>): number | null {
-  const cadenceMinutes =
-    session.artifacts?.current?.data &&
-    typeof session.artifacts.current.data === 'object' &&
-    'cadenceMinutes' in session.artifacts.current.data
-      ? session.artifacts.current.data.cadenceMinutes
-      : null;
-
-  return typeof cadenceMinutes === 'number' && Number.isFinite(cadenceMinutes) && cadenceMinutes > 0
-    ? cadenceMinutes
-    : null;
 }
 
 function requireEnvValue(value: string | undefined, name: keyof PiExampleGatewayEnv): string {
@@ -267,7 +305,8 @@ function isMeaningfulContextMessage(message: Message): boolean {
     return true;
   }
 
-  return !isPiRuntimeContextText(getUserText(message).trim());
+  const text = getUserText(message).trim();
+  return !isPiRuntimeContextText(text);
 }
 
 function splitText(text: string): string[] {
@@ -423,7 +462,7 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
     if (latestUserText.includes('cancel') || latestUserText.includes('stop automation')) {
       return createMockToolStream({
         model,
-        toolName: AUTOMATION_CANCEL_TOOL,
+        toolName: AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL,
         toolCallId: 'pi-example-tool-cancel',
         args: { automationId: 'automation:thread-1' },
         reasoning: 'Canceling the saved automation the user no longer wants running.',
@@ -433,7 +472,7 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
     if (latestUserText.includes('list') && latestUserText.includes('automation')) {
       return createMockToolStream({
         model,
-        toolName: AUTOMATION_LIST_TOOL,
+        toolName: AGENT_RUNTIME_AUTOMATION_LIST_TOOL,
         toolCallId: 'pi-example-tool-list',
         args: { state: 'active', limit: 20 },
         reasoning: 'Listing saved automations so the user can inspect the current schedule state.',
@@ -443,7 +482,7 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
     if (latestUserText.includes('schedule') || latestUserText.includes('"command":"sync"')) {
       return createMockToolStream({
         model,
-        toolName: AUTOMATION_SCHEDULE_TOOL,
+        toolName: AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL,
         toolCallId: 'pi-example-tool-schedule',
         args: {
           title: 'Sync every 5 minutes',
@@ -460,277 +499,47 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
     if (latestUserText.includes('interrupt') || latestUserText.includes('operator input')) {
       return createMockToolStream({
         model,
-        toolName: REQUEST_OPERATOR_INPUT_TOOL,
+        toolName: AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL,
         toolCallId: 'pi-example-tool-interrupt',
         args: { message: 'Please provide a short operator note to continue.' },
-        reasoning: 'Requesting operator input through A2UI before proceeding.',
+        reasoning: 'Requesting operator input through the runtime-owned tool surface.',
+      });
+    }
+
+    if (latestUserText.includes('hire') || latestUserText.includes('onboarding')) {
+      return createMockToolStream({
+        model,
+        toolName: AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
+        toolCallId: 'pi-example-tool-domain-hire',
+        args: {
+          name: 'hire',
+          inputJson: '{}',
+        },
+        reasoning: 'Using the runtime-owned lifecycle command surface to start onboarding.',
       });
     }
 
     return createMockTextStream({
       model,
-      text:
-        'Pi example mocked response. I can stream text, expose reasoning, schedule automations, and request operator input.',
+      text: 'Pi example mocked response. I can stream text, use runtime-owned tools, and walk the lifecycle.',
       reasoning: 'Explaining the mocked Pi example capabilities.',
     });
   };
 }
 
-function createPiExampleTools(params: {
-  resolveThreadKey: () => string;
-  runtimeState: PiExampleRuntimeStateStore;
-  persistence?: PiExampleGatewayFoundationOptions['persistence'];
-}): PiExampleGatewayTool[] {
-  return [
-    {
-      name: AUTOMATION_SCHEDULE_TOOL,
-      label: 'Automation Schedule',
-      description:
-        'Create a new saved automation for this thread and surface its current status via AG-UI artifacts and A2UI. Every-minute schedules are valid when `schedule.intervalMinutes` is 1 or greater.',
-      parameters: Type.Object({
-        title: Type.String(),
-        instruction: Type.String(),
-        schedule: Type.Object({
-          kind: Type.String(),
-          intervalMinutes: Type.Number({ minimum: 1, default: 5 }),
-        }),
-      }) as unknown as PiExampleGatewayToolParameters,
-      execute: async (_toolCallId, args) => {
-        const toolArgs = args as ScheduleAutomationArgs;
-        const threadKey = params.resolveThreadKey();
-        const command = inferAutomationCommand({
-          instruction: toolArgs.instruction,
-          title: toolArgs.title,
-        });
-        const minutes = getScheduleMinutes(toolArgs.schedule);
-        const persisted = await params.persistence?.scheduleAutomation?.({
-          threadKey,
-          title: toolArgs.title,
-          instruction: toolArgs.instruction,
-          schedule: toolArgs.schedule,
-        });
-        const automationId = persisted?.automationId ?? `automation:${threadKey}`;
-        const runId = persisted?.runId ?? `run:${threadKey}`;
-        const executionId = persisted?.executionId ?? `execution:${threadKey}`;
-        const artifactId = persisted?.artifactId ?? `artifact:${threadKey}:automation`;
-        const detail = describeScheduledAutomation({
-          command,
-          schedule: toolArgs.schedule,
-        });
-        const title =
-          readPersistedTitle(persisted?.title) ??
-          buildAutomationTitle({
-            command,
-            schedule: coerceSchedule(persisted?.schedule, toolArgs.schedule),
-          });
-        applyAutomationStatusUpdate({
-          runtimeState: params.runtimeState,
-          threadKey,
-          artifactId,
-          automationId,
-          executionId,
-          activityRunId: runId,
-          status: 'scheduled',
-          command,
-          minutes,
-          detail,
-        });
-
-        return {
-          content: [{ type: 'text', text: detail }],
-          details: {
-            automation: {
-              id: automationId,
-              title,
-              status: 'active',
-              schedule: persisted?.schedule ?? toolArgs.schedule,
-              nextRunAt: persisted?.nextRunAt ?? null,
-            },
-          },
-        };
-      },
-    },
-    {
-      name: AUTOMATION_LIST_TOOL,
-      label: 'Automation List',
-      description: 'List saved automations visible to the current thread without appending noisy thread activity by default.',
-      parameters: Type.Object({
-        state: Type.String({ default: 'active' }),
-        limit: Type.Number({ minimum: 1, default: 20 }),
-      }) as unknown as PiExampleGatewayToolParameters,
-      execute: async (_toolCallId, args) => {
-        const toolArgs = args as ListAutomationsArgs;
-        const threadKey = params.resolveThreadKey();
-        const session = params.runtimeState.getSession(threadKey);
-        const sessionAutomationMinutes = getSessionAutomationMinutes(session);
-        const automations =
-          (await params.persistence?.listAutomations?.({
-            threadKey,
-            state: toolArgs.state,
-            limit: toolArgs.limit,
-          })) ??
-          (session.automation && sessionAutomationMinutes !== null
-            ? [
-                {
-                  id: session.automation.id,
-                  title: buildAutomationTitle({
-                    command: 'sync',
-                    schedule: {
-                      kind: 'every',
-                      intervalMinutes: sessionAutomationMinutes,
-                    },
-                  }),
-                  status: 'active' as const,
-                  schedule: { kind: 'every', intervalMinutes: sessionAutomationMinutes },
-                  nextRunAt: null,
-                  lastRunAt: null,
-                  lastRunStatus: null,
-                },
-              ]
-            : []);
-        const detail =
-          automations.length === 0
-            ? 'No saved automations.'
-            : `Found ${automations.length} automation${automations.length === 1 ? '' : 's'}: ${automations
-                .map((automation) => `${automation.title} (${automation.status})`)
-                .join(', ')}.`;
-
-        return {
-          content: [{ type: 'text', text: detail }],
-          details: {
-            automations,
-          },
-        };
-      },
-    },
-    {
-      name: AUTOMATION_CANCEL_TOOL,
-      label: 'Automation Cancel',
-      description: 'Cancel a saved automation so it does not fire again and surface the canceled state in AG-UI.',
-      parameters: Type.Object({
-        automationId: Type.String(),
-      }) as unknown as PiExampleGatewayToolParameters,
-      execute: async (_toolCallId, args) => {
-        const toolArgs = args as CancelAutomationArgs;
-        const threadKey = params.resolveThreadKey();
-        const session = params.runtimeState.getSession(threadKey);
-        const persisted = await params.persistence?.cancelAutomation?.({
-          threadKey,
-          automationId: toolArgs.automationId,
-        });
-        const automationId = persisted?.automationId ?? session.automation?.id ?? toolArgs.automationId;
-        const artifactId = persisted?.artifactId ?? session.artifacts?.current?.artifactId ?? `artifact:${threadKey}:automation`;
-        const schedule = coerceSchedule(persisted?.schedule, { kind: 'every', intervalMinutes: 5 });
-        const command = inferAutomationCommand({
-          instruction: persisted?.instruction ?? 'sync',
-          title: persisted?.title ?? '',
-        });
-        const title =
-          readPersistedTitle(persisted?.title) ??
-          buildAutomationTitle({
-            command,
-            schedule,
-          });
-        const detail = describeCanceledAutomation(title);
-        applyAutomationStatusUpdate({
-          runtimeState: params.runtimeState,
-          threadKey,
-          artifactId,
-          automationId,
-          executionId: session.execution.id,
-          activityRunId: session.automation?.runId ?? `run:${threadKey}`,
-          status: 'canceled',
-          command,
-          minutes: getScheduleMinutes(schedule),
-          detail,
-        });
-
-        return {
-          content: [{ type: 'text', text: detail }],
-          details: {
-            automation: {
-              id: automationId,
-              title,
-              status: 'canceled',
-            },
-          },
-        };
-      },
-    },
-    {
-      name: REQUEST_OPERATOR_INPUT_TOOL,
-      label: 'Request Operator Input',
-      description: 'Pause the Pi thread for operator input and surface a chat-thread A2UI form for resolution.',
-      parameters: Type.Object({
-        message: Type.String({
-          default: 'Please provide a short operator note to continue.',
-        }),
-      }) as unknown as PiExampleGatewayToolParameters,
-      execute: async (_toolCallId, args) => {
-        const toolArgs = args as RequestOperatorInputArgs;
-        const threadKey = params.resolveThreadKey();
-        const persisted = await params.persistence?.requestInterrupt?.({
-          threadKey,
-          message: toolArgs.message,
-        });
-        const artifactId = persisted?.artifactId ?? `artifact:${threadKey}:interrupt`;
-        const artifact = buildInterruptArtifact({
-          artifactId,
-          message: toolArgs.message,
-        });
-
-        params.runtimeState.updateSession(threadKey, (session) => ({
-          ...session,
-          execution: {
-            ...session.execution,
-            status: 'interrupted',
-            statusMessage: toolArgs.message,
-          },
-          artifacts: {
-            current: artifact,
-            activity: artifact,
-          },
-          a2ui: buildInterruptA2Ui({
-            artifactId,
-            message: toolArgs.message,
-          }),
-        }));
-
-        return {
-          content: [{ type: 'text', text: toolArgs.message }],
-          details: {
-            status: 'interrupted',
-            artifactId,
-          },
-        };
-      },
-    },
-  ];
-}
-
-export function createPiExampleGatewayFoundation(
-  env: PiExampleGatewayEnv = process.env,
-  options: PiExampleGatewayFoundationOptions = {},
-): PiRuntimeGatewayFoundation {
-  const runtimeState = options.runtimeState ?? createPiExampleRuntimeStateStore();
+export function createPiExampleAgentConfig(env: PiExampleGatewayEnv = process.env): PiExampleAgentConfig {
   const mockedExternalBoundary = isMockedExternalBoundary(env);
   const openRouterApiKey = mockedExternalBoundary
     ? env.OPENROUTER_API_KEY?.trim()
     : requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.PI_AGENT_MODEL?.trim() || DEFAULT_PI_AGENT_MODEL;
-  let foundation: PiRuntimeGatewayFoundation | null = null;
-  const resolveThreadKey = () => options.resolveThreadKey?.() ?? foundation?.agent.sessionId ?? 'thread-1';
 
-  foundation = createPiRuntimeGatewayFoundation({
+  return {
     model: createOpenRouterModel(modelId),
     systemPrompt: PI_EXAMPLE_SYSTEM_PROMPT,
     databaseUrl: env.DATABASE_URL,
-    tools: createPiExampleTools({
-      resolveThreadKey,
-      runtimeState,
-      persistence: options.persistence,
-    }),
-    getSessionContext: () => runtimeState.getSession(resolveThreadKey()),
+    tools: [],
+    domain: createPiExampleDomain(),
     agentOptions: {
       initialState: {
         thinkingLevel: 'low',
@@ -746,7 +555,5 @@ export function createPiExampleGatewayFoundation(
           }
         : {}),
     },
-  });
-
-  return foundation;
+  };
 }

@@ -235,4 +235,31 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
       root.unmount();
     });
   });
+
+  it('renders lifecycle artifact updates after operator-note submission', () => {
+    const root = renderPiExamplePage(container, {
+      events: [
+        {
+          type: 'artifact',
+          artifact: {
+            artifactId: 'lifecycle-artifact',
+            data: {
+              type: 'lifecycle-status',
+              phase: 'onboarding',
+              onboardingStep: 'delegation-note',
+              operatorNote: '5',
+            },
+          },
+        },
+      ] as never,
+    });
+
+    expect(container.textContent).toContain('Lifecycle onboarding');
+    expect(container.textContent).toContain('Step: delegation-note');
+    expect(container.textContent).toContain('Operator note: 5');
+
+    act(() => {
+      root.unmount();
+    });
+  });
 });

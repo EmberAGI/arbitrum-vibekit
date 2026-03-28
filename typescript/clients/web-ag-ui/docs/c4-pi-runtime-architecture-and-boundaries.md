@@ -199,7 +199,7 @@ Definitions:
 - `AutomationRun`
   - one firing/audit record of an automation
 - `Agent Domain Module`
-  - pluggable Pi-owned layer for agent-family-specific lifecycle, commands, interrupts, and A2UI projection rules
+  - pluggable Pi-owned layer for agent-family-specific lifecycle, commands, interrupts, dynamic system context, and adapter-neutral domain outputs
 
 Examples:
 
@@ -210,17 +210,14 @@ Examples:
 
 Every Pi-owned domain module should define one explicit SPI surface:
 
-- commands:
-  - user- or automation-triggered domain commands such as `hire`, `setup`, `sync`, and `fire`
-- lifecycle:
-  - domain phases, terminal phases, and allowed command-driven transitions
-- interrupts:
-  - domain-owned interrupt schemas and the rule for whether they surface into the root thread
-- projection hooks:
-  - `projectThread`
-  - `buildCurrentArtifact`
-  - `buildActivityArtifact`
-  - `buildA2Ui`
+- lifecycle declaration:
+  - domain phases, commands, transitions, and interrupts
+- dynamic system context:
+  - domain-aware context appended to the system prompt path
+- normalized operation handling:
+  - one domain-facing operation handler that is agnostic to whether the request came from the direct command lane or the LLM tool lane
+- domain outputs:
+  - adapter-neutral outputs such as artifacts, interrupts, and status-bearing domain results
 - automation policy hooks:
   - domain-specific decisions about whether automation may enqueue or resume work
 - runtime boundary:
@@ -232,8 +229,8 @@ For the first DeFi lifecycle module, the boundary is:
 | --- | --- |
 | `hire/setup/sync/fire` command vocabulary | `PiThread`, `PiExecution`, `PiAutomation`, `AutomationRun` |
 | DeFi lifecycle phases and transitions | durable persistence and restart boundaries |
-| DeFi-specific interrupt schemas | interrupt delivery and resurfacing plumbing |
-| thread/artifact/A2UI projection rules for DeFi state | canonical execution identity and protocol projections |
+| DeFi-specific interrupt schemas and policy | interrupt delivery and resurfacing plumbing |
+| dynamic system context and adapter-neutral domain outputs | canonical execution identity and protocol projections |
 | sync automation policy decisions | scheduler, outbox/dedupe, and operator control-plane infrastructure |
 
 ## 6. Projection model
@@ -283,10 +280,11 @@ sequenceDiagram
 
   Web->>CK: AG-UI run(threadId, command/input)
   CK->>AG: route run
-  AG->>DM: route input into active domain module
-  DM->>RT: create or resume PiExecution on PiThread
+  AG->>RT: route run into runtime-owned command/tool ingress
+  RT->>DM: normalize into one domain operation pipeline
+  DM-->>RT: domain state + adapter-neutral outputs
   RT-->>AG: execution events, artifacts, interrupts
-  AG-->>CK: AG-UI events + A2UI payloads
+  AG-->>CK: AG-UI events + projected adapter payloads
   CK-->>Web: streamed state updates
 ```
 
@@ -303,7 +301,7 @@ sequenceDiagram
   SCH->>RT: trigger PiAutomation
   RT->>RT: create AutomationRun
   RT->>RT: create PiExecution
-  RT->>DM: apply domain lifecycle/projection rules
+  RT->>DM: apply normalized domain operation handling
   RT-->>AG: execution state/artifacts available
   AG-->>Web: projected AG-UI state on attach/connect
   Web->>Web: show thread.task + artifacts + activity history
