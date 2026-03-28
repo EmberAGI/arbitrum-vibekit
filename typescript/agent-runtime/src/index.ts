@@ -13,6 +13,8 @@ import {
   createPiRuntimeGatewayService as createPiRuntimeGatewayServiceInternal,
   loadPiRuntimeInspectionState as loadPiRuntimeInspectionStateInternal,
   persistPiRuntimeDirectExecution as persistPiRuntimeDirectExecutionInternal,
+  type AgentOptions as PiAgentOptions,
+  type AgentTool as PiAgentTool,
   type PiRuntimeGatewayActivityEvent,
   type PiRuntimeGatewayArtifact,
   type PiRuntimeGatewayExecutionStatus,
@@ -30,26 +32,15 @@ import {
   buildPiRuntimeStableUuid,
   executePostgresStatements,
   recoverDueAutomations,
+  type PostgresBootstrapPlan,
 } from '../lib/postgres/dist/index.js';
 
-type AgentRuntimeTransformContext = NonNullable<
-  NonNullable<Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']>['transformContext']
->;
-type AgentRuntimeStreamFn = NonNullable<
-  NonNullable<Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']>['streamFn']
->;
-type AgentRuntimeGetApiKey = NonNullable<
-  NonNullable<Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']>['getApiKey']
->;
-type AgentRuntimeInitialState = NonNullable<
-  NonNullable<Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']>['initialState']
->;
-type AgentRuntimeConvertToLlm = NonNullable<
-  NonNullable<Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']>['convertToLlm']
->;
-type AgentRuntimeTool = NonNullable<
-  Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['tools']
->[number];
+type AgentRuntimeTransformContext = NonNullable<PiAgentOptions['transformContext']>;
+type AgentRuntimeStreamFn = NonNullable<PiAgentOptions['streamFn']>;
+type AgentRuntimeGetApiKey = NonNullable<PiAgentOptions['getApiKey']>;
+type AgentRuntimeInitialState = NonNullable<PiAgentOptions['initialState']>;
+type AgentRuntimeConvertToLlm = NonNullable<PiAgentOptions['convertToLlm']>;
+type AgentRuntimeTool = PiAgentTool;
 type AgentRuntimeConnectEvent = ReturnType<typeof buildPiRuntimeGatewayConnectEventsInternal>[number];
 type AgentRuntimeAttachedEventSource = readonly AgentRuntimeConnectEvent[] | AsyncIterable<AgentRuntimeConnectEvent>;
 type AgentRuntimeAttachedThreadListener = (event: AgentRuntimeConnectEvent) => void;
@@ -167,6 +158,7 @@ export const AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL = 'automation_schedule';
 export const AGENT_RUNTIME_AUTOMATION_LIST_TOOL = 'automation_list';
 export const AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL = 'automation_cancel';
 export const AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL = 'request_operator_input';
+export type AgentRuntimeBootstrapPlan = PostgresBootstrapPlan;
 
 type AgentRuntimeExecutionContext = {
   threadId: string;
@@ -1191,10 +1183,10 @@ export interface CreateAgentRuntimeOptions<TState = unknown> {
   now?: () => number;
 }
 
-type AgentRuntimeInstance = {
-  bootstrapPlan: ReturnType<typeof createPiRuntimeGatewayFoundationInternal>['bootstrapPlan'];
+export interface AgentRuntimeInstance {
+  bootstrapPlan: AgentRuntimeBootstrapPlan;
   service: PiRuntimeGatewayService;
-};
+}
 
 export function createAgentRuntime<TState = unknown>(
   options: CreateAgentRuntimeOptions<TState>,

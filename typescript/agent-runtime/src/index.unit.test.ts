@@ -93,6 +93,7 @@ describe('agent-runtime facade', () => {
 
   it('does not let normal consumers override runtime ownership through the blessed builder options', () => {
     const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+    const declarations = readFileSync(new URL('../dist/index.d.ts', import.meta.url), 'utf8');
     const publicDomainContract = source.slice(
       source.indexOf('export type AgentRuntimeDomainOperation'),
       source.indexOf('type AgentRuntimeForwardedCommand'),
@@ -115,6 +116,12 @@ describe('agent-runtime facade', () => {
     expect(publicDomainContract).not.toContain('submitLabel?:');
     expect(publicDomainContract).not.toContain('session: PiRuntimeGatewaySession');
     expect(builderContract).not.toContain('Omit<');
+    expect(source).not.toContain("Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']");
+    expect(source).not.toContain("Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['tools']");
+    expect(source).not.toContain("ReturnType<typeof createPiRuntimeGatewayFoundationInternal>['bootstrapPlan']");
+    expect(declarations).not.toContain('createPiRuntimeGatewayFoundationInternal');
+    expect(declarations).not.toContain('Parameters<typeof createPiRuntimeGatewayFoundationInternal>');
+    expect(declarations).not.toContain('ReturnType<typeof createPiRuntimeGatewayFoundationInternal>');
     expect(source).toContain('export type AgentRuntimeDomainContext');
     expect(source).toContain('export interface CreateAgentRuntimeOptions');
   });
