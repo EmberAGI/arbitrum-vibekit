@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, InMemoryStore, START, StateGraph } from '@langchain/langgraph';
+import { restorePersistedCronSchedulesFromCheckpointer } from 'agent-runtime-langgraph';
 import { v7 as uuidv7 } from 'uuid';
 import { privateKeyToAccount } from 'viem/accounts';
 import { z } from 'zod';
@@ -15,7 +16,6 @@ import {
   memory,
   normalizeHexAddress,
 } from './workflow/context.js';
-import { restorePersistedCronSchedulesFromCheckpointer } from './workflow/cronRecovery.js';
 import { configureCronExecutor, ensureCronForThread } from './workflow/cronScheduler.js';
 import {
   resolvePostBootstrap,

@@ -6,7 +6,7 @@ import {
   restorePersistedCronSchedules,
   restorePersistedCronSchedulesFromCheckpointer,
   type ScheduleThread,
-} from './cronRecovery.js';
+} from './persistedCronRecovery.js';
 
 function encodeCheckpoint(channelValues: Record<string, unknown>, ts: string): string {
   return Buffer.from(
