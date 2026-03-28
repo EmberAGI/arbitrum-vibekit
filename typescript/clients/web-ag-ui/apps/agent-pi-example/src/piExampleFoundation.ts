@@ -1,7 +1,6 @@
 import { Type, createAssistantMessageEventStream, type Message } from '@mariozechner/pi-ai';
 import {
-  createPiRuntimeGatewayFoundation,
-  type PiRuntimeGatewayFoundation,
+  createAgentRuntime,
 } from 'agent-runtime';
 
 import {
@@ -46,9 +45,15 @@ type PiExampleGatewayEnv = NodeJS.ProcessEnv & {
 
 export type { PiExampleGatewayEnv };
 
-type PiExampleGatewayModel = Parameters<typeof createPiRuntimeGatewayFoundation>[0]['model'];
-type PiExampleGatewayTool = NonNullable<Parameters<typeof createPiRuntimeGatewayFoundation>[0]['tools']>[number];
-type PiExampleGatewayStream = NonNullable<NonNullable<Parameters<typeof createPiRuntimeGatewayFoundation>[0]['agentOptions']>['streamFn']>;
+type PiExampleAgentRuntimeOptions = Parameters<typeof createAgentRuntime>[0];
+export type PiExampleAgentConfig = Pick<
+  PiExampleAgentRuntimeOptions,
+  'agentOptions' | 'databaseUrl' | 'domain' | 'getSessionContext' | 'model' | 'systemPrompt' | 'tools'
+>;
+
+type PiExampleGatewayModel = PiExampleAgentConfig['model'];
+type PiExampleGatewayTool = NonNullable<PiExampleAgentConfig['tools']>[number];
+type PiExampleGatewayStream = NonNullable<NonNullable<PiExampleAgentConfig['agentOptions']>['streamFn']>;
 type PiExampleGatewayToolParameters = PiExampleGatewayTool['parameters'];
 
 export type PiExampleGatewayFoundationOptions = {
@@ -127,6 +132,222 @@ type CancelAutomationArgs = {
 type RequestOperatorInputArgs = {
   message: string;
 };
+
+const PI_EXAMPLE_PHASES = ['prehire', 'onboarding', 'hired', 'fired'] as const;
+const PI_EXAMPLE_COMMANDS = ['hire', 'continue_onboarding', 'complete_onboarding', 'fire'] as const;
+const PI_EXAMPLE_INTERRUPTS = ['operator-config'] as const;
+
+type PiExampleLifecyclePhase = (typeof PI_EXAMPLE_PHASES)[number];
+
+type PiExampleLifecycleState = {
+  phase: PiExampleLifecyclePhase;
+  onboardingStep: 'operator-profile' | 'delegation-note' | null;
+  operatorNote: string | null;
+};
+
+type PiExampleDomainConfig = NonNullable<PiExampleAgentConfig['domain']>;
+
+function createPiExampleLifecycleStore() {
+  const states = new Map<string, PiExampleLifecycleState>();
+
+  const getState = (threadKey: string): PiExampleLifecycleState => {
+    const existing = states.get(threadKey);
+    if (existing) {
+      return existing;
+    }
+
+    const created: PiExampleLifecycleState = {
+      phase: 'prehire',
+      onboardingStep: null,
+      operatorNote: null,
+    };
+    states.set(threadKey, created);
+    return created;
+  };
+
+  const setState = (threadKey: string, state: PiExampleLifecycleState) => {
+    states.set(threadKey, state);
+    return state;
+  };
+
+  return {
+    getState,
+    setState,
+  };
+}
+
+function createPiExampleDomain(params: {
+  lifecycleStore: ReturnType<typeof createPiExampleLifecycleStore>;
+  resolveThreadKey: () => string;
+}): PiExampleDomainConfig {
+  return {
+    lifecycle: {
+      initialPhase: 'prehire',
+      phases: PI_EXAMPLE_PHASES,
+      terminalPhases: ['fired'],
+      commands: [
+        {
+          name: 'hire',
+          description: 'Move the agent from prehire into onboarding.',
+        },
+        {
+          name: 'continue_onboarding',
+          description: 'Record onboarding input while the agent is gathering setup details.',
+        },
+        {
+          name: 'complete_onboarding',
+          description: 'Finish onboarding and mark the agent as hired.',
+        },
+        {
+          name: 'fire',
+          description: 'End the agent lifecycle.',
+        },
+      ],
+      transitions: [
+        {
+          command: 'hire',
+          from: ['prehire'],
+          to: 'onboarding',
+          description: 'Start onboarding and request the operator profile note.',
+          interrupt: 'operator-config',
+        },
+        {
+          command: 'continue_onboarding',
+          from: ['onboarding'],
+          to: 'onboarding',
+          description: 'Keep onboarding open until the required operator note is supplied.',
+        },
+        {
+          command: 'complete_onboarding',
+          from: ['onboarding'],
+          to: 'hired',
+          description: 'Promote the agent into the hired phase once onboarding is satisfied.',
+        },
+        {
+          command: 'fire',
+          from: ['prehire', 'onboarding', 'hired'],
+          to: 'fired',
+          description: 'End the golden-example lifecycle.',
+        },
+      ],
+      interrupts: [
+        {
+          type: 'operator-config',
+          description: 'Collect the operator note required during onboarding.',
+          surfacedInThread: true,
+        },
+      ],
+    },
+    systemContext: ({ threadId }) => {
+      const state = params.lifecycleStore.getState(threadId);
+      const context = [`Lifecycle phase: ${state.phase}.`];
+
+      if (state.phase === 'onboarding' && state.onboardingStep) {
+        context.push(`Onboarding step: ${state.onboardingStep}.`);
+      }
+
+      if (state.operatorNote) {
+        context.push(`Operator note captured: ${state.operatorNote}.`);
+      }
+
+      return context;
+    },
+    handleOperation: ({ operation, threadId }) => {
+      const current = params.lifecycleStore.getState(threadId);
+
+      switch (operation.name) {
+        case 'hire': {
+          const nextState: PiExampleLifecycleState = {
+            phase: 'onboarding',
+            onboardingStep: 'operator-profile',
+            operatorNote: null,
+          };
+          params.lifecycleStore.setState(threadId, nextState);
+          return {
+            state: nextState,
+            outputs: {
+              interrupt: {
+                type: 'operator-config',
+                surfacedInThread: true,
+                message: 'Please provide a short operator note to continue onboarding.',
+              },
+            },
+          };
+        }
+        case 'continue_onboarding': {
+          const operatorNote =
+            typeof operation.input === 'object' &&
+            operation.input !== null &&
+            'operatorNote' in operation.input &&
+            typeof operation.input.operatorNote === 'string'
+              ? operation.input.operatorNote
+              : current.operatorNote;
+          const nextState: PiExampleLifecycleState = {
+            phase: 'onboarding',
+            onboardingStep: 'delegation-note',
+            operatorNote: operatorNote ?? null,
+          };
+          params.lifecycleStore.setState(threadId, nextState);
+          return {
+            state: nextState,
+            outputs: {
+              artifacts: [
+                {
+                  type: 'lifecycle-status',
+                  phase: nextState.phase,
+                  onboardingStep: nextState.onboardingStep,
+                },
+              ],
+            },
+          };
+        }
+        case 'complete_onboarding': {
+          const nextState: PiExampleLifecycleState = {
+            phase: 'hired',
+            onboardingStep: null,
+            operatorNote: current.operatorNote,
+          };
+          params.lifecycleStore.setState(threadId, nextState);
+          return {
+            state: nextState,
+            outputs: {
+              artifacts: [
+                {
+                  type: 'lifecycle-status',
+                  phase: nextState.phase,
+                },
+              ],
+            },
+          };
+        }
+        case 'fire': {
+          const nextState: PiExampleLifecycleState = {
+            phase: 'fired',
+            onboardingStep: null,
+            operatorNote: current.operatorNote,
+          };
+          params.lifecycleStore.setState(threadId, nextState);
+          return {
+            state: nextState,
+            outputs: {
+              artifacts: [
+                {
+                  type: 'lifecycle-status',
+                  phase: nextState.phase,
+                },
+              ],
+            },
+          };
+        }
+        default:
+          return {
+            state: current,
+            outputs: {},
+          };
+      }
+    },
+  };
+}
 
 function inferAutomationCommand(params: {
   instruction: string;
@@ -262,12 +483,20 @@ function isPiRuntimeContextText(value: string): boolean {
   return value.startsWith('<pi-runtime-gateway>') && value.endsWith('</pi-runtime-gateway>');
 }
 
+function isAgentRuntimeDomainContextText(value: string): boolean {
+  return (
+    value.startsWith('<agent-runtime-domain-context>') &&
+    value.endsWith('</agent-runtime-domain-context>')
+  );
+}
+
 function isMeaningfulContextMessage(message: Message): boolean {
   if (message.role === 'toolResult') {
     return true;
   }
 
-  return !isPiRuntimeContextText(getUserText(message).trim());
+  const text = getUserText(message).trim();
+  return !isPiRuntimeContextText(text) && !isAgentRuntimeDomainContextText(text);
 }
 
 function splitText(text: string): string[] {
@@ -407,7 +636,11 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
       .map(getUserText)
       .find((value) => {
         const trimmed = value.trim();
-        return trimmed.length > 0 && !isPiRuntimeContextText(trimmed);
+        return (
+          trimmed.length > 0 &&
+          !isPiRuntimeContextText(trimmed) &&
+          !isAgentRuntimeDomainContextText(trimmed)
+        );
       })
       ?.trim()
       .toLowerCase();
@@ -708,20 +941,20 @@ function createPiExampleTools(params: {
   ];
 }
 
-export function createPiExampleGatewayFoundation(
+export function createPiExampleAgentConfig(
   env: PiExampleGatewayEnv = process.env,
   options: PiExampleGatewayFoundationOptions = {},
-): PiRuntimeGatewayFoundation {
+): PiExampleAgentConfig {
   const runtimeState = options.runtimeState ?? createPiExampleRuntimeStateStore();
+  const lifecycleStore = createPiExampleLifecycleStore();
   const mockedExternalBoundary = isMockedExternalBoundary(env);
   const openRouterApiKey = mockedExternalBoundary
     ? env.OPENROUTER_API_KEY?.trim()
     : requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.PI_AGENT_MODEL?.trim() || DEFAULT_PI_AGENT_MODEL;
-  let foundation: PiRuntimeGatewayFoundation | null = null;
-  const resolveThreadKey = () => options.resolveThreadKey?.() ?? foundation?.agent.sessionId ?? 'thread-1';
+  const resolveThreadKey = () => options.resolveThreadKey?.() ?? 'thread-1';
 
-  foundation = createPiRuntimeGatewayFoundation({
+  return {
     model: createOpenRouterModel(modelId),
     systemPrompt: PI_EXAMPLE_SYSTEM_PROMPT,
     databaseUrl: env.DATABASE_URL,
@@ -729,6 +962,10 @@ export function createPiExampleGatewayFoundation(
       resolveThreadKey,
       runtimeState,
       persistence: options.persistence,
+    }),
+    domain: createPiExampleDomain({
+      lifecycleStore,
+      resolveThreadKey,
     }),
     getSessionContext: () => runtimeState.getSession(resolveThreadKey()),
     agentOptions: {
@@ -746,7 +983,5 @@ export function createPiExampleGatewayFoundation(
           }
         : {}),
     },
-  });
-
-  return foundation;
+  };
 }

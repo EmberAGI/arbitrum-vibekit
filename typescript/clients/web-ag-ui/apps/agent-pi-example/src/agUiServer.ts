@@ -7,21 +7,19 @@ import {
   buildPersistInterruptCheckpointStatements,
   buildPiRuntimeDirectExecutionRecordIds,
   buildPiRuntimeStableUuid,
-  createCanonicalPiRuntimeGatewayControlPlane,
+  createAgentRuntime,
   createPiRuntimeGatewayAgUiHandler,
-  createPiRuntimeGatewayRuntime,
-  createPiRuntimeGatewayService,
   ensurePiRuntimePostgresReady,
   executePostgresStatements,
   loadPiRuntimeInspectionState,
   persistPiRuntimeDirectExecution,
-  type PiRuntimeGatewayFoundation,
   type PiRuntimeGatewayInspectionState,
   type PiRuntimeGatewayService,
 } from 'agent-runtime';
 
 import {
-  createPiExampleGatewayFoundation,
+  createPiExampleAgentConfig,
+  type PiExampleAgentConfig,
   type PiExampleGatewayEnv,
   type PiExampleGatewayFoundationOptions,
 } from './piExampleFoundation.js';
@@ -40,7 +38,7 @@ type PiExampleAgUiHandlerOptions = {
 
 type PiExampleGatewayServiceOptions = {
   env?: PiExampleGatewayEnv;
-  foundation?: PiRuntimeGatewayFoundation;
+  runtimeConfig?: PiExampleAgentConfig;
   runtimeState?: PiExampleRuntimeStateStore;
   now?: () => Date;
   persistence?: {
@@ -453,9 +451,8 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
       requestInterrupt,
     },
   };
-  const foundation = options.foundation ?? createPiExampleGatewayFoundation(options.env, foundationOptions);
-  const agent = foundation.agent;
-  const databaseUrl = foundation.bootstrapPlan.databaseUrl;
+  const runtimeConfig = options.runtimeConfig ?? createPiExampleAgentConfig(options.env, foundationOptions);
+  const databaseUrl = runtimeConfig.databaseUrl;
 
   const persistThreadExecution = async (threadKey: string): Promise<void> => {
     await ensureReady();
@@ -468,22 +465,20 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
     });
   };
 
-  const baseRuntime = createPiRuntimeGatewayRuntime({
-    agent,
-    getSession: (threadId) => runtimeState.getSession(threadId),
-    updateSession: (threadId, update) => runtimeState.updateSession(threadId, update),
-  });
-
-  const controlPlane = createCanonicalPiRuntimeGatewayControlPlane({
-    loadInspectionState: async () => {
-      await ensureReady();
-      return await loadInspectionState();
+  return createAgentRuntime({
+    ...runtimeConfig,
+    sessions: {
+      getSession: (threadId) => runtimeState.getSession(threadId),
+      updateSession: (threadId, update) => runtimeState.updateSession(threadId, update),
     },
-    now: getNow,
-  });
-
-  return createPiRuntimeGatewayService({
-    runtime: {
+    controlPlane: {
+      loadInspectionState: async () => {
+        await ensureReady();
+        return await loadInspectionState();
+      },
+      now: getNow,
+    },
+    runtime: (baseRuntime) => ({
       connect: async (request) => {
         await persistThreadExecution(request.threadId);
         return createAttachedEventStream({
@@ -515,9 +510,8 @@ export function createPiExampleGatewayService(options: PiExampleGatewayServiceOp
           },
           () => runtimeState.finishAttachedRun(request.threadId, request.runId),
         ),
-    },
-    controlPlane,
-  });
+    }),
+  }).service;
 }
 
 export function createPiExampleAgUiHandler(options: PiExampleAgUiHandlerOptions) {

@@ -1,20 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
-import { createPiExampleGatewayFoundation } from './piExampleFoundation.js';
+import { createPiExampleAgentConfig } from './piExampleFoundation.js';
 import { createPiExampleRuntimeStateStore } from './runtimeState.js';
 
-describe('createPiExampleGatewayFoundation', () => {
-  it('builds a real Pi-native foundation configured for OpenRouter', () => {
-    const foundation = createPiExampleGatewayFoundation({
+function requireTool(config: ReturnType<typeof createPiExampleAgentConfig>, toolName: string) {
+  const tool = config.tools?.find((candidate) => candidate.name === toolName);
+  if (!tool) {
+    throw new Error(`Missing expected tool: ${toolName}`);
+  }
+  return tool;
+}
+
+describe('createPiExampleAgentConfig', () => {
+  it('builds OpenRouter-backed agent-runtime config for the Pi example', () => {
+    const config = createPiExampleAgentConfig({
       OPENROUTER_API_KEY: 'test-openrouter-key',
       PI_AGENT_MODEL: 'openai/gpt-5.4-mini',
       DATABASE_URL: 'postgresql://pi:secret@db.internal:5432/pi_runtime',
     });
 
-    expect(typeof foundation.agent.prompt).toBe('function');
-    expect(typeof foundation.agent.continue).toBe('function');
-    expect(typeof foundation.agent.abort).toBe('function');
-    expect(foundation.agent.state.model).toMatchObject({
+    expect(config.model).toMatchObject({
       id: 'openai/gpt-5.4-mini',
       name: 'openai/gpt-5.4-mini',
       api: 'openai-responses',
@@ -22,48 +27,52 @@ describe('createPiExampleGatewayFoundation', () => {
       baseUrl: 'https://openrouter.ai/api/v1',
       reasoning: true,
     });
-    expect(foundation.agent.state.thinkingLevel).toBe('low');
-    expect(foundation.agent.state.tools.map((tool) => tool.name)).toEqual([
+    expect(config.systemPrompt).toContain('Pi-native');
+    expect(config.systemPrompt).toContain('supports every-minute schedules');
+    expect(config.databaseUrl).toBe('postgresql://pi:secret@db.internal:5432/pi_runtime');
+    expect(config.tools?.map((tool) => tool.name)).toEqual([
       'automation_schedule',
       'automation_list',
       'automation_cancel',
       'request_operator_input',
     ]);
-    expect(foundation.agent.state.systemPrompt).toContain('Pi-native');
-    expect(foundation.agent.state.systemPrompt).toContain('supports every-minute schedules');
-    expect(foundation.agent.getApiKey?.()).toBe('test-openrouter-key');
-    expect(foundation.bootstrapPlan).toEqual({
-      mode: 'external',
-      databaseUrl: 'postgresql://pi:secret@db.internal:5432/pi_runtime',
-      startCommand: null,
+    expect(config.domain?.lifecycle).toMatchObject({
+      initialPhase: 'prehire',
+      phases: ['prehire', 'onboarding', 'hired', 'fired'],
+      terminalPhases: ['fired'],
     });
+    expect(config.agentOptions?.initialState).toMatchObject({
+      thinkingLevel: 'low',
+    });
+    expect(config.agentOptions?.getApiKey?.()).toBe('test-openrouter-key');
+    expect(config.getSessionContext?.()).toMatchObject({
+      thread: { id: 'thread-1' },
+      execution: {
+        status: 'working',
+      },
+    });
+    expect(config.domain?.systemContext?.({
+      threadId: 'thread-1',
+      session: config.getSessionContext!(),
+    })).toEqual(['Lifecycle phase: prehire.']);
   });
 
   it('requires OPENROUTER_API_KEY for real local startup', () => {
-    expect(() => createPiExampleGatewayFoundation({})).toThrow('OPENROUTER_API_KEY');
+    expect(() => createPiExampleAgentConfig({})).toThrow('OPENROUTER_API_KEY');
   });
 
-  it('uses a mocked external LLM boundary for mocked startup profiles', async () => {
-    const foundation = createPiExampleGatewayFoundation({
+  it('uses a mocked external LLM boundary for mocked startup profiles', () => {
+    const config = createPiExampleAgentConfig({
       E2E_PROFILE: 'mocked',
     });
 
-    await foundation.agent.prompt('Schedule sync automation');
-
-    expect(foundation.agent.state.messages.at(-1)).toMatchObject({
-      role: 'assistant',
-      content: [
-        {
-          type: 'text',
-          text: expect.stringContaining('Tool automation_schedule completed.'),
-        },
-      ],
-    });
+    expect(typeof config.agentOptions?.streamFn).toBe('function');
+    expect(config.agentOptions?.getApiKey).toBeUndefined();
   });
 
   it('mutates runtime state when mocked tool calls execute', async () => {
     const runtimeState = createPiExampleRuntimeStateStore();
-    const foundation = createPiExampleGatewayFoundation(
+    const config = createPiExampleAgentConfig(
       {
         E2E_PROFILE: 'mocked',
       },
@@ -73,7 +82,15 @@ describe('createPiExampleGatewayFoundation', () => {
       },
     );
 
-    await foundation.agent.prompt('Please schedule sync automation.');
+    const scheduleTool = requireTool(config, 'automation_schedule');
+    await scheduleTool.execute('tool-1', {
+      title: 'sync every 5 minutes',
+      instruction: 'sync',
+      schedule: {
+        kind: 'every',
+        intervalMinutes: 5,
+      },
+    });
 
     expect(runtimeState.getSession('thread-1')).toMatchObject({
       execution: {
@@ -101,7 +118,7 @@ describe('createPiExampleGatewayFoundation', () => {
 
   it('lists existing automations without mutating the current automation artifact', async () => {
     const runtimeState = createPiExampleRuntimeStateStore();
-    const foundation = createPiExampleGatewayFoundation(
+    const config = createPiExampleAgentConfig(
       {
         E2E_PROFILE: 'mocked',
       },
@@ -111,26 +128,35 @@ describe('createPiExampleGatewayFoundation', () => {
       },
     );
 
-    await foundation.agent.prompt('Please schedule sync automation.');
+    const scheduleTool = requireTool(config, 'automation_schedule');
+    const listTool = requireTool(config, 'automation_list');
+
+    await scheduleTool.execute('tool-1', {
+      title: 'sync every 5 minutes',
+      instruction: 'sync',
+      schedule: {
+        kind: 'every',
+        intervalMinutes: 5,
+      },
+    });
     const beforeList = runtimeState.getSession('thread-1');
-    await foundation.agent.prompt('Please list my automations.');
+    const listResult = await listTool.execute('tool-2', {
+      state: 'active',
+    });
     const afterList = runtimeState.getSession('thread-1');
 
-    expect(foundation.agent.state.messages.at(-1)).toMatchObject({
-      role: 'assistant',
-      content: [
-        {
-          type: 'text',
-          text: expect.stringContaining('Tool automation_list completed.'),
-        },
-      ],
-    });
+    expect(listResult.content).toEqual([
+      {
+        type: 'text',
+        text: expect.stringContaining('Found 1 automation'),
+      },
+    ]);
     expect(afterList).toEqual(beforeList);
   });
 
   it('routes cancellation requests to the canonical automation cancel tool', async () => {
     const runtimeState = createPiExampleRuntimeStateStore();
-    const foundation = createPiExampleGatewayFoundation(
+    const config = createPiExampleAgentConfig(
       {
         E2E_PROFILE: 'mocked',
       },
@@ -140,8 +166,21 @@ describe('createPiExampleGatewayFoundation', () => {
       },
     );
 
-    await foundation.agent.prompt('Please schedule sync automation.');
-    await foundation.agent.prompt('Please cancel the scheduled sync.');
+    const scheduleTool = requireTool(config, 'automation_schedule');
+    const cancelTool = requireTool(config, 'automation_cancel');
+
+    const scheduleResult = await scheduleTool.execute('tool-1', {
+      title: 'sync every 5 minutes',
+      instruction: 'sync',
+      schedule: {
+        kind: 'every',
+        intervalMinutes: 5,
+      },
+    });
+
+    await cancelTool.execute('tool-2', {
+      automationId: String(scheduleResult.details?.automation?.id ?? ''),
+    });
 
     expect(runtimeState.getSession('thread-1')).toMatchObject({
       execution: {
@@ -168,7 +207,7 @@ describe('createPiExampleGatewayFoundation', () => {
 
   it('derives automation titles from the actual schedule when persistence does not supply one', async () => {
     const runtimeState = createPiExampleRuntimeStateStore();
-    const foundation = createPiExampleGatewayFoundation(
+    const config = createPiExampleAgentConfig(
       {
         OPENROUTER_API_KEY: 'test-openrouter-key',
         PI_AGENT_MODEL: 'openai/gpt-5.4-mini',
@@ -198,14 +237,10 @@ describe('createPiExampleGatewayFoundation', () => {
       },
     );
 
-    const toolsByName = new Map(foundation.agent.state.tools.map((tool) => [tool.name, tool]));
-    const scheduleTool = toolsByName.get('automation_schedule');
-    const cancelTool = toolsByName.get('automation_cancel');
+    const scheduleTool = requireTool(config, 'automation_schedule');
+    const cancelTool = requireTool(config, 'automation_cancel');
 
-    expect(scheduleTool).toBeDefined();
-    expect(cancelTool).toBeDefined();
-
-    const scheduleResult = await scheduleTool!.execute('tool-1', {
+    const scheduleResult = await scheduleTool.execute('tool-1', {
       title: 'placeholder',
       instruction: 'sync',
       schedule: {
@@ -219,7 +254,7 @@ describe('createPiExampleGatewayFoundation', () => {
       schedule: { kind: 'every', intervalMinutes: 1 },
     });
 
-    const cancelResult = await cancelTool!.execute('tool-2', {
+    const cancelResult = await cancelTool.execute('tool-2', {
       automationId: 'automation-1',
     });
 
@@ -230,6 +265,85 @@ describe('createPiExampleGatewayFoundation', () => {
     expect(runtimeState.getSession('thread-1')).toMatchObject({
       execution: {
         statusMessage: 'Canceled automation sync every 1 minutes.',
+      },
+    });
+  });
+
+  it('declares the onboarding lifecycle and exposes one normalized operation handler', () => {
+    const config = createPiExampleAgentConfig({
+      OPENROUTER_API_KEY: 'test-openrouter-key',
+    });
+
+    const session = config.getSessionContext!();
+    const hireResult = config.domain?.handleOperation?.({
+      operation: {
+        source: 'command',
+        name: 'hire',
+      },
+      threadId: 'thread-1',
+      session,
+    });
+
+    expect(config.domain?.lifecycle.commands.map((command) => command.name)).toEqual([
+      'hire',
+      'continue_onboarding',
+      'complete_onboarding',
+      'fire',
+    ]);
+    expect(hireResult).toMatchObject({
+      state: {
+        phase: 'onboarding',
+        onboardingStep: 'operator-profile',
+      },
+      outputs: {
+        interrupt: {
+          type: 'operator-config',
+          surfacedInThread: true,
+        },
+      },
+    });
+
+    const onboardingResult = config.domain?.handleOperation?.({
+      operation: {
+        source: 'interrupt',
+        name: 'continue_onboarding',
+        input: {
+          operatorNote: 'ready for delegation',
+        },
+      },
+      threadId: 'thread-1',
+      session,
+    });
+
+    expect(onboardingResult).toMatchObject({
+      state: {
+        phase: 'onboarding',
+        onboardingStep: 'delegation-note',
+        operatorNote: 'ready for delegation',
+      },
+    });
+    expect(config.domain?.systemContext?.({
+      threadId: 'thread-1',
+      session,
+    })).toEqual([
+      'Lifecycle phase: onboarding.',
+      'Onboarding step: delegation-note.',
+      'Operator note captured: ready for delegation.',
+    ]);
+
+    const hiredResult = config.domain?.handleOperation?.({
+      operation: {
+        source: 'tool',
+        name: 'complete_onboarding',
+      },
+      threadId: 'thread-1',
+      session,
+    });
+
+    expect(hiredResult).toMatchObject({
+      state: {
+        phase: 'hired',
+        operatorNote: 'ready for delegation',
       },
     });
   });

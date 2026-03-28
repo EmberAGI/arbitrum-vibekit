@@ -47,23 +47,26 @@ describe('agent-runtime facade', () => {
     });
   });
 
-  it('re-exports builder-facing contracts and Pi gateway factories without leaking LangGraph or workflow-core helpers', () => {
+  it('keeps low-level runtime assembly out of the normal public facade while preserving the shared runtime boundary', () => {
     expect(agentRuntime.TASK_STATES).toContain('working');
+    expect(typeof agentRuntime.createAgentRuntime).toBe('function');
     expect(typeof agentRuntime.defineAgentDomainModule).toBe('function');
-    expect(typeof agentRuntime.createPiRuntimeGatewayFoundation).toBe('function');
     expect(typeof agentRuntime.createPiRuntimeGatewayAgUiHandler).toBe('function');
     expect(typeof agentRuntime.buildPiRuntimeDirectExecutionRecordIds).toBe('function');
-    expect(typeof agentRuntime.createPiRuntimeGatewayRuntime).toBe('function');
     expect(typeof agentRuntime.createCanonicalPiRuntimeGatewayControlPlane).toBe('function');
     expect(typeof agentRuntime.ensurePiRuntimePostgresReady).toBe('function');
     expect(typeof agentRuntime.PiRuntimeGatewayHttpAgent).toBe('function');
-    expect(typeof agentRuntime.createPiRuntimeGatewayService).toBe('function');
     expect(agentRuntime.DEFAULT_PI_RUNTIME_GATEWAY_RETENTION).toMatchObject({
       completedExecutionMs: expect.any(Number),
       completedAutomationRunMs: expect.any(Number),
       executionEventMs: expect.any(Number),
       threadActivityMs: expect.any(Number),
     });
+
+    expect('createPiRuntimeGatewayFoundation' in agentRuntime).toBe(false);
+    expect('createPiRuntimeGatewayRuntime' in agentRuntime).toBe(false);
+    expect('createPiRuntimeGatewayService' in agentRuntime).toBe(false);
+    expect('PiRuntimeGatewaySession' in agentRuntime).toBe(false);
 
     expect('resolvePostgresBootstrapPlan' in agentRuntime).toBe(false);
     expect('configureLangGraphApiCheckpointer' in agentRuntime).toBe(false);
