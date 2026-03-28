@@ -9,7 +9,8 @@ describe('agent-pi-example architecture boundary', () => {
     const startupSource = readFileSync(new URL('./startup.ts', import.meta.url), 'utf8');
 
     expect(agUiServerSource).toContain('createAgentRuntime');
-    expect(agUiServerSource).toContain("from 'agent-runtime/pi-transport'");
+    expect(agUiServerSource).toContain("from 'agent-runtime'");
+    expect(agUiServerSource).toContain('service.createAgUiHandler');
     expect(agUiServerSource).not.toContain('attached: {');
     expect(agUiServerSource).not.toContain('runtime: (');
     expect(agUiServerSource).not.toContain('attachToThread(');
@@ -23,6 +24,7 @@ describe('agent-pi-example architecture boundary', () => {
     expect(agUiServerSource).not.toContain('persistThreadExecution');
     expect(agUiServerSource).not.toContain('createPiRuntimeGatewayRuntime');
     expect(agUiServerSource).not.toContain('createPiRuntimeGatewayService');
+    expect(agUiServerSource).not.toContain("from 'agent-runtime/pi-transport'");
     expect(foundationSource).not.toContain('createPiRuntimeGatewayFoundation');
     expect(foundationSource).not.toContain('const AUTOMATION_SCHEDULE_TOOL');
     expect(foundationSource).not.toContain('const AUTOMATION_LIST_TOOL');

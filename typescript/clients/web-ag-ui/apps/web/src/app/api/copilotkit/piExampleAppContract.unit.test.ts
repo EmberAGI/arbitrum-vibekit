@@ -34,13 +34,14 @@ describe('Pi example app package contract', () => {
     expect(packageJson.scripts?.dev).toContain('.env.example');
     expect(packageJson.scripts?.start).toBe(packageJson.scripts?.dev);
     expect(agUiServerEntry).toContain("from 'agent-runtime'");
-    expect(agUiServerEntry).toContain("from 'agent-runtime/pi-transport'");
+    expect(agUiServerEntry).toContain('service.createAgUiHandler');
     expect(serverEntry).not.toContain("from 'agent-runtime-pi'");
     expect(startupEntry).not.toContain("from 'agent-runtime-pi'");
     expect(agUiServerEntry).not.toContain("from 'agent-runtime-pi'");
     expect(serverEntry).not.toContain("from 'agent-runtime-contracts'");
     expect(startupEntry).not.toContain("from 'agent-runtime-contracts'");
     expect(agUiServerEntry).not.toContain("from 'agent-runtime-contracts'");
+    expect(agUiServerEntry).not.toContain("from 'agent-runtime/pi-transport'");
     expect(startupEntry).not.toContain("from 'agent-runtime'");
   });
 });

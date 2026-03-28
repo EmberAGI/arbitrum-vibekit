@@ -4,15 +4,14 @@ import type { AddressInfo } from 'node:net';
 import { type RunAgentInput, verifyEvents } from '@ag-ui/client';
 import { EventType, type BaseEvent } from '@ag-ui/core';
 import {
+  createAgentRuntimeHttpAgent,
+  type AgentRuntimeService,
+} from 'agent-runtime';
+import {
   createPiExampleGatewayService,
   PI_EXAMPLE_AGENT_ID,
   PI_EXAMPLE_AG_UI_BASE_PATH,
 } from 'agent-pi-example/ag-ui-server';
-import {
-  createPiRuntimeGatewayAgUiHandler,
-  PiRuntimeGatewayHttpAgent,
-  type PiRuntimeGatewayService,
-} from 'agent-runtime/pi-transport';
 import { lastValueFrom, toArray, type Observable } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -118,7 +117,7 @@ function findStateSnapshot(events: BaseEvent[]) {
   return [...events].reverse().find((event) => event.type === EventType.STATE_SNAPSHOT);
 }
 
-describe('PiRuntimeGatewayHttpAgent integration', () => {
+describe('agent-runtime HTTP agent integration', () => {
   let server: Server;
   let runtimeUrl: string;
   let requests: RecordedRequest[];
@@ -126,7 +125,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
   beforeEach(async () => {
     requests = [];
 
-    const service: PiRuntimeGatewayService = createPiExampleGatewayService({
+    const service: AgentRuntimeService = createPiExampleGatewayService({
       env: {
         OPENROUTER_API_KEY: 'test-openrouter-key',
         PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
@@ -166,9 +165,8 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
         }),
       },
     });
-    const handler = createPiRuntimeGatewayAgUiHandler({
+    const handler = service.createAgUiHandler({
       agentId: PI_EXAMPLE_AGENT_ID,
-      service,
       basePath: PI_EXAMPLE_AG_UI_BASE_PATH,
     });
 
@@ -233,7 +231,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
   });
 
   it('talks to the live Pi example app over AG-UI run and stop endpoints', async () => {
-    const agent = new PiRuntimeGatewayHttpAgent({
+    const agent = createAgentRuntimeHttpAgent({
       agentId: PI_EXAMPLE_AGENT_ID,
       runtimeUrl,
     });
@@ -292,7 +290,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
   });
 
   it('emits live AG-UI tool lifecycle events and automation artifacts when the Pi loop schedules and runs automation', async () => {
-    const agent = new PiRuntimeGatewayHttpAgent({
+    const agent = createAgentRuntimeHttpAgent({
       agentId: PI_EXAMPLE_AGENT_ID,
       runtimeUrl,
     });
@@ -409,7 +407,7 @@ describe('PiRuntimeGatewayHttpAgent integration', () => {
   });
 
   it('surfaces an interrupt A2UI payload and clears it after the operator replies on the same thread', async () => {
-    const agent = new PiRuntimeGatewayHttpAgent({
+    const agent = createAgentRuntimeHttpAgent({
       agentId: PI_EXAMPLE_AGENT_ID,
       runtimeUrl,
     });

@@ -8,7 +8,9 @@ import {
   buildPiRuntimeDirectExecutionRecordIds as buildPiRuntimeDirectExecutionRecordIdsInternal,
   buildPiRuntimeGatewayConnectEvents as buildPiRuntimeGatewayConnectEventsInternal,
   createCanonicalPiRuntimeGatewayControlPlane as createCanonicalPiRuntimeGatewayControlPlaneInternal,
+  createPiRuntimeGatewayAgUiHandler as createPiRuntimeGatewayAgUiHandlerInternal,
   createPiRuntimeGatewayFoundation as createPiRuntimeGatewayFoundationInternal,
+  PiRuntimeGatewayHttpAgent as PiRuntimeGatewayHttpAgentInternal,
   createPiRuntimeGatewayRuntime as createPiRuntimeGatewayRuntimeInternal,
   createPiRuntimeGatewayService as createPiRuntimeGatewayServiceInternal,
   loadPiRuntimeInspectionState as loadPiRuntimeInspectionStateInternal,
@@ -16,7 +18,9 @@ import {
   type AgentOptions as PiAgentOptions,
   type AgentTool as PiAgentTool,
   type PiRuntimeGatewayActivityEvent,
+  type PiRuntimeGatewayAgUiHandlerOptions,
   type PiRuntimeGatewayArtifact,
+  type PiRuntimeGatewayHttpAgentConfig,
   type PiRuntimeGatewayInspectionState,
   type PiRuntimeGatewayRunRequest,
   type PiRuntimeGatewayRuntime,
@@ -158,7 +162,16 @@ export const AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL = 'automation_schedule';
 export const AGENT_RUNTIME_AUTOMATION_LIST_TOOL = 'automation_list';
 export const AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL = 'automation_cancel';
 export const AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL = 'request_operator_input';
-export type AgentRuntimeService = PiRuntimeGatewayService;
+export type AgentRuntimeAgUiHandlerOptions = Omit<PiRuntimeGatewayAgUiHandlerOptions, 'service'>;
+export type AgentRuntimeAgUiHandler = (request: Request) => Promise<Response>;
+export type AgentRuntimeHttpAgentConfig = PiRuntimeGatewayHttpAgentConfig;
+export type AgentRuntimeService = PiRuntimeGatewayService & {
+  createAgUiHandler: (options: AgentRuntimeAgUiHandlerOptions) => AgentRuntimeAgUiHandler;
+};
+
+export function createAgentRuntimeHttpAgent(config: AgentRuntimeHttpAgentConfig) {
+  return new PiRuntimeGatewayHttpAgentInternal(config);
+}
 
 type AgentRuntimeExecutionContext = {
   threadId: string;
@@ -1936,10 +1949,19 @@ export function createAgentRuntime<TState = unknown>(
     timer.unref?.();
   }
 
+  const serviceCore = createPiRuntimeGatewayServiceInternal({
+    runtime: runtimeWithAttachedSessions,
+    controlPlane,
+  });
+  const service: AgentRuntimeService = Object.assign(serviceCore, {
+    createAgUiHandler: (handlerOptions: AgentRuntimeAgUiHandlerOptions) =>
+      createPiRuntimeGatewayAgUiHandlerInternal({
+        ...handlerOptions,
+        service: serviceCore,
+      }),
+  });
+
   return {
-    service: createPiRuntimeGatewayServiceInternal({
-      runtime: runtimeWithAttachedSessions,
-      controlPlane,
-    }),
+    service,
   };
 }

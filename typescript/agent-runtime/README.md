@@ -15,8 +15,9 @@ The supported normal-consumer path is:
 
 - depend on `agent-runtime`
 - import `createAgentRuntime(...)` and domain types from the package root
-- import adapter-specific HTTP/AG-UI mounting helpers from `agent-runtime/pi-transport` only when you are exposing the ready runtime service over that transport
 - configure the runtime declaratively
+- mount AG-UI from the returned `service.createAgUiHandler(...)` when you need to expose the ready runtime service over HTTP
+- use `createAgentRuntimeHttpAgent(...)` from the package root when a web/runtime consumer needs an AG-UI HTTP client
 - let `agent-runtime` own runtime assembly and projection assembly
 
 Concrete agent apps should primarily provide:
@@ -34,7 +35,7 @@ Concrete agent apps should not re-implement:
 Do not treat the package root as a grab bag of helper exports. In particular:
 
 - do not import `agent-runtime-contracts` as the blessed integration model
-- do not expect root exports for transport helpers, control-plane helpers, direct-execution helpers, or Postgres bootstrap helpers
+- do not expect transport subpaths, control-plane helpers, direct-execution helpers, or Postgres bootstrap helpers
 - treat legacy internal packages that still use those seams as compatibility debt, not as architectural precedent
 
 ## Domain Model

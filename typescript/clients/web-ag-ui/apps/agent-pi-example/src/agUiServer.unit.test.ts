@@ -35,6 +35,45 @@ function createStubService() {
       inspectOutbox: async () => ({ dueOutboxIds: [], intents: [] }),
       inspectMaintenance: async () => ({ recovery: {}, archival: {} }),
     },
+    createAgUiHandler: ({ agentId, basePath = '/ag-ui' }) => async (request: Request) => {
+      const pathname = new URL(request.url).pathname;
+
+      if (pathname === `${basePath}/control/threads`) {
+        return new Response(JSON.stringify(await service.control.listThreads()));
+      }
+
+      if (pathname === `${basePath}/agent/${agentId}/connect`) {
+        const body = await request.json() as { threadId: string };
+        return new Response(JSON.stringify(await service.connect({ threadId: body.threadId })));
+      }
+
+      if (pathname === `${basePath}/agent/${agentId}/run`) {
+        const body = await request.json() as {
+          threadId: string;
+          runId: string;
+          messages?: unknown[];
+        };
+        return new Response(
+          JSON.stringify(
+            await service.run({
+              threadId: body.threadId,
+              runId: body.runId,
+              messages: body.messages as Parameters<AgentRuntimeService['run']>[0]['messages'],
+            }),
+          ),
+        );
+      }
+
+      const body = await request.json() as { threadId: string; runId: string };
+      return new Response(
+        JSON.stringify(
+          await service.stop({
+            threadId: body.threadId,
+            runId: body.runId,
+          }),
+        ),
+      );
+    },
   };
 
   return { service };

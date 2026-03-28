@@ -20,8 +20,8 @@ This app is the intended reference path: it should configure `agent-runtime`, no
 
 The intended split is:
 
-- `agent-runtime` package root for the blessed runtime builder
-- `agent-runtime/pi-transport` for AG-UI transport mounting only
+- `agent-runtime` package root for the blessed runtime builder and AG-UI HTTP client factory
+- the returned runtime `service.createAgUiHandler(...)` for AG-UI mounting
 
 In particular, `agent-runtime` now owns:
 

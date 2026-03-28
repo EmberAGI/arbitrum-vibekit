@@ -9,10 +9,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./pi-transport": {
-      "types": "./dist/piTransport.d.ts",
-      "default": "./dist/piTransport.js"
     }
   },
   "scripts": {

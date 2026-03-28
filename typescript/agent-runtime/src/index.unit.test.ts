@@ -41,10 +41,6 @@ describe('agent-runtime facade', () => {
         default: './dist/index.js',
         types: './dist/index.d.ts',
       },
-      './pi-transport': {
-        default: './dist/piTransport.js',
-        types: './dist/piTransport.d.ts',
-      },
     });
     expect(packageJson.dependencies).toMatchObject({
       'agent-runtime-contracts': 'workspace:^',
@@ -65,6 +61,7 @@ describe('agent-runtime facade', () => {
 
   it('keeps the package root focused on the blessed runtime builder surface', () => {
     expect(typeof agentRuntime.createAgentRuntime).toBe('function');
+    expect(typeof agentRuntime.createAgentRuntimeHttpAgent).toBe('function');
 
     expect('TASK_STATES' in agentRuntime).toBe(false);
     expect('defineAgentDomainModule' in agentRuntime).toBe(false);
@@ -141,6 +138,7 @@ describe('agent-runtime facade', () => {
         connect: expect.any(Function),
         run: expect.any(Function),
         stop: expect.any(Function),
+        createAgUiHandler: expect.any(Function),
         control: expect.objectContaining({
           listThreads: expect.any(Function),
         }),

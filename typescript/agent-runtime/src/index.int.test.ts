@@ -277,6 +277,58 @@ function createLifecycleDomain() {
             },
           };
         }
+        case 'complete_onboarding': {
+          const nextState = {
+            phase: 'hired',
+            onboardingStep: null,
+            operatorNote: current.operatorNote,
+          };
+          phases.set(threadId, nextState);
+          return {
+            state: nextState,
+            outputs: {
+              status: {
+                executionStatus: 'completed' as const,
+                statusMessage: 'Onboarding complete. Agent is now hired.',
+              },
+              artifacts: [
+                {
+                  data: {
+                    type: 'lifecycle-status',
+                    phase: nextState.phase,
+                    operatorNote: nextState.operatorNote,
+                  },
+                },
+              ],
+            },
+          };
+        }
+        case 'fire': {
+          const nextState = {
+            phase: 'fired',
+            onboardingStep: null,
+            operatorNote: current.operatorNote,
+          };
+          phases.set(threadId, nextState);
+          return {
+            state: nextState,
+            outputs: {
+              status: {
+                executionStatus: 'completed' as const,
+                statusMessage: 'Agent moved to fired. Rehire is still available in this thread.',
+              },
+              artifacts: [
+                {
+                  data: {
+                    type: 'lifecycle-status',
+                    phase: nextState.phase,
+                    operatorNote: nextState.operatorNote,
+                  },
+                },
+              ],
+            },
+          };
+        }
         default:
           return { state: current, outputs: {} };
       }
@@ -285,7 +337,7 @@ function createLifecycleDomain() {
 }
 
 describe('agent-runtime integration', () => {
-  it('normalizes tool-driven lifecycle commands and interrupt resumes through the root builder service', async () => {
+  it('normalizes tool-driven lifecycle commands and interrupt resumes through the full runtime-owned lifecycle', async () => {
     let latestUserText = '';
     const observedSystemPrompts: string[] = [];
     let observedDomainCommandToolDescription = '';
@@ -434,6 +486,64 @@ describe('agent-runtime integration', () => {
     expect(resumeSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
       type: 'lifecycle-status',
       onboardingStep: 'delegation-note',
+      operatorNote: 'safe window approved',
+    });
+
+    const completeEvents = await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-1',
+        runId: 'run-complete',
+        forwardedProps: {
+          command: {
+            name: 'complete_onboarding',
+          },
+        },
+      }),
+    );
+
+    const completeSnapshot = completeEvents.find(isStateSnapshotEvent);
+
+    expect(completeSnapshot).toBeDefined();
+    expect(completeSnapshot!.snapshot.thread.lifecycle).toMatchObject({
+      phase: 'hired',
+      operatorNote: 'safe window approved',
+    });
+    expect(completeSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
+      state: 'completed',
+      message: 'Onboarding complete. Agent is now hired.',
+    });
+    expect(completeSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
+      type: 'lifecycle-status',
+      phase: 'hired',
+      operatorNote: 'safe window approved',
+    });
+
+    const fireEvents = await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-1',
+        runId: 'run-fire',
+        forwardedProps: {
+          command: {
+            name: 'fire',
+          },
+        },
+      }),
+    );
+
+    const fireSnapshot = fireEvents.find(isStateSnapshotEvent);
+
+    expect(fireSnapshot).toBeDefined();
+    expect(fireSnapshot!.snapshot.thread.lifecycle).toMatchObject({
+      phase: 'fired',
+      operatorNote: 'safe window approved',
+    });
+    expect(fireSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
+      state: 'completed',
+      message: 'Agent moved to fired. Rehire is still available in this thread.',
+    });
+    expect(fireSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
+      type: 'lifecycle-status',
+      phase: 'fired',
       operatorNote: 'safe window approved',
     });
   });
