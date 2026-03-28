@@ -2,21 +2,22 @@
 
 `agent-runtime` is the builder-facing package for Pi-backed agents.
 
-Normal consumers should treat the package root as the only supported integration surface. The architectural direction for this package is:
+Normal consumers should treat the package root as the only supported runtime-construction surface. The architectural direction for this package is:
 
 - one blessed top-level builder for normal consumers
 - top-level configuration for `model`, `systemPrompt`, and `tools`
 - domain extension through declarative `domain` configuration
-- no consumer-owned runtime/session/projection/AG-UI assembly
+- no consumer-owned runtime/session/projection assembly
 
 ## Public Boundary
 
 The supported normal-consumer path is:
 
 - depend on `agent-runtime`
-- import from the package root
+- import `createAgentRuntime(...)` and domain types from the package root
+- import adapter-specific HTTP/AG-UI mounting helpers from `agent-runtime/pi-transport` only when you are exposing the ready runtime service over that transport
 - configure the runtime declaratively
-- let `agent-runtime` own runtime assembly, AG-UI transport integration, and projection assembly
+- let `agent-runtime` own runtime assembly and projection assembly
 
 Concrete agent apps should primarily provide:
 
@@ -28,7 +29,13 @@ Concrete agent apps should not re-implement:
 
 - low-level runtime/service/control-plane assembly
 - projection-store ownership
-- generic AG-UI transport glue
+- bootstrap/control-plane/persistence helper orchestration
+
+Do not treat the package root as a grab bag of helper exports. In particular:
+
+- do not import `agent-runtime-contracts` as the blessed integration model
+- do not expect root exports for transport helpers, control-plane helpers, direct-execution helpers, or Postgres bootstrap helpers
+- treat legacy internal packages that still use those seams as compatibility debt, not as architectural precedent
 
 ## Domain Model
 

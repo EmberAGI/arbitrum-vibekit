@@ -4,3 +4,4 @@ export {
   PiRuntimeGatewayHttpAgent,
 } from '../lib/pi/dist/piTransport.js';
 export type { PiRuntimeGatewayAgUiHandlerOptions, PiRuntimeGatewayHttpAgentConfig } from '../lib/pi/dist/piTransport.js';
+export type { PiRuntimeGatewayService } from '../lib/pi/dist/index.js';

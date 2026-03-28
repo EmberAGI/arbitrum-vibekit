@@ -1,8 +1,8 @@
 import {
   createAgentRuntime,
-  createPiRuntimeGatewayAgUiHandler,
-  type PiRuntimeGatewayService,
+  type AgentRuntimeService,
 } from 'agent-runtime';
+import { createPiRuntimeGatewayAgUiHandler } from 'agent-runtime/pi-transport';
 
 import {
   createPiExampleAgentConfig,
@@ -15,7 +15,7 @@ export const PI_EXAMPLE_AG_UI_BASE_PATH = '/ag-ui';
 
 type PiExampleAgUiHandlerOptions = {
   agentId: string;
-  service: PiRuntimeGatewayService;
+  service: AgentRuntimeService;
   basePath?: string;
 };
 
@@ -25,7 +25,7 @@ type PiExampleGatewayServiceOptions = {
   now?: () => number;
 };
 
-export function createPiExampleGatewayService(options: PiExampleGatewayServiceOptions = {}): PiRuntimeGatewayService {
+export function createPiExampleGatewayService(options: PiExampleGatewayServiceOptions = {}): AgentRuntimeService {
   const runtimeConfig = options.runtimeConfig ?? createPiExampleAgentConfig(options.env);
   const runtime = createAgentRuntime({
     ...runtimeConfig,

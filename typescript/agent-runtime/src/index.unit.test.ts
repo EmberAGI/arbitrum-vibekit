@@ -63,32 +63,33 @@ describe('agent-runtime facade', () => {
     });
   });
 
-  it('keeps low-level runtime assembly out of the normal public facade while preserving the shared runtime boundary', () => {
-    expect(agentRuntime.TASK_STATES).toContain('working');
+  it('keeps the package root focused on the blessed runtime builder surface', () => {
     expect(typeof agentRuntime.createAgentRuntime).toBe('function');
-    expect(typeof agentRuntime.defineAgentDomainModule).toBe('function');
-    expect(typeof agentRuntime.createPiRuntimeGatewayAgUiHandler).toBe('function');
-    expect(typeof agentRuntime.buildPiRuntimeDirectExecutionRecordIds).toBe('function');
-    expect(typeof agentRuntime.createCanonicalPiRuntimeGatewayControlPlane).toBe('function');
-    expect(typeof agentRuntime.ensurePiRuntimePostgresReady).toBe('function');
-    expect(typeof agentRuntime.PiRuntimeGatewayHttpAgent).toBe('function');
-    expect(agentRuntime.DEFAULT_PI_RUNTIME_GATEWAY_RETENTION).toMatchObject({
-      completedExecutionMs: expect.any(Number),
-      completedAutomationRunMs: expect.any(Number),
-      executionEventMs: expect.any(Number),
-      threadActivityMs: expect.any(Number),
-    });
 
+    expect('TASK_STATES' in agentRuntime).toBe(false);
+    expect('defineAgentDomainModule' in agentRuntime).toBe(false);
+    expect('createPiRuntimeGatewayAgUiHandler' in agentRuntime).toBe(false);
+    expect('buildPiRuntimeDirectExecutionRecordIds' in agentRuntime).toBe(false);
+    expect('createCanonicalPiRuntimeGatewayControlPlane' in agentRuntime).toBe(false);
+    expect('ensurePiRuntimePostgresReady' in agentRuntime).toBe(false);
+    expect('loadPiRuntimeInspectionState' in agentRuntime).toBe(false);
+    expect('persistPiRuntimeDirectExecution' in agentRuntime).toBe(false);
+    expect('PiRuntimeGatewayHttpAgent' in agentRuntime).toBe(false);
+    expect('DEFAULT_PI_RUNTIME_GATEWAY_RETENTION' in agentRuntime).toBe(false);
+    expect('buildPiA2UiActivityEvent' in agentRuntime).toBe(false);
+    expect('buildPiRuntimeGatewayConnectEvents' in agentRuntime).toBe(false);
+    expect('buildPiRuntimeGatewayContextMessages' in agentRuntime).toBe(false);
+    expect('createPiRuntimeGatewayMockStream' in agentRuntime).toBe(false);
+    expect('convertPiRuntimeGatewayMessagesToLlm' in agentRuntime).toBe(false);
     expect('createPiRuntimeGatewayFoundation' in agentRuntime).toBe(false);
     expect('createPiRuntimeGatewayRuntime' in agentRuntime).toBe(false);
     expect('createPiRuntimeGatewayService' in agentRuntime).toBe(false);
     expect('PiRuntimeGatewaySession' in agentRuntime).toBe(false);
-
-    expect('resolvePostgresBootstrapPlan' in agentRuntime).toBe(false);
     expect('configureLangGraphApiCheckpointer' in agentRuntime).toBe(false);
     expect('loadLangGraphApiCheckpointer' in agentRuntime).toBe(false);
     expect('pruneCheckpointerState' in agentRuntime).toBe(false);
     expect('isLangGraphBusyStatus' in agentRuntime).toBe(false);
+    expect('resolvePostgresBootstrapPlan' in agentRuntime).toBe(false);
   });
 
   it('does not let normal consumers override runtime ownership through the blessed builder options', () => {
@@ -109,12 +110,14 @@ describe('agent-runtime facade', () => {
     expect(source).not.toContain('sessions.attached');
     expect(source).not.toContain('publishSessionSnapshot:');
     expect(source).not.toContain('<agent-runtime-domain-context>');
+    expect(source).not.toContain("export * from '../lib/contracts/dist/index.js';");
     expect(publicDomainContract).not.toContain('channel?:');
     expect(publicDomainContract).not.toContain('append?:');
     expect(publicDomainContract).not.toContain('threadPatch?:');
     expect(publicDomainContract).not.toContain('inputLabel?:');
     expect(publicDomainContract).not.toContain('submitLabel?:');
     expect(publicDomainContract).not.toContain('session: PiRuntimeGatewaySession');
+    expect(publicDomainContract).not.toContain('PiRuntimeGatewayExecutionStatus');
     expect(builderContract).not.toContain('Omit<');
     expect(source).not.toContain("Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']");
     expect(source).not.toContain("Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['tools']");
@@ -122,7 +125,7 @@ describe('agent-runtime facade', () => {
     expect(declarations).not.toContain('createPiRuntimeGatewayFoundationInternal');
     expect(declarations).not.toContain('Parameters<typeof createPiRuntimeGatewayFoundationInternal>');
     expect(declarations).not.toContain('ReturnType<typeof createPiRuntimeGatewayFoundationInternal>');
-    expect(source).toContain('PiRuntimeGatewayService,');
+    expect(publicDomainContract).toContain('export type AgentRuntimeExecutionStatus');
     expect(source).toContain('export type AgentRuntimeDomainContext');
     expect(source).toContain('export interface CreateAgentRuntimeOptions');
   });
@@ -134,7 +137,6 @@ describe('agent-runtime facade', () => {
     });
 
     expect(runtime).toMatchObject({
-      bootstrapPlan: expect.any(Object),
       service: expect.objectContaining({
         connect: expect.any(Function),
         run: expect.any(Function),
@@ -144,6 +146,7 @@ describe('agent-runtime facade', () => {
         }),
       }),
     });
+    expect('bootstrapPlan' in runtime).toBe(false);
     expect('publishSessionSnapshot' in runtime).toBe(false);
 
     await expect(runtime.service.control.listThreads()).resolves.toEqual([]);

@@ -8,11 +8,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
+  type AgentRuntimeService,
   createAgentRuntime,
-  type PiRuntimeGatewayService,
 } from './index.js';
 
-type GatewayEvent = Awaited<ReturnType<PiRuntimeGatewayService['run']>> extends
+type GatewayEvent = Awaited<ReturnType<AgentRuntimeService['run']>> extends
   | readonly (infer TEvent)[]
   | AsyncIterable<infer TEvent>
   ? TEvent

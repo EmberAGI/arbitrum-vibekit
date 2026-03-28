@@ -12,7 +12,7 @@ import {
   createPiRuntimeGatewayAgUiHandler,
   PiRuntimeGatewayHttpAgent,
   type PiRuntimeGatewayService,
-} from 'agent-runtime';
+} from 'agent-runtime/pi-transport';
 import { lastValueFrom, toArray, type Observable } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

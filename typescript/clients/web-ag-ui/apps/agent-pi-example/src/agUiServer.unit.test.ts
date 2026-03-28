@@ -1,10 +1,11 @@
-import type { PiRuntimeGatewayService } from 'agent-runtime';
 import { describe, expect, it } from 'vitest';
+
+import type { AgentRuntimeService } from 'agent-runtime';
 
 import { createPiExampleAgUiHandler, createPiExampleGatewayService } from './agUiServer';
 
 function createStubService() {
-  const service: PiRuntimeGatewayService = {
+  const service: AgentRuntimeService = {
     connect: async () => [{ type: 'STATE_SNAPSHOT', snapshot: { thread: { id: 'thread-1' } } }] as any[],
     run: async () =>
       [

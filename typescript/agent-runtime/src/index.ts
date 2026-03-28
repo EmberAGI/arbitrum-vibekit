@@ -17,7 +17,6 @@ import {
   type AgentTool as PiAgentTool,
   type PiRuntimeGatewayActivityEvent,
   type PiRuntimeGatewayArtifact,
-  type PiRuntimeGatewayExecutionStatus,
   type PiRuntimeGatewayInspectionState,
   type PiRuntimeGatewayRunRequest,
   type PiRuntimeGatewayRuntime,
@@ -32,7 +31,6 @@ import {
   buildPiRuntimeStableUuid,
   executePostgresStatements,
   recoverDueAutomations,
-  type PostgresBootstrapPlan,
 } from '../lib/postgres/dist/index.js';
 
 type AgentRuntimeTransformContext = NonNullable<PiAgentOptions['transformContext']>;
@@ -94,8 +92,10 @@ export type AgentRuntimeDomainOperation = {
   input?: unknown;
 };
 
+export type AgentRuntimeExecutionStatus = PiRuntimeGatewaySession['execution']['status'];
+
 export type AgentRuntimeDomainStatusOutput = {
-  executionStatus: PiRuntimeGatewayExecutionStatus;
+  executionStatus: AgentRuntimeExecutionStatus;
   statusMessage?: string;
 };
 
@@ -158,7 +158,7 @@ export const AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL = 'automation_schedule';
 export const AGENT_RUNTIME_AUTOMATION_LIST_TOOL = 'automation_list';
 export const AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL = 'automation_cancel';
 export const AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL = 'request_operator_input';
-export type AgentRuntimeBootstrapPlan = PostgresBootstrapPlan;
+export type AgentRuntimeService = PiRuntimeGatewayService;
 
 type AgentRuntimeExecutionContext = {
   threadId: string;
@@ -1207,8 +1207,7 @@ export interface CreateAgentRuntimeOptions<TState = unknown> {
 }
 
 export interface AgentRuntimeInstance {
-  bootstrapPlan: AgentRuntimeBootstrapPlan;
-  service: PiRuntimeGatewayService;
+  service: AgentRuntimeService;
 }
 
 export function createAgentRuntime<TState = unknown>(
@@ -1938,64 +1937,9 @@ export function createAgentRuntime<TState = unknown>(
   }
 
   return {
-    bootstrapPlan: foundation.bootstrapPlan,
     service: createPiRuntimeGatewayServiceInternal({
       runtime: runtimeWithAttachedSessions,
       controlPlane,
     }),
   };
 }
-
-export * from '../lib/contracts/dist/index.js';
-export {
-  buildPiA2UiActivityEvent,
-  buildPiRuntimeDirectExecutionRecordIds,
-  buildPiRuntimeGatewayConnectEvents,
-  buildPiRuntimeGatewayContextMessages,
-  buildPiThreadStateSnapshot,
-  createPiRuntimeGatewayMockStream,
-  convertPiRuntimeGatewayMessagesToLlm,
-  createCanonicalPiRuntimeGatewayControlPlane,
-  createPiRuntimeGatewayAgUiHandler,
-  DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH,
-  DEFAULT_PI_RUNTIME_GATEWAY_RETENTION,
-  ensurePiRuntimePostgresReady,
-  loadPiRuntimeInspectionState,
-  mapPiAgentEventsToAgUiEvents,
-  persistPiRuntimeDirectExecution,
-  PiRuntimeGatewayHttpAgent,
-} from '../lib/pi/dist/index.js';
-export {
-  buildCancelAutomationStatements,
-  buildCompleteAutomationExecutionStatements,
-  buildPersistAutomationDispatchStatements,
-  buildPersistInterruptCheckpointStatements,
-  recoverDueAutomations,
-  buildPiRuntimeStableUuid,
-  executePostgresStatements,
-} from '../lib/postgres/dist/index.js';
-export type {
-  EnsuredPiRuntimePostgres,
-  EnsurePiRuntimePostgresReadyOptions,
-  LoadedPiRuntimeInspectionState,
-  LoadPiRuntimeInspectionStateOptions,
-  PiRuntimeGatewayA2UiMessage,
-  PiRuntimeGatewayA2UiPayload,
-  PiRuntimeGatewayActivityEvent,
-  PiRuntimeGatewayAgUiHandlerOptions,
-  PiRuntimeGatewayAgent,
-  PiRuntimeGatewayArtifact,
-  PiRuntimeGatewayArtifactMessage,
-  PiRuntimeGatewayConnectRequest,
-  PiRuntimeGatewayContextMessage,
-  PiRuntimeGatewayControlPlane,
-  PiRuntimeGatewayExecutionStatus,
-  PiRuntimeGatewayHttpAgentConfig,
-  PiRuntimeGatewayInspectionState,
-  PiRuntimeGatewayRunRequest,
-  PiRuntimeGatewayService,
-  PiRuntimeGatewayRuntimeNoteMessage,
-  PiRuntimeGatewayStopRequest,
-  PersistPiRuntimeDirectExecutionOptions,
-} from '../lib/pi/dist/index.js';
-export type { ExecutePostgresStatements } from '../lib/postgres/dist/index.js';
