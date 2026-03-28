@@ -2,7 +2,7 @@ import {
   extractCommandEnvelopeFromMessages as extractRuntimeCommandEnvelopeFromMessages,
   extractCommandFromMessages as extractRuntimeCommandFromMessages,
   type CommandEnvelope,
-} from 'agent-runtime-contracts';
+} from 'pi-runtime-legacy-contracts';
 
 export const AGENT_COMMANDS = ['hire', 'fire', 'cycle', 'sync'] as const;
 export type AgentCommand = (typeof AGENT_COMMANDS)[number];

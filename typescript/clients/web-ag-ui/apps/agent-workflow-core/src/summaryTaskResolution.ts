@@ -1,4 +1,4 @@
-import type { TaskState } from 'agent-runtime-contracts';
+import type { TaskState } from 'pi-runtime-legacy-contracts';
 
 export interface ResolveSummaryTaskStatusInput {
   haltReason?: string | null;

@@ -13,14 +13,13 @@ const packageSpecs = [
     packageRoot,
     artifactDirs: [
       'dist',
-      path.join('lib', 'contracts', 'dist'),
       path.join('lib', 'postgres', 'dist'),
       path.join('lib', 'pi', 'dist'),
     ],
   },
   {
-    packageName: 'agent-runtime-contracts',
-    packageRoot: path.join(packageRoot, 'lib', 'contracts'),
+    packageName: 'pi-runtime-legacy-contracts',
+    packageRoot: path.join(packageRoot, '..', 'lib', 'pi-runtime-legacy-contracts'),
     artifactDirs: ['dist'],
   },
   {

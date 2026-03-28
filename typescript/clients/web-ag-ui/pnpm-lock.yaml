@@ -43,7 +43,7 @@ importers:
 
   ../../agent-runtime:
     dependencies:
-      agent-runtime-contracts:
+      pi-runtime-legacy-contracts:
         specifier: workspace:^
         version: link:lib/contracts
       agent-runtime-pi:
@@ -60,7 +60,7 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.9(@types/node@22.19.7)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.8.2)
 
-  ../../agent-runtime/lib/contracts:
+  ../../lib/pi-runtime-legacy-contracts:
     dependencies:
       '@a2a-js/sdk':
         specifier: ^0.3.4
@@ -87,7 +87,7 @@ importers:
       '@mariozechner/pi-ai':
         specifier: 0.60.0
         version: 0.60.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.11.7)(zod@4.3.6))(bufferutil@4.1.0)(utf-8-validate@5.0.10)(ws@8.19.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@4.3.6)
-      agent-runtime-contracts:
+      pi-runtime-legacy-contracts:
         specifier: workspace:^
         version: link:../contracts
       agent-runtime-postgres:
@@ -96,7 +96,7 @@ importers:
 
   ../../agent-runtime/lib/postgres:
     dependencies:
-      agent-runtime-contracts:
+      pi-runtime-legacy-contracts:
         specifier: workspace:^
         version: link:../contracts
     devDependencies:
@@ -139,9 +139,9 @@ importers:
       '@metamask/delegation-toolkit':
         specifier: ^0.13.0
         version: 0.13.0(viem@2.45.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
-      agent-runtime-contracts:
+      pi-runtime-legacy-contracts:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/contracts
+        version: link:../../../../lib/pi-runtime-legacy-contracts
       agent-runtime-langgraph:
         specifier: workspace:^
         version: link:../agent-runtime-langgraph
@@ -239,9 +239,9 @@ importers:
       '@metamask/delegation-toolkit':
         specifier: ^0.13.0
         version: 0.13.0(viem@2.45.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
-      agent-runtime-contracts:
+      pi-runtime-legacy-contracts:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/contracts
+        version: link:../../../../lib/pi-runtime-legacy-contracts
       agent-runtime-langgraph:
         specifier: workspace:^
         version: link:../agent-runtime-langgraph
@@ -342,9 +342,9 @@ importers:
       '@metamask/delegation-toolkit':
         specifier: ^0.13.0
         version: 0.13.0(viem@2.45.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
-      agent-runtime-contracts:
+      pi-runtime-legacy-contracts:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/contracts
+        version: link:../../../../lib/pi-runtime-legacy-contracts
       agent-runtime-langgraph:
         specifier: workspace:^
         version: link:../agent-runtime-langgraph
@@ -448,9 +448,9 @@ importers:
       '@metamask/delegation-toolkit':
         specifier: ^0.13.0
         version: 0.13.0(viem@2.45.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
-      agent-runtime-contracts:
+      pi-runtime-legacy-contracts:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/contracts
+        version: link:../../../../lib/pi-runtime-legacy-contracts
       agent-runtime-langgraph:
         specifier: workspace:^
         version: link:../agent-runtime-langgraph
@@ -543,9 +543,9 @@ importers:
 
   apps/agent-workflow-core:
     dependencies:
-      agent-runtime-contracts:
+      pi-runtime-legacy-contracts:
         specifier: workspace:^
-        version: link:../../../../agent-runtime/lib/contracts
+        version: link:../../../../lib/pi-runtime-legacy-contracts
       agent-runtime-langgraph:
         specifier: workspace:^
         version: link:../agent-runtime-langgraph

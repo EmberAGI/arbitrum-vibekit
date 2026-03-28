@@ -5,7 +5,7 @@
   "main": "dist/agent.js",
   "type": "module",
   "scripts": {
-    "build:runtime-deps": "pnpm --dir ../../../.. --filter agent-runtime-contracts build",
+    "build:runtime-deps": "pnpm --dir ../../../.. --filter pi-runtime-legacy-contracts build",
     "dev": "bash ../../scripts/langgraph-dev.sh 8125",
     "start": "bash ../../scripts/langgraph-dev.sh 8125",
     "build": "tsc --project tsconfig.json",
@@ -60,7 +60,7 @@
     "@langchain/langgraph-checkpoint": "1.0.0",
     "@langchain/openai": "^1.1.3",
     "@metamask/delegation-toolkit": "^0.13.0",
-    "agent-runtime-contracts": "workspace:^",
+    "pi-runtime-legacy-contracts": "workspace:^",
     "agent-runtime-langgraph": "workspace:^",
     "agent-workflow-core": "workspace:^",
     "node-cron": "^4.2.1",
@@ -71,7 +71,7 @@
     "zod": "^4.3.5"
   },
   "dependenciesMeta": {
-    "agent-runtime-contracts": {
+    "pi-runtime-legacy-contracts": {
       "injected": false
     }
   }

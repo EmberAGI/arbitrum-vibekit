@@ -27,7 +27,7 @@ describe('Pi example app package contract', () => {
     });
     expect(packageJson.files).toEqual(expect.arrayContaining(['src', 'dist']));
     expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-pi');
-    expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-contracts');
+    expect(packageJson.dependencies).not.toHaveProperty('pi-runtime-legacy-contracts');
     expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-postgres');
     expect(packageJson.scripts?.dev).toContain('src/server.ts');
     expect(packageJson.scripts?.dev).toContain('node --env-file=');
@@ -38,9 +38,9 @@ describe('Pi example app package contract', () => {
     expect(serverEntry).not.toContain("from 'agent-runtime-pi'");
     expect(startupEntry).not.toContain("from 'agent-runtime-pi'");
     expect(agUiServerEntry).not.toContain("from 'agent-runtime-pi'");
-    expect(serverEntry).not.toContain("from 'agent-runtime-contracts'");
-    expect(startupEntry).not.toContain("from 'agent-runtime-contracts'");
-    expect(agUiServerEntry).not.toContain("from 'agent-runtime-contracts'");
+    expect(serverEntry).not.toContain("from 'pi-runtime-legacy-contracts'");
+    expect(startupEntry).not.toContain("from 'pi-runtime-legacy-contracts'");
+    expect(agUiServerEntry).not.toContain("from 'pi-runtime-legacy-contracts'");
     expect(agUiServerEntry).not.toContain("from 'agent-runtime/pi-transport'");
     expect(startupEntry).not.toContain("from 'agent-runtime'");
   });

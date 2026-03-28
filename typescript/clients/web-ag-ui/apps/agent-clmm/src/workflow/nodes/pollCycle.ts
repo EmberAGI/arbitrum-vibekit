@@ -1,5 +1,5 @@
 import { type Command } from '@langchain/langgraph';
-import { buildNodeTransition } from 'agent-runtime-contracts';
+import { buildNodeTransition } from 'pi-runtime-legacy-contracts';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
 import type { AccountingState, FlowLogEventInput } from '../../accounting/types.js';

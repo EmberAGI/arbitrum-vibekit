@@ -5,7 +5,7 @@ import {
   buildInterruptPauseTransition,
   requestInterruptPayload,
   shouldPersistInputRequiredCheckpoint,
-} from 'agent-runtime-contracts';
+} from 'pi-runtime-legacy-contracts';
 import { z } from 'zod';
 
 import {

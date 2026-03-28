@@ -9,7 +9,7 @@ import {
   resolveThreadLifecyclePhase,
   type TaskState,
   type ThreadLifecyclePhase,
-} from 'agent-runtime-contracts';
+} from 'pi-runtime-legacy-contracts';
 import {
   normalizeLegacyOnboardingState,
   type OnboardingContract,

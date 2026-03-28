@@ -1,4 +1,4 @@
-import { buildStateUpdate } from 'agent-runtime-contracts';
+import { buildStateUpdate } from 'pi-runtime-legacy-contracts';
 
 import { logClmmStateEmission } from './context.js';
 

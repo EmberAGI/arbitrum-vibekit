@@ -34,7 +34,7 @@ Concrete agent apps should not re-implement:
 
 Do not treat the package root as a grab bag of helper exports. In particular:
 
-- do not import `agent-runtime-contracts` as the blessed integration model
+- do not import `pi-runtime-legacy-contracts` as the blessed integration model
 - do not expect transport subpaths, control-plane helpers, direct-execution helpers, or Postgres bootstrap helpers
 - treat legacy internal packages that still use those seams as compatibility debt, not as architectural precedent
 
@@ -83,7 +83,7 @@ The web layer remains projection-only and is not the source of domain truth.
 The internal package family still separates:
 
 - `agent-runtime/`: public builder-facing facade package
-- `agent-runtime/lib/contracts`: runtime-neutral contracts and shared invariants
+- `lib/pi-runtime-legacy-contracts`: deprecated workflow compatibility contracts and old projection-hook SPI, intentionally kept outside the `agent-runtime/` tree
 - `agent-runtime/lib/pi`: Pi runtime and AG-UI transport implementation details
 - `agent-runtime/lib/postgres`: persistence, recovery, and bootstrap helpers
 
@@ -93,9 +93,9 @@ Those internal packages exist to support the public facade. They are not the nor
 
 `pnpm build` syncs built `dist` artifacts into installed pnpm snapshots so downstream apps can consume local workspace package shapes without a fresh reinstall.
 
-That sync step can be triggered by multiple downstream `build:runtime-deps` commands at once, such as `apps/web` and `apps/agent-ember-lending` starting in parallel. The snapshot replacement flow now takes a per-target lock directory before removing and copying `dist` so concurrent builds do not leave installed artifacts such as `agent-runtime-contracts/dist` missing.
+That sync step can be triggered by multiple downstream `build:runtime-deps` commands at once, such as `apps/web` and `apps/agent-ember-lending` starting in parallel. The snapshot replacement flow now takes a per-target lock directory before removing and copying `dist` so concurrent builds do not leave installed artifacts such as `pi-runtime-legacy-contracts/dist` missing.
 
 If a local workspace ever gets into a broken state after an interrupted or older concurrent build, recover it by rebuilding the runtime packages serially:
 
-1. `pnpm --filter agent-runtime-contracts build`
+1. `pnpm --filter pi-runtime-legacy-contracts build`
 2. `pnpm --filter agent-runtime build`

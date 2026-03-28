@@ -5,7 +5,7 @@ import {
   buildNodeTransition,
   requestInterruptPayload,
   shouldPersistInputRequiredCheckpoint,
-} from 'agent-runtime-contracts';
+} from 'pi-runtime-legacy-contracts';
 import { z } from 'zod';
 
 import { resolvePendleChainIds, resolveStablecoinWhitelist } from '../../config/constants.js';

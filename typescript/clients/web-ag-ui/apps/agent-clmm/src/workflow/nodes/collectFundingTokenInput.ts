@@ -4,7 +4,7 @@ import {
   buildNodeTransition,
   requestInterruptPayload,
   shouldPersistInputRequiredCheckpoint,
-} from 'agent-runtime-contracts';
+} from 'pi-runtime-legacy-contracts';
 import { erc20Abi, formatUnits } from 'viem';
 import { z } from 'zod';
 

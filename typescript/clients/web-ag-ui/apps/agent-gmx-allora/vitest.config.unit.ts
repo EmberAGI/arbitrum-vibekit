@@ -4,14 +4,14 @@ import { defineConfig } from 'vitest/config';
 
 const setupFiles = ['./tests/setup/vitest.setup.ts'];
 const runtimeContractsEntry = fileURLToPath(
-  new URL('../../../../agent-runtime/lib/contracts/src/index.ts', import.meta.url),
+  new URL('../../../../lib/pi-runtime-legacy-contracts/src/index.ts', import.meta.url),
 );
 const workflowCoreEntry = fileURLToPath(new URL('../agent-workflow-core/src/index.ts', import.meta.url));
 
 export default defineConfig({
   resolve: {
     alias: {
-      'agent-runtime-contracts': runtimeContractsEntry,
+      'pi-runtime-legacy-contracts': runtimeContractsEntry,
       'agent-workflow-core': workflowCoreEntry,
     },
   },

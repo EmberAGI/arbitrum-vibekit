@@ -43,9 +43,10 @@ describe('agent-runtime facade', () => {
       },
     });
     expect(packageJson.dependencies).toMatchObject({
-      'agent-runtime-contracts': 'workspace:^',
+      'pi-runtime-legacy-contracts': 'workspace:^',
       'agent-runtime-pi': 'workspace:^',
     });
+    expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-contracts');
     expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-postgres');
     expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-langgraph');
     expect(packageJson.dependencies).not.toHaveProperty('agent-workflow-core');
@@ -122,6 +123,11 @@ describe('agent-runtime facade', () => {
     expect(declarations).not.toContain('createPiRuntimeGatewayFoundationInternal');
     expect(declarations).not.toContain('Parameters<typeof createPiRuntimeGatewayFoundationInternal>');
     expect(declarations).not.toContain('ReturnType<typeof createPiRuntimeGatewayFoundationInternal>');
+    expect(declarations).not.toContain('PiRuntimeGatewayHttpAgentInternal');
+    expect(declarations).not.toContain('PiRuntimeGatewayAgUiHandlerOptions');
+    expect(declarations).not.toContain('PiRuntimeGatewayHttpAgentConfig');
+    expect(declarations).not.toContain('PiRuntimeGatewayService');
+    expect(declarations).not.toContain('PiRuntimeGatewaySession');
     expect(publicDomainContract).toContain('export type AgentRuntimeExecutionStatus');
     expect(source).toContain('export type AgentRuntimeDomainContext');
     expect(source).toContain('export interface CreateAgentRuntimeOptions');
@@ -157,6 +163,12 @@ describe('agent-runtime facade', () => {
       'utf8',
     );
 
+    expect(syncScript).toContain(
+      "packageRoot: path.join(packageRoot, '..', 'lib', 'pi-runtime-legacy-contracts')",
+    );
+    expect(syncScript).toContain("packageName: 'pi-runtime-legacy-contracts'");
+    expect(syncScript).not.toContain("packageName: 'agent-runtime-contracts'");
+    expect(syncScript).not.toContain("path.join('lib', 'contracts', 'dist')");
     expect(syncScript).toContain("path.join('lib', 'postgres', 'dist')");
   });
 

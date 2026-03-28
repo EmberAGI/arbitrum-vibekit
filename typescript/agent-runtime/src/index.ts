@@ -1,6 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
+import type { HttpAgent, HttpAgentConfig } from '@ag-ui/client';
+import type { BaseEvent, Message as AgUiMessage } from '@ag-ui/core';
+import type { AgentOptions as RuntimeAgentOptions, AgentTool as RuntimeAgentTool } from '@mariozechner/pi-agent-core';
 import { Type, streamSimple, type Api, type Model } from '@mariozechner/pi-ai';
 
 import {
@@ -15,16 +18,10 @@ import {
   createPiRuntimeGatewayService as createPiRuntimeGatewayServiceInternal,
   loadPiRuntimeInspectionState as loadPiRuntimeInspectionStateInternal,
   persistPiRuntimeDirectExecution as persistPiRuntimeDirectExecutionInternal,
-  type AgentOptions as PiAgentOptions,
-  type AgentTool as PiAgentTool,
   type PiRuntimeGatewayActivityEvent,
-  type PiRuntimeGatewayAgUiHandlerOptions,
   type PiRuntimeGatewayArtifact,
-  type PiRuntimeGatewayHttpAgentConfig,
   type PiRuntimeGatewayInspectionState,
-  type PiRuntimeGatewayRunRequest,
   type PiRuntimeGatewayRuntime,
-  type PiRuntimeGatewayService,
   type PiRuntimeGatewaySession,
 } from '../lib/pi/dist/index.js';
 import {
@@ -37,12 +34,12 @@ import {
   recoverDueAutomations,
 } from '../lib/postgres/dist/index.js';
 
-type AgentRuntimeTransformContext = NonNullable<PiAgentOptions['transformContext']>;
-type AgentRuntimeStreamFn = NonNullable<PiAgentOptions['streamFn']>;
-type AgentRuntimeGetApiKey = NonNullable<PiAgentOptions['getApiKey']>;
-type AgentRuntimeInitialState = NonNullable<PiAgentOptions['initialState']>;
-type AgentRuntimeConvertToLlm = NonNullable<PiAgentOptions['convertToLlm']>;
-type AgentRuntimeTool = PiAgentTool;
+type AgentRuntimeTransformContext = NonNullable<RuntimeAgentOptions['transformContext']>;
+type AgentRuntimeStreamFn = NonNullable<RuntimeAgentOptions['streamFn']>;
+type AgentRuntimeGetApiKey = NonNullable<RuntimeAgentOptions['getApiKey']>;
+type AgentRuntimeInitialState = NonNullable<RuntimeAgentOptions['initialState']>;
+type AgentRuntimeConvertToLlm = NonNullable<RuntimeAgentOptions['convertToLlm']>;
+type AgentRuntimeTool = RuntimeAgentTool;
 type AgentRuntimeConnectEvent = ReturnType<typeof buildPiRuntimeGatewayConnectEventsInternal>[number];
 type AgentRuntimeAttachedEventSource = readonly AgentRuntimeConnectEvent[] | AsyncIterable<AgentRuntimeConnectEvent>;
 type AgentRuntimeAttachedThreadListener = (event: AgentRuntimeConnectEvent) => void;
@@ -96,7 +93,14 @@ export type AgentRuntimeDomainOperation = {
   input?: unknown;
 };
 
-export type AgentRuntimeExecutionStatus = PiRuntimeGatewaySession['execution']['status'];
+export type AgentRuntimeExecutionStatus =
+  | 'queued'
+  | 'working'
+  | 'interrupted'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+  | 'auth-required';
 
 export type AgentRuntimeDomainStatusOutput = {
   executionStatus: AgentRuntimeExecutionStatus;
@@ -148,9 +152,11 @@ export interface AgentRuntimeAgentOptions {
   convertToLlm?: AgentRuntimeConvertToLlm;
 }
 
-type AgentRuntimeForwardedCommand = NonNullable<
-  NonNullable<PiRuntimeGatewayRunRequest['forwardedProps']>['command']
->;
+export type AgentRuntimeForwardedCommand = {
+  name?: string;
+  input?: unknown;
+  resume?: string;
+};
 
 type AgentRuntimeDomainCommandToolArgs = {
   name: string;
@@ -162,14 +168,56 @@ export const AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL = 'automation_schedule';
 export const AGENT_RUNTIME_AUTOMATION_LIST_TOOL = 'automation_list';
 export const AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL = 'automation_cancel';
 export const AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL = 'request_operator_input';
-export type AgentRuntimeAgUiHandlerOptions = Omit<PiRuntimeGatewayAgUiHandlerOptions, 'service'>;
-export type AgentRuntimeAgUiHandler = (request: Request) => Promise<Response>;
-export type AgentRuntimeHttpAgentConfig = PiRuntimeGatewayHttpAgentConfig;
-export type AgentRuntimeService = PiRuntimeGatewayService & {
-  createAgUiHandler: (options: AgentRuntimeAgUiHandlerOptions) => AgentRuntimeAgUiHandler;
+export type AgentRuntimeConnectRequest = {
+  threadId: string;
+  runId?: string;
 };
+export type AgentRuntimeRunRequest = {
+  threadId: string;
+  runId: string;
+  messages?: AgUiMessage[];
+  forwardedProps?: {
+    command?: AgentRuntimeForwardedCommand;
+  };
+};
+export type AgentRuntimeStopRequest = {
+  threadId: string;
+  runId: string;
+};
+export type AgentRuntimeEventSource = readonly BaseEvent[] | AsyncIterable<BaseEvent>;
+export interface AgentRuntimeControlPlane {
+  inspectHealth: () => Promise<unknown>;
+  listThreads: () => Promise<unknown>;
+  listExecutions: () => Promise<unknown>;
+  listAutomations: () => Promise<unknown>;
+  listAutomationRuns: () => Promise<unknown>;
+  inspectScheduler: () => Promise<unknown>;
+  inspectOutbox: () => Promise<unknown>;
+  inspectMaintenance: () => Promise<unknown>;
+}
+export type AgentRuntimeAgUiHandlerOptions = {
+  agentId: string;
+  basePath?: string;
+};
+export type AgentRuntimeAgUiHandler = (request: Request) => Promise<Response>;
+export type AgentRuntimeHttpAgentConfig = Omit<HttpAgentConfig, 'url'> & {
+  runtimeUrl: string;
+};
+export type AgentRuntimeHttpAgent = HttpAgent & {
+  runtimeUrl: string;
+  clone: () => AgentRuntimeHttpAgent;
+};
+export interface AgentRuntimeService {
+  connect: (
+    request: AgentRuntimeConnectRequest,
+  ) => Promise<AgentRuntimeEventSource> | AgentRuntimeEventSource;
+  run: (request: AgentRuntimeRunRequest) => Promise<AgentRuntimeEventSource> | AgentRuntimeEventSource;
+  stop: (request: AgentRuntimeStopRequest) => Promise<AgentRuntimeEventSource> | AgentRuntimeEventSource;
+  control: AgentRuntimeControlPlane;
+  createAgUiHandler: (options: AgentRuntimeAgUiHandlerOptions) => AgentRuntimeAgUiHandler;
+}
 
-export function createAgentRuntimeHttpAgent(config: AgentRuntimeHttpAgentConfig) {
+export function createAgentRuntimeHttpAgent(config: AgentRuntimeHttpAgentConfig): AgentRuntimeHttpAgent {
   return new PiRuntimeGatewayHttpAgentInternal(config);
 }
 

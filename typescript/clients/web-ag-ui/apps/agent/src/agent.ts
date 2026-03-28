@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
-import { projectCycleCommandThread } from 'agent-runtime-contracts';
+import { projectCycleCommandThread } from 'pi-runtime-legacy-contracts';
 import {
   configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,

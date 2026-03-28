@@ -1,4 +1,4 @@
-import type { CommandEnvelope } from 'agent-runtime-contracts';
+import type { CommandEnvelope } from 'pi-runtime-legacy-contracts';
 import {
   extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import * as runtimeContracts from 'agent-runtime-contracts';
+import * as runtimeContracts from 'pi-runtime-legacy-contracts';
 import * as runtimeLanggraph from 'agent-runtime-langgraph';
 
 import * as workflowCore from './index.js';
 
 describe('package boundaries', () => {
-  it('exposes runtime-neutral contracts from agent-runtime-contracts', () => {
+  it('exposes legacy workflow compatibility contracts from pi-runtime-legacy-contracts', () => {
     expect(runtimeContracts.TASK_STATES).toContain('working');
     expect(typeof runtimeContracts.isTaskTerminalState).toBe('function');
     expect(typeof runtimeContracts.resolveThreadLifecyclePhase).toBe('function');

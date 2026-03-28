@@ -4,7 +4,7 @@ import { END, START, StateGraph } from '@langchain/langgraph';
 import {
   analyzeCycleProjectionThread,
   projectCycleCommandThread,
-} from 'agent-runtime-contracts';
+} from 'pi-runtime-legacy-contracts';
 import {
   configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,

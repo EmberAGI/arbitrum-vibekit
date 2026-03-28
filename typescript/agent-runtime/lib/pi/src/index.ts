@@ -9,7 +9,7 @@ import {
 } from '@ag-ui/core';
 import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
 import { createAssistantMessageEventStream, type Api, type Message, type Model, type ToolResultMessage } from '@mariozechner/pi-ai';
-import { mergeThreadPatchForEmit, type TaskState } from 'agent-runtime-contracts';
+import { mergeThreadPatchForEmit, type TaskState } from 'pi-runtime-legacy-contracts';
 import {
   buildPiRuntimeInspectionSnapshot,
   buildPiRuntimeMaintenancePlan,

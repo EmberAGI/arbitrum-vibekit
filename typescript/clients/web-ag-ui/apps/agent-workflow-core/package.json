@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build:runtime-deps": "pnpm --dir ../../../.. --filter agent-runtime-contracts build",
+    "build:runtime-deps": "pnpm --dir ../../../.. --filter pi-runtime-legacy-contracts build",
     "build": "tsc --project tsconfig.json",
     "lint": "eslint \"src\" --ext .ts",
     "lint:fix": "eslint \"src\" --ext .ts --fix",
@@ -27,12 +27,12 @@
     "vitest": "^4.0.18"
   },
   "dependenciesMeta": {
-    "agent-runtime-contracts": {
+    "pi-runtime-legacy-contracts": {
       "injected": false
     }
   },
   "dependencies": {
-    "agent-runtime-contracts": "workspace:^",
+    "pi-runtime-legacy-contracts": "workspace:^",
     "agent-runtime-langgraph": "workspace:^"
   }
 }

@@ -100,22 +100,22 @@ describe("resolveAffectedPackages", () => {
       {
         name: "agent-runtime",
         rootRelativeDir: "agent-runtime",
-        workspaceDependencies: ["agent-runtime-contracts", "agent-runtime-pi"],
+        workspaceDependencies: ["pi-runtime-legacy-contracts", "agent-runtime-pi"],
       },
       {
-        name: "agent-runtime-contracts",
-        rootRelativeDir: "agent-runtime/lib/contracts",
+        name: "pi-runtime-legacy-contracts",
+        rootRelativeDir: "lib/pi-runtime-legacy-contracts",
         workspaceDependencies: [],
       },
       {
         name: "agent-runtime-pi",
         rootRelativeDir: "agent-runtime/lib/pi",
-        workspaceDependencies: ["agent-runtime-contracts", "agent-runtime-postgres"],
+        workspaceDependencies: ["pi-runtime-legacy-contracts", "agent-runtime-postgres"],
       },
       {
         name: "agent-runtime-postgres",
         rootRelativeDir: "agent-runtime/lib/postgres",
-        workspaceDependencies: ["agent-runtime-contracts"],
+        workspaceDependencies: ["pi-runtime-legacy-contracts"],
       },
       {
         name: "langgraph-js-starter",
@@ -125,7 +125,7 @@ describe("resolveAffectedPackages", () => {
     ];
 
     const result = resolveAffectedPackages({
-      changedFiles: ["agent-runtime/lib/contracts/src/index.ts"],
+      changedFiles: ["lib/pi-runtime-legacy-contracts/src/index.ts"],
       globalInvalidators: [],
       packages,
     });
@@ -133,9 +133,9 @@ describe("resolveAffectedPackages", () => {
     expect(result.scope).toBe("partial");
     expect(result.selectedPackageNames).toEqual([
       "agent-runtime",
-      "agent-runtime-contracts",
       "agent-runtime-pi",
       "agent-runtime-postgres",
+      "pi-runtime-legacy-contracts",
     ]);
   });
 
@@ -248,7 +248,7 @@ describe("resolveAffectedPackages", () => {
     );
 
     expect(packageDirsByName.get("agent-runtime")).toBe("agent-runtime");
-    expect(packageDirsByName.get("agent-runtime-contracts")).toBe("agent-runtime/lib/contracts");
+    expect(packageDirsByName.get("pi-runtime-legacy-contracts")).toBe("lib/pi-runtime-legacy-contracts");
     expect(packageDirsByName.get("agent-runtime-pi")).toBe("agent-runtime/lib/pi");
     expect(packageDirsByName.get("agent-runtime-postgres")).toBe("agent-runtime/lib/postgres");
     expect(packageDirsByName.get("agent-runtime-langgraph")).toBe("clients/web-ag-ui/apps/agent-runtime-langgraph");
