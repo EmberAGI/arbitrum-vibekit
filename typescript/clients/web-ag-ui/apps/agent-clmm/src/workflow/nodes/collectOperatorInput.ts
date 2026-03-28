@@ -4,7 +4,7 @@ import {
   buildNodeTransition,
   requestInterruptPayload,
   shouldPersistInputRequiredCheckpoint,
-} from 'pi-runtime-legacy-contracts';
+} from 'agent-workflow-core';
 import { z } from 'zod';
 
 import { OperatorConfigInputSchema } from '../../domain/types.js';

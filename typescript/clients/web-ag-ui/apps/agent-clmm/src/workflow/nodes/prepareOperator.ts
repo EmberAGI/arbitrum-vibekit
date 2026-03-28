@@ -1,5 +1,5 @@
 import { type Command } from '@langchain/langgraph';
-import { buildNodeTransition } from 'pi-runtime-legacy-contracts';
+import { buildNodeTransition } from 'agent-workflow-core';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';

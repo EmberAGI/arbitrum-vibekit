@@ -1,8 +1,10 @@
 import {
   extractCommandEnvelopeFromMessages as extractRuntimeCommandEnvelopeFromMessages,
   extractCommandFromMessages as extractRuntimeCommandFromMessages,
-  type CommandEnvelope,
-} from 'pi-runtime-legacy-contracts';
+} from './commandEnvelope.js';
+import type { CommandEnvelope } from './commandEnvelope.js';
+
+export type { CommandEnvelope } from './commandEnvelope.js';
 
 export const AGENT_COMMANDS = ['hire', 'fire', 'cycle', 'sync'] as const;
 export type AgentCommand = (typeof AGENT_COMMANDS)[number];

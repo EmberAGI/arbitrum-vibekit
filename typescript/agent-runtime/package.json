@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "build:deps": "pnpm --dir .. --filter pi-runtime-legacy-contracts --filter agent-runtime-pi build",
+    "build:deps": "pnpm --dir .. --filter agent-runtime-pi build",
     "build": "tsc --project tsconfig.json && node ./scripts/sync-installed-artifacts.mjs",
     "lint": "eslint \"src\" --ext .ts",
     "lint:fix": "eslint \"src\" --ext .ts --fix",
@@ -34,9 +34,6 @@
     "vitest": "^4.0.18"
   },
   "dependenciesMeta": {
-    "pi-runtime-legacy-contracts": {
-      "injected": false
-    },
     "agent-runtime-pi": {
       "injected": false
     }
@@ -46,7 +43,6 @@
     "@ag-ui/core": "0.0.47",
     "@mariozechner/pi-agent-core": "0.62.0",
     "@mariozechner/pi-ai": "0.62.0",
-    "agent-runtime-pi": "workspace:^",
-    "pi-runtime-legacy-contracts": "workspace:^"
+    "agent-runtime-pi": "workspace:^"
   }
 }

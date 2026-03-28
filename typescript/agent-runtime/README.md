@@ -34,9 +34,9 @@ Concrete agent apps should not re-implement:
 
 Do not treat the package root as a grab bag of helper exports. In particular:
 
-- do not import `pi-runtime-legacy-contracts` as the blessed integration model
+- do not import deprecated workflow helpers as the blessed integration model
 - do not expect transport subpaths, control-plane helpers, direct-execution helpers, or Postgres bootstrap helpers
-- treat legacy internal packages that still use those seams as compatibility debt, not as architectural precedent
+- treat deprecated workflow packages and compatibility seams as debt, not as architectural precedent
 
 ## Domain Model
 
@@ -83,19 +83,20 @@ The web layer remains projection-only and is not the source of domain truth.
 The internal package family still separates:
 
 - `agent-runtime/`: public builder-facing facade package
-- `lib/pi-runtime-legacy-contracts`: deprecated workflow compatibility contracts and old projection-hook SPI, intentionally kept outside the `agent-runtime/` tree
 - `agent-runtime/lib/pi`: Pi runtime and AG-UI transport implementation details
 - `agent-runtime/lib/postgres`: persistence, recovery, and bootstrap helpers
+- `clients/web-ag-ui/apps/agent-workflow-core`: shared deprecated LangGraph/workflow helpers used only by the older workflow apps
 
-Those internal packages exist to support the public facade. They are not the normal-consumer integration story.
+`agent-runtime` no longer depends on any deprecated-workflow-branded package. Those internal/runtime-adjacent packages exist to support the public facade, not to define the normal-consumer integration story.
 
 ## Installed Snapshot Sync
 
 `pnpm build` syncs built `dist` artifacts into installed pnpm snapshots so downstream apps can consume local workspace package shapes without a fresh reinstall.
 
-That sync step can be triggered by multiple downstream `build:runtime-deps` commands at once, such as `apps/web` and `apps/agent-ember-lending` starting in parallel. The snapshot replacement flow now takes a per-target lock directory before removing and copying `dist` so concurrent builds do not leave installed artifacts such as `pi-runtime-legacy-contracts/dist` missing.
+That sync step can be triggered by multiple downstream `build:runtime-deps` commands at once. The snapshot replacement flow now takes a per-target lock directory before removing and copying `dist` so concurrent builds do not leave installed artifacts such as `agent-runtime-pi/dist` or `agent-runtime-postgres/dist` missing.
 
 If a local workspace ever gets into a broken state after an interrupted or older concurrent build, recover it by rebuilding the runtime packages serially:
 
-1. `pnpm --filter pi-runtime-legacy-contracts build`
-2. `pnpm --filter agent-runtime build`
+1. `pnpm --filter agent-runtime-postgres build`
+2. `pnpm --filter agent-runtime-pi build`
+3. `pnpm --filter agent-runtime build`

@@ -1,5 +1,5 @@
 import { type Command } from '@langchain/langgraph';
-import { buildNodeTransition } from 'pi-runtime-legacy-contracts';
+import { buildNodeTransition } from 'agent-workflow-core';
 
 import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
 import { type CamelotPool } from '../../domain/types.js';

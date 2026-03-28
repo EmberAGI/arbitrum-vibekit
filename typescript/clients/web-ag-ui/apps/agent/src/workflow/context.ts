@@ -6,12 +6,10 @@ import {
   isTaskActiveState,
   isTaskTerminalState,
   mergeThreadPatchForEmit,
+  normalizeLegacyOnboardingState,
   resolveThreadLifecyclePhase,
   type TaskState,
   type ThreadLifecyclePhase,
-} from 'pi-runtime-legacy-contracts';
-import {
-  normalizeLegacyOnboardingState,
   type OnboardingContract,
 } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';

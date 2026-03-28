@@ -1,6 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
-import { requestInterruptPayload, shouldPersistInputRequiredCheckpoint } from 'pi-runtime-legacy-contracts';
+import { requestInterruptPayload, shouldPersistInputRequiredCheckpoint } from 'agent-workflow-core';
 import { z } from 'zod';
 
 import { FundingTokenInputSchema, type FundingTokenInput } from '../../domain/types.js';

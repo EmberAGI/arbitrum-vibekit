@@ -32,10 +32,10 @@ describe('interruptPayload', () => {
       request: { type: 'input-request' },
       interrupt: () =>
         Promise.resolve(
-        JSON.stringify({
-          outcome: 'signed',
-          approvals: 2,
-        }),
+          JSON.stringify({
+            outcome: 'signed',
+            approvals: 2,
+          }),
         ),
     });
 

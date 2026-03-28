@@ -1,5 +1,5 @@
 import { type Command } from '@langchain/langgraph';
-import { buildNodeTransition } from 'pi-runtime-legacy-contracts';
+import { buildNodeTransition } from 'agent-workflow-core';
 
 import { buildTaskStatus, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
 import { copilotkitEmitState } from '../emitState.js';

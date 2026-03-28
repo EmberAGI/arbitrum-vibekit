@@ -1,4 +1,4 @@
-import { piRuntimePersistenceModel } from 'pi-runtime-legacy-contracts';
+import { piRuntimePersistenceModel } from './persistenceModel.js';
 
 export type PiRuntimeColumnSchema = {
   name: string;

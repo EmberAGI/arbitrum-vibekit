@@ -1,4 +1,4 @@
-import type { TaskState } from 'pi-runtime-legacy-contracts';
+import type { TaskState } from './taskState.js';
 
 export interface ResolveSummaryTaskStatusInput {
   haltReason?: string | null;

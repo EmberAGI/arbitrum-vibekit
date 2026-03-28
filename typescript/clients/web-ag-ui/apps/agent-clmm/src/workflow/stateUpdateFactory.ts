@@ -1,4 +1,4 @@
-import { buildStateUpdate } from 'pi-runtime-legacy-contracts';
+import { buildStateUpdate } from 'agent-workflow-core';
 
 import { logClmmStateEmission } from './context.js';
 

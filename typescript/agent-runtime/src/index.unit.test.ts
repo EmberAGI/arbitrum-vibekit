@@ -43,9 +43,9 @@ describe('agent-runtime facade', () => {
       },
     });
     expect(packageJson.dependencies).toMatchObject({
-      'pi-runtime-legacy-contracts': 'workspace:^',
       'agent-runtime-pi': 'workspace:^',
     });
+    expect(packageJson.dependencies).not.toHaveProperty('pi-runtime-legacy-contracts');
     expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-contracts');
     expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-postgres');
     expect(packageJson.dependencies).not.toHaveProperty('agent-runtime-langgraph');
@@ -163,12 +163,11 @@ describe('agent-runtime facade', () => {
       'utf8',
     );
 
-    expect(syncScript).toContain(
-      "packageRoot: path.join(packageRoot, '..', 'lib', 'pi-runtime-legacy-contracts')",
-    );
-    expect(syncScript).toContain("packageName: 'pi-runtime-legacy-contracts'");
+    expect(syncScript).not.toContain("packageName: 'pi-runtime-legacy-contracts'");
+    expect(syncScript).not.toContain("path.join(packageRoot, '..', 'lib', 'pi-runtime-legacy-contracts')");
     expect(syncScript).not.toContain("packageName: 'agent-runtime-contracts'");
     expect(syncScript).not.toContain("path.join('lib', 'contracts', 'dist')");
+    expect(syncScript).toContain("packageName: 'agent-runtime-postgres'");
     expect(syncScript).toContain("path.join('lib', 'postgres', 'dist')");
   });
 

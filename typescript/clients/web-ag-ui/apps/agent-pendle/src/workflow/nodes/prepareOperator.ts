@@ -1,6 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import type { Command } from '@langchain/langgraph';
-import { buildNodeTransition } from 'pi-runtime-legacy-contracts';
+import { buildNodeTransition } from 'agent-workflow-core';
 import { formatUnits, parseUnits } from 'viem';
 
 import type { TokenizedYieldMarket, WalletBalance } from '../../clients/onchainActions.js';

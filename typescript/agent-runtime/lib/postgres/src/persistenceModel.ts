@@ -1,4 +1,4 @@
-import type { CoreRuntimeRecord } from './domainModule.js';
+type CoreRuntimeRecord = 'PiThread' | 'PiExecution' | 'PiAutomation' | 'AutomationRun';
 
 export type PiRuntimeSupportingRecord =
   | 'PiInterrupt'

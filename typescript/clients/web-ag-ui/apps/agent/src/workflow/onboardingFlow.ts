@@ -1,10 +1,10 @@
-import type { TaskState } from 'pi-runtime-legacy-contracts';
 import {
   buildOnboardingContractFromLegacyStep,
   finalizeOnboardingContract,
   type OnboardingContract,
   type LegacyOnboardingState,
   type OnboardingStepDefinition,
+  type TaskState,
 } from 'agent-workflow-core';
 
 const BASE_STEPS: readonly OnboardingStepDefinition[] = [

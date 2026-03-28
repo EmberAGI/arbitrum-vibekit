@@ -46,9 +46,9 @@ describe('agent-runtime-pi package contract', () => {
       '@ag-ui/client': '0.0.47',
       '@mariozechner/pi-agent-core': expect.any(String),
       '@mariozechner/pi-ai': expect.any(String),
-      'pi-runtime-legacy-contracts': 'workspace:^',
       'agent-runtime-postgres': 'workspace:^',
     });
+    expect(packageJson.dependencies).not.toHaveProperty('pi-runtime-legacy-contracts');
     expect(packageJson.scripts).toMatchObject({
       'build:deps': expect.any(String),
       build: expect.any(String),

@@ -100,22 +100,17 @@ describe("resolveAffectedPackages", () => {
       {
         name: "agent-runtime",
         rootRelativeDir: "agent-runtime",
-        workspaceDependencies: ["pi-runtime-legacy-contracts", "agent-runtime-pi"],
-      },
-      {
-        name: "pi-runtime-legacy-contracts",
-        rootRelativeDir: "lib/pi-runtime-legacy-contracts",
-        workspaceDependencies: [],
+        workspaceDependencies: ["agent-runtime-pi"],
       },
       {
         name: "agent-runtime-pi",
         rootRelativeDir: "agent-runtime/lib/pi",
-        workspaceDependencies: ["pi-runtime-legacy-contracts", "agent-runtime-postgres"],
+        workspaceDependencies: ["agent-runtime-postgres"],
       },
       {
         name: "agent-runtime-postgres",
         rootRelativeDir: "agent-runtime/lib/postgres",
-        workspaceDependencies: ["pi-runtime-legacy-contracts"],
+        workspaceDependencies: [],
       },
       {
         name: "langgraph-js-starter",
@@ -125,7 +120,7 @@ describe("resolveAffectedPackages", () => {
     ];
 
     const result = resolveAffectedPackages({
-      changedFiles: ["lib/pi-runtime-legacy-contracts/src/index.ts"],
+      changedFiles: ["agent-runtime/lib/postgres/src/schema.ts"],
       globalInvalidators: [],
       packages,
     });
@@ -135,7 +130,6 @@ describe("resolveAffectedPackages", () => {
       "agent-runtime",
       "agent-runtime-pi",
       "agent-runtime-postgres",
-      "pi-runtime-legacy-contracts",
     ]);
   });
 
@@ -248,7 +242,7 @@ describe("resolveAffectedPackages", () => {
     );
 
     expect(packageDirsByName.get("agent-runtime")).toBe("agent-runtime");
-    expect(packageDirsByName.get("pi-runtime-legacy-contracts")).toBe("lib/pi-runtime-legacy-contracts");
+    expect(packageDirsByName.has("pi-runtime-legacy-contracts")).toBe(false);
     expect(packageDirsByName.get("agent-runtime-pi")).toBe("agent-runtime/lib/pi");
     expect(packageDirsByName.get("agent-runtime-postgres")).toBe("agent-runtime/lib/postgres");
     expect(packageDirsByName.get("agent-runtime-langgraph")).toBe("clients/web-ag-ui/apps/agent-runtime-langgraph");
