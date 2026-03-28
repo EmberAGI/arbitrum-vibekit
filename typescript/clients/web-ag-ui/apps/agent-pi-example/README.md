@@ -27,6 +27,14 @@ In particular, `agent-runtime` now owns:
 
 `agent-pi-example` supplies only domain behavior, model/prompt configuration, and server bootstrap.
 
+Its domain module now uses the blessed state-driven contract:
+
+- `systemContext({ threadId, state })`
+- `handleOperation({ threadId, state, operation })`
+- semantic outputs for status, artifacts, and interrupts only
+
+The example does not author thread patches, AG-UI label text, or projection-channel details directly.
+
 ## Local Startup
 
 1. Set `OPENROUTER_API_KEY` in `.env` or export it in your shell.

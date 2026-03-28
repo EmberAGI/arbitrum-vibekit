@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
-import { Type, streamSimple } from '@mariozechner/pi-ai';
+import { Type, streamSimple, type Api, type Model } from '@mariozechner/pi-ai';
 
 import {
   buildPiA2UiActivityEvent as buildPiA2UiActivityEventInternal,
@@ -37,6 +37,15 @@ type AgentRuntimeTransformContext = NonNullable<
 >;
 type AgentRuntimeStreamFn = NonNullable<
   NonNullable<Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']>['streamFn']
+>;
+type AgentRuntimeGetApiKey = NonNullable<
+  NonNullable<Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']>['getApiKey']
+>;
+type AgentRuntimeInitialState = NonNullable<
+  NonNullable<Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']>['initialState']
+>;
+type AgentRuntimeConvertToLlm = NonNullable<
+  NonNullable<Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']>['convertToLlm']
 >;
 type AgentRuntimeTool = NonNullable<
   Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['tools']
@@ -88,57 +97,61 @@ type AgentRuntimeDomainLifecycle<
   interrupts: readonly AgentRuntimeDomainInterrupt<TInterrupt>[];
 };
 
-type AgentRuntimeDomainOperation = {
+export type AgentRuntimeDomainOperation = {
   source: 'command' | 'tool' | 'interrupt';
   name: string;
   input?: unknown;
 };
 
-type AgentRuntimeDomainStatusOutput = {
+export type AgentRuntimeDomainStatusOutput = {
   executionStatus: PiRuntimeGatewayExecutionStatus;
   statusMessage?: string;
 };
 
-type AgentRuntimeDomainArtifactOutput = {
-  channel?: 'current' | 'activity';
+export type AgentRuntimeDomainArtifactOutput = {
   artifactId?: string;
   data: unknown;
-  append?: boolean;
 };
 
-type AgentRuntimeDomainInterruptOutput = {
+export type AgentRuntimeDomainInterruptOutput = {
   type: string;
   surfacedInThread: boolean;
   message: string;
-  inputLabel?: string;
-  submitLabel?: string;
-  artifactData?: unknown;
 };
 
-type AgentRuntimeDomainOutputs = {
+export type AgentRuntimeDomainOutputs = {
   status?: AgentRuntimeDomainStatusOutput;
   artifacts?: readonly AgentRuntimeDomainArtifactOutput[];
   interrupt?: AgentRuntimeDomainInterruptOutput;
-  threadPatch?: Record<string, unknown>;
 };
 
-type AgentRuntimeDomainOperationResult = {
-  state?: unknown;
+export type AgentRuntimeDomainOperationResult<TState = unknown> = {
+  state?: TState;
   outputs?: AgentRuntimeDomainOutputs;
 };
 
-type AgentRuntimeDomainConfig = {
-  lifecycle: AgentRuntimeDomainLifecycle;
-  systemContext?: (params: {
-    threadId: string;
-    session: PiRuntimeGatewaySession;
-  }) => string | readonly string[] | undefined;
-  handleOperation?: (params: {
-    operation: AgentRuntimeDomainOperation;
-    threadId: string;
-    session: PiRuntimeGatewaySession;
-  }) => AgentRuntimeDomainOperationResult | Promise<AgentRuntimeDomainOperationResult>;
+export type AgentRuntimeDomainContext<TState = unknown> = {
+  threadId: string;
+  state?: TState;
 };
+
+export type AgentRuntimeDomainConfig<TState = unknown> = {
+  lifecycle: AgentRuntimeDomainLifecycle;
+  systemContext?: (params: AgentRuntimeDomainContext<TState>) => string | readonly string[] | undefined;
+  handleOperation?: (params: AgentRuntimeDomainContext<TState> & {
+    operation: AgentRuntimeDomainOperation;
+  }) => AgentRuntimeDomainOperationResult<TState> | Promise<AgentRuntimeDomainOperationResult<TState>>;
+};
+
+type AgentRuntimeModel = Model<Api>;
+
+export interface AgentRuntimeAgentOptions {
+  getApiKey?: AgentRuntimeGetApiKey;
+  initialState?: AgentRuntimeInitialState;
+  transformContext?: AgentRuntimeTransformContext;
+  streamFn?: AgentRuntimeStreamFn;
+  convertToLlm?: AgentRuntimeConvertToLlm;
+}
 
 type AgentRuntimeForwardedCommand = NonNullable<
   NonNullable<PiRuntimeGatewayRunRequest['forwardedProps']>['command']
@@ -528,10 +541,10 @@ function readDirectCommandOperation(
   };
 }
 
-function readInterruptOperation(params: {
+function readInterruptOperation<TState>(params: {
   command: AgentRuntimeForwardedCommand | undefined;
   session: PiRuntimeGatewaySession;
-  domain: AgentRuntimeDomainConfig | undefined;
+  domain: AgentRuntimeDomainConfig<TState> | undefined;
 }): AgentRuntimeDomainOperation | null {
   const resumePayload = params.command?.resume;
   if (typeof resumePayload !== 'string' || !params.domain?.handleOperation) {
@@ -612,13 +625,38 @@ function buildInterruptArtifact(params: {
 }): PiRuntimeGatewayArtifact {
   return {
     artifactId: `domain-interrupt:${params.threadId}:${params.operationName}:${params.now()}`,
-    data:
-      params.interrupt.artifactData ?? {
-        type: 'interrupt-status',
-        interruptType: params.interrupt.type,
-        status: 'pending',
-        message: params.interrupt.message,
-      },
+    data: {
+      type: 'interrupt-status',
+      interruptType: params.interrupt.type,
+      status: 'pending',
+      message: params.interrupt.message,
+    },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function buildLifecycleThreadPatch(params: {
+  lifecycle: AgentRuntimeDomainLifecycle;
+  state: unknown;
+}): Record<string, unknown> | undefined {
+  if (!isRecord(params.state)) {
+    return undefined;
+  }
+
+  const phase = params.state.phase;
+  if (typeof phase !== 'string' || !params.lifecycle.phases.includes(phase)) {
+    return undefined;
+  }
+
+  const lifecycleState = Object.fromEntries(
+    Object.entries(params.state).filter(([, value]) => value !== undefined),
+  );
+
+  return {
+    lifecycle: lifecycleState,
   };
 }
 
@@ -751,10 +789,19 @@ function applyDomainOperationResult(params: {
   now: () => number;
   operation: AgentRuntimeDomainOperation;
   session: PiRuntimeGatewaySession;
+  lifecycle: AgentRuntimeDomainLifecycle;
   result: AgentRuntimeDomainOperationResult;
 }): PiRuntimeGatewaySession {
   const outputs = params.result.outputs;
-  if (!outputs) {
+  const domainOutputs = outputs ?? {};
+  const lifecycleThreadPatch =
+    params.result.state === undefined
+      ? undefined
+      : buildLifecycleThreadPatch({
+          lifecycle: params.lifecycle,
+          state: params.result.state,
+        });
+  if (!outputs && !lifecycleThreadPatch) {
     return params.session;
   }
 
@@ -768,34 +815,30 @@ function applyDomainOperationResult(params: {
     : [];
   let nextA2Ui = params.session.a2ui;
 
-  for (const artifactOutput of outputs.artifacts ?? []) {
+  for (const artifactOutput of domainOutputs.artifacts ?? []) {
     const artifact = buildDomainArtifact({
       artifact: artifactOutput,
       threadId: params.threadId,
       operationName: params.operation.name,
       now: params.now,
     });
-    const channel = artifactOutput.channel ?? 'current';
     const artifacts = nextArtifacts ?? {};
-    if (channel === 'activity') {
-      artifacts.activity = artifact;
-    } else {
-      artifacts.current = artifact;
-    }
+    artifacts.current = artifact;
+    artifacts.activity = artifact;
     nextArtifacts = artifacts;
     nextActivityEvents.push({
       type: 'artifact',
       artifact,
-      ...(artifactOutput.append === true ? { append: true } : {}),
+      append: true,
     });
   }
 
-  let executionStatus = outputs.status?.executionStatus ?? params.session.execution.status;
-  let executionStatusMessage = outputs.status?.statusMessage ?? params.session.execution.statusMessage;
+  let executionStatus = domainOutputs.status?.executionStatus ?? params.session.execution.status;
+  let executionStatusMessage = domainOutputs.status?.statusMessage ?? params.session.execution.statusMessage;
 
-  if (outputs.interrupt) {
+  if (domainOutputs.interrupt) {
     const interruptArtifact = buildInterruptArtifact({
-      interrupt: outputs.interrupt,
+      interrupt: domainOutputs.interrupt,
       threadId: params.threadId,
       operationName: params.operation.name,
       now: params.now,
@@ -811,11 +854,11 @@ function applyDomainOperationResult(params: {
     nextA2Ui = {
       kind: 'interrupt',
       payload: {
-        type: outputs.interrupt.type,
+        type: domainOutputs.interrupt.type,
         artifactId: interruptArtifact.artifactId,
-        message: outputs.interrupt.message,
-        inputLabel: outputs.interrupt.inputLabel ?? 'Provide input',
-        submitLabel: outputs.interrupt.submitLabel ?? 'Continue',
+        message: domainOutputs.interrupt.message,
+        inputLabel: 'Provide input',
+        submitLabel: 'Continue',
       },
     };
     nextActivityEvents.push(
@@ -826,8 +869,8 @@ function applyDomainOperationResult(params: {
       }),
     );
     executionStatus = 'interrupted';
-    executionStatusMessage = outputs.interrupt.message;
-  } else if (outputs.status && outputs.status.executionStatus !== 'interrupted') {
+    executionStatusMessage = domainOutputs.interrupt.message;
+  } else if (domainOutputs.status && domainOutputs.status.executionStatus !== 'interrupted') {
     nextA2Ui = undefined;
   }
 
@@ -841,7 +884,11 @@ function applyDomainOperationResult(params: {
     ...(nextArtifacts ? { artifacts: nextArtifacts } : {}),
     ...(nextActivityEvents.length > 0 ? { activityEvents: nextActivityEvents } : {}),
     ...(nextA2Ui ? { a2ui: nextA2Ui } : {}),
-    threadPatch: mergeThreadPatch(params.session.threadPatch, outputs.threadPatch),
+    ...(lifecycleThreadPatch
+      ? {
+          threadPatch: mergeThreadPatch(params.session.threadPatch, lifecycleThreadPatch),
+        }
+      : {}),
   };
 }
 
@@ -1134,31 +1181,42 @@ function tapAttachedEventSource(
   };
 }
 
-type CreateAgentRuntimeOptions = Omit<
-  Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0],
-  'getSessionContext'
-> & {
-  domain?: AgentRuntimeDomainConfig;
-};
+export interface CreateAgentRuntimeOptions<TState = unknown> {
+  model: AgentRuntimeModel;
+  systemPrompt: string;
+  tools?: AgentRuntimeTool[];
+  databaseUrl?: string;
+  agentOptions?: AgentRuntimeAgentOptions;
+  domain?: AgentRuntimeDomainConfig<TState>;
+  now?: () => number;
+}
 
 type AgentRuntimeInstance = {
   bootstrapPlan: ReturnType<typeof createPiRuntimeGatewayFoundationInternal>['bootstrapPlan'];
   service: PiRuntimeGatewayService;
 };
 
-export function createAgentRuntime(options: CreateAgentRuntimeOptions): AgentRuntimeInstance {
+export function createAgentRuntime<TState = unknown>(
+  options: CreateAgentRuntimeOptions<TState>,
+): AgentRuntimeInstance {
+  const domain = options.domain;
   const now = options.now ?? (() => Date.now());
   const sessionStore = createSessionStore();
+  const domainStateStore = new Map<string, TState>();
   const automationRegistry = createAutomationRegistry();
   const attachedRuns = createAttachedRunRegistry();
   const executionContext = new AsyncLocalStorage<AgentRuntimeExecutionContext>();
   const persistedThreads = new Set<string>();
-  if (options.domain) {
-    validateDomainLifecycle(options.domain.lifecycle);
+  if (domain) {
+    validateDomainLifecycle(domain.lifecycle);
   }
-  const getActiveSessionContext = (): PiRuntimeGatewaySession | undefined => {
+  const getActiveThreadId = (): string | undefined => {
     const context = executionContext.getStore();
-    return context ? sessionStore.getSession(context.threadId) : undefined;
+    return context?.threadId;
+  };
+  const getActiveSessionContext = (): PiRuntimeGatewaySession | undefined => {
+    const threadId = getActiveThreadId();
+    return threadId ? sessionStore.getSession(threadId) : undefined;
   };
   const loadInspectionState = async (): Promise<PiRuntimeGatewayInspectionState> => {
     return options.databaseUrl
@@ -1201,15 +1259,15 @@ export function createAgentRuntime(options: CreateAgentRuntimeOptions): AgentRun
       ? async (messages, signal) => await options.agentOptions!.transformContext!(messages, signal)
       : undefined;
   const streamFn: AgentRuntimeStreamFn | undefined =
-    options.agentOptions?.streamFn || options.domain?.systemContext
+    options.agentOptions?.streamFn || domain?.systemContext
       ? (model, context, streamOptions) => {
-          const session = getActiveSessionContext();
+          const threadId = getActiveThreadId();
           const lines =
-            session && options.domain?.systemContext
+            threadId && domain?.systemContext
               ? normalizeDomainSystemContextLines(
-                  options.domain.systemContext({
-                    threadId: session.thread.id,
-                    session,
+                  domain.systemContext({
+                    threadId,
+                    state: domainStateStore.get(threadId),
                   }),
                 )
               : [];
@@ -1228,24 +1286,31 @@ export function createAgentRuntime(options: CreateAgentRuntimeOptions): AgentRun
     threadId: string,
     operation: AgentRuntimeDomainOperation,
   ): Promise<PiRuntimeGatewaySession> => {
-    if (!options.domain?.handleOperation) {
+    if (!domain?.handleOperation) {
       return sessionStore.getSession(threadId);
     }
 
-    const session = sessionStore.getSession(threadId);
-    const result = await options.domain.handleOperation({
+    const result = await domain.handleOperation({
       operation,
       threadId,
-      session,
+      state: domainStateStore.get(threadId),
     });
+    if ('state' in result) {
+      if (result.state === undefined) {
+        domainStateStore.delete(threadId);
+      } else {
+        domainStateStore.set(threadId, result.state);
+      }
+    }
 
     return sessionStore.updateSession(threadId, (currentSession) =>
       applyDomainOperationResult({
-          threadId,
-          now,
-          operation,
-          session: currentSession,
-          result,
+        threadId,
+        now,
+        operation,
+        session: currentSession,
+        lifecycle: domain.lifecycle,
+        result,
       }),
     );
   };
@@ -1583,7 +1648,7 @@ export function createAgentRuntime(options: CreateAgentRuntimeOptions): AgentRun
   ];
 
   const domainCommandTool: AgentRuntimeTool | null =
-    options.domain?.handleOperation && options.domain.lifecycle.commands.length > 0
+    domain?.handleOperation && domain.lifecycle.commands.length > 0
       ? {
           name: AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
           label: 'Agent Runtime Domain Command',
@@ -1664,9 +1729,9 @@ export function createAgentRuntime(options: CreateAgentRuntimeOptions): AgentRun
         readInterruptOperation({
           command: request.forwardedProps?.command,
           session,
-          domain: options.domain,
+          domain,
         });
-      if (!operation || !options.domain?.handleOperation) {
+      if (!operation || !domain?.handleOperation) {
         return await executionContext.run(
           {
             threadId: request.threadId,
@@ -1706,7 +1771,7 @@ export function createAgentRuntime(options: CreateAgentRuntimeOptions): AgentRun
         readInterruptOperation({
           command: request.forwardedProps?.command,
           session: sessionStore.getSession(request.threadId),
-          domain: options.domain,
+          domain,
         }) !== null;
       if (typeof request.forwardedProps?.command?.resume === 'string' && !isDomainInterruptResume) {
         resumeInterruptedSession(request.threadId);

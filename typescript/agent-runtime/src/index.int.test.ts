@@ -9,7 +9,6 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
   createAgentRuntime,
-  type PiRuntimeGatewaySession,
   type PiRuntimeGatewayService,
 } from './index.js';
 
@@ -24,6 +23,11 @@ type LifecycleState = {
   phase: string;
   onboardingStep: string | null;
   operatorNote: string | null;
+};
+
+type LifecycleContext = {
+  threadId: string;
+  state?: LifecycleState;
 };
 
 function createModel(id: string): Model<'openai-responses'> {
@@ -200,19 +204,21 @@ function createLifecycleDomain() {
         },
       ],
     },
-    systemContext: ({ threadId }: { threadId: string; session: PiRuntimeGatewaySession }) => {
-      const state = getState(threadId);
-      return [`Lifecycle phase: ${state.phase}.`];
+    systemContext: ({ threadId, state }: LifecycleContext) => {
+      const currentState = state ?? getState(threadId);
+      phases.set(threadId, currentState);
+      return [`Lifecycle phase: ${currentState.phase}.`];
     },
     handleOperation: ({
       operation,
       threadId,
+      state,
     }: {
       operation: { source: 'command' | 'tool' | 'interrupt'; name: string; input?: unknown };
       threadId: string;
-      session: PiRuntimeGatewaySession;
+      state?: LifecycleState;
     }) => {
-      const current = getState(threadId);
+      const current = state ?? getState(threadId);
 
       switch (operation.name) {
         case 'hire': {
@@ -233,12 +239,6 @@ function createLifecycleDomain() {
                 type: 'operator-config',
                 surfacedInThread: true,
                 message: 'Please provide a short operator note to continue onboarding.',
-              },
-              threadPatch: {
-                lifecycle: {
-                  phase: nextState.phase,
-                  onboardingStep: nextState.onboardingStep,
-                },
               },
             },
           };
@@ -274,13 +274,6 @@ function createLifecycleDomain() {
                   },
                 },
               ],
-              threadPatch: {
-                lifecycle: {
-                  phase: nextState.phase,
-                  onboardingStep: nextState.onboardingStep,
-                  operatorNote: nextState.operatorNote,
-                },
-              },
             },
           };
         }

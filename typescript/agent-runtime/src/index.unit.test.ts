@@ -93,6 +93,14 @@ describe('agent-runtime facade', () => {
 
   it('does not let normal consumers override runtime ownership through the blessed builder options', () => {
     const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+    const publicDomainContract = source.slice(
+      source.indexOf('export type AgentRuntimeDomainOperation'),
+      source.indexOf('type AgentRuntimeForwardedCommand'),
+    );
+    const builderContract = source.slice(
+      source.indexOf('export interface CreateAgentRuntimeOptions'),
+      source.indexOf('type AgentRuntimeInstance'),
+    );
 
     expect(source).not.toContain('runtime?:');
     expect(source).not.toContain('options.runtime?.(');
@@ -100,6 +108,15 @@ describe('agent-runtime facade', () => {
     expect(source).not.toContain('sessions.attached');
     expect(source).not.toContain('publishSessionSnapshot:');
     expect(source).not.toContain('<agent-runtime-domain-context>');
+    expect(publicDomainContract).not.toContain('channel?:');
+    expect(publicDomainContract).not.toContain('append?:');
+    expect(publicDomainContract).not.toContain('threadPatch?:');
+    expect(publicDomainContract).not.toContain('inputLabel?:');
+    expect(publicDomainContract).not.toContain('submitLabel?:');
+    expect(publicDomainContract).not.toContain('session: PiRuntimeGatewaySession');
+    expect(builderContract).not.toContain('Omit<');
+    expect(source).toContain('export type AgentRuntimeDomainContext');
+    expect(source).toContain('export interface CreateAgentRuntimeOptions');
   });
 
   it('owns sessions and control-plane defaults inside the blessed builder', async () => {

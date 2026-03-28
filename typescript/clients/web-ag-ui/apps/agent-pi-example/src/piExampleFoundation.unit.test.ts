@@ -41,15 +41,10 @@ describe('createPiExampleAgentConfig', () => {
     expect(
       config.domain?.systemContext?.({
         threadId: 'thread-1',
-        session: {
-          thread: { id: 'thread-1' },
-          execution: {
-            id: 'exec:thread-1',
-            status: 'working',
-            statusMessage: 'ready',
-          },
-          messages: [],
-          activityEvents: [],
+        state: {
+          phase: 'prehire',
+          onboardingStep: null,
+          operatorNote: null,
         },
       }),
     ).toEqual(['Lifecycle phase: prehire.']);
@@ -73,23 +68,17 @@ describe('createPiExampleAgentConfig', () => {
       OPENROUTER_API_KEY: 'test-openrouter-key',
     });
 
-    const session = {
-      thread: { id: 'thread-1' },
-      execution: {
-        id: 'exec:thread-1',
-        status: 'working' as const,
-        statusMessage: 'ready',
-      },
-      messages: [],
-      activityEvents: [],
-    };
     const hireResult = config.domain?.handleOperation?.({
       operation: {
         source: 'command',
         name: 'hire',
       },
       threadId: 'thread-1',
-      session,
+      state: {
+        phase: 'prehire',
+        onboardingStep: null,
+        operatorNote: null,
+      },
     });
 
     expect(config.domain?.lifecycle.commands.map((command) => command.name)).toEqual([
@@ -108,8 +97,20 @@ describe('createPiExampleAgentConfig', () => {
           type: 'operator-config',
           surfacedInThread: true,
         },
+        artifacts: [
+          {
+            data: {
+              type: 'lifecycle-status',
+              phase: 'onboarding',
+              onboardingStep: 'operator-profile',
+            },
+          },
+        ],
       },
     });
+    expect(hireResult?.outputs).not.toHaveProperty('threadPatch');
+    expect(hireResult?.outputs?.interrupt).not.toHaveProperty('inputLabel');
+    expect(hireResult?.outputs?.interrupt).not.toHaveProperty('submitLabel');
 
     const onboardingResult = config.domain?.handleOperation?.({
       operation: {
@@ -120,7 +121,7 @@ describe('createPiExampleAgentConfig', () => {
         },
       },
       threadId: 'thread-1',
-      session,
+      state: hireResult?.state,
     });
 
     expect(onboardingResult).toMatchObject({
@@ -130,10 +131,11 @@ describe('createPiExampleAgentConfig', () => {
         operatorNote: 'ready for delegation',
       },
     });
+    expect(onboardingResult?.outputs).not.toHaveProperty('threadPatch');
     expect(
       config.domain?.systemContext?.({
         threadId: 'thread-1',
-        session,
+        state: onboardingResult?.state,
       }),
     ).toEqual([
       'Lifecycle phase: onboarding.',
@@ -147,7 +149,7 @@ describe('createPiExampleAgentConfig', () => {
         name: 'complete_onboarding',
       },
       threadId: 'thread-1',
-      session,
+      state: onboardingResult?.state,
     });
 
     expect(hiredResult).toMatchObject({

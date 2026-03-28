@@ -46,6 +46,7 @@ The `domain` extension surface is responsible for:
 - lifecycle declaration
 - dynamic system context contribution
 - one normalized domain operation handler
+- state-driven domain context via `threadId` plus domain state
 - adapter-neutral domain outputs
 
 The domain owns:
@@ -64,6 +65,8 @@ The domain owns:
 - transport ownership
 - projection assembly
 - structural contract enforcement
+
+In particular, domains do not author projection details such as thread patches, AG-UI labels, or artifact-channel routing. Domains return semantic state, artifacts, interrupts, and status updates; `agent-runtime` projects those into runtime/session/transport shapes internally.
 
 The web layer remains projection-only and is not the source of domain truth.
 

@@ -5,7 +5,8 @@ import {
   AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL,
   AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
   AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL,
-  createAgentRuntime,
+  type AgentRuntimeDomainConfig,
+  type CreateAgentRuntimeOptions,
 } from 'agent-runtime';
 
 const DEFAULT_PI_AGENT_MODEL = 'openai/gpt-5.4-mini';
@@ -38,7 +39,7 @@ type PiExampleGatewayEnv = NodeJS.ProcessEnv & {
 
 export type { PiExampleGatewayEnv };
 
-type PiExampleAgentRuntimeOptions = Parameters<typeof createAgentRuntime>[0];
+type PiExampleAgentRuntimeOptions = CreateAgentRuntimeOptions<PiExampleLifecycleState>;
 export type PiExampleAgentConfig = Pick<
   PiExampleAgentRuntimeOptions,
   'agentOptions' | 'databaseUrl' | 'domain' | 'model' | 'systemPrompt' | 'tools'
@@ -58,40 +59,17 @@ type PiExampleLifecycleState = {
   operatorNote: string | null;
 };
 
-type PiExampleDomainConfig = NonNullable<PiExampleAgentConfig['domain']>;
+type PiExampleDomainConfig = AgentRuntimeDomainConfig<PiExampleLifecycleState>;
 
-function createPiExampleLifecycleStore() {
-  const states = new Map<string, PiExampleLifecycleState>();
-
-  const getState = (threadId: string): PiExampleLifecycleState => {
-    const existing = states.get(threadId);
-    if (existing) {
-      return existing;
-    }
-
-    const created: PiExampleLifecycleState = {
-      phase: 'prehire',
-      onboardingStep: null,
-      operatorNote: null,
-    };
-    states.set(threadId, created);
-    return created;
-  };
-
-  const setState = (threadId: string, state: PiExampleLifecycleState) => {
-    states.set(threadId, state);
-    return state;
-  };
-
+function buildDefaultLifecycleState(): PiExampleLifecycleState {
   return {
-    getState,
-    setState,
+    phase: 'prehire',
+    onboardingStep: null,
+    operatorNote: null,
   };
 }
 
-function createPiExampleDomain(params: {
-  lifecycleStore: ReturnType<typeof createPiExampleLifecycleStore>;
-}): PiExampleDomainConfig {
+function createPiExampleDomain(): PiExampleDomainConfig {
   return {
     lifecycle: {
       initialPhase: 'prehire',
@@ -136,22 +114,22 @@ function createPiExampleDomain(params: {
         },
       ],
     },
-    systemContext: ({ threadId }) => {
-      const state = params.lifecycleStore.getState(threadId);
-      const context = [`Lifecycle phase: ${state.phase}.`];
+    systemContext: ({ state }) => {
+      const currentState = state ?? buildDefaultLifecycleState();
+      const context = [`Lifecycle phase: ${currentState.phase}.`];
 
-      if (state.phase === 'onboarding' && state.onboardingStep) {
-        context.push(`Onboarding step: ${state.onboardingStep}.`);
+      if (currentState.phase === 'onboarding' && currentState.onboardingStep) {
+        context.push(`Onboarding step: ${currentState.onboardingStep}.`);
       }
 
-      if (state.operatorNote) {
-        context.push(`Operator note captured: ${state.operatorNote}.`);
+      if (currentState.operatorNote) {
+        context.push(`Operator note captured: ${currentState.operatorNote}.`);
       }
 
       return context;
     },
-    handleOperation: ({ operation, threadId }) => {
-      const current = params.lifecycleStore.getState(threadId);
+    handleOperation: ({ operation, state }) => {
+      const current = state ?? buildDefaultLifecycleState();
       const buildLifecycleArtifact = (state: PiExampleLifecycleState) => ({
         data: {
           type: 'lifecycle-status',
@@ -169,7 +147,6 @@ function createPiExampleDomain(params: {
             onboardingStep: 'operator-profile',
             operatorNote: null,
           };
-          params.lifecycleStore.setState(threadId, nextState);
           return {
             state: nextState,
             outputs: {
@@ -182,20 +159,6 @@ function createPiExampleDomain(params: {
                 type: 'operator-config',
                 surfacedInThread: true,
                 message,
-                inputLabel: 'Operator note',
-                submitLabel: 'Continue agent loop',
-                artifactData: {
-                  type: 'interrupt-status',
-                  interruptType: 'operator-config',
-                  status: 'pending',
-                  message,
-                },
-              },
-              threadPatch: {
-                lifecycle: {
-                  phase: nextState.phase,
-                  onboardingStep: nextState.onboardingStep,
-                },
               },
             },
           };
@@ -213,7 +176,6 @@ function createPiExampleDomain(params: {
             onboardingStep: 'delegation-note',
             operatorNote: operatorNote ?? null,
           };
-          params.lifecycleStore.setState(threadId, nextState);
           return {
             state: nextState,
             outputs: {
@@ -222,13 +184,6 @@ function createPiExampleDomain(params: {
                 statusMessage: 'Operator note captured. Ready to complete onboarding.',
               },
               artifacts: [buildLifecycleArtifact(nextState)],
-              threadPatch: {
-                lifecycle: {
-                  phase: nextState.phase,
-                  onboardingStep: nextState.onboardingStep,
-                  operatorNote: nextState.operatorNote,
-                },
-              },
             },
           };
         }
@@ -238,7 +193,6 @@ function createPiExampleDomain(params: {
             onboardingStep: null,
             operatorNote: current.operatorNote,
           };
-          params.lifecycleStore.setState(threadId, nextState);
           return {
             state: nextState,
             outputs: {
@@ -247,12 +201,6 @@ function createPiExampleDomain(params: {
                 statusMessage: 'Onboarding complete. Agent is now hired.',
               },
               artifacts: [buildLifecycleArtifact(nextState)],
-              threadPatch: {
-                lifecycle: {
-                  phase: nextState.phase,
-                  operatorNote: nextState.operatorNote,
-                },
-              },
             },
           };
         }
@@ -262,7 +210,6 @@ function createPiExampleDomain(params: {
             onboardingStep: null,
             operatorNote: current.operatorNote,
           };
-          params.lifecycleStore.setState(threadId, nextState);
           return {
             state: nextState,
             outputs: {
@@ -271,12 +218,6 @@ function createPiExampleDomain(params: {
                 statusMessage: 'Agent lifecycle ended.',
               },
               artifacts: [buildLifecycleArtifact(nextState)],
-              threadPatch: {
-                lifecycle: {
-                  phase: nextState.phase,
-                  operatorNote: nextState.operatorNote,
-                },
-              },
             },
           };
         }
@@ -572,7 +513,6 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
 }
 
 export function createPiExampleAgentConfig(env: PiExampleGatewayEnv = process.env): PiExampleAgentConfig {
-  const lifecycleStore = createPiExampleLifecycleStore();
   const mockedExternalBoundary = isMockedExternalBoundary(env);
   const openRouterApiKey = mockedExternalBoundary
     ? env.OPENROUTER_API_KEY?.trim()
@@ -584,9 +524,7 @@ export function createPiExampleAgentConfig(env: PiExampleGatewayEnv = process.en
     systemPrompt: PI_EXAMPLE_SYSTEM_PROMPT,
     databaseUrl: env.DATABASE_URL,
     tools: [],
-    domain: createPiExampleDomain({
-      lifecycleStore,
-    }),
+    domain: createPiExampleDomain(),
     agentOptions: {
       initialState: {
         thinkingLevel: 'low',
