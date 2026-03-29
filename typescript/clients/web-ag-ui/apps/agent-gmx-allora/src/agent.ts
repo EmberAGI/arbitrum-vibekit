@@ -272,6 +272,9 @@ const ThreadStateUpdateResponseSchema = z
 const RunResponseSchema = z
   .object({ run_id: z.string(), status: z.string().optional() })
   .catchall(z.unknown());
+const ListedRunSchema = z
+  .object({ run_id: z.string(), status: z.string().optional() })
+  .catchall(z.unknown());
 
 type RunStatus = string | undefined;
 const DEFAULT_RUN_STREAM_SILENCE_TIMEOUT_MS = 90_000;
@@ -479,8 +482,43 @@ async function fetchRun(baseUrl: string, threadId: string, runId: string) {
   return parseJsonResponse(response, RunResponseSchema);
 }
 
-async function cancelRun(baseUrl: string, threadId: string, runId: string): Promise<void> {
-  const response = await fetch(`${baseUrl}/threads/${threadId}/runs/${runId}/cancel`, {
+async function listThreadRuns(
+  baseUrl: string,
+  threadId: string,
+): Promise<Array<z.infer<typeof ListedRunSchema>>> {
+  const response = await fetch(`${baseUrl}/threads/${threadId}/runs`);
+  const payload = await parseJsonResponse(response, z.unknown());
+  const runList = Array.isArray(payload)
+    ? payload
+    : isRecord(payload) && Array.isArray(payload['runs'])
+      ? payload['runs']
+      : isRecord(payload) && Array.isArray(payload['data'])
+        ? payload['data']
+        : undefined;
+
+  if (!runList) {
+    throw new Error('Unexpected LangGraph runs response shape');
+  }
+
+  return runList.map((candidate) => ListedRunSchema.parse(candidate));
+}
+
+function isActiveRunStatus(status: RunStatus): boolean {
+  return status === 'pending' || status === 'running';
+}
+
+async function cancelRun(
+  baseUrl: string,
+  threadId: string,
+  runId: string,
+  options?: { wait?: boolean },
+): Promise<void> {
+  const cancelUrl = new URL(`${baseUrl}/threads/${threadId}/runs/${runId}/cancel`);
+  if (options?.wait) {
+    cancelUrl.searchParams.set('wait', 'true');
+  }
+
+  const response = await fetch(cancelUrl, {
     method: 'POST',
   });
 
@@ -490,6 +528,25 @@ async function cancelRun(baseUrl: string, threadId: string, runId: string): Prom
 
   const payloadText = await response.text().catch(() => 'No error body');
   throw new Error(`LangGraph run cancel failed (${response.status}): ${payloadText}`);
+}
+
+async function reconcileRecoveredThreadRuns(baseUrl: string, threadId: string): Promise<void> {
+  const activeRuns = (await listThreadRuns(baseUrl, threadId)).filter((run) =>
+    isActiveRunStatus(run.status),
+  );
+  if (activeRuns.length === 0) {
+    return;
+  }
+
+  console.warn('[cron] Recovered thread has active runs; canceling before rescheduling', {
+    threadId,
+    runIds: activeRuns.map((run) => run.run_id),
+    statuses: activeRuns.map((run) => run.status),
+  });
+
+  await Promise.all(
+    activeRuns.map((run) => cancelRun(baseUrl, threadId, run.run_id, { wait: true })),
+  );
 }
 
 function timeoutAfter(ms: number): Promise<never> {
@@ -556,7 +613,7 @@ async function waitForRunStreamCompletion(params: {
         runId: params.runId,
         timeoutMs,
       });
-      await cancelRun(params.baseUrl, params.threadId, params.runId);
+      await cancelRun(params.baseUrl, params.threadId, params.runId, { wait: true });
     }
   }
 
@@ -623,8 +680,21 @@ export async function startCron(threadId: string, options?: { durability?: LangG
 
 configureCronExecutor(runGraphOnce);
 try {
-  const recoveredCronThreads = await restorePersistedCronSchedulesFromCheckpointer((threadId, intervalMs) =>
-    ensureCronForThread(threadId, intervalMs),
+  const recoveredCronThreads = await restorePersistedCronSchedulesFromCheckpointer(() => undefined);
+  const baseUrl = resolveLangGraphDeploymentUrl();
+  await Promise.all(
+    recoveredCronThreads.map(async ({ threadId, pollIntervalMs }) => {
+      try {
+        await reconcileRecoveredThreadRuns(baseUrl, threadId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn('[cron] Failed to reconcile recovered thread runs', {
+          threadId,
+          error: message,
+        });
+      }
+      ensureCronForThread(threadId, pollIntervalMs);
+    }),
   );
   if (recoveredCronThreads.length > 0) {
     console.info('[cron] Recovered persisted cron schedules', {

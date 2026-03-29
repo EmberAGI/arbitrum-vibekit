@@ -244,7 +244,7 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
           { status: 200 },
         );
       }
-      if (url.endsWith('/threads/thread-1/runs/run-1/cancel') && method === 'POST') {
+      if (url.includes('/threads/thread-1/runs/run-1/cancel') && method === 'POST') {
         return new Response('', { status: 202 });
       }
       if (url.endsWith('/threads/thread-1/runs/run-1') && method === 'GET') {
@@ -274,11 +274,12 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
 
     const cancelCalls = fetchMock.mock.calls.filter(([input, requestInit]) => {
       return (
-        getUrl(input as string | URL | Request).endsWith('/threads/thread-1/runs/run-1/cancel') &&
+        getUrl(input as string | URL | Request).includes('/threads/thread-1/runs/run-1/cancel') &&
         getMethod(requestInit) === 'POST'
       );
     });
     expect(cancelCalls).toHaveLength(1);
+    expect(getUrl(cancelCalls[0]?.[0] as string | URL | Request)).toContain('wait=true');
 
     const runCreateCalls = fetchMock.mock.calls.filter(([input, requestInit]) => {
       return (
@@ -326,7 +327,7 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
           { status: 200 },
         );
       }
-      if (url.endsWith('/threads/thread-1/runs/run-1/cancel') && method === 'POST') {
+      if (url.includes('/threads/thread-1/runs/run-1/cancel') && method === 'POST') {
         return new Response('', { status: 202 });
       }
       if (url.endsWith('/threads/thread-1/runs/run-1') && method === 'GET') {
@@ -356,11 +357,12 @@ describe('runGraphOnce busy handling integration (GMX Allora)', () => {
 
     const cancelCalls = fetchMock.mock.calls.filter(([input, requestInit]) => {
       return (
-        getUrl(input as string | URL | Request).endsWith('/threads/thread-1/runs/run-1/cancel') &&
+        getUrl(input as string | URL | Request).includes('/threads/thread-1/runs/run-1/cancel') &&
         getMethod(requestInit) === 'POST'
       );
     });
     expect(cancelCalls).toHaveLength(1);
+    expect(getUrl(cancelCalls[0]?.[0] as string | URL | Request)).toContain('wait=true');
 
     const runCreateCalls = fetchMock.mock.calls.filter(([input, requestInit]) => {
       return (
