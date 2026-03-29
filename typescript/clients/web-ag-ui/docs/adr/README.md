@@ -11,4 +11,5 @@
 | [0007](./0007-sibling-channel-adapters-and-canonical-thread-identity.md) | Sibling channel adapters and canonical thread identity | Accepted | 2026-03-17 |
 | [0008](./0008-runtime-agnostic-shared-contract-extraction.md) | Runtime-agnostic shared contract extraction | Accepted | 2026-03-17 |
 | [0009](./0009-postgres-centered-persistence-for-pi-runtime.md) | Postgres-centered persistence for Pi runtime | Accepted | 2026-03-17 |
-| [0010](./0010-pluggable-agent-domain-modules-above-pi-core-runtime.md) | Pluggable agent domain modules above Pi core runtime | Accepted | 2026-03-18 |
+| [0010](./0010-pluggable-agent-domain-modules-above-pi-core-runtime.md) | Pluggable agent domain modules above Pi core runtime | Superseded | 2026-03-18 |
+| [0011](./0011-blessed-agent-runtime-factory-and-runtime-owned-projection-assembly.md) | Blessed agent-runtime factory and runtime-owned projection assembly | Accepted | 2026-03-28 |

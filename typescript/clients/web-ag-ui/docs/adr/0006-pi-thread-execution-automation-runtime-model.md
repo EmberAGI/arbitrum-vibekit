@@ -43,7 +43,7 @@ These runtime records sit above the concrete Pi package foundation:
 
 The foundational runtime model is intentionally lower-level than any specific agent-family lifecycle system.
 - Opinionated workflows such as hire/setup/sync/fire do not belong in the core runtime model itself.
-- Those higher-level workflows belong in pluggable Pi-owned agent domain modules layered above the core runtime model, as described in ADR 0010.
+- Those higher-level workflows belong in pluggable Pi-owned agent domain modules layered above the core runtime model, as described in ADR 0011.
 
 Additional rules:
 - Background/autonomous executions run in separate operational contexts linked back to the root thread.

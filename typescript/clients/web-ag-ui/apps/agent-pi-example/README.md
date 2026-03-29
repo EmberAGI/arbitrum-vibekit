@@ -18,6 +18,11 @@ The intended lifecycle example for this app is:
 
 This app is the intended reference path: it should configure `agent-runtime`, not assemble low-level runtime internals itself.
 
+The intended split is:
+
+- `agent-runtime` package root for the blessed runtime builder and AG-UI HTTP client factory
+- the returned runtime `service.createAgUiHandler(...)` for AG-UI mounting
+
 In particular, `agent-runtime` now owns:
 
 - session storage and projection assembly
@@ -44,17 +49,15 @@ That command:
 
 - builds the shared `agent-runtime` dependency
 - loads `.env` automatically, falling back to `.env.example`
-- auto-starts the shared local Docker Postgres container when `DATABASE_URL` is not set
-- applies the Pi runtime schema before the HTTP server starts
 - serves the Pi-backed AG-UI service on `http://127.0.0.1:3410/ag-ui`
 
-If you already have a Postgres instance, set `DATABASE_URL` and the shared bootstrap helper will use it instead of booting local Docker.
+If you set `DATABASE_URL`, the runtime uses that Postgres instance as the explicit override. If you omit it, `agent-runtime` boots and uses its default local Postgres setup automatically.
 
 ## Environment
 
 - `OPENROUTER_API_KEY`: required for live runs
 - `PI_AGENT_MODEL`: optional OpenRouter model id, defaults to `openai/gpt-5.4-mini`
-- `DATABASE_URL`: optional external Postgres URL
+- `DATABASE_URL`: optional Postgres URL override; when omitted, runtime-managed default Postgres bootstrap is used
 - `PORT`: optional HTTP port, defaults to `3410`
 - `E2E_PROFILE=mocked` or `PI_AGENT_EXTERNAL_BOUNDARY_MODE=mocked`: test-only mode that keeps the in-repo Pi runtime, transport, and Postgres stack while replacing only the external LLM boundary
 
@@ -64,6 +67,6 @@ Normal validation should keep the in-repo Pi systems real:
 
 - Pi-backed runtime behavior
 - AG-UI transport and service boundary
-- Postgres-backed persistence, control-plane reads, and automation recovery
+- Postgres-backed persistence, control-plane reads, and automation recovery through either the runtime-managed default Postgres path or an explicit `DATABASE_URL` override
 
 Only external boundaries should be mocked or replayed. For the Pi example, that means tests may replace the OpenRouter LLM call, but they should not replace the internal runtime driver with app-owned session, scheduler, or persistence stand-ins.

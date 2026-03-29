@@ -25,11 +25,12 @@ export function buildPersistDirectExecutionStatements(params: {
   now: Date;
 }): PostgresStatement[] {
   return [
-    buildStatement(
-      'pi_threads',
-      'insert into pi_threads (id, thread_key, status, thread_state, created_at, updated_at) values ($1, $2, $3, $4, $5, $6) on conflict (id) do update set thread_state = excluded.thread_state, updated_at = excluded.updated_at',
-      [params.threadId, params.threadKey, 'active', JSON.stringify(params.threadState), params.now, params.now],
-    ),
+    ...buildPersistThreadStateStatements({
+      threadId: params.threadId,
+      threadKey: params.threadKey,
+      threadState: params.threadState,
+      now: params.now,
+    }),
     buildStatement(
       'pi_executions',
       'insert into pi_executions (id, thread_id, automation_run_id, status, source, current_interrupt_id, created_at, updated_at, completed_at) values ($1, $2, null, $3, $4, $5, $6, $7, null) on conflict (id) do update set status = excluded.status, current_interrupt_id = excluded.current_interrupt_id, updated_at = excluded.updated_at',
@@ -49,6 +50,21 @@ export function buildPersistDirectExecutionStatements(params: {
       'pi_thread_activity',
       'insert into pi_thread_activity (id, thread_id, execution_id, activity_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
       [params.activityId, params.threadId, params.executionId, 'direct-execution', '{}', params.now],
+    ),
+  ];
+}
+
+export function buildPersistThreadStateStatements(params: {
+  threadId: string;
+  threadKey: string;
+  threadState: Record<string, unknown>;
+  now: Date;
+}): PostgresStatement[] {
+  return [
+    buildStatement(
+      'pi_threads',
+      'insert into pi_threads (id, thread_key, status, thread_state, created_at, updated_at) values ($1, $2, $3, $4, $5, $6) on conflict (id) do update set thread_state = excluded.thread_state, updated_at = excluded.updated_at',
+      [params.threadId, params.threadKey, 'active', JSON.stringify(params.threadState), params.now, params.now],
     ),
   ];
 }

@@ -9,7 +9,6 @@ import {
 } from '@ag-ui/core';
 import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
 import { createAssistantMessageEventStream, type Api, type Message, type Model, type ToolResultMessage } from '@mariozechner/pi-ai';
-import { mergeThreadPatchForEmit, type TaskState } from 'agent-runtime-contracts';
 import {
   buildPiRuntimeInspectionSnapshot,
   buildPiRuntimeMaintenancePlan,
@@ -27,6 +26,9 @@ import {
   type PiThreadRecord,
   type PostgresBootstrapPlan,
 } from 'agent-runtime-postgres';
+
+import { type TaskState } from './taskState.js';
+import { mergeThreadPatchForEmit } from './threadEmission.js';
 export type { AgentOptions, AgentTool } from '@mariozechner/pi-agent-core';
 export {
   createPiRuntimeGatewayAgUiHandler,
@@ -1474,6 +1476,10 @@ export const createPiRuntimeGatewayRuntime = (params: {
     threadId: string,
     update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
   ) => PiRuntimeGatewaySession;
+  onSessionUpdated?: (
+    threadId: string,
+    session: PiRuntimeGatewaySession,
+  ) => Promise<void> | void;
   now?: () => number;
 }): PiRuntimeGatewayRuntime => {
   const now = params.now ?? (() => Date.now());
@@ -1492,28 +1498,36 @@ export const createPiRuntimeGatewayRuntime = (params: {
           messages: session.messages,
         }
       : null;
-  const persistRequestMessages = (threadId: string, requestMessages: readonly AgUiMessage[]) => {
-    if (requestMessages.length === 0 || !params.updateSession) {
-      return params.getSession(threadId);
-    }
+  const persistRequestMessages = async (threadId: string, requestMessages: readonly AgUiMessage[]) => {
+    const session =
+      requestMessages.length === 0 || !params.updateSession
+        ? params.getSession(threadId)
+        : params.updateSession(threadId, (session) => ({
+            ...session,
+            messages: mergeAgUiMessages(session.messages ?? [], requestMessages),
+          }));
 
-    return params.updateSession(threadId, (session) => ({
-      ...session,
-      messages: mergeAgUiMessages(session.messages ?? [], requestMessages),
-    }));
+    await params.onSessionUpdated?.(threadId, session);
+    return session;
   };
-  const persistRunTranscript = (threadId: string, requestMessages: readonly AgUiMessage[], projectedEvents: readonly BaseEvent[]) => {
-    if (!params.updateSession) {
-      return params.getSession(threadId);
-    }
+  const persistRunTranscript = async (
+    threadId: string,
+    requestMessages: readonly AgUiMessage[],
+    projectedEvents: readonly BaseEvent[],
+  ) => {
+    const session =
+      !params.updateSession
+        ? params.getSession(threadId)
+        : params.updateSession(threadId, (session) => ({
+            ...session,
+            messages: applyProjectedRunEventsToMessages(
+              mergeAgUiMessages(session.messages ?? [], requestMessages),
+              projectedEvents,
+            ),
+          }));
 
-    return params.updateSession(threadId, (session) => ({
-      ...session,
-      messages: applyProjectedRunEventsToMessages(
-        mergeAgUiMessages(session.messages ?? [], requestMessages),
-        projectedEvents,
-      ),
-    }));
+    await params.onSessionUpdated?.(threadId, session);
+    return session;
   };
 
   return {
@@ -1549,7 +1563,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
           threadId: request.threadId,
           runId: request.runId,
         } satisfies RunStartedEvent));
-        const requestSession = persistRequestMessages(request.threadId, requestMessages);
+        const requestSession = await persistRequestMessages(request.threadId, requestMessages);
         const requestMessagesSnapshotEvent = buildMessagesSnapshotEvent(requestSession);
         if (requestMessagesSnapshotEvent) {
           controller.push(requestMessagesSnapshotEvent);
@@ -1589,7 +1603,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
             await params.agent.continue();
           }
 
-          const session = persistRunTranscript(request.threadId, requestMessages, projectedRunEvents);
+          const session = await persistRunTranscript(request.threadId, requestMessages, projectedRunEvents);
           logPiGatewayDebug('run session after transcript persist', session);
           controller.push(buildSnapshotEvent(session));
           const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);

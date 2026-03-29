@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const langGraphInterruptSnapshotAgentConfigs: Array<Record<string, unknown>> = [];
-const piRuntimeHttpAgentConfigs: Array<Record<string, unknown>> = [];
+const agentRuntimeHttpAgentConfigs: Array<Record<string, unknown>> = [];
 
 class MockLangGraphInterruptSnapshotAgent {
   constructor(config: Record<string, unknown>) {
@@ -9,26 +9,30 @@ class MockLangGraphInterruptSnapshotAgent {
   }
 }
 
-class MockPiRuntimeHttpAgent {
-  constructor(config: Record<string, unknown>) {
-    piRuntimeHttpAgentConfigs.push(config);
-  }
+const mockAgentRuntimeHttpAgent = (config: Record<string, unknown>) => {
+  agentRuntimeHttpAgentConfigs.push(config);
+  return {
+    config,
+  };
+};
+
+vi.mock('agent-runtime', async () => {
+  const actual = await vi.importActual<typeof import('agent-runtime')>('agent-runtime');
+  return {
+    ...actual,
+    createAgentRuntimeHttpAgent: mockAgentRuntimeHttpAgent,
+  };
 }
+);
 
 vi.mock('./langGraphInterruptSnapshotAgent', () => ({
   LangGraphInterruptSnapshotAgent: MockLangGraphInterruptSnapshotAgent,
 }));
 
-vi.mock('agent-runtime/pi-transport', () => {
-  return {
-    PiRuntimeGatewayHttpAgent: MockPiRuntimeHttpAgent,
-  };
-});
-
 describe('buildCopilotRuntimeAgents', () => {
   beforeEach(() => {
     langGraphInterruptSnapshotAgentConfigs.length = 0;
-    piRuntimeHttpAgentConfigs.length = 0;
+    agentRuntimeHttpAgentConfigs.length = 0;
   });
 
   it('registers LangGraph agents through the interrupt-preserving adapter and keeps Pi on the AG-UI HTTP runtime', async () => {
@@ -73,13 +77,18 @@ describe('buildCopilotRuntimeAgents', () => {
       },
     ]);
 
-    expect(piRuntimeHttpAgentConfigs).toEqual([
+    expect(agentRuntimeHttpAgentConfigs).toEqual([
       {
         agentId: 'agent-pi-example',
         runtimeUrl: 'http://pi-agent-example:3410/ag-ui',
       },
     ]);
-    expect(agents['agent-pi-example']).toBeInstanceOf(MockPiRuntimeHttpAgent);
+    expect(agents['agent-pi-example']).toMatchObject({
+      config: {
+        agentId: 'agent-pi-example',
+        runtimeUrl: 'http://pi-agent-example:3410/ag-ui',
+      },
+    });
   });
 
   it('defaults the Pi example runtime URL for local development', async () => {
@@ -89,8 +98,13 @@ describe('buildCopilotRuntimeAgents', () => {
       LANGSMITH_API_KEY: 'test-langsmith-key',
     });
 
-    expect(agents['agent-pi-example']).toBeInstanceOf(MockPiRuntimeHttpAgent);
-    expect(piRuntimeHttpAgentConfigs).toContainEqual({
+    expect(agents['agent-pi-example']).toMatchObject({
+      config: {
+        agentId: 'agent-pi-example',
+        runtimeUrl: 'http://127.0.0.1:3410/ag-ui',
+      },
+    });
+    expect(agentRuntimeHttpAgentConfigs).toContainEqual({
       agentId: 'agent-pi-example',
       runtimeUrl: 'http://127.0.0.1:3410/ag-ui',
     });

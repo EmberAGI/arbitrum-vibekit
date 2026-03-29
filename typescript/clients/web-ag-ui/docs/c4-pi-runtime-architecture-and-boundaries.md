@@ -35,7 +35,7 @@ Related docs:
 - `docs/adr/0006-pi-thread-execution-automation-runtime-model.md`
 - `docs/adr/0007-sibling-channel-adapters-and-canonical-thread-identity.md`
 - `docs/adr/0008-runtime-agnostic-shared-contract-extraction.md`
-- `docs/adr/0010-pluggable-agent-domain-modules-above-pi-core-runtime.md`
+- `docs/adr/0011-blessed-agent-runtime-factory-and-runtime-owned-projection-assembly.md`
 
 ## 2. Boundary rules
 
@@ -148,7 +148,7 @@ Container responsibilities:
 - `@mariozechner/pi-ai`: provider/model/tool-calling substrate beneath the Pi agent core
 - Pi runtime core: canonical ownership of threads, executions, automations, and automation runs
 - Projection layer: maps canonical Pi records into AG-UI, A2A, and future channel-specific views without creating competing durable identities
-- Agent domain module: pluggable layer for agent-family-specific lifecycle, interrupt, command, and A2UI projection rules
+- Agent domain module: pluggable layer for agent-family-specific lifecycle, interrupt, command, and semantic A2UI content
 - Operator control plane: scheduler health, maintenance, replay/recreate, inspection, and archival workflows that are not model-facing tools
 
 Important web constraint:
@@ -159,8 +159,8 @@ Important web constraint:
 ### 4.1 Package Ownership Clarification
 
 - The `agent-runtime` package family owns the reusable Pi AG-UI transport layer on both sides of the HTTP boundary:
-  - runtime-side AG-UI HTTP adapter/server helpers
-  - Pi-capable `HttpAgent` transport helpers needed by web-side consumers
+  - runtime-side AG-UI mounting on the returned runtime service
+  - root-level runtime-owned AG-UI HTTP client creation for web-side consumers
 - Concrete Pi-backed `apps/agent*` own:
   - domain-specific agent construction
   - runtime configuration
@@ -183,7 +183,7 @@ flowchart LR
   A -->|schedules| R
   R -->|creates or references| E
   T -->|hosts visible state and projections for| E
-  D -->|defines lifecycle and projection rules over| T
+  D -->|defines lifecycle semantics for| T
   D -->|drives domain behavior for| E
   D -->|may define domain semantics for| A
 ```

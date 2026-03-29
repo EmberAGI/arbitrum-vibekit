@@ -1,4 +1,4 @@
-import type { TaskState } from 'agent-runtime-contracts';
+import type { TaskState } from './taskState.js';
 
 export interface ResolveSummaryTaskStatusInput {
   haltReason?: string | null;

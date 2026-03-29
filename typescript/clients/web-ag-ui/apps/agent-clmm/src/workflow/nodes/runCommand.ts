@@ -1,4 +1,3 @@
-import type { CommandEnvelope } from 'agent-runtime-contracts';
 import {
   extractCommandEnvelopeFromMessages,
   extractCommandFromMessages,
@@ -6,6 +5,7 @@ import {
   resolveCycleCommandTarget,
   resolveCommandTargetForBootstrappedFlow,
   type AgentCommand,
+  type CommandEnvelope,
   type CommandRoutingTarget,
 } from 'agent-workflow-core';
 

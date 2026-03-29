@@ -1,6 +1,6 @@
 # ADR 0010: pluggable-agent-domain-modules-above-pi-core-runtime
 
-Status: Accepted
+Status: Superseded by ADR 0011
 Date: 2026-03-18
 
 ## Context

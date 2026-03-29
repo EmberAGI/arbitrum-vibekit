@@ -2,21 +2,24 @@
 
 `agent-runtime` is the builder-facing package for Pi-backed agents.
 
-Normal consumers should treat the package root as the only supported integration surface. The architectural direction for this package is:
+Normal consumers should treat the package root as the only supported runtime-construction surface. The architectural direction for this package is:
 
 - one blessed top-level builder for normal consumers
 - top-level configuration for `model`, `systemPrompt`, and `tools`
 - domain extension through declarative `domain` configuration
-- no consumer-owned runtime/session/projection/AG-UI assembly
+- no consumer-owned runtime/session/projection assembly
 
 ## Public Boundary
 
 The supported normal-consumer path is:
 
 - depend on `agent-runtime`
-- import from the package root
+- import `createAgentRuntime(...)` and domain types from the package root
 - configure the runtime declaratively
-- let `agent-runtime` own runtime assembly, AG-UI transport integration, and projection assembly
+- `await createAgentRuntime(...)` during process startup to receive the ready runtime `service`
+- mount AG-UI from the returned `service.createAgUiHandler(...)` when you need to expose the ready runtime service over HTTP
+- use `createAgentRuntimeHttpAgent(...)` from the package root when a web/runtime consumer needs an AG-UI HTTP client
+- let `agent-runtime` own runtime assembly and projection assembly
 
 Concrete agent apps should primarily provide:
 
@@ -28,7 +31,13 @@ Concrete agent apps should not re-implement:
 
 - low-level runtime/service/control-plane assembly
 - projection-store ownership
-- generic AG-UI transport glue
+- bootstrap/control-plane/persistence helper orchestration
+
+Do not treat the package root as a grab bag of helper exports. In particular:
+
+- do not import deprecated workflow helpers as the blessed integration model
+- do not expect transport subpaths, control-plane helpers, direct-execution helpers, or Postgres bootstrap helpers
+- treat deprecated workflow packages and compatibility seams as debt, not as architectural precedent
 
 ## Domain Model
 
@@ -40,6 +49,12 @@ The intended public shape is:
 - `domain` configuration
 
 Normal consumers should not pass public session stores, control-plane loaders, or background automation adapters into the blessed builder. Those concerns are runtime-owned internals.
+
+Persistence/bootstrap ownership follows the same rule:
+
+- if you supply `databaseUrl`, `agent-runtime` treats it as the explicit Postgres override
+- if you omit `databaseUrl`, `agent-runtime` boots and uses its default local Postgres configuration internally
+- normal consumers do not manually start Postgres, apply schema, or wire persistence helpers around the builder
 
 The `domain` extension surface is responsible for:
 
@@ -75,19 +90,20 @@ The web layer remains projection-only and is not the source of domain truth.
 The internal package family still separates:
 
 - `agent-runtime/`: public builder-facing facade package
-- `agent-runtime/lib/contracts`: runtime-neutral contracts and shared invariants
 - `agent-runtime/lib/pi`: Pi runtime and AG-UI transport implementation details
 - `agent-runtime/lib/postgres`: persistence, recovery, and bootstrap helpers
+- `clients/web-ag-ui/apps/agent-workflow-core`: shared deprecated LangGraph/workflow helpers used only by the older workflow apps
 
-Those internal packages exist to support the public facade. They are not the normal-consumer integration story.
+`agent-runtime` no longer depends on any deprecated-workflow-branded package. Those internal/runtime-adjacent packages exist to support the public facade, not to define the normal-consumer integration story.
 
 ## Installed Snapshot Sync
 
 `pnpm build` syncs built `dist` artifacts into installed pnpm snapshots so downstream apps can consume local workspace package shapes without a fresh reinstall.
 
-That sync step can be triggered by multiple downstream `build:runtime-deps` commands at once, such as `apps/web` and `apps/agent-ember-lending` starting in parallel. The snapshot replacement flow now takes a per-target lock directory before removing and copying `dist` so concurrent builds do not leave installed artifacts such as `agent-runtime-contracts/dist` missing.
+That sync step can be triggered by multiple downstream `build:runtime-deps` commands at once. The snapshot replacement flow now takes a per-target lock directory before removing and copying `dist` so concurrent builds do not leave installed artifacts such as `agent-runtime-pi/dist` or `agent-runtime-postgres/dist` missing.
 
 If a local workspace ever gets into a broken state after an interrupted or older concurrent build, recover it by rebuilding the runtime packages serially:
 
-1. `pnpm --filter agent-runtime-contracts build`
-2. `pnpm --filter agent-runtime build`
+1. `pnpm --filter agent-runtime-postgres build`
+2. `pnpm --filter agent-runtime-pi build`
+3. `pnpm --filter agent-runtime build`
