@@ -1,6 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
+import type { HttpAgent, HttpAgentConfig } from '@ag-ui/client';
+import type { BaseEvent, Message as AgUiMessage } from '@ag-ui/core';
+import type { AgentOptions as RuntimeAgentOptions, AgentTool as RuntimeAgentTool } from '@mariozechner/pi-agent-core';
 import { Type, streamSimple, type Api, type Model } from '@mariozechner/pi-ai';
 
 import {
@@ -8,20 +11,17 @@ import {
   buildPiRuntimeDirectExecutionRecordIds as buildPiRuntimeDirectExecutionRecordIdsInternal,
   buildPiRuntimeGatewayConnectEvents as buildPiRuntimeGatewayConnectEventsInternal,
   createCanonicalPiRuntimeGatewayControlPlane as createCanonicalPiRuntimeGatewayControlPlaneInternal,
+  createPiRuntimeGatewayAgUiHandler as createPiRuntimeGatewayAgUiHandlerInternal,
   createPiRuntimeGatewayFoundation as createPiRuntimeGatewayFoundationInternal,
+  PiRuntimeGatewayHttpAgent as PiRuntimeGatewayHttpAgentInternal,
   createPiRuntimeGatewayRuntime as createPiRuntimeGatewayRuntimeInternal,
   createPiRuntimeGatewayService as createPiRuntimeGatewayServiceInternal,
   loadPiRuntimeInspectionState as loadPiRuntimeInspectionStateInternal,
   persistPiRuntimeDirectExecution as persistPiRuntimeDirectExecutionInternal,
-  type AgentOptions as PiAgentOptions,
-  type AgentTool as PiAgentTool,
   type PiRuntimeGatewayActivityEvent,
   type PiRuntimeGatewayArtifact,
-  type PiRuntimeGatewayExecutionStatus,
   type PiRuntimeGatewayInspectionState,
-  type PiRuntimeGatewayRunRequest,
   type PiRuntimeGatewayRuntime,
-  type PiRuntimeGatewayService,
   type PiRuntimeGatewaySession,
 } from '../lib/pi/dist/index.js';
 import {
@@ -29,18 +29,19 @@ import {
   buildCompleteAutomationExecutionStatements,
   buildPersistAutomationDispatchStatements,
   buildPersistInterruptCheckpointStatements,
+  buildPersistThreadStateStatements,
   buildPiRuntimeStableUuid,
+  ensurePiRuntimePostgresReady as ensurePiRuntimePostgresReadyInternal,
   executePostgresStatements,
   recoverDueAutomations,
-  type PostgresBootstrapPlan,
 } from '../lib/postgres/dist/index.js';
 
-type AgentRuntimeTransformContext = NonNullable<PiAgentOptions['transformContext']>;
-type AgentRuntimeStreamFn = NonNullable<PiAgentOptions['streamFn']>;
-type AgentRuntimeGetApiKey = NonNullable<PiAgentOptions['getApiKey']>;
-type AgentRuntimeInitialState = NonNullable<PiAgentOptions['initialState']>;
-type AgentRuntimeConvertToLlm = NonNullable<PiAgentOptions['convertToLlm']>;
-type AgentRuntimeTool = PiAgentTool;
+type AgentRuntimeTransformContext = NonNullable<RuntimeAgentOptions['transformContext']>;
+type AgentRuntimeStreamFn = NonNullable<RuntimeAgentOptions['streamFn']>;
+type AgentRuntimeGetApiKey = NonNullable<RuntimeAgentOptions['getApiKey']>;
+type AgentRuntimeInitialState = NonNullable<RuntimeAgentOptions['initialState']>;
+type AgentRuntimeConvertToLlm = NonNullable<RuntimeAgentOptions['convertToLlm']>;
+type AgentRuntimeTool = RuntimeAgentTool;
 type AgentRuntimeConnectEvent = ReturnType<typeof buildPiRuntimeGatewayConnectEventsInternal>[number];
 type AgentRuntimeAttachedEventSource = readonly AgentRuntimeConnectEvent[] | AsyncIterable<AgentRuntimeConnectEvent>;
 type AgentRuntimeAttachedThreadListener = (event: AgentRuntimeConnectEvent) => void;
@@ -94,8 +95,17 @@ export type AgentRuntimeDomainOperation = {
   input?: unknown;
 };
 
+export type AgentRuntimeExecutionStatus =
+  | 'queued'
+  | 'working'
+  | 'interrupted'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+  | 'auth-required';
+
 export type AgentRuntimeDomainStatusOutput = {
-  executionStatus: PiRuntimeGatewayExecutionStatus;
+  executionStatus: AgentRuntimeExecutionStatus;
   statusMessage?: string;
 };
 
@@ -144,9 +154,11 @@ export interface AgentRuntimeAgentOptions {
   convertToLlm?: AgentRuntimeConvertToLlm;
 }
 
-type AgentRuntimeForwardedCommand = NonNullable<
-  NonNullable<PiRuntimeGatewayRunRequest['forwardedProps']>['command']
->;
+export type AgentRuntimeForwardedCommand = {
+  name?: string;
+  input?: unknown;
+  resume?: string;
+};
 
 type AgentRuntimeDomainCommandToolArgs = {
   name: string;
@@ -158,14 +170,67 @@ export const AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL = 'automation_schedule';
 export const AGENT_RUNTIME_AUTOMATION_LIST_TOOL = 'automation_list';
 export const AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL = 'automation_cancel';
 export const AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL = 'request_operator_input';
-export type AgentRuntimeBootstrapPlan = PostgresBootstrapPlan;
+export type AgentRuntimeConnectRequest = {
+  threadId: string;
+  runId?: string;
+};
+export type AgentRuntimeRunRequest = {
+  threadId: string;
+  runId: string;
+  messages?: AgUiMessage[];
+  forwardedProps?: {
+    command?: AgentRuntimeForwardedCommand;
+  };
+};
+export type AgentRuntimeStopRequest = {
+  threadId: string;
+  runId: string;
+};
+export type AgentRuntimeEventSource = readonly BaseEvent[] | AsyncIterable<BaseEvent>;
+export interface AgentRuntimeControlPlane {
+  inspectHealth: () => Promise<unknown>;
+  listThreads: () => Promise<unknown>;
+  listExecutions: () => Promise<unknown>;
+  listAutomations: () => Promise<unknown>;
+  listAutomationRuns: () => Promise<unknown>;
+  inspectScheduler: () => Promise<unknown>;
+  inspectOutbox: () => Promise<unknown>;
+  inspectMaintenance: () => Promise<unknown>;
+}
+export type AgentRuntimeAgUiHandlerOptions = {
+  agentId: string;
+  basePath?: string;
+};
+export type AgentRuntimeAgUiHandler = (request: Request) => Promise<Response>;
+export type AgentRuntimeHttpAgentConfig = Omit<HttpAgentConfig, 'url'> & {
+  runtimeUrl: string;
+};
+export type AgentRuntimeHttpAgent = HttpAgent & {
+  runtimeUrl: string;
+  clone: () => AgentRuntimeHttpAgent;
+};
+export interface AgentRuntimeService {
+  connect: (
+    request: AgentRuntimeConnectRequest,
+  ) => Promise<AgentRuntimeEventSource> | AgentRuntimeEventSource;
+  run: (request: AgentRuntimeRunRequest) => Promise<AgentRuntimeEventSource> | AgentRuntimeEventSource;
+  stop: (request: AgentRuntimeStopRequest) => Promise<AgentRuntimeEventSource> | AgentRuntimeEventSource;
+  control: AgentRuntimeControlPlane;
+  createAgUiHandler: (options: AgentRuntimeAgUiHandlerOptions) => AgentRuntimeAgUiHandler;
+}
+
+export function createAgentRuntimeHttpAgent(config: AgentRuntimeHttpAgentConfig): AgentRuntimeHttpAgent {
+  return new PiRuntimeGatewayHttpAgentInternal(config);
+}
 
 type AgentRuntimeExecutionContext = {
   threadId: string;
 };
 
 type AgentRuntimeSessionStore = {
+  hasSession: (threadId: string) => boolean;
   getSession: (threadId: string) => PiRuntimeGatewaySession;
+  setSession: (threadId: string, session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession;
   updateSession: (
     threadId: string,
     update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
@@ -261,20 +326,6 @@ function appendDomainSystemPromptContext(
   return `${systemPrompt}\n\n${appended}`;
 }
 
-function createEmptyInspectionState(): PiRuntimeGatewayInspectionState {
-  return {
-    threads: [],
-    executions: [],
-    automations: [],
-    automationRuns: [],
-    interrupts: [],
-    leases: [],
-    outboxIntents: [],
-    executionEvents: [],
-    threadActivities: [],
-  };
-}
-
 function buildDefaultSession(threadId: string): PiRuntimeGatewaySession {
   return {
     thread: { id: threadId },
@@ -291,6 +342,8 @@ function buildDefaultSession(threadId: string): PiRuntimeGatewaySession {
 function createSessionStore(): AgentRuntimeSessionStore {
   const sessions = new Map<string, PiRuntimeGatewaySession>();
 
+  const hasSession = (threadId: string): boolean => sessions.has(threadId);
+
   const getSession = (threadId: string): PiRuntimeGatewaySession => {
     const existing = sessions.get(threadId);
     if (existing) {
@@ -303,13 +356,42 @@ function createSessionStore(): AgentRuntimeSessionStore {
   };
 
   return {
+    hasSession,
     getSession,
+    setSession: (threadId, session) => {
+      sessions.set(threadId, session);
+      return session;
+    },
     updateSession: (threadId, update) => {
       const nextSession = update(getSession(threadId));
       sessions.set(threadId, nextSession);
       return nextSession;
     },
   };
+}
+
+function readPersistedSession(
+  threadId: string,
+  threadState: Record<string, unknown>,
+): PiRuntimeGatewaySession | null {
+  const candidateThread =
+    typeof threadState.thread === 'object' && threadState.thread !== null
+      ? (threadState.thread as { id?: unknown })
+      : null;
+  const candidateExecution =
+    typeof threadState.execution === 'object' && threadState.execution !== null
+      ? (threadState.execution as { id?: unknown; status?: unknown })
+      : null;
+
+  if (
+    candidateThread?.id !== threadId ||
+    typeof candidateExecution?.id !== 'string' ||
+    typeof candidateExecution.status !== 'string'
+  ) {
+    return null;
+  }
+
+  return threadState as unknown as PiRuntimeGatewaySession;
 }
 
 function createAutomationRegistry(): AgentRuntimeAutomationRegistry {
@@ -1207,24 +1289,61 @@ export interface CreateAgentRuntimeOptions<TState = unknown> {
 }
 
 export interface AgentRuntimeInstance {
-  bootstrapPlan: AgentRuntimeBootstrapPlan;
-  service: PiRuntimeGatewayService;
+  service: AgentRuntimeService;
 }
+
+type CreateAgentRuntimeInternalPostgres = {
+  ensureReady?: (options?: { env?: { DATABASE_URL?: string } }) => Promise<{
+    databaseUrl: string;
+  }>;
+  loadInspectionState?: (options: { databaseUrl: string }) => Promise<PiRuntimeGatewayInspectionState>;
+  executeStatements?: (
+    databaseUrl: string,
+    statements: Parameters<typeof executePostgresStatements>[1],
+  ) => Promise<void>;
+  persistDirectExecution?: (
+    options: Parameters<typeof persistPiRuntimeDirectExecutionInternal>[0],
+  ) => Promise<void>;
+};
+
+type CreateAgentRuntimeInternalOptions<TState = unknown> = CreateAgentRuntimeOptions<TState> & {
+  __internalPostgres?: CreateAgentRuntimeInternalPostgres;
+};
 
 export function createAgentRuntime<TState = unknown>(
   options: CreateAgentRuntimeOptions<TState>,
-): AgentRuntimeInstance {
+): Promise<AgentRuntimeInstance>;
+export async function createAgentRuntime<TState = unknown>(
+  options: CreateAgentRuntimeInternalOptions<TState>,
+): Promise<AgentRuntimeInstance> {
   const domain = options.domain;
   const now = options.now ?? (() => Date.now());
+  if (domain) {
+    validateDomainLifecycle(domain.lifecycle);
+  }
+  const configuredDatabaseUrl = options.databaseUrl?.trim();
+  const postgres = {
+    ensureReady: options.__internalPostgres?.ensureReady ?? ensurePiRuntimePostgresReadyInternal,
+    loadInspectionState: options.__internalPostgres?.loadInspectionState ?? loadPiRuntimeInspectionStateInternal,
+    executeStatements: options.__internalPostgres?.executeStatements ?? executePostgresStatements,
+    persistDirectExecution:
+      options.__internalPostgres?.persistDirectExecution ?? persistPiRuntimeDirectExecutionInternal,
+  };
+  const { databaseUrl: resolvedDatabaseUrl } = await postgres.ensureReady(
+    configuredDatabaseUrl
+      ? {
+          env: {
+            DATABASE_URL: configuredDatabaseUrl,
+          },
+        }
+      : {},
+  );
   const sessionStore = createSessionStore();
   const domainStateStore = new Map<string, TState>();
   const automationRegistry = createAutomationRegistry();
   const attachedRuns = createAttachedRunRegistry();
   const executionContext = new AsyncLocalStorage<AgentRuntimeExecutionContext>();
   const persistedThreads = new Set<string>();
-  if (domain) {
-    validateDomainLifecycle(domain.lifecycle);
-  }
   const getActiveThreadId = (): string | undefined => {
     const context = executionContext.getStore();
     return context?.threadId;
@@ -1234,23 +1353,53 @@ export function createAgentRuntime<TState = unknown>(
     return threadId ? sessionStore.getSession(threadId) : undefined;
   };
   const loadInspectionState = async (): Promise<PiRuntimeGatewayInspectionState> => {
-    return options.databaseUrl
-      ? await loadPiRuntimeInspectionStateInternal({
-          databaseUrl: options.databaseUrl,
-        })
-      : createEmptyInspectionState();
+    return await postgres.loadInspectionState({
+      databaseUrl: resolvedDatabaseUrl,
+    });
   };
-  const ensureThread = async (threadId: string): Promise<void> => {
-    if (!options.databaseUrl || persistedThreads.has(threadId)) {
-      return;
+  const persistSessionSnapshot = async (
+    threadId: string,
+    session: PiRuntimeGatewaySession = sessionStore.getSession(threadId),
+  ): Promise<void> => {
+    const ids = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+    await postgres.executeStatements(
+      resolvedDatabaseUrl,
+      buildPersistThreadStateStatements({
+        threadId: ids.threadId,
+        threadKey: threadId,
+        threadState: session as unknown as Record<string, unknown>,
+        now: new Date(now()),
+      }),
+    );
+  };
+  const hydrateThreadSession = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
+    if (sessionStore.hasSession(threadId)) {
+      return sessionStore.getSession(threadId);
+    }
+
+    const persistedThread = (await loadInspectionState()).threads.find((candidate) => candidate.threadKey === threadId);
+    if (persistedThread) {
+      persistedThreads.add(threadId);
+      const persistedSession = readPersistedSession(threadId, persistedThread.threadState);
+      if (persistedSession) {
+        return sessionStore.setSession(threadId, persistedSession);
+      }
+    }
+
+    return sessionStore.getSession(threadId);
+  };
+  const ensureThread = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
+    const session = await hydrateThreadSession(threadId);
+    if (persistedThreads.has(threadId)) {
+      return session;
     }
 
     const ids = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
-    await persistPiRuntimeDirectExecutionInternal({
-      databaseUrl: options.databaseUrl,
+    await postgres.persistDirectExecution({
+      databaseUrl: resolvedDatabaseUrl,
       threadId: ids.threadId,
       threadKey: threadId,
-      threadState: { threadId },
+      threadState: session as unknown as Record<string, unknown>,
       executionId: ids.executionId,
       interruptId: ids.interruptId,
       artifactId: ids.artifactId,
@@ -1258,6 +1407,7 @@ export function createAgentRuntime<TState = unknown>(
       now: new Date(now()),
     });
     persistedThreads.add(threadId);
+    return session;
   };
   const publishSessionUpdate = async (threadId: string, runId?: string): Promise<void> => {
     await attachedRuns.publishEventSource(
@@ -1319,7 +1469,7 @@ export function createAgentRuntime<TState = unknown>(
       }
     }
 
-    return sessionStore.updateSession(threadId, (currentSession) =>
+    const nextSession = sessionStore.updateSession(threadId, (currentSession) =>
       applyDomainOperationResult({
         threadId,
         now,
@@ -1329,10 +1479,14 @@ export function createAgentRuntime<TState = unknown>(
         result,
       }),
     );
+    await persistSessionSnapshot(threadId, nextSession);
+    return nextSession;
   };
 
-  const resumeInterruptedSession = (threadId: string): PiRuntimeGatewaySession => {
-    return sessionStore.updateSession(threadId, resolveInterruptedSessionForUserInput);
+  const resumeInterruptedSession = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
+    const nextSession = sessionStore.updateSession(threadId, resolveInterruptedSessionForUserInput);
+    await persistSessionSnapshot(threadId, nextSession);
+    return nextSession;
   };
 
   const readCurrentThreadId = (): string => {
@@ -1377,32 +1531,30 @@ export function createAgentRuntime<TState = unknown>(
         const executionId = randomUUID();
         const artifactId = buildPiRuntimeStableUuid('artifact', `agent-runtime:${threadId}:automation-artifact`);
 
-        if (options.databaseUrl) {
-          const directExecutionIds = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
-          const currentNow = new Date(now());
-          await executePostgresStatements(
-            options.databaseUrl,
-            buildPersistAutomationDispatchStatements({
-              automationId,
-              runId,
-              executionId,
-              threadId: directExecutionIds.threadId,
-              commandName: toolArgs.title,
-              schedulePayload: {
-                title: toolArgs.title,
-                instruction: toolArgs.instruction,
-                schedule,
-                command,
-                minutes,
-              },
-              activityId: randomUUID(),
-              leaseOwnerId: buildPiRuntimeStableUuid('lease-owner', `agent-runtime:${threadId}:lease-owner`),
-              now: currentNow,
-              nextRunAt: new Date(nextRunAt),
-              leaseExpiresAt: new Date(currentNow.getTime() + 60 * 1000),
-            }),
-          );
-        }
+        const directExecutionIds = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+        const currentNow = new Date(now());
+        await postgres.executeStatements(
+          resolvedDatabaseUrl,
+          buildPersistAutomationDispatchStatements({
+            automationId,
+            runId,
+            executionId,
+            threadId: directExecutionIds.threadId,
+            commandName: toolArgs.title,
+            schedulePayload: {
+              title: toolArgs.title,
+              instruction: toolArgs.instruction,
+              schedule,
+              command,
+              minutes,
+            },
+            activityId: randomUUID(),
+            leaseOwnerId: buildPiRuntimeStableUuid('lease-owner', `agent-runtime:${threadId}:lease-owner`),
+            now: currentNow,
+            nextRunAt: new Date(nextRunAt),
+            leaseExpiresAt: new Date(currentNow.getTime() + 60 * 1000),
+          }),
+        );
 
         const title = buildAutomationTitle({
           command,
@@ -1427,7 +1579,7 @@ export function createAgentRuntime<TState = unknown>(
           command,
           schedule,
         });
-        applyAutomationStatusUpdate({
+        const session = applyAutomationStatusUpdate({
           sessionStore,
           threadId,
           artifactId,
@@ -1439,6 +1591,7 @@ export function createAgentRuntime<TState = unknown>(
           minutes,
           detail,
         });
+        await persistSessionSnapshot(threadId, session);
 
         return {
           content: [{ type: 'text' as const, text: detail }],
@@ -1469,28 +1622,26 @@ export function createAgentRuntime<TState = unknown>(
         };
         const threadId = readCurrentThreadId();
         const limit = Math.max(1, Math.min(toolArgs.limit ?? 20, 50));
-        const persistedAutomations = options.databaseUrl
-          ? (await loadInspectionState()).automations
-              .filter(
-                (automation) =>
-                  automation.threadId === buildPiRuntimeDirectExecutionRecordIdsInternal(threadId).threadId,
-              )
-              .map((automation) => ({
-                id: automation.automationId,
-                title:
-                  typeof automation.schedulePayload.title === 'string'
-                    ? automation.schedulePayload.title
-                    : automation.commandName,
-                status: automation.nextRunAt === null ? 'completed' : automation.suspended ? 'canceled' : 'active',
-                schedule: coerceSchedule(automation.schedulePayload.schedule, {
-                  kind: 'every',
-                  intervalMinutes: automation.schedulePayload.minutes ?? 5,
-                }),
-                nextRunAt: automation.nextRunAt?.toISOString() ?? null,
-                lastRunAt: null,
-                lastRunStatus: null,
-              }))
-          : [];
+        const persistedAutomations = (await loadInspectionState()).automations
+          .filter(
+            (automation) =>
+              automation.threadId === buildPiRuntimeDirectExecutionRecordIdsInternal(threadId).threadId,
+          )
+          .map((automation) => ({
+            id: automation.automationId,
+            title:
+              typeof automation.schedulePayload.title === 'string'
+                ? automation.schedulePayload.title
+                : automation.commandName,
+            status: automation.nextRunAt === null ? 'completed' : automation.suspended ? 'canceled' : 'active',
+            schedule: coerceSchedule(automation.schedulePayload.schedule, {
+              kind: 'every',
+              intervalMinutes: automation.schedulePayload.minutes ?? 5,
+            }),
+            nextRunAt: automation.nextRunAt?.toISOString() ?? null,
+            lastRunAt: null,
+            lastRunStatus: null,
+          }));
         const automations = (persistedAutomations.length > 0
           ? persistedAutomations
           : automationRegistry.getByThread(threadId).map((record) => ({
@@ -1536,25 +1687,23 @@ export function createAgentRuntime<TState = unknown>(
         const threadId = readCurrentThreadId();
         const currentRecord = automationRegistry.getById(toolArgs.automationId);
 
-        if (options.databaseUrl) {
-          const inspectionState = await loadInspectionState();
-          const threadRecordId = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId).threadId;
-          const scheduledRun = [...inspectionState.automationRuns]
-            .filter((run) => run.automationId === toolArgs.automationId && run.status === 'scheduled')
-            .sort((left, right) => right.scheduledAt.getTime() - left.scheduledAt.getTime())[0];
-          await executePostgresStatements(
-            options.databaseUrl,
-            buildCancelAutomationStatements({
-              automationId: toolArgs.automationId,
-              currentRunId: scheduledRun?.runId ?? null,
-              currentExecutionId: scheduledRun?.executionId ?? null,
-              threadId: threadRecordId,
-              eventId: randomUUID(),
-              activityId: randomUUID(),
-              now: new Date(now()),
-            }),
-          );
-        }
+        const inspectionState = await loadInspectionState();
+        const threadRecordId = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId).threadId;
+        const scheduledRun = [...inspectionState.automationRuns]
+          .filter((run) => run.automationId === toolArgs.automationId && run.status === 'scheduled')
+          .sort((left, right) => right.scheduledAt.getTime() - left.scheduledAt.getTime())[0];
+        await postgres.executeStatements(
+          resolvedDatabaseUrl,
+          buildCancelAutomationStatements({
+            automationId: toolArgs.automationId,
+            currentRunId: scheduledRun?.runId ?? null,
+            currentExecutionId: scheduledRun?.executionId ?? null,
+            threadId: threadRecordId,
+            eventId: randomUUID(),
+            activityId: randomUUID(),
+            now: new Date(now()),
+          }),
+        );
 
         const record =
           currentRecord ??
@@ -1588,7 +1737,7 @@ export function createAgentRuntime<TState = unknown>(
           lastRunStatus: 'canceled',
           lastRunAt: new Date(now()).toISOString(),
         });
-        applyAutomationStatusUpdate({
+        const session = applyAutomationStatusUpdate({
           sessionStore,
           threadId,
           artifactId: record.artifactId,
@@ -1600,6 +1749,7 @@ export function createAgentRuntime<TState = unknown>(
           minutes,
           detail,
         });
+        await persistSessionSnapshot(threadId, session);
 
         return {
           content: [{ type: 'text' as const, text: detail }],
@@ -1630,27 +1780,26 @@ export function createAgentRuntime<TState = unknown>(
         const artifactId =
           buildPiRuntimeStableUuid('artifact', `agent-runtime:${threadId}:interrupt-artifact`);
 
-        if (options.databaseUrl) {
-          const directExecutionIds = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
-          await executePostgresStatements(
-            options.databaseUrl,
-            buildPersistInterruptCheckpointStatements({
-              executionId: directExecutionIds.executionId,
-              interruptId: buildPiRuntimeStableUuid('interrupt', `agent-runtime:${threadId}:interrupt`),
-              artifactId,
-              activityId: buildPiRuntimeStableUuid('activity', `agent-runtime:${threadId}:interrupt-activity`),
-              threadId: directExecutionIds.threadId,
-              now: new Date(now()),
-            }),
-          );
-        }
+        const directExecutionIds = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+        await postgres.executeStatements(
+          resolvedDatabaseUrl,
+          buildPersistInterruptCheckpointStatements({
+            executionId: directExecutionIds.executionId,
+            interruptId: buildPiRuntimeStableUuid('interrupt', `agent-runtime:${threadId}:interrupt`),
+            artifactId,
+            activityId: buildPiRuntimeStableUuid('activity', `agent-runtime:${threadId}:interrupt-activity`),
+            threadId: directExecutionIds.threadId,
+            now: new Date(now()),
+          }),
+        );
 
-        applyOperatorInputRequest({
+        const session = applyOperatorInputRequest({
           sessionStore,
           threadId,
           artifactId,
           message: toolArgs.message,
         });
+        await persistSessionSnapshot(threadId, session);
 
         return {
           content: [{ type: 'text' as const, text: toolArgs.message }],
@@ -1718,7 +1867,7 @@ export function createAgentRuntime<TState = unknown>(
       ...runtimeTools,
       ...(domainCommandTool ? [domainCommandTool] : []),
     ],
-    databaseUrl: options.databaseUrl,
+    databaseUrl: resolvedDatabaseUrl,
     agentOptions: {
       ...options.agentOptions,
       ...(streamFn ? { streamFn } : {}),
@@ -1732,6 +1881,7 @@ export function createAgentRuntime<TState = unknown>(
     agent: foundation.agent,
     getSession: sessionStore.getSession,
     updateSession: sessionStore.updateSession,
+    onSessionUpdated: persistSessionSnapshot,
     now,
   });
 
@@ -1768,28 +1918,28 @@ export function createAgentRuntime<TState = unknown>(
   const runtimeWithAttachedSessions: PiRuntimeGatewayRuntime = {
     ...runtimeWithDomain,
     connect: async (request) => {
-      await ensureThread(request.threadId);
+      const session = await ensureThread(request.threadId);
 
       return createAttachedEventStream({
         seedEvents: buildPiRuntimeGatewayConnectEventsInternal({
           threadId: request.threadId,
           runId: request.runId ?? `connect:${request.threadId}`,
-          session: sessionStore.getSession(request.threadId),
+          session,
         }),
         attach: (push) => attachedRuns.attachToThread(request.threadId, push),
       });
     },
     run: async (request) => {
-      await ensureThread(request.threadId);
+      const session = await ensureThread(request.threadId);
 
       const isDomainInterruptResume =
         readInterruptOperation({
           command: request.forwardedProps?.command,
-          session: sessionStore.getSession(request.threadId),
+          session,
           domain,
         }) !== null;
       if (typeof request.forwardedProps?.command?.resume === 'string' && !isDomainInterruptResume) {
-        resumeInterruptedSession(request.threadId);
+        await resumeInterruptedSession(request.threadId);
       }
 
       attachedRuns.startRun(request.threadId, request.runId);
@@ -1814,188 +1964,142 @@ export function createAgentRuntime<TState = unknown>(
     loadInspectionState,
   });
 
-  if (options.databaseUrl) {
-    const databaseUrl = options.databaseUrl;
-    let tickInFlight = false;
-    const runAutomationTick = async () => {
-      if (tickInFlight) {
-        return;
-      }
+  let tickInFlight = false;
+  const runAutomationTick = async () => {
+    if (tickInFlight) {
+      return;
+    }
 
-      tickInFlight = true;
-      try {
-        const inspectionState = await loadInspectionState();
-        const dueAutomationIds = recoverDueAutomations({
-          now: new Date(now()),
-          automations: inspectionState.automations.map((automation) => ({
-            automationId: automation.automationId,
-            nextRunAt: automation.nextRunAt,
-            suspended: automation.suspended,
-          })),
-          leases: inspectionState.leases,
-        });
-        const threadById = new Map(inspectionState.threads.map((thread) => [thread.threadId, thread]));
+    tickInFlight = true;
+    try {
+      const inspectionState = await loadInspectionState();
+      const dueAutomationIds = recoverDueAutomations({
+        now: new Date(now()),
+        automations: inspectionState.automations.map((automation) => ({
+          automationId: automation.automationId,
+          nextRunAt: automation.nextRunAt,
+          suspended: automation.suspended,
+        })),
+        leases: inspectionState.leases,
+      });
+      const threadById = new Map(inspectionState.threads.map((thread) => [thread.threadId, thread]));
 
-        for (const automationId of dueAutomationIds) {
-          const automation = inspectionState.automations.find((candidate) => candidate.automationId === automationId);
-          const scheduledRun = [...inspectionState.automationRuns]
-            .filter(
-              (run) =>
-                run.automationId === automationId && run.status === 'scheduled' && run.executionId !== null,
-            )
-            .sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime())[0];
-          if (!automation || !scheduledRun?.executionId) {
-            continue;
-          }
-
-          const thread = threadById.get(automation.threadId);
-          const minutes =
-            typeof automation.schedulePayload.minutes === 'number' &&
-            Number.isFinite(automation.schedulePayload.minutes) &&
-            automation.schedulePayload.minutes > 0
-              ? automation.schedulePayload.minutes
-              : null;
-          if (!thread || minutes === null) {
-            continue;
-          }
-
-          const currentNow = new Date(now());
-          const nextRunAt = new Date(currentNow.getTime() + minutes * 60 * 1000);
-          const artifactId = buildPiRuntimeStableUuid(
-            'artifact',
-            `agent-runtime:${thread.threadKey}:automation-artifact`,
-          );
-
-          applyAutomationStatusUpdate({
-            sessionStore,
-            threadId: thread.threadKey,
-            artifactId,
-            automationId,
-            executionId: scheduledRun.executionId,
-            activityRunId: scheduledRun.runId,
-            status: 'running',
-            command: automation.commandName,
-            minutes,
-            detail: `Running automation ${automation.commandName}.`,
-          });
-          await publishSessionUpdate(thread.threadKey, scheduledRun.runId);
-
-          await executePostgresStatements(
-            databaseUrl,
-            buildCompleteAutomationExecutionStatements({
-              automationId,
-              currentRunId: scheduledRun.runId,
-              currentExecutionId: scheduledRun.executionId,
-              nextRunId: buildPiRuntimeStableUuid(
-                'automation-run',
-                `agent-runtime:${automationId}:run:${nextRunAt.toISOString()}`,
-              ),
-              nextExecutionId: buildPiRuntimeStableUuid(
-                'execution',
-                `agent-runtime:${automationId}:execution:${nextRunAt.toISOString()}`,
-              ),
-              threadId: automation.threadId,
-              commandName: automation.commandName,
-              schedulePayload: automation.schedulePayload,
-              eventId: buildPiRuntimeStableUuid(
-                'execution-event',
-                `agent-runtime:${automationId}:event:${currentNow.toISOString()}`,
-              ),
-              activityId: buildPiRuntimeStableUuid(
-                'activity',
-                `agent-runtime:${automationId}:activity:${currentNow.toISOString()}`,
-              ),
-              now: currentNow,
-              nextRunAt,
-              leaseExpiresAt: currentNow,
-            }),
-          );
-
-          applyAutomationStatusUpdate({
-            sessionStore,
-            threadId: thread.threadKey,
-            artifactId,
-            automationId,
-            executionId: scheduledRun.executionId,
-            activityRunId: scheduledRun.runId,
-            status: 'completed',
-            command: automation.commandName,
-            minutes,
-            detail: `Automation ${automation.commandName} executed successfully.`,
-          });
-          await publishSessionUpdate(thread.threadKey, scheduledRun.runId);
+      for (const automationId of dueAutomationIds) {
+        const automation = inspectionState.automations.find((candidate) => candidate.automationId === automationId);
+        const scheduledRun = [...inspectionState.automationRuns]
+          .filter(
+            (run) =>
+              run.automationId === automationId && run.status === 'scheduled' && run.executionId !== null,
+          )
+          .sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime())[0];
+        if (!automation || !scheduledRun?.executionId) {
+          continue;
         }
-      } finally {
-        tickInFlight = false;
-      }
-    };
 
+        const thread = threadById.get(automation.threadId);
+        const minutes =
+          typeof automation.schedulePayload.minutes === 'number' &&
+          Number.isFinite(automation.schedulePayload.minutes) &&
+          automation.schedulePayload.minutes > 0
+            ? automation.schedulePayload.minutes
+            : null;
+        if (!thread || minutes === null) {
+          continue;
+        }
+
+        const currentNow = new Date(now());
+        const nextRunAt = new Date(currentNow.getTime() + minutes * 60 * 1000);
+        const artifactId = buildPiRuntimeStableUuid(
+          'artifact',
+          `agent-runtime:${thread.threadKey}:automation-artifact`,
+        );
+
+        await hydrateThreadSession(thread.threadKey);
+        const runningSession = applyAutomationStatusUpdate({
+          sessionStore,
+          threadId: thread.threadKey,
+          artifactId,
+          automationId,
+          executionId: scheduledRun.executionId,
+          activityRunId: scheduledRun.runId,
+          status: 'running',
+          command: automation.commandName,
+          minutes,
+          detail: `Running automation ${automation.commandName}.`,
+        });
+        await persistSessionSnapshot(thread.threadKey, runningSession);
+        await publishSessionUpdate(thread.threadKey, scheduledRun.runId);
+
+        await postgres.executeStatements(
+          resolvedDatabaseUrl,
+          buildCompleteAutomationExecutionStatements({
+            automationId,
+            currentRunId: scheduledRun.runId,
+            currentExecutionId: scheduledRun.executionId,
+            nextRunId: buildPiRuntimeStableUuid(
+              'automation-run',
+              `agent-runtime:${automationId}:run:${nextRunAt.toISOString()}`,
+            ),
+            nextExecutionId: buildPiRuntimeStableUuid(
+              'execution',
+              `agent-runtime:${automationId}:execution:${nextRunAt.toISOString()}`,
+            ),
+            threadId: automation.threadId,
+            commandName: automation.commandName,
+            schedulePayload: automation.schedulePayload,
+            eventId: buildPiRuntimeStableUuid(
+              'execution-event',
+              `agent-runtime:${automationId}:event:${currentNow.toISOString()}`,
+            ),
+            activityId: buildPiRuntimeStableUuid(
+              'activity',
+              `agent-runtime:${automationId}:activity:${currentNow.toISOString()}`,
+            ),
+            now: currentNow,
+            nextRunAt,
+            leaseExpiresAt: currentNow,
+          }),
+        );
+
+        const completedSession = applyAutomationStatusUpdate({
+          sessionStore,
+          threadId: thread.threadKey,
+          artifactId,
+          automationId,
+          executionId: scheduledRun.executionId,
+          activityRunId: scheduledRun.runId,
+          status: 'completed',
+          command: automation.commandName,
+          minutes,
+          detail: `Automation ${automation.commandName} executed successfully.`,
+        });
+        await persistSessionSnapshot(thread.threadKey, completedSession);
+        await publishSessionUpdate(thread.threadKey, scheduledRun.runId);
+      }
+    } finally {
+      tickInFlight = false;
+    }
+  };
+
+  void runAutomationTick();
+  const timer = setInterval(() => {
     void runAutomationTick();
-    const timer = setInterval(() => {
-      void runAutomationTick();
-    }, 1_000);
-    timer.unref?.();
-  }
+  }, 1_000);
+  timer.unref?.();
+
+  const serviceCore = createPiRuntimeGatewayServiceInternal({
+    runtime: runtimeWithAttachedSessions,
+    controlPlane,
+  });
+  const service: AgentRuntimeService = Object.assign(serviceCore, {
+    createAgUiHandler: (handlerOptions: AgentRuntimeAgUiHandlerOptions) =>
+      createPiRuntimeGatewayAgUiHandlerInternal({
+        ...handlerOptions,
+        service: serviceCore,
+      }),
+  });
 
   return {
-    bootstrapPlan: foundation.bootstrapPlan,
-    service: createPiRuntimeGatewayServiceInternal({
-      runtime: runtimeWithAttachedSessions,
-      controlPlane,
-    }),
+    service,
   };
 }
-
-export * from '../lib/contracts/dist/index.js';
-export {
-  buildPiA2UiActivityEvent,
-  buildPiRuntimeDirectExecutionRecordIds,
-  buildPiRuntimeGatewayConnectEvents,
-  buildPiRuntimeGatewayContextMessages,
-  buildPiThreadStateSnapshot,
-  createPiRuntimeGatewayMockStream,
-  convertPiRuntimeGatewayMessagesToLlm,
-  createCanonicalPiRuntimeGatewayControlPlane,
-  createPiRuntimeGatewayAgUiHandler,
-  DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH,
-  DEFAULT_PI_RUNTIME_GATEWAY_RETENTION,
-  ensurePiRuntimePostgresReady,
-  loadPiRuntimeInspectionState,
-  mapPiAgentEventsToAgUiEvents,
-  persistPiRuntimeDirectExecution,
-  PiRuntimeGatewayHttpAgent,
-} from '../lib/pi/dist/index.js';
-export {
-  buildCancelAutomationStatements,
-  buildCompleteAutomationExecutionStatements,
-  buildPersistAutomationDispatchStatements,
-  buildPersistInterruptCheckpointStatements,
-  recoverDueAutomations,
-  buildPiRuntimeStableUuid,
-  executePostgresStatements,
-} from '../lib/postgres/dist/index.js';
-export type {
-  EnsuredPiRuntimePostgres,
-  EnsurePiRuntimePostgresReadyOptions,
-  LoadedPiRuntimeInspectionState,
-  LoadPiRuntimeInspectionStateOptions,
-  PiRuntimeGatewayA2UiMessage,
-  PiRuntimeGatewayA2UiPayload,
-  PiRuntimeGatewayActivityEvent,
-  PiRuntimeGatewayAgUiHandlerOptions,
-  PiRuntimeGatewayAgent,
-  PiRuntimeGatewayArtifact,
-  PiRuntimeGatewayArtifactMessage,
-  PiRuntimeGatewayConnectRequest,
-  PiRuntimeGatewayContextMessage,
-  PiRuntimeGatewayControlPlane,
-  PiRuntimeGatewayExecutionStatus,
-  PiRuntimeGatewayHttpAgentConfig,
-  PiRuntimeGatewayInspectionState,
-  PiRuntimeGatewayRunRequest,
-  PiRuntimeGatewayService,
-  PiRuntimeGatewayRuntimeNoteMessage,
-  PiRuntimeGatewayStopRequest,
-  PersistPiRuntimeDirectExecutionOptions,
-} from '../lib/pi/dist/index.js';
-export type { ExecutePostgresStatements } from '../lib/postgres/dist/index.js';

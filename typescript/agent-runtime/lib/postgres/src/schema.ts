@@ -1,4 +1,4 @@
-import { piRuntimePersistenceModel } from 'agent-runtime-contracts';
+import { piRuntimePersistenceModel } from './persistenceModel.js';
 
 export type PiRuntimeColumnSchema = {
   name: string;

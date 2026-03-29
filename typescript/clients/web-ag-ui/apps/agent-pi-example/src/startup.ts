@@ -1,6 +1,3 @@
-import type { EnsuredPiRuntimePostgres, PiRuntimeGatewayService } from 'agent-runtime';
-import { ensurePiRuntimePostgresReady } from 'agent-runtime';
-
 import { createPiExampleGatewayService } from './agUiServer.js';
 import type { PiExampleGatewayEnv } from './piExampleFoundation.js';
 
@@ -8,44 +5,32 @@ type PiExampleServerEnv = PiExampleGatewayEnv & {
   PORT?: string;
 };
 
+type PiExampleGatewayService = Awaited<ReturnType<typeof createPiExampleGatewayService>>;
+
 type PreparePiExampleServerOptions = {
   env?: PiExampleServerEnv;
-  ensureReady?: () => Promise<EnsuredPiRuntimePostgres | void>;
-  createService?: (options: { env: PiExampleServerEnv }) => PiRuntimeGatewayService;
+  createService?: (options: { env: PiExampleServerEnv }) => Promise<PiExampleGatewayService>;
 };
+
+function normalizeDatabaseUrl(databaseUrl: string | undefined): string | null {
+  const normalized = databaseUrl?.trim();
+  return normalized && normalized.length > 0 ? normalized : null;
+}
 
 export async function preparePiExampleServer(
   options: PreparePiExampleServerOptions = {},
 ): Promise<{
-  bootstrap: EnsuredPiRuntimePostgres | null;
+  databaseUrl: string | null;
   port: number;
-  service: PiRuntimeGatewayService;
+  service: PiExampleGatewayService;
 }> {
   const env = options.env ?? process.env;
-
-  const bootstrap =
-    (await (options.ensureReady ??
-      (() =>
-        ensurePiRuntimePostgresReady({
-          env: {
-            DATABASE_URL: env.DATABASE_URL,
-          },
-        })))()) ?? null;
-
-  const serviceEnv =
-    !env.DATABASE_URL && bootstrap?.databaseUrl
-      ? {
-          ...env,
-          DATABASE_URL: bootstrap.databaseUrl,
-        }
-      : env;
-
-  const service = (options.createService ?? createPiExampleGatewayService)({
-    env: serviceEnv,
+  const service = await (options.createService ?? createPiExampleGatewayService)({
+    env,
   });
 
   return {
-    bootstrap,
+    databaseUrl: normalizeDatabaseUrl(env.DATABASE_URL),
     port: Number.parseInt(env.PORT ?? '3410', 10),
     service,
   };

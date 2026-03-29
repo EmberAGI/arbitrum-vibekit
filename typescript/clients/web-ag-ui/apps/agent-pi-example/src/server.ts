@@ -2,7 +2,7 @@ import http from 'node:http';
 import { createPiExampleAgUiHandler, PI_EXAMPLE_AGENT_ID } from './agUiServer.js';
 import { preparePiExampleServer } from './startup.js';
 
-const { bootstrap, port, service } = await preparePiExampleServer();
+const { databaseUrl, port, service } = await preparePiExampleServer();
 const handler = createPiExampleAgUiHandler({
   agentId: PI_EXAMPLE_AGENT_ID,
   service,
@@ -79,9 +79,7 @@ server.listen(port, () => {
   console.log(
     [
       `agent-pi-example listening on http://127.0.0.1:${port}`,
-      bootstrap
-        ? `database=${bootstrap.databaseUrl} mode=${bootstrap.bootstrapPlan.mode} startedLocalDocker=${String(bootstrap.startedLocalDocker)}`
-        : 'database=unknown',
+      `database=${databaseUrl ?? 'runtime-managed-default'}`,
     ].join(' '),
   );
 });

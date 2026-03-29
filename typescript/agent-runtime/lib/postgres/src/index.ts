@@ -32,6 +32,7 @@ export {
   buildPersistDirectExecutionStatements,
   buildPersistInterruptCheckpointStatements,
   buildPersistOutboxIntentStatements,
+  buildPersistThreadStateStatements,
   type PostgresStatement,
 } from './transactions.js';
 export {

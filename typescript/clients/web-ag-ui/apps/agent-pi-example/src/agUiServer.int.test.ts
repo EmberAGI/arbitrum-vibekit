@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createPiExampleAgUiHandler, createPiExampleGatewayService, PI_EXAMPLE_AGENT_ID } from './agUiServer.js';
 
@@ -42,17 +42,39 @@ function findStateSnapshot(events: readonly AgUiEventEnvelope[]) {
   return [...events].reverse().find((event) => event.type === 'STATE_SNAPSHOT');
 }
 
+function createInternalPostgresHooks() {
+  return {
+    ensureReady: vi.fn(async () => ({
+      databaseUrl: 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime',
+    })),
+    loadInspectionState: vi.fn(async () => ({
+      threads: [],
+      executions: [],
+      automations: [],
+      automationRuns: [],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    })),
+    executeStatements: vi.fn(async () => undefined),
+    persistDirectExecution: vi.fn(async () => undefined),
+  };
+}
+
 describe('agent-pi-example AG-UI integration', () => {
   let server: Server;
   let baseUrl: string;
 
   beforeEach(async () => {
-    const service = createPiExampleGatewayService({
+    const service = await createPiExampleGatewayService({
       env: {
         OPENROUTER_API_KEY: 'test-openrouter-key',
         PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
       },
-    });
+      __internalPostgres: createInternalPostgresHooks(),
+    } as any);
 
     const handler = createPiExampleAgUiHandler({
       agentId: PI_EXAMPLE_AGENT_ID,
@@ -113,7 +135,7 @@ describe('agent-pi-example AG-UI integration', () => {
     });
   });
 
-  it('serves lifecycle onboarding and resume state over real AG-UI HTTP endpoints', async () => {
+  it('serves the full runtime-owned lifecycle over real AG-UI HTTP endpoints', async () => {
     const runResponse = await fetch(`${baseUrl}/agent/${PI_EXAMPLE_AGENT_ID}/run`, {
       method: 'POST',
       headers: {
@@ -195,6 +217,100 @@ describe('agent-pi-example AG-UI integration', () => {
               data: {
                 type: 'lifecycle-status',
                 onboardingStep: 'delegation-note',
+                operatorNote: 'safe window approved',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const completeResponse = await fetch(`${baseUrl}/agent/${PI_EXAMPLE_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-1',
+        runId: 'run-complete',
+        forwardedProps: {
+          command: {
+            name: 'complete_onboarding',
+          },
+        },
+      }),
+    });
+
+    expect(completeResponse.ok).toBe(true);
+    const completeEvents = parseEventStreamBody(await completeResponse.text());
+    const completeSnapshot = findStateSnapshot(completeEvents);
+
+    expect(completeSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'hired',
+            operatorNote: 'safe window approved',
+          },
+          task: {
+            taskStatus: {
+              state: 'completed',
+              message: 'Onboarding complete. Agent is now hired.',
+            },
+          },
+          artifacts: {
+            current: {
+              data: {
+                type: 'lifecycle-status',
+                phase: 'hired',
+                operatorNote: 'safe window approved',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const fireResponse = await fetch(`${baseUrl}/agent/${PI_EXAMPLE_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-1',
+        runId: 'run-fire',
+        forwardedProps: {
+          command: {
+            name: 'fire',
+          },
+        },
+      }),
+    });
+
+    expect(fireResponse.ok).toBe(true);
+    const fireEvents = parseEventStreamBody(await fireResponse.text());
+    const fireSnapshot = findStateSnapshot(fireEvents);
+
+    expect(fireSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'fired',
+            operatorNote: 'safe window approved',
+          },
+          task: {
+            taskStatus: {
+              state: 'completed',
+              message: 'Agent moved to fired. Rehire is still available in this thread.',
+            },
+          },
+          artifacts: {
+            current: {
+              data: {
+                type: 'lifecycle-status',
+                phase: 'fired',
                 operatorNote: 'safe window approved',
               },
             },

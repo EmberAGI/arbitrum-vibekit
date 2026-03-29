@@ -1,10 +1,10 @@
-import type { TaskState } from 'agent-runtime-contracts';
 import {
   buildOnboardingContractFromLegacyStep,
   finalizeOnboardingContract,
   type OnboardingContract,
   type LegacyOnboardingState,
   type OnboardingStepDefinition,
+  type TaskState,
 } from 'agent-workflow-core';
 
 const FULL_STEPS: readonly OnboardingStepDefinition[] = [

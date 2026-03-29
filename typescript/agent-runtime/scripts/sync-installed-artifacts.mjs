@@ -13,15 +13,9 @@ const packageSpecs = [
     packageRoot,
     artifactDirs: [
       'dist',
-      path.join('lib', 'contracts', 'dist'),
       path.join('lib', 'postgres', 'dist'),
       path.join('lib', 'pi', 'dist'),
     ],
-  },
-  {
-    packageName: 'agent-runtime-contracts',
-    packageRoot: path.join(packageRoot, 'lib', 'contracts'),
-    artifactDirs: ['dist'],
   },
   {
     packageName: 'agent-runtime-postgres',

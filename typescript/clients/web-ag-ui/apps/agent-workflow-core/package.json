@@ -9,11 +9,9 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build:runtime-deps": "pnpm --dir ../../../.. --filter agent-runtime-contracts build",
     "build": "tsc --project tsconfig.json",
     "lint": "eslint \"src\" --ext .ts",
     "lint:fix": "eslint \"src\" --ext .ts --fix",
-    "prelint": "pnpm build:runtime-deps",
     "format": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --write",
     "format:check": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --check",
     "test": "pnpm test:unit",
@@ -26,13 +24,9 @@
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   },
-  "dependenciesMeta": {
-    "agent-runtime-contracts": {
-      "injected": false
-    }
-  },
+  "dependenciesMeta": {},
   "dependencies": {
-    "agent-runtime-contracts": "workspace:^",
+    "@a2a-js/sdk": "^0.3.13",
     "agent-runtime-langgraph": "workspace:^"
   }
 }

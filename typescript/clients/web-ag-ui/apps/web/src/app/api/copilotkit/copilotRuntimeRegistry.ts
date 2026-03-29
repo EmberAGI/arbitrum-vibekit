@@ -1,5 +1,5 @@
 import { CopilotRuntime } from '@copilotkit/runtime';
-import { PiRuntimeGatewayHttpAgent } from 'agent-runtime/pi-transport';
+import { createAgentRuntimeHttpAgent } from 'agent-runtime';
 import { LangGraphInterruptSnapshotAgent } from './langGraphInterruptSnapshotAgent';
 
 export const CLMM_AGENT_NAME = 'agent-clmm';
@@ -34,7 +34,7 @@ export function buildCopilotRuntimeAgents(env: RuntimeEnv) {
       graphId: STARTER_AGENT_NAME,
       langsmithApiKey: env.LANGSMITH_API_KEY || '',
     }),
-    [PI_EXAMPLE_AGENT_NAME]: new PiRuntimeGatewayHttpAgent({
+    [PI_EXAMPLE_AGENT_NAME]: createAgentRuntimeHttpAgent({
       agentId: PI_EXAMPLE_AGENT_NAME,
       runtimeUrl: piAgentRuntimeUrl,
     }),

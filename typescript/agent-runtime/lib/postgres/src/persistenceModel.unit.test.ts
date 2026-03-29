@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getCoreRuntimeTableName, piRuntimePersistenceModel } from './index.js';
+import { getCoreRuntimeTableName, piRuntimePersistenceModel } from './persistenceModel.js';
 
 describe('piRuntimePersistence', () => {
   it('defines canonical Postgres tables for Pi runtime records and durability support rows', () => {

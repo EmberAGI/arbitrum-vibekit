@@ -2,14 +2,14 @@ import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
 import {
-  analyzeCycleProjectionThread,
-  projectCycleCommandThread,
-} from 'agent-runtime-contracts';
-import {
   configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,
   restorePersistedCronSchedulesFromCheckpointer,
 } from 'agent-runtime-langgraph';
+import {
+  analyzeCycleProjectionThread,
+  projectCycleCommandThread,
+} from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 

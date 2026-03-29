@@ -9,6 +9,8 @@ describe('agent-pi-example architecture boundary', () => {
     const startupSource = readFileSync(new URL('./startup.ts', import.meta.url), 'utf8');
 
     expect(agUiServerSource).toContain('createAgentRuntime');
+    expect(agUiServerSource).toContain("from 'agent-runtime'");
+    expect(agUiServerSource).toContain('service.createAgUiHandler');
     expect(agUiServerSource).not.toContain('attached: {');
     expect(agUiServerSource).not.toContain('runtime: (');
     expect(agUiServerSource).not.toContain('attachToThread(');
@@ -22,6 +24,7 @@ describe('agent-pi-example architecture boundary', () => {
     expect(agUiServerSource).not.toContain('persistThreadExecution');
     expect(agUiServerSource).not.toContain('createPiRuntimeGatewayRuntime');
     expect(agUiServerSource).not.toContain('createPiRuntimeGatewayService');
+    expect(agUiServerSource).not.toContain("from 'agent-runtime/pi-transport'");
     expect(foundationSource).not.toContain('createPiRuntimeGatewayFoundation');
     expect(foundationSource).not.toContain('const AUTOMATION_SCHEDULE_TOOL');
     expect(foundationSource).not.toContain('const AUTOMATION_LIST_TOOL');
@@ -30,6 +33,8 @@ describe('agent-pi-example architecture boundary', () => {
     expect(foundationSource).not.toContain('runtimeState');
     expect(foundationSource).not.toContain('persistence:');
     expect(foundationSource).not.toContain('getSessionContext');
+    expect(startupSource).not.toContain('ensurePiRuntimePostgresReady');
+    expect(startupSource).not.toContain('bootstrapPlan');
     expect(startupSource).not.toContain('automationScheduler');
     expect(startupSource).not.toContain('startPiExampleAutomationScheduler');
     expect(startupSource).not.toContain('runtimeState');
