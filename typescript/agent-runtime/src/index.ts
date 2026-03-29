@@ -1318,6 +1318,9 @@ export async function createAgentRuntime<TState = unknown>(
 ): Promise<AgentRuntimeInstance> {
   const domain = options.domain;
   const now = options.now ?? (() => Date.now());
+  if (domain) {
+    validateDomainLifecycle(domain.lifecycle);
+  }
   const configuredDatabaseUrl = options.databaseUrl?.trim();
   const postgres = {
     ensureReady: options.__internalPostgres?.ensureReady ?? ensurePiRuntimePostgresReadyInternal,
@@ -1341,9 +1344,6 @@ export async function createAgentRuntime<TState = unknown>(
   const attachedRuns = createAttachedRunRegistry();
   const executionContext = new AsyncLocalStorage<AgentRuntimeExecutionContext>();
   const persistedThreads = new Set<string>();
-  if (domain) {
-    validateDomainLifecycle(domain.lifecycle);
-  }
   const getActiveThreadId = (): string | undefined => {
     const context = executionContext.getStore();
     return context?.threadId;
