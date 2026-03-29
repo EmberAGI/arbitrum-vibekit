@@ -1,11 +1,11 @@
 import type { MemorySaver } from '@langchain/langgraph';
 
-import { resolvePollIntervalMs } from '../config/constants.js';
-
-import { loadLangGraphApiCheckpointer } from './langgraphApiCheckpointer.js';
+import { loadLangGraphApiCheckpointer } from './langgraphCheckpointerRetention.js';
 
 type CheckpointTuple = [string | Uint8Array, string | Uint8Array, string];
 type ThreadStorage = MemorySaver['storage'][string];
+
+const DEFAULT_POLL_INTERVAL_MS = 5_000;
 
 export type PersistedCronRecoveryCandidate = {
   threadId: string;
@@ -118,7 +118,7 @@ export function resolvePersistedCronRecoveryCandidates(
 
     candidates.push({
       threadId,
-      pollIntervalMs: channelValues.private?.pollIntervalMs ?? resolvePollIntervalMs(),
+      pollIntervalMs: channelValues.private?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
     });
   }
 

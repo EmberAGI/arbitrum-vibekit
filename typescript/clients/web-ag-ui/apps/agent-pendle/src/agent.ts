@@ -4,6 +4,7 @@ import { END, START, StateGraph } from '@langchain/langgraph';
 import {
   configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,
+  restorePersistedCronSchedulesFromCheckpointer,
 } from 'agent-runtime-langgraph';
 import {
   analyzeCycleProjectionThread,
@@ -22,7 +23,7 @@ import {
   getBackgroundCycleReadiness,
 } from './workflow/backgroundCycleReadiness.js';
 import { ClmmStateAnnotation, memory } from './workflow/context.js';
-import { configureCronExecutor } from './workflow/cronScheduler.js';
+import { configureCronExecutor, ensureCronForThread } from './workflow/cronScheduler.js';
 import {
   resolvePostBootstrap,
   resolvePostCollectDelegations,
@@ -372,6 +373,18 @@ export async function startCron(
 }
 
 configureCronExecutor(runGraphOnce);
+try {
+  const recoveredCronThreads = await restorePersistedCronSchedulesFromCheckpointer((threadId, intervalMs) =>
+    ensureCronForThread(threadId, intervalMs),
+  );
+  if (recoveredCronThreads.length > 0) {
+    console.info('[cron] Recovered persisted cron schedules', {
+      threadIds: recoveredCronThreads.map((candidate) => candidate.threadId),
+    });
+  }
+} catch (error) {
+  console.error('[cron] Failed to recover persisted cron schedules', error);
+}
 
 const invokedAsEntryPoint =
   process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
