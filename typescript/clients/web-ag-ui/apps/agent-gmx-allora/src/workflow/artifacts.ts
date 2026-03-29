@@ -150,6 +150,8 @@ export function buildExecutionResultArtifact(params: {
   telemetry?: GmxAlloraTelemetry;
   transactions?: TransactionPlan[];
   txHashes?: `0x${string}`[];
+  submissionTxHash?: `0x${string}`;
+  finalTxHash?: `0x${string}`;
   lastTxHash?: `0x${string}`;
 }): Artifact {
   const executionStatus = params.status ?? (params.ok ? 'confirmed' : 'failed');
@@ -192,6 +194,9 @@ export function buildExecutionResultArtifact(params: {
           status: executionStatus,
           error: params.error,
           txHashes: params.txHashes,
+          submissionTxHash: params.submissionTxHash,
+          finalTxHash: params.finalTxHash,
+          userFacingTxHash: params.lastTxHash,
           lastTxHash: params.lastTxHash,
           txRef,
           // Useful for the UI to render the signal next to the plan/tx reference.
