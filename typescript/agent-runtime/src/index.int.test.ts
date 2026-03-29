@@ -18,6 +18,17 @@ type GatewayEvent = Awaited<ReturnType<AgentRuntimeService['run']>> extends
   ? TEvent
   : never;
 type StateSnapshotEvent = Extract<GatewayEvent, { snapshot: unknown }>;
+type MessagesSnapshotEvent = Extract<GatewayEvent, { messages: unknown }>;
+type InternalPostgresStatement = {
+  tableName: string;
+  values: readonly unknown[];
+};
+type InternalPersistDirectExecutionOptions = {
+  threadId: string;
+  threadKey: string;
+  threadState: Record<string, unknown>;
+  now: Date;
+};
 
 type LifecycleState = {
   phase: string;
@@ -59,7 +70,10 @@ function createInternalPostgresHooks(
       executionEvents: unknown[];
       threadActivities: unknown[];
     }>;
-    executeStatements: (databaseUrl: string, statements: readonly string[]) => Promise<void>;
+    executeStatements: (
+      databaseUrl: string,
+      statements: readonly InternalPostgresStatement[],
+    ) => Promise<void>;
     persistDirectExecution: (options: unknown) => Promise<void>;
   }> = {},
 ) {
@@ -241,6 +255,10 @@ async function readFirstMatchingEvent<T>(
 
 function isStateSnapshotEvent(event: GatewayEvent): event is StateSnapshotEvent {
   return typeof event === 'object' && event !== null && 'snapshot' in event;
+}
+
+function isMessagesSnapshotEvent(event: GatewayEvent): event is MessagesSnapshotEvent {
+  return typeof event === 'object' && event !== null && 'messages' in event;
 }
 
 function createLifecycleDomain() {
@@ -765,5 +783,121 @@ describe('agent-runtime integration', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('rehydrates persisted transcript before reconnect snapshots after process restart', async () => {
+    const persistedThreads = new Map<
+      string,
+      {
+        threadId: string;
+        threadKey: string;
+        status: string;
+        threadState: Record<string, unknown>;
+        createdAt: Date;
+        updatedAt: Date;
+      }
+    >();
+    const loadInspectionState = vi.fn(async () => ({
+      threads: [...persistedThreads.values()],
+      executions: [],
+      automations: [],
+      automationRuns: [],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    }));
+    const persistDirectExecution = vi.fn(async (options: unknown) => {
+      const params = options as InternalPersistDirectExecutionOptions;
+      persistedThreads.set(params.threadKey, {
+        threadId: params.threadId,
+        threadKey: params.threadKey,
+        status: 'active',
+        threadState: params.threadState,
+        createdAt: params.now,
+        updatedAt: params.now,
+      });
+    });
+    const executeStatements = vi.fn(
+      async (_databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
+        for (const statement of statements) {
+          if (statement.tableName !== 'pi_threads') {
+            continue;
+          }
+
+          const [threadId, threadKey, status, threadStateValue, createdAt, updatedAt] = statement.values;
+          persistedThreads.set(threadKey as string, {
+            threadId: threadId as string,
+            threadKey: threadKey as string,
+            status: status as string,
+            threadState:
+              typeof threadStateValue === 'string'
+                ? (JSON.parse(threadStateValue) as Record<string, unknown>)
+                : (threadStateValue as Record<string, unknown>),
+            createdAt: createdAt as Date,
+            updatedAt: updatedAt as Date,
+          });
+        }
+      },
+    );
+    const internalPostgres = createInternalPostgresHooks({
+      loadInspectionState,
+      executeStatements,
+      persistDirectExecution,
+    });
+
+    const runtimeA = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a persistence agent.',
+      agentOptions: {
+        streamFn: () => createTextStream('Hello back from persisted state.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeA.service.run({
+        threadId: 'thread-1',
+        runId: 'run-initial',
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'Hello from persisted thread.',
+          },
+        ],
+      }),
+    );
+
+    const runtimeB = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a persistence agent.',
+      agentOptions: {
+        streamFn: () => createTextStream('Unused after reconnect.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    const reconnectMessages = await readFirstMatchingEvent(
+      await runtimeB.service.connect({
+        threadId: 'thread-1',
+        runId: 'run-reconnect',
+      }),
+      isMessagesSnapshotEvent,
+    );
+    expect(reconnectMessages).toBeDefined();
+    expect(reconnectMessages!.messages.length).toBeGreaterThanOrEqual(2);
+    expect(reconnectMessages!.messages).toContainEqual(
+      expect.objectContaining({
+        role: 'user',
+        content: 'Hello from persisted thread.',
+      }),
+    );
+    expect(
+      reconnectMessages!.messages.some(
+        (message) => typeof message === 'object' && message !== null && 'role' in message && message.role === 'assistant',
+      ),
+    ).toBe(true);
   });
 });

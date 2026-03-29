@@ -29,6 +29,7 @@ import {
   buildCompleteAutomationExecutionStatements,
   buildPersistAutomationDispatchStatements,
   buildPersistInterruptCheckpointStatements,
+  buildPersistThreadStateStatements,
   buildPiRuntimeStableUuid,
   ensurePiRuntimePostgresReady as ensurePiRuntimePostgresReadyInternal,
   executePostgresStatements,
@@ -227,7 +228,9 @@ type AgentRuntimeExecutionContext = {
 };
 
 type AgentRuntimeSessionStore = {
+  hasSession: (threadId: string) => boolean;
   getSession: (threadId: string) => PiRuntimeGatewaySession;
+  setSession: (threadId: string, session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession;
   updateSession: (
     threadId: string,
     update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
@@ -339,6 +342,8 @@ function buildDefaultSession(threadId: string): PiRuntimeGatewaySession {
 function createSessionStore(): AgentRuntimeSessionStore {
   const sessions = new Map<string, PiRuntimeGatewaySession>();
 
+  const hasSession = (threadId: string): boolean => sessions.has(threadId);
+
   const getSession = (threadId: string): PiRuntimeGatewaySession => {
     const existing = sessions.get(threadId);
     if (existing) {
@@ -351,13 +356,42 @@ function createSessionStore(): AgentRuntimeSessionStore {
   };
 
   return {
+    hasSession,
     getSession,
+    setSession: (threadId, session) => {
+      sessions.set(threadId, session);
+      return session;
+    },
     updateSession: (threadId, update) => {
       const nextSession = update(getSession(threadId));
       sessions.set(threadId, nextSession);
       return nextSession;
     },
   };
+}
+
+function readPersistedSession(
+  threadId: string,
+  threadState: Record<string, unknown>,
+): PiRuntimeGatewaySession | null {
+  const candidateThread =
+    typeof threadState.thread === 'object' && threadState.thread !== null
+      ? (threadState.thread as { id?: unknown })
+      : null;
+  const candidateExecution =
+    typeof threadState.execution === 'object' && threadState.execution !== null
+      ? (threadState.execution as { id?: unknown; status?: unknown })
+      : null;
+
+  if (
+    candidateThread?.id !== threadId ||
+    typeof candidateExecution?.id !== 'string' ||
+    typeof candidateExecution.status !== 'string'
+  ) {
+    return null;
+  }
+
+  return threadState as unknown as PiRuntimeGatewaySession;
 }
 
 function createAutomationRegistry(): AgentRuntimeAutomationRegistry {
@@ -1323,9 +1357,41 @@ export async function createAgentRuntime<TState = unknown>(
       databaseUrl: resolvedDatabaseUrl,
     });
   };
-  const ensureThread = async (threadId: string): Promise<void> => {
+  const persistSessionSnapshot = async (
+    threadId: string,
+    session: PiRuntimeGatewaySession = sessionStore.getSession(threadId),
+  ): Promise<void> => {
+    const ids = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+    await postgres.executeStatements(
+      resolvedDatabaseUrl,
+      buildPersistThreadStateStatements({
+        threadId: ids.threadId,
+        threadKey: threadId,
+        threadState: session as unknown as Record<string, unknown>,
+        now: new Date(now()),
+      }),
+    );
+  };
+  const hydrateThreadSession = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
+    if (sessionStore.hasSession(threadId)) {
+      return sessionStore.getSession(threadId);
+    }
+
+    const persistedThread = (await loadInspectionState()).threads.find((candidate) => candidate.threadKey === threadId);
+    if (persistedThread) {
+      persistedThreads.add(threadId);
+      const persistedSession = readPersistedSession(threadId, persistedThread.threadState);
+      if (persistedSession) {
+        return sessionStore.setSession(threadId, persistedSession);
+      }
+    }
+
+    return sessionStore.getSession(threadId);
+  };
+  const ensureThread = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
+    const session = await hydrateThreadSession(threadId);
     if (persistedThreads.has(threadId)) {
-      return;
+      return session;
     }
 
     const ids = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
@@ -1333,7 +1399,7 @@ export async function createAgentRuntime<TState = unknown>(
       databaseUrl: resolvedDatabaseUrl,
       threadId: ids.threadId,
       threadKey: threadId,
-      threadState: { threadId },
+      threadState: session as unknown as Record<string, unknown>,
       executionId: ids.executionId,
       interruptId: ids.interruptId,
       artifactId: ids.artifactId,
@@ -1341,6 +1407,7 @@ export async function createAgentRuntime<TState = unknown>(
       now: new Date(now()),
     });
     persistedThreads.add(threadId);
+    return session;
   };
   const publishSessionUpdate = async (threadId: string, runId?: string): Promise<void> => {
     await attachedRuns.publishEventSource(
@@ -1402,7 +1469,7 @@ export async function createAgentRuntime<TState = unknown>(
       }
     }
 
-    return sessionStore.updateSession(threadId, (currentSession) =>
+    const nextSession = sessionStore.updateSession(threadId, (currentSession) =>
       applyDomainOperationResult({
         threadId,
         now,
@@ -1412,10 +1479,14 @@ export async function createAgentRuntime<TState = unknown>(
         result,
       }),
     );
+    await persistSessionSnapshot(threadId, nextSession);
+    return nextSession;
   };
 
-  const resumeInterruptedSession = (threadId: string): PiRuntimeGatewaySession => {
-    return sessionStore.updateSession(threadId, resolveInterruptedSessionForUserInput);
+  const resumeInterruptedSession = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
+    const nextSession = sessionStore.updateSession(threadId, resolveInterruptedSessionForUserInput);
+    await persistSessionSnapshot(threadId, nextSession);
+    return nextSession;
   };
 
   const readCurrentThreadId = (): string => {
@@ -1508,7 +1579,7 @@ export async function createAgentRuntime<TState = unknown>(
           command,
           schedule,
         });
-        applyAutomationStatusUpdate({
+        const session = applyAutomationStatusUpdate({
           sessionStore,
           threadId,
           artifactId,
@@ -1520,6 +1591,7 @@ export async function createAgentRuntime<TState = unknown>(
           minutes,
           detail,
         });
+        await persistSessionSnapshot(threadId, session);
 
         return {
           content: [{ type: 'text' as const, text: detail }],
@@ -1665,7 +1737,7 @@ export async function createAgentRuntime<TState = unknown>(
           lastRunStatus: 'canceled',
           lastRunAt: new Date(now()).toISOString(),
         });
-        applyAutomationStatusUpdate({
+        const session = applyAutomationStatusUpdate({
           sessionStore,
           threadId,
           artifactId: record.artifactId,
@@ -1677,6 +1749,7 @@ export async function createAgentRuntime<TState = unknown>(
           minutes,
           detail,
         });
+        await persistSessionSnapshot(threadId, session);
 
         return {
           content: [{ type: 'text' as const, text: detail }],
@@ -1720,12 +1793,13 @@ export async function createAgentRuntime<TState = unknown>(
           }),
         );
 
-        applyOperatorInputRequest({
+        const session = applyOperatorInputRequest({
           sessionStore,
           threadId,
           artifactId,
           message: toolArgs.message,
         });
+        await persistSessionSnapshot(threadId, session);
 
         return {
           content: [{ type: 'text' as const, text: toolArgs.message }],
@@ -1807,6 +1881,7 @@ export async function createAgentRuntime<TState = unknown>(
     agent: foundation.agent,
     getSession: sessionStore.getSession,
     updateSession: sessionStore.updateSession,
+    onSessionUpdated: persistSessionSnapshot,
     now,
   });
 
@@ -1843,28 +1918,28 @@ export async function createAgentRuntime<TState = unknown>(
   const runtimeWithAttachedSessions: PiRuntimeGatewayRuntime = {
     ...runtimeWithDomain,
     connect: async (request) => {
-      await ensureThread(request.threadId);
+      const session = await ensureThread(request.threadId);
 
       return createAttachedEventStream({
         seedEvents: buildPiRuntimeGatewayConnectEventsInternal({
           threadId: request.threadId,
           runId: request.runId ?? `connect:${request.threadId}`,
-          session: sessionStore.getSession(request.threadId),
+          session,
         }),
         attach: (push) => attachedRuns.attachToThread(request.threadId, push),
       });
     },
     run: async (request) => {
-      await ensureThread(request.threadId);
+      const session = await ensureThread(request.threadId);
 
       const isDomainInterruptResume =
         readInterruptOperation({
           command: request.forwardedProps?.command,
-          session: sessionStore.getSession(request.threadId),
+          session,
           domain,
         }) !== null;
       if (typeof request.forwardedProps?.command?.resume === 'string' && !isDomainInterruptResume) {
-        resumeInterruptedSession(request.threadId);
+        await resumeInterruptedSession(request.threadId);
       }
 
       attachedRuns.startRun(request.threadId, request.runId);
@@ -1939,7 +2014,8 @@ export async function createAgentRuntime<TState = unknown>(
           `agent-runtime:${thread.threadKey}:automation-artifact`,
         );
 
-        applyAutomationStatusUpdate({
+        await hydrateThreadSession(thread.threadKey);
+        const runningSession = applyAutomationStatusUpdate({
           sessionStore,
           threadId: thread.threadKey,
           artifactId,
@@ -1951,6 +2027,7 @@ export async function createAgentRuntime<TState = unknown>(
           minutes,
           detail: `Running automation ${automation.commandName}.`,
         });
+        await persistSessionSnapshot(thread.threadKey, runningSession);
         await publishSessionUpdate(thread.threadKey, scheduledRun.runId);
 
         await postgres.executeStatements(
@@ -1984,7 +2061,7 @@ export async function createAgentRuntime<TState = unknown>(
           }),
         );
 
-        applyAutomationStatusUpdate({
+        const completedSession = applyAutomationStatusUpdate({
           sessionStore,
           threadId: thread.threadKey,
           artifactId,
@@ -1996,6 +2073,7 @@ export async function createAgentRuntime<TState = unknown>(
           minutes,
           detail: `Automation ${automation.commandName} executed successfully.`,
         });
+        await persistSessionSnapshot(thread.threadKey, completedSession);
         await publishSessionUpdate(thread.threadKey, scheduledRun.runId);
       }
     } finally {
