@@ -35,7 +35,7 @@ Related docs:
 - `docs/adr/0006-pi-thread-execution-automation-runtime-model.md`
 - `docs/adr/0007-sibling-channel-adapters-and-canonical-thread-identity.md`
 - `docs/adr/0008-runtime-agnostic-shared-contract-extraction.md`
-- `docs/adr/0010-pluggable-agent-domain-modules-above-pi-core-runtime.md`
+- `docs/adr/0011-blessed-agent-runtime-factory-and-runtime-owned-projection-assembly.md`
 
 ## 2. Boundary rules
 
