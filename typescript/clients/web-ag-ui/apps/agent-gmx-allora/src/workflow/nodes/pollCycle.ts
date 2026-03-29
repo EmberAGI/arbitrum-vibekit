@@ -43,6 +43,7 @@ import {
   type ClmmEvent,
   type GmxLatestSnapshot,
   type ClmmState,
+  type Task,
   type ClmmUpdate,
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';
@@ -920,7 +921,7 @@ function asLifecycleTxHash(value: string | undefined): `0x${string}` | undefined
 }
 
 type LifecycleWatchResult = {
-  task: ClmmState['thread']['task'];
+  task: Task;
   statusEvent: ClmmEvent;
   lifecycleFailure?: ExecutionFailureSummary;
   lifecycleStatus?: 'pending' | 'executed' | 'cancelled' | 'failed' | 'unknown';
@@ -931,7 +932,7 @@ type LifecycleWatchResult = {
 async function watchLifecycleForExecutionHash(params: {
   client: OnchainActionsClient;
   config: CopilotKitConfig;
-  task: ClmmState['thread']['task'];
+  task: Task;
   statusEvent: ClmmEvent;
   activityTelemetry: ClmmState['thread']['activity']['telemetry'];
   latestCycle: ClmmState['thread']['metrics']['latestCycle'];
