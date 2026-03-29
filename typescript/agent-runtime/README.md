@@ -16,6 +16,7 @@ The supported normal-consumer path is:
 - depend on `agent-runtime`
 - import `createAgentRuntime(...)` and domain types from the package root
 - configure the runtime declaratively
+- `await createAgentRuntime(...)` during process startup to receive the ready runtime `service`
 - mount AG-UI from the returned `service.createAgUiHandler(...)` when you need to expose the ready runtime service over HTTP
 - use `createAgentRuntimeHttpAgent(...)` from the package root when a web/runtime consumer needs an AG-UI HTTP client
 - let `agent-runtime` own runtime assembly and projection assembly
@@ -48,6 +49,12 @@ The intended public shape is:
 - `domain` configuration
 
 Normal consumers should not pass public session stores, control-plane loaders, or background automation adapters into the blessed builder. Those concerns are runtime-owned internals.
+
+Persistence/bootstrap ownership follows the same rule:
+
+- if you supply `databaseUrl`, `agent-runtime` treats it as the explicit Postgres override
+- if you omit `databaseUrl`, `agent-runtime` boots and uses its default local Postgres configuration internally
+- normal consumers do not manually start Postgres, apply schema, or wire persistence helpers around the builder
 
 The `domain` extension surface is responsible for:
 

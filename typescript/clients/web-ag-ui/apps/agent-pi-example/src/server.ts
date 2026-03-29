@@ -79,7 +79,7 @@ server.listen(port, () => {
   console.log(
     [
       `agent-pi-example listening on http://127.0.0.1:${port}`,
-      `database=${databaseUrl ?? 'ephemeral-memory'}`,
+      `database=${databaseUrl ?? 'runtime-managed-default'}`,
     ].join(' '),
   );
 });

@@ -4,7 +4,7 @@ import {
   type Message,
   type Model,
 } from '@mariozechner/pi-ai';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
@@ -42,6 +42,64 @@ function createModel(id: string): Model<'openai-responses'> {
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 8192,
     maxTokens: 2048,
+  };
+}
+
+function createInternalPostgresHooks(
+  overrides: Partial<{
+    databaseUrl: string;
+    loadInspectionState: (options: { databaseUrl: string }) => Promise<{
+      threads: unknown[];
+      executions: unknown[];
+      automations: unknown[];
+      automationRuns: unknown[];
+      interrupts: unknown[];
+      leases: unknown[];
+      outboxIntents: unknown[];
+      executionEvents: unknown[];
+      threadActivities: unknown[];
+    }>;
+    executeStatements: (databaseUrl: string, statements: readonly string[]) => Promise<void>;
+    persistDirectExecution: (options: unknown) => Promise<void>;
+  }> = {},
+) {
+  const databaseUrl = overrides.databaseUrl ?? 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime';
+  const ensureReady = vi.fn(async (options?: { env?: { DATABASE_URL?: string } }) => ({
+    bootstrapPlan: options?.env?.DATABASE_URL
+      ? {
+          mode: 'external' as const,
+          databaseUrl: options.env.DATABASE_URL,
+          startCommand: null,
+        }
+      : {
+          mode: 'local-docker' as const,
+          databaseUrl,
+          startCommand: 'docker run --name pi-runtime-postgres ...',
+        },
+    databaseUrl: options?.env?.DATABASE_URL ?? databaseUrl,
+    startedLocalDocker: !options?.env?.DATABASE_URL,
+  }));
+  const loadInspectionState =
+    overrides.loadInspectionState ??
+    vi.fn(async () => ({
+      threads: [],
+      executions: [],
+      automations: [],
+      automationRuns: [],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    }));
+  const executeStatements = overrides.executeStatements ?? vi.fn(async () => undefined);
+  const persistDirectExecution = overrides.persistDirectExecution ?? vi.fn(async () => undefined);
+
+  return {
+    ensureReady,
+    loadInspectionState,
+    executeStatements,
+    persistDirectExecution,
   };
 }
 
@@ -154,6 +212,31 @@ async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): P
     events.push(event);
   }
   return events;
+}
+
+async function readFirstMatchingEvent<T>(
+  source: readonly T[] | AsyncIterable<T>,
+  predicate: (event: T) => boolean,
+): Promise<T | undefined> {
+  if (Array.isArray(source)) {
+    return source.find(predicate);
+  }
+
+  const iterator = source[Symbol.asyncIterator]();
+  try {
+    while (true) {
+      const result = await iterator.next();
+      if (result.done) {
+        return undefined;
+      }
+
+      if (predicate(result.value)) {
+        return result.value;
+      }
+    }
+  } finally {
+    await iterator.return?.();
+  }
 }
 
 function isStateSnapshotEvent(event: GatewayEvent): event is StateSnapshotEvent {
@@ -345,7 +428,7 @@ describe('agent-runtime integration', () => {
     let sawSyntheticDomainContextMessage = false;
 
     const domain = createLifecycleDomain();
-    const runtime = createAgentRuntime({
+    const runtime = await createAgentRuntime({
       model: createModel('int-model'),
       systemPrompt: 'You are a lifecycle agent.',
       domain,
@@ -421,7 +504,8 @@ describe('agent-runtime integration', () => {
           });
         },
       },
-    });
+      __internalPostgres: createInternalPostgresHooks(),
+    } as any);
 
     const hireEvents = await collectEventSource(
       await runtime.service.run({
@@ -546,5 +630,140 @@ describe('agent-runtime integration', () => {
       phase: 'fired',
       operatorNote: 'safe window approved',
     });
+  });
+
+  it('runs scheduled automation updates through the runtime-owned default Postgres bootstrap path', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      let inspectionState = {
+        threads: [],
+        executions: [],
+        automations: [],
+        automationRuns: [],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      } as {
+        threads: unknown[];
+        executions: unknown[];
+        automations: unknown[];
+        automationRuns: unknown[];
+        interrupts: unknown[];
+        leases: unknown[];
+        outboxIntents: unknown[];
+        executionEvents: unknown[];
+        threadActivities: unknown[];
+      };
+      const internalPostgres = createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+      });
+
+      const runtime = await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestToolResult = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'toolResult');
+
+            if (latestToolResult) {
+              return createTextStream('Automation scheduled.');
+            }
+
+            return createToolStream({
+              toolName: 'automation_schedule',
+              toolCallId: 'tool-automation-schedule',
+              args: {
+                title: 'Sync every minute',
+                instruction: 'sync',
+                schedule: {
+                  kind: 'every',
+                  intervalMinutes: 1,
+                },
+              },
+            });
+          },
+        },
+        __internalPostgres: internalPostgres,
+      } as any);
+
+      await collectEventSource(
+        await runtime.service.run({
+          threadId: 'thread-1',
+          runId: 'run-schedule',
+          messages: [
+            {
+              id: 'message-1',
+              role: 'user',
+              content: 'Please schedule sync automation every minute.',
+            },
+          ],
+        }),
+      );
+
+      inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'sync',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const connectSnapshot = await readFirstMatchingEvent(
+        await runtime.service.connect({
+          threadId: 'thread-1',
+          runId: 'run-connect',
+        }),
+        isStateSnapshotEvent,
+      );
+
+      expect(connectSnapshot).toBeDefined();
+      expect(connectSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
+        type: 'automation-status',
+        status: 'completed',
+        command: 'sync',
+      });
+      expect(internalPostgres.ensureReady).toHaveBeenCalledWith({});
+      expect(internalPostgres.loadInspectionState).toHaveBeenCalled();
+      expect(internalPostgres.executeStatements).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

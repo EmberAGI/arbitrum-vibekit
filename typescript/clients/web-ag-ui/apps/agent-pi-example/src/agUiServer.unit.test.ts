@@ -1,8 +1,29 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { AgentRuntimeService } from 'agent-runtime';
 
 import { createPiExampleAgUiHandler, createPiExampleGatewayService } from './agUiServer';
+
+function createInternalPostgresHooks() {
+  return {
+    ensureReady: vi.fn(async () => ({
+      databaseUrl: 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime',
+    })),
+    loadInspectionState: vi.fn(async () => ({
+      threads: [],
+      executions: [],
+      automations: [],
+      automationRuns: [],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    })),
+    executeStatements: vi.fn(async () => undefined),
+    persistDirectExecution: vi.fn(async () => undefined),
+  };
+}
 
 function createStubService() {
   const service: AgentRuntimeService = {
@@ -93,8 +114,8 @@ async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): P
 }
 
 describe('createPiExampleAgUiHandler', () => {
-  it('requires real Pi foundation env for default service startup', () => {
-    expect(() => createPiExampleGatewayService()).toThrow('OPENROUTER_API_KEY');
+  it('requires real Pi foundation env for default service startup', async () => {
+    await expect(createPiExampleGatewayService()).rejects.toThrow('OPENROUTER_API_KEY');
   });
 
   it('serves AG-UI connect, run, stop, and control reads for the Pi example agent', async () => {
@@ -141,12 +162,13 @@ describe('createPiExampleAgUiHandler', () => {
   });
 
   it('surfaces runtime-owned automation artifacts after a mocked tool-backed run', async () => {
-    const service = createPiExampleGatewayService({
+    const service = await createPiExampleGatewayService({
       env: {
         OPENROUTER_API_KEY: 'test-openrouter-key',
         PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
       },
-    });
+      __internalPostgres: createInternalPostgresHooks(),
+    } as any);
 
     const runEvents = await collectEventSource(
       await service.run({

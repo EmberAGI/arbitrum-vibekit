@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 import type { Model } from '@mariozechner/pi-ai';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import * as agentRuntime from './index.js';
 
@@ -17,6 +17,64 @@ function createModel(id: string): Model<'openai-responses'> {
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 8192,
     maxTokens: 2048,
+  };
+}
+
+function createInternalPostgresHooks(
+  overrides: Partial<{
+    databaseUrl: string;
+    loadInspectionState: (options: { databaseUrl: string }) => Promise<{
+      threads: unknown[];
+      executions: unknown[];
+      automations: unknown[];
+      automationRuns: unknown[];
+      interrupts: unknown[];
+      leases: unknown[];
+      outboxIntents: unknown[];
+      executionEvents: unknown[];
+      threadActivities: unknown[];
+    }>;
+    executeStatements: (databaseUrl: string, statements: readonly string[]) => Promise<void>;
+    persistDirectExecution: (options: unknown) => Promise<void>;
+  }> = {},
+) {
+  const databaseUrl = overrides.databaseUrl ?? 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime';
+  const ensureReady = vi.fn(async (options?: { env?: { DATABASE_URL?: string } }) => ({
+    bootstrapPlan: options?.env?.DATABASE_URL
+      ? {
+          mode: 'external' as const,
+          databaseUrl: options.env.DATABASE_URL,
+          startCommand: null,
+        }
+      : {
+          mode: 'local-docker' as const,
+          databaseUrl,
+          startCommand: 'docker run --name pi-runtime-postgres ...',
+        },
+    databaseUrl: options?.env?.DATABASE_URL ?? databaseUrl,
+    startedLocalDocker: !options?.env?.DATABASE_URL,
+  }));
+  const loadInspectionState =
+    overrides.loadInspectionState ??
+    vi.fn(async () => ({
+      threads: [],
+      executions: [],
+      automations: [],
+      automationRuns: [],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    }));
+  const executeStatements = overrides.executeStatements ?? vi.fn(async () => undefined);
+  const persistDirectExecution = overrides.persistDirectExecution ?? vi.fn(async () => undefined);
+
+  return {
+    ensureReady,
+    loadInspectionState,
+    executeStatements,
+    persistDirectExecution,
   };
 }
 
@@ -128,16 +186,19 @@ describe('agent-runtime facade', () => {
     expect(declarations).not.toContain('PiRuntimeGatewayHttpAgentConfig');
     expect(declarations).not.toContain('PiRuntimeGatewayService');
     expect(declarations).not.toContain('PiRuntimeGatewaySession');
+    expect(declarations).not.toContain('__internalPostgres');
     expect(publicDomainContract).toContain('export type AgentRuntimeExecutionStatus');
     expect(source).toContain('export type AgentRuntimeDomainContext');
     expect(source).toContain('export interface CreateAgentRuntimeOptions');
   });
 
   it('owns sessions and control-plane defaults inside the blessed builder', async () => {
-    const runtime = agentRuntime.createAgentRuntime({
+    const internalPostgres = createInternalPostgresHooks();
+    const runtime = await agentRuntime.createAgentRuntime({
       model: createModel('unit-model'),
       systemPrompt: 'You are a lifecycle agent.',
-    });
+      __internalPostgres: internalPostgres,
+    } as any);
 
     expect(runtime).toMatchObject({
       service: expect.objectContaining({
@@ -152,9 +213,46 @@ describe('agent-runtime facade', () => {
     });
     expect('bootstrapPlan' in runtime).toBe(false);
     expect('publishSessionSnapshot' in runtime).toBe(false);
+    expect(internalPostgres.ensureReady).toHaveBeenCalledWith({});
 
     await expect(runtime.service.control.listThreads()).resolves.toEqual([]);
     await expect(runtime.service.control.listAutomations()).resolves.toEqual([]);
+  });
+
+  it('bootstraps the runtime-owned default Postgres when no DATABASE_URL override is supplied', async () => {
+    const internalPostgres = createInternalPostgresHooks();
+
+    const runtime = await agentRuntime.createAgentRuntime({
+      model: createModel('unit-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await runtime.service.control.listThreads();
+
+    expect(internalPostgres.ensureReady).toHaveBeenCalledWith({});
+    expect(internalPostgres.loadInspectionState).toHaveBeenCalledWith({
+      databaseUrl: 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime',
+    });
+  });
+
+  it('passes an explicit DATABASE_URL through the runtime-owned bootstrap override path', async () => {
+    const internalPostgres = createInternalPostgresHooks({
+      databaseUrl: 'postgresql://ignored:ignored@127.0.0.1:55432/ignored',
+    });
+
+    await agentRuntime.createAgentRuntime({
+      model: createModel('unit-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      databaseUrl: 'postgresql://custom-user:custom-pass@db.internal:5432/custom_runtime',
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    expect(internalPostgres.ensureReady).toHaveBeenCalledWith({
+      env: {
+        DATABASE_URL: 'postgresql://custom-user:custom-pass@db.internal:5432/custom_runtime',
+      },
+    });
   });
 
   it('syncs postgres artifacts into installed agent-runtime snapshots for clean workspace consumers', () => {
@@ -171,8 +269,8 @@ describe('agent-runtime facade', () => {
     expect(syncScript).toContain("path.join('lib', 'postgres', 'dist')");
   });
 
-  it('rejects lifecycle declarations whose transitions reference undeclared phases', () => {
-    expect(() =>
+  it('rejects lifecycle declarations whose transitions reference undeclared phases', async () => {
+    await expect(
       agentRuntime.createAgentRuntime({
         model: createModel('unit-model'),
         systemPrompt: 'You are a lifecycle agent.',
@@ -193,12 +291,12 @@ describe('agent-runtime facade', () => {
             interrupts: [],
           },
         },
-      }),
-    ).toThrow(/undeclared phase/i);
+      } as any),
+    ).rejects.toThrow(/undeclared phase/i);
   });
 
-  it('rejects lifecycle declarations whose terminal phases are not declared', () => {
-    expect(() =>
+  it('rejects lifecycle declarations whose terminal phases are not declared', async () => {
+    await expect(
       agentRuntime.createAgentRuntime({
         model: createModel('unit-model'),
         systemPrompt: 'You are a lifecycle agent.',
@@ -219,7 +317,7 @@ describe('agent-runtime facade', () => {
             interrupts: [],
           },
         },
-      }),
-    ).toThrow(/terminal phase/i);
+      } as any),
+    ).rejects.toThrow(/terminal phase/i);
   });
 });

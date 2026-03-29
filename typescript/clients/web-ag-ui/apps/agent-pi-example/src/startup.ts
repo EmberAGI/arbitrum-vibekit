@@ -5,11 +5,11 @@ type PiExampleServerEnv = PiExampleGatewayEnv & {
   PORT?: string;
 };
 
-type PiExampleGatewayService = ReturnType<typeof createPiExampleGatewayService>;
+type PiExampleGatewayService = Awaited<ReturnType<typeof createPiExampleGatewayService>>;
 
 type PreparePiExampleServerOptions = {
   env?: PiExampleServerEnv;
-  createService?: (options: { env: PiExampleServerEnv }) => PiExampleGatewayService;
+  createService?: (options: { env: PiExampleServerEnv }) => Promise<PiExampleGatewayService>;
 };
 
 function normalizeDatabaseUrl(databaseUrl: string | undefined): string | null {
@@ -25,7 +25,7 @@ export async function preparePiExampleServer(
   service: PiExampleGatewayService;
 }> {
   const env = options.env ?? process.env;
-  const service = (options.createService ?? createPiExampleGatewayService)({
+  const service = await (options.createService ?? createPiExampleGatewayService)({
     env,
   });
 

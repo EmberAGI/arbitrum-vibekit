@@ -21,12 +21,29 @@ type PiExampleGatewayServiceOptions = {
   now?: () => number;
 };
 
-export function createPiExampleGatewayService(options: PiExampleGatewayServiceOptions = {}): AgentRuntimeService {
+type PiExampleGatewayInternalOptions = PiExampleGatewayServiceOptions & {
+  __internalPostgres?: {
+    ensureReady?: (options?: { env?: { DATABASE_URL?: string } }) => Promise<{
+      databaseUrl: string;
+    }>;
+    loadInspectionState?: (options: { databaseUrl: string }) => Promise<unknown>;
+    executeStatements?: (databaseUrl: string, statements: readonly unknown[]) => Promise<void>;
+    persistDirectExecution?: (options: unknown) => Promise<void>;
+  };
+};
+
+export async function createPiExampleGatewayService(
+  options?: PiExampleGatewayServiceOptions,
+): Promise<AgentRuntimeService>;
+export async function createPiExampleGatewayService(
+  options: PiExampleGatewayInternalOptions = {},
+): Promise<AgentRuntimeService> {
   const runtimeConfig = options.runtimeConfig ?? createPiExampleAgentConfig(options.env);
-  const runtime = createAgentRuntime({
+  const runtime = await createAgentRuntime({
     ...runtimeConfig,
     ...(options.now ? { now: options.now } : {}),
-  });
+    ...(options.__internalPostgres ? { __internalPostgres: options.__internalPostgres } : {}),
+  } as any);
 
   return runtime.service;
 }

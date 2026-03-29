@@ -25,7 +25,7 @@ function createStubService(): AgentRuntimeService {
 describe('preparePiExampleServer', () => {
   it('forwards the provided env directly into the blessed service factory', async () => {
     const service = createStubService();
-    const createService = vi.fn(() => service);
+    const createService = vi.fn(async () => service);
 
     await expect(
       preparePiExampleServer({
@@ -51,9 +51,9 @@ describe('preparePiExampleServer', () => {
     });
   });
 
-  it('reports null when persistence is not configured', async () => {
+  it('reports null when no explicit DATABASE_URL override is configured', async () => {
     const service = createStubService();
-    const createService = vi.fn(() => service);
+    const createService = vi.fn(async () => service);
 
     await expect(
       preparePiExampleServer({

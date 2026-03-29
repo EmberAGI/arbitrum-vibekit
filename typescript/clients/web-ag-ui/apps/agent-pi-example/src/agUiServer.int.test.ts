@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createPiExampleAgUiHandler, createPiExampleGatewayService, PI_EXAMPLE_AGENT_ID } from './agUiServer.js';
 
@@ -42,17 +42,39 @@ function findStateSnapshot(events: readonly AgUiEventEnvelope[]) {
   return [...events].reverse().find((event) => event.type === 'STATE_SNAPSHOT');
 }
 
+function createInternalPostgresHooks() {
+  return {
+    ensureReady: vi.fn(async () => ({
+      databaseUrl: 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime',
+    })),
+    loadInspectionState: vi.fn(async () => ({
+      threads: [],
+      executions: [],
+      automations: [],
+      automationRuns: [],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    })),
+    executeStatements: vi.fn(async () => undefined),
+    persistDirectExecution: vi.fn(async () => undefined),
+  };
+}
+
 describe('agent-pi-example AG-UI integration', () => {
   let server: Server;
   let baseUrl: string;
 
   beforeEach(async () => {
-    const service = createPiExampleGatewayService({
+    const service = await createPiExampleGatewayService({
       env: {
         OPENROUTER_API_KEY: 'test-openrouter-key',
         PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
       },
-    });
+      __internalPostgres: createInternalPostgresHooks(),
+    } as any);
 
     const handler = createPiExampleAgUiHandler({
       agentId: PI_EXAMPLE_AGENT_ID,
