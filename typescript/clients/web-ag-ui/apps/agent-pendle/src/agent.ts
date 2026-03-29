@@ -2,9 +2,9 @@ import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
 import {
+  restorePersistedCronSchedulesWithRunReconciliation,
   configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,
-  restorePersistedCronSchedulesFromCheckpointer,
 } from 'agent-runtime-langgraph';
 import {
   analyzeCycleProjectionThread,
@@ -374,9 +374,10 @@ export async function startCron(
 
 configureCronExecutor(runGraphOnce);
 try {
-  const recoveredCronThreads = await restorePersistedCronSchedulesFromCheckpointer((threadId, intervalMs) =>
-    ensureCronForThread(threadId, intervalMs),
-  );
+  const recoveredCronThreads = await restorePersistedCronSchedulesWithRunReconciliation({
+    baseUrl: resolveLangGraphDeploymentUrl(),
+    scheduleThread: ensureCronForThread,
+  });
   if (recoveredCronThreads.length > 0) {
     console.info('[cron] Recovered persisted cron schedules', {
       threadIds: recoveredCronThreads.map((candidate) => candidate.threadId),

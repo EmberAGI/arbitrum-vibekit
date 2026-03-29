@@ -9,32 +9,30 @@ const {
   configureLangGraphApiCheckpointerMock,
   restorePersistedCronSchedulesWithRunReconciliationMock,
   ensureCronForThreadMock,
-  setupAgentLocalE2EMocksIfNeededMock,
 } = vi.hoisted(() => ({
-  configureLangGraphApiCheckpointerMock: vi.fn(async () => undefined),
-  restorePersistedCronSchedulesWithRunReconciliationMock: vi.fn(
-    async (_params: RestoreParams) => [],
-  ),
+  configureLangGraphApiCheckpointerMock: vi.fn(() => Promise.resolve(undefined)),
+  restorePersistedCronSchedulesWithRunReconciliationMock: vi.fn((params: RestoreParams) => {
+    void params;
+    return Promise.resolve([]);
+  }),
   ensureCronForThreadMock: vi.fn(),
-  setupAgentLocalE2EMocksIfNeededMock: vi.fn(async () => undefined),
 }));
 
 vi.mock('agent-runtime-langgraph', async () => {
-  const actual = await vi.importActual<typeof import('agent-runtime-langgraph')>(
-    'agent-runtime-langgraph',
-  );
+  const actual = await vi.importActual('agent-runtime-langgraph');
   return {
     ...actual,
-    configureLangGraphApiCheckpointer: configureLangGraphApiCheckpointerMock,
     restorePersistedCronSchedulesWithRunReconciliation:
       restorePersistedCronSchedulesWithRunReconciliationMock,
   };
 });
 
+vi.mock('../src/workflow/langgraphApiCheckpointer.js', () => ({
+  configureLangGraphApiCheckpointer: configureLangGraphApiCheckpointerMock,
+}));
+
 vi.mock('../src/workflow/cronScheduler.js', async () => {
-  const actual = await vi.importActual<typeof import('../src/workflow/cronScheduler.js')>(
-    '../src/workflow/cronScheduler.js',
-  );
+  const actual = await vi.importActual('../src/workflow/cronScheduler.js');
   return {
     ...actual,
     ensureCronForThread: ensureCronForThreadMock,
@@ -42,25 +40,20 @@ vi.mock('../src/workflow/cronScheduler.js', async () => {
   };
 });
 
-vi.mock('../src/e2e/agentLocalMocks.js', () => ({
-  setupAgentLocalE2EMocksIfNeeded: setupAgentLocalE2EMocksIfNeededMock,
-}));
-
-describe('GMX Allora boot-time cron recovery', () => {
+describe('CLMM boot-time cron recovery', () => {
   beforeEach(() => {
     vi.resetModules();
     configureLangGraphApiCheckpointerMock.mockReset();
     restorePersistedCronSchedulesWithRunReconciliationMock.mockReset();
     ensureCronForThreadMock.mockReset();
-    setupAgentLocalE2EMocksIfNeededMock.mockReset();
     configureLangGraphApiCheckpointerMock.mockResolvedValue(undefined);
-    setupAgentLocalE2EMocksIfNeededMock.mockResolvedValue(undefined);
     restorePersistedCronSchedulesWithRunReconciliationMock.mockImplementation(
       async ({ scheduleThread }: RestoreParams) => {
         await scheduleThread('thread-recovered', 15_000);
         return [{ threadId: 'thread-recovered', pollIntervalMs: 15_000 }];
       },
     );
+    delete process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
   });
 
   afterEach(() => {
@@ -71,7 +64,6 @@ describe('GMX Allora boot-time cron recovery', () => {
   it('re-schedules recovered threads when the agent boots', async () => {
     await import('../src/agent.js');
 
-    expect(setupAgentLocalE2EMocksIfNeededMock).toHaveBeenCalledTimes(1);
     expect(configureLangGraphApiCheckpointerMock).toHaveBeenCalledTimes(1);
     expect(restorePersistedCronSchedulesWithRunReconciliationMock).toHaveBeenCalledTimes(1);
     expect(ensureCronForThreadMock).toHaveBeenCalledWith('thread-recovered', 15_000);
@@ -82,7 +74,7 @@ describe('GMX Allora boot-time cron recovery', () => {
 
     expect(restorePersistedCronSchedulesWithRunReconciliationMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        baseUrl: 'http://localhost:8126',
+        baseUrl: 'http://localhost:8124',
         scheduleThread: ensureCronForThreadMock,
       }),
     );

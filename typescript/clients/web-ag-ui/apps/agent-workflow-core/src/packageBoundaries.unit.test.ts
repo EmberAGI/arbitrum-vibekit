@@ -24,6 +24,10 @@ describe('package boundaries', () => {
     expect(typeof runtimeLanggraph.loadLangGraphApiCheckpointer).toBe('function');
     expect(typeof runtimeLanggraph.pruneCheckpointerState).toBe('function');
     expect(typeof runtimeLanggraph.isLangGraphBusyStatus).toBe('function');
+    expect(typeof runtimeLanggraph.reconcileRecoveredThreadRuns).toBe('function');
+    expect(typeof runtimeLanggraph.restorePersistedCronSchedulesWithRunReconciliation).toBe(
+      'function',
+    );
   });
 
   it('does not re-export LangGraph runtime helpers from agent-workflow-core', () => {
@@ -31,5 +35,7 @@ describe('package boundaries', () => {
     expect('loadLangGraphApiCheckpointer' in workflowCore).toBe(false);
     expect('pruneCheckpointerState' in workflowCore).toBe(false);
     expect('isLangGraphBusyStatus' in workflowCore).toBe(false);
+    expect('reconcileRecoveredThreadRuns' in workflowCore).toBe(false);
+    expect('restorePersistedCronSchedulesWithRunReconciliation' in workflowCore).toBe(false);
   });
 });

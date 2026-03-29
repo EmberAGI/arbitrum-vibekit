@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, InMemoryStore, START, StateGraph } from '@langchain/langgraph';
-import { restorePersistedCronSchedulesFromCheckpointer } from 'agent-runtime-langgraph';
+import { restorePersistedCronSchedulesWithRunReconciliation } from 'agent-runtime-langgraph';
 import { v7 as uuidv7 } from 'uuid';
 import { privateKeyToAccount } from 'viem/accounts';
 import { z } from 'zod';
@@ -272,9 +272,10 @@ export async function startClmmCron(
 
 configureCronExecutor(runGraphOnce);
 try {
-  const recoveredCronThreads = await restorePersistedCronSchedulesFromCheckpointer((threadId, intervalMs) =>
-    ensureCronForThread(threadId, intervalMs),
-  );
+  const recoveredCronThreads = await restorePersistedCronSchedulesWithRunReconciliation({
+    baseUrl: resolveLangGraphDeploymentUrl(),
+    scheduleThread: ensureCronForThread,
+  });
   if (recoveredCronThreads.length > 0) {
     console.info('[cron] Recovered persisted cron schedules', {
       threadIds: recoveredCronThreads.map((candidate) => candidate.threadId),

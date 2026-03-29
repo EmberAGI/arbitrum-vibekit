@@ -12,3 +12,10 @@ export {
   type PersistedCronRecoveryCandidate,
   type ScheduleThread,
 } from './persistedCronRecovery.js';
+export {
+  cancelLangGraphRun,
+  isActiveLangGraphRunStatus,
+  listThreadRuns,
+  reconcileRecoveredThreadRuns,
+  restorePersistedCronSchedulesWithRunReconciliation,
+} from './recoveredRunReconciliation.js';

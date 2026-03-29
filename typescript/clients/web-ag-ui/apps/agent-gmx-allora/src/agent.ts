@@ -2,9 +2,10 @@ import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
 import {
+  cancelLangGraphRun,
   configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,
-  restorePersistedCronSchedulesFromCheckpointer,
+  restorePersistedCronSchedulesWithRunReconciliation,
 } from 'agent-runtime-langgraph';
 import {
   analyzeCycleProjectionThread,
@@ -479,19 +480,6 @@ async function fetchRun(baseUrl: string, threadId: string, runId: string) {
   return parseJsonResponse(response, RunResponseSchema);
 }
 
-async function cancelRun(baseUrl: string, threadId: string, runId: string): Promise<void> {
-  const response = await fetch(`${baseUrl}/threads/${threadId}/runs/${runId}/cancel`, {
-    method: 'POST',
-  });
-
-  if (response.ok || response.status === 404) {
-    return;
-  }
-
-  const payloadText = await response.text().catch(() => 'No error body');
-  throw new Error(`LangGraph run cancel failed (${response.status}): ${payloadText}`);
-}
-
 function timeoutAfter(ms: number): Promise<never> {
   return new Promise((_, reject) => {
     setTimeout(() => {
@@ -556,7 +544,7 @@ async function waitForRunStreamCompletion(params: {
         runId: params.runId,
         timeoutMs,
       });
-      await cancelRun(params.baseUrl, params.threadId, params.runId);
+      await cancelLangGraphRun(params.baseUrl, params.threadId, params.runId, { wait: true });
     }
   }
 
@@ -623,9 +611,10 @@ export async function startCron(threadId: string, options?: { durability?: LangG
 
 configureCronExecutor(runGraphOnce);
 try {
-  const recoveredCronThreads = await restorePersistedCronSchedulesFromCheckpointer((threadId, intervalMs) =>
-    ensureCronForThread(threadId, intervalMs),
-  );
+  const recoveredCronThreads = await restorePersistedCronSchedulesWithRunReconciliation({
+    baseUrl: resolveLangGraphDeploymentUrl(),
+    scheduleThread: ensureCronForThread,
+  });
   if (recoveredCronThreads.length > 0) {
     console.info('[cron] Recovered persisted cron schedules', {
       threadIds: recoveredCronThreads.map((candidate) => candidate.threadId),
