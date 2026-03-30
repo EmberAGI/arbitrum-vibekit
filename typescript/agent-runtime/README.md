@@ -33,6 +33,13 @@ Concrete agent apps should not re-implement:
 - projection-store ownership
 - bootstrap/control-plane/persistence helper orchestration
 
+Concrete agent apps may still consume runtime-agnostic external domain services.
+When they do, the concrete app owns the service-specific adapter that translates
+between its `domain` hooks and the external protocol. `agent-runtime` must stay
+generic: it should not become a service-specific client package or absorb
+translation logic for downstream integrations such as the Shared Ember Domain
+Service.
+
 Do not treat the package root as a grab bag of helper exports. In particular:
 
 - do not import deprecated workflow helpers as the blessed integration model
@@ -80,6 +87,11 @@ The domain owns:
 - transport ownership
 - projection assembly
 - structural contract enforcement
+
+If a domain integration needs to call an external service, the domain/config
+layer may delegate to an app-local adapter that returns semantic state,
+artifacts, interrupts, and status outputs. `agent-runtime` still owns runtime
+projection, transport, and session lifecycle around those outputs.
 
 In particular, domains do not author projection details such as thread patches, AG-UI labels, or artifact-channel routing. Domains return semantic state, artifacts, interrupts, and status updates; `agent-runtime` projects those into runtime/session/transport shapes internally.
 

@@ -7,12 +7,16 @@ export const PENDLE_AGENT_NAME = 'agent-pendle';
 export const GMX_ALLORA_AGENT_NAME = 'agent-gmx-allora';
 export const STARTER_AGENT_NAME = 'starterAgent';
 export const PI_EXAMPLE_AGENT_NAME = 'agent-pi-example';
+export const PORTFOLIO_MANAGER_AGENT_NAME = 'agent-portfolio-manager';
 const DEFAULT_PI_AGENT_DEPLOYMENT_URL = 'http://127.0.0.1:3410/ag-ui';
+const DEFAULT_PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL = 'http://127.0.0.1:3420/ag-ui';
 
 type RuntimeEnv = Record<string, string | undefined>;
 
 export function buildCopilotRuntimeAgents(env: RuntimeEnv) {
   const piAgentRuntimeUrl = env.PI_AGENT_DEPLOYMENT_URL || DEFAULT_PI_AGENT_DEPLOYMENT_URL;
+  const portfolioManagerRuntimeUrl =
+    env.PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL || DEFAULT_PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL;
   const agents = {
     [CLMM_AGENT_NAME]: new LangGraphInterruptSnapshotAgent({
       deploymentUrl: env.LANGGRAPH_DEPLOYMENT_URL || 'http://localhost:8124',
@@ -37,6 +41,10 @@ export function buildCopilotRuntimeAgents(env: RuntimeEnv) {
     [PI_EXAMPLE_AGENT_NAME]: createAgentRuntimeHttpAgent({
       agentId: PI_EXAMPLE_AGENT_NAME,
       runtimeUrl: piAgentRuntimeUrl,
+    }),
+    [PORTFOLIO_MANAGER_AGENT_NAME]: createAgentRuntimeHttpAgent({
+      agentId: PORTFOLIO_MANAGER_AGENT_NAME,
+      runtimeUrl: portfolioManagerRuntimeUrl,
     }),
   };
 

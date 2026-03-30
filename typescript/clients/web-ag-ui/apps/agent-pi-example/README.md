@@ -40,6 +40,21 @@ Its domain module now uses the blessed state-driven contract:
 
 The example does not author thread patches, AG-UI label text, or projection-channel details directly.
 
+## Reference Boundary Rules
+
+`agent-pi-example` is the positive example for the blessed `agent-runtime`
+builder path, but some of its surrounding web/test affordances are
+example-specific and should not be copied blindly into other downstream apps.
+
+- The example app shows how a concrete app configures `agent-runtime`; it is
+  not a precedent for embedding external service-specific translation logic in
+  `apps/web` or in `agent-runtime` itself.
+- Downstream apps that consume runtime-agnostic upstream services should keep
+  that translation in an app-local adapter beside their own domain config.
+- The anonymous-thread allowance used by the Pi example in web surfaces is an
+  example-specific smoke-test affordance, not a general rule for wallet-backed
+  downstream agent apps.
+
 ## Local Startup
 
 1. Set `OPENROUTER_API_KEY` in `.env` or export it in your shell.

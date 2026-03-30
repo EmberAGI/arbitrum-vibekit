@@ -15,6 +15,8 @@ It includes:
 - `apps/web` stays projection-only and must not become the source of domain truth.
 - The `agent-runtime` package family owns reusable Pi AG-UI transport behavior.
 - Concrete agent apps should primarily contribute domain behavior, runtime configuration, and app-specific bootstrap.
+- When a concrete agent app consumes a runtime-agnostic upstream domain service, the app owns the thin adapter between `agent-runtime` domain hooks and that external service protocol.
+- Neither `apps/web` nor `agent-runtime` should absorb service-specific translation logic for downstream domain integrations such as the Shared Ember Domain Service.
 - Agent-family lifecycle behavior belongs in pluggable domain modules above the Pi core runtime.
 
 ## Workspace Notes
@@ -29,4 +31,5 @@ It includes:
 - [C4 Target Architecture: Pi Runtime + AG-UI + Automations](./docs/c4-pi-runtime-architecture-and-boundaries.md)
 - [AG-UI Client Runtime Invariants](./docs/ag-ui-client-runtime-invariants.md)
 - [AG-UI Frontend/Backend Contract for UI Stability](./docs/ag-ui-frontend-backend-contract-ui-stability.md)
-- [ADR 0010: pluggable-agent-domain-modules-above-pi-core-runtime](./docs/adr/0010-pluggable-agent-domain-modules-above-pi-core-runtime.md)
+- [ADR 0011: blessed-agent-runtime-factory-and-runtime-owned-projection-assembly](./docs/adr/0011-blessed-agent-runtime-factory-and-runtime-owned-projection-assembly.md)
+- [ADR 0010: pluggable-agent-domain-modules-above-pi-core-runtime](./docs/adr/0010-pluggable-agent-domain-modules-above-pi-core-runtime.md) (superseded lineage)

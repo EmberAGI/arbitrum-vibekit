@@ -92,6 +92,19 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     protocols: ['Pi Runtime', 'OpenRouter'],
     tokens: ['USDC'],
   },
+  'agent-portfolio-manager': {
+    id: 'agent-portfolio-manager',
+    name: 'Portfolio Manager',
+    description:
+      'Concrete PI-runtime orchestrator path for wallet-backed onboarding, signing handoffs, and Shared Ember Domain Service integration.',
+    creator: 'Ember AI Team',
+    creatorVerified: true,
+    avatar: '🧭',
+    avatarBg: 'linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%)',
+    chains: ['Arbitrum'],
+    protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+    tokens: ['USDC'],
+  },
 };
 
 export function getAgentConfig(agentId: string): AgentConfig {

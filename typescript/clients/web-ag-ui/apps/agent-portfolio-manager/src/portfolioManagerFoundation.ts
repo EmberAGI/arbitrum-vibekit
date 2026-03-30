@@ -1,0 +1,78 @@
+import type { CreateAgentRuntimeOptions } from 'agent-runtime';
+
+import {
+  createPortfolioManagerDomain,
+  type PortfolioManagerLifecycleState,
+} from './sharedEmberAdapter.js';
+import {
+  createPortfolioManagerSharedEmberHttpHost,
+  resolvePortfolioManagerSharedEmberBaseUrl,
+} from './sharedEmberHttpHost.js';
+
+const DEFAULT_PORTFOLIO_MANAGER_MODEL = 'openai/gpt-5.4-mini';
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+const PORTFOLIO_MANAGER_SYSTEM_PROMPT =
+  'You are the portfolio manager orchestrator running on agent-runtime. Stay concise, keep onboarding state explicit, and prepare to hand off wallet and Shared Ember Domain Service work through app-local adapters.';
+
+export type PortfolioManagerGatewayEnv = NodeJS.ProcessEnv & {
+  OPENROUTER_API_KEY?: string;
+  PORTFOLIO_MANAGER_MODEL?: string;
+  DATABASE_URL?: string;
+  SHARED_EMBER_BASE_URL?: string;
+};
+
+type PortfolioManagerAgentRuntimeOptions = CreateAgentRuntimeOptions<PortfolioManagerLifecycleState>;
+
+export type PortfolioManagerAgentConfig = Pick<
+  PortfolioManagerAgentRuntimeOptions,
+  'agentOptions' | 'databaseUrl' | 'domain' | 'model' | 'systemPrompt' | 'tools'
+>;
+
+function requireEnvValue(
+  value: string | undefined,
+  name: keyof PortfolioManagerGatewayEnv,
+): string {
+  const normalized = value?.trim();
+  if (!normalized) {
+    throw new Error(`Missing required env var: ${name}`);
+  }
+
+  return normalized;
+}
+
+export function createPortfolioManagerAgentConfig(
+  env: PortfolioManagerGatewayEnv = process.env,
+): PortfolioManagerAgentConfig {
+  const apiKey = requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
+  const modelId = env.PORTFOLIO_MANAGER_MODEL?.trim() || DEFAULT_PORTFOLIO_MANAGER_MODEL;
+  const sharedEmberBaseUrl = resolvePortfolioManagerSharedEmberBaseUrl(env);
+
+  return {
+    model: {
+      id: modelId,
+      name: modelId,
+      api: 'openai-responses',
+      provider: 'openrouter',
+      baseUrl: OPENROUTER_BASE_URL,
+      reasoning: true,
+    },
+    systemPrompt: PORTFOLIO_MANAGER_SYSTEM_PROMPT,
+    databaseUrl: env.DATABASE_URL,
+    tools: [],
+    domain: createPortfolioManagerDomain({
+      ...(sharedEmberBaseUrl
+        ? {
+            protocolHost: createPortfolioManagerSharedEmberHttpHost({
+              baseUrl: sharedEmberBaseUrl,
+            }),
+          }
+        : {}),
+    }),
+    agentOptions: {
+      initialState: {
+        thinkingLevel: 'low',
+      },
+      getApiKey: () => apiKey,
+    },
+  };
+}
