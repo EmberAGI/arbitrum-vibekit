@@ -73,17 +73,23 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - Client waits for terminal acknowledgment or bounded timeout before dispatching `fire`.
    - `fire` may use bounded retry for short server finalization windows.
 
-10. Confirmation semantics:
+10. Imperative command transport policy:
+   - Conversational user input belongs in AG-UI messages.
+   - Imperative client controls belong in `forwardedProps.command` whenever the target runtime supports a direct command lane.
+   - Current preferred direct-command set is `hire`, `fire`, `sync`, and interrupt resume.
+   - Compatibility note: LangGraph currently uses `forwardedProps.command` for resume only; imperative `hire`/`fire` remain message-driven there until an equivalent direct lane exists.
+
+11. Confirmation semantics:
    - “Saved/synced” UX should complete only when AG-UI state confirms application (e.g., task state, version, or acknowledged projection).
    - Current handshake: client sends `clientMutationId` in `sync` command payload; agent projects `lastAppliedClientMutationId` acknowledgment state; UI clears pending sync only when ids match.
    - Optimistic UI is allowed but must reconcile against streamed state.
 
-11. Intent/state boundary:
+12. Intent/state boundary:
    - Command intent is transport/control-plane input, not shared render truth.
    - Shared agent state must not persist command as a render-driving field.
    - ViewModel derives `UiState` from `ThreadState` plus local transient command lane state.
 
-12. Two-layer invariants:
+13. Two-layer invariants:
    - Agent invariants are authoritative business/workflow invariants.
    - ViewModel invariants are defensive projection invariants (stale run rejection, ordering/authority guards).
    - ViewModel must not re-implement business rules already owned by agents.

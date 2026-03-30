@@ -1316,6 +1316,53 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
   });
 
+  it('dispatches PI-runtime fire through forwardedProps command instead of a JSON user message', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        lifecycle: {
+          phase: 'active',
+        },
+        task: {
+          id: 'task-active',
+          taskStatus: {
+            state: 'working',
+            message: { content: 'Portfolio manager is active.' },
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    mocks.agent.addMessage.mockClear();
+    mocks.runAgent.mockClear();
+
+    latestValue?.runFire();
+    await flushEffects();
+
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
+    expect(mocks.runAgent).toHaveBeenCalledWith({
+      agent: mocks.agent,
+      forwardedProps: {
+        command: {
+          name: 'fire',
+        },
+      },
+    });
+  });
+
   it('marks agent as not hired once fire reaches a terminal task state', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 

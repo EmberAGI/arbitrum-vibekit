@@ -30,6 +30,9 @@ describe('createPortfolioManagerAgentConfig', () => {
           name: 'hire',
         },
         {
+          name: 'fire',
+        },
+        {
           name: 'register_root_delegation_from_user_signing',
         },
         {

@@ -4,8 +4,18 @@ import { deriveTaskStateForUi } from './deriveTaskStateForUi';
 function shouldSuppressPrehireTaskState(params: {
   lifecyclePhase?: ThreadLifecyclePhase | null;
   onboardingStatus?: OnboardingStatus;
+  taskState?: TaskState;
 }): boolean {
-  return params.lifecyclePhase === 'prehire' && params.onboardingStatus !== 'in_progress';
+  if (params.lifecyclePhase !== 'prehire' || params.onboardingStatus === 'in_progress') {
+    return false;
+  }
+
+  return (
+    params.taskState === 'working' ||
+    params.taskState === 'submitted' ||
+    params.taskState === 'input-required' ||
+    params.taskState == null
+  );
 }
 
 export function resolveSidebarTaskState(params: {
@@ -29,6 +39,7 @@ export function resolveSidebarTaskState(params: {
     !shouldSuppressPrehireTaskState({
       lifecyclePhase: params.runtimeLifecyclePhase as ThreadLifecyclePhase | null | undefined,
       onboardingStatus: params.runtimeOnboardingStatus,
+      taskState: runtimeTaskState,
     })
   ) {
     return runtimeTaskState;
@@ -42,6 +53,7 @@ export function resolveSidebarTaskState(params: {
     shouldSuppressPrehireTaskState({
       lifecyclePhase: params.listLifecyclePhase,
       onboardingStatus: params.listOnboardingStatus,
+      taskState: params.listTaskState,
     })
   ) {
     return undefined;

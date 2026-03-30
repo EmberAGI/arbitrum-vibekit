@@ -289,7 +289,7 @@ describe('createPortfolioManagerDomain', () => {
       },
       outputs: {
         status: {
-          executionStatus: 'completed',
+          executionStatus: 'working',
           statusMessage: 'Portfolio manager onboarding complete. Agent is active.',
         },
         artifacts: [
@@ -321,6 +321,79 @@ describe('createPortfolioManagerDomain', () => {
         }),
       }),
     );
+  });
+
+  it('moves back to prehire on fire and allows hire to start again', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+
+    const fired = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        phase: 'active',
+        lastPortfolioState: {
+          positions: 1,
+        },
+        lastSharedEmberRevision: 3,
+        lastRootDelegation: {
+          root_delegation_id: 'root-user-protocol-001',
+        },
+        lastOnboardingBootstrap: createOnboardingBootstrap(),
+        lastRootedWalletContextId: 'rwc-user-protocol-001',
+        pendingUserWalletAddress: null,
+        pendingBaseContributionUsd: null,
+      },
+      operation: {
+        source: 'command',
+        name: 'fire',
+      },
+    });
+
+    expect(fired).toMatchObject({
+      state: {
+        phase: 'prehire',
+        lastPortfolioState: {
+          positions: 1,
+        },
+        lastSharedEmberRevision: 3,
+        lastRootDelegation: null,
+        lastOnboardingBootstrap: null,
+        lastRootedWalletContextId: null,
+        pendingUserWalletAddress: null,
+        pendingBaseContributionUsd: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Portfolio manager fired. Ready to hire again.',
+        },
+      },
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: fired?.state,
+        operation: {
+          source: 'command',
+          name: 'hire',
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'onboarding',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'interrupted',
+          statusMessage: 'Connect the wallet allocation you want the portfolio manager to onboard.',
+        },
+        interrupt: {
+          type: 'portfolio-manager-setup-request',
+        },
+      },
+    });
   });
 
   it('translates register_root_delegation_from_user_signing into the Shared Ember root-delegation command', async () => {

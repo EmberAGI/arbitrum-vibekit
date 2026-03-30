@@ -12,7 +12,8 @@ ADR 0012 established that LangGraph and `agent-runtime` must converge on one sha
 Portfolio-manager onboarding exposed a separate contract gap on the command path:
 - `agent-runtime` already supports a direct AG-UI control lane via `forwardedProps.command`
 - interrupt resumes already use that direct lane
-- some imperative web actions, such as `hire`, still travel as JSON user messages and rely on the model to call `agent_runtime_domain_command`
+- some imperative web actions historically still traveled as JSON user messages and relied on the model to call `agent_runtime_domain_command`
+- LangGraph currently uses `forwardedProps.command` only for interrupt resume, not for imperative `hire`/`fire`/`sync` actions
 
 That split is architecturally wrong for imperative controls. Commands such as `hire`, `fire`, `sync`, and interrupt resume are not natural-language inputs that need interpretation. They are control-plane requests from the client to the runtime. Routing them through inference adds nondeterminism, couples business flow to prompt/tool behavior, and creates live regressions where the direct runtime path already exists and is better tested.
 
@@ -27,8 +28,13 @@ The rules are:
 - conversational turns remain message-driven and may use inference normally
 - if a direct command is present, the runtime must not require the model to rediscover that intent via `agent_runtime_domain_command`
 
+Preferred cross-runtime direction:
+- `forwardedProps.command` is the preferred transport for imperative client actions across runtime families, not only for `agent-runtime`
+- runtime families may keep different internal execution models, but the web should converge on one command-lane convention: conversational user input in messages, imperative control actions in `forwardedProps.command`
+- until a legacy runtime gains equivalent direct-command support, compatibility branching may remain in the web, but it is a migration state rather than the desired permanent contract
+
 Compatibility rule:
-- legacy runtime families may continue using message-driven command dispatch until they gain an equivalent direct command lane, but that compatibility path must not redefine the `agent-runtime` contract
+- legacy runtime families may continue using message-driven command dispatch until they gain an equivalent direct command lane, but that compatibility path must not redefine the `agent-runtime` contract or the preferred long-term web command convention
 
 ## Rationale
 
@@ -53,10 +59,12 @@ Compatibility rule:
   - `agent-runtime` commands become deterministic and easier to reason about.
   - Web command handling can share one explicit control-lane contract with interrupt resume.
   - Manual QA and automated tests can exercise command flows without depending on prompt/tool behavior.
+  - Future migration away from LangGraph can converge on one control-lane convention instead of preserving two imperative command transports forever.
 - Tradeoffs:
   - The web app must distinguish between direct command-capable runtimes and legacy message-driven runtimes during the migration period.
   - Existing tests that assert message-injection for imperative `agent-runtime` commands need to be updated.
 - Follow-on work:
   - update web command dispatch so PI-runtime imperative actions use `forwardedProps.command`
-  - keep LangGraph compatibility isolated until it gains an equivalent direct command lane
-  - add regression coverage that proves direct command forwarding is used for `agent-runtime` `hire` and `sync`
+  - keep LangGraph compatibility isolated until it gains an equivalent direct command lane for imperative actions
+  - add regression coverage that proves direct command forwarding is used for `agent-runtime` `hire`, `fire`, and `sync`
+  - when LangGraph is retired or replaced, remove the remaining message-driven imperative-command compatibility path rather than preserving it as a permanent dual-mode convention

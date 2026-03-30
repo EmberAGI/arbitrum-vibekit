@@ -1228,10 +1228,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             copilotkit.runAgent({
               agent: current,
             } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+          runDirectCommand: async (current, commandName) =>
+            copilotkit.runAgent({
+              agent: current,
+              forwardedProps: {
+                command: {
+                  name: commandName,
+                },
+              },
+            } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
           preemptActiveRun: async (current) => copilotkit.stopAgent({ agent: current }),
           threadId,
           runInFlightRef,
           createId: v7,
+          commandTransport: config.imperativeCommandTransport,
           onError: (message) => {
             setUiError(message);
             setIsFiring(false);
@@ -1264,7 +1274,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     }
 
     setTimeout(() => setIsFiring(false), 3000);
-  }, [copilotkit, isFiring, threadId]);
+  }, [config.imperativeCommandTransport, copilotkit, isFiring, threadId]);
 
   const sendChatMessage = useCallback(
     (content: string) => {

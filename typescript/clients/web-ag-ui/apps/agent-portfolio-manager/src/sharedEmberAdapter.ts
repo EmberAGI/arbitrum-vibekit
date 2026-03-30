@@ -320,6 +320,11 @@ export function createPortfolioManagerDomain(
             'Start onboarding for the portfolio manager and request the initial wallet allocation.',
         },
         {
+          name: 'fire',
+          description:
+            'Return the portfolio manager to a rehirable prehire state and mark the current task complete.',
+        },
+        {
           name: 'register_root_delegation_from_user_signing',
           description:
             'Register the rooted-wallet signing handoff with the Shared Ember orchestrator.',
@@ -406,6 +411,27 @@ export function createPortfolioManagerDomain(
                 type: PORTFOLIO_MANAGER_SETUP_INTERRUPT_TYPE,
                 surfacedInThread: true,
                 message: PORTFOLIO_MANAGER_SETUP_MESSAGE,
+              },
+            },
+          };
+        }
+        case 'fire': {
+          const nextState: PortfolioManagerLifecycleState = {
+            ...currentState,
+            phase: 'prehire',
+            lastRootDelegation: null,
+            lastOnboardingBootstrap: null,
+            lastRootedWalletContextId: null,
+            pendingUserWalletAddress: null,
+            pendingBaseContributionUsd: null,
+          };
+
+          return {
+            state: nextState,
+            outputs: {
+              status: {
+                executionStatus: 'completed',
+                statusMessage: 'Portfolio manager fired. Ready to hire again.',
               },
             },
           };
@@ -536,7 +562,7 @@ export function createPortfolioManagerDomain(
             state: nextState,
             outputs: {
               status: {
-                executionStatus: 'completed',
+                executionStatus: 'working',
                 statusMessage: 'Portfolio manager onboarding complete. Agent is active.',
               },
               artifacts: [

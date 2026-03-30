@@ -107,4 +107,15 @@ describe('resolveSidebarTaskState', () => {
       }),
     ).toBe('input-required');
   });
+
+  it('keeps a fired prehire runtime state visible when it is terminal', () => {
+    expect(
+      resolveSidebarTaskState({
+        runtimeTaskState: 'completed',
+        runtimeLifecyclePhase: 'prehire',
+        runtimeTaskMessage: 'Portfolio manager fired. Ready to hire again.',
+        fallbackToListWhenRuntimeMissing: false,
+      }),
+    ).toBe('completed');
+  });
 });

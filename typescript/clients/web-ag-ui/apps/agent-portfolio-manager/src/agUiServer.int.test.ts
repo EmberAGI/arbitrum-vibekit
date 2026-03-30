@@ -380,7 +380,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           },
           task: {
             taskStatus: {
-              state: 'completed',
+              state: 'working',
               message: {
                 content: 'Portfolio manager onboarding complete. Agent is active.',
               },
@@ -419,5 +419,154 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         }),
       }),
     );
+  });
+
+  it('marks the agent completed only after fire and then allows rehire', async () => {
+    const hireResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire',
+        runId: 'run-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    });
+    expect(hireResponse.ok).toBe(true);
+
+    const setupResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire',
+        runId: 'run-setup',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify({
+              walletAddress: '0x00000000000000000000000000000000000000a1',
+              baseContributionUsd: 900,
+            }),
+          },
+        },
+      }),
+    });
+    expect(setupResponse.ok).toBe(true);
+
+    const signingResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire',
+        runId: 'run-signing',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify({
+              outcome: 'signed',
+              signedDelegations: [
+                {
+                  delegate: '0x2222222222222222222222222222222222222222',
+                  delegator: '0x00000000000000000000000000000000000000a1',
+                  authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+                  caveats: [],
+                  salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+                  signature: '0x1234',
+                },
+              ],
+            }),
+          },
+        },
+      }),
+    });
+    expect(signingResponse.ok).toBe(true);
+
+    const fireResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire',
+        runId: 'run-fire',
+        forwardedProps: {
+          command: {
+            name: 'fire',
+          },
+        },
+      }),
+    });
+
+    expect(fireResponse.ok).toBe(true);
+    const fireEvents = parseEventStreamBody(await fireResponse.text());
+    const fireSnapshot = findStateSnapshot(fireEvents);
+
+    expect(fireSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'prehire',
+            lastRootedWalletContextId: null,
+            pendingUserWalletAddress: null,
+            pendingBaseContributionUsd: null,
+          },
+          task: {
+            taskStatus: {
+              state: 'completed',
+              message: {
+                content: 'Portfolio manager fired. Ready to hire again.',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const rehireResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire',
+        runId: 'run-rehire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    });
+
+    expect(rehireResponse.ok).toBe(true);
+    const rehireEvents = parseEventStreamBody(await rehireResponse.text());
+    const rehireSnapshot = findStateSnapshot(rehireEvents);
+
+    expect(rehireSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'onboarding',
+          },
+          task: {
+            taskStatus: {
+              state: 'input-required',
+              message: {
+                content: 'Connect the wallet allocation you want the portfolio manager to onboard.',
+              },
+            },
+          },
+        },
+      },
+    });
   });
 });
