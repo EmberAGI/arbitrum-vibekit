@@ -22,6 +22,12 @@ type CreatePortfolioManagerDomainOptions = {
   agentId?: string;
 };
 
+type SharedEmberRevisionResponse = {
+  result?: {
+    revision?: number;
+  };
+};
+
 function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
   return {
     phase: 'prehire',
@@ -33,6 +39,58 @@ function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
     pendingUserWalletAddress: null,
     pendingBaseContributionUsd: null,
   };
+}
+
+function isSharedEmberRevisionConflict(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes('Shared Ember Domain Service JSON-RPC error: protocol_conflict') &&
+    error.message.includes('expected_revision')
+  );
+}
+
+async function readCurrentSharedEmberRevision(input: {
+  protocolHost: PortfolioManagerSharedEmberProtocolHost;
+  threadId: string;
+  agentId: string;
+}): Promise<number> {
+  const response = (await input.protocolHost.handleJsonRpc({
+    jsonrpc: '2.0',
+    id: `shared-ember-${input.threadId}-read-current-revision`,
+    method: 'subagent.readPortfolioState.v1',
+    params: {
+      agent_id: input.agentId,
+    },
+  })) as SharedEmberRevisionResponse;
+
+  return response.result?.revision ?? 0;
+}
+
+async function runSharedEmberCommandWithResolvedRevision<T>(input: {
+  protocolHost: PortfolioManagerSharedEmberProtocolHost;
+  threadId: string;
+  agentId: string;
+  currentRevision: number | null;
+  buildRequest: (expectedRevision: number) => unknown;
+}): Promise<T> {
+  let expectedRevision =
+    input.currentRevision ?? (await readCurrentSharedEmberRevision(input));
+
+  try {
+    return (await input.protocolHost.handleJsonRpc(input.buildRequest(expectedRevision))) as T;
+  } catch (error) {
+    if (!isSharedEmberRevisionConflict(error)) {
+      throw error;
+    }
+
+    const refreshedRevision = await readCurrentSharedEmberRevision(input);
+    if (refreshedRevision === expectedRevision) {
+      throw error;
+    }
+
+    expectedRevision = refreshedRevision;
+    return (await input.protocolHost.handleJsonRpc(input.buildRequest(expectedRevision))) as T;
+  }
 }
 
 const PORTFOLIO_MANAGER_SETUP_INTERRUPT_TYPE = 'portfolio-manager-setup-request';
@@ -51,6 +109,8 @@ const PORTFOLIO_MANAGER_DELEGATION_SALT =
   '0x1111111111111111111111111111111111111111111111111111111111111111';
 const PORTFOLIO_MANAGER_ROOT_ASSET = 'USDC';
 const PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP = '2026-03-30T00:00:00.000Z';
+const PORTFOLIO_MANAGER_PROTOCOL_SOURCE = 'onboarding_scan';
+const PORTFOLIO_MANAGER_ONBOARDING_CONTROL_PATH = 'unassigned';
 
 type PortfolioManagerSetupInput = {
   walletAddress: `0x${string}`;
@@ -189,7 +249,7 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
       network: PORTFOLIO_MANAGER_NETWORK,
       registered_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
       metadata: {
-        source: 'portfolio_manager_web_onboarding',
+        source: PORTFOLIO_MANAGER_PROTOCOL_SOURCE,
       },
     },
     mandates: [
@@ -201,7 +261,7 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
     ],
     capitalObservation: {
       observation_id: observationId,
-      kind: 'portfolio_manager_bootstrap',
+      kind: 'onboarding_scan',
       wallet_address: params.walletAddress,
       network: PORTFOLIO_MANAGER_NETWORK,
       observed_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
@@ -237,7 +297,7 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
         status: 'reserved',
         reservation_id: reservationId,
         delegation_id: null,
-        control_path: 'portfolio_manager.allocate',
+        control_path: 'unassigned',
         position_kind: 'unassigned',
         benchmark_asset: 'USD',
         benchmark_value: allocation,
@@ -247,7 +307,7 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
         closed_at: null,
         parent_unit_ids: [],
         metadata: {
-          source: 'portfolio_manager_web_onboarding',
+          source: PORTFOLIO_MANAGER_PROTOCOL_SOURCE,
         },
       },
     ],
@@ -257,7 +317,7 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
         agent_id: params.agentId,
         owner_id: userId,
         purpose: 'deploy',
-        control_path: 'portfolio_manager.allocate',
+        control_path: PORTFOLIO_MANAGER_ONBOARDING_CONTROL_PATH,
         unit_allocations: [{ unit_id: unitId, quantity: allocation }],
         status: 'active',
         created_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
@@ -270,7 +330,7 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
         policy_snapshot_ref: policySnapshotRef,
         agent_id: params.agentId,
         network: PORTFOLIO_MANAGER_NETWORK,
-        control_paths: ['portfolio_manager.allocate'],
+        control_paths: [PORTFOLIO_MANAGER_ONBOARDING_CONTROL_PATH],
         unit_bounds: [{ unit_id: unitId, quantity: allocation }],
         created_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
       },
@@ -295,7 +355,7 @@ function buildPortfolioManagerRootDelegationHandoff(params: {
     artifact_ref: `artifact-root-${identity}`,
     issued_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
     activated_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
-    signer_kind: 'wallet_user',
+    signer_kind: 'delegation_toolkit',
     metadata: {
       delegation_manager: PORTFOLIO_MANAGER_DELEGATION_MANAGER,
       signed_delegation_count: 1,
@@ -528,24 +588,30 @@ export function createPortfolioManagerDomain(
             walletAddress,
             signedDelegation,
           });
-          const response = (await options.protocolHost.handleJsonRpc({
-            jsonrpc: '2.0',
-            id: `shared-ember-${threadId}-complete-rooted-bootstrap`,
-            method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
-            params: {
-              idempotency_key: `idem-portfolio-manager-rooted-bootstrap-${threadId}`,
-              expected_revision: currentState.lastSharedEmberRevision ?? 0,
-              onboarding,
-              handoff,
-            },
-          })) as {
+          const response = await runSharedEmberCommandWithResolvedRevision<{
             result?: {
               revision?: number;
               committed_event_ids?: string[];
               rooted_wallet_context_id?: string;
               root_delegation?: unknown;
             };
-          };
+          }>({
+            protocolHost: options.protocolHost,
+            threadId,
+            agentId,
+            currentRevision: currentState.lastSharedEmberRevision,
+            buildRequest: (expectedRevision) => ({
+              jsonrpc: '2.0',
+              id: `shared-ember-${threadId}-complete-rooted-bootstrap`,
+              method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+              params: {
+                idempotency_key: `idem-portfolio-manager-rooted-bootstrap-${threadId}`,
+                expected_revision: expectedRevision,
+                onboarding,
+                handoff,
+              },
+            }),
+          });
 
           const nextState: PortfolioManagerLifecycleState = {
             phase: 'active',
@@ -598,22 +664,28 @@ export function createPortfolioManagerDomain(
               ? commandInput.idempotencyKey
               : `idem-root-delegation-${threadId}`;
           const handoff = 'handoff' in commandInput ? commandInput.handoff : undefined;
-          const response = (await options.protocolHost.handleJsonRpc({
-            jsonrpc: '2.0',
-            id: `shared-ember-${threadId}-register-root-delegation`,
-            method: 'orchestrator.registerRootDelegationFromUserSigning.v1',
-            params: {
-              idempotency_key: idempotencyKey,
-              expected_revision: currentState.lastSharedEmberRevision ?? 0,
-              handoff,
-            },
-          })) as {
+          const response = await runSharedEmberCommandWithResolvedRevision<{
             result?: {
               revision?: number;
               committed_event_ids?: string[];
               root_delegation?: unknown;
             };
-          };
+          }>({
+            protocolHost: options.protocolHost,
+            threadId,
+            agentId,
+            currentRevision: currentState.lastSharedEmberRevision,
+            buildRequest: (expectedRevision) => ({
+              jsonrpc: '2.0',
+              id: `shared-ember-${threadId}-register-root-delegation`,
+              method: 'orchestrator.registerRootDelegationFromUserSigning.v1',
+              params: {
+                idempotency_key: idempotencyKey,
+                expected_revision: expectedRevision,
+                handoff,
+              },
+            }),
+          });
 
           const nextState: PortfolioManagerLifecycleState = {
             phase: 'onboarding',
@@ -721,22 +793,28 @@ export function createPortfolioManagerDomain(
               ? commandInput.idempotencyKey
               : `idem-onboarding-bootstrap-${threadId}`;
           const onboarding = 'onboarding' in commandInput ? commandInput.onboarding : undefined;
-          const response = (await options.protocolHost.handleJsonRpc({
-            jsonrpc: '2.0',
-            id: `shared-ember-${threadId}-complete-onboarding-bootstrap`,
-            method: 'orchestrator.completeOnboardingBootstrap.v1',
-            params: {
-              idempotency_key: idempotencyKey,
-              expected_revision: currentState.lastSharedEmberRevision ?? 0,
-              onboarding,
-            },
-          })) as {
+          const response = await runSharedEmberCommandWithResolvedRevision<{
             result?: {
               revision?: number;
               committed_event_ids?: string[];
               onboarding_bootstrap?: unknown;
             };
-          };
+          }>({
+            protocolHost: options.protocolHost,
+            threadId,
+            agentId,
+            currentRevision: currentState.lastSharedEmberRevision,
+            buildRequest: (expectedRevision) => ({
+              jsonrpc: '2.0',
+              id: `shared-ember-${threadId}-complete-onboarding-bootstrap`,
+              method: 'orchestrator.completeOnboardingBootstrap.v1',
+              params: {
+                idempotency_key: idempotencyKey,
+                expected_revision: expectedRevision,
+                onboarding,
+              },
+            }),
+          });
 
           const nextState: PortfolioManagerLifecycleState = {
             phase: 'onboarding',
@@ -789,24 +867,30 @@ export function createPortfolioManagerDomain(
               : `idem-rooted-bootstrap-${threadId}`;
           const onboarding = 'onboarding' in commandInput ? commandInput.onboarding : undefined;
           const handoff = 'handoff' in commandInput ? commandInput.handoff : undefined;
-          const response = (await options.protocolHost.handleJsonRpc({
-            jsonrpc: '2.0',
-            id: `shared-ember-${threadId}-complete-rooted-bootstrap`,
-            method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
-            params: {
-              idempotency_key: idempotencyKey,
-              expected_revision: currentState.lastSharedEmberRevision ?? 0,
-              onboarding,
-              handoff,
-            },
-          })) as {
+          const response = await runSharedEmberCommandWithResolvedRevision<{
             result?: {
               revision?: number;
               committed_event_ids?: string[];
               rooted_wallet_context_id?: string;
               root_delegation?: unknown;
             };
-          };
+          }>({
+            protocolHost: options.protocolHost,
+            threadId,
+            agentId,
+            currentRevision: currentState.lastSharedEmberRevision,
+            buildRequest: (expectedRevision) => ({
+              jsonrpc: '2.0',
+              id: `shared-ember-${threadId}-complete-rooted-bootstrap`,
+              method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+              params: {
+                idempotency_key: idempotencyKey,
+                expected_revision: expectedRevision,
+                onboarding,
+                handoff,
+              },
+            }),
+          });
 
           const nextState: PortfolioManagerLifecycleState = {
             phase: 'onboarding',

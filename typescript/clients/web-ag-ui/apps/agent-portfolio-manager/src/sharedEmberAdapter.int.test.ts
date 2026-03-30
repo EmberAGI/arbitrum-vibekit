@@ -80,7 +80,7 @@ function createOnboardingBootstrap() {
     mandates: [
       {
         mandate_ref: 'mandate-portfolio-protocol-001',
-        agent_id: 'portfolio',
+        agent_id: 'portfolio-manager',
         mandate_summary: 'preserve direct-user liquidity',
       },
     ],
@@ -120,7 +120,7 @@ function createOnboardingBootstrap() {
         owner_type: 'user_idle',
         owner_id: 'user_idle',
         status: 'reserved',
-        reservation_id: 'res-yield-bootstrap-protocol-001',
+        reservation_id: 'res-portfolio-manager-bootstrap-protocol-001',
         delegation_id: null,
         control_path: 'unassigned',
         position_kind: 'unassigned',
@@ -138,11 +138,11 @@ function createOnboardingBootstrap() {
     ],
     reservations: [
       {
-        reservation_id: 'res-yield-bootstrap-protocol-001',
-        agent_id: 'yield',
+        reservation_id: 'res-portfolio-manager-bootstrap-protocol-001',
+        agent_id: 'portfolio-manager',
         owner_id: 'user_idle',
         purpose: 'deploy',
-        control_path: 'vault.deposit',
+        control_path: 'unassigned',
         unit_allocations: [{ unit_id: 'unit-usdc-onboard-protocol-001', quantity: '900' }],
         status: 'active',
         created_at: '2026-03-29T00:05:00Z',
@@ -152,10 +152,10 @@ function createOnboardingBootstrap() {
     ],
     policySnapshots: [
       {
-        policy_snapshot_ref: 'pol-yield-bootstrap-protocol-001',
-        agent_id: 'yield',
+        policy_snapshot_ref: 'pol-portfolio-manager-bootstrap-protocol-001',
+        agent_id: 'portfolio-manager',
         network: 'base',
-        control_paths: ['vault.deposit'],
+        control_paths: ['unassigned'],
         unit_bounds: [{ unit_id: 'unit-usdc-onboard-protocol-001', quantity: '900' }],
         created_at: '2026-03-29T00:05:00Z',
       },
@@ -469,6 +469,43 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
             },
           },
         ],
+      },
+    });
+
+    await expect(
+      protocolHost.handleJsonRpc({
+        jsonrpc: '2.0',
+        id: `rpc-shared-ember-int-read-onboarding-${suffix}`,
+        method: 'orchestrator.readOnboardingState.v1',
+        params: {
+          agent_id: 'portfolio-manager',
+          wallet_address: onboarding.rootedWalletContext.wallet_address,
+          network: onboarding.rootedWalletContext.network,
+        },
+      }),
+    ).resolves.toMatchObject({
+      jsonrpc: '2.0',
+      id: `rpc-shared-ember-int-read-onboarding-${suffix}`,
+      result: {
+        protocol_version: 'v1',
+        onboarding_state: {
+          phase: 'active',
+          owned_units: [
+            expect.objectContaining({
+              control_path: 'unassigned',
+            }),
+          ],
+          reservations: [
+            expect.objectContaining({
+              control_path: 'unassigned',
+            }),
+          ],
+          policy_snapshots: [
+            expect.objectContaining({
+              control_paths: ['unassigned'],
+            }),
+          ],
+        },
       },
     });
   });

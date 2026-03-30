@@ -18,7 +18,7 @@ function createOnboardingBootstrap() {
     mandates: [
       {
         mandate_ref: 'mandate-portfolio-protocol-001',
-        agent_id: 'portfolio',
+        agent_id: 'portfolio-manager',
         mandate_summary: 'preserve direct-user liquidity',
       },
     ],
@@ -58,7 +58,7 @@ function createOnboardingBootstrap() {
         owner_type: 'user_idle',
         owner_id: 'user_idle',
         status: 'reserved',
-        reservation_id: 'res-yield-bootstrap-protocol-001',
+        reservation_id: 'res-portfolio-manager-bootstrap-protocol-001',
         delegation_id: null,
         control_path: 'unassigned',
         position_kind: 'unassigned',
@@ -76,11 +76,11 @@ function createOnboardingBootstrap() {
     ],
     reservations: [
       {
-        reservation_id: 'res-yield-bootstrap-protocol-001',
-        agent_id: 'yield',
+        reservation_id: 'res-portfolio-manager-bootstrap-protocol-001',
+        agent_id: 'portfolio-manager',
         owner_id: 'user_idle',
         purpose: 'deploy',
-        control_path: 'vault.deposit',
+        control_path: 'unassigned',
         unit_allocations: [{ unit_id: 'unit-usdc-onboard-protocol-001', quantity: '900' }],
         status: 'active',
         created_at: '2026-03-29T00:05:00Z',
@@ -90,10 +90,10 @@ function createOnboardingBootstrap() {
     ],
     policySnapshots: [
       {
-        policy_snapshot_ref: 'pol-yield-bootstrap-protocol-001',
-        agent_id: 'yield',
+        policy_snapshot_ref: 'pol-portfolio-manager-bootstrap-protocol-001',
+        agent_id: 'portfolio-manager',
         network: 'base',
-        control_paths: ['vault.deposit'],
+        control_paths: ['unassigned'],
         unit_bounds: [{ unit_id: 'unit-usdc-onboard-protocol-001', quantity: '900' }],
         created_at: '2026-03-29T00:05:00Z',
       },
@@ -310,14 +310,148 @@ describe('createPortfolioManagerDomain', () => {
         params: expect.objectContaining({
           expected_revision: 0,
           onboarding: expect.objectContaining({
+            capitalObservation: expect.objectContaining({
+              kind: 'onboarding_scan',
+            }),
             rootedWalletContext: expect.objectContaining({
               wallet_address: '0x00000000000000000000000000000000000000a1',
             }),
+            ownedUnits: [
+              expect.objectContaining({
+                control_path: 'unassigned',
+              }),
+            ],
+            reservations: [
+              expect.objectContaining({
+                control_path: 'unassigned',
+              }),
+            ],
+            policySnapshots: [
+              expect.objectContaining({
+                control_paths: ['unassigned'],
+              }),
+            ],
           }),
           handoff: expect.objectContaining({
             user_wallet: '0x00000000000000000000000000000000000000a1',
             orchestrator_wallet: '0x2222222222222222222222222222222222222222',
+            signer_kind: 'delegation_toolkit',
           }),
+        }),
+      }),
+    );
+  });
+
+  it('reads the current Shared Ember revision before completing onboarding when the thread has no cached revision', async () => {
+    const signedDelegation = {
+      delegate: '0x2222222222222222222222222222222222222222',
+      delegator: '0x00000000000000000000000000000000000000a1',
+      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      caveats: [],
+      salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      signature: '0x1234',
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        if (
+          typeof request === 'object' &&
+          request !== null &&
+          'method' in request &&
+          request.method === 'subagent.readPortfolioState.v1'
+        ) {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-current-revision',
+            result: {
+              protocol_version: 'v1',
+              revision: 3,
+              portfolio_state: {
+                agent_id: 'portfolio-manager',
+                owned_units: [],
+                reservations: [],
+              },
+            },
+          };
+        }
+
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-complete-rooted-bootstrap',
+          result: {
+            protocol_version: 'v1',
+            revision: 4,
+            committed_event_ids: ['evt-rooted-bootstrap-3', 'evt-rooted-bootstrap-4'],
+            rooted_wallet_context_id: 'rwc-user-protocol-001',
+            root_delegation: {
+              root_delegation_id: 'root-user-protocol-001',
+              user_wallet: '0x00000000000000000000000000000000000000a1',
+              status: 'active',
+            },
+          },
+        };
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 4,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 4,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: null,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          pendingUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingBaseContributionUsd: 900,
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-delegation-signing-request',
+          input: {
+            outcome: 'signed',
+            signedDelegations: [signedDelegation],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 4,
+        lastRootedWalletContextId: 'rwc-user-protocol-001',
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-read-current-revision',
+      method: 'subagent.readPortfolioState.v1',
+      params: {
+        agent_id: 'portfolio-manager',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+        params: expect.objectContaining({
+          expected_revision: 3,
         }),
       }),
     );
@@ -760,6 +894,139 @@ describe('createPortfolioManagerDomain', () => {
       params: {
         idempotency_key: 'idem-rooted-bootstrap-protocol-001',
         expected_revision: 0,
+        onboarding,
+        handoff,
+      },
+    });
+  });
+
+  it('retries rooted bootstrap once after a Shared Ember expected_revision conflict', async () => {
+    const onboarding = createOnboardingBootstrap();
+    const handoff = {
+      handoff_id: 'handoff-root-protocol-001',
+      root_delegation_id: 'root-user-protocol-001',
+      user_id: 'user_idle',
+      user_wallet: '0xUSERPROTO1',
+      orchestrator_wallet: '0xORCHPROTO1',
+      network: 'base',
+      artifact_ref: 'artifact-root-protocol-001',
+      issued_at: '2026-03-29T00:00:00Z',
+      activated_at: '2026-03-29T00:00:05Z',
+      signer_kind: 'delegation_toolkit',
+      metadata: {
+        delegation_manager: '0xDELEGATIONMANAGERPROTO1',
+      },
+    } as const;
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new Error(
+            'Shared Ember Domain Service JSON-RPC error: protocol_conflict: expected_revision must match the current service revision',
+          ),
+        )
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-read-current-revision',
+          result: {
+            protocol_version: 'v1',
+            revision: 3,
+            portfolio_state: {
+              agent_id: 'portfolio-manager',
+              owned_units: [],
+              reservations: [],
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-complete-rooted-bootstrap',
+          result: {
+            protocol_version: 'v1',
+            revision: 4,
+            committed_event_ids: ['evt-rooted-bootstrap-3', 'evt-rooted-bootstrap-4'],
+            rooted_wallet_context_id: 'rwc-user-protocol-001',
+            root_delegation: {
+              root_delegation_id: 'root-user-protocol-001',
+              user_wallet: '0xUSERPROTO1',
+              status: 'active',
+            },
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 4,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 4,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 0,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          pendingUserWalletAddress: null,
+          pendingBaseContributionUsd: null,
+        },
+        operation: {
+          source: 'tool',
+          name: 'complete_rooted_bootstrap_from_user_signing',
+          input: {
+            idempotencyKey: 'idem-rooted-bootstrap-protocol-001',
+            onboarding,
+            handoff,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        lastSharedEmberRevision: 4,
+        lastRootedWalletContextId: 'rwc-user-protocol-001',
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-complete-rooted-bootstrap',
+      method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+      params: {
+        idempotency_key: 'idem-rooted-bootstrap-protocol-001',
+        expected_revision: 0,
+        onboarding,
+        handoff,
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-read-current-revision',
+      method: 'subagent.readPortfolioState.v1',
+      params: {
+        agent_id: 'portfolio-manager',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(3, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-complete-rooted-bootstrap',
+      method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+      params: {
+        idempotency_key: 'idem-rooted-bootstrap-protocol-001',
+        expected_revision: 3,
         onboarding,
         handoff,
       },
