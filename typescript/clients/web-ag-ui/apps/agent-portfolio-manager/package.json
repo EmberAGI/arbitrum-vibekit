@@ -23,6 +23,8 @@
     "predev": "pnpm build:runtime-deps",
     "prebuild": "pnpm build:runtime-deps",
     "prestart": "pnpm build:runtime-deps",
+    "pretest:int": "pnpm build:runtime-deps",
+    "pretest:unit": "pnpm build:runtime-deps",
     "start": "bash -lc 'ENV_FILE=.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.example; exec node --env-file=\"$ENV_FILE\" ./node_modules/tsx/dist/cli.mjs src/server.ts \"$@\"' --",
     "build": "tsc --project tsconfig.json",
     "test": "pnpm test:unit && pnpm test:int",

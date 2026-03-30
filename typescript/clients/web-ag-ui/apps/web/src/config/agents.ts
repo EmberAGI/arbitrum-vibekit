@@ -9,6 +9,7 @@ export interface AgentConfig {
   creatorVerified: boolean;
   avatar: string;
   avatarBg: string;
+  imperativeCommandTransport?: 'message' | 'forwarded-props';
   // Static metadata used for pre-auth and degraded modes before runtime stream data arrives.
   chains?: string[];
   protocols?: string[];
@@ -88,6 +89,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '🧪',
     avatarBg: 'linear-gradient(135deg, #0891b2 0%, #2563eb 100%)',
+    imperativeCommandTransport: 'forwarded-props',
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'OpenRouter'],
     tokens: ['USDC'],
@@ -101,6 +103,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '🧭',
     avatarBg: 'linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%)',
+    imperativeCommandTransport: 'forwarded-props',
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
     tokens: ['USDC'],

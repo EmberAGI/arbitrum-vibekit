@@ -32,6 +32,24 @@ describe('agentListProjection', () => {
     expect(update.metrics?.iteration).toBe(12);
   });
 
+  it('projects string-shaped task status messages from runtime payloads', () => {
+    const update = projectAgentListUpdate({
+      lifecycle: { phase: 'prehire' },
+      task: {
+        id: 'task-ready',
+        taskStatus: {
+          state: 'working',
+          message: 'Ready for a live runtime conversation.',
+        },
+      },
+    });
+
+    expect(update.taskId).toBe('task-ready');
+    expect(update.taskState).toBe('working');
+    expect(update.taskMessage).toBe('Ready for a live runtime conversation.');
+    expect(update.lifecyclePhase).toBe('prehire');
+  });
+
   it('clears task fields when runtime view has no task', () => {
     const update = projectAgentListUpdate({
       profile: null,

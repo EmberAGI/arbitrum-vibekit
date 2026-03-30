@@ -530,6 +530,14 @@ describe('agent-runtime integration', () => {
       __internalPostgres: createInternalPostgresHooks(),
     } as any);
 
+    const initialConnectSnapshot = await readFirstMatchingEvent(
+      await runtime.service.connect({
+        threadId: 'thread-1',
+        runId: 'run-connect-initial',
+      }),
+      isStateSnapshotEvent,
+    );
+
     const hireEvents = await collectEventSource(
       await runtime.service.run({
         threadId: 'thread-1',
@@ -556,6 +564,16 @@ describe('agent-runtime integration', () => {
       'fire',
     ]);
     expect(sawSyntheticDomainContextMessage).toBe(false);
+    expect(initialConnectSnapshot).toBeDefined();
+    expect(initialConnectSnapshot!.snapshot.thread.lifecycle).toMatchObject({
+      phase: 'prehire',
+    });
+    expect(initialConnectSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
+      state: 'working',
+      message: {
+        content: 'Ready for a live runtime conversation.',
+      },
+    });
     expect(hireSnapshot).toBeDefined();
     expect(hireSnapshot!.snapshot.thread.lifecycle).toMatchObject({
       phase: 'onboarding',
@@ -563,7 +581,9 @@ describe('agent-runtime integration', () => {
     });
     expect(hireSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
       state: 'input-required',
-      message: 'Please provide a short operator note to continue onboarding.',
+      message: {
+        content: 'Please provide a short operator note to continue onboarding.',
+      },
     });
     expect(hireSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
       type: 'interrupt-status',
@@ -620,7 +640,9 @@ describe('agent-runtime integration', () => {
     });
     expect(resumeSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
       state: 'working',
-      message: 'Operator note captured. Ready to complete onboarding.',
+      message: {
+        content: 'Operator note captured. Ready to complete onboarding.',
+      },
     });
     expect(resumeSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
       type: 'lifecycle-status',
@@ -649,7 +671,9 @@ describe('agent-runtime integration', () => {
     });
     expect(completeSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
       state: 'completed',
-      message: 'Onboarding complete. Agent is now hired.',
+      message: {
+        content: 'Onboarding complete. Agent is now hired.',
+      },
     });
     expect(completeSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
       type: 'lifecycle-status',
@@ -678,12 +702,65 @@ describe('agent-runtime integration', () => {
     });
     expect(fireSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
       state: 'completed',
-      message: 'Agent moved to fired. Rehire is still available in this thread.',
+      message: {
+        content: 'Agent moved to fired. Rehire is still available in this thread.',
+      },
     });
     expect(fireSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
       type: 'lifecycle-status',
       phase: 'fired',
       operatorNote: 'safe window approved',
+    });
+  });
+
+  it('executes forwardedProps command before inference when both command and messages are present', async () => {
+    let inferenceCalls = 0;
+
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => {
+          inferenceCalls += 1;
+          return createTextStream('This should never be emitted for direct commands.');
+        },
+      },
+      __internalPostgres: createInternalPostgresHooks(),
+    } as any);
+
+    const events = await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-direct-command',
+        runId: 'run-direct-hire',
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'Please hire the agent later.',
+          },
+        ],
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const snapshot = events.find(isStateSnapshotEvent);
+
+    expect(inferenceCalls).toBe(0);
+    expect(snapshot).toBeDefined();
+    expect(snapshot!.snapshot.thread.lifecycle).toMatchObject({
+      phase: 'onboarding',
+      onboardingStep: 'operator-profile',
+    });
+    expect(snapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
+      state: 'input-required',
+      message: {
+        content: 'Please provide a short operator note to continue onboarding.',
+      },
     });
   });
 

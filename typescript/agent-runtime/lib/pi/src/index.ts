@@ -1068,7 +1068,13 @@ export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Rec
       id: params.execution.id,
       taskStatus: {
         state: mapExecutionStatusToTaskState(params.execution.status),
-        message: params.execution.statusMessage,
+        ...(typeof params.execution.statusMessage === 'string'
+          ? {
+              message: {
+                content: params.execution.statusMessage,
+              },
+            }
+          : {}),
       },
     },
     projection: {

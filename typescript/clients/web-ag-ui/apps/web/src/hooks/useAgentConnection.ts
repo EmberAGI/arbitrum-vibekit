@@ -412,7 +412,39 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [],
   );
 
-  const runCommand = useCallback((command: string) => dispatchCommand(command), [dispatchCommand]);
+  const runDirectCommand = useCallback(
+    (command: string) => {
+      const scheduler = commandSchedulerRef.current;
+      if (!scheduler) {
+        return false;
+      }
+
+      return scheduler.dispatchCustom({
+        command,
+        run: async (currentAgent) =>
+          copilotkit.runAgent({
+            agent: currentAgent,
+            forwardedProps: {
+              command: {
+                name: command,
+              },
+            },
+          } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+      });
+    },
+    [copilotkit],
+  );
+
+  const runCommand = useCallback(
+    (command: string) => {
+      if (config.imperativeCommandTransport === 'forwarded-props') {
+        return runDirectCommand(command);
+      }
+
+      return dispatchCommand(command);
+    },
+    [config.imperativeCommandTransport, dispatchCommand, runDirectCommand],
+  );
 
   const setRunInFlight = useCallback((next: boolean) => {
     runInFlightRef.current = next;

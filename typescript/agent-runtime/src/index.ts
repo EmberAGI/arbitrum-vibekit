@@ -327,8 +327,38 @@ function appendDomainSystemPromptContext(
   return `${systemPrompt}\n\n${appended}`;
 }
 
-function buildDefaultSession(threadId: string): PiRuntimeGatewaySession {
+function materializeSessionLifecycle(
+  session: PiRuntimeGatewaySession,
+  initialLifecyclePhase?: string,
+): PiRuntimeGatewaySession {
+  if (!initialLifecyclePhase) {
+    return session;
+  }
+
+  const existingThreadPatch =
+    typeof session.threadPatch === 'object' && session.threadPatch !== null
+      ? (session.threadPatch)
+      : null;
+  const existingLifecycle =
+    existingThreadPatch && typeof existingThreadPatch.lifecycle === 'object' && existingThreadPatch.lifecycle !== null
+      ? (existingThreadPatch.lifecycle as { phase?: unknown })
+      : null;
+  if (typeof existingLifecycle?.phase === 'string' && existingLifecycle.phase.length > 0) {
+    return session;
+  }
+
   return {
+    ...session,
+    threadPatch: mergeThreadPatch(session.threadPatch, {
+      lifecycle: {
+        phase: initialLifecyclePhase,
+      },
+    }),
+  };
+}
+
+function buildDefaultSession(threadId: string, initialLifecyclePhase?: string): PiRuntimeGatewaySession {
+  return materializeSessionLifecycle({
     thread: { id: threadId },
     execution: {
       id: `agent-runtime:${threadId}`,
@@ -337,10 +367,10 @@ function buildDefaultSession(threadId: string): PiRuntimeGatewaySession {
     },
     messages: [],
     activityEvents: [],
-  };
+  }, initialLifecyclePhase);
 }
 
-function createSessionStore(): AgentRuntimeSessionStore {
+function createSessionStore(initialLifecyclePhase?: string): AgentRuntimeSessionStore {
   const sessions = new Map<string, PiRuntimeGatewaySession>();
 
   const hasSession = (threadId: string): boolean => sessions.has(threadId);
@@ -351,7 +381,7 @@ function createSessionStore(): AgentRuntimeSessionStore {
       return existing;
     }
 
-    const created = buildDefaultSession(threadId);
+    const created = buildDefaultSession(threadId, initialLifecyclePhase);
     sessions.set(threadId, created);
     return created;
   };
@@ -1345,7 +1375,8 @@ export async function createAgentRuntime<TState = unknown>(
         }
       : {},
   );
-  const sessionStore = createSessionStore();
+  const initialLifecyclePhase = domain?.lifecycle.initialPhase;
+  const sessionStore = createSessionStore(initialLifecyclePhase);
   const domainStateStore = new Map<string, TState>();
   const automationRegistry = createAutomationRegistry();
   const attachedRuns = createAttachedRunRegistry();
@@ -1389,7 +1420,12 @@ export async function createAgentRuntime<TState = unknown>(
       persistedThreads.add(threadId);
       const persistedSession = readPersistedSession(threadId, persistedThread.threadState);
       if (persistedSession) {
-        return sessionStore.setSession(threadId, persistedSession);
+        const normalizedSession = materializeSessionLifecycle(persistedSession, initialLifecyclePhase);
+        const hydratedSession = sessionStore.setSession(threadId, normalizedSession);
+        if (normalizedSession !== persistedSession) {
+          await persistSessionSnapshot(threadId, hydratedSession);
+        }
+        return hydratedSession;
       }
     }
 

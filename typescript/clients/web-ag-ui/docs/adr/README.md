@@ -13,3 +13,5 @@
 | [0009](./0009-postgres-centered-persistence-for-pi-runtime.md) | Postgres-centered persistence for Pi runtime | Accepted | 2026-03-17 |
 | [0010](./0010-pluggable-agent-domain-modules-above-pi-core-runtime.md) | Pluggable agent domain modules above Pi core runtime | Superseded | 2026-03-18 |
 | [0011](./0011-blessed-agent-runtime-factory-and-runtime-owned-projection-assembly.md) | Blessed agent-runtime factory and runtime-owned projection assembly | Accepted | 2026-03-28 |
+| [0012](./0012-runtime-family-neutral-web-thread-contract.md) | Runtime-family-neutral web thread contract | Accepted | 2026-03-30 |
+| [0013](./0013-direct-forwarded-command-lane-precedes-inference.md) | Direct forwarded command lane precedes inference | Accepted | 2026-03-30 |

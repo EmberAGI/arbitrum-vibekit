@@ -1,4 +1,5 @@
 import type { OnboardingFlow, ThreadLifecycle, ThreadState, TaskState } from '../types/agent';
+import { extractTaskStatusMessage } from '../utils/extractTaskStatusMessage';
 import type { AgentListEntry } from './agentListTypes';
 
 type TaskLike = {
@@ -10,11 +11,7 @@ type TaskLike = {
 };
 
 function extractTaskMessage(task: TaskLike | null | undefined): string | undefined {
-  const message = task?.taskStatus?.message;
-  if (typeof message !== 'object' || message === null) return undefined;
-  if (!('content' in message)) return undefined;
-  const content = (message as { content?: unknown }).content;
-  return typeof content === 'string' ? content : undefined;
+  return extractTaskStatusMessage(task?.taskStatus?.message);
 }
 
 export function projectAgentListUpdate(params: {

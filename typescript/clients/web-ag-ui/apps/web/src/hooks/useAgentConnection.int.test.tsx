@@ -1180,6 +1180,39 @@ describe('useAgentConnection integration', () => {
     expect(mocks.agent.setState).not.toHaveBeenCalled();
   });
 
+  it('dispatches PI-runtime hire through forwardedProps command instead of a JSON user message', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    mocks.agent.addMessage.mockClear();
+    mocks.runAgent.mockClear();
+
+    latestValue?.runHire();
+    await flushEffects();
+
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
+    expect(mocks.runAgent).toHaveBeenCalledWith({
+      agent: mocks.agent,
+      forwardedProps: {
+        command: {
+          name: 'hire',
+        },
+      },
+    });
+    expect(mocks.agent.setState).not.toHaveBeenCalled();
+  });
+
   it('does not optimistically mutate runtime state when dispatching fire', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
@@ -1548,7 +1581,7 @@ describe('useAgentConnection integration', () => {
           id: 'task-chat',
           taskStatus: {
             state: 'working',
-            message: { content: 'Ready for a live runtime conversation.' },
+            message: 'Ready for a live runtime conversation.',
           },
         },
       },
@@ -1581,7 +1614,7 @@ describe('useAgentConnection integration', () => {
           id: 'task-ready',
           taskStatus: {
             state: 'working',
-            message: { content: 'Ready for a live runtime conversation.' },
+            message: 'Ready for a live runtime conversation.',
           },
         },
       },

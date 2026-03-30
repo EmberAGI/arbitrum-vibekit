@@ -9,6 +9,7 @@ import {
   type UiState,
 } from '../types/agent';
 import { deriveTaskStateForUi } from './deriveTaskStateForUi';
+import { extractTaskStatusMessage } from './extractTaskStatusMessage';
 
 const ensureArray = <T>(value: T[] | undefined | null): T[] => (Array.isArray(value) ? value : []);
 
@@ -34,11 +35,7 @@ function cloneActivity(activity: ThreadState['activity'] | undefined): UiState['
 }
 
 function extractTaskMessage(threadState: ThreadState): string | null {
-  const message = threadState.task?.taskStatus?.message;
-  if (typeof message !== 'object' || message === null) return null;
-  if (!('content' in message)) return null;
-  const content = (message as { content?: unknown }).content;
-  return typeof content === 'string' ? content : null;
+  return extractTaskStatusMessage(threadState.task?.taskStatus?.message) ?? null;
 }
 
 function resolveOnboardingActive(params: {

@@ -215,7 +215,7 @@ describe('deriveUiState', () => {
         id: 'task-chat',
         taskStatus: {
           state: 'working',
-          message: { content: 'Ready for a live runtime conversation.' },
+          message: 'Ready for a live runtime conversation.',
         },
       },
     };
@@ -245,7 +245,7 @@ describe('deriveUiState', () => {
         id: 'task-ready',
         taskStatus: {
           state: 'working',
-          message: { content: 'Ready for a live runtime conversation.' },
+          message: 'Ready for a live runtime conversation.',
         },
       },
     };

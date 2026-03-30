@@ -177,7 +177,9 @@ describe('pi gateway service integration', () => {
               id: 'exec-1',
               taskStatus: {
                 state: 'working',
-                message: 'Pi is connected.',
+                message: {
+                  content: 'Pi is connected.',
+                },
               },
             },
             projection: {
@@ -276,13 +278,15 @@ describe('pi gateway service integration', () => {
       snapshot: {
         thread: {
           id: 'thread-1',
-          task: {
-            id: 'exec-1',
-            taskStatus: {
-              state: 'working',
-              message: 'Pi is connected.',
+            task: {
+              id: 'exec-1',
+              taskStatus: {
+                state: 'working',
+                message: {
+                  content: 'Pi is connected.',
+                },
+              },
             },
-          },
           projection: {
             source: 'pi-runtime-gateway',
             canonicalIds: {
@@ -593,7 +597,9 @@ describe('pi gateway service integration', () => {
               id: 'exec-2',
               taskStatus: {
                 state: 'working',
-                message: 'Awaiting steering',
+                message: {
+                  content: 'Awaiting steering',
+                },
               },
             },
             projection: {
@@ -675,7 +681,9 @@ describe('pi gateway service integration', () => {
               id: 'exec-3',
               taskStatus: {
                 state: 'working',
-                message: 'Awaiting follow-up',
+                message: {
+                  content: 'Awaiting follow-up',
+                },
               },
             },
             projection: {
@@ -749,7 +757,9 @@ describe('pi gateway service integration', () => {
               id: 'exec-5',
               taskStatus: {
                 state: 'input-required',
-                message: 'Awaiting explicit resume',
+                message: {
+                  content: 'Awaiting explicit resume',
+                },
               },
             },
             projection: {

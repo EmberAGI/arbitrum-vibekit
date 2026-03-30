@@ -85,6 +85,29 @@ describe('agentProjection', () => {
     expect(update.onboardingStatus).toBe('completed');
   });
 
+  it('preserves string-shaped task status messages when projecting sidebar list updates', () => {
+    const projected = projectDetailStateFromPayload({
+      thread: {
+        lifecycle: {
+          phase: 'prehire',
+        },
+        task: {
+          id: 'task-ready',
+          taskStatus: {
+            state: 'working',
+            message: 'Ready for a live runtime conversation.',
+          },
+        },
+      },
+    });
+
+    const update = projectAgentListUpdateFromState(projected!);
+    expect(update.taskId).toBe('task-ready');
+    expect(update.taskState).toBe('working');
+    expect(update.taskMessage).toBe('Ready for a live runtime conversation.');
+    expect(update.lifecyclePhase).toBe('prehire');
+  });
+
   it('drops incoming command intent from projected detail state', () => {
     const projected = projectDetailStateFromPayload({
       thread: {

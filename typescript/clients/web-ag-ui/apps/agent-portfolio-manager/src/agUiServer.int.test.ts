@@ -235,7 +235,9 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           task: {
             taskStatus: {
               state: 'input-required',
-              message: 'Connect the wallet allocation you want the portfolio manager to onboard.',
+              message: {
+                content: 'Connect the wallet allocation you want the portfolio manager to onboard.',
+              },
             },
           },
           artifacts: {
@@ -285,7 +287,9 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           task: {
             taskStatus: {
               state: 'input-required',
-              message: 'Review and sign the delegation needed to activate your portfolio manager.',
+              message: {
+                content: 'Review and sign the delegation needed to activate your portfolio manager.',
+              },
             },
           },
           artifacts: {
@@ -377,7 +381,9 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           task: {
             taskStatus: {
               state: 'completed',
-              message: 'Portfolio manager onboarding complete. Agent is active.',
+              message: {
+                content: 'Portfolio manager onboarding complete. Agent is active.',
+              },
             },
           },
           artifacts: {
