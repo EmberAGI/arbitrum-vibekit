@@ -21,8 +21,12 @@ async function readRequestBody(request: IncomingMessage): Promise<unknown> {
 describe('createPortfolioManagerSharedEmberHttpHost', () => {
   let server: Server;
   let baseUrl: string;
+  let responseStatus: number;
+  let responseBody: unknown;
 
   beforeEach(async () => {
+    responseStatus = 200;
+    responseBody = null;
     server = createServer((request: IncomingMessage, response: ServerResponse) => {
       void (async () => {
         if (request.url !== '/jsonrpc') {
@@ -31,14 +35,16 @@ describe('createPortfolioManagerSharedEmberHttpHost', () => {
           return;
         }
 
-        response.writeHead(200, {
+        response.writeHead(responseStatus, {
           'content-type': 'application/json; charset=utf-8',
         });
         response.end(
-          JSON.stringify({
-            ok: true,
-            received: await readRequestBody(request),
-          }),
+          JSON.stringify(
+            responseBody ?? {
+              ok: true,
+              received: await readRequestBody(request),
+            },
+          ),
         );
       })().catch((error: unknown) => {
         response.writeHead(500);
@@ -97,6 +103,32 @@ describe('createPortfolioManagerSharedEmberHttpHost', () => {
         },
       },
     });
+  });
+
+  it('throws when the sidecar returns a JSON-RPC error payload with HTTP 200', async () => {
+    responseBody = {
+      jsonrpc: '2.0',
+      id: 'rpc-shared-http-error',
+      error: {
+        code: -32001,
+        message: 'expected revision mismatch',
+      },
+    };
+
+    const host = createPortfolioManagerSharedEmberHttpHost({
+      baseUrl,
+    });
+
+    await expect(
+      host.handleJsonRpc({
+        jsonrpc: '2.0',
+        id: 'rpc-shared-http-error',
+        method: 'subagent.readPortfolioState.v1',
+        params: {
+          agent_id: 'portfolio-manager',
+        },
+      }),
+    ).rejects.toThrow('expected revision mismatch');
   });
 
   it('normalizes the optional Shared Ember base URL from env', () => {

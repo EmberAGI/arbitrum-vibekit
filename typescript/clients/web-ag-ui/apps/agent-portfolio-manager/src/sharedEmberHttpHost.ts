@@ -10,6 +10,19 @@ function trimTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function readJsonRpcErrorMessage(body: unknown): string | null {
+  if (!isRecord(body) || !('error' in body) || !isRecord(body.error)) {
+    return null;
+  }
+
+  const message = body.error.message;
+  return typeof message === 'string' && message.trim().length > 0 ? message : 'Unknown JSON-RPC error.';
+}
+
 async function postJson(input: {
   url: string;
   body: unknown;
@@ -29,6 +42,11 @@ async function postJson(input: {
     throw new Error(
       `Shared Ember Domain Service HTTP request failed with status ${response.status}.`,
     );
+  }
+
+  const jsonRpcErrorMessage = readJsonRpcErrorMessage(parsedBody);
+  if (jsonRpcErrorMessage) {
+    throw new Error(`Shared Ember Domain Service JSON-RPC error: ${jsonRpcErrorMessage}`);
   }
 
   return parsedBody;

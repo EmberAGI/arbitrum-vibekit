@@ -29,6 +29,14 @@ type InternalPersistDirectExecutionOptions = {
   threadState: Record<string, unknown>;
   now: Date;
 };
+type PersistedThreadRecord = {
+  threadId: string;
+  threadKey: string;
+  status: string;
+  threadState: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 type LifecycleState = {
   phase: string;
@@ -114,6 +122,63 @@ function createInternalPostgresHooks(
     loadInspectionState,
     executeStatements,
     persistDirectExecution,
+  };
+}
+
+function createPersistingInternalPostgres() {
+  const persistedThreads = new Map<string, PersistedThreadRecord>();
+  const loadInspectionState = vi.fn(async () => ({
+    threads: [...persistedThreads.values()],
+    executions: [],
+    automations: [],
+    automationRuns: [],
+    interrupts: [],
+    leases: [],
+    outboxIntents: [],
+    executionEvents: [],
+    threadActivities: [],
+  }));
+  const persistDirectExecution = vi.fn(async (options: unknown) => {
+    const params = options as InternalPersistDirectExecutionOptions;
+    persistedThreads.set(params.threadKey, {
+      threadId: params.threadId,
+      threadKey: params.threadKey,
+      status: 'active',
+      threadState: params.threadState,
+      createdAt: params.now,
+      updatedAt: params.now,
+    });
+  });
+  const executeStatements = vi.fn(
+    async (_databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
+      for (const statement of statements) {
+        if (statement.tableName !== 'pi_threads') {
+          continue;
+        }
+
+        const [threadId, threadKey, status, threadStateValue, createdAt, updatedAt] = statement.values;
+        persistedThreads.set(threadKey as string, {
+          threadId: threadId as string,
+          threadKey: threadKey as string,
+          status: status as string,
+          threadState:
+            typeof threadStateValue === 'string'
+              ? (JSON.parse(threadStateValue) as Record<string, unknown>)
+              : (threadStateValue as Record<string, unknown>),
+          createdAt: createdAt as Date,
+          updatedAt: updatedAt as Date,
+        });
+      }
+    },
+  );
+
+  return {
+    persistedThreads,
+    hooks: createInternalPostgresHooks({
+      loadInspectionState,
+      executeStatements,
+      persistDirectExecution,
+    }),
   };
 }
 
@@ -449,6 +514,7 @@ describe('agent-runtime integration', () => {
     let observedDomainCommandToolDescription = '';
     let observedDomainCommandNames: string[] = [];
     let sawSyntheticDomainContextMessage = false;
+    const { persistedThreads, hooks: internalPostgres } = createPersistingInternalPostgres();
 
     const domain = createLifecycleDomain();
     const runtime = await createAgentRuntime({
@@ -527,7 +593,7 @@ describe('agent-runtime integration', () => {
           });
         },
       },
-      __internalPostgres: createInternalPostgresHooks(),
+      __internalPostgres: internalPostgres,
     } as any);
 
     const initialConnectSnapshot = await readFirstMatchingEvent(
@@ -618,6 +684,8 @@ describe('agent-runtime integration', () => {
       ]),
     );
 
+    expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('a2ui');
+
     const resumeEvents = await collectEventSource(
       await runtime.service.run({
         threadId: 'thread-1',
@@ -649,6 +717,8 @@ describe('agent-runtime integration', () => {
       onboardingStep: 'delegation-note',
       operatorNote: 'safe window approved',
     });
+
+    expect(persistedThreads.get('thread-1')?.threadState).not.toHaveProperty('a2ui');
 
     const completeEvents = await collectEventSource(
       await runtime.service.run({
@@ -900,66 +970,7 @@ describe('agent-runtime integration', () => {
   });
 
   it('rehydrates persisted transcript before reconnect snapshots after process restart', async () => {
-    const persistedThreads = new Map<
-      string,
-      {
-        threadId: string;
-        threadKey: string;
-        status: string;
-        threadState: Record<string, unknown>;
-        createdAt: Date;
-        updatedAt: Date;
-      }
-    >();
-    const loadInspectionState = vi.fn(async () => ({
-      threads: [...persistedThreads.values()],
-      executions: [],
-      automations: [],
-      automationRuns: [],
-      interrupts: [],
-      leases: [],
-      outboxIntents: [],
-      executionEvents: [],
-      threadActivities: [],
-    }));
-    const persistDirectExecution = vi.fn(async (options: unknown) => {
-      const params = options as InternalPersistDirectExecutionOptions;
-      persistedThreads.set(params.threadKey, {
-        threadId: params.threadId,
-        threadKey: params.threadKey,
-        status: 'active',
-        threadState: params.threadState,
-        createdAt: params.now,
-        updatedAt: params.now,
-      });
-    });
-    const executeStatements = vi.fn(
-      async (_databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
-        for (const statement of statements) {
-          if (statement.tableName !== 'pi_threads') {
-            continue;
-          }
-
-          const [threadId, threadKey, status, threadStateValue, createdAt, updatedAt] = statement.values;
-          persistedThreads.set(threadKey as string, {
-            threadId: threadId as string,
-            threadKey: threadKey as string,
-            status: status as string,
-            threadState:
-              typeof threadStateValue === 'string'
-                ? (JSON.parse(threadStateValue) as Record<string, unknown>)
-                : (threadStateValue as Record<string, unknown>),
-            createdAt: createdAt as Date,
-            updatedAt: updatedAt as Date,
-          });
-        }
-      },
-    );
-    const internalPostgres = createInternalPostgresHooks({
-      loadInspectionState,
-      executeStatements,
-      persistDirectExecution,
-    });
+    const { hooks: internalPostgres } = createPersistingInternalPostgres();
 
     const runtimeA = await createAgentRuntime({
       model: createModel('int-model'),

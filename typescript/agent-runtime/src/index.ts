@@ -943,6 +943,7 @@ function applyDomainOperationResult(params: {
     ? [...params.session.activityEvents]
     : [];
   let nextA2Ui = params.session.a2ui;
+  let shouldWriteA2Ui = false;
 
   for (const artifactOutput of domainOutputs.artifacts ?? []) {
     const artifact = buildDomainArtifact({
@@ -1004,8 +1005,10 @@ function applyDomainOperationResult(params: {
     );
     executionStatus = 'interrupted';
     executionStatusMessage = domainOutputs.interrupt.message;
+    shouldWriteA2Ui = true;
   } else if (domainOutputs.status && domainOutputs.status.executionStatus !== 'interrupted') {
     nextA2Ui = undefined;
+    shouldWriteA2Ui = true;
   }
 
   return {
@@ -1017,7 +1020,7 @@ function applyDomainOperationResult(params: {
     },
     ...(nextArtifacts ? { artifacts: nextArtifacts } : {}),
     ...(nextActivityEvents.length > 0 ? { activityEvents: nextActivityEvents } : {}),
-    ...(nextA2Ui ? { a2ui: nextA2Ui } : {}),
+    ...(shouldWriteA2Ui ? { a2ui: nextA2Ui } : {}),
     ...(lifecycleThreadPatch
       ? {
           threadPatch: mergeThreadPatch(params.session.threadPatch, lifecycleThreadPatch),
