@@ -199,7 +199,8 @@ describe('createPortfolioManagerDomain', () => {
               expect.objectContaining({
                 delegate: '0x2222222222222222222222222222222222222222',
                 delegator: '0x00000000000000000000000000000000000000a1',
-                authority: '0x',
+                authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+                salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
               }),
             ],
           },
@@ -212,9 +213,9 @@ describe('createPortfolioManagerDomain', () => {
     const signedDelegation = {
       delegate: '0x2222222222222222222222222222222222222222',
       delegator: '0x00000000000000000000000000000000000000a1',
-      authority: '0x',
+      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
       caveats: [],
-      salt: '0x01',
+      salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
       signature: '0x1234',
     };
     const protocolHost = {
