@@ -267,6 +267,10 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
           lastPortfolioState: null,
           lastSharedEmberRevision: revisionResponse.result?.revision ?? 0,
           lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          pendingUserWalletAddress: null,
+          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'tool',
@@ -343,6 +347,9 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
             root_delegation_id: 'root-user-portfolio-int-existing',
           },
           lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          pendingUserWalletAddress: null,
+          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'tool',
@@ -420,6 +427,8 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
+          pendingUserWalletAddress: null,
+          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'tool',

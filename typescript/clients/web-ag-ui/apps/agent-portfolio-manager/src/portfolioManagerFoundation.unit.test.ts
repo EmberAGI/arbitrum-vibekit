@@ -23,9 +23,12 @@ describe('createPortfolioManagerAgentConfig', () => {
     expect(config.tools).toEqual([]);
     expect(config.domain?.lifecycle).toMatchObject({
       initialPhase: 'prehire',
-      phases: ['prehire', 'onboarding'],
+      phases: ['prehire', 'onboarding', 'active'],
       terminalPhases: [],
       commands: [
+        {
+          name: 'hire',
+        },
         {
           name: 'register_root_delegation_from_user_signing',
         },
@@ -40,7 +43,14 @@ describe('createPortfolioManagerAgentConfig', () => {
         },
       ],
       transitions: [],
-      interrupts: [],
+      interrupts: [
+        {
+          type: 'portfolio-manager-setup-request',
+        },
+        {
+          type: 'portfolio-manager-delegation-signing-request',
+        },
+      ],
     });
     expect(config.agentOptions?.initialState).toMatchObject({
       thinkingLevel: 'low',
@@ -56,6 +66,8 @@ describe('createPortfolioManagerAgentConfig', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
+          pendingUserWalletAddress: null,
+          pendingBaseContributionUsd: null,
         },
       }),
     ).toEqual(['Lifecycle phase: prehire.']);

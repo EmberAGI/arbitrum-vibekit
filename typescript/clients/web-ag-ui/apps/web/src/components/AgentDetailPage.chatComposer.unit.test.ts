@@ -45,15 +45,18 @@ describe('AgentDetailPage chat composer', () => {
     container.remove();
   });
 
-  it('submits the Pi chat draft when Enter is pressed without Shift', () => {
+  it.each([
+    ['agent-pi-example', 'Pi Example Agent'],
+    ['agent-portfolio-manager', 'Portfolio Manager'],
+  ])('submits the chat draft for %s when Enter is pressed without Shift', (agentId, agentName) => {
     const onSendChatMessage = vi.fn();
     const root = createRoot(container);
 
     act(() => {
       root.render(
         React.createElement(AgentDetailPage, {
-          agentId: 'agent-pi-example',
-          agentName: 'Pi Example Agent',
+          agentId,
+          agentName,
           agentDescription: 'desc',
           creatorName: 'Ember AI Team',
           creatorVerified: true,

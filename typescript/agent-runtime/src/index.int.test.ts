@@ -340,6 +340,11 @@ function createLifecycleDomain() {
                 type: 'operator-config',
                 surfacedInThread: true,
                 message: 'Please provide a short operator note to continue onboarding.',
+                payload: {
+                  promptKind: 'text-note',
+                  inputLabel: 'Operator note',
+                  submitLabel: 'Continue agent loop',
+                },
               },
             },
           };
@@ -560,6 +565,38 @@ describe('agent-runtime integration', () => {
       state: 'input-required',
       message: 'Please provide a short operator note to continue onboarding.',
     });
+    expect(hireSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
+      type: 'interrupt-status',
+      interruptType: 'operator-config',
+      payload: {
+        promptKind: 'text-note',
+        inputLabel: 'Operator note',
+        submitLabel: 'Continue agent loop',
+      },
+    });
+    expect(hireSnapshot!.snapshot.thread.activity?.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'dispatch-response',
+          parts: expect.arrayContaining([
+            expect.objectContaining({
+              kind: 'a2ui',
+              data: expect.objectContaining({
+                payload: expect.objectContaining({
+                  kind: 'interrupt',
+                  payload: expect.objectContaining({
+                    type: 'operator-config',
+                    promptKind: 'text-note',
+                    inputLabel: 'Operator note',
+                    submitLabel: 'Continue agent loop',
+                  }),
+                }),
+              }),
+            }),
+          ]),
+        }),
+      ]),
+    );
 
     const resumeEvents = await collectEventSource(
       await runtime.service.run({

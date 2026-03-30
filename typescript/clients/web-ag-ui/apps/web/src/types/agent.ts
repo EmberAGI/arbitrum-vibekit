@@ -179,6 +179,12 @@ export type GmxSetupRequestInterrupt = {
   payloadSchema?: Record<string, unknown>;
 };
 
+export type PortfolioManagerSetupRequestInterrupt = {
+  type: 'portfolio-manager-setup-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+};
+
 export type FundingTokenRequestInterrupt = {
   type: 'clmm-funding-token-request' | 'pendle-funding-token-request' | 'gmx-funding-token-request';
   message: string;
@@ -208,7 +214,8 @@ export type DelegationSigningRequestInterrupt = {
   type:
     | 'clmm-delegation-signing-request'
     | 'pendle-delegation-signing-request'
-    | 'gmx-delegation-signing-request';
+    | 'gmx-delegation-signing-request'
+    | 'portfolio-manager-delegation-signing-request';
   message: string;
   payloadSchema?: unknown;
   chainId: number;
@@ -226,6 +233,7 @@ export type AgentInterrupt =
   | PendleFundWalletRequestInterrupt
   | GmxFundWalletRequestInterrupt
   | GmxSetupRequestInterrupt
+  | PortfolioManagerSetupRequestInterrupt
   | FundingTokenRequestInterrupt
   | DelegationSigningRequestInterrupt;
 

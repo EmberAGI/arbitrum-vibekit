@@ -102,6 +102,226 @@ function createOnboardingBootstrap() {
 }
 
 describe('createPortfolioManagerDomain', () => {
+  it('starts hire by moving into onboarding and requesting portfolio-manager setup input', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'prehire',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: null,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          pendingUserWalletAddress: null,
+          pendingBaseContributionUsd: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'hire',
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'onboarding',
+        pendingUserWalletAddress: null,
+        pendingBaseContributionUsd: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'interrupted',
+          statusMessage: 'Connect the wallet allocation you want the portfolio manager to onboard.',
+        },
+        interrupt: {
+          type: 'portfolio-manager-setup-request',
+          surfacedInThread: true,
+          message: 'Connect the wallet allocation you want the portfolio manager to onboard.',
+        },
+      },
+    });
+  });
+
+  it('turns portfolio-manager setup input into a delegation-signing interrupt', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: null,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          pendingUserWalletAddress: null,
+          pendingBaseContributionUsd: null,
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-setup-request',
+          input: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            baseContributionUsd: 900,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'onboarding',
+        pendingUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingBaseContributionUsd: 900,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'interrupted',
+          statusMessage: 'Review and sign the delegation needed to activate your portfolio manager.',
+        },
+        interrupt: {
+          type: 'portfolio-manager-delegation-signing-request',
+          surfacedInThread: true,
+          message: 'Review and sign the delegation needed to activate your portfolio manager.',
+          payload: {
+            chainId: 42161,
+            delegatorAddress: '0x00000000000000000000000000000000000000a1',
+            delegateeAddress: '0x2222222222222222222222222222222222222222',
+            delegationManager: '0x1111111111111111111111111111111111111111',
+            descriptions: expect.arrayContaining([
+              expect.stringContaining('900'),
+            ]),
+            delegationsToSign: [
+              expect.objectContaining({
+                delegate: '0x2222222222222222222222222222222222222222',
+                delegator: '0x00000000000000000000000000000000000000a1',
+                authority: '0x',
+              }),
+            ],
+          },
+        },
+      },
+    });
+  });
+
+  it('completes onboarding after signed delegations are supplied through the signing interrupt', async () => {
+    const signedDelegation = {
+      delegate: '0x2222222222222222222222222222222222222222',
+      delegator: '0x00000000000000000000000000000000000000a1',
+      authority: '0x',
+      caveats: [],
+      salt: '0x01',
+      signature: '0x1234',
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-complete-rooted-bootstrap',
+        result: {
+          protocol_version: 'v1',
+          revision: 3,
+          committed_event_ids: ['evt-rooted-bootstrap-1', 'evt-rooted-bootstrap-2'],
+          rooted_wallet_context_id: 'rwc-user-protocol-001',
+          root_delegation: {
+            root_delegation_id: 'root-user-protocol-001',
+            user_wallet: '0x00000000000000000000000000000000000000a1',
+            status: 'active',
+          },
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 0,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          pendingUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingBaseContributionUsd: 900,
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-delegation-signing-request',
+          input: {
+            outcome: 'signed',
+            signedDelegations: [signedDelegation],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 3,
+        lastRootDelegation: {
+          root_delegation_id: 'root-user-protocol-001',
+          user_wallet: '0x00000000000000000000000000000000000000a1',
+          status: 'active',
+        },
+        lastRootedWalletContextId: 'rwc-user-protocol-001',
+        pendingUserWalletAddress: null,
+        pendingBaseContributionUsd: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Portfolio manager onboarding complete. Agent is active.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'shared-ember-rooted-bootstrap',
+              rootedWalletContextId: 'rwc-user-protocol-001',
+            },
+          },
+        ],
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonrpc: '2.0',
+        method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+        params: expect.objectContaining({
+          expected_revision: 0,
+          onboarding: expect.objectContaining({
+            rootedWalletContext: expect.objectContaining({
+              wallet_address: '0x00000000000000000000000000000000000000a1',
+            }),
+          }),
+          handoff: expect.objectContaining({
+            user_wallet: '0x00000000000000000000000000000000000000a1',
+            orchestrator_wallet: '0x2222222222222222222222222222222222222222',
+          }),
+        }),
+      }),
+    );
+  });
+
   it('translates register_root_delegation_from_user_signing into the Shared Ember root-delegation command', async () => {
     const handoff = {
       handoff_id: 'handoff-root-protocol-001',
@@ -171,6 +391,8 @@ describe('createPortfolioManagerDomain', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
+          pendingUserWalletAddress: null,
+          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'tool',
@@ -279,12 +501,14 @@ describe('createPortfolioManagerDomain', () => {
           phase: 'onboarding',
           lastPortfolioState: null,
           lastSharedEmberRevision: 1,
-          lastRootDelegation: {
-            root_delegation_id: 'root-user-protocol-001',
-          },
-          lastOnboardingBootstrap: null,
-          lastRootedWalletContextId: null,
+        lastRootDelegation: {
+          root_delegation_id: 'root-user-protocol-001',
         },
+        lastOnboardingBootstrap: null,
+        lastRootedWalletContextId: null,
+        pendingUserWalletAddress: null,
+        pendingBaseContributionUsd: null,
+      },
         operation: {
           source: 'tool',
           name: 'complete_onboarding_bootstrap',
@@ -307,6 +531,8 @@ describe('createPortfolioManagerDomain', () => {
           },
         },
         lastRootedWalletContextId: null,
+        pendingUserWalletAddress: null,
+        pendingBaseContributionUsd: null,
       },
       outputs: {
         status: {
@@ -403,6 +629,8 @@ describe('createPortfolioManagerDomain', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
+          pendingUserWalletAddress: null,
+          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'tool',
@@ -425,6 +653,8 @@ describe('createPortfolioManagerDomain', () => {
         },
         lastOnboardingBootstrap: null,
         lastRootedWalletContextId: 'rwc-user-protocol-001',
+        pendingUserWalletAddress: null,
+        pendingBaseContributionUsd: null,
       },
       outputs: {
         status: {
@@ -510,6 +740,8 @@ describe('createPortfolioManagerDomain', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
+          pendingUserWalletAddress: null,
+          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'tool',
@@ -533,6 +765,8 @@ describe('createPortfolioManagerDomain', () => {
             },
           ],
         },
+        pendingUserWalletAddress: null,
+        pendingBaseContributionUsd: null,
       },
       outputs: {
         status: {

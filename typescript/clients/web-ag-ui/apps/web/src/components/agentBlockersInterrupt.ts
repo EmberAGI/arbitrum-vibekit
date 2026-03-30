@@ -1,6 +1,7 @@
 export type BlockersInterruptKind =
   | 'operator-config'
   | 'pendle-setup'
+  | 'portfolio-manager-setup'
   | 'pendle-fund-wallet'
   | 'gmx-fund-wallet'
   | 'gmx-setup'
@@ -22,6 +23,8 @@ export function resolveBlockersInterruptView(input: {
       return { kind: 'pendle-setup', interruptStep: 1 };
     case 'gmx-setup-request':
       return { kind: 'gmx-setup', interruptStep: 1 };
+    case 'portfolio-manager-setup-request':
+      return { kind: 'portfolio-manager-setup', interruptStep: 1 };
     case 'pendle-fund-wallet-request':
       return { kind: 'pendle-fund-wallet', interruptStep: 2 };
     case 'gmx-fund-wallet-request':
@@ -33,6 +36,7 @@ export function resolveBlockersInterruptView(input: {
     case 'clmm-delegation-signing-request':
     case 'pendle-delegation-signing-request':
     case 'gmx-delegation-signing-request':
+    case 'portfolio-manager-delegation-signing-request':
       return {
         kind: 'delegation-signing',
         interruptStep: input.maxSetupStep >= 3 ? 3 : input.maxSetupStep,

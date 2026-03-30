@@ -24,4 +24,15 @@ describe('selectRuntimeTaskState', () => {
 
     expect(resolved).toBe('completed');
   });
+
+  it('suppresses the idle-ready placeholder task state before hire', () => {
+    const resolved = selectRuntimeTaskState({
+      lifecyclePhase: null,
+      taskState: 'working',
+      taskMessage: 'Ready for a live runtime conversation.',
+      effectiveTaskState: null,
+    });
+
+    expect(resolved).toBeUndefined();
+  });
 });

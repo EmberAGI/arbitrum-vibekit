@@ -1536,6 +1536,74 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.isActive).toBe(true);
   });
 
+  it('does not treat prehire chat task progress as hired or active', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        lifecycle: {
+          phase: 'prehire',
+        },
+        task: {
+          id: 'task-chat',
+          taskStatus: {
+            state: 'working',
+            message: { content: 'Ready for a live runtime conversation.' },
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasLoadedView).toBe(true);
+    expect(latestValue?.isHired).toBe(false);
+    expect(latestValue?.isActive).toBe(false);
+  });
+
+  it('does not treat a null-lifecycle idle-ready runtime thread as hired or active', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        lifecycle: null,
+        task: {
+          id: 'task-ready',
+          taskStatus: {
+            state: 'working',
+            message: { content: 'Ready for a live runtime conversation.' },
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasLoadedView).toBe(true);
+    expect(latestValue?.isHired).toBe(false);
+    expect(latestValue?.isActive).toBe(false);
+  });
+
   it('serializes rapid A->B->A detail handoff so next connect waits for prior disconnect', async () => {
     let resolveDetachAtoB: (() => void) | null = null;
     let resolveDetachBtoA: (() => void) | null = null;

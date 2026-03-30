@@ -121,8 +121,11 @@ export function AppSidebar() {
           taskId: runtimeTaskId,
           taskState: resolveSidebarTaskState({
             listTaskState: listEntry?.taskState,
+            listLifecyclePhase: listEntry?.lifecyclePhase,
+            listOnboardingStatus: listEntry?.onboardingStatus,
             runtimeTaskState,
             runtimeLifecyclePhase,
+            runtimeOnboardingStatus: agent.uiState.onboardingFlow?.status,
             runtimeTaskMessage,
             fallbackToListWhenRuntimeMissing: false,
           }),

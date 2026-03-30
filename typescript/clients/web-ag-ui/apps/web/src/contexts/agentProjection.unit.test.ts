@@ -59,6 +59,14 @@ describe('agentProjection', () => {
     const projected = projectDetailStateFromPayload({
       thread: {
         command: 'cycle',
+        lifecycle: {
+          phase: 'prehire',
+        },
+        onboardingFlow: {
+          status: 'completed',
+          revision: 1,
+          steps: [],
+        },
         task: {
           id: 'task-1',
           taskStatus: {
@@ -73,6 +81,8 @@ describe('agentProjection', () => {
     expect(update.taskId).toBe('task-1');
     expect(update.taskState).toBe('working');
     expect(update.taskMessage).toBe('processing');
+    expect(update.lifecyclePhase).toBe('prehire');
+    expect(update.onboardingStatus).toBe('completed');
   });
 
   it('drops incoming command intent from projected detail state', () => {

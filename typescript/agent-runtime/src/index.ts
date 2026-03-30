@@ -118,6 +118,7 @@ export type AgentRuntimeDomainInterruptOutput = {
   type: string;
   surfacedInThread: boolean;
   message: string;
+  payload?: Record<string, unknown>;
 };
 
 export type AgentRuntimeDomainOutputs = {
@@ -727,6 +728,7 @@ function buildInterruptArtifact(params: {
       interruptType: params.interrupt.type,
       status: 'pending',
       message: params.interrupt.message,
+      ...(params.interrupt.payload ? { payload: params.interrupt.payload } : {}),
     },
   };
 }
@@ -951,11 +953,16 @@ function applyDomainOperationResult(params: {
     nextA2Ui = {
       kind: 'interrupt',
       payload: {
+        ...(domainOutputs.interrupt.payload ?? {}),
         type: domainOutputs.interrupt.type,
         artifactId: interruptArtifact.artifactId,
         message: domainOutputs.interrupt.message,
-        inputLabel: 'Provide input',
-        submitLabel: 'Continue',
+        ...(!domainOutputs.interrupt.payload || !('inputLabel' in domainOutputs.interrupt.payload)
+          ? { inputLabel: 'Provide input' }
+          : {}),
+        ...(!domainOutputs.interrupt.payload || !('submitLabel' in domainOutputs.interrupt.payload)
+          ? { submitLabel: 'Continue' }
+          : {}),
       },
     };
     nextActivityEvents.push(
