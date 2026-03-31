@@ -8,15 +8,18 @@ import {
   createPortfolioManagerSharedEmberHttpHost,
   resolvePortfolioManagerSharedEmberBaseUrl,
 } from './sharedEmberHttpHost.js';
+import { createPortfolioManagerDiagnosticTool } from './diagnosticTool.js';
+import { createPortfolioManagerWalletAccountingTool } from './walletAccountingTool.js';
 
 const DEFAULT_PORTFOLIO_MANAGER_MODEL = 'openai/gpt-5.4-mini';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const PORTFOLIO_MANAGER_SYSTEM_PROMPT =
-  'You are the portfolio manager orchestrator running on agent-runtime. Stay concise, keep onboarding state explicit, and prepare to hand off wallet and Shared Ember Domain Service work through app-local adapters.';
+  'You are the portfolio manager orchestrator running on agent-runtime. Stay concise, keep onboarding state explicit, and use read_wallet_accounting_state whenever the user asks about wallet contents, reservations, or account status in Shared Ember.';
 
 export type PortfolioManagerGatewayEnv = NodeJS.ProcessEnv & {
   OPENROUTER_API_KEY?: string;
   PORTFOLIO_MANAGER_MODEL?: string;
+  PORTFOLIO_MANAGER_ENABLE_DIAGNOSTIC_TOOLS?: string;
   DATABASE_URL?: string;
   SHARED_EMBER_BASE_URL?: string;
 };
@@ -45,7 +48,13 @@ export function createPortfolioManagerAgentConfig(
 ): PortfolioManagerAgentConfig {
   const apiKey = requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.PORTFOLIO_MANAGER_MODEL?.trim() || DEFAULT_PORTFOLIO_MANAGER_MODEL;
+  const enableDiagnosticTools = env.PORTFOLIO_MANAGER_ENABLE_DIAGNOSTIC_TOOLS?.trim() === '1';
   const sharedEmberBaseUrl = resolvePortfolioManagerSharedEmberBaseUrl(env);
+  const protocolHost = sharedEmberBaseUrl
+    ? createPortfolioManagerSharedEmberHttpHost({
+        baseUrl: sharedEmberBaseUrl,
+      })
+    : null;
 
   return {
     model: {
@@ -58,13 +67,21 @@ export function createPortfolioManagerAgentConfig(
     },
     systemPrompt: PORTFOLIO_MANAGER_SYSTEM_PROMPT,
     databaseUrl: env.DATABASE_URL,
-    tools: [],
-    domain: createPortfolioManagerDomain({
-      ...(sharedEmberBaseUrl
-        ? {
-            protocolHost: createPortfolioManagerSharedEmberHttpHost({
-              baseUrl: sharedEmberBaseUrl,
+    tools: [
+      ...(protocolHost
+        ? [
+            createPortfolioManagerWalletAccountingTool({
+              protocolHost,
+              agentId: 'portfolio-manager',
             }),
+          ]
+        : []),
+      ...(enableDiagnosticTools ? [createPortfolioManagerDiagnosticTool()] : []),
+    ],
+    domain: createPortfolioManagerDomain({
+      ...(protocolHost
+        ? {
+            protocolHost,
           }
         : {}),
     }),

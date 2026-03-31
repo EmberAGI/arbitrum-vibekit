@@ -1,4 +1,9 @@
 import type { AgentRuntimeDomainConfig } from 'agent-runtime';
+import {
+  buildPortfolioManagerWalletAccountingDetails,
+  buildSharedEmberAccountingContextXml,
+  readPortfolioManagerOnboardingState,
+} from './sharedEmberOnboardingState.js';
 
 export type PortfolioManagerSharedEmberProtocolHost = {
   handleJsonRpc: (input: unknown) => Promise<unknown>;
@@ -13,7 +18,8 @@ export type PortfolioManagerLifecycleState = {
   lastRootDelegation: unknown;
   lastOnboardingBootstrap: unknown;
   lastRootedWalletContextId: string | null;
-  pendingUserWalletAddress: `0x${string}` | null;
+  activeWalletAddress: `0x${string}` | null;
+  pendingOnboardingWalletAddress: `0x${string}` | null;
   pendingBaseContributionUsd: number | null;
 };
 
@@ -36,9 +42,36 @@ function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
     lastRootDelegation: null,
     lastOnboardingBootstrap: null,
     lastRootedWalletContextId: null,
-    pendingUserWalletAddress: null,
+    activeWalletAddress: null,
+    pendingOnboardingWalletAddress: null,
     pendingBaseContributionUsd: null,
   };
+}
+
+function readOnboardingBootstrapWalletAddress(value: unknown): `0x${string}` | null {
+  if (typeof value !== 'object' || value === null || !('rootedWalletContext' in value)) {
+    return null;
+  }
+
+  const rootedWalletContext = value.rootedWalletContext;
+  if (
+    typeof rootedWalletContext !== 'object' ||
+    rootedWalletContext === null ||
+    !('wallet_address' in rootedWalletContext) ||
+    typeof rootedWalletContext.wallet_address !== 'string'
+  ) {
+    return null;
+  }
+
+  return rootedWalletContext.wallet_address.startsWith('0x')
+    ? (rootedWalletContext.wallet_address as `0x${string}`)
+    : null;
+}
+
+function readPortfolioManagerContextWalletAddress(
+  state: PortfolioManagerLifecycleState,
+): `0x${string}` | null {
+  return state.activeWalletAddress ?? readOnboardingBootstrapWalletAddress(state.lastOnboardingBootstrap);
 }
 
 function isSharedEmberRevisionConflict(error: unknown): boolean {
@@ -420,32 +453,87 @@ export function createPortfolioManagerDomain(
         },
       ],
     },
-    systemContext: ({ state }) => {
+    systemContext: async ({ state }) => {
       const currentState = state ?? buildDefaultLifecycleState();
-      const context = [`Lifecycle phase: ${currentState.phase}.`];
+      const context = ['<portfolio_manager_context>'];
+
+      context.push(`  <lifecycle_phase>${currentState.phase}</lifecycle_phase>`);
 
       if (currentState.lastSharedEmberRevision !== null) {
-        context.push(`Shared Ember revision: ${currentState.lastSharedEmberRevision}.`);
+        context.push(
+          `  <shared_ember_revision>${currentState.lastSharedEmberRevision}</shared_ember_revision>`,
+        );
       }
 
       if (currentState.lastRootDelegation) {
-        context.push('Root delegation registered with Shared Ember Domain Service.');
+        context.push('  <root_delegation_registered>true</root_delegation_registered>');
       }
 
       if (currentState.lastOnboardingBootstrap) {
-        context.push('Onboarding bootstrap completed with Shared Ember Domain Service.');
+        context.push('  <onboarding_bootstrap_completed>true</onboarding_bootstrap_completed>');
+      }
+
+      const rootedWalletAddress = readOnboardingBootstrapWalletAddress(
+        currentState.lastOnboardingBootstrap,
+      );
+      if (rootedWalletAddress) {
+        context.push(
+          `  <user_portfolio_wallet_address source="rooted_wallet_context">${rootedWalletAddress}</user_portfolio_wallet_address>`,
+        );
       }
 
       if (currentState.lastRootedWalletContextId) {
-        context.push(`Rooted wallet context: ${currentState.lastRootedWalletContextId}.`);
+        context.push(
+          `  <rooted_wallet_context_id>${currentState.lastRootedWalletContextId}</rooted_wallet_context_id>`,
+        );
       }
 
-      if (currentState.pendingUserWalletAddress) {
-        context.push(`Pending onboarding wallet: ${currentState.pendingUserWalletAddress}.`);
+      if (currentState.activeWalletAddress) {
+        context.push(
+          `  <active_portfolio_wallet_address>${currentState.activeWalletAddress}</active_portfolio_wallet_address>`,
+        );
+      }
+
+      if (currentState.pendingOnboardingWalletAddress) {
+        context.push(
+          `  <pending_onboarding_wallet_address source="onboarding_setup">${currentState.pendingOnboardingWalletAddress}</pending_onboarding_wallet_address>`,
+        );
       }
 
       if (currentState.pendingBaseContributionUsd !== null) {
-        context.push(`Pending onboarding allocation: ${currentState.pendingBaseContributionUsd} USD.`);
+        context.push(
+          `  <pending_onboarding_allocation_usd>${currentState.pendingBaseContributionUsd}</pending_onboarding_allocation_usd>`,
+        );
+      }
+
+      context.push('</portfolio_manager_context>');
+
+      const walletAddress = readPortfolioManagerContextWalletAddress(currentState);
+      if (walletAddress && options.protocolHost) {
+        try {
+          const { revision, onboardingState } = await readPortfolioManagerOnboardingState({
+            protocolHost: options.protocolHost,
+            agentId,
+            walletAddress,
+          });
+          context.push(
+            ...buildSharedEmberAccountingContextXml({
+              status: 'live',
+              details: buildPortfolioManagerWalletAccountingDetails({
+                revision,
+                onboardingState,
+              }),
+            }),
+          );
+        } catch (error) {
+          context.push(
+            ...buildSharedEmberAccountingContextXml({
+              status: 'unavailable',
+              walletAddress,
+              error: error instanceof Error ? error.message : 'Unknown Shared Ember read failure.',
+            }),
+          );
+        }
       }
 
       return context;
@@ -482,7 +570,8 @@ export function createPortfolioManagerDomain(
             lastRootDelegation: null,
             lastOnboardingBootstrap: null,
             lastRootedWalletContextId: null,
-            pendingUserWalletAddress: null,
+            activeWalletAddress: currentState.activeWalletAddress,
+            pendingOnboardingWalletAddress: null,
             pendingBaseContributionUsd: null,
           };
 
@@ -513,7 +602,8 @@ export function createPortfolioManagerDomain(
           const nextState: PortfolioManagerLifecycleState = {
             ...currentState,
             phase: 'onboarding',
-            pendingUserWalletAddress: setupInput.walletAddress,
+            activeWalletAddress: setupInput.walletAddress,
+            pendingOnboardingWalletAddress: setupInput.walletAddress,
             pendingBaseContributionUsd: setupInput.baseContributionUsd,
           };
 
@@ -534,7 +624,7 @@ export function createPortfolioManagerDomain(
               state: {
                 ...currentState,
                 phase: 'prehire',
-                pendingUserWalletAddress: null,
+                pendingOnboardingWalletAddress: null,
                 pendingBaseContributionUsd: null,
               },
               outputs: {
@@ -547,7 +637,7 @@ export function createPortfolioManagerDomain(
             };
           }
 
-          const walletAddress = currentState.pendingUserWalletAddress;
+          const walletAddress = currentState.pendingOnboardingWalletAddress;
           const baseContributionUsd = currentState.pendingBaseContributionUsd;
           const signedDelegations = parsePortfolioManagerSignedDelegations(operation.input);
           const signedDelegation = signedDelegations?.[0];
@@ -620,7 +710,8 @@ export function createPortfolioManagerDomain(
             lastRootDelegation: response.result?.root_delegation ?? currentState.lastRootDelegation,
             lastOnboardingBootstrap: onboarding,
             lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
-            pendingUserWalletAddress: null,
+            activeWalletAddress: walletAddress,
+            pendingOnboardingWalletAddress: null,
             pendingBaseContributionUsd: null,
           };
 
@@ -694,7 +785,8 @@ export function createPortfolioManagerDomain(
             lastRootDelegation: response.result?.root_delegation ?? null,
             lastOnboardingBootstrap: currentState.lastOnboardingBootstrap,
             lastRootedWalletContextId: currentState.lastRootedWalletContextId,
-            pendingUserWalletAddress: currentState.pendingUserWalletAddress,
+            activeWalletAddress: currentState.activeWalletAddress,
+            pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
             pendingBaseContributionUsd: currentState.pendingBaseContributionUsd,
           };
 
@@ -751,7 +843,8 @@ export function createPortfolioManagerDomain(
             lastRootDelegation: currentState.lastRootDelegation,
             lastOnboardingBootstrap: currentState.lastOnboardingBootstrap,
             lastRootedWalletContextId: currentState.lastRootedWalletContextId,
-            pendingUserWalletAddress: currentState.pendingUserWalletAddress,
+            activeWalletAddress: currentState.activeWalletAddress,
+            pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
             pendingBaseContributionUsd: currentState.pendingBaseContributionUsd,
           };
 
@@ -823,7 +916,10 @@ export function createPortfolioManagerDomain(
             lastRootDelegation: currentState.lastRootDelegation,
             lastOnboardingBootstrap: response.result?.onboarding_bootstrap ?? null,
             lastRootedWalletContextId: currentState.lastRootedWalletContextId,
-            pendingUserWalletAddress: currentState.pendingUserWalletAddress,
+            activeWalletAddress:
+              currentState.activeWalletAddress ??
+              readOnboardingBootstrapWalletAddress(response.result?.onboarding_bootstrap ?? null),
+            pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
             pendingBaseContributionUsd: currentState.pendingBaseContributionUsd,
           };
 
@@ -899,7 +995,10 @@ export function createPortfolioManagerDomain(
             lastRootDelegation: response.result?.root_delegation ?? currentState.lastRootDelegation,
             lastOnboardingBootstrap: currentState.lastOnboardingBootstrap,
             lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
-            pendingUserWalletAddress: currentState.pendingUserWalletAddress,
+            activeWalletAddress:
+              currentState.activeWalletAddress ??
+              currentState.pendingOnboardingWalletAddress,
+            pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
             pendingBaseContributionUsd: currentState.pendingBaseContributionUsd,
           };
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createPortfolioManagerAgentConfig } from './portfolioManagerFoundation.js';
 
 describe('createPortfolioManagerAgentConfig', () => {
-  it('builds an OpenRouter-backed agent-runtime config for portfolio-manager startup', () => {
+  it('builds an OpenRouter-backed agent-runtime config for portfolio-manager startup', async () => {
     const config = createPortfolioManagerAgentConfig({
       OPENROUTER_API_KEY: 'test-openrouter-key',
       PORTFOLIO_MANAGER_MODEL: 'openai/gpt-5.4-mini',
@@ -60,7 +60,7 @@ describe('createPortfolioManagerAgentConfig', () => {
     });
     expect(config.agentOptions?.getApiKey?.()).toBe('test-openrouter-key');
     expect(
-      config.domain?.systemContext?.({
+      await config.domain?.systemContext?.({
         threadId: 'thread-1',
         state: {
           phase: 'prehire',
@@ -69,14 +69,99 @@ describe('createPortfolioManagerAgentConfig', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
-          pendingUserWalletAddress: null,
+          activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
           pendingBaseContributionUsd: null,
         },
       }),
-    ).toEqual(['Lifecycle phase: prehire.']);
+    ).toEqual([
+      '<portfolio_manager_context>',
+      '  <lifecycle_phase>prehire</lifecycle_phase>',
+      '</portfolio_manager_context>',
+    ]);
   });
 
   it('requires OPENROUTER_API_KEY for real local startup', () => {
     expect(() => createPortfolioManagerAgentConfig({})).toThrow('OPENROUTER_API_KEY');
+  });
+
+  it('registers the wallet accounting tool when Shared Ember is configured', () => {
+    const config = createPortfolioManagerAgentConfig({
+      OPENROUTER_API_KEY: 'test-openrouter-key',
+      SHARED_EMBER_BASE_URL: 'http://127.0.0.1:56436',
+    });
+
+    expect(config.systemPrompt).toContain('read_wallet_accounting_state');
+    expect(config.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'read_wallet_accounting_state',
+        }),
+      ]),
+    );
+  });
+
+  it('registers the diagnostic runtime tool only when explicitly enabled', async () => {
+    const disabledConfig = createPortfolioManagerAgentConfig({
+      OPENROUTER_API_KEY: 'test-openrouter-key',
+    });
+    expect(disabledConfig.tools).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({
+          name: 'diagnostic_runtime_ping',
+        }),
+      ]),
+    );
+
+    const enabledConfig = createPortfolioManagerAgentConfig({
+      OPENROUTER_API_KEY: 'test-openrouter-key',
+      PORTFOLIO_MANAGER_ENABLE_DIAGNOSTIC_TOOLS: '1',
+    });
+    const diagnosticTool = enabledConfig.tools?.find((tool) => tool.name === 'diagnostic_runtime_ping');
+    expect(diagnosticTool).toBeDefined();
+    await expect(diagnosticTool?.execute?.('tool-diagnostic-ping', { label: 'probe-1' })).resolves.toMatchObject({
+      content: [
+        {
+          type: 'text',
+          text: expect.stringContaining('diagnostic runtime ping ok (probe-1)'),
+        },
+      ],
+      details: {
+        label: 'probe-1',
+        source: 'agent-portfolio-manager',
+        executedAt: expect.any(String),
+      },
+    });
+  });
+
+  it('surfaces the rooted wallet address in system context after onboarding', () => {
+    const config = createPortfolioManagerAgentConfig({
+      OPENROUTER_API_KEY: 'test-openrouter-key',
+    });
+
+    return expect(
+      config.domain?.systemContext?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 1,
+          lastRootDelegation: {
+            root_delegation_id: 'root-1',
+          },
+          lastOnboardingBootstrap: {
+            rootedWalletContext: {
+              wallet_address: '0x00000000000000000000000000000000000000a1',
+            },
+          },
+          lastRootedWalletContextId: 'rwc-1',
+          activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
+          pendingBaseContributionUsd: null,
+        },
+      }),
+    ).resolves.toContain(
+      '  <user_portfolio_wallet_address source="rooted_wallet_context">0x00000000000000000000000000000000000000a1</user_portfolio_wallet_address>',
+    );
   });
 });

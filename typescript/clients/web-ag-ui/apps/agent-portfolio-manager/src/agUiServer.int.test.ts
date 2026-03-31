@@ -229,7 +229,8 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         thread: {
           lifecycle: {
             phase: 'onboarding',
-            pendingUserWalletAddress: null,
+            activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
             pendingBaseContributionUsd: null,
           },
           task: {
@@ -281,7 +282,8 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         thread: {
           lifecycle: {
             phase: 'onboarding',
-            pendingUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+            activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
             pendingBaseContributionUsd: 900,
           },
           task: {
@@ -375,7 +377,8 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           lifecycle: {
             phase: 'active',
             lastRootedWalletContextId: 'rwc-thread10x00000000000000000000000000000000000000a1',
-            pendingUserWalletAddress: null,
+            activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
             pendingBaseContributionUsd: null,
           },
           task: {
@@ -515,7 +518,8 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           lifecycle: {
             phase: 'prehire',
             lastRootedWalletContextId: null,
-            pendingUserWalletAddress: null,
+            activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
             pendingBaseContributionUsd: null,
           },
           task: {

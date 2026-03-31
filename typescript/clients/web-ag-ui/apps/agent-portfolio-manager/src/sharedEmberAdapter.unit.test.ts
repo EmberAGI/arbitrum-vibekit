@@ -117,7 +117,8 @@ describe('createPortfolioManagerDomain', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
-          pendingUserWalletAddress: null,
+          activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
           pendingBaseContributionUsd: null,
         },
         operation: {
@@ -128,7 +129,8 @@ describe('createPortfolioManagerDomain', () => {
     ).resolves.toMatchObject({
       state: {
         phase: 'onboarding',
-        pendingUserWalletAddress: null,
+        activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
         pendingBaseContributionUsd: null,
       },
       outputs: {
@@ -160,7 +162,8 @@ describe('createPortfolioManagerDomain', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
-          pendingUserWalletAddress: null,
+          activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
           pendingBaseContributionUsd: null,
         },
         operation: {
@@ -175,7 +178,8 @@ describe('createPortfolioManagerDomain', () => {
     ).resolves.toMatchObject({
       state: {
         phase: 'onboarding',
-        pendingUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
         pendingBaseContributionUsd: 900,
       },
       outputs: {
@@ -262,7 +266,8 @@ describe('createPortfolioManagerDomain', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
-          pendingUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingBaseContributionUsd: 900,
         },
         operation: {
@@ -284,7 +289,8 @@ describe('createPortfolioManagerDomain', () => {
           status: 'active',
         },
         lastRootedWalletContextId: 'rwc-user-protocol-001',
-        pendingUserWalletAddress: null,
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: null,
         pendingBaseContributionUsd: null,
       },
       outputs: {
@@ -418,7 +424,8 @@ describe('createPortfolioManagerDomain', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
-          pendingUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingBaseContributionUsd: 900,
         },
         operation: {
@@ -475,7 +482,8 @@ describe('createPortfolioManagerDomain', () => {
         },
         lastOnboardingBootstrap: createOnboardingBootstrap(),
         lastRootedWalletContextId: 'rwc-user-protocol-001',
-        pendingUserWalletAddress: null,
+        activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
         pendingBaseContributionUsd: null,
       },
       operation: {
@@ -494,7 +502,8 @@ describe('createPortfolioManagerDomain', () => {
         lastRootDelegation: null,
         lastOnboardingBootstrap: null,
         lastRootedWalletContextId: null,
-        pendingUserWalletAddress: null,
+        activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
         pendingBaseContributionUsd: null,
       },
       outputs: {
@@ -599,7 +608,8 @@ describe('createPortfolioManagerDomain', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
-          pendingUserWalletAddress: null,
+          activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
           pendingBaseContributionUsd: null,
         },
         operation: {
@@ -714,7 +724,8 @@ describe('createPortfolioManagerDomain', () => {
         },
         lastOnboardingBootstrap: null,
         lastRootedWalletContextId: null,
-        pendingUserWalletAddress: null,
+        activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
         pendingBaseContributionUsd: null,
       },
         operation: {
@@ -739,7 +750,8 @@ describe('createPortfolioManagerDomain', () => {
           },
         },
         lastRootedWalletContextId: null,
-        pendingUserWalletAddress: null,
+        activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
         pendingBaseContributionUsd: null,
       },
       outputs: {
@@ -837,7 +849,8 @@ describe('createPortfolioManagerDomain', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
-          pendingUserWalletAddress: null,
+          activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
           pendingBaseContributionUsd: null,
         },
         operation: {
@@ -861,7 +874,8 @@ describe('createPortfolioManagerDomain', () => {
         },
         lastOnboardingBootstrap: null,
         lastRootedWalletContextId: 'rwc-user-protocol-001',
-        pendingUserWalletAddress: null,
+        activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
         pendingBaseContributionUsd: null,
       },
       outputs: {
@@ -981,7 +995,8 @@ describe('createPortfolioManagerDomain', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
-          pendingUserWalletAddress: null,
+          activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
           pendingBaseContributionUsd: null,
         },
         operation: {
@@ -1081,7 +1096,8 @@ describe('createPortfolioManagerDomain', () => {
           lastRootDelegation: null,
           lastOnboardingBootstrap: null,
           lastRootedWalletContextId: null,
-          pendingUserWalletAddress: null,
+          activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
           pendingBaseContributionUsd: null,
         },
         operation: {
@@ -1106,7 +1122,8 @@ describe('createPortfolioManagerDomain', () => {
             },
           ],
         },
-        pendingUserWalletAddress: null,
+        activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
         pendingBaseContributionUsd: null,
       },
       outputs: {
@@ -1143,5 +1160,141 @@ describe('createPortfolioManagerDomain', () => {
         agent_id: 'portfolio-manager',
       },
     });
+  });
+
+  it('appends live Shared Ember accounting context to the system prompt context when a wallet is active', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-wallet-accounting-portfolio-manager-0x00000000000000000000000000000000000000a1',
+        result: {
+          revision: 4,
+          onboarding_state: {
+            wallet_address: '0x00000000000000000000000000000000000000a1',
+            network: 'arbitrum',
+            phase: 'active',
+            proofs: {
+              rooted_wallet_context_registered: true,
+              root_delegation_registered: true,
+              root_authority_active: true,
+              wallet_baseline_observed: true,
+              accounting_units_seeded: true,
+              mandate_inputs_configured: true,
+              reserve_policy_configured: true,
+              capital_reserved_for_agent: true,
+              policy_snapshot_recorded: true,
+              agent_active: true,
+            },
+            rooted_wallet_context: {
+              rooted_wallet_context_id: 'rwc-a1',
+            },
+            root_delegation: {
+              root_delegation_id: 'root-a1',
+            },
+            owned_units: [
+              {
+                unit_id: 'unit-a1',
+                root_asset: 'USDC',
+                quantity: '10',
+                status: 'reserved',
+                control_path: 'unassigned',
+                reservation_id: 'reservation-a1',
+              },
+            ],
+            reservations: [
+              {
+                reservation_id: 'reservation-a1',
+                agent_id: 'portfolio-manager',
+                purpose: 'deploy',
+                status: 'active',
+                control_path: 'unassigned',
+                unit_allocations: [
+                  {
+                    unit_id: 'unit-a1',
+                    quantity: '10',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.systemContext?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 4,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: {
+            rootedWalletContext: {
+              wallet_address: '0x00000000000000000000000000000000000000a1',
+            },
+          },
+          lastRootedWalletContextId: 'rwc-a1',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          pendingBaseContributionUsd: null,
+        },
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        '<shared_ember_accounting_context freshness="live">',
+        expect.stringMatching(/^  <generated_at>.+<\/generated_at>$/),
+        '  <wallet_address>0x00000000000000000000000000000000000000a1</wallet_address>',
+        '  <revision>4</revision>',
+        '  <phase>active</phase>',
+        '    <asset unit_id="unit-a1" reservation_id="reservation-a1">',
+        '    <reservation reservation_id="reservation-a1" agent_id="portfolio-manager">',
+      ]),
+    );
+  });
+
+  it('marks live Shared Ember accounting context unavailable when the upstream read fails', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => {
+        throw new Error('Shared Ember Domain Service HTTP request failed with status 503.');
+      }),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.systemContext?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 4,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          pendingBaseContributionUsd: null,
+        },
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        '<shared_ember_accounting_context status="unavailable">',
+        expect.stringMatching(/^  <generated_at>.+<\/generated_at>$/),
+        '  <wallet_address>0x00000000000000000000000000000000000000a1</wallet_address>',
+        '  <network>arbitrum</network>',
+        '  <error>Shared Ember Domain Service HTTP request failed with status 503.</error>',
+      ]),
+    );
   });
 });
