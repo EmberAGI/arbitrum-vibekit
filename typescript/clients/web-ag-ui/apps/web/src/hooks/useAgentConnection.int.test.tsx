@@ -1180,6 +1180,39 @@ describe('useAgentConnection integration', () => {
     expect(mocks.agent.setState).not.toHaveBeenCalled();
   });
 
+  it('dispatches PI-runtime hire through forwardedProps command instead of a JSON user message', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    mocks.agent.addMessage.mockClear();
+    mocks.runAgent.mockClear();
+
+    latestValue?.runHire();
+    await flushEffects();
+
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
+    expect(mocks.runAgent).toHaveBeenCalledWith({
+      agent: mocks.agent,
+      forwardedProps: {
+        command: {
+          name: 'hire',
+        },
+      },
+    });
+    expect(mocks.agent.setState).not.toHaveBeenCalled();
+  });
+
   it('does not optimistically mutate runtime state when dispatching fire', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
@@ -1281,6 +1314,53 @@ describe('useAgentConnection integration', () => {
     expect(mocks.agent.detachActiveRun.mock.calls.length).toBeGreaterThanOrEqual(1);
     subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
     await flushEffects();
+  });
+
+  it('dispatches PI-runtime fire through forwardedProps command instead of a JSON user message', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        lifecycle: {
+          phase: 'active',
+        },
+        task: {
+          id: 'task-active',
+          taskStatus: {
+            state: 'working',
+            message: { content: 'Portfolio manager is active.' },
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    mocks.agent.addMessage.mockClear();
+    mocks.runAgent.mockClear();
+
+    latestValue?.runFire();
+    await flushEffects();
+
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
+    expect(mocks.runAgent).toHaveBeenCalledWith({
+      agent: mocks.agent,
+      forwardedProps: {
+        command: {
+          name: 'fire',
+        },
+      },
+    });
   });
 
   it('marks agent as not hired once fire reaches a terminal task state', async () => {
@@ -1534,6 +1614,74 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(latestValue?.isActive).toBe(true);
+  });
+
+  it('does not treat prehire chat task progress as hired or active', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        lifecycle: {
+          phase: 'prehire',
+        },
+        task: {
+          id: 'task-chat',
+          taskStatus: {
+            state: 'working',
+            message: 'Ready for a live runtime conversation.',
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasLoadedView).toBe(true);
+    expect(latestValue?.isHired).toBe(false);
+    expect(latestValue?.isActive).toBe(false);
+  });
+
+  it('does not treat a null-lifecycle idle-ready runtime thread as hired or active', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        lifecycle: null,
+        task: {
+          id: 'task-ready',
+          taskStatus: {
+            state: 'working',
+            message: 'Ready for a live runtime conversation.',
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasLoadedView).toBe(true);
+    expect(latestValue?.isHired).toBe(false);
+    expect(latestValue?.isActive).toBe(false);
   });
 
   it('serializes rapid A->B->A detail handoff so next connect waits for prior disconnect', async () => {

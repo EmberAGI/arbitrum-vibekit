@@ -4,6 +4,7 @@ import { Subject, lastValueFrom, toArray } from 'rxjs';
 import { describe, expect, it } from 'vitest';
 
 import { LangGraphInterruptSnapshotAgent } from './langGraphInterruptSnapshotAgent';
+import { assertSharedThreadSnapshotContract } from './sharedThreadSnapshotContract.test-support';
 
 type LangGraphThreadState = Parameters<LangGraphInterruptSnapshotAgent['getStateSnapshot']>[0];
 
@@ -73,6 +74,50 @@ describe('LangGraphInterruptSnapshotAgent', () => {
       ],
     });
     expect(snapshot).not.toHaveProperty('droppedField');
+  });
+
+  it('preserves the shared web-facing lifecycle and task status snapshot contract', () => {
+    const agent = new LangGraphInterruptSnapshotAgent({
+      deploymentUrl: 'http://langgraph-gmx:8126',
+      graphId: 'agent-gmx-allora',
+    });
+
+    Reflect.set(agent, 'activeRun', {
+      id: 'run-1',
+      schemaKeys: {
+        config: [],
+        context: [],
+        input: ['thread', 'copilotkit', 'messages', 'tools'],
+        output: ['thread', 'copilotkit', 'messages', 'tools'],
+      },
+    });
+
+    const snapshot = agent.getStateSnapshot({
+      values: {
+        thread: {
+          id: 'thread-1',
+          lifecycle: {
+            phase: 'onboarding',
+          },
+          task: {
+            id: 'task-1',
+            taskStatus: {
+              state: 'input-required',
+              message: {
+                content: 'Provide strategy config',
+              },
+            },
+          },
+        },
+        copilotkit: {
+          actions: [],
+          context: [],
+        },
+      },
+      tasks: [],
+    } as unknown as LangGraphThreadState);
+
+    assertSharedThreadSnapshotContract(snapshot);
   });
 
   it('completes the raw run observable when runAgentStream returns after emitting run finished', async () => {

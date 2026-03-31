@@ -16,6 +16,15 @@ describe('agentBlockersInterrupt', () => {
       kind: 'gmx-setup',
       interruptStep: 1,
     });
+    expect(
+      resolveBlockersInterruptView({
+        interruptType: 'portfolio-manager-setup-request',
+        maxSetupStep: 4,
+      }),
+    ).toEqual({
+      kind: 'portfolio-manager-setup',
+      interruptStep: 1,
+    });
   });
 
   it('maps funding-related interrupts to the expected steps', () => {
@@ -41,6 +50,15 @@ describe('agentBlockersInterrupt', () => {
     expect(
       resolveBlockersInterruptView({
         interruptType: 'clmm-delegation-signing-request',
+        maxSetupStep: 4,
+      }),
+    ).toEqual({
+      kind: 'delegation-signing',
+      interruptStep: 3,
+    });
+    expect(
+      resolveBlockersInterruptView({
+        interruptType: 'portfolio-manager-delegation-signing-request',
         maxSetupStep: 4,
       }),
     ).toEqual({

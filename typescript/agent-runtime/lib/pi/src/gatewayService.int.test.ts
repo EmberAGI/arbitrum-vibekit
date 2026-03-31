@@ -177,7 +177,9 @@ describe('pi gateway service integration', () => {
               id: 'exec-1',
               taskStatus: {
                 state: 'working',
-                message: 'Pi is connected.',
+                message: {
+                  content: 'Pi is connected.',
+                },
               },
             },
             projection: {
@@ -276,13 +278,15 @@ describe('pi gateway service integration', () => {
       snapshot: {
         thread: {
           id: 'thread-1',
-          task: {
-            id: 'exec-1',
-            taskStatus: {
-              state: 'working',
-              message: 'Pi is connected.',
+            task: {
+              id: 'exec-1',
+              taskStatus: {
+                state: 'working',
+                message: {
+                  content: 'Pi is connected.',
+                },
+              },
             },
-          },
           projection: {
             source: 'pi-runtime-gateway',
             canonicalIds: {
@@ -473,6 +477,109 @@ describe('pi gateway service integration', () => {
     ]);
   });
 
+  it('preserves assistant tool calls when AG-UI history is converted back into agent messages', async () => {
+    const agent = new ScriptedPiAgent([
+      { type: 'agent_start' },
+      { type: 'turn_start' },
+      { type: 'agent_end', messages: [] },
+    ]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      now: () => 123,
+      getSession: () => ({
+        thread: { id: 'thread-tool-history' },
+        execution: { id: 'exec-tool-history', status: 'working' },
+        messages: [],
+      }),
+      updateSession: (_threadId, update) =>
+        update({
+          thread: { id: 'thread-tool-history' },
+          execution: { id: 'exec-tool-history', status: 'working' },
+          messages: [],
+        }),
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-tool-history',
+        runId: 'run-tool-history',
+        messages: [
+          {
+            id: 'user-msg',
+            role: 'user',
+            content: 'what is my account status?',
+          },
+          {
+            id: 'assistant-msg',
+            role: 'assistant',
+            content: '',
+            toolCalls: [
+              {
+                id: 'tool-call-1',
+                type: 'function',
+                function: {
+                  name: 'read_wallet_accounting_state',
+                  arguments: '{"walletAddress":"0xabc"}',
+                },
+              },
+            ],
+          },
+          {
+            id: 'tool-msg',
+            role: 'tool',
+            toolCallId: 'tool-call-1',
+            content: '{"summary":"ok"}',
+          },
+        ],
+      }),
+    );
+
+    expect(agent.promptCalls).toEqual([
+      [
+        {
+          role: 'user',
+          content: 'what is my account status?',
+          timestamp: 123,
+        },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'toolCall',
+              id: 'tool-call-1',
+              name: 'read_wallet_accounting_state',
+              arguments: {
+                walletAddress: '0xabc',
+              },
+            },
+          ],
+          api: 'responses',
+          provider: 'openai',
+          model: 'ag-ui-projected',
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: 'stop',
+          timestamp: 123,
+        },
+        {
+          role: 'toolResult',
+          toolCallId: 'tool-call-1',
+          toolName: 'ag-ui-tool',
+          content: [{ type: 'text', text: '{"summary":"ok"}' }],
+          isError: false,
+          timestamp: 123,
+        },
+      ],
+    ]);
+  });
+
   it('emits a canonical request-message snapshot before streamed assistant output on run', async () => {
     const assistantMessage = {
       role: 'assistant',
@@ -593,7 +700,9 @@ describe('pi gateway service integration', () => {
               id: 'exec-2',
               taskStatus: {
                 state: 'working',
-                message: 'Awaiting steering',
+                message: {
+                  content: 'Awaiting steering',
+                },
               },
             },
             projection: {
@@ -675,7 +784,9 @@ describe('pi gateway service integration', () => {
               id: 'exec-3',
               taskStatus: {
                 state: 'working',
-                message: 'Awaiting follow-up',
+                message: {
+                  content: 'Awaiting follow-up',
+                },
               },
             },
             projection: {
@@ -749,7 +860,9 @@ describe('pi gateway service integration', () => {
               id: 'exec-5',
               taskStatus: {
                 state: 'input-required',
-                message: 'Awaiting explicit resume',
+                message: {
+                  content: 'Awaiting explicit resume',
+                },
               },
             },
             projection: {

@@ -170,7 +170,9 @@ describe('agent-pi-example AG-UI integration', () => {
           task: {
             taskStatus: {
               state: 'input-required',
-              message: 'Please provide a short operator note to continue onboarding.',
+              message: {
+                content: 'Please provide a short operator note to continue onboarding.',
+              },
             },
           },
         },
@@ -209,7 +211,9 @@ describe('agent-pi-example AG-UI integration', () => {
           task: {
             taskStatus: {
               state: 'working',
-              message: 'Operator note captured. Ready to complete onboarding.',
+              message: {
+                content: 'Operator note captured. Ready to complete onboarding.',
+              },
             },
           },
           artifacts: {
@@ -256,7 +260,9 @@ describe('agent-pi-example AG-UI integration', () => {
           task: {
             taskStatus: {
               state: 'completed',
-              message: 'Onboarding complete. Agent is now hired.',
+              message: {
+                content: 'Onboarding complete. Agent is now hired.',
+              },
             },
           },
           artifacts: {
@@ -303,7 +309,9 @@ describe('agent-pi-example AG-UI integration', () => {
           task: {
             taskStatus: {
               state: 'completed',
-              message: 'Agent moved to fired. Rehire is still available in this thread.',
+              message: {
+                content: 'Agent moved to fired. Rehire is still available in this thread.',
+              },
             },
           },
           artifacts: {

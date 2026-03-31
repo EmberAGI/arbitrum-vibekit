@@ -6,12 +6,14 @@ const AGENT_INTERRUPT_TYPES = new Set<AgentInterrupt['type']>([
   'pendle-fund-wallet-request',
   'gmx-fund-wallet-request',
   'gmx-setup-request',
+  'portfolio-manager-setup-request',
   'clmm-funding-token-request',
   'pendle-funding-token-request',
   'gmx-funding-token-request',
   'clmm-delegation-signing-request',
   'pendle-delegation-signing-request',
   'gmx-delegation-signing-request',
+  'portfolio-manager-delegation-signing-request',
 ]);
 
 export const isAgentInterrupt = (value: unknown): value is AgentInterrupt => {

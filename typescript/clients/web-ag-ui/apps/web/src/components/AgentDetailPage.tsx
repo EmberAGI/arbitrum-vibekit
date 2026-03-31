@@ -27,6 +27,7 @@ import type {
   PendleMarket,
   OperatorConfigInput,
   PendleSetupInput,
+  PortfolioManagerSetupInput,
   FundWalletAcknowledgement,
   GmxSetupInput,
   PiOperatorNoteInput,
@@ -110,6 +111,7 @@ interface AgentDetailPageProps {
     input:
       | OperatorConfigInput
       | PendleSetupInput
+      | PortfolioManagerSetupInput
       | FundWalletAcknowledgement
       | GmxSetupInput
       | PiOperatorNoteInput
@@ -620,7 +622,8 @@ export function AgentDetailPage({
   onSettingsSave,
 }: AgentDetailPageProps) {
   const showPostHireLayout = isHired || Boolean(isFiring);
-  const chatEnabled = agentId === 'agent-pi-example';
+  const chatEnabled = agentId === 'agent-pi-example' || agentId === 'agent-portfolio-manager';
+  const inlineOnboardingChatEnabled = agentId === 'agent-pi-example';
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (showPostHireLayout ? 'blockers' : 'metrics'),
   );
@@ -633,18 +636,18 @@ export function AgentDetailPage({
     taskStatus,
     onboardingStatus: onboardingFlow?.status,
   });
-  const forceBlockersTab = isOnboardingActive && !chatEnabled;
+  const forceBlockersTab = isOnboardingActive && !inlineOnboardingChatEnabled;
   const defaultPostHireTab: TabType = isFiring ? 'transactions' : 'metrics';
   const selectTab = useCallback((tab: TabType) => {
     setHasUserSelectedTab(true);
     setActiveTab(tab);
   }, []);
   const handleHire = useCallback(() => {
-    if (chatEnabled) {
+    if (inlineOnboardingChatEnabled) {
       selectTab('chat');
     }
     onHire();
-  }, [chatEnabled, onHire, selectTab]);
+  }, [inlineOnboardingChatEnabled, onHire, selectTab]);
   const submitChatDraft = useCallback(() => {
     const trimmed = chatDraft.trim();
     if (trimmed.length === 0) {
@@ -2015,6 +2018,7 @@ interface AgentBlockersTabProps {
     input:
       | OperatorConfigInput
       | PendleSetupInput
+      | PortfolioManagerSetupInput
       | FundWalletAcknowledgement
       | GmxSetupInput
       | PiOperatorNoteInput
@@ -2212,6 +2216,36 @@ function AgentBlockersTab({
     });
   };
 
+  const handlePortfolioManagerSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    const operatorWalletAddress =
+      privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
+
+    if (!operatorWalletAddress) {
+      setError(
+        delegationsBypassEnabled
+          ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
+          : 'Connect a wallet to continue.',
+      );
+      return;
+    }
+
+    if (!isHexAddress(operatorWalletAddress)) {
+      setError(
+        delegationsBypassEnabled
+          ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
+          : 'Connected wallet address is not a valid 0x-prefixed hex string.',
+      );
+      return;
+    }
+
+    onInterruptSubmit?.({
+      walletAddress: operatorWalletAddress as `0x${string}`,
+    });
+  };
+
   const handleGmxSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -2302,6 +2336,7 @@ function AgentBlockersTab({
   );
   const showOperatorConfigForm = blockersInterruptView.kind === 'operator-config';
   const showPendleSetupForm = blockersInterruptView.kind === 'pendle-setup';
+  const showPortfolioManagerSetupForm = blockersInterruptView.kind === 'portfolio-manager-setup';
   const showPendleFundWalletForm = blockersInterruptView.kind === 'pendle-fund-wallet';
   const showGmxFundWalletForm = blockersInterruptView.kind === 'gmx-fund-wallet';
   const showGmxSetupForm = blockersInterruptView.kind === 'gmx-setup';
@@ -2561,6 +2596,38 @@ function AgentBlockersTab({
                         },
                       });
                     }}
+                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </form>
+            ) : showPortfolioManagerSetupForm ? (
+              <form onSubmit={handlePortfolioManagerSetupSubmit}>
+                <h3 className="text-lg font-semibold text-white mb-4">Portfolio Manager Setup</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
+                <div className="space-y-4 mb-6">
+                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                    <div className="text-gray-300 text-sm font-medium mb-2">Root delegation setup</div>
+                    <p className="text-gray-400 text-xs">
+                      Shared Ember will observe your connected wallet directly during onboarding and derive
+                      the initial reserve state from that live wallet observation.
+                    </p>
+                    <p className="text-gray-500 text-xs mt-3">
+                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
+                    </p>
+                  </div>
+                </div>
+
+                {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isWalletLoading}
                     className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
                   >
                     Next

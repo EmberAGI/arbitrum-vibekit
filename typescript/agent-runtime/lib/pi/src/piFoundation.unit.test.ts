@@ -109,6 +109,7 @@ describe('pi gateway foundation', () => {
   it('injects session context through Pi-native transformContext and convertToLlm defaults', async () => {
     const captured = {
       messages: [] as Message[],
+      systemPrompt: undefined as string | undefined,
     };
 
     const foundation = createPiRuntimeGatewayFoundation({
@@ -133,6 +134,7 @@ describe('pi gateway foundation', () => {
       agentOptions: {
         streamFn: (_model, context) => {
           captured.messages = context.messages;
+          captured.systemPrompt = context.systemPrompt;
           const stream = new MockAssistantStream();
           queueMicrotask(() => {
             stream.push({
@@ -154,13 +156,10 @@ describe('pi gateway foundation', () => {
         content: [{ type: 'text', text: 'Hello Pi' }],
         timestamp: expect.any(Number),
       },
-      {
-        role: 'user',
-        content:
-          '<pi-runtime-gateway>Thread thread-ctx execution exec-ctx is interrupted. Waiting for wallet confirmation.</pi-runtime-gateway>',
-        timestamp: 456,
-      },
     ]);
+    expect(captured.systemPrompt).toBe(
+      'You are Pi.\n\n<pi-runtime-gateway>Thread thread-ctx execution exec-ctx is interrupted. Waiting for wallet confirmation.</pi-runtime-gateway>',
+    );
   });
 
   it('fails fast when tools use non-portable names', () => {

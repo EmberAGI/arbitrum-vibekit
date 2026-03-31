@@ -179,6 +179,94 @@ describe('deriveUiState', () => {
     expect(uiState.selectors.isActive).toBe(true);
   });
 
+  it('does not treat pre-sync task noise as hired before the current thread snapshot has loaded', () => {
+    const threadState: ThreadState = {
+      ...defaultThreadState,
+      task: {
+        id: 'task-stale',
+        taskStatus: {
+          state: 'input-required',
+          message: { content: 'Waiting for onboarding input.' },
+        },
+      },
+    };
+
+    const uiState = deriveUiState({
+      threadState,
+      runtime: {
+        isConnected: true,
+        hasLoadedSnapshot: false,
+        commandInFlight: false,
+        syncPending: false,
+        pendingSyncMutationId: null,
+      },
+    });
+
+    expect(uiState.selectors.lifecyclePhase).toBe('prehire');
+    expect(uiState.selectors.effectiveTaskState).toBe('input-required');
+    expect(uiState.selectors.isHired).toBe(false);
+  });
+
+  it('does not treat prehire chat task progress as hired or active after snapshot load', () => {
+    const threadState: ThreadState = {
+      ...defaultThreadState,
+      lifecycle: { phase: 'prehire' },
+      task: {
+        id: 'task-chat',
+        taskStatus: {
+          state: 'working',
+          message: 'Ready for a live runtime conversation.',
+        },
+      },
+    };
+
+    const uiState = deriveUiState({
+      threadState,
+      runtime: {
+        isConnected: true,
+        hasLoadedSnapshot: true,
+        commandInFlight: false,
+        syncPending: false,
+        pendingSyncMutationId: null,
+      },
+    });
+
+    expect(uiState.selectors.lifecyclePhase).toBe('prehire');
+    expect(uiState.selectors.effectiveTaskState).toBe(null);
+    expect(uiState.selectors.isHired).toBe(false);
+    expect(uiState.selectors.isActive).toBe(false);
+  });
+
+  it('does not treat a null-lifecycle idle-ready runtime task as hired or active', () => {
+    const threadState: ThreadState = {
+      ...defaultThreadState,
+      lifecycle: null,
+      task: {
+        id: 'task-ready',
+        taskStatus: {
+          state: 'working',
+          message: 'Ready for a live runtime conversation.',
+        },
+      },
+    };
+
+    const uiState = deriveUiState({
+      threadState,
+      runtime: {
+        isConnected: true,
+        hasLoadedSnapshot: true,
+        commandInFlight: false,
+        syncPending: false,
+        pendingSyncMutationId: null,
+      },
+    });
+
+    expect(uiState.selectors.lifecyclePhase).toBe(null);
+    expect(uiState.selectors.effectiveTaskState).toBe(null);
+    expect(uiState.selectors.isHired).toBe(false);
+    expect(uiState.selectors.isActive).toBe(false);
+  });
+
   it('normalizes firing interrupt-like failures into completed effective task state', () => {
     const threadState: ThreadState = {
       ...defaultThreadState,

@@ -15,6 +15,8 @@ import {
 import { lastValueFrom, toArray, type Observable } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { assertSharedThreadSnapshotContract } from './sharedThreadSnapshotContract.test-support';
+
 type RecordedRequest = {
   method: string;
   pathname: string;
@@ -73,6 +75,30 @@ function createResumeRunInput(resumePayload: string, overrides: Partial<RunAgent
 
 async function collectEvents<T>(source$: Observable<T>) {
   return lastValueFrom(source$.pipe(toArray()));
+}
+
+async function readFirstMatchingEventSource<T>(
+  source: readonly T[] | AsyncIterable<T>,
+  predicate: (event: T) => boolean,
+) {
+  if (Array.isArray(source)) {
+    return source.find(predicate);
+  }
+
+  const iterator = source[Symbol.asyncIterator]();
+  try {
+    while (true) {
+      const result = await iterator.next();
+      if (result.done) {
+        return undefined;
+      }
+      if (predicate(result.value)) {
+        return result.value;
+      }
+    }
+  } finally {
+    await iterator.return?.();
+  }
 }
 
 async function waitForAssertion(assertion: () => void, timeoutMs = 1_000): Promise<void> {
@@ -142,11 +168,12 @@ describe('agent-runtime HTTP agent integration', () => {
   let server: Server;
   let runtimeUrl: string;
   let requests: RecordedRequest[];
+  let service: AgentRuntimeService;
 
   beforeEach(async () => {
     requests = [];
 
-    const service: AgentRuntimeService = await createPiExampleGatewayService({
+    service = await createPiExampleGatewayService({
       env: {
         OPENROUTER_API_KEY: 'test-openrouter-key',
         PI_AGENT_EXTERNAL_BOUNDARY_MODE: 'mocked',
@@ -275,6 +302,17 @@ describe('agent-runtime HTTP agent integration', () => {
         ]),
       );
     });
+  });
+
+  it('emits the shared web-facing lifecycle and task status snapshot contract on connect', async () => {
+    const connectEventSource = await service.connect({ threadId: 'thread-1' });
+    const connectSnapshot = await readFirstMatchingEventSource(
+      connectEventSource,
+      (event): event is BaseEvent => event.type === EventType.STATE_SNAPSHOT,
+    );
+
+    expect(connectSnapshot).toBeDefined();
+    assertSharedThreadSnapshotContract((connectSnapshot as Extract<BaseEvent, { snapshot: unknown }>).snapshot);
   });
 
   it('emits live AG-UI tool lifecycle events and automation artifacts when the Pi loop schedules and runs automation', async () => {
@@ -457,7 +495,9 @@ describe('agent-runtime HTTP agent integration', () => {
             task: expect.objectContaining({
               taskStatus: expect.objectContaining({
                 state: 'working',
-                message: 'Operator input received. Continuing the Pi loop.',
+                message: {
+                  content: 'Operator input received. Continuing the Pi loop.',
+                },
               }),
             }),
             artifacts: expect.objectContaining({

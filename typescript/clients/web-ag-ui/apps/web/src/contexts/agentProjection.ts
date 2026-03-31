@@ -145,6 +145,8 @@ export function projectDetailStateFromPayload(
 
 export function projectAgentListUpdateFromState(state: ThreadSnapshot): Partial<AgentListEntry> {
   return projectAgentListUpdate({
+    lifecycle: state.thread.lifecycle,
+    onboardingFlow: state.thread.onboardingFlow,
     profile: state.thread.profile,
     metrics: state.thread.metrics,
     task: state.thread.task,

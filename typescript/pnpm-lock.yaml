@@ -124,6 +124,9 @@ patchedDependencies:
   '@copilotkitnext/runtime@1.54.0':
     hash: 6fdb15da05fbf241773a08848a9e47c117b97fb693ba933381ad8442a5d4c24f
     path: patches/@copilotkitnext__runtime@1.54.0.patch
+  fast-json-patch@3.1.1:
+    hash: 5a36c993e7d9da965b642d6d0e2860c03aaa57b26a71c6f517c9fd070416a7f5
+    path: patches/fast-json-patch@3.1.1.patch
 
 importers:
 
@@ -269,14 +272,14 @@ importers:
         specifier: 0.0.47
         version: 0.0.47
       '@mariozechner/pi-agent-core':
-        specifier: 0.62.0
-        version: 0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
+        specifier: 0.64.0
+        version: 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
       '@mariozechner/pi-ai':
-        specifier: 0.62.0
-        version: 0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
+        specifier: 0.64.0
+        version: 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
       agent-runtime-pi:
         specifier: workspace:^
-        version: file:agent-runtime/lib/pi(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
+        version: link:lib/pi
     dependenciesMeta:
       agent-runtime-pi:
         injected: false
@@ -303,11 +306,11 @@ importers:
         specifier: 0.0.47
         version: 0.0.47
       '@mariozechner/pi-agent-core':
-        specifier: 0.62.0
-        version: 0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+        specifier: 0.64.0
+        version: 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
       '@mariozechner/pi-ai':
-        specifier: 0.62.0
-        version: 0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+        specifier: 0.64.0
+        version: 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
       agent-runtime-postgres:
         specifier: workspace:^
         version: link:../postgres
@@ -528,7 +531,7 @@ importers:
         version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
-        version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
+        version: file:clients/web-ag-ui/apps/agent-workflow-core(@bufbuild/protobuf@2.10.2)(@grpc/grpc-js@1.14.3)(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(express@5.1.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
@@ -625,7 +628,7 @@ importers:
         version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
-        version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
+        version: file:clients/web-ag-ui/apps/agent-workflow-core(@bufbuild/protobuf@2.10.2)(@grpc/grpc-js@1.14.3)(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(express@5.1.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
@@ -725,7 +728,7 @@ importers:
         version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
-        version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
+        version: file:clients/web-ag-ui/apps/agent-workflow-core(@bufbuild/protobuf@2.10.2)(@grpc/grpc-js@1.14.3)(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(express@5.1.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
@@ -828,7 +831,7 @@ importers:
         version: link:../agent-runtime-langgraph
       agent-workflow-core:
         specifier: workspace:^
-        version: file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
+        version: file:clients/web-ag-ui/apps/agent-workflow-core(@bufbuild/protobuf@2.10.2)(@grpc/grpc-js@1.14.3)(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(express@5.1.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
@@ -900,11 +903,33 @@ importers:
   clients/web-ag-ui/apps/agent-pi-example:
     dependencies:
       '@mariozechner/pi-ai':
-        specifier: 0.62.0
-        version: 0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
+        specifier: 0.64.0
+        version: 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
       agent-runtime:
         specifier: workspace:^
-        version: link:../../../../agent-runtime
+        version: file:agent-runtime(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+    dependenciesMeta:
+      agent-runtime:
+        injected: false
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.2
+        version: 22.19.2
+      tsx:
+        specifier: 'catalog:'
+        version: 4.20.6
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.2)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
+
+  clients/web-ag-ui/apps/agent-portfolio-manager:
+    dependencies:
+      agent-runtime:
+        specifier: workspace:^
+        version: file:agent-runtime(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
     dependenciesMeta:
       agent-runtime:
         injected: false
@@ -955,7 +980,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.2)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.2)(@vitest/ui@3.2.4(vitest@3.2.4))(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.8(@types/node@22.19.2)(typescript@5.9.3))(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)
 
   clients/web-ag-ui/apps/web:
     dependencies:
@@ -985,7 +1010,7 @@ importers:
         version: 5.90.12(react@19.2.3)
       agent-runtime:
         specifier: workspace:^
-        version: file:agent-runtime(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+        version: file:agent-runtime(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
       lucide-react:
         specifier: ^0.561.0
         version: 0.561.0(react@19.2.3)
@@ -1051,7 +1076,7 @@ importers:
         version: 4.0.18(vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.30.2)(msw@2.12.8(@types/node@20.19.21)(typescript@5.9.3))(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1))
       agent-pi-example:
         specifier: workspace:^
-        version: file:clients/web-ag-ui/apps/agent-pi-example(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+        version: file:clients/web-ag-ui/apps/agent-pi-example(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
       eslint:
         specifier: ^9
         version: 9.39.2(jiti@2.6.1)
@@ -5749,12 +5774,12 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
-  '@mariozechner/pi-agent-core@0.62.0':
-    resolution: {integrity: sha512-SBjqgDrgKOaC+IGzFGB3jXQErv9H1QMYnWFvUg6ra6dG0ZgWFBUZb6unidngWLsmaxSDWes6KeKiVFMsr2VSEQ==}
+  '@mariozechner/pi-agent-core@0.64.0':
+    resolution: {integrity: sha512-IN/sIxWOD0v1OFVXHB605SGiZhO5XdEWG5dO8EAV08n3jz/p12o4OuYGvhGXmHhU28WXa/FGWC+FO5xiIih8Uw==}
     engines: {node: '>=20.0.0'}
 
-  '@mariozechner/pi-ai@0.62.0':
-    resolution: {integrity: sha512-mJgryZ5RgBQG++tiETMtCQQJoH2MAhKetCfqI98NMvGydu7L9x2qC2JekQlRaAgIlTgv4MRH1UXHMEs4UweE/Q==}
+  '@mariozechner/pi-ai@0.64.0':
+    resolution: {integrity: sha512-Z/Jnf+JSVDPLRcxJsa8XhYTJKIqKekNueaCpBLGQHgizL1F9RQ1Rur3rIfZpfXkt2cLu/AIPtOs223ueuoWaWg==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -9205,6 +9230,7 @@ packages:
   '@vercel/postgres@0.10.0':
     resolution: {integrity: sha512-fSD23DxGND40IzSkXjcFcxr53t3Tiym59Is0jSYIFpG4/0f0KO9SGtcp1sXiebvPaGe7N/tU05cH4yt2S6/IPg==}
     engines: {node: '>=18.14'}
+    deprecated: '@vercel/postgres is deprecated. You can either choose an alternate storage solution from the Vercel Marketplace if you want to set up a new database. Or you can follow this guide to migrate your existing Vercel Postgres db: https://neon.com/docs/guides/vercel-postgres-transition-guide'
 
   '@viem/anvil@0.0.10':
     resolution: {integrity: sha512-9PzYXBRikfSUhhm8Bd0avv07agwcbMJ5FaSu2D2vbE0cxkvXGtolL3fW5nz2yefMqOqVQL4XzfM5nwY81x3ytw==}
@@ -14566,6 +14592,7 @@ packages:
   next@16.0.8:
     resolution: {integrity: sha512-LmcZzG04JuzNXi48s5P+TnJBsTGPJunViNKV/iE4uM6kstjTQsQhvsAv+xF6MJxU2Pr26tl15eVbp0jQnsv6/g==}
     engines: {node: '>=20.9.0'}
+    deprecated: This version has a security vulnerability. Please upgrade to a patched version. See https://nextjs.org/blog/security-update-2025-12-11 for more details.
     hasBin: true
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
@@ -18124,6 +18151,7 @@ packages:
   whatwg-encoding@3.1.1:
     resolution: {integrity: sha512-6qN4hJdMwfYBtE3YBTTHhoeuUrDBPZmbQaxWAqSALV/MeEnR5z1xd8UKud2RAkFoPkmB+hli1TZSnyi84xz1vQ==}
     engines: {node: '>=18'}
+    deprecated: Use @exodus/bytes instead for a more spec-conformant and faster implementation
 
   whatwg-fetch@3.6.20:
     resolution: {integrity: sha512-EqhiFU6daOA8kpjOWTL0olhVOF3i7OrFzSYiGsEMB8GcXS+RrzauAERX65xMeNWVqxA6HXH2m69Z9LaKKdisfg==}
@@ -18584,7 +18612,7 @@ snapshots:
       '@ag-ui/proto': 0.0.47
       '@types/uuid': 10.0.0
       compare-versions: 6.1.1
-      fast-json-patch: 3.1.1
+      fast-json-patch: 3.1.1(patch_hash=5a36c993e7d9da965b642d6d0e2860c03aaa57b26a71c6f517c9fd070416a7f5)
       rxjs: 7.8.1
       untruncate-json: 0.0.1
       uuid: 11.1.0
@@ -18597,7 +18625,7 @@ snapshots:
       '@ag-ui/proto': 0.0.48
       '@types/uuid': 10.0.0
       compare-versions: 6.1.1
-      fast-json-patch: 3.1.1
+      fast-json-patch: 3.1.1(patch_hash=5a36c993e7d9da965b642d6d0e2860c03aaa57b26a71c6f517c9fd070416a7f5)
       rxjs: 7.8.1
       untruncate-json: 0.0.1
       uuid: 11.1.0
@@ -23177,9 +23205,9 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mariozechner/pi-agent-core@0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)':
+  '@mariozechner/pi-agent-core@0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)':
     dependencies:
-      '@mariozechner/pi-ai': 0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+      '@mariozechner/pi-ai': 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - aws-crt
@@ -23189,9 +23217,9 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-agent-core@0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)':
+  '@mariozechner/pi-agent-core@0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)':
     dependencies:
-      '@mariozechner/pi-ai': 0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
+      '@mariozechner/pi-ai': 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - aws-crt
@@ -23201,19 +23229,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-agent-core@0.62.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)':
-    dependencies:
-      '@mariozechner/pi-ai': 0.62.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - aws-crt
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
-  '@mariozechner/pi-ai@0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)':
+  '@mariozechner/pi-ai@0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)':
     dependencies:
       '@anthropic-ai/sdk': 0.73.0(zod@3.25.76)
       '@aws-sdk/client-bedrock-runtime': 3.1013.0
@@ -23237,7 +23253,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-ai@0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)':
+  '@mariozechner/pi-ai@0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)':
     dependencies:
       '@anthropic-ai/sdk': 0.73.0(zod@4.3.5)
       '@aws-sdk/client-bedrock-runtime': 3.1013.0
@@ -23252,30 +23268,6 @@ snapshots:
       proxy-agent: 6.5.0
       undici: 7.22.0
       zod-to-json-schema: 3.25.1(zod@4.3.5)
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - aws-crt
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
-  '@mariozechner/pi-ai@0.62.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)':
-    dependencies:
-      '@anthropic-ai/sdk': 0.73.0(zod@3.25.76)
-      '@aws-sdk/client-bedrock-runtime': 3.1013.0
-      '@google/genai': 1.46.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@mistralai/mistralai': 1.14.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@sinclair/typebox': 0.34.48
-      ajv: 8.17.1
-      ajv-formats: 3.0.1(ajv@8.17.1)
-      chalk: 5.6.2
-      openai: 6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
-      partial-json: 0.1.7
-      proxy-agent: 6.5.0
-      undici: 7.22.0
-      zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - aws-crt
@@ -32675,14 +32667,17 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  agent-pi-example@file:clients/web-ag-ui/apps/agent-pi-example(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76):
+  agent-pi-example@file:clients/web-ag-ui/apps/agent-pi-example(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76):
     dependencies:
-      '@mariozechner/pi-ai': 0.62.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
-      agent-runtime: file:agent-runtime(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+      '@mariozechner/pi-ai': 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+      agent-runtime: file:agent-runtime(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
     transitivePeerDependencies:
+      - '@bufbuild/protobuf'
+      - '@grpc/grpc-js'
       - '@modelcontextprotocol/sdk'
       - aws-crt
       - bufferutil
+      - express
       - pg-native
       - supports-color
       - utf-8-validate
@@ -32699,34 +32694,42 @@ snapshots:
       - zod
       - zod-to-json-schema
 
-  agent-runtime-pi@file:agent-runtime/lib/pi(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5):
+  agent-runtime-pi@file:agent-runtime/lib/pi(@bufbuild/protobuf@2.10.2)(@grpc/grpc-js@1.14.3)(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5):
     dependencies:
+      '@a2a-js/sdk': 0.3.13(@bufbuild/protobuf@2.10.2)(@grpc/grpc-js@1.14.3)(express@5.1.0)
       '@ag-ui/client': 0.0.47
       '@ag-ui/core': 0.0.47
-      '@mariozechner/pi-agent-core': 0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
-      '@mariozechner/pi-ai': 0.62.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
+      '@mariozechner/pi-agent-core': 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
+      '@mariozechner/pi-ai': 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
       agent-runtime-postgres: file:agent-runtime/lib/postgres
     transitivePeerDependencies:
+      - '@bufbuild/protobuf'
+      - '@grpc/grpc-js'
       - '@modelcontextprotocol/sdk'
       - aws-crt
       - bufferutil
+      - express
       - pg-native
       - supports-color
       - utf-8-validate
       - ws
       - zod
 
-  agent-runtime-pi@file:agent-runtime/lib/pi(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76):
+  agent-runtime-pi@file:agent-runtime/lib/pi(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76):
     dependencies:
+      '@a2a-js/sdk': 0.3.13(@bufbuild/protobuf@2.10.2)(@grpc/grpc-js@1.14.3)(express@5.1.0)
       '@ag-ui/client': 0.0.47
       '@ag-ui/core': 0.0.47
-      '@mariozechner/pi-agent-core': 0.62.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
-      '@mariozechner/pi-ai': 0.62.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+      '@mariozechner/pi-agent-core': 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+      '@mariozechner/pi-ai': 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
       agent-runtime-postgres: file:agent-runtime/lib/postgres
     transitivePeerDependencies:
+      - '@bufbuild/protobuf'
+      - '@grpc/grpc-js'
       - '@modelcontextprotocol/sdk'
       - aws-crt
       - bufferutil
+      - express
       - pg-native
       - supports-color
       - utf-8-validate
@@ -32739,28 +32742,55 @@ snapshots:
     transitivePeerDependencies:
       - pg-native
 
-  agent-runtime@file:agent-runtime(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76):
+  agent-runtime@file:agent-runtime(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76):
     dependencies:
       '@ag-ui/client': 0.0.47
       '@ag-ui/core': 0.0.47
-      '@mariozechner/pi-agent-core': 0.62.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
-      '@mariozechner/pi-ai': 0.62.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
-      agent-runtime-pi: file:agent-runtime/lib/pi(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+      '@mariozechner/pi-agent-core': 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+      '@mariozechner/pi-ai': 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
+      agent-runtime-pi: file:agent-runtime/lib/pi(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@3.25.76))(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)
     transitivePeerDependencies:
+      - '@bufbuild/protobuf'
+      - '@grpc/grpc-js'
       - '@modelcontextprotocol/sdk'
       - aws-crt
       - bufferutil
+      - express
       - pg-native
       - supports-color
       - utf-8-validate
       - ws
       - zod
 
-  agent-workflow-core@file:clients/web-ag-ui/apps/agent-workflow-core(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5):
+  agent-runtime@file:agent-runtime(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5):
     dependencies:
+      '@ag-ui/client': 0.0.47
+      '@ag-ui/core': 0.0.47
+      '@mariozechner/pi-agent-core': 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
+      '@mariozechner/pi-ai': 0.64.0(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
+      agent-runtime-pi: file:agent-runtime/lib/pi(@bufbuild/protobuf@2.10.2)(@grpc/grpc-js@1.14.3)(@modelcontextprotocol/sdk@1.25.3(@cfworker/json-schema@4.1.1)(hono@4.12.9)(zod@4.3.5))(bufferutil@4.0.9)(express@5.1.0)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)
+    transitivePeerDependencies:
+      - '@bufbuild/protobuf'
+      - '@grpc/grpc-js'
+      - '@modelcontextprotocol/sdk'
+      - aws-crt
+      - bufferutil
+      - express
+      - pg-native
+      - supports-color
+      - utf-8-validate
+      - ws
+      - zod
+
+  agent-workflow-core@file:clients/web-ag-ui/apps/agent-workflow-core(@bufbuild/protobuf@2.10.2)(@grpc/grpc-js@1.14.3)(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(express@5.1.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5):
+    dependencies:
+      '@a2a-js/sdk': 0.3.13(@bufbuild/protobuf@2.10.2)(@grpc/grpc-js@1.14.3)(express@5.1.0)
       agent-runtime-langgraph: file:clients/web-ag-ui/apps/agent-runtime-langgraph(@langchain/core@1.1.4(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.3.5)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod-to-json-schema@3.25.1(zod@4.3.5))(zod@4.3.5)
     transitivePeerDependencies:
+      - '@bufbuild/protobuf'
+      - '@grpc/grpc-js'
       - '@langchain/core'
+      - express
       - react
       - react-dom
       - zod
@@ -35820,7 +35850,7 @@ snapshots:
       merge2: 1.4.1
       micromatch: 4.0.8
 
-  fast-json-patch@3.1.1: {}
+  fast-json-patch@3.1.1(patch_hash=5a36c993e7d9da965b642d6d0e2860c03aaa57b26a71c6f517c9fd070416a7f5): {}
 
   fast-json-stable-stringify@2.1.0: {}
 

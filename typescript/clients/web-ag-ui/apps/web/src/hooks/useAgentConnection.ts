@@ -23,6 +23,7 @@ import {
   type AgentInterrupt,
   type OperatorConfigInput,
   type PendleSetupInput,
+  type PortfolioManagerSetupInput,
   type GmxSetupInput,
   type PiOperatorNoteInput,
   type FundingTokenInput,
@@ -147,6 +148,7 @@ export type {
   AgentInterrupt,
   OperatorConfigInput,
   PendleSetupInput,
+  PortfolioManagerSetupInput,
   GmxSetupInput,
   PiOperatorNoteInput,
   FundWalletAcknowledgement,
@@ -194,6 +196,7 @@ export interface UseAgentConnectionResult {
     input:
       | OperatorConfigInput
       | PendleSetupInput
+      | PortfolioManagerSetupInput
       | GmxSetupInput
       | PiOperatorNoteInput
       | FundWalletAcknowledgement
@@ -412,7 +415,39 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [],
   );
 
-  const runCommand = useCallback((command: string) => dispatchCommand(command), [dispatchCommand]);
+  const runDirectCommand = useCallback(
+    (command: string) => {
+      const scheduler = commandSchedulerRef.current;
+      if (!scheduler) {
+        return false;
+      }
+
+      return scheduler.dispatchCustom({
+        command,
+        run: async (currentAgent) =>
+          copilotkit.runAgent({
+            agent: currentAgent,
+            forwardedProps: {
+              command: {
+                name: command,
+              },
+            },
+          } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+      });
+    },
+    [copilotkit],
+  );
+
+  const runCommand = useCallback(
+    (command: string) => {
+      if (config.imperativeCommandTransport === 'forwarded-props') {
+        return runDirectCommand(command);
+      }
+
+      return dispatchCommand(command);
+    },
+    [config.imperativeCommandTransport, dispatchCommand, runDirectCommand],
+  );
 
   const setRunInFlight = useCallback((next: boolean) => {
     runInFlightRef.current = next;
@@ -1196,10 +1231,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             copilotkit.runAgent({
               agent: current,
             } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+          runDirectCommand: async (current, commandName) =>
+            copilotkit.runAgent({
+              agent: current,
+              forwardedProps: {
+                command: {
+                  name: commandName,
+                },
+              },
+            } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
           preemptActiveRun: async (current) => copilotkit.stopAgent({ agent: current }),
           threadId,
           runInFlightRef,
           createId: v7,
+          commandTransport: config.imperativeCommandTransport,
           onError: (message) => {
             setUiError(message);
             setIsFiring(false);
@@ -1232,7 +1277,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     }
 
     setTimeout(() => setIsFiring(false), 3000);
-  }, [copilotkit, isFiring, threadId]);
+  }, [config.imperativeCommandTransport, copilotkit, isFiring, threadId]);
 
   const sendChatMessage = useCallback(
     (content: string) => {
@@ -1304,6 +1349,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       input:
         | OperatorConfigInput
         | PendleSetupInput
+        | PortfolioManagerSetupInput
         | GmxSetupInput
         | PiOperatorNoteInput
         | FundWalletAcknowledgement

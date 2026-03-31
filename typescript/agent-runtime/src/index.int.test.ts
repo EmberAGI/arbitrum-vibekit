@@ -29,6 +29,14 @@ type InternalPersistDirectExecutionOptions = {
   threadState: Record<string, unknown>;
   now: Date;
 };
+type PersistedThreadRecord = {
+  threadId: string;
+  threadKey: string;
+  status: string;
+  threadState: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 type LifecycleState = {
   phase: string;
@@ -114,6 +122,63 @@ function createInternalPostgresHooks(
     loadInspectionState,
     executeStatements,
     persistDirectExecution,
+  };
+}
+
+function createPersistingInternalPostgres() {
+  const persistedThreads = new Map<string, PersistedThreadRecord>();
+  const loadInspectionState = vi.fn(async () => ({
+    threads: [...persistedThreads.values()],
+    executions: [],
+    automations: [],
+    automationRuns: [],
+    interrupts: [],
+    leases: [],
+    outboxIntents: [],
+    executionEvents: [],
+    threadActivities: [],
+  }));
+  const persistDirectExecution = vi.fn(async (options: unknown) => {
+    const params = options as InternalPersistDirectExecutionOptions;
+    persistedThreads.set(params.threadKey, {
+      threadId: params.threadId,
+      threadKey: params.threadKey,
+      status: 'active',
+      threadState: params.threadState,
+      createdAt: params.now,
+      updatedAt: params.now,
+    });
+  });
+  const executeStatements = vi.fn(
+    async (_databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
+      for (const statement of statements) {
+        if (statement.tableName !== 'pi_threads') {
+          continue;
+        }
+
+        const [threadId, threadKey, status, threadStateValue, createdAt, updatedAt] = statement.values;
+        persistedThreads.set(threadKey as string, {
+          threadId: threadId as string,
+          threadKey: threadKey as string,
+          status: status as string,
+          threadState:
+            typeof threadStateValue === 'string'
+              ? (JSON.parse(threadStateValue) as Record<string, unknown>)
+              : (threadStateValue as Record<string, unknown>),
+          createdAt: createdAt as Date,
+          updatedAt: updatedAt as Date,
+        });
+      }
+    },
+  );
+
+  return {
+    persistedThreads,
+    hooks: createInternalPostgresHooks({
+      loadInspectionState,
+      executeStatements,
+      persistDirectExecution,
+    }),
   };
 }
 
@@ -261,6 +326,13 @@ function isMessagesSnapshotEvent(event: GatewayEvent): event is MessagesSnapshot
   return typeof event === 'object' && event !== null && 'messages' in event;
 }
 
+function hasSystemPromptFragments(
+  prompts: readonly string[],
+  fragments: readonly string[],
+): boolean {
+  return prompts.some((prompt) => fragments.every((fragment) => prompt.includes(fragment)));
+}
+
 function createLifecycleDomain() {
   const phases = new Map<string, LifecycleState>();
 
@@ -340,6 +412,11 @@ function createLifecycleDomain() {
                 type: 'operator-config',
                 surfacedInThread: true,
                 message: 'Please provide a short operator note to continue onboarding.',
+                payload: {
+                  promptKind: 'text-note',
+                  inputLabel: 'Operator note',
+                  submitLabel: 'Continue agent loop',
+                },
               },
             },
           };
@@ -444,6 +521,7 @@ describe('agent-runtime integration', () => {
     let observedDomainCommandToolDescription = '';
     let observedDomainCommandNames: string[] = [];
     let sawSyntheticDomainContextMessage = false;
+    const { persistedThreads, hooks: internalPostgres } = createPersistingInternalPostgres();
 
     const domain = createLifecycleDomain();
     const runtime = await createAgentRuntime({
@@ -522,8 +600,16 @@ describe('agent-runtime integration', () => {
           });
         },
       },
-      __internalPostgres: createInternalPostgresHooks(),
+      __internalPostgres: internalPostgres,
     } as any);
+
+    const initialConnectSnapshot = await readFirstMatchingEvent(
+      await runtime.service.connect({
+        threadId: 'thread-1',
+        runId: 'run-connect-initial',
+      }),
+      isStateSnapshotEvent,
+    );
 
     const hireEvents = await collectEventSource(
       await runtime.service.run({
@@ -541,7 +627,12 @@ describe('agent-runtime integration', () => {
 
     const hireSnapshot = hireEvents.find(isStateSnapshotEvent);
     expect(latestUserText).toBe('Please hire the agent.');
-    expect(observedSystemPrompts).toContain('You are a lifecycle agent.\n\nLifecycle phase: prehire.');
+    expect(
+      hasSystemPromptFragments(observedSystemPrompts, [
+        'You are a lifecycle agent.',
+        'Lifecycle phase: prehire.',
+      ]),
+    ).toBe(true);
     expect(observedDomainCommandToolDescription).toContain('Available commands: hire (Start onboarding.)');
     expect(observedDomainCommandToolDescription).toContain('complete_onboarding (Finish onboarding.)');
     expect(observedDomainCommandNames).toEqual([
@@ -551,6 +642,16 @@ describe('agent-runtime integration', () => {
       'fire',
     ]);
     expect(sawSyntheticDomainContextMessage).toBe(false);
+    expect(initialConnectSnapshot).toBeDefined();
+    expect(initialConnectSnapshot!.snapshot.thread.lifecycle).toMatchObject({
+      phase: 'prehire',
+    });
+    expect(initialConnectSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
+      state: 'working',
+      message: {
+        content: 'Ready for a live runtime conversation.',
+      },
+    });
     expect(hireSnapshot).toBeDefined();
     expect(hireSnapshot!.snapshot.thread.lifecycle).toMatchObject({
       phase: 'onboarding',
@@ -558,8 +659,44 @@ describe('agent-runtime integration', () => {
     });
     expect(hireSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
       state: 'input-required',
-      message: 'Please provide a short operator note to continue onboarding.',
+      message: {
+        content: 'Please provide a short operator note to continue onboarding.',
+      },
     });
+    expect(hireSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
+      type: 'interrupt-status',
+      interruptType: 'operator-config',
+      payload: {
+        promptKind: 'text-note',
+        inputLabel: 'Operator note',
+        submitLabel: 'Continue agent loop',
+      },
+    });
+    expect(hireSnapshot!.snapshot.thread.activity?.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'dispatch-response',
+          parts: expect.arrayContaining([
+            expect.objectContaining({
+              kind: 'a2ui',
+              data: expect.objectContaining({
+                payload: expect.objectContaining({
+                  kind: 'interrupt',
+                  payload: expect.objectContaining({
+                    type: 'operator-config',
+                    promptKind: 'text-note',
+                    inputLabel: 'Operator note',
+                    submitLabel: 'Continue agent loop',
+                  }),
+                }),
+              }),
+            }),
+          ]),
+        }),
+      ]),
+    );
+
+    expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('a2ui');
 
     const resumeEvents = await collectEventSource(
       await runtime.service.run({
@@ -583,13 +720,17 @@ describe('agent-runtime integration', () => {
     });
     expect(resumeSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
       state: 'working',
-      message: 'Operator note captured. Ready to complete onboarding.',
+      message: {
+        content: 'Operator note captured. Ready to complete onboarding.',
+      },
     });
     expect(resumeSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
       type: 'lifecycle-status',
       onboardingStep: 'delegation-note',
       operatorNote: 'safe window approved',
     });
+
+    expect(persistedThreads.get('thread-1')?.threadState).not.toHaveProperty('a2ui');
 
     const completeEvents = await collectEventSource(
       await runtime.service.run({
@@ -612,7 +753,9 @@ describe('agent-runtime integration', () => {
     });
     expect(completeSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
       state: 'completed',
-      message: 'Onboarding complete. Agent is now hired.',
+      message: {
+        content: 'Onboarding complete. Agent is now hired.',
+      },
     });
     expect(completeSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
       type: 'lifecycle-status',
@@ -641,13 +784,169 @@ describe('agent-runtime integration', () => {
     });
     expect(fireSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
       state: 'completed',
-      message: 'Agent moved to fired. Rehire is still available in this thread.',
+      message: {
+        content: 'Agent moved to fired. Rehire is still available in this thread.',
+      },
     });
     expect(fireSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
       type: 'lifecycle-status',
       phase: 'fired',
       operatorNote: 'safe window approved',
     });
+  });
+
+  it('executes forwardedProps command before inference when both command and messages are present', async () => {
+    let inferenceCalls = 0;
+
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => {
+          inferenceCalls += 1;
+          return createTextStream('This should never be emitted for direct commands.');
+        },
+      },
+      __internalPostgres: createInternalPostgresHooks(),
+    } as any);
+
+    const events = await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-direct-command',
+        runId: 'run-direct-hire',
+        messages: [
+          {
+            id: 'message-1',
+            role: 'user',
+            content: 'Please hire the agent later.',
+          },
+        ],
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const snapshot = events.find(isStateSnapshotEvent);
+
+    expect(inferenceCalls).toBe(0);
+    expect(snapshot).toBeDefined();
+    expect(snapshot!.snapshot.thread.lifecycle).toMatchObject({
+      phase: 'onboarding',
+      onboardingStep: 'operator-profile',
+    });
+    expect(snapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
+      state: 'input-required',
+      message: {
+        content: 'Please provide a short operator note to continue onboarding.',
+      },
+    });
+  });
+
+  it('logs the final system prompt when DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT is enabled', async () => {
+    const originalDebugFlag = process.env.DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT;
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    process.env.DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT = '1';
+
+    try {
+      const runtime = await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are a lifecycle agent.',
+        domain: createLifecycleDomain(),
+        agentOptions: {
+          streamFn: () => createTextStream('Debug prompt captured.'),
+        },
+        __internalPostgres: createInternalPostgresHooks(),
+      } as any);
+
+      await collectEventSource(
+        await runtime.service.run({
+          threadId: 'thread-debug-system-prompt',
+          runId: 'run-debug-system-prompt',
+          messages: [
+            {
+              id: 'message-debug-system-prompt',
+              role: 'user',
+              content: 'Show me the runtime prompt.',
+            },
+          ],
+        }),
+      );
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '[agent-runtime] final system prompt for thread thread-debug-system-prompt:',
+        ),
+      );
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Lifecycle phase: prehire.'),
+      );
+    } finally {
+      consoleLogSpy.mockRestore();
+      if (originalDebugFlag === undefined) {
+        delete process.env.DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT;
+      } else {
+        process.env.DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT = originalDebugFlag;
+      }
+    }
+  });
+
+  it('awaits async domain system context before starting inference', async () => {
+    const observedSystemPrompts: string[] = [];
+
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are an async lifecycle agent.',
+      domain: {
+        lifecycle: {
+          initialPhase: 'prehire',
+          phases: ['prehire'],
+          terminalPhases: [],
+          commands: [],
+          transitions: [],
+          interrupts: [],
+        },
+        systemContext: async () => {
+          await Promise.resolve();
+          return ['<async_context>', '  <phase>prehire</phase>', '</async_context>'];
+        },
+      },
+      agentOptions: {
+        streamFn: (_model, context) => {
+          observedSystemPrompts.push(context.systemPrompt ?? '');
+          return createTextStream('Async context observed.');
+        },
+      },
+      __internalPostgres: createInternalPostgresHooks(),
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-async-context',
+        runId: 'run-async-context',
+        messages: [
+          {
+            id: 'message-async-context',
+            role: 'user',
+            content: 'Show async context.',
+          },
+        ],
+      }),
+    );
+
+    expect(
+      observedSystemPrompts.some(
+        (prompt) =>
+          prompt.includes('You are an async lifecycle agent.') &&
+          prompt.includes('<async_context>') &&
+          prompt.includes('<phase>prehire</phase>') &&
+          prompt.includes('</async_context>'),
+      ),
+    ).toBe(true);
   });
 
   it('runs scheduled automation updates through the runtime-owned default Postgres bootstrap path', async () => {
@@ -786,66 +1085,7 @@ describe('agent-runtime integration', () => {
   });
 
   it('rehydrates persisted transcript before reconnect snapshots after process restart', async () => {
-    const persistedThreads = new Map<
-      string,
-      {
-        threadId: string;
-        threadKey: string;
-        status: string;
-        threadState: Record<string, unknown>;
-        createdAt: Date;
-        updatedAt: Date;
-      }
-    >();
-    const loadInspectionState = vi.fn(async () => ({
-      threads: [...persistedThreads.values()],
-      executions: [],
-      automations: [],
-      automationRuns: [],
-      interrupts: [],
-      leases: [],
-      outboxIntents: [],
-      executionEvents: [],
-      threadActivities: [],
-    }));
-    const persistDirectExecution = vi.fn(async (options: unknown) => {
-      const params = options as InternalPersistDirectExecutionOptions;
-      persistedThreads.set(params.threadKey, {
-        threadId: params.threadId,
-        threadKey: params.threadKey,
-        status: 'active',
-        threadState: params.threadState,
-        createdAt: params.now,
-        updatedAt: params.now,
-      });
-    });
-    const executeStatements = vi.fn(
-      async (_databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
-        for (const statement of statements) {
-          if (statement.tableName !== 'pi_threads') {
-            continue;
-          }
-
-          const [threadId, threadKey, status, threadStateValue, createdAt, updatedAt] = statement.values;
-          persistedThreads.set(threadKey as string, {
-            threadId: threadId as string,
-            threadKey: threadKey as string,
-            status: status as string,
-            threadState:
-              typeof threadStateValue === 'string'
-                ? (JSON.parse(threadStateValue) as Record<string, unknown>)
-                : (threadStateValue as Record<string, unknown>),
-            createdAt: createdAt as Date,
-            updatedAt: updatedAt as Date,
-          });
-        }
-      },
-    );
-    const internalPostgres = createInternalPostgresHooks({
-      loadInspectionState,
-      executeStatements,
-      persistDirectExecution,
-    });
+    const { hooks: internalPostgres } = createPersistingInternalPostgres();
 
     const runtimeA = await createAgentRuntime({
       model: createModel('int-model'),
@@ -899,5 +1139,151 @@ describe('agent-runtime integration', () => {
         (message) => typeof message === 'object' && message !== null && 'role' in message && message.role === 'assistant',
       ),
     ).toBe(true);
+  });
+
+  it('rehydrates persisted domain state before rebuilding system prompt after process restart', async () => {
+    const { hooks: internalPostgres } = createPersistingInternalPostgres();
+
+    const runtimeA = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a persistence agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused for direct command.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeA.service.run({
+        threadId: 'thread-domain-state',
+        runId: 'run-domain-state-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const observedSystemPrompts: string[] = [];
+    const runtimeB = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a persistence agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: (_model, context) => {
+          observedSystemPrompts.push(context.systemPrompt ?? '');
+          return createTextStream('Prompt rebuilt after restart.');
+        },
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeB.service.run({
+        threadId: 'thread-domain-state',
+        runId: 'run-domain-state-after-restart',
+        messages: [
+          {
+            id: 'message-domain-state-after-restart',
+            role: 'user',
+            content: 'What state are you in?',
+          },
+        ],
+      }),
+    );
+
+    expect(
+      hasSystemPromptFragments(observedSystemPrompts, [
+        'You are a persistence agent.',
+        'Lifecycle phase: onboarding.',
+      ]),
+    ).toBe(true);
+  });
+
+  it('recovers domain state from persisted thread lifecycle when the dedicated domain-state blob is missing', async () => {
+    const { persistedThreads, hooks: internalPostgres } = createPersistingInternalPostgres();
+
+    const runtimeA = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a persistence agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused for direct command.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeA.service.run({
+        threadId: 'thread-legacy-lifecycle',
+        runId: 'run-legacy-lifecycle-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const persistedThread = persistedThreads.get('thread-legacy-lifecycle');
+    expect(persistedThread).toBeDefined();
+    if (!persistedThread) {
+      return;
+    }
+
+    const legacyThreadState = {
+      ...persistedThread.threadState,
+    };
+    delete legacyThreadState.__agentRuntimeDomainState;
+    persistedThreads.set('thread-legacy-lifecycle', {
+      ...persistedThread,
+      threadState: legacyThreadState,
+    });
+
+    const observedSystemPrompts: string[] = [];
+    const runtimeB = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a persistence agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: (_model, context) => {
+          observedSystemPrompts.push(context.systemPrompt ?? '');
+          return createTextStream('Recovered from legacy lifecycle state.');
+        },
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeB.service.run({
+        threadId: 'thread-legacy-lifecycle',
+        runId: 'run-legacy-lifecycle-after-restart',
+        messages: [
+          {
+            id: 'message-legacy-lifecycle-after-restart',
+            role: 'user',
+            content: 'What state are you in?',
+          },
+        ],
+      }),
+    );
+
+    expect(
+      hasSystemPromptFragments(observedSystemPrompts, [
+        'You are a persistence agent.',
+        'Lifecycle phase: onboarding.',
+      ]),
+    ).toBe(true);
+
+    const migratedThreadState = persistedThreads.get('thread-legacy-lifecycle')?.threadState;
+    expect(migratedThreadState).toMatchObject({
+      __agentRuntimeDomainState: {
+        phase: 'onboarding',
+        onboardingStep: 'operator-profile',
+        operatorNote: null,
+      },
+    });
   });
 });

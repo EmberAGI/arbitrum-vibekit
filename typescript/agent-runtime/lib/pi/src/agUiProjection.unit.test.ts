@@ -45,7 +45,9 @@ describe('pi AG-UI projection', () => {
           id: 'exec-1',
           taskStatus: {
             state: 'input-required',
-            message: 'Waiting for wallet confirmation.',
+            message: {
+              content: 'Waiting for wallet confirmation.',
+            },
           },
         },
         projection: {
