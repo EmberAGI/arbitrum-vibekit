@@ -118,12 +118,13 @@ describe('HireAgentsRoute integration', () => {
     expect(capturedProps).not.toBeNull();
     const props = capturedProps as HireAgentsRoutePropsCapture;
 
-    expect(props.agents).toHaveLength(4);
+    expect(props.agents).toHaveLength(5);
     expect(props.featuredAgents).toHaveLength(3);
 
     const clmm = props.agents.find((agent) => agent.id === 'agent-clmm');
     const pendle = props.agents.find((agent) => agent.id === 'agent-pendle');
     const piExample = props.agents.find((agent) => agent.id === 'agent-pi-example');
+    const portfolioManager = props.agents.find((agent) => agent.id === 'agent-portfolio-manager');
 
     expect(clmm?.chains).toEqual(['Arbitrum']);
     expect(clmm?.tokens).toEqual(['USDC', 'WETH', 'WBTC']);
@@ -140,6 +141,12 @@ describe('HireAgentsRoute integration', () => {
     expect(piExample?.tokens).toEqual(['USDC']);
     expect(piExample?.pointsTrend).toBe('up');
     expect(piExample?.trendMultiplier).toBe('1x');
+
+    expect(portfolioManager?.chains).toEqual(['Arbitrum']);
+    expect(portfolioManager?.protocols).toEqual(['Pi Runtime', 'Shared Ember Domain Service']);
+    expect(portfolioManager?.tokens).toEqual(['USDC']);
+    expect(portfolioManager?.pointsTrend).toBeUndefined();
+    expect(portfolioManager?.trendMultiplier).toBeUndefined();
   });
 
   it('routes hire/view handlers to the correct detail URL', () => {
