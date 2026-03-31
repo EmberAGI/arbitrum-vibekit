@@ -17,6 +17,15 @@ describe('createPortfolioManagerAgentConfig', () => {
       provider: 'openrouter',
       baseUrl: 'https://openrouter.ai/api/v1',
       reasoning: true,
+      input: ['text'],
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+      contextWindow: 128_000,
+      maxTokens: 4_096,
     });
     expect(config.systemPrompt).toContain('portfolio manager orchestrator');
     expect(config.databaseUrl).toBe('postgresql://portfolio:secret@db.internal:5432/pi_runtime');

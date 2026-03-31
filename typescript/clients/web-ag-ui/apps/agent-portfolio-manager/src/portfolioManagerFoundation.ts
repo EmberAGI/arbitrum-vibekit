@@ -31,6 +31,8 @@ export type PortfolioManagerAgentConfig = Pick<
   'agentOptions' | 'databaseUrl' | 'domain' | 'model' | 'systemPrompt' | 'tools'
 >;
 
+type PortfolioManagerGatewayModel = PortfolioManagerAgentConfig['model'];
+
 function requireEnvValue(
   value: string | undefined,
   name: keyof PortfolioManagerGatewayEnv,
@@ -41,6 +43,26 @@ function requireEnvValue(
   }
 
   return normalized;
+}
+
+function createOpenRouterModel(modelId: string): PortfolioManagerGatewayModel {
+  return {
+    id: modelId,
+    name: modelId,
+    api: 'openai-responses',
+    provider: 'openrouter',
+    baseUrl: OPENROUTER_BASE_URL,
+    reasoning: true,
+    input: ['text'],
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    },
+    contextWindow: 128_000,
+    maxTokens: 4_096,
+  };
 }
 
 export function createPortfolioManagerAgentConfig(
@@ -57,14 +79,7 @@ export function createPortfolioManagerAgentConfig(
     : null;
 
   return {
-    model: {
-      id: modelId,
-      name: modelId,
-      api: 'openai-responses',
-      provider: 'openrouter',
-      baseUrl: OPENROUTER_BASE_URL,
-      reasoning: true,
-    },
+    model: createOpenRouterModel(modelId),
     systemPrompt: PORTFOLIO_MANAGER_SYSTEM_PROMPT,
     databaseUrl: env.DATABASE_URL,
     tools: [
