@@ -49,7 +49,6 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: null,
           pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'command',
@@ -60,24 +59,23 @@ describe('createPortfolioManagerDomain', () => {
       state: {
         phase: 'onboarding',
         activeWalletAddress: null,
-          pendingOnboardingWalletAddress: null,
-        pendingBaseContributionUsd: null,
+        pendingOnboardingWalletAddress: null,
       },
       outputs: {
         status: {
           executionStatus: 'interrupted',
-          statusMessage: 'Connect the wallet allocation you want the portfolio manager to onboard.',
+          statusMessage: 'Connect the wallet you want the portfolio manager to onboard.',
         },
         interrupt: {
           type: 'portfolio-manager-setup-request',
           surfacedInThread: true,
-          message: 'Connect the wallet allocation you want the portfolio manager to onboard.',
+          message: 'Connect the wallet you want the portfolio manager to onboard.',
         },
       },
     });
   });
 
-  it('turns portfolio-manager setup input into a delegation-signing interrupt', async () => {
+  it('turns wallet-only portfolio-manager setup input into a delegation-signing interrupt', async () => {
     const domain = createPortfolioManagerDomain({
       agentId: 'portfolio-manager',
     });
@@ -94,14 +92,12 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: null,
           pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'interrupt',
           name: 'portfolio-manager-setup-request',
           input: {
             walletAddress: '0x00000000000000000000000000000000000000a1',
-            baseContributionUsd: 900,
           },
         },
       }),
@@ -109,8 +105,7 @@ describe('createPortfolioManagerDomain', () => {
       state: {
         phase: 'onboarding',
         activeWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-        pendingBaseContributionUsd: 900,
+        pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
       },
       outputs: {
         status: {
@@ -126,9 +121,7 @@ describe('createPortfolioManagerDomain', () => {
             delegatorAddress: '0x00000000000000000000000000000000000000a1',
             delegateeAddress: '0x2222222222222222222222222222222222222222',
             delegationManager: '0x1111111111111111111111111111111111111111',
-            descriptions: expect.arrayContaining([
-              expect.stringContaining('900'),
-            ]),
+            descriptions: ['Authorize the portfolio manager to operate through your root delegation.'],
             delegationsToSign: [
               expect.objectContaining({
                 delegate: '0x2222222222222222222222222222222222222222',
@@ -198,7 +191,6 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingBaseContributionUsd: 900,
         },
         operation: {
           source: 'interrupt',
@@ -221,7 +213,6 @@ describe('createPortfolioManagerDomain', () => {
         lastRootedWalletContextId: 'rwc-user-protocol-001',
         activeWalletAddress: '0x00000000000000000000000000000000000000a1',
         pendingOnboardingWalletAddress: null,
-        pendingBaseContributionUsd: null,
       },
       outputs: {
         status: {
@@ -264,6 +255,48 @@ describe('createPortfolioManagerDomain', () => {
         }),
       }),
     );
+  });
+
+  it('returns to prehire and clears wallet-local state when delegation signing is rejected', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: null,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-delegation-signing-request',
+          input: {
+            outcome: 'rejected',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'prehire',
+        activeWalletAddress: null,
+        pendingOnboardingWalletAddress: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'canceled',
+          statusMessage:
+            'Portfolio manager onboarding was canceled because delegation signing was rejected.',
+        },
+      },
+    });
   });
 
   it('reads the current Shared Ember revision before completing onboarding when the thread has no cached revision', async () => {
@@ -344,7 +377,6 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingBaseContributionUsd: 900,
         },
         operation: {
           source: 'interrupt',
@@ -402,7 +434,6 @@ describe('createPortfolioManagerDomain', () => {
         lastRootedWalletContextId: 'rwc-user-protocol-001',
         activeWalletAddress: '0x00000000000000000000000000000000000000a1',
         pendingOnboardingWalletAddress: null,
-        pendingBaseContributionUsd: null,
       },
       operation: {
         source: 'command',
@@ -422,7 +453,6 @@ describe('createPortfolioManagerDomain', () => {
         lastRootedWalletContextId: null,
         activeWalletAddress: null,
         pendingOnboardingWalletAddress: null,
-        pendingBaseContributionUsd: null,
       },
       outputs: {
         status: {
@@ -448,7 +478,7 @@ describe('createPortfolioManagerDomain', () => {
       outputs: {
         status: {
           executionStatus: 'interrupted',
-          statusMessage: 'Connect the wallet allocation you want the portfolio manager to onboard.',
+          statusMessage: 'Connect the wallet you want the portfolio manager to onboard.',
         },
         interrupt: {
           type: 'portfolio-manager-setup-request',
@@ -528,7 +558,6 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: null,
           pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'tool',
@@ -648,7 +677,6 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: null,
           pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'tool',
@@ -672,8 +700,7 @@ describe('createPortfolioManagerDomain', () => {
         lastOnboardingBootstrap: null,
         lastRootedWalletContextId: 'rwc-user-protocol-001',
         activeWalletAddress: null,
-          pendingOnboardingWalletAddress: null,
-        pendingBaseContributionUsd: null,
+        pendingOnboardingWalletAddress: null,
       },
       outputs: {
         status: {
@@ -794,7 +821,6 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: null,
           pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'tool',
@@ -895,7 +921,6 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: null,
           pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'tool',
@@ -920,8 +945,7 @@ describe('createPortfolioManagerDomain', () => {
           ],
         },
         activeWalletAddress: null,
-          pendingOnboardingWalletAddress: null,
-        pendingBaseContributionUsd: null,
+        pendingOnboardingWalletAddress: null,
       },
       outputs: {
         status: {
@@ -1040,7 +1064,6 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: 'rwc-a1',
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
         },
       }),
     ).resolves.toEqual(
@@ -1081,7 +1104,6 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
         },
       }),
     ).resolves.toEqual(

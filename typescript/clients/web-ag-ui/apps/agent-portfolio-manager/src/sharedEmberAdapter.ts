@@ -20,7 +20,6 @@ export type PortfolioManagerLifecycleState = {
   lastRootedWalletContextId: string | null;
   activeWalletAddress: `0x${string}` | null;
   pendingOnboardingWalletAddress: `0x${string}` | null;
-  pendingBaseContributionUsd: number | null;
 };
 
 type CreatePortfolioManagerDomainOptions = {
@@ -44,7 +43,6 @@ function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
     lastRootedWalletContextId: null,
     activeWalletAddress: null,
     pendingOnboardingWalletAddress: null,
-    pendingBaseContributionUsd: null,
   };
 }
 
@@ -128,7 +126,7 @@ async function runSharedEmberCommandWithResolvedRevision<T>(input: {
 
 const PORTFOLIO_MANAGER_SETUP_INTERRUPT_TYPE = 'portfolio-manager-setup-request';
 const PORTFOLIO_MANAGER_SETUP_MESSAGE =
-  'Connect the wallet allocation you want the portfolio manager to onboard.';
+  'Connect the wallet you want the portfolio manager to onboard.';
 const PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE = 'portfolio-manager-delegation-signing-request';
 const PORTFOLIO_MANAGER_SIGNING_MESSAGE =
   'Review and sign the delegation needed to activate your portfolio manager.';
@@ -140,14 +138,12 @@ const PORTFOLIO_MANAGER_ROOT_AUTHORITY =
   '0x0000000000000000000000000000000000000000000000000000000000000000';
 const PORTFOLIO_MANAGER_DELEGATION_SALT =
   '0x1111111111111111111111111111111111111111111111111111111111111111';
-const PORTFOLIO_MANAGER_ROOT_ASSET = 'USDC';
 const PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP = '2026-03-30T00:00:00.000Z';
 const PORTFOLIO_MANAGER_PROTOCOL_SOURCE = 'onboarding_scan';
 const PORTFOLIO_MANAGER_ONBOARDING_CONTROL_PATH = 'unassigned';
 
 type PortfolioManagerSetupInput = {
   walletAddress: `0x${string}`;
-  baseContributionUsd: number;
 };
 
 type PortfolioManagerUnsignedDelegation = {
@@ -171,12 +167,6 @@ function sanitizeIdentitySegment(value: string): string {
   return normalized.length > 0 ? normalized : 'portfolio-manager';
 }
 
-function toUsdQuantityString(value: number): string {
-  const normalized = Number.isFinite(value) ? value : 0;
-  const rounded = Math.max(0, Math.round(normalized * 100) / 100);
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
-}
-
 function parsePortfolioManagerSetupInput(input: unknown): PortfolioManagerSetupInput | null {
   if (typeof input !== 'object' || input === null) {
     return null;
@@ -186,22 +176,12 @@ function parsePortfolioManagerSetupInput(input: unknown): PortfolioManagerSetupI
     'walletAddress' in input && typeof input.walletAddress === 'string'
       ? input.walletAddress
       : null;
-  const baseContributionUsd =
-    'baseContributionUsd' in input && typeof input.baseContributionUsd === 'number'
-      ? input.baseContributionUsd
-      : null;
-
   if (!walletAddress?.startsWith('0x') || walletAddress.length < 4) {
-    return null;
-  }
-
-  if (baseContributionUsd === null || !Number.isFinite(baseContributionUsd) || baseContributionUsd <= 0) {
     return null;
   }
 
   return {
     walletAddress: walletAddress as `0x${string}`,
-    baseContributionUsd,
   };
 }
 
@@ -238,8 +218,6 @@ function buildPortfolioManagerUnsignedDelegation(
 }
 
 function buildPortfolioManagerSigningInterrupt(setup: PortfolioManagerSetupInput) {
-  const allocation = toUsdQuantityString(setup.baseContributionUsd);
-
   return {
     type: PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE,
     surfacedInThread: true,
@@ -250,7 +228,7 @@ function buildPortfolioManagerSigningInterrupt(setup: PortfolioManagerSetupInput
       delegatorAddress: setup.walletAddress,
       delegateeAddress: PORTFOLIO_MANAGER_ORCHESTRATOR_WALLET,
       delegationsToSign: [buildPortfolioManagerUnsignedDelegation(setup.walletAddress)],
-      descriptions: [`Authorize the portfolio manager to operate up to ${allocation} ${PORTFOLIO_MANAGER_ROOT_ASSET}.`],
+      descriptions: ['Authorize the portfolio manager to operate through your root delegation.'],
       warnings: ['Only continue if you trust this portfolio-manager session.'],
     },
   };
@@ -333,7 +311,7 @@ export function createPortfolioManagerDomain(
         {
           name: 'hire',
           description:
-            'Start onboarding for the portfolio manager and request the initial wallet allocation.',
+            'Start onboarding for the portfolio manager and request the connected wallet.',
         },
         {
           name: 'fire',
@@ -360,8 +338,7 @@ export function createPortfolioManagerDomain(
       interrupts: [
         {
           type: PORTFOLIO_MANAGER_SETUP_INTERRUPT_TYPE,
-          description:
-            'Collect the initial connected-wallet allocation before rooted delegation signing.',
+          description: 'Collect the connected wallet before rooted delegation signing.',
           surfacedInThread: true,
         },
         {
@@ -415,12 +392,6 @@ export function createPortfolioManagerDomain(
       if (currentState.pendingOnboardingWalletAddress) {
         context.push(
           `  <pending_onboarding_wallet_address source="onboarding_setup">${currentState.pendingOnboardingWalletAddress}</pending_onboarding_wallet_address>`,
-        );
-      }
-
-      if (currentState.pendingBaseContributionUsd !== null) {
-        context.push(
-          `  <pending_onboarding_allocation_usd>${currentState.pendingBaseContributionUsd}</pending_onboarding_allocation_usd>`,
         );
       }
 
@@ -490,7 +461,6 @@ export function createPortfolioManagerDomain(
             lastRootedWalletContextId: null,
             activeWalletAddress: null,
             pendingOnboardingWalletAddress: null,
-            pendingBaseContributionUsd: null,
           };
 
           return {
@@ -522,7 +492,6 @@ export function createPortfolioManagerDomain(
             phase: 'onboarding',
             activeWalletAddress: setupInput.walletAddress,
             pendingOnboardingWalletAddress: setupInput.walletAddress,
-            pendingBaseContributionUsd: setupInput.baseContributionUsd,
           };
 
           return {
@@ -542,8 +511,8 @@ export function createPortfolioManagerDomain(
               state: {
                 ...currentState,
                 phase: 'prehire',
+                activeWalletAddress: null,
                 pendingOnboardingWalletAddress: null,
-                pendingBaseContributionUsd: null,
               },
               outputs: {
                 status: {
@@ -556,11 +525,10 @@ export function createPortfolioManagerDomain(
           }
 
           const walletAddress = currentState.pendingOnboardingWalletAddress;
-          const baseContributionUsd = currentState.pendingBaseContributionUsd;
           const signedDelegations = parsePortfolioManagerSignedDelegations(operation.input);
           const signedDelegation = signedDelegations?.[0];
 
-          if (!walletAddress || baseContributionUsd === null || !signedDelegation) {
+          if (!walletAddress || !signedDelegation) {
             return {
               state: currentState,
               outputs: {
@@ -629,7 +597,6 @@ export function createPortfolioManagerDomain(
             lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
             activeWalletAddress: walletAddress,
             pendingOnboardingWalletAddress: null,
-            pendingBaseContributionUsd: null,
           };
 
           return {
@@ -704,7 +671,6 @@ export function createPortfolioManagerDomain(
             lastRootedWalletContextId: currentState.lastRootedWalletContextId,
             activeWalletAddress: currentState.activeWalletAddress,
             pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
-            pendingBaseContributionUsd: currentState.pendingBaseContributionUsd,
           };
 
           return {
@@ -762,7 +728,6 @@ export function createPortfolioManagerDomain(
             lastRootedWalletContextId: currentState.lastRootedWalletContextId,
             activeWalletAddress: currentState.activeWalletAddress,
             pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
-            pendingBaseContributionUsd: currentState.pendingBaseContributionUsd,
           };
 
           return {
@@ -840,7 +805,6 @@ export function createPortfolioManagerDomain(
               currentState.activeWalletAddress ??
               currentState.pendingOnboardingWalletAddress,
             pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
-            pendingBaseContributionUsd: currentState.pendingBaseContributionUsd,
           };
 
           return {

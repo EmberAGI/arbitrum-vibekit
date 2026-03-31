@@ -249,6 +249,10 @@ export interface PendleSetupInput {
   baseContributionUsd: number;
 }
 
+export interface PortfolioManagerSetupInput {
+  walletAddress: `0x${string}`;
+}
+
 export interface FundWalletAcknowledgement {
   acknowledged: true;
 }
@@ -404,7 +408,12 @@ export interface ThreadState {
   task?: Task;
   onboardingFlow?: OnboardingFlow;
   poolArtifact?: Artifact;
-  operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput | PiOperatorNoteInput;
+  operatorInput?:
+    | OperatorConfigInput
+    | PendleSetupInput
+    | PortfolioManagerSetupInput
+    | GmxSetupInput
+    | PiOperatorNoteInput;
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: Pool;
   operatorConfig?: unknown;
@@ -440,7 +449,12 @@ export interface UiState {
   task?: Task;
   onboardingFlow?: OnboardingFlow;
   poolArtifact?: Artifact;
-  operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput | PiOperatorNoteInput;
+  operatorInput?:
+    | OperatorConfigInput
+    | PendleSetupInput
+    | PortfolioManagerSetupInput
+    | GmxSetupInput
+    | PiOperatorNoteInput;
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: Pool;
   operatorConfig?: unknown;

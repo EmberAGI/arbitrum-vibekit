@@ -23,6 +23,7 @@ import {
   type AgentInterrupt,
   type OperatorConfigInput,
   type PendleSetupInput,
+  type PortfolioManagerSetupInput,
   type GmxSetupInput,
   type PiOperatorNoteInput,
   type FundingTokenInput,
@@ -147,6 +148,7 @@ export type {
   AgentInterrupt,
   OperatorConfigInput,
   PendleSetupInput,
+  PortfolioManagerSetupInput,
   GmxSetupInput,
   PiOperatorNoteInput,
   FundWalletAcknowledgement,
@@ -194,6 +196,7 @@ export interface UseAgentConnectionResult {
     input:
       | OperatorConfigInput
       | PendleSetupInput
+      | PortfolioManagerSetupInput
       | GmxSetupInput
       | PiOperatorNoteInput
       | FundWalletAcknowledgement
@@ -1346,6 +1349,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       input:
         | OperatorConfigInput
         | PendleSetupInput
+        | PortfolioManagerSetupInput
         | GmxSetupInput
         | PiOperatorNoteInput
         | FundWalletAcknowledgement

@@ -27,6 +27,7 @@ import type {
   PendleMarket,
   OperatorConfigInput,
   PendleSetupInput,
+  PortfolioManagerSetupInput,
   FundWalletAcknowledgement,
   GmxSetupInput,
   PiOperatorNoteInput,
@@ -110,6 +111,7 @@ interface AgentDetailPageProps {
     input:
       | OperatorConfigInput
       | PendleSetupInput
+      | PortfolioManagerSetupInput
       | FundWalletAcknowledgement
       | GmxSetupInput
       | PiOperatorNoteInput
@@ -2016,6 +2018,7 @@ interface AgentBlockersTabProps {
     input:
       | OperatorConfigInput
       | PendleSetupInput
+      | PortfolioManagerSetupInput
       | FundWalletAcknowledgement
       | GmxSetupInput
       | PiOperatorNoteInput
@@ -2210,6 +2213,36 @@ function AgentBlockersTab({
     onInterruptSubmit?.({
       walletAddress: operatorWalletAddress as `0x${string}`,
       baseContributionUsd: baseContributionNumber,
+    });
+  };
+
+  const handlePortfolioManagerSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    const operatorWalletAddress =
+      privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
+
+    if (!operatorWalletAddress) {
+      setError(
+        delegationsBypassEnabled
+          ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
+          : 'Connect a wallet to continue.',
+      );
+      return;
+    }
+
+    if (!isHexAddress(operatorWalletAddress)) {
+      setError(
+        delegationsBypassEnabled
+          ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
+          : 'Connected wallet address is not a valid 0x-prefixed hex string.',
+      );
+      return;
+    }
+
+    onInterruptSubmit?.({
+      walletAddress: operatorWalletAddress as `0x${string}`,
     });
   };
 
@@ -2570,30 +2603,18 @@ function AgentBlockersTab({
                 </div>
               </form>
             ) : showPortfolioManagerSetupForm ? (
-              <form onSubmit={handlePendleSetupSubmit}>
+              <form onSubmit={handlePortfolioManagerSetupSubmit}>
                 <h3 className="text-lg font-semibold text-white mb-4">Portfolio Manager Setup</h3>
                 {activeInterrupt?.message && (
                   <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
                 )}
 
                 <div className="space-y-4 mb-6">
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">USDC Allocation</label>
-                    <input
-                      type="number"
-                      value={baseContributionUsd}
-                      onChange={(e) => setBaseContributionUsd(e.target.value)}
-                      placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
-                      min={MIN_BASE_CONTRIBUTION_USD}
-                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
-                    />
-                  </div>
-
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">Portfolio policy bootstrap</div>
+                    <div className="text-gray-300 text-sm font-medium mb-2">Root delegation setup</div>
                     <p className="text-gray-400 text-xs">
-                      The agent will generate the initial reserve policy and onboarding snapshot from your
-                      connected wallet and allocation.
+                      Shared Ember will observe your connected wallet directly during onboarding and derive
+                      the initial reserve state from that live wallet observation.
                     </p>
                     <p className="text-gray-500 text-xs mt-3">
                       Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}

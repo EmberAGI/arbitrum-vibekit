@@ -164,17 +164,19 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         const origin = `http://${request.headers.host ?? '127.0.0.1'}`;
         const url = new URL(request.url ?? '/', origin);
 
+        const headers = Object.entries(request.headers).flatMap(
+          ([name, value]): Array<[string, string]> => {
+            if (Array.isArray(value)) {
+              return value.map((entry) => [name, entry]);
+            }
+
+            return value ? [[name, value]] : [];
+          },
+        );
+
         const webRequest = new Request(url, {
           method: request.method,
-          headers: new Headers(
-            Object.entries(request.headers).flatMap(([name, value]) => {
-              if (Array.isArray(value)) {
-                return value.map((entry) => [name, entry] as const);
-              }
-
-              return value ? [[name, value] as const] : [];
-            }),
-          ),
+          headers: new Headers(headers),
           body: body.length > 0 ? body : undefined,
           duplex: 'half',
         });
@@ -244,14 +246,13 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           lifecycle: {
             phase: 'onboarding',
             activeWalletAddress: null,
-          pendingOnboardingWalletAddress: null,
-            pendingBaseContributionUsd: null,
+            pendingOnboardingWalletAddress: null,
           },
           task: {
             taskStatus: {
               state: 'input-required',
               message: {
-                content: 'Connect the wallet allocation you want the portfolio manager to onboard.',
+                content: 'Connect the wallet you want the portfolio manager to onboard.',
               },
             },
           },
@@ -279,7 +280,6 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           command: {
             resume: JSON.stringify({
               walletAddress: '0x00000000000000000000000000000000000000a1',
-              baseContributionUsd: 900,
             }),
           },
         },
@@ -297,8 +297,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           lifecycle: {
             phase: 'onboarding',
             activeWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-            pendingBaseContributionUsd: 900,
+            pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           },
           task: {
             taskStatus: {
@@ -393,7 +392,6 @@ describe('agent-portfolio-manager AG-UI integration', () => {
             lastRootedWalletContextId: 'rwc-thread10x00000000000000000000000000000000000000a1',
             activeWalletAddress: '0x00000000000000000000000000000000000000a1',
             pendingOnboardingWalletAddress: null,
-            pendingBaseContributionUsd: null,
           },
           task: {
             taskStatus: {
@@ -438,6 +436,93 @@ describe('agent-portfolio-manager AG-UI integration', () => {
     );
   });
 
+  it('clears wallet-local onboarding state when delegation signing is rejected', async () => {
+    const hireResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-cancel',
+        runId: 'run-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    });
+    expect(hireResponse.ok).toBe(true);
+
+    const setupResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-cancel',
+        runId: 'run-setup',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify({
+              walletAddress: '0x00000000000000000000000000000000000000a1',
+            }),
+          },
+        },
+      }),
+    });
+    expect(setupResponse.ok).toBe(true);
+
+    const signingResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-cancel',
+        runId: 'run-signing-rejected',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify({
+              outcome: 'rejected',
+            }),
+          },
+        },
+      }),
+    });
+
+    expect(signingResponse.ok).toBe(true);
+    const signingEvents = parseEventStreamBody(await signingResponse.text());
+    const signingSnapshot = findStateSnapshot(signingEvents);
+
+    expect(signingSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'prehire',
+            activeWalletAddress: null,
+            pendingOnboardingWalletAddress: null,
+          },
+          task: {
+            taskStatus: {
+              state: 'canceled',
+              message: {
+                content:
+                  'Portfolio manager onboarding was canceled because delegation signing was rejected.',
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+      }),
+    );
+  });
+
   it('marks the agent completed only after fire and then allows rehire', async () => {
     const hireResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
       method: 'POST',
@@ -468,7 +553,6 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           command: {
             resume: JSON.stringify({
               walletAddress: '0x00000000000000000000000000000000000000a1',
-              baseContributionUsd: 900,
             }),
           },
         },
@@ -533,8 +617,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
             phase: 'prehire',
             lastRootedWalletContextId: null,
             activeWalletAddress: null,
-          pendingOnboardingWalletAddress: null,
-            pendingBaseContributionUsd: null,
+            pendingOnboardingWalletAddress: null,
           },
           task: {
             taskStatus: {
@@ -579,7 +662,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
             taskStatus: {
               state: 'input-required',
               message: {
-                content: 'Connect the wallet allocation you want the portfolio manager to onboard.',
+                content: 'Connect the wallet you want the portfolio manager to onboard.',
               },
             },
           },

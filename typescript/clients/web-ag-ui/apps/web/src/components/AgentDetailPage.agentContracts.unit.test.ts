@@ -310,7 +310,9 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     });
 
     expect(html).toContain('Portfolio Manager Setup');
-    expect(html).toContain('USDC Allocation');
-    expect(html).toContain('Portfolio policy bootstrap');
+    expect(html).toContain('Root delegation setup');
+    expect(html).toContain('live wallet observation');
+    expect(html).not.toContain('USDC Allocation');
+    expect(html).not.toContain('Portfolio policy bootstrap');
   });
 });
