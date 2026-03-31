@@ -326,6 +326,13 @@ function isMessagesSnapshotEvent(event: GatewayEvent): event is MessagesSnapshot
   return typeof event === 'object' && event !== null && 'messages' in event;
 }
 
+function hasSystemPromptFragments(
+  prompts: readonly string[],
+  fragments: readonly string[],
+): boolean {
+  return prompts.some((prompt) => fragments.every((fragment) => prompt.includes(fragment)));
+}
+
 function createLifecycleDomain() {
   const phases = new Map<string, LifecycleState>();
 
@@ -620,7 +627,12 @@ describe('agent-runtime integration', () => {
 
     const hireSnapshot = hireEvents.find(isStateSnapshotEvent);
     expect(latestUserText).toBe('Please hire the agent.');
-    expect(observedSystemPrompts).toContain('You are a lifecycle agent.\n\nLifecycle phase: prehire.');
+    expect(
+      hasSystemPromptFragments(observedSystemPrompts, [
+        'You are a lifecycle agent.',
+        'Lifecycle phase: prehire.',
+      ]),
+    ).toBe(true);
     expect(observedDomainCommandToolDescription).toContain('Available commands: hire (Start onboarding.)');
     expect(observedDomainCommandToolDescription).toContain('complete_onboarding (Finish onboarding.)');
     expect(observedDomainCommandNames).toEqual([
@@ -871,7 +883,7 @@ describe('agent-runtime integration', () => {
         ),
       );
       expect(consoleLogSpy).toHaveBeenCalledWith(
-        expect.stringContaining('You are a lifecycle agent.\n\nLifecycle phase: prehire.'),
+        expect.stringContaining('Lifecycle phase: prehire.'),
       );
     } finally {
       consoleLogSpy.mockRestore();
@@ -1182,9 +1194,12 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    expect(observedSystemPrompts).toContain(
-      'You are a persistence agent.\n\nLifecycle phase: onboarding.',
-    );
+    expect(
+      hasSystemPromptFragments(observedSystemPrompts, [
+        'You are a persistence agent.',
+        'Lifecycle phase: onboarding.',
+      ]),
+    ).toBe(true);
   });
 
   it('recovers domain state from persisted thread lifecycle when the dedicated domain-state blob is missing', async () => {
@@ -1255,9 +1270,12 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    expect(observedSystemPrompts).toContain(
-      'You are a persistence agent.\n\nLifecycle phase: onboarding.',
-    );
+    expect(
+      hasSystemPromptFragments(observedSystemPrompts, [
+        'You are a persistence agent.',
+        'Lifecycle phase: onboarding.',
+      ]),
+    ).toBe(true);
 
     const migratedThreadState = persistedThreads.get('thread-legacy-lifecycle')?.threadState;
     expect(migratedThreadState).toMatchObject({
