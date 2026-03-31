@@ -32,8 +32,21 @@ async function writeNodeResponse(response: Response, target: ServerResponse): Pr
     target.setHeader(key, value);
   });
 
-  const body = new Uint8Array(await response.arrayBuffer());
-  target.end(body);
+  const reader = response.body?.getReader();
+  if (!reader) {
+    target.end();
+    return;
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      target.end();
+      return;
+    }
+
+    target.write(Buffer.from(value));
+  }
 }
 
 function parseEventStreamBody(body: string): AgUiEventEnvelope[] {
@@ -45,6 +58,51 @@ function parseEventStreamBody(body: string): AgUiEventEnvelope[] {
 
 function findStateSnapshot(events: readonly AgUiEventEnvelope[]) {
   return [...events].reverse().find((event) => event.type === 'STATE_SNAPSHOT');
+}
+
+async function readEventStreamUntilStateSnapshot(response: Response): Promise<AgUiEventEnvelope[]> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return [];
+  }
+
+  const decoder = new TextDecoder();
+  const events: AgUiEventEnvelope[] = [];
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, {
+      stream: true,
+    });
+
+    let boundary = buffer.indexOf('\n\n');
+    while (boundary !== -1) {
+      const frame = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+
+      for (const line of frame.split('\n')) {
+        if (!line.startsWith('data: ')) {
+          continue;
+        }
+
+        const event = JSON.parse(line.slice('data: '.length)) as AgUiEventEnvelope;
+        events.push(event);
+        if (event.type === 'STATE_SNAPSHOT') {
+          await reader.cancel();
+          return events;
+        }
+      }
+
+      boundary = buffer.indexOf('\n\n');
+    }
+  }
+
+  return events;
 }
 
 function createInternalPostgresHooks() {
@@ -168,6 +226,35 @@ async function runAgUiCommand(input: {
   expect(response.headers.get('content-type')).toContain('text/event-stream');
 
   const events = parseEventStreamBody(await response.text());
+  return {
+    events,
+    snapshot: findStateSnapshot(events),
+  };
+}
+
+async function runAgUiConnect(input: {
+  baseUrl: string;
+  threadId?: string;
+  runId?: string;
+}) {
+  const controller = new AbortController();
+  const response = await fetch(`${input.baseUrl}/agent/${EMBER_LENDING_AGENT_ID}/connect`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    signal: controller.signal,
+    body: JSON.stringify({
+      threadId: input.threadId ?? 'thread-connect-1',
+      ...(input.runId ? { runId: input.runId } : {}),
+    }),
+  });
+
+  expect(response.ok).toBe(true);
+  expect(response.headers.get('content-type')).toContain('text/event-stream');
+
+  const events = await readEventStreamUntilStateSnapshot(response);
+  controller.abort();
   return {
     events,
     snapshot: findStateSnapshot(events),
@@ -407,6 +494,40 @@ describe('agent-ember-lending AG-UI integration', () => {
     protocolHost.handleJsonRpc.mockClear();
     protocolHost.readCommittedEventOutbox.mockClear();
     protocolHost.acknowledgeCommittedEventOutbox.mockClear();
+  });
+
+  it('hydrates a fresh lending thread on connect so the first snapshot is UI-ready', async () => {
+    const { snapshot } = await runAgUiConnect({
+      baseUrl,
+      threadId: 'thread-connect-1',
+      runId: 'run-connect-1',
+    });
+
+    expect(snapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            mandateRef: 'mandate-ember-lending-001',
+            walletAddress: '0x00000000000000000000000000000000000000b1',
+            rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+            rootedWalletContextId: 'rwc-ember-lending-thread-001',
+            lastReservationSummary:
+              'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+          },
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.readPortfolioState.v1',
+        params: {
+          agent_id: 'ember-lending',
+        },
+      }),
+    );
   });
 
   it('serves lending state refresh and candidate-plan materialization over real AG-UI HTTP endpoints', async () => {

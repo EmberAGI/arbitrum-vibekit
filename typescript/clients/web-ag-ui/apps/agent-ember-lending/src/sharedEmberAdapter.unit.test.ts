@@ -94,6 +94,120 @@ function createPortfolioStateResponse() {
   };
 }
 
+function createLeanPortfolioStateResponse() {
+  return {
+    jsonrpc: '2.0',
+    id: 'shared-ember-thread-1-read-portfolio-state',
+    result: {
+      protocol_version: 'v1',
+      revision: 8,
+      portfolio_state: {
+        agent_id: 'ember-lending',
+        owned_units: [
+          {
+            unit_id: 'unit-ember-lending-001',
+            network: 'arbitrum',
+            wallet_address: '0x00000000000000000000000000000000000000b1',
+            root_asset: 'USDC',
+            quantity: '10',
+            reservation_id: 'reservation-ember-lending-001',
+          },
+        ],
+        reservations: [
+          {
+            reservation_id: 'reservation-ember-lending-001',
+            purpose: 'deploy',
+            control_path: 'lending.supply',
+          },
+        ],
+      },
+    },
+  };
+}
+
+function createWalletAccountingResponse() {
+  return {
+    jsonrpc: '2.0',
+    id: 'shared-ember-wallet-accounting-portfolio-manager-0x00000000000000000000000000000000000000a1',
+    result: {
+      protocol_version: 'v1',
+      revision: 11,
+      onboarding_state: {
+        wallet_address: '0x00000000000000000000000000000000000000a1',
+        network: 'arbitrum',
+        phase: 'active',
+        proofs: {
+          rooted_wallet_context_registered: true,
+          root_delegation_registered: true,
+          root_authority_active: true,
+          wallet_baseline_observed: true,
+          accounting_units_seeded: true,
+          mandate_inputs_configured: true,
+          reserve_policy_configured: true,
+          capital_reserved_for_agent: true,
+          policy_snapshot_recorded: true,
+          agent_active: true,
+        },
+        rooted_wallet_context: {
+          rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
+        },
+        root_delegation: {
+          root_delegation_id: 'root-delegation-001',
+        },
+        owned_units: [
+          {
+            unit_id: 'unit-unreserved-001',
+            root_asset: 'USDC',
+            quantity: '90',
+            status: 'available',
+            control_path: 'unassigned',
+            reservation_id: null,
+          },
+          {
+            unit_id: 'unit-ember-lending-001',
+            root_asset: 'USDC',
+            quantity: '10',
+            status: 'reserved',
+            control_path: 'lending.supply',
+            reservation_id: 'reservation-ember-lending-001',
+          },
+        ],
+        reservations: [
+          {
+            reservation_id: 'reservation-ember-lending-001',
+            agent_id: 'ember-lending',
+            purpose: 'deploy',
+            status: 'active',
+            control_path: 'lending.supply',
+            unit_allocations: [
+              {
+                unit_id: 'unit-ember-lending-001',
+                quantity: '10',
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+}
+
+function createEmptyPortfolioStateResponse() {
+  return {
+    jsonrpc: '2.0',
+    id: 'shared-ember-thread-1-read-portfolio-state',
+    result: {
+      protocol_version: 'v1',
+      revision: 9,
+      portfolio_state: {
+        agent_id: 'ember-lending',
+        owned_units: [],
+        reservations: [],
+      },
+    },
+  };
+}
+
 function createCandidatePlanInput() {
   return {
     idempotencyKey: 'idem-candidate-plan-001',
@@ -265,6 +379,183 @@ describe('createEmberLendingDomain', () => {
         '  <rooted_wallet_context_id>rwc-ember-lending-thread-001</rooted_wallet_context_id>',
       ]),
     );
+  });
+
+  it('backfills wallet and lane context from lean portfolio-state payloads', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => createLeanPortfolioStateResponse()),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        phase: 'prehire',
+        mandateRef: null,
+        mandateSummary: null,
+        mandateContext: null,
+        walletAddress: null,
+        rootUserWalletAddress: null,
+        rootedWalletContextId: null,
+        lastPortfolioState: null,
+        lastSharedEmberRevision: null,
+        lastReservationSummary: null,
+        lastCandidatePlan: null,
+        lastCandidatePlanSummary: null,
+        lastExecutionResult: null,
+        lastExecutionTxHash: null,
+        lastEscalationRequest: null,
+        lastEscalationSummary: null,
+      },
+      operation: {
+        source: 'tool',
+        name: 'read_portfolio_state',
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        mandateRef: null,
+        mandateSummary: null,
+        mandateContext: {
+          network: 'arbitrum',
+          protocol: 'lending',
+        },
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        rootUserWalletAddress: null,
+        rootedWalletContextId: null,
+        lastSharedEmberRevision: 8,
+        lastReservationSummary:
+          'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+      },
+    });
+  });
+
+  it('injects broader wallet accounting context into system context for escalation decisions', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+        if (request.method === 'orchestrator.readOnboardingState.v1') {
+          return createWalletAccountingResponse();
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const context = await domain.systemContext?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
+      jsonrpc: '2.0',
+      id: 'shared-ember-wallet-accounting-portfolio-manager-0x00000000000000000000000000000000000000a1',
+      method: 'orchestrator.readOnboardingState.v1',
+      params: {
+        agent_id: 'portfolio-manager',
+        wallet_address: '0x00000000000000000000000000000000000000a1',
+        network: 'arbitrum',
+      },
+    });
+
+    expect(context).toEqual(
+      expect.arrayContaining([
+        '<shared_ember_accounting_context freshness="live">',
+        '  <wallet_address>0x00000000000000000000000000000000000000a1</wallet_address>',
+        '  <network>arbitrum</network>',
+        '    <reservation reservation_id="reservation-ember-lending-001" agent_id="ember-lending">',
+      ]),
+    );
+  });
+
+  it('does not promote the thread to active when Shared Ember returns no managed-lane projection', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => createEmptyPortfolioStateResponse()),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        phase: 'prehire',
+        mandateRef: null,
+        mandateSummary: null,
+        mandateContext: null,
+        walletAddress: null,
+        rootUserWalletAddress: null,
+        rootedWalletContextId: null,
+        lastPortfolioState: null,
+        lastSharedEmberRevision: null,
+        lastReservationSummary: null,
+        lastCandidatePlan: null,
+        lastCandidatePlanSummary: null,
+        lastExecutionResult: null,
+        lastExecutionTxHash: null,
+        lastEscalationRequest: null,
+        lastEscalationSummary: null,
+      },
+      operation: {
+        source: 'tool',
+        name: 'read_portfolio_state',
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'prehire',
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          owned_units: [],
+          reservations: [],
+        },
+        lastSharedEmberRevision: 9,
+      },
+    });
   });
 
   it('materializes candidate plans through the bounded subagent surface using managed state context', async () => {
