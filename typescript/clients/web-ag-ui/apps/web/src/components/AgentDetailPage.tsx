@@ -66,6 +66,7 @@ import { resolveBlockersInterruptView } from './agentBlockersInterrupt';
 import { resolveCurrentSetupStep } from './agentCurrentSetupStep';
 import { resolveSetupSteps } from './agentSetupSteps';
 import { emitAgentConnectDebug } from '../utils/agentConnectDebug';
+import { buildPortfolioManagerSetupInput } from '../utils/portfolioManagerSetup';
 import {
   buildPiExampleInterruptA2UiView,
   buildPiExampleStatusA2UiView,
@@ -2242,7 +2243,7 @@ function AgentBlockersTab({
     }
 
     onInterruptSubmit?.({
-      walletAddress: operatorWalletAddress as `0x${string}`,
+      ...buildPortfolioManagerSetupInput(operatorWalletAddress as `0x${string}`),
     });
   };
 
@@ -2620,6 +2621,24 @@ function AgentBlockersTab({
                       Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
                     </p>
                   </div>
+
+                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                    <div className="text-gray-300 text-sm font-medium mb-2">Portfolio mandate</div>
+                    <p className="text-gray-400 text-xs">
+                      Approve the preloaded medium-risk portfolio mandate so the portfolio manager can
+                      coordinate managed subagents without overriding your rooted wallet controls.
+                    </p>
+                    <p className="text-gray-500 text-xs mt-3">Risk level: Medium</p>
+                  </div>
+
+                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                    <div className="text-gray-300 text-sm font-medium mb-2">First managed lending lane</div>
+                    <p className="text-gray-400 text-xs">
+                      The first managed lane is preloaded for Arbitrum Aave lending with USDC-only
+                      collateral and borrow assets, a 35% allocation cap, 7000 max LTV bps, and a
+                      1.25 minimum health factor.
+                    </p>
+                  </div>
                 </div>
 
                 {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
@@ -2630,7 +2649,7 @@ function AgentBlockersTab({
                     disabled={isWalletLoading}
                     className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
                   >
-                    Next
+                    Approve &amp; Continue
                   </button>
                 </div>
               </form>

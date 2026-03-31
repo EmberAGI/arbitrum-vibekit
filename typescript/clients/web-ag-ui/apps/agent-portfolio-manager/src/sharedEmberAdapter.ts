@@ -20,6 +20,7 @@ export type PortfolioManagerLifecycleState = {
   lastRootedWalletContextId: string | null;
   activeWalletAddress: `0x${string}` | null;
   pendingOnboardingWalletAddress: `0x${string}` | null;
+  pendingApprovedMandateEnvelope?: PortfolioManagerApprovedMandateEnvelope | null;
 };
 
 type CreatePortfolioManagerDomainOptions = {
@@ -33,6 +34,12 @@ type SharedEmberRevisionResponse = {
   };
 };
 
+type OnboardingMandateSource = {
+  mandate_ref: string;
+  agent_id: string;
+  mandate_summary: string;
+};
+
 function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
   return {
     phase: 'prehire',
@@ -43,6 +50,7 @@ function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
     lastRootedWalletContextId: null,
     activeWalletAddress: null,
     pendingOnboardingWalletAddress: null,
+    pendingApprovedMandateEnvelope: null,
   };
 }
 
@@ -70,6 +78,15 @@ function readPortfolioManagerContextWalletAddress(
   state: PortfolioManagerLifecycleState,
 ): `0x${string}` | null {
   return state.activeWalletAddress ?? readOnboardingBootstrapWalletAddress(state.lastOnboardingBootstrap);
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
 }
 
 function isSharedEmberRevisionConflict(error: unknown): boolean {
@@ -140,9 +157,41 @@ const PORTFOLIO_MANAGER_DELEGATION_SALT =
   '0x1111111111111111111111111111111111111111111111111111111111111111';
 const PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP = '2026-03-30T00:00:00.000Z';
 const PORTFOLIO_MANAGER_PROTOCOL_SOURCE = 'onboarding_scan';
-const PORTFOLIO_MANAGER_ONBOARDING_CONTROL_PATH = 'unassigned';
+const PORTFOLIO_MANAGER_DEFAULT_RISK_LEVEL = 'medium';
+const FIRST_MANAGED_AGENT_TYPE = 'ember-lending';
+const FIRST_MANAGED_AGENT_PROTOCOL = 'aave';
+const FIRST_MANAGED_AGENT_ROOT_ASSET = 'USDC';
+const FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY = '10';
+const FIRST_MANAGED_AGENT_CONTROL_PATH = 'lending.supply';
 
-type PortfolioManagerSetupInput = {
+type PortfolioManagerPortfolioMandate = {
+  approved: true;
+  riskLevel: typeof PORTFOLIO_MANAGER_DEFAULT_RISK_LEVEL;
+};
+
+type EmberLendingManagedAgentSettings = {
+  network: typeof PORTFOLIO_MANAGER_NETWORK;
+  protocol: typeof FIRST_MANAGED_AGENT_PROTOCOL;
+  allowedCollateralAssets: string[];
+  allowedBorrowAssets: string[];
+  maxAllocationPct: number;
+  maxLtvBps: number;
+  minHealthFactor: string;
+};
+
+type PortfolioManagerManagedAgentMandate = {
+  agentKey: string;
+  agentType: typeof FIRST_MANAGED_AGENT_TYPE;
+  approved: true;
+  settings: EmberLendingManagedAgentSettings;
+};
+
+type PortfolioManagerApprovedMandateEnvelope = {
+  portfolioMandate: PortfolioManagerPortfolioMandate;
+  managedAgentMandates: PortfolioManagerManagedAgentMandate[];
+};
+
+type PortfolioManagerSetupInput = PortfolioManagerApprovedMandateEnvelope & {
   walletAddress: `0x${string}`;
 };
 
@@ -167,6 +216,111 @@ function sanitizeIdentitySegment(value: string): string {
   return normalized.length > 0 ? normalized : 'portfolio-manager';
 }
 
+function isNonEmptyStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every((entry) => typeof entry === 'string' && entry.trim().length > 0)
+  );
+}
+
+function parsePortfolioMandate(input: unknown): PortfolioManagerPortfolioMandate | null {
+  if (typeof input !== 'object' || input === null) {
+    return null;
+  }
+
+  if (
+    !('approved' in input) ||
+    input.approved !== true ||
+    !('riskLevel' in input) ||
+    input.riskLevel !== PORTFOLIO_MANAGER_DEFAULT_RISK_LEVEL
+  ) {
+    return null;
+  }
+
+  return {
+    approved: true,
+    riskLevel: PORTFOLIO_MANAGER_DEFAULT_RISK_LEVEL,
+  };
+}
+
+function parseEmberLendingManagedAgentSettings(input: unknown): EmberLendingManagedAgentSettings | null {
+  if (typeof input !== 'object' || input === null) {
+    return null;
+  }
+
+  const network = 'network' in input && typeof input.network === 'string' ? input.network : null;
+  const protocol = 'protocol' in input && typeof input.protocol === 'string' ? input.protocol : null;
+  const allowedCollateralAssets =
+    'allowedCollateralAssets' in input ? input.allowedCollateralAssets : null;
+  const allowedBorrowAssets = 'allowedBorrowAssets' in input ? input.allowedBorrowAssets : null;
+  const maxAllocationPct =
+    'maxAllocationPct' in input && typeof input.maxAllocationPct === 'number'
+      ? input.maxAllocationPct
+      : null;
+  const maxLtvBps =
+    'maxLtvBps' in input && typeof input.maxLtvBps === 'number' ? input.maxLtvBps : null;
+  const minHealthFactor =
+    'minHealthFactor' in input && typeof input.minHealthFactor === 'string'
+      ? input.minHealthFactor
+      : null;
+
+  if (
+    network !== PORTFOLIO_MANAGER_NETWORK ||
+    protocol !== FIRST_MANAGED_AGENT_PROTOCOL ||
+    !isNonEmptyStringArray(allowedCollateralAssets) ||
+    !isNonEmptyStringArray(allowedBorrowAssets) ||
+    maxAllocationPct === null ||
+    maxAllocationPct <= 0 ||
+    maxAllocationPct > 100 ||
+    maxLtvBps === null ||
+    maxLtvBps <= 0 ||
+    !Number.isInteger(maxLtvBps) ||
+    !minHealthFactor ||
+    minHealthFactor.trim().length === 0
+  ) {
+    return null;
+  }
+
+  return {
+    network,
+    protocol,
+    allowedCollateralAssets,
+    allowedBorrowAssets,
+    maxAllocationPct,
+    maxLtvBps,
+    minHealthFactor,
+  };
+}
+
+function parseManagedAgentMandate(input: unknown): PortfolioManagerManagedAgentMandate | null {
+  if (typeof input !== 'object' || input === null) {
+    return null;
+  }
+
+  const agentKey =
+    'agentKey' in input && typeof input.agentKey === 'string' ? input.agentKey.trim() : null;
+  const agentType =
+    'agentType' in input && typeof input.agentType === 'string' ? input.agentType : null;
+  const approved = 'approved' in input ? input.approved : null;
+  const settings = 'settings' in input ? input.settings : null;
+
+  if (!agentKey || agentType !== FIRST_MANAGED_AGENT_TYPE || approved !== true) {
+    return null;
+  }
+
+  const parsedSettings = parseEmberLendingManagedAgentSettings(settings);
+  if (!parsedSettings) {
+    return null;
+  }
+
+  return {
+    agentKey,
+    agentType,
+    approved: true,
+    settings: parsedSettings,
+  };
+}
+
 function parsePortfolioManagerSetupInput(input: unknown): PortfolioManagerSetupInput | null {
   if (typeof input !== 'object' || input === null) {
     return null;
@@ -180,9 +334,123 @@ function parsePortfolioManagerSetupInput(input: unknown): PortfolioManagerSetupI
     return null;
   }
 
+  const portfolioMandate = 'portfolioMandate' in input ? input.portfolioMandate : null;
+  const managedAgentMandates =
+    'managedAgentMandates' in input && Array.isArray(input.managedAgentMandates)
+      ? input.managedAgentMandates
+      : null;
+  const parsedPortfolioMandate = parsePortfolioMandate(portfolioMandate);
+
+  if (
+    !parsedPortfolioMandate ||
+    !managedAgentMandates ||
+    managedAgentMandates.length === 0
+  ) {
+    return null;
+  }
+
+  const parsedManagedAgentMandates: PortfolioManagerManagedAgentMandate[] = [];
+  for (const mandate of managedAgentMandates) {
+    const parsedMandate = parseManagedAgentMandate(mandate);
+    if (!parsedMandate) {
+      return null;
+    }
+
+    parsedManagedAgentMandates.push(parsedMandate);
+  }
+
   return {
     walletAddress: walletAddress as `0x${string}`,
+    portfolioMandate: parsedPortfolioMandate,
+    managedAgentMandates: parsedManagedAgentMandates,
   };
+}
+
+function readApprovedMandateEnvelopeFromOnboardingBootstrap(
+  value: unknown,
+): PortfolioManagerApprovedMandateEnvelope | null {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('rootedWalletContext' in value) ||
+    typeof value.rootedWalletContext !== 'object' ||
+    value.rootedWalletContext === null ||
+    !('metadata' in value.rootedWalletContext) ||
+    typeof value.rootedWalletContext.metadata !== 'object' ||
+    value.rootedWalletContext.metadata === null ||
+    !('approvedMandateEnvelope' in value.rootedWalletContext.metadata)
+  ) {
+    return null;
+  }
+
+  const approvedMandateEnvelope = value.rootedWalletContext.metadata.approvedMandateEnvelope;
+  if (typeof approvedMandateEnvelope !== 'object' || approvedMandateEnvelope === null) {
+    return null;
+  }
+
+  const portfolioMandate =
+    'portfolioMandate' in approvedMandateEnvelope
+      ? parsePortfolioMandate(approvedMandateEnvelope.portfolioMandate)
+      : null;
+  const managedAgentMandates =
+    'managedAgentMandates' in approvedMandateEnvelope &&
+    Array.isArray(approvedMandateEnvelope.managedAgentMandates)
+      ? approvedMandateEnvelope.managedAgentMandates
+      : null;
+
+  if (!portfolioMandate || !managedAgentMandates || managedAgentMandates.length === 0) {
+    return null;
+  }
+
+  const parsedManagedAgentMandates: PortfolioManagerManagedAgentMandate[] = [];
+  for (const mandate of managedAgentMandates) {
+    const parsedMandate = parseManagedAgentMandate(mandate);
+    if (!parsedMandate) {
+      return null;
+    }
+
+    parsedManagedAgentMandates.push(parsedMandate);
+  }
+
+  return {
+    portfolioMandate,
+    managedAgentMandates: parsedManagedAgentMandates,
+  };
+}
+
+function readOnboardingMandateSources(value: unknown): OnboardingMandateSource[] {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('mandates' in value) ||
+    !Array.isArray(value.mandates)
+  ) {
+    return [];
+  }
+
+  const mandateSources: OnboardingMandateSource[] = [];
+  for (const mandate of value.mandates) {
+    if (
+      typeof mandate !== 'object' ||
+      mandate === null ||
+      !('mandate_ref' in mandate) ||
+      typeof mandate.mandate_ref !== 'string' ||
+      !('agent_id' in mandate) ||
+      typeof mandate.agent_id !== 'string' ||
+      !('mandate_summary' in mandate) ||
+      typeof mandate.mandate_summary !== 'string'
+    ) {
+      continue;
+    }
+
+    mandateSources.push({
+      mandate_ref: mandate.mandate_ref,
+      agent_id: mandate.agent_id,
+      mandate_summary: mandate.mandate_summary,
+    });
+  }
+
+  return mandateSources;
 }
 
 function parsePortfolioManagerSignedDelegations(input: unknown): PortfolioManagerSignedDelegation[] | null {
@@ -234,15 +502,33 @@ function buildPortfolioManagerSigningInterrupt(setup: PortfolioManagerSetupInput
   };
 }
 
+function buildPortfolioManagerMandateSummary(input: PortfolioManagerPortfolioMandate): string {
+  return `preserve direct-user liquidity at ${input.riskLevel} risk while coordinating managed subagents`;
+}
+
+function buildManagedAgentMandateSummary(input: PortfolioManagerManagedAgentMandate): string {
+  const primaryAsset = input.settings.allowedCollateralAssets[0] ?? FIRST_MANAGED_AGENT_ROOT_ASSET;
+  return `lend ${primaryAsset} on Aave within medium-risk allocation, LTV, and health-factor guardrails`;
+}
+
 function buildPortfolioManagerOnboardingBootstrap(params: {
   agentId: string;
   threadId: string;
   walletAddress: `0x${string}`;
+  approvedMandateEnvelope: PortfolioManagerApprovedMandateEnvelope;
 }) {
   const identity = sanitizeIdentitySegment(`${params.threadId}-${params.walletAddress}`);
   const userId = `user-${identity}`;
   const rootedWalletContextId = `rwc-${identity}`;
-  const mandateRef = `mandate-${identity}`;
+  const valuationRef = `valuation-${identity}`;
+  const capitalObservationId = `observation-${identity}`;
+  const portfolioMandateRef = `mandate-portfolio-${identity}`;
+  const firstManagedAgentMandate = params.approvedMandateEnvelope.managedAgentMandates[0];
+  const managedAgentKeySegment = sanitizeIdentitySegment(firstManagedAgentMandate.agentKey);
+  const managedAgentMandateRef = `mandate-${managedAgentKeySegment}-${identity}`;
+  const seededUnitId = `unit-${managedAgentKeySegment}-${identity}`;
+  const seededReservationId = `reservation-${managedAgentKeySegment}-${identity}`;
+  const seededPolicySnapshotRef = `policy-${managedAgentKeySegment}-${identity}`;
 
   return {
     occurredAt: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
@@ -254,21 +540,100 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
       registered_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
       metadata: {
         source: PORTFOLIO_MANAGER_PROTOCOL_SOURCE,
+        approvedMandateEnvelope: params.approvedMandateEnvelope,
       },
     },
     mandates: [
       {
-        mandate_ref: mandateRef,
+        mandate_ref: portfolioMandateRef,
         agent_id: params.agentId,
-        mandate_summary: 'activate portfolio manager reserves',
+        mandate_summary: buildPortfolioManagerMandateSummary(
+          params.approvedMandateEnvelope.portfolioMandate,
+        ),
+      },
+      {
+        mandate_ref: managedAgentMandateRef,
+        agent_id: FIRST_MANAGED_AGENT_TYPE,
+        mandate_summary: buildManagedAgentMandateSummary(firstManagedAgentMandate),
       },
     ],
-    userReservePolicies: [],
-    activation: {
-      agentId: params.agentId,
-      purpose: 'deploy',
-      controlPath: PORTFOLIO_MANAGER_ONBOARDING_CONTROL_PATH,
+    capitalObservation: {
+      observation_id: capitalObservationId,
+      kind: 'onboarding_scan',
+      wallet_address: params.walletAddress,
+      network: PORTFOLIO_MANAGER_NETWORK,
+      observed_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
+      benchmark_asset: 'USD',
+      valuation_ref: valuationRef,
+      asset_deltas: [
+        {
+          root_asset: FIRST_MANAGED_AGENT_ROOT_ASSET,
+          quantity_delta: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
+        },
+      ],
+      affected_unit_ids: [seededUnitId],
     },
+    userReservePolicies: [],
+    ownedUnits: [
+      {
+        unit_id: seededUnitId,
+        root_asset: FIRST_MANAGED_AGENT_ROOT_ASSET,
+        network: PORTFOLIO_MANAGER_NETWORK,
+        wallet_address: params.walletAddress,
+        quantity: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
+        owner_type: 'user_idle',
+        owner_id: userId,
+        status: 'reserved',
+        reservation_id: seededReservationId,
+        delegation_id: null,
+        control_path: 'unassigned',
+        position_kind: 'spot',
+        benchmark_asset: 'USD',
+        benchmark_value: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
+        valuation_ref: valuationRef,
+        cost_basis: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
+        opened_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
+        closed_at: null,
+        parent_unit_ids: [],
+        metadata: {
+          source: PORTFOLIO_MANAGER_PROTOCOL_SOURCE,
+        },
+      },
+    ],
+    reservations: [
+      {
+        reservation_id: seededReservationId,
+        agent_id: FIRST_MANAGED_AGENT_TYPE,
+        owner_id: userId,
+        purpose: 'deploy',
+        control_path: FIRST_MANAGED_AGENT_CONTROL_PATH,
+        unit_allocations: [
+          {
+            unit_id: seededUnitId,
+            quantity: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
+          },
+        ],
+        status: 'active',
+        created_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
+        released_at: null,
+        superseded_by: null,
+      },
+    ],
+    policySnapshots: [
+      {
+        policy_snapshot_ref: seededPolicySnapshotRef,
+        agent_id: FIRST_MANAGED_AGENT_TYPE,
+        network: PORTFOLIO_MANAGER_NETWORK,
+        control_paths: [FIRST_MANAGED_AGENT_CONTROL_PATH],
+        unit_bounds: [
+          {
+            unit_id: seededUnitId,
+            quantity: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
+          },
+        ],
+        created_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
+      },
+    ],
   };
 }
 
@@ -395,6 +760,83 @@ export function createPortfolioManagerDomain(
         );
       }
 
+      const approvedMandateEnvelope = readApprovedMandateEnvelopeFromOnboardingBootstrap(
+        currentState.lastOnboardingBootstrap,
+      );
+      if (approvedMandateEnvelope) {
+        const mandateSources = readOnboardingMandateSources(currentState.lastOnboardingBootstrap);
+        const portfolioMandateSource =
+          mandateSources.find((mandate) => mandate.agent_id === agentId) ?? null;
+        const managedAgentMandateSources = mandateSources.filter(
+          (mandate) => mandate.agent_id !== agentId,
+        );
+
+        if (portfolioMandateSource) {
+          context.push(
+            `  <portfolio_mandate mandate_ref="${escapeXml(
+              portfolioMandateSource.mandate_ref,
+            )}" risk_level="${escapeXml(
+              approvedMandateEnvelope.portfolioMandate.riskLevel,
+            )}">${escapeXml(portfolioMandateSource.mandate_summary)}</portfolio_mandate>`,
+          );
+        }
+
+        if (approvedMandateEnvelope.managedAgentMandates.length > 0) {
+          context.push('  <managed_agent_mandates>');
+
+          approvedMandateEnvelope.managedAgentMandates.forEach((managedAgentMandate, index) => {
+            const mandateSource = managedAgentMandateSources[index] ?? null;
+
+            context.push(
+              `    <managed_agent agent_key="${escapeXml(
+                managedAgentMandate.agentKey,
+              )}" agent_type="${escapeXml(
+                managedAgentMandate.agentType,
+              )}" approved="true"${
+                mandateSource ? ` mandate_ref="${escapeXml(mandateSource.mandate_ref)}"` : ''
+              }>`,
+            );
+
+            if (mandateSource) {
+              context.push(
+                `      <summary>${escapeXml(mandateSource.mandate_summary)}</summary>`,
+              );
+            }
+
+            context.push(
+              `      <network>${escapeXml(managedAgentMandate.settings.network)}</network>`,
+            );
+            context.push(
+              `      <protocol>${escapeXml(managedAgentMandate.settings.protocol)}</protocol>`,
+            );
+            context.push(
+              `      <allowed_collateral_assets>${escapeXml(
+                managedAgentMandate.settings.allowedCollateralAssets.join(','),
+              )}</allowed_collateral_assets>`,
+            );
+            context.push(
+              `      <allowed_borrow_assets>${escapeXml(
+                managedAgentMandate.settings.allowedBorrowAssets.join(','),
+              )}</allowed_borrow_assets>`,
+            );
+            context.push(
+              `      <max_allocation_pct>${managedAgentMandate.settings.maxAllocationPct}</max_allocation_pct>`,
+            );
+            context.push(
+              `      <max_ltv_bps>${managedAgentMandate.settings.maxLtvBps}</max_ltv_bps>`,
+            );
+            context.push(
+              `      <min_health_factor>${escapeXml(
+                managedAgentMandate.settings.minHealthFactor,
+              )}</min_health_factor>`,
+            );
+            context.push('    </managed_agent>');
+          });
+
+          context.push('  </managed_agent_mandates>');
+        }
+      }
+
       context.push('</portfolio_manager_context>');
 
       const walletAddress = readPortfolioManagerContextWalletAddress(currentState);
@@ -461,6 +903,7 @@ export function createPortfolioManagerDomain(
             lastRootedWalletContextId: null,
             activeWalletAddress: null,
             pendingOnboardingWalletAddress: null,
+            pendingApprovedMandateEnvelope: null,
           };
 
           return {
@@ -492,6 +935,10 @@ export function createPortfolioManagerDomain(
             phase: 'onboarding',
             activeWalletAddress: setupInput.walletAddress,
             pendingOnboardingWalletAddress: setupInput.walletAddress,
+            pendingApprovedMandateEnvelope: {
+              portfolioMandate: setupInput.portfolioMandate,
+              managedAgentMandates: setupInput.managedAgentMandates,
+            },
           };
 
           return {
@@ -513,6 +960,7 @@ export function createPortfolioManagerDomain(
                 phase: 'prehire',
                 activeWalletAddress: null,
                 pendingOnboardingWalletAddress: null,
+                pendingApprovedMandateEnvelope: null,
               },
               outputs: {
                 status: {
@@ -525,10 +973,11 @@ export function createPortfolioManagerDomain(
           }
 
           const walletAddress = currentState.pendingOnboardingWalletAddress;
+          const approvedMandateEnvelope = currentState.pendingApprovedMandateEnvelope ?? null;
           const signedDelegations = parsePortfolioManagerSignedDelegations(operation.input);
           const signedDelegation = signedDelegations?.[0];
 
-          if (!walletAddress || !signedDelegation) {
+          if (!walletAddress || !approvedMandateEnvelope || !signedDelegation) {
             return {
               state: currentState,
               outputs: {
@@ -557,6 +1006,7 @@ export function createPortfolioManagerDomain(
             agentId,
             threadId,
             walletAddress,
+            approvedMandateEnvelope,
           });
           const handoff = buildPortfolioManagerRootDelegationHandoff({
             threadId,
@@ -597,6 +1047,7 @@ export function createPortfolioManagerDomain(
             lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
             activeWalletAddress: walletAddress,
             pendingOnboardingWalletAddress: null,
+            pendingApprovedMandateEnvelope: null,
           };
 
           return {
@@ -671,6 +1122,7 @@ export function createPortfolioManagerDomain(
             lastRootedWalletContextId: currentState.lastRootedWalletContextId,
             activeWalletAddress: currentState.activeWalletAddress,
             pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
+            pendingApprovedMandateEnvelope: currentState.pendingApprovedMandateEnvelope ?? null,
           };
 
           return {
@@ -728,6 +1180,7 @@ export function createPortfolioManagerDomain(
             lastRootedWalletContextId: currentState.lastRootedWalletContextId,
             activeWalletAddress: currentState.activeWalletAddress,
             pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
+            pendingApprovedMandateEnvelope: currentState.pendingApprovedMandateEnvelope ?? null,
           };
 
           return {
@@ -805,6 +1258,7 @@ export function createPortfolioManagerDomain(
               currentState.activeWalletAddress ??
               currentState.pendingOnboardingWalletAddress,
             pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
+            pendingApprovedMandateEnvelope: currentState.pendingApprovedMandateEnvelope ?? null,
           };
 
           return {

@@ -68,6 +68,32 @@ function createInternalPostgresHooks() {
   };
 }
 
+function createPortfolioManagerSetupInput() {
+  return {
+    walletAddress: '0x00000000000000000000000000000000000000a1' as const,
+    portfolioMandate: {
+      approved: true,
+      riskLevel: 'medium' as const,
+    },
+    managedAgentMandates: [
+      {
+        agentKey: 'ember-lending-primary',
+        agentType: 'ember-lending',
+        approved: true,
+        settings: {
+          network: 'arbitrum',
+          protocol: 'aave',
+          allowedCollateralAssets: ['USDC'],
+          allowedBorrowAssets: ['USDC'],
+          maxAllocationPct: 35,
+          maxLtvBps: 7000,
+          minHealthFactor: '1.25',
+        },
+      },
+    ],
+  };
+}
+
 describe('agent-portfolio-manager AG-UI integration', () => {
   let server: Server;
   let baseUrl: string;
@@ -278,9 +304,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         runId: 'run-setup',
         forwardedProps: {
           command: {
-            resume: JSON.stringify({
-              walletAddress: '0x00000000000000000000000000000000000000a1',
-            }),
+            resume: JSON.stringify(createPortfolioManagerSetupInput()),
           },
         },
       }),
@@ -425,7 +449,29 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           onboarding: expect.objectContaining({
             rootedWalletContext: expect.objectContaining({
               wallet_address: '0x00000000000000000000000000000000000000a1',
+              metadata: expect.objectContaining({
+                approvedMandateEnvelope: expect.objectContaining({
+                  portfolioMandate: {
+                    approved: true,
+                    riskLevel: 'medium',
+                  },
+                }),
+              }),
             }),
+            mandates: expect.arrayContaining([
+              expect.objectContaining({
+                agent_id: 'portfolio-manager',
+              }),
+              expect.objectContaining({
+                agent_id: 'ember-lending',
+              }),
+            ]),
+            reservations: expect.arrayContaining([
+              expect.objectContaining({
+                agent_id: 'ember-lending',
+                control_path: 'lending.supply',
+              }),
+            ]),
           }),
           handoff: expect.objectContaining({
             user_wallet: '0x00000000000000000000000000000000000000a1',
@@ -464,9 +510,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         runId: 'run-setup',
         forwardedProps: {
           command: {
-            resume: JSON.stringify({
-              walletAddress: '0x00000000000000000000000000000000000000a1',
-            }),
+            resume: JSON.stringify(createPortfolioManagerSetupInput()),
           },
         },
       }),
@@ -551,9 +595,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         runId: 'run-setup',
         forwardedProps: {
           command: {
-            resume: JSON.stringify({
-              walletAddress: '0x00000000000000000000000000000000000000a1',
-            }),
+            resume: JSON.stringify(createPortfolioManagerSetupInput()),
           },
         },
       }),

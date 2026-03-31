@@ -2,6 +2,32 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createPortfolioManagerDomain } from './sharedEmberAdapter.js';
 
+function createPortfolioManagerSetupInput() {
+  return {
+    walletAddress: '0x00000000000000000000000000000000000000a1' as const,
+    portfolioMandate: {
+      approved: true,
+      riskLevel: 'medium' as const,
+    },
+    managedAgentMandates: [
+      {
+        agentKey: 'ember-lending-primary',
+        agentType: 'ember-lending',
+        approved: true,
+        settings: {
+          network: 'arbitrum',
+          protocol: 'aave',
+          allowedCollateralAssets: ['USDC'],
+          allowedBorrowAssets: ['USDC'],
+          maxAllocationPct: 35,
+          maxLtvBps: 7000,
+          minHealthFactor: '1.25',
+        },
+      },
+    ],
+  };
+}
+
 function createOnboardingBootstrap() {
   return {
     occurredAt: '2026-03-29T00:06:00Z',
@@ -13,6 +39,28 @@ function createOnboardingBootstrap() {
       registered_at: '2026-03-29T00:00:00Z',
       metadata: {
         source: 'onboarding_scan',
+        approvedMandateEnvelope: {
+          portfolioMandate: {
+            approved: true,
+            riskLevel: 'medium',
+          },
+          managedAgentMandates: [
+            {
+              agentKey: 'ember-lending-primary',
+              agentType: 'ember-lending',
+              approved: true,
+              settings: {
+                network: 'arbitrum',
+                protocol: 'aave',
+                allowedCollateralAssets: ['USDC'],
+                allowedBorrowAssets: ['USDC'],
+                maxAllocationPct: 35,
+                maxLtvBps: 7000,
+                minHealthFactor: '1.25',
+              },
+            },
+          ],
+        },
       },
     },
     mandates: [
@@ -21,13 +69,89 @@ function createOnboardingBootstrap() {
         agent_id: 'portfolio-manager',
         mandate_summary: 'preserve direct-user liquidity',
       },
+      {
+        mandate_ref: 'mandate-ember-lending-protocol-001',
+        agent_id: 'ember-lending',
+        mandate_summary: 'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+      },
     ],
-    userReservePolicies: [],
-    activation: {
-      agentId: 'portfolio-manager',
-      purpose: 'deploy',
-      controlPath: 'unassigned',
+    capitalObservation: {
+      observation_id: 'observation-portfolio-protocol-001',
+      kind: 'onboarding_scan',
+      wallet_address: '0xUSERPROTO1',
+      network: 'base',
+      observed_at: '2026-03-29T00:00:00Z',
+      benchmark_asset: 'USD',
+      valuation_ref: 'valuation-portfolio-protocol-001',
+      asset_deltas: [
+        {
+          root_asset: 'USDC',
+          quantity_delta: '10',
+        },
+      ],
+      affected_unit_ids: ['unit-portfolio-protocol-001'],
     },
+    userReservePolicies: [],
+    ownedUnits: [
+      {
+        unit_id: 'unit-portfolio-protocol-001',
+        root_asset: 'USDC',
+        network: 'base',
+        wallet_address: '0xUSERPROTO1',
+        quantity: '10',
+        owner_type: 'user_idle',
+        owner_id: 'user_idle',
+        status: 'reserved',
+        reservation_id: 'reservation-ember-lending-protocol-001',
+        delegation_id: null,
+        control_path: 'unassigned',
+        position_kind: 'spot',
+        benchmark_asset: 'USD',
+        benchmark_value: '10',
+        valuation_ref: 'valuation-portfolio-protocol-001',
+        cost_basis: '10',
+        opened_at: '2026-03-29T00:00:00Z',
+        closed_at: null,
+        parent_unit_ids: [],
+        metadata: {
+          source: 'onboarding_scan',
+        },
+      },
+    ],
+    reservations: [
+      {
+        reservation_id: 'reservation-ember-lending-protocol-001',
+        agent_id: 'ember-lending',
+        owner_id: 'user_idle',
+        purpose: 'deploy',
+        control_path: 'lending.supply',
+        unit_allocations: [
+          {
+            unit_id: 'unit-portfolio-protocol-001',
+            quantity: '10',
+          },
+        ],
+        status: 'active',
+        created_at: '2026-03-29T00:00:00Z',
+        released_at: null,
+        superseded_by: null,
+      },
+    ],
+    policySnapshots: [
+      {
+        policy_snapshot_ref: 'policy-ember-lending-protocol-001',
+        agent_id: 'ember-lending',
+        network: 'base',
+        control_paths: ['lending.supply'],
+        unit_bounds: [
+          {
+            unit_id: 'unit-portfolio-protocol-001',
+            quantity: '10',
+          },
+        ],
+        created_at: '2026-03-29T00:00:00Z',
+      },
+    ],
   };
 }
 
@@ -75,7 +199,7 @@ describe('createPortfolioManagerDomain', () => {
     });
   });
 
-  it('turns wallet-only portfolio-manager setup input into a delegation-signing interrupt', async () => {
+  it('turns the approved mandate envelope into a delegation-signing interrupt', async () => {
     const domain = createPortfolioManagerDomain({
       agentId: 'portfolio-manager',
     });
@@ -96,9 +220,7 @@ describe('createPortfolioManagerDomain', () => {
         operation: {
           source: 'interrupt',
           name: 'portfolio-manager-setup-request',
-          input: {
-            walletAddress: '0x00000000000000000000000000000000000000a1',
-          },
+          input: createPortfolioManagerSetupInput(),
         },
       }),
     ).resolves.toMatchObject({
@@ -191,6 +313,10 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingApprovedMandateEnvelope: {
+            portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+          },
         },
         operation: {
           source: 'interrupt',
@@ -239,13 +365,66 @@ describe('createPortfolioManagerDomain', () => {
           onboarding: expect.objectContaining({
             rootedWalletContext: expect.objectContaining({
               wallet_address: '0x00000000000000000000000000000000000000a1',
+              metadata: expect.objectContaining({
+                approvedMandateEnvelope: {
+                  portfolioMandate: {
+                    approved: true,
+                    riskLevel: 'medium',
+                  },
+                  managedAgentMandates: [
+                    {
+                      agentKey: 'ember-lending-primary',
+                      agentType: 'ember-lending',
+                      approved: true,
+                      settings: {
+                        network: 'arbitrum',
+                        protocol: 'aave',
+                        allowedCollateralAssets: ['USDC'],
+                        allowedBorrowAssets: ['USDC'],
+                        maxAllocationPct: 35,
+                        maxLtvBps: 7000,
+                        minHealthFactor: '1.25',
+                      },
+                    },
+                  ],
+                },
+              }),
             }),
             userReservePolicies: [],
-            activation: {
-              agentId: 'portfolio-manager',
-              purpose: 'deploy',
-              controlPath: 'unassigned',
-            },
+            mandates: [
+              {
+                mandate_ref: expect.stringContaining('mandate-'),
+                agent_id: 'portfolio-manager',
+                mandate_summary: 'preserve direct-user liquidity at medium risk while coordinating managed subagents',
+              },
+              {
+                mandate_ref: expect.stringContaining('mandate-'),
+                agent_id: 'ember-lending',
+                mandate_summary:
+                  'lend USDC on Aave within medium-risk allocation, LTV, and health-factor guardrails',
+              },
+            ],
+            capitalObservation: expect.objectContaining({
+              wallet_address: '0x00000000000000000000000000000000000000a1',
+            }),
+            ownedUnits: [
+              expect.objectContaining({
+                root_asset: 'USDC',
+                control_path: 'unassigned',
+              }),
+            ],
+            reservations: [
+              expect.objectContaining({
+                agent_id: 'ember-lending',
+                control_path: 'lending.supply',
+              }),
+            ],
+            policySnapshots: [
+              expect.objectContaining({
+                agent_id: 'ember-lending',
+                control_paths: ['lending.supply'],
+              }),
+            ],
           }),
           handoff: expect.objectContaining({
             user_wallet: '0x00000000000000000000000000000000000000a1',
@@ -274,6 +453,10 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingApprovedMandateEnvelope: {
+            portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+          },
         },
         operation: {
           source: 'interrupt',
@@ -377,6 +560,10 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingApprovedMandateEnvelope: {
+            portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+          },
         },
         operation: {
           source: 'interrupt',
@@ -981,6 +1168,46 @@ describe('createPortfolioManagerDomain', () => {
         agent_id: 'portfolio-manager',
       },
     });
+  });
+
+  it('injects the portfolio mandate and managed lending mandate set into system context', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.systemContext?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 4,
+          lastRootDelegation: {
+            root_delegation_id: 'root-a1',
+          },
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        '  <portfolio_mandate mandate_ref="mandate-portfolio-protocol-001" risk_level="medium">preserve direct-user liquidity</portfolio_mandate>',
+        '  <managed_agent_mandates>',
+        '    <managed_agent agent_key="ember-lending-primary" agent_type="ember-lending" approved="true" mandate_ref="mandate-ember-lending-protocol-001">',
+        '      <summary>lend USDC on Aave within medium-risk allocation and health-factor guardrails</summary>',
+        '      <network>arbitrum</network>',
+        '      <protocol>aave</protocol>',
+        '      <allowed_collateral_assets>USDC</allowed_collateral_assets>',
+        '      <allowed_borrow_assets>USDC</allowed_borrow_assets>',
+        '      <max_allocation_pct>35</max_allocation_pct>',
+        '      <max_ltv_bps>7000</max_ltv_bps>',
+        '      <min_health_factor>1.25</min_health_factor>',
+        '    </managed_agent>',
+        '  </managed_agent_mandates>',
+      ]),
+    );
   });
 
   it('appends live Shared Ember accounting context to the system prompt context when a wallet is active', async () => {

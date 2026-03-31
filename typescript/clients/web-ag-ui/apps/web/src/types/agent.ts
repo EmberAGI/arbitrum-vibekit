@@ -249,8 +249,32 @@ export interface PendleSetupInput {
   baseContributionUsd: number;
 }
 
+export interface PortfolioManagerMandateApproval {
+  approved: true;
+  riskLevel: 'medium';
+}
+
+export interface EmberLendingManagedAgentSettings {
+  network: 'arbitrum';
+  protocol: 'aave';
+  allowedCollateralAssets: string[];
+  allowedBorrowAssets: string[];
+  maxAllocationPct: number;
+  maxLtvBps: number;
+  minHealthFactor: string;
+}
+
+export interface PortfolioManagerManagedAgentMandateInput {
+  agentKey: string;
+  agentType: 'ember-lending';
+  approved: true;
+  settings: EmberLendingManagedAgentSettings;
+}
+
 export interface PortfolioManagerSetupInput {
   walletAddress: `0x${string}`;
+  portfolioMandate: PortfolioManagerMandateApproval;
+  managedAgentMandates: PortfolioManagerManagedAgentMandateInput[];
 }
 
 export interface FundWalletAcknowledgement {
