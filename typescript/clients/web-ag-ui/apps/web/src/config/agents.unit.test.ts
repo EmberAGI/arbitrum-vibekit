@@ -13,12 +13,15 @@ describe('agents config', () => {
     const clmm = getAgentConfig('agent-clmm');
     const piExample = getAgentConfig('agent-pi-example');
     const portfolioManager = getAgentConfig('agent-portfolio-manager');
+    const emberLending = getAgentConfig('agent-ember-lending');
     expect(clmm.name).toBe('Camelot CLMM');
     expect(piExample.name).toBe('Pi Example Agent');
     expect(portfolioManager.name).toBe('Portfolio Manager');
+    expect(emberLending.name).toBe('Ember Lending');
     expect(isRegisteredAgentId('agent-clmm')).toBe(true);
     expect(isRegisteredAgentId('agent-pi-example')).toBe(true);
     expect(isRegisteredAgentId('agent-portfolio-manager')).toBe(true);
+    expect(isRegisteredAgentId('agent-ember-lending')).toBe(true);
 
     const featured = getFeaturedAgents();
     expect(featured.map((agent) => agent.id)).toEqual(['agent-clmm', 'agent-pendle', 'agent-gmx-allora']);

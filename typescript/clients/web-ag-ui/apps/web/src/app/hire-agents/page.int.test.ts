@@ -118,13 +118,14 @@ describe('HireAgentsRoute integration', () => {
     expect(capturedProps).not.toBeNull();
     const props = capturedProps as HireAgentsRoutePropsCapture;
 
-    expect(props.agents).toHaveLength(5);
+    expect(props.agents).toHaveLength(6);
     expect(props.featuredAgents).toHaveLength(3);
 
     const clmm = props.agents.find((agent) => agent.id === 'agent-clmm');
     const pendle = props.agents.find((agent) => agent.id === 'agent-pendle');
     const piExample = props.agents.find((agent) => agent.id === 'agent-pi-example');
     const portfolioManager = props.agents.find((agent) => agent.id === 'agent-portfolio-manager');
+    const emberLending = props.agents.find((agent) => agent.id === 'agent-ember-lending');
 
     expect(clmm?.chains).toEqual(['Arbitrum']);
     expect(clmm?.tokens).toEqual(['USDC', 'WETH', 'WBTC']);
@@ -147,6 +148,12 @@ describe('HireAgentsRoute integration', () => {
     expect(portfolioManager?.tokens).toEqual(['USDC']);
     expect(portfolioManager?.pointsTrend).toBeUndefined();
     expect(portfolioManager?.trendMultiplier).toBeUndefined();
+
+    expect(emberLending?.chains).toEqual(['Arbitrum']);
+    expect(emberLending?.protocols).toEqual(['Pi Runtime', 'Shared Ember Domain Service']);
+    expect(emberLending?.tokens).toEqual(['USDC']);
+    expect(emberLending?.pointsTrend).toBeUndefined();
+    expect(emberLending?.trendMultiplier).toBeUndefined();
   });
 
   it('routes hire/view handlers to the correct detail URL', () => {

@@ -108,6 +108,20 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
     tokens: ['USDC'],
   },
+  'agent-ember-lending': {
+    id: 'agent-ember-lending',
+    name: 'Ember Lending',
+    description:
+      'Managed lending subagent on the public PI runtime path for bounded Shared Ember portfolio-state reads, plan materialization, execution, and escalation.',
+    creator: 'Ember AI Team',
+    creatorVerified: true,
+    avatar: '🏦',
+    avatarBg: 'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
+    imperativeCommandTransport: 'forwarded-props',
+    chains: ['Arbitrum'],
+    protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+    tokens: ['USDC'],
+  },
 };
 
 export function getAgentConfig(agentId: string): AgentConfig {

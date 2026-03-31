@@ -45,6 +45,7 @@ describe('buildCopilotRuntimeAgents', () => {
       LANGSMITH_API_KEY: 'test-langsmith-key',
       PI_AGENT_DEPLOYMENT_URL: 'http://pi-agent-example:3410/ag-ui',
       PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL: 'http://portfolio-manager:3420/ag-ui',
+      EMBER_LENDING_AGENT_DEPLOYMENT_URL: 'http://ember-lending:3430/ag-ui',
     });
 
     expect(Object.keys(agents)).toEqual([
@@ -54,6 +55,7 @@ describe('buildCopilotRuntimeAgents', () => {
       'starterAgent',
       'agent-pi-example',
       'agent-portfolio-manager',
+      'agent-ember-lending',
     ]);
 
     expect(langGraphInterruptSnapshotAgentConfigs).toEqual([
@@ -88,6 +90,10 @@ describe('buildCopilotRuntimeAgents', () => {
         agentId: 'agent-portfolio-manager',
         runtimeUrl: 'http://portfolio-manager:3420/ag-ui',
       },
+      {
+        agentId: 'agent-ember-lending',
+        runtimeUrl: 'http://ember-lending:3430/ag-ui',
+      },
     ]);
     expect(agents['agent-pi-example']).toMatchObject({
       config: {
@@ -99,6 +105,12 @@ describe('buildCopilotRuntimeAgents', () => {
       config: {
         agentId: 'agent-portfolio-manager',
         runtimeUrl: 'http://portfolio-manager:3420/ag-ui',
+      },
+    });
+    expect(agents['agent-ember-lending']).toMatchObject({
+      config: {
+        agentId: 'agent-ember-lending',
+        runtimeUrl: 'http://ember-lending:3430/ag-ui',
       },
     });
   });
@@ -122,6 +134,12 @@ describe('buildCopilotRuntimeAgents', () => {
         runtimeUrl: 'http://127.0.0.1:3420/ag-ui',
       },
     });
+    expect(agents['agent-ember-lending']).toMatchObject({
+      config: {
+        agentId: 'agent-ember-lending',
+        runtimeUrl: 'http://127.0.0.1:3430/ag-ui',
+      },
+    });
     expect(agentRuntimeHttpAgentConfigs).toContainEqual({
       agentId: 'agent-pi-example',
       runtimeUrl: 'http://127.0.0.1:3410/ag-ui',
@@ -129,6 +147,10 @@ describe('buildCopilotRuntimeAgents', () => {
     expect(agentRuntimeHttpAgentConfigs).toContainEqual({
       agentId: 'agent-portfolio-manager',
       runtimeUrl: 'http://127.0.0.1:3420/ag-ui',
+    });
+    expect(agentRuntimeHttpAgentConfigs).toContainEqual({
+      agentId: 'agent-ember-lending',
+      runtimeUrl: 'http://127.0.0.1:3430/ag-ui',
     });
   });
 });
