@@ -74,6 +74,7 @@ flowchart LR
   A2A[A2A Client] --> PA
 
   PA --> PI[Pi Runtime]
+  PI --> SE[Shared Ember Domain Service]
   PI --> EXT[External Tools / APIs / Chains]
 ```
 
@@ -81,6 +82,7 @@ Key point:
 
 - Web, Telegram, and A2A are sibling client surfaces around the same Pi gateway runtime.
 - The gateway runtime itself is an initiative-specific layer built around `@mariozechner/pi-agent-core` + `@mariozechner/pi-ai`, not a claim that all of the durable records in this document already exist as `pi-mono` primitives today.
+- The current concrete managed downstream pair is `agent-portfolio-manager` plus `agent-ember-lending`; both are separate Pi-backed runtimes that consume Shared Ember over thin app-local adapters instead of talking to each other directly.
 
 ## 4. Container view
 
@@ -114,6 +116,8 @@ flowchart TB
     Ops[Operator Control Plane]
   end
 
+  SE[Shared Ember Domain Service]
+
   UI --> Store
   Store --> Stream
   Stream --> CK
@@ -129,6 +133,7 @@ flowchart TB
   Domain --> Runs
   Projection --> Threads
   Projection --> Execs
+  Domain --> SE
   Scheduler --> Autos
   Scheduler --> Runs
   Scheduler --> Execs
@@ -150,6 +155,9 @@ Container responsibilities:
 - Projection layer: maps canonical Pi records into AG-UI, A2A, and future channel-specific views without creating competing durable identities
 - Agent domain module: pluggable layer for agent-family-specific lifecycle, interrupt, command, and semantic A2UI content
 - Operator control plane: scheduler health, maintenance, replay/recreate, inspection, and archival workflows that are not model-facing tools
+- Current managed-runtime example:
+  - `agent-portfolio-manager` owns onboarding approval, reservation creation, and managed-agent control-plane projection.
+  - `agent-ember-lending` owns the bounded subagent read/plan/execute/escalate runtime against Shared Ember.
 
 Important web constraint:
 

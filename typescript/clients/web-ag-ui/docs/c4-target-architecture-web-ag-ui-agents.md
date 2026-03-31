@@ -39,19 +39,20 @@ Current code references that motivate this:
 flowchart LR
   U[End User] --> W[web-ag-ui Web App]
   W --> R[CopilotKit Runtime Endpoint /api/copilotkit]
-  R --> A1[Agent Runtime: agent-clmm]
-  R --> A2[Agent Runtime: agent-pendle]
-  R --> A3[Agent Runtime: agent-gmx-allora]
+  R --> PM[Agent Runtime: agent-portfolio-manager]
+  R --> EL[Agent Runtime: agent-ember-lending]
+  R --> O[Other Agent Runtimes]
 
-  A1 --> X1[External Protocols/APIs]
-  A2 --> X2[External Protocols/APIs]
-  A3 --> X3[External Protocols/APIs]
+  PM --> SE[Shared Ember Domain Service]
+  EL --> SE
+  O --> X[External Protocols/APIs]
 ```
 
 Boundary intent:
 
 - User-facing web talks only to CopilotKit runtime over AG-UI-compatible routes.
 - Runtime talks to agent runtimes; web never talks directly to LangGraph thread APIs.
+- The first concrete managed-runtime pair is `agent-portfolio-manager` plus `agent-ember-lending`; they stay as separate runtimes and meet only through the Shared Ember boundary rather than direct runtime-to-runtime calls.
 
 ## 4. C4 Level 2: Container View
 
@@ -69,18 +70,22 @@ flowchart TB
   end
 
   subgraph AgentRuntimes[Agent Runtimes]
-    CLMM[agent-clmm]
-    PENDLE[agent-pendle]
-    GMX[agent-gmx-allora]
+    PM[agent-portfolio-manager]
+    EL[agent-ember-lending]
+    OTHER[other agent runtimes]
   end
+
+  SE[Shared Ember Domain Service]
 
   UI --> StreamMgr
   StreamMgr --> Store
   StreamMgr --> CK
   BFF --> CK
-  CK --> CLMM
-  CK --> PENDLE
-  CK --> GMX
+  CK --> PM
+  CK --> EL
+  CK --> OTHER
+  PM --> SE
+  EL --> SE
 ```
 
 Container responsibilities:
@@ -90,6 +95,7 @@ Container responsibilities:
 - Projection Store: derives sidebar/detail state from AG-UI events.
 - CopilotKit endpoint: protocol boundary and routing to agents.
 - Agent runtimes: workflow execution and state emission.
+- Managed downstream note: `agent-portfolio-manager` owns managed onboarding/control-plane flows, while `agent-ember-lending` stays on the bounded subagent read/plan/execute/escalate surface against Shared Ember.
 
 Explicit non-goal container:
 
@@ -147,6 +153,7 @@ Explicit non-goal container:
   - Maps agent ids to runtime endpoints and capabilities.
   - Provides metadata only; does not mirror thread state.
   - Must support multiple runtime families cleanly, including standalone Pi gateway-backed agents registered through `HttpAgent` rather than in-process runtime embedding.
+  - Must register managed-runtime pairs cleanly, such as `agent-portfolio-manager` and `agent-ember-lending`, without collapsing them into one combined runtime identity.
 
 - Pi-backed runtime package ownership:
   - The `agent-runtime` package family owns the reusable Pi AG-UI HTTP adapter/server layer.
@@ -170,6 +177,17 @@ Target factorization:
   - Canonical onboarding + task state machine
   - Shared `ThreadState` schema + versioning
   - Shared event/status helpers
+
+Current concrete managed-path specialization:
+
+- `agent-portfolio-manager`
+  - owns onboarding approval, reservation creation, managed-agent activation/deactivation, and managed-lane summary projection
+  - consumes Shared Ember through a thin app-local adapter without owning Ember business logic
+
+- `agent-ember-lending`
+  - owns the first bounded managed-subagent runtime
+  - consumes the Shared Ember subagent surface for `read_portfolio_state`, `materialize_candidate_plan`, `execute_transaction_plan`, and `create_escalation_request`
+  - projects lifecycle, wallet, mandate, reservation, planning, execution, and escalation state into the shared AG-UI thread contract
 
 ## 6. Dynamic views (sequence)
 

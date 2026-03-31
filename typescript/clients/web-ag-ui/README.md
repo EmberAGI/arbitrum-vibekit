@@ -6,6 +6,8 @@ It includes:
 
 - `apps/web`: the Next.js frontend that talks to agents only through the AG-UI/CopilotKit boundary
 - `apps/agent-pi-example`: the Pi-backed golden-example runtime target
+- `apps/agent-portfolio-manager`: the managed-agent controller for Shared Ember onboarding, reservation, and activation flows
+- `apps/agent-ember-lending`: the first concrete managed subagent consuming the bounded Shared Ember subagent surface
 - additional `apps/agent-*` runtimes for concrete agent families
 - shared architecture docs and ADRs for AG-UI, Pi runtime, and domain-module boundaries
 
@@ -18,6 +20,9 @@ It includes:
 - When a concrete agent app consumes a runtime-agnostic upstream domain service, the app owns the thin adapter between `agent-runtime` domain hooks and that external service protocol.
 - Neither `apps/web` nor `agent-runtime` should absorb service-specific translation logic for downstream domain integrations such as the Shared Ember Domain Service.
 - Agent-family lifecycle behavior belongs in pluggable domain modules above the Pi core runtime.
+- The first concrete managed downstream path is `agent-portfolio-manager` -> `agent-ember-lending` -> Shared Ember Domain Service:
+  - Portfolio Manager owns managed onboarding, mandate approval, reservation creation, activation, and deactivation.
+  - Ember Lending owns the bounded managed-subagent surface for portfolio-state reads, candidate-plan materialization, transaction execution, and escalation requests.
 
 ## Workspace Notes
 
