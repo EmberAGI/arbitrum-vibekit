@@ -67,7 +67,7 @@ describe('pi runtime gateway context messages', () => {
     ]);
   });
 
-  it('converts runtime notes into user context while filtering UI-only session messages', () => {
+  it('filters runtime-only session messages from the LLM-visible message list', () => {
     const converted = convertPiRuntimeGatewayMessagesToLlm([
       {
         role: 'user',
@@ -107,11 +107,6 @@ describe('pi runtime gateway context messages', () => {
         role: 'user',
         content: 'Hello',
         timestamp: 1,
-      },
-      {
-        role: 'user',
-        content: '<pi-runtime-gateway>Execution is waiting for confirmation.</pi-runtime-gateway>',
-        timestamp: 2,
       },
     ]);
   });

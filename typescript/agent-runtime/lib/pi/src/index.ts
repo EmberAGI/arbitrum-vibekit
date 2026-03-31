@@ -8,7 +8,14 @@ import {
   type StateSnapshotEvent,
 } from '@ag-ui/core';
 import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
-import { createAssistantMessageEventStream, type Api, type Message, type Model, type ToolResultMessage } from '@mariozechner/pi-ai';
+import {
+  createAssistantMessageEventStream,
+  streamSimple,
+  type Api,
+  type Message,
+  type Model,
+  type ToolResultMessage,
+} from '@mariozechner/pi-ai';
 import {
   buildPiRuntimeInspectionSnapshot,
   buildPiRuntimeMaintenancePlan,
@@ -893,6 +900,27 @@ const buildExecutionStatusText = (session: PiRuntimeGatewaySession): string =>
     .filter((part): part is string => typeof part === 'string' && part.length > 0)
     .join(' ');
 
+const buildPiRuntimeGatewaySystemPromptLines = (session: PiRuntimeGatewaySession): string[] => {
+  const executionStatusText = buildExecutionStatusText(session);
+  return executionStatusText.length > 0 ? [`<pi-runtime-gateway>${executionStatusText}</pi-runtime-gateway>`] : [];
+};
+
+const appendPiRuntimeGatewaySystemPromptContext = (
+  systemPrompt: string | undefined,
+  lines: readonly string[],
+): string | undefined => {
+  if (lines.length === 0) {
+    return systemPrompt;
+  }
+
+  const appended = lines.join('\n');
+  if (!systemPrompt || systemPrompt.trim().length === 0) {
+    return appended;
+  }
+
+  return `${systemPrompt}\n\n${appended}`;
+};
+
 export const buildPiRuntimeGatewayContextMessages = (params: {
   session: PiRuntimeGatewaySession;
   now?: () => number;
@@ -953,17 +981,11 @@ export const convertPiRuntimeGatewayMessagesToLlm = (
   delegate?: (messages: AgentMessage[]) => Message[] | Promise<Message[]>,
 ): Message[] | Promise<Message[]> => {
   const preprocessedMessages = messages.flatMap((message): AgentMessage[] => {
-    if (isPiRuntimeGatewayRuntimeNoteMessage(message)) {
-      return [
-        {
-          role: 'user',
-          content: `<pi-runtime-gateway>${message.text}</pi-runtime-gateway>`,
-          timestamp: message.timestamp,
-        },
-      ];
-    }
-
-    if (isPiRuntimeGatewayArtifactMessage(message) || isPiRuntimeGatewayA2UiMessage(message)) {
+    if (
+      isPiRuntimeGatewayRuntimeNoteMessage(message) ||
+      isPiRuntimeGatewayArtifactMessage(message) ||
+      isPiRuntimeGatewayA2UiMessage(message)
+    ) {
       return [];
     }
 
@@ -1459,31 +1481,33 @@ export const createPiRuntimeGatewayFoundation = (params: {
   getSessionContext?: () => PiRuntimeGatewaySession | undefined;
   now?: () => number;
 }): PiRuntimeGatewayFoundation => {
-  const now = params.now ?? (() => Date.now());
   validatePiGatewayToolNames(params.model, params.tools);
   const transformContext =
-    params.getSessionContext || params.agentOptions?.transformContext
+    params.agentOptions?.transformContext
       ? async (messages: AgentMessage[], signal?: AbortSignal) => {
-          const transformedMessages = params.agentOptions?.transformContext
-            ? await params.agentOptions.transformContext(messages, signal)
-            : messages;
-          const session = params.getSessionContext?.();
-          return session
-            ? [
-                ...transformedMessages,
-                ...buildPiRuntimeGatewayContextMessages({
-                  session,
-                  now,
-                }),
-              ]
-            : transformedMessages;
+          return await params.agentOptions!.transformContext!(messages, signal);
         }
       : undefined;
+  const streamFn: AgentOptions['streamFn'] | undefined = params.getSessionContext
+    ? async (model, context, streamOptions) => {
+        const session = params.getSessionContext?.();
+        const lines = session ? buildPiRuntimeGatewaySystemPromptLines(session) : [];
+        const nextContext = lines.length
+          ? {
+              ...context,
+              systemPrompt: appendPiRuntimeGatewaySystemPromptContext(context.systemPrompt, lines),
+            }
+          : context;
+
+        return await (params.agentOptions?.streamFn ?? streamSimple)(model, nextContext, streamOptions);
+      }
+    : params.agentOptions?.streamFn;
 
   const agent = new Agent({
     ...params.agentOptions,
     convertToLlm: (messages) => convertPiRuntimeGatewayMessagesToLlm(messages, params.agentOptions?.convertToLlm),
     transformContext,
+    streamFn,
     initialState: {
       ...params.agentOptions?.initialState,
       model: params.model,
