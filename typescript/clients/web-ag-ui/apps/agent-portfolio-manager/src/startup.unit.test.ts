@@ -19,6 +19,7 @@ function createStubService(): AgentRuntimeService {
       inspectOutbox: async () => ({ dueOutboxIds: [], intents: [] }),
       inspectMaintenance: async () => ({ recovery: {}, archival: {} }),
     },
+    createAgUiHandler: () => async () => new Response(null),
   };
 }
 

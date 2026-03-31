@@ -15,11 +15,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function readJsonRpcErrorMessage(body: unknown): string | null {
-  if (!isRecord(body) || !('error' in body) || !isRecord(body.error)) {
+  if (!isRecord(body) || !('error' in body) || !isRecord(body['error'])) {
     return null;
   }
 
-  const message = body.error.message;
+  const message = body['error']['message'];
   return typeof message === 'string' && message.trim().length > 0 ? message : 'Unknown JSON-RPC error.';
 }
 
@@ -55,7 +55,7 @@ async function postJson(input: {
 export function resolvePortfolioManagerSharedEmberBaseUrl(
   env: PortfolioManagerSharedEmberHttpHostEnv = process.env,
 ): string | null {
-  const normalized = env.SHARED_EMBER_BASE_URL?.trim();
+  const normalized = env['SHARED_EMBER_BASE_URL']?.trim();
   return normalized ? trimTrailingSlash(normalized) : null;
 }
 

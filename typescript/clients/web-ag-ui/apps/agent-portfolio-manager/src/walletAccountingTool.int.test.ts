@@ -13,11 +13,11 @@ type StartedSharedEmberTarget = {
   close: () => Promise<void>;
 };
 
-const runSharedEmberIntegration = process.env.RUN_SHARED_EMBER_INT?.trim() === '1';
+const runSharedEmberIntegration = process.env['RUN_SHARED_EMBER_INT']?.trim() === '1';
 const describeSharedEmberIntegration = runSharedEmberIntegration ? describe : describe.skip;
 
 async function resolveSharedEmberTarget(): Promise<StartedSharedEmberTarget> {
-  const explicitBaseUrl = process.env.SHARED_EMBER_BASE_URL?.trim();
+  const explicitBaseUrl = process.env['SHARED_EMBER_BASE_URL']?.trim();
   if (explicitBaseUrl) {
     return {
       baseUrl: explicitBaseUrl,
@@ -25,7 +25,7 @@ async function resolveSharedEmberTarget(): Promise<StartedSharedEmberTarget> {
     };
   }
 
-  const privateRepoRoot = process.env.EMBER_ORCHESTRATION_V1_SPEC_ROOT?.trim();
+  const privateRepoRoot = process.env['EMBER_ORCHESTRATION_V1_SPEC_ROOT']?.trim();
   if (!privateRepoRoot) {
     throw new Error(
       'Set SHARED_EMBER_BASE_URL or EMBER_ORCHESTRATION_V1_SPEC_ROOT when RUN_SHARED_EMBER_INT=1.',
@@ -207,7 +207,6 @@ describeSharedEmberIntegration('wallet accounting tool Shared Ember integration'
           lastRootedWalletContextId: null,
           activeWalletAddress: null,
           pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
         },
         operation: {
           source: 'tool',

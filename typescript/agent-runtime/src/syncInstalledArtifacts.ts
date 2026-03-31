@@ -21,8 +21,10 @@ type CopyArtifactDirParams = {
 };
 
 const DEFAULT_MAX_REPLACE_ATTEMPTS = 3;
+const DEFAULT_MAX_LOCK_ATTEMPTS = 120;
 const DEFAULT_RETRY_DELAY_MS = 25;
 const RETRYABLE_REPLACE_ERROR_CODES = new Set(['EBUSY', 'EEXIST', 'ENOENT', 'ENOTEMPTY', 'EPERM']);
+const RETRYABLE_LOCK_ERROR_CODES = new Set(['EBUSY', 'EEXIST', 'ENOTEMPTY', 'EPERM']);
 
 const DEFAULT_FILE_OPS: FileOps = {
   cp,
@@ -46,6 +48,40 @@ const isRetryableReplaceError = (error: unknown): error is RetryableError =>
   typeof (error as { code?: unknown }).code === 'string' &&
   RETRYABLE_REPLACE_ERROR_CODES.has((error as { code: string }).code);
 
+const isRetryableLockError = (error: unknown): error is RetryableError =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  typeof (error as { code?: unknown }).code === 'string' &&
+  RETRYABLE_LOCK_ERROR_CODES.has((error as { code: string }).code);
+
+async function withDirectoryLock(input: {
+  fileOps: FileOps;
+  lockDir: string;
+  maxLockAttempts: number;
+  retryDelayMs: number;
+  run: () => Promise<void>;
+}): Promise<void> {
+  for (let attempt = 1; attempt <= input.maxLockAttempts; attempt += 1) {
+    try {
+      await input.fileOps.mkdir(input.lockDir);
+      break;
+    } catch (error) {
+      if (!isRetryableLockError(error) || attempt === input.maxLockAttempts) {
+        throw error;
+      }
+
+      await sleep(input.retryDelayMs);
+    }
+  }
+
+  try {
+    await input.run();
+  } finally {
+    await input.fileOps.rm(input.lockDir, { recursive: true, force: true });
+  }
+}
+
 export async function copyArtifactDir({
   sourceRoot,
   relativeDir,
@@ -63,18 +99,27 @@ export async function copyArtifactDir({
 
   const targetDir = path.join(targetRoot, relativeDir);
   await fileOps.mkdir(path.dirname(targetDir), { recursive: true });
+  const lockDir = `${targetDir}.sync-lock`;
 
-  for (let attempt = 1; attempt <= maxReplaceAttempts; attempt += 1) {
-    try {
-      await fileOps.rm(targetDir, { recursive: true, force: true });
-      await fileOps.cp(sourceDir, targetDir, { recursive: true, force: true });
-      return;
-    } catch (error) {
-      if (!isRetryableReplaceError(error) || attempt === maxReplaceAttempts) {
-        throw error;
+  await withDirectoryLock({
+    fileOps,
+    lockDir,
+    maxLockAttempts: DEFAULT_MAX_LOCK_ATTEMPTS,
+    retryDelayMs,
+    run: async () => {
+      for (let attempt = 1; attempt <= maxReplaceAttempts; attempt += 1) {
+        try {
+          await fileOps.rm(targetDir, { recursive: true, force: true });
+          await fileOps.cp(sourceDir, targetDir, { recursive: true, force: true });
+          return;
+        } catch (error) {
+          if (!isRetryableReplaceError(error) || attempt === maxReplaceAttempts) {
+            throw error;
+          }
+
+          await sleep(retryDelayMs);
+        }
       }
-
-      await sleep(retryDelayMs);
-    }
-  }
+    },
+  });
 }

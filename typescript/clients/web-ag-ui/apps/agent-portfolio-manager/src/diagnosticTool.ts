@@ -34,7 +34,7 @@ export function createPortfolioManagerDiagnosticTool(): PortfolioManagerAgentToo
         },
       },
       additionalProperties: false,
-    } as PortfolioManagerAgentTool['parameters'],
+    } as unknown as PortfolioManagerAgentTool['parameters'],
     execute: async (_toolCallId, args) => {
       const toolArgs = parseDiagnosticToolArgs(args);
       const executedAt = new Date().toISOString();

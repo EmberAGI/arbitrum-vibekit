@@ -7,7 +7,8 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { NextRequest } from 'next/server';
 import { installCopilotRuntimeDebugFilter } from '../../../utils/copilotRuntimeDebugFilter';
-import { buildCopilotRuntime } from './copilotRuntimeRegistry';
+
+export const runtime = 'nodejs';
 
 // 1. You can use any service adapter here for multi-agent support. We use
 //    the empty adapter since we're only using one agent.
@@ -19,10 +20,6 @@ const shouldTraceCopilotRouteConnect =
   process.env.COPILOTKIT_ROUTE_TRACE_CONNECT === 'true' || process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
 
 installCopilotRuntimeDebugFilter({ enabled: shouldLogCopilotRuntimeDebug });
-
-// 2. Create the CopilotRuntime instance and utilize the LangGraph AG-UI
-//    integration to setup the connection.
-const runtime = buildCopilotRuntime(process.env);
 
 type CopilotRouteRequestMetadata = {
   method?: string;
@@ -351,8 +348,9 @@ export const POST = async (req: NextRequest) => {
     });
   }
 
+  const { buildCopilotRuntime } = await import('./copilotRuntimeRegistry');
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime,
+    runtime: buildCopilotRuntime(process.env),
     serviceAdapter,
     endpoint: '/api/copilotkit',
   });

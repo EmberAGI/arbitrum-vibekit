@@ -35,7 +35,9 @@ function parseWalletAccountingToolArgs(args: unknown): WalletAccountingToolArgs 
   };
 }
 
-function buildWalletAccountingSummary(details: WalletAccountingToolDetails): string {
+function buildWalletAccountingSummary(
+  details: PortfolioManagerWalletAccountingDetails,
+): string {
   if (details.assets.length === 0 && details.reservations.length === 0) {
     return `Wallet ${details.wallet.address} on ${details.wallet.network} has no durable onboarding/accounting state yet. Phase: ${details.onboarding.phase}. No baseline assets or reservations are recorded.`;
   }
@@ -74,7 +76,7 @@ export function createPortfolioManagerWalletAccountingTool(input: {
       },
       required: ['walletAddress'],
       additionalProperties: false,
-    } as PortfolioManagerAgentTool['parameters'],
+    } as unknown as PortfolioManagerAgentTool['parameters'],
     execute: async (_toolCallId, args) => {
       const toolArgs = parseWalletAccountingToolArgs(args);
       const { revision, onboardingState } = await readPortfolioManagerOnboardingState({

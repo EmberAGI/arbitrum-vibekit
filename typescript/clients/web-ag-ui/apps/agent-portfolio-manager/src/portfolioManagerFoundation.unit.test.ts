@@ -64,7 +64,7 @@ describe('createPortfolioManagerAgentConfig', () => {
     expect(config.agentOptions?.initialState).toMatchObject({
       thinkingLevel: 'low',
     });
-    expect(config.agentOptions?.getApiKey?.()).toBe('test-openrouter-key');
+    expect(config.agentOptions?.getApiKey?.(undefined as never)).toBe('test-openrouter-key');
     expect(
       await config.domain?.systemContext?.({
         threadId: 'thread-1',
@@ -77,7 +77,6 @@ describe('createPortfolioManagerAgentConfig', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: null,
           pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
         },
       }),
     ).toEqual([
@@ -163,7 +162,6 @@ describe('createPortfolioManagerAgentConfig', () => {
           lastRootedWalletContextId: 'rwc-1',
           activeWalletAddress: null,
           pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
         },
       }),
     ).resolves.toContain(

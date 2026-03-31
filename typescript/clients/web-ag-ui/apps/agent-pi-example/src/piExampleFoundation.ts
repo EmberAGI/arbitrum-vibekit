@@ -47,6 +47,8 @@ export type PiExampleAgentConfig = Pick<
 
 type PiExampleGatewayModel = PiExampleAgentConfig['model'];
 type PiExampleGatewayStream = NonNullable<NonNullable<PiExampleAgentConfig['agentOptions']>['streamFn']>;
+type PiExampleGatewayStreamModel = Parameters<PiExampleGatewayStream>[0];
+type PiExampleGatewayStreamContext = Parameters<PiExampleGatewayStream>[1];
 
 const PI_EXAMPLE_PHASES = ['prehire', 'onboarding', 'hired', 'fired'] as const;
 const PI_EXAMPLE_COMMANDS = ['hire', 'continue_onboarding', 'complete_onboarding', 'fire'] as const;
@@ -426,7 +428,7 @@ function createMockToolStream(params: {
 }
 
 function createPiExampleMockStream(): PiExampleGatewayStream {
-  return (model, context) => {
+  return ((model: PiExampleGatewayStreamModel, context: PiExampleGatewayStreamContext) => {
     const latestMessage = [...context.messages].reverse().find(isMeaningfulContextMessage);
 
     if (latestMessage?.role === 'toolResult') {
@@ -524,7 +526,7 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
       text: 'Pi example mocked response. I can stream text, use runtime-owned tools, and walk the lifecycle.',
       reasoning: 'Explaining the mocked Pi example capabilities.',
     });
-  };
+  }) as unknown as PiExampleGatewayStream;
 }
 
 export function createPiExampleAgentConfig(env: PiExampleGatewayEnv = process.env): PiExampleAgentConfig {

@@ -75,6 +75,53 @@ describe('syncInstalledArtifacts', () => {
     expect(cp).toHaveBeenNthCalledWith(2, '/source/dist', '/target/dist', { recursive: true, force: true });
   });
 
+  it('waits for a per-target sync lock before replacing installed artifacts', async () => {
+    const stat = vi.fn(() => Promise.resolve({
+      isDirectory: () => true,
+    }));
+    const mkdir = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(Object.assign(new Error('lock busy'), { code: 'EEXIST' }))
+      .mockResolvedValueOnce(undefined);
+    const rm = vi.fn(() => Promise.resolve(undefined));
+    const cp = vi.fn(() => Promise.resolve(undefined));
+
+    await expect(
+      Promise.all([
+        copyArtifactDir({
+          sourceRoot: '/source',
+          relativeDir: 'dist',
+          targetRoot: '/target',
+          fileOps: {
+            stat,
+            mkdir,
+            rm,
+            cp,
+          },
+          retryDelayMs: 0,
+        }),
+        copyArtifactDir({
+          sourceRoot: '/source',
+          relativeDir: 'dist',
+          targetRoot: '/target',
+          fileOps: {
+            stat,
+            mkdir,
+            rm,
+            cp,
+          },
+          retryDelayMs: 0,
+        }),
+      ]),
+    ).resolves.toEqual([undefined, undefined]);
+
+    expect(mkdir).toHaveBeenCalledWith('/target', { recursive: true });
+    expect(mkdir).toHaveBeenCalledWith('/target/dist.sync-lock');
+    expect(rm).toHaveBeenCalledWith('/target/dist.sync-lock', { recursive: true, force: true });
+    expect(cp).toHaveBeenCalledTimes(2);
+  });
+
   it('syncs postgres dist artifacts into installed agent-runtime snapshots', () => {
     const scriptSource = readFileSync(
       path.resolve(import.meta.dirname, '../scripts/sync-installed-artifacts.mjs'),

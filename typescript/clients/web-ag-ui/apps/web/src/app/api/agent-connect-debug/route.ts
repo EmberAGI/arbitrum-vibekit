@@ -4,6 +4,8 @@ import path from 'node:path';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
+export const runtime = 'nodejs';
+
 const shouldLogAgentConnectDebug =
   process.env.AGENT_CONNECT_DEBUG === 'true' || process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === 'true';
 
