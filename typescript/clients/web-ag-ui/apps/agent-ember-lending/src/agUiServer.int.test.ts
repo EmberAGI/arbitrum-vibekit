@@ -95,6 +95,85 @@ function createCandidatePlanInput() {
   };
 }
 
+function createEscalationRequestInput() {
+  return {
+    handoff: {
+      handoff_id: 'handoff-ember-lending-escalation-001',
+      intent: 'deploy',
+      action_summary: 'supply reserved USDC on Aave',
+      candidate_unit_ids: ['unit-ember-lending-001'],
+      requested_quantities: [
+        {
+          unit_id: 'unit-ember-lending-001',
+          quantity: '10',
+        },
+      ],
+      decision_context: {
+        objective_summary: 'deploy reserved capital into the approved lending lane',
+        accounting_state_summary: 'reserved capital is still claimed by another agent',
+        why_this_path_is_best: 'lending.supply remains the approved path once capital is free',
+        consequence_if_delayed: 'reserved capital remains idle',
+        alternatives_considered: ['wait for manual intervention'],
+      },
+      payload_builder_output: {
+        transaction_payload_ref: 'tx-lending-supply-001',
+        required_control_path: 'lending.supply',
+        network: 'arbitrum',
+      },
+    },
+    result: {
+      phase: 'blocked',
+      transaction_plan_id: 'txplan-ember-lending-001',
+      request_result: {
+        result: 'needs_release_or_transfer',
+        request_id: 'req-ember-lending-blocked-001',
+        message: 'reserved capital is still claimed by another agent',
+        reservation_id: 'reservation-ember-lending-001',
+        blocking_reason_code: 'reserved_for_other_agent',
+        next_action: 'escalate_to_control_plane',
+      },
+      portfolio_state: {
+        agent_id: 'ember-lending',
+        owned_units: [],
+        reservations: [],
+      },
+    },
+  };
+}
+
+async function runAgUiCommand(input: {
+  baseUrl: string;
+  runId: string;
+  command: {
+    name: string;
+    input?: unknown;
+  };
+  threadId?: string;
+}) {
+  const response = await fetch(`${input.baseUrl}/agent/${EMBER_LENDING_AGENT_ID}/run`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      threadId: input.threadId ?? 'thread-1',
+      runId: input.runId,
+      forwardedProps: {
+        command: input.command,
+      },
+    }),
+  });
+
+  expect(response.ok).toBe(true);
+  expect(response.headers.get('content-type')).toContain('text/event-stream');
+
+  const events = parseEventStreamBody(await response.text());
+  return {
+    events,
+    snapshot: findStateSnapshot(events),
+  };
+}
+
 describe('agent-ember-lending AG-UI integration', () => {
   let server: Server;
   let baseUrl: string;
@@ -161,6 +240,64 @@ describe('agent-ember-lending AG-UI integration', () => {
                   amount: '10',
                   summary: 'supply reserved USDC on Aave',
                 },
+              },
+            },
+          };
+        case 'subagent.executeTransactionPlan.v1':
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-execute-transaction-plan',
+            result: {
+              protocol_version: 'v1',
+              revision: 9,
+              committed_event_ids: ['evt-execution-1'],
+              execution_result: {
+                transaction_plan_id: 'txplan-ember-lending-001',
+                execution: {
+                  execution_id: 'exec-ember-lending-001',
+                  status: 'confirmed',
+                  transaction_hash:
+                    '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+                  successor_unit_ids: ['unit-ember-lending-successor-001'],
+                },
+                portfolio_state: {
+                  agent_id: 'ember-lending',
+                  agent_wallet: '0x00000000000000000000000000000000000000b1',
+                  root_user_wallet: '0x00000000000000000000000000000000000000a1',
+                  mandate_ref: 'mandate-ember-lending-001',
+                  mandate_summary:
+                    'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                  reservations: [
+                    {
+                      reservation_id: 'reservation-ember-lending-001',
+                      purpose: 'deploy',
+                      control_path: 'lending.supply',
+                    },
+                  ],
+                  owned_units: [
+                    {
+                      unit_id: 'unit-ember-lending-successor-001',
+                      root_asset: 'USDC',
+                      quantity: '10',
+                      reservation_id: 'reservation-ember-lending-001',
+                    },
+                  ],
+                },
+              },
+            },
+          };
+        case 'subagent.createEscalationRequest.v1':
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-create-escalation-request',
+            result: {
+              protocol_version: 'v1',
+              revision: 10,
+              escalation_request: {
+                source: 'subagent_loop',
+                request_kind: 'release_or_transfer_request',
+                request_id: 'req-ember-lending-escalation-001',
+                handoff_id: 'handoff-ember-lending-escalation-001',
               },
             },
           };
@@ -273,26 +410,13 @@ describe('agent-ember-lending AG-UI integration', () => {
   });
 
   it('serves lending state refresh and candidate-plan materialization over real AG-UI HTTP endpoints', async () => {
-    const refreshResponse = await fetch(`${baseUrl}/agent/${EMBER_LENDING_AGENT_ID}/run`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
+    const { events: refreshEvents, snapshot: refreshSnapshot } = await runAgUiCommand({
+      baseUrl,
+      runId: 'run-refresh',
+      command: {
+        name: 'read_portfolio_state',
       },
-      body: JSON.stringify({
-        threadId: 'thread-1',
-        runId: 'run-refresh',
-        forwardedProps: {
-          command: {
-            name: 'read_portfolio_state',
-          },
-        },
-      }),
     });
-
-    expect(refreshResponse.ok).toBe(true);
-    expect(refreshResponse.headers.get('content-type')).toContain('text/event-stream');
-    const refreshEvents = parseEventStreamBody(await refreshResponse.text());
-    const refreshSnapshot = findStateSnapshot(refreshEvents);
 
     expect(refreshSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -319,26 +443,14 @@ describe('agent-ember-lending AG-UI integration', () => {
       },
     });
 
-    const planResponse = await fetch(`${baseUrl}/agent/${EMBER_LENDING_AGENT_ID}/run`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
+    const { events: planEvents, snapshot: planSnapshot } = await runAgUiCommand({
+      baseUrl,
+      runId: 'run-plan',
+      command: {
+        name: 'materialize_candidate_plan',
+        input: createCandidatePlanInput(),
       },
-      body: JSON.stringify({
-        threadId: 'thread-1',
-        runId: 'run-plan',
-        forwardedProps: {
-          command: {
-            name: 'materialize_candidate_plan',
-            input: createCandidatePlanInput(),
-          },
-        },
-      }),
     });
-
-    expect(planResponse.ok).toBe(true);
-    const planEvents = parseEventStreamBody(await planResponse.text());
-    const planSnapshot = findStateSnapshot(planEvents);
 
     expect(planSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -371,6 +483,129 @@ describe('agent-ember-lending AG-UI integration', () => {
             agent_id: 'ember-lending',
             agent_wallet: '0x00000000000000000000000000000000000000b1',
             mandate_ref: 'mandate-ember-lending-001',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('serves lending execution over real AG-UI HTTP endpoints', async () => {
+    await runAgUiCommand({
+      baseUrl,
+      runId: 'run-refresh',
+      command: {
+        name: 'read_portfolio_state',
+      },
+    });
+
+    await runAgUiCommand({
+      baseUrl,
+      runId: 'run-plan',
+      command: {
+        name: 'materialize_candidate_plan',
+        input: createCandidatePlanInput(),
+      },
+    });
+
+    const { snapshot: executeSnapshot } = await runAgUiCommand({
+      baseUrl,
+      runId: 'run-execute',
+      command: {
+        name: 'execute_transaction_plan',
+      },
+    });
+
+    expect(executeSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            lastExecutionTxHash:
+              '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+            lastReservationSummary:
+              'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+          },
+          artifacts: {
+            current: {
+              data: {
+                type: 'shared-ember-execution-result',
+                revision: 9,
+                executionResult: {
+                  transaction_plan_id: 'txplan-ember-lending-001',
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.executeTransactionPlan.v1',
+        params: expect.objectContaining({
+          expected_revision: 8,
+          transaction_plan_id: 'txplan-ember-lending-001',
+        }),
+      }),
+    );
+  });
+
+  it('serves lending escalation requests over real AG-UI HTTP endpoints', async () => {
+    await runAgUiCommand({
+      baseUrl,
+      runId: 'run-refresh',
+      command: {
+        name: 'read_portfolio_state',
+      },
+    });
+
+    const { snapshot: escalationSnapshot } = await runAgUiCommand({
+      baseUrl,
+      runId: 'run-escalation',
+      command: {
+        name: 'create_escalation_request',
+        input: createEscalationRequestInput(),
+      },
+    });
+
+    expect(escalationSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            lastEscalationSummary:
+              'release_or_transfer_request escalation req-ember-lending-escalation-001 created from blocked lending execution.',
+          },
+          artifacts: {
+            current: {
+              data: {
+                type: 'shared-ember-escalation-request',
+                revision: 10,
+                escalationRequest: {
+                  request_id: 'req-ember-lending-escalation-001',
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createEscalationRequest.v1',
+        params: expect.objectContaining({
+          handoff: expect.objectContaining({
+            agent_id: 'ember-lending',
+            agent_wallet: '0x00000000000000000000000000000000000000b1',
+            mandate_ref: 'mandate-ember-lending-001',
+          }),
+          result: expect.objectContaining({
+            phase: 'blocked',
+            transaction_plan_id: 'txplan-ember-lending-001',
           }),
         }),
       }),
