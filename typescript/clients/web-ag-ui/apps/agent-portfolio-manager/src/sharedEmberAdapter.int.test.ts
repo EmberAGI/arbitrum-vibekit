@@ -84,82 +84,12 @@ function createOnboardingBootstrap() {
         mandate_summary: 'preserve direct-user liquidity',
       },
     ],
-    capitalObservation: {
-      observation_id: 'obs-onboard-protocol-001',
-      kind: 'onboarding_scan',
-      wallet_address: '0xUSERPROTO1',
-      network: 'base',
-      observed_at: '2026-03-29T00:00:00Z',
-      benchmark_asset: 'USD',
-      valuation_ref: 'val-onboard-protocol-001',
-      asset_deltas: [{ root_asset: 'USDC', quantity_delta: '900' }],
-      affected_unit_ids: ['unit-usdc-onboard-protocol-001'],
+    userReservePolicies: [],
+    activation: {
+      agentId: 'portfolio-manager',
+      purpose: 'deploy',
+      controlPath: 'unassigned',
     },
-    userReservePolicies: [
-      {
-        reserve_policy_ref: 'reserve-policy-portfolio-protocol-001',
-        summary: 'keep 500 USDC liquid',
-        user_reserve_rules: [
-          {
-            root_asset: 'USDC',
-            network: 'base',
-            benchmark_asset: 'USD',
-            reserved_quantity: '500',
-            reason: 'keep 500 USDC liquid',
-          },
-        ],
-      },
-    ],
-    ownedUnits: [
-      {
-        unit_id: 'unit-usdc-onboard-protocol-001',
-        root_asset: 'USDC',
-        network: 'base',
-        wallet_address: '0xUSERPROTO1',
-        quantity: '900',
-        owner_type: 'user_idle',
-        owner_id: 'user_idle',
-        status: 'reserved',
-        reservation_id: 'res-portfolio-manager-bootstrap-protocol-001',
-        delegation_id: null,
-        control_path: 'unassigned',
-        position_kind: 'unassigned',
-        benchmark_asset: 'USD',
-        benchmark_value: '900',
-        valuation_ref: 'val-onboard-protocol-001',
-        cost_basis: '900',
-        opened_at: '2026-03-29T00:00:00Z',
-        closed_at: null,
-        parent_unit_ids: [],
-        metadata: {
-          source: 'onboarding_scan',
-        },
-      },
-    ],
-    reservations: [
-      {
-        reservation_id: 'res-portfolio-manager-bootstrap-protocol-001',
-        agent_id: 'portfolio-manager',
-        owner_id: 'user_idle',
-        purpose: 'deploy',
-        control_path: 'unassigned',
-        unit_allocations: [{ unit_id: 'unit-usdc-onboard-protocol-001', quantity: '900' }],
-        status: 'active',
-        created_at: '2026-03-29T00:05:00Z',
-        released_at: null,
-        superseded_by: null,
-      },
-    ],
-    policySnapshots: [
-      {
-        policy_snapshot_ref: 'pol-portfolio-manager-bootstrap-protocol-001',
-        agent_id: 'portfolio-manager',
-        network: 'base',
-        control_paths: ['unassigned'],
-        unit_bounds: [{ unit_id: 'unit-usdc-onboard-protocol-001', quantity: '900' }],
-        created_at: '2026-03-29T00:05:00Z',
-      },
-    ],
   };
 }
 
@@ -305,86 +235,6 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
                 root_delegation_id: handoff.root_delegation_id,
                 user_wallet: handoff.user_wallet,
                 status: 'active',
-              },
-            },
-          },
-        ],
-      },
-    });
-  });
-
-  it('completes onboarding bootstrap through the real Shared Ember HTTP boundary', async () => {
-    const protocolHost = createPortfolioManagerSharedEmberHttpHost({
-      baseUrl: target.baseUrl,
-    });
-    const domain = createPortfolioManagerDomain({
-      protocolHost,
-      agentId: 'portfolio-manager',
-    });
-
-    const revisionResponse = (await protocolHost.handleJsonRpc({
-      jsonrpc: '2.0',
-      id: 'rpc-shared-ember-int-current-revision-bootstrap',
-      method: 'subagent.readPortfolioState.v1',
-      params: {
-        agent_id: 'portfolio-manager',
-      },
-    })) as {
-      result?: {
-        revision?: number;
-      };
-    };
-
-    const onboarding = createOnboardingBootstrap();
-
-    await expect(
-      domain.handleOperation?.({
-        threadId: 'thread-bootstrap-int',
-        state: {
-          phase: 'onboarding',
-          lastPortfolioState: null,
-          lastSharedEmberRevision: revisionResponse.result?.revision ?? 0,
-          lastRootDelegation: {
-            root_delegation_id: 'root-user-portfolio-int-existing',
-          },
-          lastOnboardingBootstrap: null,
-          lastRootedWalletContextId: null,
-          activeWalletAddress: null,
-          pendingOnboardingWalletAddress: null,
-          pendingBaseContributionUsd: null,
-        },
-        operation: {
-          source: 'tool',
-          name: 'complete_onboarding_bootstrap',
-          input: {
-            idempotencyKey: `idem-onboarding-portfolio-int-${Date.now().toString(36)}`,
-            onboarding,
-          },
-        },
-      }),
-    ).resolves.toMatchObject({
-      state: {
-        phase: 'onboarding',
-        lastSharedEmberRevision: expect.any(Number),
-        lastOnboardingBootstrap: {
-          rootedWalletContext: {
-            rooted_wallet_context_id: 'rwc-user-protocol-001',
-          },
-        },
-      },
-      outputs: {
-        status: {
-          executionStatus: 'completed',
-          statusMessage: 'Onboarding bootstrap completed with Shared Ember Domain Service.',
-        },
-        artifacts: [
-          {
-            data: {
-              type: 'shared-ember-onboarding-bootstrap',
-              onboardingBootstrap: {
-                rootedWalletContext: {
-                  rooted_wallet_context_id: 'rwc-user-protocol-001',
-                },
               },
             },
           },

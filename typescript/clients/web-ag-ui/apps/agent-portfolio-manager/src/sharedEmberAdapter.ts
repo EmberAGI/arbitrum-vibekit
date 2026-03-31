@@ -260,18 +260,11 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
   agentId: string;
   threadId: string;
   walletAddress: `0x${string}`;
-  baseContributionUsd: number;
 }) {
-  const allocation = toUsdQuantityString(params.baseContributionUsd);
   const identity = sanitizeIdentitySegment(`${params.threadId}-${params.walletAddress}`);
   const userId = `user-${identity}`;
   const rootedWalletContextId = `rwc-${identity}`;
-  const valuationRef = `valuation-${identity}`;
-  const unitId = `unit-${identity}`;
-  const reservationId = `reservation-${identity}`;
   const mandateRef = `mandate-${identity}`;
-  const policySnapshotRef = `policy-${identity}`;
-  const observationId = `observation-${identity}`;
 
   return {
     occurredAt: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
@@ -292,82 +285,12 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
         mandate_summary: 'activate portfolio manager reserves',
       },
     ],
-    capitalObservation: {
-      observation_id: observationId,
-      kind: 'onboarding_scan',
-      wallet_address: params.walletAddress,
-      network: PORTFOLIO_MANAGER_NETWORK,
-      observed_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
-      benchmark_asset: 'USD',
-      valuation_ref: valuationRef,
-      asset_deltas: [{ root_asset: PORTFOLIO_MANAGER_ROOT_ASSET, quantity_delta: allocation }],
-      affected_unit_ids: [unitId],
+    userReservePolicies: [],
+    activation: {
+      agentId: params.agentId,
+      purpose: 'deploy',
+      controlPath: PORTFOLIO_MANAGER_ONBOARDING_CONTROL_PATH,
     },
-    userReservePolicies: [
-      {
-        reserve_policy_ref: `reserve-policy-${identity}`,
-        summary: `reserve ${allocation} ${PORTFOLIO_MANAGER_ROOT_ASSET} for portfolio manager`,
-        user_reserve_rules: [
-          {
-            root_asset: PORTFOLIO_MANAGER_ROOT_ASSET,
-            network: PORTFOLIO_MANAGER_NETWORK,
-            benchmark_asset: 'USD',
-            reserved_quantity: allocation,
-            reason: 'portfolio manager bootstrap reserve',
-          },
-        ],
-      },
-    ],
-    ownedUnits: [
-      {
-        unit_id: unitId,
-        root_asset: PORTFOLIO_MANAGER_ROOT_ASSET,
-        network: PORTFOLIO_MANAGER_NETWORK,
-        wallet_address: params.walletAddress,
-        quantity: allocation,
-        owner_type: 'user_idle',
-        owner_id: userId,
-        status: 'reserved',
-        reservation_id: reservationId,
-        delegation_id: null,
-        control_path: 'unassigned',
-        position_kind: 'unassigned',
-        benchmark_asset: 'USD',
-        benchmark_value: allocation,
-        valuation_ref: valuationRef,
-        cost_basis: allocation,
-        opened_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
-        closed_at: null,
-        parent_unit_ids: [],
-        metadata: {
-          source: PORTFOLIO_MANAGER_PROTOCOL_SOURCE,
-        },
-      },
-    ],
-    reservations: [
-      {
-        reservation_id: reservationId,
-        agent_id: params.agentId,
-        owner_id: userId,
-        purpose: 'deploy',
-        control_path: PORTFOLIO_MANAGER_ONBOARDING_CONTROL_PATH,
-        unit_allocations: [{ unit_id: unitId, quantity: allocation }],
-        status: 'active',
-        created_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
-        released_at: null,
-        superseded_by: null,
-      },
-    ],
-    policySnapshots: [
-      {
-        policy_snapshot_ref: policySnapshotRef,
-        agent_id: params.agentId,
-        network: PORTFOLIO_MANAGER_NETWORK,
-        control_paths: [PORTFOLIO_MANAGER_ONBOARDING_CONTROL_PATH],
-        unit_bounds: [{ unit_id: unitId, quantity: allocation }],
-        created_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
-      },
-    ],
   };
 }
 
@@ -426,11 +349,6 @@ export function createPortfolioManagerDomain(
           name: 'refresh_portfolio_state',
           description:
             'Read the current Shared Ember portfolio state for the portfolio-manager subagent.',
-        },
-        {
-          name: 'complete_onboarding_bootstrap',
-          description:
-            'Complete the Shared Ember onboarding bootstrap after rooted-wallet registration.',
         },
         {
           name: 'complete_rooted_bootstrap_from_user_signing',
@@ -570,7 +488,7 @@ export function createPortfolioManagerDomain(
             lastRootDelegation: null,
             lastOnboardingBootstrap: null,
             lastRootedWalletContextId: null,
-            activeWalletAddress: currentState.activeWalletAddress,
+            activeWalletAddress: null,
             pendingOnboardingWalletAddress: null,
             pendingBaseContributionUsd: null,
           };
@@ -671,7 +589,6 @@ export function createPortfolioManagerDomain(
             agentId,
             threadId,
             walletAddress,
-            baseContributionUsd,
           });
           const handoff = buildPortfolioManagerRootDelegationHandoff({
             threadId,
@@ -861,82 +778,6 @@ export function createPortfolioManagerDomain(
                     type: 'shared-ember-portfolio-state',
                     revision: nextState.lastSharedEmberRevision,
                     portfolioState: nextState.lastPortfolioState,
-                  },
-                },
-              ],
-            },
-          };
-        }
-        case 'complete_onboarding_bootstrap': {
-          if (!options.protocolHost) {
-            return {
-              state: currentState,
-              outputs: {
-                status: {
-                  executionStatus: 'failed',
-                  statusMessage: 'Shared Ember Domain Service host is not configured.',
-                },
-              },
-            };
-          }
-          const commandInput =
-            typeof operation.input === 'object' && operation.input !== null ? operation.input : {};
-          const idempotencyKey =
-            'idempotencyKey' in commandInput && typeof commandInput.idempotencyKey === 'string'
-              ? commandInput.idempotencyKey
-              : `idem-onboarding-bootstrap-${threadId}`;
-          const onboarding = 'onboarding' in commandInput ? commandInput.onboarding : undefined;
-          const response = await runSharedEmberCommandWithResolvedRevision<{
-            result?: {
-              revision?: number;
-              committed_event_ids?: string[];
-              onboarding_bootstrap?: unknown;
-            };
-          }>({
-            protocolHost: options.protocolHost,
-            threadId,
-            agentId,
-            currentRevision: currentState.lastSharedEmberRevision,
-            buildRequest: (expectedRevision) => ({
-              jsonrpc: '2.0',
-              id: `shared-ember-${threadId}-complete-onboarding-bootstrap`,
-              method: 'orchestrator.completeOnboardingBootstrap.v1',
-              params: {
-                idempotency_key: idempotencyKey,
-                expected_revision: expectedRevision,
-                onboarding,
-              },
-            }),
-          });
-
-          const nextState: PortfolioManagerLifecycleState = {
-            phase: 'onboarding',
-            lastPortfolioState: currentState.lastPortfolioState,
-            lastSharedEmberRevision: response.result?.revision ?? null,
-            lastRootDelegation: currentState.lastRootDelegation,
-            lastOnboardingBootstrap: response.result?.onboarding_bootstrap ?? null,
-            lastRootedWalletContextId: currentState.lastRootedWalletContextId,
-            activeWalletAddress:
-              currentState.activeWalletAddress ??
-              readOnboardingBootstrapWalletAddress(response.result?.onboarding_bootstrap ?? null),
-            pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
-            pendingBaseContributionUsd: currentState.pendingBaseContributionUsd,
-          };
-
-          return {
-            state: nextState,
-            outputs: {
-              status: {
-                executionStatus: 'completed',
-                statusMessage: 'Onboarding bootstrap completed with Shared Ember Domain Service.',
-              },
-              artifacts: [
-                {
-                  data: {
-                    type: 'shared-ember-onboarding-bootstrap',
-                    revision: nextState.lastSharedEmberRevision,
-                    committedEventIds: response.result?.committed_event_ids ?? [],
-                    onboardingBootstrap: nextState.lastOnboardingBootstrap,
                   },
                 },
               ],

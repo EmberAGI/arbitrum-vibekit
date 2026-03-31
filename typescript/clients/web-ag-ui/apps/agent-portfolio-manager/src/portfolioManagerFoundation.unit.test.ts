@@ -48,9 +48,6 @@ describe('createPortfolioManagerAgentConfig', () => {
           name: 'refresh_portfolio_state',
         },
         {
-          name: 'complete_onboarding_bootstrap',
-        },
-        {
           name: 'complete_rooted_bootstrap_from_user_signing',
         },
       ],

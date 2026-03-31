@@ -79,6 +79,20 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           : {};
 
       switch (request.method) {
+        case 'subagent.readPortfolioState.v1':
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-current-revision',
+            result: {
+              protocol_version: 'v1',
+              revision: 0,
+              portfolio_state: {
+                agent_id: 'portfolio-manager',
+                owned_units: [],
+                reservations: [],
+              },
+            },
+          };
         case 'orchestrator.completeRootedBootstrapFromUserSigning.v1':
           return {
             jsonrpc: '2.0',
@@ -377,8 +391,8 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           lifecycle: {
             phase: 'active',
             lastRootedWalletContextId: 'rwc-thread10x00000000000000000000000000000000000000a1',
-            activeWalletAddress: null,
-          pendingOnboardingWalletAddress: null,
+            activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+            pendingOnboardingWalletAddress: null,
             pendingBaseContributionUsd: null,
           },
           task: {
