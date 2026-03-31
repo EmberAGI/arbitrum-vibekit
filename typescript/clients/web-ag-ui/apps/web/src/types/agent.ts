@@ -423,6 +423,7 @@ export interface ThreadLifecycle {
   phase: ThreadLifecyclePhase;
   reason?: string;
   updatedAt?: string;
+  [key: string]: unknown;
 }
 
 // Domain thread state emitted by agents

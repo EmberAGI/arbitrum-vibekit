@@ -39,6 +39,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const routeHasRegisteredAgent = isRegisteredAgentId(routeAgentId);
   const selectedAgentId = routeHasRegisteredAgent ? routeAgentId : activeAgentId;
   const selectedConfig = getAgentConfig(selectedAgentId);
+  const onboardingOwnerAgentId = selectedConfig.onboardingOwnerAgentId;
   const selectedProfile = {
     ...agent.profile,
     chains:
@@ -58,6 +59,15 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const handleBack = () => {
     router.push('/hire-agents');
   };
+  const handleManagedOwnerNavigation = (ownerAgentId: string) => {
+    router.push(`/hire-agents/${ownerAgentId}`);
+  };
+  const handleHire = onboardingOwnerAgentId
+    ? () => handleManagedOwnerNavigation(onboardingOwnerAgentId)
+    : agent.runHire;
+  const handleFire = onboardingOwnerAgentId
+    ? () => handleManagedOwnerNavigation(onboardingOwnerAgentId)
+    : agent.runFire;
 
   // Dev-only UI preview for screenshot-driven design work.
   // This is guarded by NODE_ENV by default so it cannot affect production behavior.
@@ -71,6 +81,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   if (uiPreviewState) {
     const previewAgentId = routeHasRegisteredAgent ? routeAgentId : selectedAgentId;
     const config = getAgentConfig(previewAgentId);
+    const previewOnboardingOwnerAgentId = config.onboardingOwnerAgentId;
 
     const isHired = uiPreviewState !== 'prehire';
 
@@ -110,8 +121,16 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         isSyncing={false}
         uiError={null}
         onClearUiError={() => undefined}
-        onHire={() => undefined}
-        onFire={() => undefined}
+        onHire={
+          previewOnboardingOwnerAgentId
+            ? () => handleManagedOwnerNavigation(previewOnboardingOwnerAgentId)
+            : () => undefined
+        }
+        onFire={
+          previewOnboardingOwnerAgentId
+            ? () => handleManagedOwnerNavigation(previewOnboardingOwnerAgentId)
+            : () => undefined
+        }
         onSync={() => undefined}
         onBack={handleBack}
         activeInterrupt={null}
@@ -128,6 +147,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         events={[]}
         messages={EMPTY_MESSAGES}
         messageSnapshotEpoch={0}
+        lifecycleState={undefined}
         settings={agent.settings}
         onSendChatMessage={() => undefined}
         onSettingsChange={() => undefined}
@@ -172,8 +192,8 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       isSyncing={agent.isSyncing}
       uiError={agent.uiError}
       onClearUiError={agent.clearUiError}
-      onHire={agent.runHire}
-      onFire={agent.runFire}
+      onHire={handleHire}
+      onFire={handleFire}
       onSync={agent.runSync}
       onBack={handleBack}
       activeInterrupt={agent.activeInterrupt}
@@ -190,6 +210,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       events={agent.events}
       messages={agent.messages}
       messageSnapshotEpoch={agent.messageSnapshotEpoch}
+      lifecycleState={agent.uiState.lifecycle}
       settings={agent.settings}
       onSendChatMessage={agent.sendChatMessage}
       onSettingsChange={agent.updateSettings}

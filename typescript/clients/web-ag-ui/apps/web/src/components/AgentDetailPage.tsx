@@ -37,6 +37,7 @@ import type {
   Transaction,
   TelemetryItem,
   ClmmEvent,
+  ThreadLifecycle,
 } from '../types/agent';
 import { getAgentConfig } from '../config/agents';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
@@ -132,6 +133,7 @@ interface AgentDetailPageProps {
   events?: ClmmEvent[];
   messages?: Message[];
   messageSnapshotEpoch?: number;
+  lifecycleState?: ThreadLifecycle;
   // Settings
   settings?: AgentSettings;
   onSendChatMessage?: (content: string) => void;
@@ -416,6 +418,178 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
 }
 
+function readString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function formatManagedLanePart(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return value
+    .split(/[\s_-]+/)
+    .filter((part) => part.length > 0)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+}
+
+function formatManagedLaneLabel(network: string | null, protocol: string | null): string | null {
+  if (!network && !protocol) {
+    return null;
+  }
+
+  return [formatManagedLanePart(network), formatManagedLanePart(protocol)]
+    .filter((value): value is string => value !== null)
+    .join(' / ');
+}
+
+function buildReservationSummaryFromBootstrap(value: Record<string, unknown> | null): string | null {
+  if (!value || !Array.isArray(value['reservations'])) {
+    return null;
+  }
+
+  const reservation = value['reservations'].find((candidate) => asRecord(candidate));
+  const reservationRecord = asRecord(reservation);
+  if (!reservationRecord) {
+    return null;
+  }
+
+  const reservationId = readString(reservationRecord['reservation_id']);
+  const purpose = readString(reservationRecord['purpose']);
+  const controlPath = readString(reservationRecord['control_path']);
+  const ownedUnits =
+    (Array.isArray(value['ownedUnits']) ? value['ownedUnits'] : null) ??
+    (Array.isArray(value['owned_units']) ? value['owned_units'] : null) ??
+    [];
+  const matchingOwnedUnit =
+    ownedUnits.find(
+      (candidate) =>
+        asRecord(candidate) && readString(asRecord(candidate)?.['reservation_id']) === reservationId,
+    ) ?? ownedUnits.find((candidate) => asRecord(candidate));
+  const ownedUnitRecord = asRecord(matchingOwnedUnit);
+  const quantity = readString(ownedUnitRecord?.['quantity']);
+  const rootAsset = readString(ownedUnitRecord?.['root_asset']);
+
+  if (!reservationId) {
+    return null;
+  }
+
+  const reservationAction =
+    purpose === 'deploy' ? 'deploys' : purpose ? `${purpose}s` : 'moves';
+  const quantitySummary = quantity && rootAsset ? ` ${quantity} ${rootAsset}` : ' capital';
+  const controlPathSummary = controlPath ? ` via ${controlPath}` : '';
+
+  return `Reservation ${reservationId} ${reservationAction}${quantitySummary}${controlPathSummary}.`;
+}
+
+type PortfolioManagerManagedAgentView = {
+  title: string;
+  detailHref: string;
+  laneLabel: string | null;
+  mandateSummary: string | null;
+  allocationSummary: string | null;
+  reservationSummary: string | null;
+};
+
+function buildPortfolioManagerManagedAgentView(
+  lifecycleState: ThreadLifecycle | undefined,
+): PortfolioManagerManagedAgentView | null {
+  const lifecycleRecord = asRecord(lifecycleState);
+  if (!lifecycleRecord) {
+    return null;
+  }
+
+  const onboardingBootstrap = asRecord(lifecycleRecord['lastOnboardingBootstrap']);
+  const pendingApprovedMandateEnvelope = asRecord(lifecycleRecord['pendingApprovedMandateEnvelope']);
+  const approvedMandateEnvelope =
+    pendingApprovedMandateEnvelope ??
+    asRecord(
+      asRecord(
+        asRecord(
+          asRecord(onboardingBootstrap?.['rootedWalletContext'])?.['metadata'],
+        )?.['approvedMandateEnvelope'],
+      ),
+    );
+  const managedAgentMandates = Array.isArray(approvedMandateEnvelope?.['managedAgentMandates'])
+    ? approvedMandateEnvelope['managedAgentMandates']
+    : [];
+  const firstManagedMandate = managedAgentMandates
+    .map((candidate) => asRecord(candidate))
+    .find(
+      (candidate) => candidate && readString(candidate['agentType']) === 'ember-lending',
+    );
+
+  if (!firstManagedMandate) {
+    return null;
+  }
+
+  const settings = asRecord(firstManagedMandate['settings']);
+  const laneLabel = formatManagedLaneLabel(
+    readString(settings?.['network']),
+    readString(settings?.['protocol']),
+  );
+  const allocationCap = readFiniteNumber(settings?.['maxAllocationPct']);
+  const allocationSummary =
+    allocationCap !== null ? `${allocationCap}% allocation cap` : null;
+
+  let mandateSummary: string | null = null;
+  if (Array.isArray(onboardingBootstrap?.['mandates'])) {
+    const managedMandateSource = onboardingBootstrap['mandates']
+      .map((candidate) => asRecord(candidate))
+      .find(
+        (candidate) => candidate && readString(candidate['agent_id']) === 'ember-lending',
+      );
+    mandateSummary = readString(managedMandateSource?.['mandate_summary']);
+  }
+
+  return {
+    title: 'Ember Lending',
+    detailHref: '/hire-agents/agent-ember-lending',
+    laneLabel,
+    mandateSummary,
+    allocationSummary,
+    reservationSummary: buildReservationSummaryFromBootstrap(onboardingBootstrap),
+  };
+}
+
+type EmberLendingRuntimeView = {
+  phase: string | null;
+  laneLabel: string | null;
+  walletAddress: string | null;
+  mandateSummary: string | null;
+  reservationSummary: string | null;
+};
+
+function buildEmberLendingRuntimeView(
+  lifecycleState: ThreadLifecycle | undefined,
+): EmberLendingRuntimeView | null {
+  const lifecycleRecord = asRecord(lifecycleState);
+  if (!lifecycleRecord) {
+    return null;
+  }
+
+  const mandateContext = asRecord(lifecycleRecord['mandateContext']);
+  const runtimeView: EmberLendingRuntimeView = {
+    phase: readString(lifecycleRecord['phase']),
+    laneLabel: formatManagedLaneLabel(
+      readString(mandateContext?.['network']),
+      readString(mandateContext?.['protocol']),
+    ),
+    walletAddress: readString(lifecycleRecord['walletAddress']),
+    mandateSummary: readString(lifecycleRecord['mandateSummary']),
+    reservationSummary: readString(lifecycleRecord['lastReservationSummary']),
+  };
+
+  return runtimeView.walletAddress || runtimeView.mandateSummary || runtimeView.reservationSummary
+    ? runtimeView
+    : null;
+}
+
 type PiExampleChatCard = {
   id: string;
   label: 'Artifact' | 'A2UI';
@@ -617,13 +791,42 @@ export function AgentDetailPage({
   events = [],
   messages = [],
   messageSnapshotEpoch = 0,
+  lifecycleState,
   settings,
   onSendChatMessage,
   onSettingsChange,
   onSettingsSave,
 }: AgentDetailPageProps) {
   const showPostHireLayout = isHired || Boolean(isFiring);
-  const chatEnabled = agentId === 'agent-pi-example' || agentId === 'agent-portfolio-manager';
+  const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
+  const managedOnboardingOwner = useMemo(
+    () =>
+      agentConfig.onboardingOwnerAgentId
+        ? getAgentConfig(agentConfig.onboardingOwnerAgentId)
+        : null,
+    [agentConfig.onboardingOwnerAgentId],
+  );
+  const emberLendingRuntimeView = useMemo(
+    () => (agentId === 'agent-ember-lending' ? buildEmberLendingRuntimeView(lifecycleState) : null),
+    [agentId, lifecycleState],
+  );
+  const portfolioManagerManagedAgentView = useMemo(
+    () =>
+      agentId === 'agent-portfolio-manager'
+        ? buildPortfolioManagerManagedAgentView(lifecycleState)
+        : null,
+    [agentId, lifecycleState],
+  );
+  const emberLendingChatEnabled =
+    agentId === 'agent-ember-lending' &&
+    emberLendingRuntimeView?.phase === 'active' &&
+    Boolean(emberLendingRuntimeView.walletAddress) &&
+    Boolean(emberLendingRuntimeView.mandateSummary) &&
+    Boolean(emberLendingRuntimeView.reservationSummary);
+  const chatEnabled =
+    agentId === 'agent-pi-example' ||
+    agentId === 'agent-portfolio-manager' ||
+    emberLendingChatEnabled;
   const inlineOnboardingChatEnabled = agentId === 'agent-pi-example';
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (showPostHireLayout ? 'blockers' : 'metrics'),
@@ -631,7 +834,6 @@ export function AgentDetailPage({
   const [hasUserSelectedTab, setHasUserSelectedTab] = useState(Boolean(initialTab));
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState('');
-  const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
   const isOnboardingActive = resolveOnboardingActive({
     activeInterruptPresent: Boolean(activeInterrupt),
     taskStatus,
@@ -866,7 +1068,7 @@ export function AgentDetailPage({
       onChatDraftChange={setChatDraft}
       onSubmit={handleChatSubmit}
       onChatKeyDown={handleChatKeyDown}
-      isComposerEnabled={typeof onSendChatMessage === 'function'}
+      isComposerEnabled={chatEnabled && typeof onSendChatMessage === 'function'}
       onSendChatMessage={onSendChatMessage}
       onInterruptSubmit={onInterruptSubmit}
     />
@@ -1034,20 +1236,24 @@ export function AgentDetailPage({
                             className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)] transition-transform duration-200 group-hover:scale-110"
                             aria-hidden="true"
                           />
-                          <span>Agent is hired</span>
+                          <span>
+                            {managedOnboardingOwner
+                              ? `Managed by ${managedOnboardingOwner.name}`
+                              : 'Agent is hired'}
+                          </span>
                         </div>
 
                         <button
                           type="button"
                           onClick={onFire}
-                          disabled={isFiring}
+                          disabled={managedOnboardingOwner ? false : isFiring}
                           className={`relative z-10 flex flex-[0_0_92px] items-center justify-center px-3 h-full text-[13px] font-medium text-white border-l border-white/10 transition-[flex-basis,background-color,border-color,color,box-shadow] duration-300 ease-out group-hover:flex-1 group-hover:bg-transparent group-hover:border-white/0 ${
-                            isFiring
+                            !managedOnboardingOwner && isFiring
                               ? 'bg-gray-600 cursor-wait'
                               : 'bg-gradient-to-b from-[#ff4d1a] to-[#fd6731] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
                           }`}
                         >
-                          {isFiring ? 'Firing...' : 'Fire'}
+                          {managedOnboardingOwner ? 'Manage' : isFiring ? 'Firing...' : 'Fire'}
                         </button>
                       </div>
                     ) : (
@@ -1137,6 +1343,87 @@ export function AgentDetailPage({
                       />
                     </div>
                   </div>
+
+                  {portfolioManagerManagedAgentView ? (
+                    <div className="mt-6 rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-gray-300 text-sm font-medium">Managed lending lane</div>
+                        <a
+                          href={portfolioManagerManagedAgentView.detailHref}
+                          className="text-xs font-medium text-[#fd6731] hover:text-[#ff8a5c] transition-colors"
+                        >
+                          View lending agent
+                        </a>
+                      </div>
+                      <div className="mt-3 text-white text-sm font-medium">
+                        {portfolioManagerManagedAgentView.title}
+                      </div>
+                      {portfolioManagerManagedAgentView.laneLabel ? (
+                        <div className="mt-1 text-xs text-gray-400">
+                          {portfolioManagerManagedAgentView.laneLabel}
+                        </div>
+                      ) : null}
+                      {portfolioManagerManagedAgentView.mandateSummary ? (
+                        <p className="mt-3 text-xs leading-relaxed text-gray-400">
+                          {portfolioManagerManagedAgentView.mandateSummary}
+                        </p>
+                      ) : null}
+                      {portfolioManagerManagedAgentView.allocationSummary ? (
+                        <div className="mt-3 text-xs text-gray-300">
+                          {portfolioManagerManagedAgentView.allocationSummary}
+                        </div>
+                      ) : null}
+                      {portfolioManagerManagedAgentView.reservationSummary ? (
+                        <div className="mt-3 text-xs text-gray-400">
+                          {portfolioManagerManagedAgentView.reservationSummary}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {emberLendingRuntimeView ? (
+                    <div className="mt-6 rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                      <div className="text-gray-300 text-sm font-medium mb-3">
+                        Managed lending runtime
+                      </div>
+                      <div className="space-y-2 text-xs">
+                        <div>
+                          <div className="text-gray-500 uppercase tracking-wide">Task status</div>
+                          <div className="mt-1 text-white">{taskStatus ?? 'idle'}</div>
+                        </div>
+                        {emberLendingRuntimeView.laneLabel ? (
+                          <div>
+                            <div className="text-gray-500 uppercase tracking-wide">Lane</div>
+                            <div className="mt-1 text-white">{emberLendingRuntimeView.laneLabel}</div>
+                          </div>
+                        ) : null}
+                        {emberLendingRuntimeView.walletAddress ? (
+                          <div>
+                            <div className="text-gray-500 uppercase tracking-wide">Subagent wallet</div>
+                            <div className="mt-1 break-all text-white">
+                              {emberLendingRuntimeView.walletAddress}
+                            </div>
+                          </div>
+                        ) : null}
+                        {emberLendingRuntimeView.mandateSummary ? (
+                          <div>
+                            <div className="text-gray-500 uppercase tracking-wide">Mandate</div>
+                            <div className="mt-1 text-gray-300">
+                              {emberLendingRuntimeView.mandateSummary}
+                            </div>
+                          </div>
+                        ) : null}
+                        {emberLendingRuntimeView.reservationSummary ? (
+                          <div>
+                            <div className="text-gray-500 uppercase tracking-wide">Reservation</div>
+                            <div className="mt-1 text-gray-300">
+                              {emberLendingRuntimeView.reservationSummary}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Right header (no surrounding card) */}
@@ -1286,8 +1573,21 @@ export function AgentDetailPage({
                   'transition-[background-color,box-shadow] duration-200',
                 ].join(' ')}
               >
-                {isHiring ? 'Hiring...' : 'Hire'}
+                {managedOnboardingOwner
+                  ? `Open ${managedOnboardingOwner.name}`
+                  : isHiring
+                    ? 'Hiring...'
+                    : 'Hire'}
               </button>
+
+              {managedOnboardingOwner ? (
+                <div className="mt-4 rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                  <div className="text-gray-300 text-sm font-medium mb-2">Managed onboarding</div>
+                  <p className="text-gray-400 text-xs leading-relaxed">
+                    Managed onboarding happens through {managedOnboardingOwner.name}.
+                  </p>
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
                 <div>

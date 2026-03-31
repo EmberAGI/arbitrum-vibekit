@@ -18,6 +18,7 @@ describe('agents config', () => {
     expect(piExample.name).toBe('Pi Example Agent');
     expect(portfolioManager.name).toBe('Portfolio Manager');
     expect(emberLending.name).toBe('Ember Lending');
+    expect(emberLending.onboardingOwnerAgentId).toBe('agent-portfolio-manager');
     expect(isRegisteredAgentId('agent-clmm')).toBe(true);
     expect(isRegisteredAgentId('agent-pi-example')).toBe(true);
     expect(isRegisteredAgentId('agent-portfolio-manager')).toBe(true);
