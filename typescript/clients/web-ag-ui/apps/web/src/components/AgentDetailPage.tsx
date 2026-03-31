@@ -487,6 +487,50 @@ function buildReservationSummaryFromBootstrap(value: Record<string, unknown> | n
   return `Reservation ${reservationId} ${reservationAction}${quantitySummary}${controlPathSummary}.`;
 }
 
+function readFirstRecordFromArray(value: unknown): Record<string, unknown> | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  for (const entry of value) {
+    const record = asRecord(entry);
+    if (record) {
+      return record;
+    }
+  }
+
+  return null;
+}
+
+function readPortfolioStateOwnedUnit(value: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!value) {
+    return null;
+  }
+
+  return readFirstRecordFromArray(value['owned_units']) ?? readFirstRecordFromArray(value['ownedUnits']);
+}
+
+function readLaneProtocolFromControlPath(controlPath: string | null): string | null {
+  if (!controlPath) {
+    return null;
+  }
+
+  const [laneFamily] = controlPath.split('.', 1);
+  return laneFamily?.trim().length ? laneFamily : null;
+}
+
+function readArtifactEventType(event: ClmmEvent): string {
+  if (event.type !== 'artifact') {
+    return 'unknown';
+  }
+
+  return (
+    readString(event.artifact?.type) ??
+    readString(asRecord(event.artifact?.data)?.['type']) ??
+    'unknown'
+  );
+}
+
 type PortfolioManagerManagedAgentView = {
   title: string;
   detailHref: string;
@@ -574,15 +618,29 @@ function buildEmberLendingRuntimeView(
   }
 
   const mandateContext = asRecord(lifecycleRecord['mandateContext']);
+  const lastPortfolioState = asRecord(lifecycleRecord['lastPortfolioState']);
+  const portfolioReservation = readFirstRecordFromArray(lastPortfolioState?.['reservations']);
+  const portfolioOwnedUnit = readPortfolioStateOwnedUnit(lastPortfolioState);
+  const portfolioNetwork =
+    readString(portfolioOwnedUnit?.['network']) ?? readString(portfolioReservation?.['network']);
+  const portfolioProtocol = readLaneProtocolFromControlPath(
+    readString(portfolioReservation?.['control_path']),
+  );
   const runtimeView: EmberLendingRuntimeView = {
     phase: readString(lifecycleRecord['phase']),
     laneLabel: formatManagedLaneLabel(
-      readString(mandateContext?.['network']),
-      readString(mandateContext?.['protocol']),
+      readString(mandateContext?.['network']) ?? portfolioNetwork,
+      readString(mandateContext?.['protocol']) ?? portfolioProtocol,
     ),
-    walletAddress: readString(lifecycleRecord['walletAddress']),
-    mandateSummary: readString(lifecycleRecord['mandateSummary']),
-    reservationSummary: readString(lifecycleRecord['lastReservationSummary']),
+    walletAddress:
+      readString(lifecycleRecord['walletAddress']) ?? readString(portfolioOwnedUnit?.['wallet_address']),
+    mandateSummary:
+      readString(lifecycleRecord['mandateSummary']) ??
+      readString(lastPortfolioState?.['mandate_summary']) ??
+      readString(asRecord(lastPortfolioState?.['mandate'])?.['summary']),
+    reservationSummary:
+      readString(lifecycleRecord['lastReservationSummary']) ??
+      buildReservationSummaryFromBootstrap(lastPortfolioState),
   };
 
   return runtimeView.phase ||
@@ -824,9 +882,11 @@ export function AgentDetailPage({
   const emberLendingChatEnabled =
     agentId === 'agent-ember-lending' &&
     emberLendingRuntimeView?.phase === 'active' &&
-    Boolean(emberLendingRuntimeView.walletAddress) &&
-    Boolean(emberLendingRuntimeView.mandateSummary) &&
-    Boolean(emberLendingRuntimeView.reservationSummary);
+    Boolean(
+      emberLendingRuntimeView.walletAddress ||
+        emberLendingRuntimeView.mandateSummary ||
+        emberLendingRuntimeView.reservationSummary,
+    );
   const chatEnabled =
     agentId === 'agent-pi-example' ||
     agentId === 'agent-portfolio-manager' ||
@@ -2307,7 +2367,7 @@ function TransactionHistoryTab({
                   <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
                   <div className="text-sm text-white mt-1">
                     {event.type === 'status' && event.message}
-                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                    {event.type === 'artifact' && `Artifact: ${readArtifactEventType(event)}`}
                     {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
                   </div>
                 </div>

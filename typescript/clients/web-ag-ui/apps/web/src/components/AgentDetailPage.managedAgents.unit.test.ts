@@ -97,6 +97,77 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).toContain('Send message');
   });
 
+  it('falls back to the last portfolio state for sparse lending runtime context and keeps chat enabled', () => {
+    const html = renderManagedAgentDetail({
+      isHired: true,
+      initialTab: 'chat',
+      taskStatus: 'completed',
+      lifecycleState: {
+        phase: 'active',
+        mandateRef: null,
+        mandateSummary: null,
+        mandateContext: null,
+        walletAddress: null,
+        rootUserWalletAddress: null,
+        rootedWalletContextId: null,
+        lastReservationSummary: null,
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          owned_units: [
+            {
+              unit_id: 'unit-ember-lending-001',
+              network: 'arbitrum',
+              wallet_address: '0x00000000000000000000000000000000000000b1',
+              root_asset: 'USDC',
+              quantity: '10',
+              reservation_id: 'reservation-ember-lending-001',
+            },
+          ],
+          reservations: [
+            {
+              reservation_id: 'reservation-ember-lending-001',
+              purpose: 'deploy',
+              control_path: 'lending.supply',
+            },
+          ],
+        },
+      } as never,
+    });
+
+    expect(html).toContain('Managed lending runtime');
+    expect(html).toContain('Lifecycle state');
+    expect(html).toContain('active');
+    expect(html).toContain('Lane');
+    expect(html).toContain('Arbitrum / Lending');
+    expect(html).toContain('Subagent wallet');
+    expect(html).toContain('0x00000000000000000000000000000000000000b1');
+    expect(html).toContain(
+      'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+    );
+    expect(html).toContain('Send message');
+  });
+
+  it('renders artifact labels from nested artifact payload types in the activity stream', () => {
+    const html = renderManagedAgentDetail({
+      isHired: true,
+      initialTab: 'transactions',
+      events: [
+        {
+          type: 'artifact',
+          artifact: {
+            artifactId: 'artifact-1',
+            data: {
+              type: 'shared-ember-portfolio-state',
+            },
+          },
+        } as never,
+      ],
+    });
+
+    expect(html).toContain('Activity Stream');
+    expect(html).toContain('Artifact: shared-ember-portfolio-state');
+  });
+
   it('renders the managed lending lane summary on the portfolio-manager detail page', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
