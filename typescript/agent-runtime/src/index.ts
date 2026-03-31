@@ -139,7 +139,13 @@ export type AgentRuntimeDomainContext<TState = unknown> = {
 
 export type AgentRuntimeDomainConfig<TState = unknown> = {
   lifecycle: AgentRuntimeDomainLifecycle;
-  systemContext?: (params: AgentRuntimeDomainContext<TState>) => string | readonly string[] | undefined;
+  systemContext?: (
+    params: AgentRuntimeDomainContext<TState>,
+  ) =>
+    | string
+    | readonly string[]
+    | undefined
+    | Promise<string | readonly string[] | undefined>;
   handleOperation?: (params: AgentRuntimeDomainContext<TState> & {
     operation: AgentRuntimeDomainOperation;
   }) => AgentRuntimeDomainOperationResult<TState> | Promise<AgentRuntimeDomainOperationResult<TState>>;
@@ -227,6 +233,8 @@ export function createAgentRuntimeHttpAgent(config: AgentRuntimeHttpAgentConfig)
 type AgentRuntimeExecutionContext = {
   threadId: string;
 };
+
+const AGENT_RUNTIME_PERSISTED_DOMAIN_STATE_KEY = '__agentRuntimeDomainState';
 
 type AgentRuntimeSessionStore = {
   hasSession: (threadId: string) => boolean;
@@ -327,6 +335,25 @@ function appendDomainSystemPromptContext(
   return `${systemPrompt}\n\n${appended}`;
 }
 
+function shouldDebugLogSystemPrompt(): boolean {
+  const value = process.env.DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT?.trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+}
+
+function logSystemPromptDebug(input: {
+  threadId?: string;
+  systemPrompt: string | undefined;
+}): void {
+  if (!shouldDebugLogSystemPrompt()) {
+    return;
+  }
+
+  const threadLabel = input.threadId ?? 'unknown-thread';
+  console.log(
+    `[agent-runtime] final system prompt for thread ${threadLabel}:\n${input.systemPrompt ?? ''}`,
+  );
+}
+
 function materializeSessionLifecycle(
   session: PiRuntimeGatewaySession,
   initialLifecyclePhase?: string,
@@ -423,6 +450,41 @@ function readPersistedSession(
   }
 
   return threadState as unknown as PiRuntimeGatewaySession;
+}
+
+function readPersistedDomainState<TState>(
+  threadState: Record<string, unknown>,
+): TState | undefined {
+  return AGENT_RUNTIME_PERSISTED_DOMAIN_STATE_KEY in threadState
+    ? (threadState[AGENT_RUNTIME_PERSISTED_DOMAIN_STATE_KEY] as TState)
+    : undefined;
+}
+
+function readPersistedLifecycleDomainState<TState>(
+  threadState: Record<string, unknown>,
+): TState | undefined {
+  const threadPatch =
+    'threadPatch' in threadState && isRecord(threadState.threadPatch) ? threadState.threadPatch : null;
+  const lifecycleState =
+    threadPatch && 'lifecycle' in threadPatch && isRecord(threadPatch.lifecycle)
+      ? threadPatch.lifecycle
+      : null;
+
+  return lifecycleState ? (lifecycleState as TState) : undefined;
+}
+
+function buildPersistedThreadStateSnapshot<TState>(input: {
+  session: PiRuntimeGatewaySession;
+  state: TState | undefined;
+}): Record<string, unknown> {
+  if (input.state === undefined) {
+    return input.session as unknown as Record<string, unknown>;
+  }
+
+  return {
+    ...(input.session as unknown as Record<string, unknown>),
+    [AGENT_RUNTIME_PERSISTED_DOMAIN_STATE_KEY]: input.state,
+  };
 }
 
 function createAutomationRegistry(): AgentRuntimeAutomationRegistry {
@@ -1403,12 +1465,16 @@ export async function createAgentRuntime<TState = unknown>(
     session: PiRuntimeGatewaySession = sessionStore.getSession(threadId),
   ): Promise<void> => {
     const ids = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+    const threadState = buildPersistedThreadStateSnapshot({
+      session,
+      state: domainStateStore.get(threadId),
+    });
     await postgres.executeStatements(
       resolvedDatabaseUrl,
       buildPersistThreadStateStatements({
         threadId: ids.threadId,
         threadKey: threadId,
-        threadState: session as unknown as Record<string, unknown>,
+        threadState,
         now: new Date(now()),
       }),
     );
@@ -1423,9 +1489,22 @@ export async function createAgentRuntime<TState = unknown>(
       persistedThreads.add(threadId);
       const persistedSession = readPersistedSession(threadId, persistedThread.threadState);
       if (persistedSession) {
+        const persistedDomainState = readPersistedDomainState<TState>(persistedThread.threadState);
+        const recoveredLifecycleState =
+          persistedDomainState === undefined
+            ? readPersistedLifecycleDomainState<TState>(persistedThread.threadState)
+            : undefined;
         const normalizedSession = materializeSessionLifecycle(persistedSession, initialLifecyclePhase);
         const hydratedSession = sessionStore.setSession(threadId, normalizedSession);
-        if (normalizedSession !== persistedSession) {
+        if (persistedDomainState !== undefined) {
+          domainStateStore.set(threadId, persistedDomainState);
+        } else if (recoveredLifecycleState !== undefined) {
+          domainStateStore.set(threadId, recoveredLifecycleState);
+        }
+        if (
+          normalizedSession !== persistedSession ||
+          (persistedDomainState === undefined && recoveredLifecycleState !== undefined)
+        ) {
           await persistSessionSnapshot(threadId, hydratedSession);
         }
         return hydratedSession;
@@ -1441,11 +1520,15 @@ export async function createAgentRuntime<TState = unknown>(
     }
 
     const ids = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+    const threadState = buildPersistedThreadStateSnapshot({
+      session,
+      state: domainStateStore.get(threadId),
+    });
     await postgres.persistDirectExecution({
       databaseUrl: resolvedDatabaseUrl,
       threadId: ids.threadId,
       threadKey: threadId,
-      threadState: session as unknown as Record<string, unknown>,
+      threadState,
       executionId: ids.executionId,
       interruptId: ids.interruptId,
       artifactId: ids.artifactId,
@@ -1471,12 +1554,12 @@ export async function createAgentRuntime<TState = unknown>(
       : undefined;
   const streamFn: AgentRuntimeStreamFn | undefined =
     options.agentOptions?.streamFn || domain
-      ? (model, context, streamOptions) => {
+      ? async (model, context, streamOptions) => {
           const threadId = getActiveThreadId();
           const lines = threadId && domain
             ? [
                 ...normalizeDomainSystemContextLines(
-                  domain.systemContext?.({
+                  await domain.systemContext?.({
                     threadId,
                     state: domainStateStore.get(threadId),
                   }),
@@ -1490,7 +1573,16 @@ export async function createAgentRuntime<TState = unknown>(
               }
             : context;
 
-          return (options.agentOptions?.streamFn ?? streamSimple)(model, nextContext, streamOptions);
+          logSystemPromptDebug({
+            threadId,
+            systemPrompt: nextContext.systemPrompt,
+          });
+
+          return await (options.agentOptions?.streamFn ?? streamSimple)(
+            model,
+            nextContext,
+            streamOptions,
+          );
         }
       : undefined;
 

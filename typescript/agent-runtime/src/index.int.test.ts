@@ -834,6 +834,109 @@ describe('agent-runtime integration', () => {
     });
   });
 
+  it('logs the final system prompt when DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT is enabled', async () => {
+    const originalDebugFlag = process.env.DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT;
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    process.env.DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT = '1';
+
+    try {
+      const runtime = await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are a lifecycle agent.',
+        domain: createLifecycleDomain(),
+        agentOptions: {
+          streamFn: () => createTextStream('Debug prompt captured.'),
+        },
+        __internalPostgres: createInternalPostgresHooks(),
+      } as any);
+
+      await collectEventSource(
+        await runtime.service.run({
+          threadId: 'thread-debug-system-prompt',
+          runId: 'run-debug-system-prompt',
+          messages: [
+            {
+              id: 'message-debug-system-prompt',
+              role: 'user',
+              content: 'Show me the runtime prompt.',
+            },
+          ],
+        }),
+      );
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '[agent-runtime] final system prompt for thread thread-debug-system-prompt:',
+        ),
+      );
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining('You are a lifecycle agent.\n\nLifecycle phase: prehire.'),
+      );
+    } finally {
+      consoleLogSpy.mockRestore();
+      if (originalDebugFlag === undefined) {
+        delete process.env.DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT;
+      } else {
+        process.env.DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT = originalDebugFlag;
+      }
+    }
+  });
+
+  it('awaits async domain system context before starting inference', async () => {
+    const observedSystemPrompts: string[] = [];
+
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are an async lifecycle agent.',
+      domain: {
+        lifecycle: {
+          initialPhase: 'prehire',
+          phases: ['prehire'],
+          terminalPhases: [],
+          commands: [],
+          transitions: [],
+          interrupts: [],
+        },
+        systemContext: async () => {
+          await Promise.resolve();
+          return ['<async_context>', '  <phase>prehire</phase>', '</async_context>'];
+        },
+      },
+      agentOptions: {
+        streamFn: (_model, context) => {
+          observedSystemPrompts.push(context.systemPrompt ?? '');
+          return createTextStream('Async context observed.');
+        },
+      },
+      __internalPostgres: createInternalPostgresHooks(),
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-async-context',
+        runId: 'run-async-context',
+        messages: [
+          {
+            id: 'message-async-context',
+            role: 'user',
+            content: 'Show async context.',
+          },
+        ],
+      }),
+    );
+
+    expect(
+      observedSystemPrompts.some(
+        (prompt) =>
+          prompt.includes('You are an async lifecycle agent.') &&
+          prompt.includes('<async_context>') &&
+          prompt.includes('<phase>prehire</phase>') &&
+          prompt.includes('</async_context>'),
+      ),
+    ).toBe(true);
+  });
+
   it('runs scheduled automation updates through the runtime-owned default Postgres bootstrap path', async () => {
     vi.useFakeTimers();
 
@@ -1024,5 +1127,145 @@ describe('agent-runtime integration', () => {
         (message) => typeof message === 'object' && message !== null && 'role' in message && message.role === 'assistant',
       ),
     ).toBe(true);
+  });
+
+  it('rehydrates persisted domain state before rebuilding system prompt after process restart', async () => {
+    const { hooks: internalPostgres } = createPersistingInternalPostgres();
+
+    const runtimeA = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a persistence agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused for direct command.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeA.service.run({
+        threadId: 'thread-domain-state',
+        runId: 'run-domain-state-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const observedSystemPrompts: string[] = [];
+    const runtimeB = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a persistence agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: (_model, context) => {
+          observedSystemPrompts.push(context.systemPrompt ?? '');
+          return createTextStream('Prompt rebuilt after restart.');
+        },
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeB.service.run({
+        threadId: 'thread-domain-state',
+        runId: 'run-domain-state-after-restart',
+        messages: [
+          {
+            id: 'message-domain-state-after-restart',
+            role: 'user',
+            content: 'What state are you in?',
+          },
+        ],
+      }),
+    );
+
+    expect(observedSystemPrompts).toContain(
+      'You are a persistence agent.\n\nLifecycle phase: onboarding.',
+    );
+  });
+
+  it('recovers domain state from persisted thread lifecycle when the dedicated domain-state blob is missing', async () => {
+    const { persistedThreads, hooks: internalPostgres } = createPersistingInternalPostgres();
+
+    const runtimeA = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a persistence agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused for direct command.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeA.service.run({
+        threadId: 'thread-legacy-lifecycle',
+        runId: 'run-legacy-lifecycle-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const persistedThread = persistedThreads.get('thread-legacy-lifecycle');
+    expect(persistedThread).toBeDefined();
+    if (!persistedThread) {
+      return;
+    }
+
+    const legacyThreadState = {
+      ...persistedThread.threadState,
+    };
+    delete legacyThreadState.__agentRuntimeDomainState;
+    persistedThreads.set('thread-legacy-lifecycle', {
+      ...persistedThread,
+      threadState: legacyThreadState,
+    });
+
+    const observedSystemPrompts: string[] = [];
+    const runtimeB = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a persistence agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: (_model, context) => {
+          observedSystemPrompts.push(context.systemPrompt ?? '');
+          return createTextStream('Recovered from legacy lifecycle state.');
+        },
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeB.service.run({
+        threadId: 'thread-legacy-lifecycle',
+        runId: 'run-legacy-lifecycle-after-restart',
+        messages: [
+          {
+            id: 'message-legacy-lifecycle-after-restart',
+            role: 'user',
+            content: 'What state are you in?',
+          },
+        ],
+      }),
+    );
+
+    expect(observedSystemPrompts).toContain(
+      'You are a persistence agent.\n\nLifecycle phase: onboarding.',
+    );
+
+    const migratedThreadState = persistedThreads.get('thread-legacy-lifecycle')?.threadState;
+    expect(migratedThreadState).toMatchObject({
+      __agentRuntimeDomainState: {
+        phase: 'onboarding',
+        onboardingStep: 'operator-profile',
+        operatorNote: null,
+      },
+    });
   });
 });

@@ -997,14 +997,30 @@ const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => num
           },
         ];
       }
-      case 'assistant':
+      case 'assistant': {
+        const content: Array<
+          { type: 'text'; text: string } | { type: 'toolCall'; id: string; name: string; arguments: unknown }
+        > = [];
+
+        if (typeof message.content === 'string' && message.content.length > 0) {
+          content.push({ type: 'text', text: message.content });
+        }
+
+        if (Array.isArray(message.toolCalls)) {
+          for (const toolCall of message.toolCalls) {
+            content.push({
+              type: 'toolCall',
+              id: toolCall.id,
+              name: toolCall.function.name,
+              arguments: parseAgUiToolCallArguments(toolCall.function.arguments),
+            });
+          }
+        }
+
         return [
           {
             role: 'assistant',
-            content:
-              typeof message.content === 'string' && message.content.length > 0
-                ? [{ type: 'text', text: message.content }]
-                : [],
+            content,
             api: 'responses' as never,
             provider: 'openai' as never,
             model: 'ag-ui-projected',
@@ -1013,6 +1029,7 @@ const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => num
             timestamp: now(),
           } as AgentMessage,
         ];
+      }
       case 'tool':
         return [
           {
@@ -1028,6 +1045,14 @@ const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => num
         return [];
     }
   });
+
+const parseAgUiToolCallArguments = (serializedArguments: string): unknown => {
+  try {
+    return JSON.parse(serializedArguments);
+  } catch {
+    return serializedArguments;
+  }
+};
 
 const buildResumePromptMessages = (resumePayload: string, now: () => number): AgentMessage[] => [
   {
