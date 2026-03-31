@@ -585,7 +585,11 @@ function buildEmberLendingRuntimeView(
     reservationSummary: readString(lifecycleRecord['lastReservationSummary']),
   };
 
-  return runtimeView.walletAddress || runtimeView.mandateSummary || runtimeView.reservationSummary
+  return runtimeView.phase ||
+    runtimeView.laneLabel ||
+    runtimeView.walletAddress ||
+    runtimeView.mandateSummary ||
+    runtimeView.reservationSummary
     ? runtimeView
     : null;
 }
@@ -1387,6 +1391,12 @@ export function AgentDetailPage({
                         Managed lending runtime
                       </div>
                       <div className="space-y-2 text-xs">
+                        {emberLendingRuntimeView.phase ? (
+                          <div>
+                            <div className="text-gray-500 uppercase tracking-wide">Lifecycle state</div>
+                            <div className="mt-1 text-white">{emberLendingRuntimeView.phase}</div>
+                          </div>
+                        ) : null}
                         <div>
                           <div className="text-gray-500 uppercase tracking-wide">Task status</div>
                           <div className="mt-1 text-white">{taskStatus ?? 'idle'}</div>

@@ -80,6 +80,8 @@ describe('AgentDetailPage managed-agent affordances', () => {
     });
 
     expect(html).toContain('Managed lending runtime');
+    expect(html).toContain('Lifecycle state');
+    expect(html).toContain('active');
     expect(html).toContain('Subagent wallet');
     expect(html).toContain('0x00000000000000000000000000000000000000b1');
     expect(html).toContain('Task status');
