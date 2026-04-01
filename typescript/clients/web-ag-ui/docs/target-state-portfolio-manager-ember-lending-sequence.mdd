@@ -5,7 +5,7 @@ Scope: managed Portfolio Manager -> Ember Lending coordination over Shared Ember
 
 ## Contract summary
 
-- Portfolio Manager remains the owner of onboarding, reservations, and control-plane interventions.
+- Portfolio Manager remains the owner of onboarding approval, rooted-signing collection, and control-plane interventions.
 - Ember Lending keeps exactly three model-visible tools:
   - `create_transaction_plan`
   - `request_transaction_execution`
@@ -17,6 +17,9 @@ Scope: managed Portfolio Manager -> Ember Lending coordination over Shared Ember
 - Planner note:
   - `subagent.createTransactionPlan.v1` accepts a bounded planning handoff without planner-owned `payload_builder_output`.
   - Shared Ember routes that request through the `ember-cli` planner path and returns the planner-generated payload output in `candidate_plan.handoff`.
+- Execution-context note:
+  - `owned_units` and `reservations` are agent-scoped to the managed lending lane.
+  - `wallet_contents` is rooted-wallet-wide so every managed agent can see the full wallet inventory in prompt context.
 
 ```mermaid
 sequenceDiagram
@@ -28,13 +31,14 @@ sequenceDiagram
   participant SE as Shared Ember
   participant Planner as ember-cli planner path
 
-  PM->>SE: approve mandate + reserve capital + activate lending lane
+  PM->>SE: complete rooted bootstrap with activation targeted to ember-lending
+  Note over SE: Wallet observation, accounting-unit ingestion, reservation creation, and policy snapshot materialization happen inside Shared Ember
   User->>Web: Open Ember Lending detail
   Web->>Runtime: connect(agent-ember-lending, threadId)
   Runtime->>EL: runtime-owned hydrate + system-context assembly
   EL->>SE: subagent.readPortfolioState.v1
   EL->>SE: subagent.readExecutionContext.v1
-  SE-->>EL: managed projection + minimal execution_context
+  SE-->>EL: lending-lane projection + execution_context(rooted-wallet-wide wallet_contents)
   EL-->>Runtime: ready snapshot with minimal execution contract
 
   User->>Web: create_transaction_plan
@@ -71,3 +75,4 @@ sequenceDiagram
 - There is no model-visible `read_portfolio_state` tool.
 - There is no model-visible onboarding-context read or manual sync/bootstrap step.
 - `request_transaction_execution` must surface admit-and-execute, blocked, and denied admission outcomes explicitly in status and artifacts.
+- In the current reference implementation, bootstrap-created lending lanes can still have `subagent_wallet_address = null` until a later delegation issuance step assigns a dedicated subagent wallet.

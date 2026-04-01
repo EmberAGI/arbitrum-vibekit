@@ -98,6 +98,7 @@ Container responsibilities:
 - CopilotKit endpoint: protocol boundary and routing to agents.
 - Agent runtimes: workflow execution and state emission.
 - Managed downstream note: `agent-portfolio-manager` owns managed onboarding/control-plane flows, while `agent-ember-lending` stays on the bounded subagent read/plan/execute/escalate surface against Shared Ember.
+  - Shared Ember, not the portfolio-manager runtime, owns the durable wallet observation, managed-lane owned units, reservations, and policy snapshots produced during onboarding completion.
 
 Explicit non-goal container:
 
@@ -183,7 +184,8 @@ Target factorization:
 Current concrete managed-path specialization:
 
 - `agent-portfolio-manager`
-  - owns onboarding approval, reservation creation, managed-agent activation/deactivation, and managed-lane summary projection
+  - owns onboarding approval, rooted-signing collection, and managed-agent activation/deactivation intent submission
+  - submits the minimal rooted-bootstrap activation contract that tells Shared Ember which managed mandate should materialize the initial lane
   - consumes Shared Ember through a thin app-local adapter without owning Ember business logic
 
 - `agent-ember-lending`
@@ -192,6 +194,7 @@ Current concrete managed-path specialization:
   - keeps planning on the bounded Shared Ember planner contract, sending only a bounded planning handoff while receiving planner-generated payload output back in the candidate plan
   - treats execution as admit-and-execute or blocked/denied admission rather than an execution-only success path
   - projects lifecycle, wallet, mandate, reservation, planning, execution, and escalation state into the shared AG-UI thread contract
+  - treats `owned_units` and `reservations` as lending-lane truth while treating `wallet_contents` as rooted-wallet-wide context for prompt visibility
 
 ## 6. Dynamic views (sequence)
 

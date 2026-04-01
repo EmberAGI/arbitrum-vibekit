@@ -11,14 +11,14 @@ Traced from:
 
 ## Boundary summary
 
-- Portfolio Manager owns mandate approval, reservation creation, and control-plane follow-up.
+- Portfolio Manager owns mandate approval, rooted-signing collection, and submission of the managed-agent activation intent.
 - Ember Lending exposes exactly three model-visible tools:
   - `create_transaction_plan`
   - `request_transaction_execution`
   - `create_escalation_request`
 - Runtime-internal reads stay hidden from the model:
   - `subagent.readPortfolioState.v1` for connect-time hydration
-  - `subagent.readExecutionContext.v1` during system-context assembly
+  - `subagent.readExecutionContext.v1` for connect-time hydration and system-context assembly
 
 ```mermaid
 sequenceDiagram
@@ -29,15 +29,17 @@ sequenceDiagram
   participant EL as agent-ember-lending
   participant SE as Shared Ember
 
-  PM->>SE: approve lending mandate + reserve capital
+  PM->>SE: orchestrator.completeRootedBootstrapFromUserSigning.v1(portfolio + lending mandates, activation.agentId=ember-lending)
+  Note over SE: Observe rooted wallet and materialize the initial ember-lending lane internally
   User->>Web: Open Ember Lending detail
   Web->>Runtime: connect(agent-ember-lending, threadId)
   Runtime->>EL: hydrate_runtime_projection (internal)
   EL->>SE: subagent.readPortfolioState.v1
-  SE-->>EL: portfolio_state + revision
+  EL->>SE: subagent.readExecutionContext.v1
+  SE-->>EL: agent-scoped portfolio_state + revision
   Runtime->>EL: build system context (internal)
   EL->>SE: subagent.readExecutionContext.v1
-  SE-->>EL: minimal execution_context
+  SE-->>EL: execution_context with lane-scoped owned_units and rooted-wallet-wide wallet_contents
   EL-->>Runtime: UI-ready state snapshot
 
   User->>Web: create_transaction_plan
@@ -76,3 +78,4 @@ sequenceDiagram
 - Blocked execution responses preserve the already-hydrated mandate and wallet context even when the blocked portfolio payload is sparse.
 - Nested raw `handoff` payloads, planner-owned `payload_builder_output`, and reasoning-trace fields are not forwarded on planning calls.
 - Escalation calls still forward only the bounded escalation handoff fields plus the blocked result.
+- In the current implementation, onboarding bootstrap creates the initial lending `owned_units`, `reservations`, and policy snapshot for `activation.agentId`, but `subagent_wallet_address` can still remain `null` until later delegation issuance.

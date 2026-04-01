@@ -156,8 +156,8 @@ Container responsibilities:
 - Agent domain module: pluggable layer for agent-family-specific lifecycle, interrupt, command, and semantic A2UI content
 - Operator control plane: scheduler health, maintenance, replay/recreate, inspection, and archival workflows that are not model-facing tools
 - Current managed-runtime example:
-  - `agent-portfolio-manager` owns onboarding approval, reservation creation, and managed-agent control-plane projection.
-  - `agent-ember-lending` owns the bounded subagent read/plan/execute/escalate runtime against Shared Ember.
+  - `agent-portfolio-manager` owns onboarding approval, rooted-signing collection, and managed-agent control-plane projection, but Shared Ember owns the durable reservation and owned-unit truth created during onboarding completion.
+  - `agent-ember-lending` owns the bounded subagent read/plan/execute/escalate runtime against Shared Ember and consumes agent-scoped lane data plus rooted-wallet-wide wallet contents from Shared Ember execution context.
 
 Important web constraint:
 
