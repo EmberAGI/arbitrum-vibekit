@@ -14,6 +14,10 @@ type StartedSharedEmberTarget = {
 
 const runSharedEmberIntegration = process.env['RUN_SHARED_EMBER_INT']?.trim() === '1';
 const describeSharedEmberIntegration = runSharedEmberIntegration ? describe : describe.skip;
+const TEST_SIGNING_INTERRUPT_WALLET = '0x00000000000000000000000000000000000000a1' as const;
+const TEST_USER_WALLET = '0x00000000000000000000000000000000000000b1' as const;
+const TEST_ORCHESTRATOR_WALLET = '0x00000000000000000000000000000000000000b2' as const;
+const TEST_DELEGATION_MANAGER = '0x00000000000000000000000000000000000000b3' as const;
 
 async function resolveSharedEmberTarget(): Promise<StartedSharedEmberTarget> {
   const explicitBaseUrl = process.env['SHARED_EMBER_BASE_URL']?.trim();
@@ -51,16 +55,53 @@ function createRootDelegationHandoff(suffix: string) {
     handoff_id: `handoff-root-portfolio-int-${suffix}`,
     root_delegation_id: `root-user-portfolio-int-${suffix}`,
     user_id: 'user_idle',
-    user_wallet: '0xUSERPROTO1',
-    orchestrator_wallet: '0xORCHPORTFOLIO1',
+    user_wallet: TEST_USER_WALLET,
+    orchestrator_wallet: TEST_ORCHESTRATOR_WALLET,
     network: 'base',
     artifact_ref: `artifact-root-portfolio-int-${suffix}`,
     issued_at: '2026-03-29T00:00:00Z',
     activated_at: '2026-03-29T00:00:05Z',
     signer_kind: 'delegation_toolkit',
     metadata: {
-      delegation_manager: '0xDELEGATIONMANAGERPORTFOLIO1',
+      delegation_manager: TEST_DELEGATION_MANAGER,
     },
+  };
+}
+
+function createPortfolioManagerSetupInput(walletAddress: `0x${string}`) {
+  return {
+    walletAddress,
+    portfolioMandate: {
+      approved: true,
+      riskLevel: 'medium' as const,
+    },
+    managedAgentMandates: [
+      {
+        agentKey: 'ember-lending-primary',
+        agentType: 'ember-lending' as const,
+        approved: true,
+        settings: {
+          network: 'arbitrum' as const,
+          protocol: 'aave' as const,
+          allowedCollateralAssets: ['USDC'],
+          allowedBorrowAssets: ['USDC'],
+          maxAllocationPct: 35,
+          maxLtvBps: 7000,
+          minHealthFactor: '1.25',
+        },
+      },
+    ],
+  };
+}
+
+function createSignedDelegation(walletAddress: `0x${string}`) {
+  return {
+    delegate: '0x2222222222222222222222222222222222222222' as const,
+    delegator: walletAddress,
+    authority: '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
+    caveats: [],
+    salt: '0x1111111111111111111111111111111111111111111111111111111111111111' as const,
+    signature: '0x1234' as const,
   };
 }
 
@@ -70,7 +111,7 @@ function createOnboardingBootstrap() {
     rootedWalletContext: {
       rooted_wallet_context_id: 'rwc-user-protocol-001',
       user_id: 'user_idle',
-      wallet_address: '0xUSERPROTO1',
+      wallet_address: TEST_USER_WALLET,
       network: 'base',
       registered_at: '2026-03-29T00:00:00Z',
       metadata: {
@@ -86,7 +127,7 @@ function createOnboardingBootstrap() {
     ],
     userReservePolicies: [],
     activation: {
-      agentId: 'portfolio-manager',
+      agentId: 'ember-lending',
       purpose: 'deploy',
       controlPath: 'unassigned',
     },
@@ -360,6 +401,137 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
               control_paths: ['unassigned'],
             }),
           ],
+        },
+      },
+    });
+  });
+
+  it('completes rooted bootstrap from the signing interrupt through the real Shared Ember HTTP boundary', async () => {
+    const protocolHost = createPortfolioManagerSharedEmberHttpHost({
+      baseUrl: target.baseUrl,
+    });
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    const suffix = Date.now().toString(16);
+    const walletAddress = TEST_SIGNING_INTERRUPT_WALLET;
+    const threadId = `thread-rooted-bootstrap-signing-int-${suffix}`;
+    const setupInput = createPortfolioManagerSetupInput(walletAddress);
+
+    const setupResult = await domain.handleOperation?.({
+      threadId,
+      state: {
+        phase: 'prehire',
+        lastPortfolioState: null,
+        lastSharedEmberRevision: null,
+        lastRootDelegation: null,
+        lastOnboardingBootstrap: null,
+        lastRootedWalletContextId: null,
+        activeWalletAddress: null,
+        pendingOnboardingWalletAddress: null,
+      },
+      operation: {
+        source: 'interrupt',
+        name: 'portfolio-manager-setup-request',
+        input: setupInput,
+      },
+    });
+
+    expect(setupResult).toMatchObject({
+      state: {
+        phase: 'onboarding',
+        activeWalletAddress: walletAddress,
+        pendingOnboardingWalletAddress: walletAddress,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'interrupted',
+          statusMessage: 'Review and sign the delegation needed to activate your portfolio manager.',
+        },
+        interrupt: {
+          type: 'portfolio-manager-delegation-signing-request',
+        },
+      },
+    });
+
+    const signingResult = await domain.handleOperation?.({
+      threadId,
+      state: setupResult?.state,
+      operation: {
+        source: 'interrupt',
+        name: 'portfolio-manager-delegation-signing-request',
+        input: {
+          outcome: 'signed',
+          signedDelegations: [createSignedDelegation(walletAddress)],
+        },
+      },
+    });
+
+    expect(signingResult).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: expect.any(Number),
+        lastRootDelegation: {
+          user_wallet: walletAddress,
+          status: 'active',
+        },
+        lastRootedWalletContextId: expect.any(String),
+        activeWalletAddress: walletAddress,
+        pendingOnboardingWalletAddress: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'working',
+          statusMessage: 'Portfolio manager onboarding complete. Agent is active.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'shared-ember-rooted-bootstrap',
+              rootedWalletContextId: expect.any(String),
+              rootDelegation: {
+                user_wallet: walletAddress,
+                status: 'active',
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    await expect(
+      protocolHost.handleJsonRpc({
+        jsonrpc: '2.0',
+        id: `rpc-shared-ember-int-read-onboarding-signing-${suffix}`,
+        method: 'orchestrator.readOnboardingState.v1',
+        params: {
+          agent_id: 'portfolio-manager',
+          wallet_address: walletAddress,
+          network: 'arbitrum',
+        },
+      }),
+    ).resolves.toMatchObject({
+      jsonrpc: '2.0',
+      id: `rpc-shared-ember-int-read-onboarding-signing-${suffix}`,
+      result: {
+        protocol_version: 'v1',
+        onboarding_state: {
+          phase: 'active',
+          rooted_wallet_context: {
+            rooted_wallet_context_id: expect.any(String),
+          },
+          reservations: expect.arrayContaining([
+            expect.objectContaining({
+              control_path: 'unassigned',
+            }),
+          ]),
+          policy_snapshots: expect.arrayContaining([
+            expect.objectContaining({
+              control_paths: ['unassigned'],
+            }),
+          ]),
         },
       },
     });

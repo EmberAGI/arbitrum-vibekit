@@ -466,12 +466,11 @@ describe('agent-portfolio-manager AG-UI integration', () => {
                 agent_id: 'ember-lending',
               }),
             ]),
-            reservations: expect.arrayContaining([
-              expect.objectContaining({
-                agent_id: 'ember-lending',
-                control_path: 'lending.supply',
-              }),
-            ]),
+            activation: {
+              agentId: 'ember-lending',
+              purpose: 'deploy',
+              controlPath: 'unassigned',
+            },
           }),
           handoff: expect.objectContaining({
             user_wallet: '0x00000000000000000000000000000000000000a1',
@@ -480,6 +479,23 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         }),
       }),
     );
+
+    const rootedBootstrapRequest = protocolHost.handleJsonRpc.mock.calls.find(
+      ([request]) =>
+        typeof request === 'object' &&
+        request !== null &&
+        'method' in request &&
+        request.method === 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+    )?.[0] as {
+      params?: {
+        onboarding?: Record<string, unknown>;
+      };
+    };
+
+    expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('capitalObservation');
+    expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('ownedUnits');
+    expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('reservations');
+    expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('policySnapshots');
   });
 
   it('clears wallet-local onboarding state when delegation signing is rejected', async () => {

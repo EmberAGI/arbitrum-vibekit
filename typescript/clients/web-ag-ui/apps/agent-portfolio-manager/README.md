@@ -5,6 +5,21 @@ implementation for the first Shared Ember Domain Service integration slice.
 
 This package is expected to remain a thin `agent-runtime` consumer.
 
+## Managed onboarding semantics
+
+For the current Portfolio Manager -> Ember Lending pair, this app owns:
+
+- user-facing mandate approval
+- rooted-delegation signing handoff
+- submission of the minimal onboarding activation contract to Shared Ember
+
+Shared Ember remains the durable owner of wallet observation, accounting-unit
+ingestion, reservation truth, and managed-lane materialization. The current
+bootstrap path targets the managed lending mandate during onboarding
+completion, so Shared Ember creates the initial `ember-lending` lane during
+rooted bootstrap instead of reserving that capital under the portfolio-manager
+agent id.
+
 ## Shared Ember sidecar testing
 
 This package does not vendor or commit private `ember-orchestration-v1-spec`

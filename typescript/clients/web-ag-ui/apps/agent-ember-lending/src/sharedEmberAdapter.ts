@@ -30,7 +30,6 @@ export type EmberLendingLifecycleState = {
 type CreateEmberLendingDomainOptions = {
   protocolHost?: EmberLendingSharedEmberProtocolHost;
   agentId?: string;
-  onboardingOwnerAgentId?: string;
 };
 
 type SharedEmberRevisionResponse = {
@@ -39,56 +38,37 @@ type SharedEmberRevisionResponse = {
   };
 };
 
-type OnboardingProofs = {
-  rooted_wallet_context_registered: boolean;
-  root_delegation_registered: boolean;
-  root_authority_active: boolean;
-  wallet_baseline_observed: boolean;
-  accounting_units_seeded: boolean;
-  mandate_inputs_configured: boolean;
-  reserve_policy_configured: boolean;
-  capital_reserved_for_agent: boolean;
-  policy_snapshot_recorded: boolean;
-  agent_active: boolean;
-};
-
-type OnboardingState = {
-  wallet_address: string;
-  network: string;
-  phase: string;
-  proofs: OnboardingProofs;
-  rooted_wallet_context?: {
-    rooted_wallet_context_id?: string;
-  } | null;
-  root_delegation?: {
-    root_delegation_id?: string;
-  } | null;
+type SharedEmberExecutionContext = {
+  generated_at?: string;
+  network?: string;
+  mandate_ref?: string;
+  mandate_summary?: string;
+  mandate_context?: Record<string, unknown> | null;
+  subagent_wallet_address?: string;
+  root_user_wallet_address?: string;
   owned_units?: Array<{
-    unit_id: string;
-    root_asset: string;
-    quantity: string;
-    status: string;
-    control_path: string;
-    reservation_id: string | null;
+    unit_id?: string;
+    root_asset?: string;
+    amount?: string;
+    benchmark_value_usd?: string;
   }>;
-  reservations?: Array<{
-    reservation_id: string;
-    agent_id: string;
-    purpose: string;
-    status: string;
-    control_path: string;
-    unit_allocations: Array<{
-      unit_id: string;
-      quantity: string;
-    }>;
+  wallet_contents?: Array<{
+    asset?: string;
+    amount?: string;
+    benchmark_value_usd?: string;
   }>;
 } | null;
 
-type OnboardingStateResponse = {
+type ExecutionContextResponse = {
   result?: {
     revision?: number;
-    onboarding_state?: OnboardingState;
+    execution_context?: SharedEmberExecutionContext;
   };
+};
+
+type SharedEmberExecutionContextEnvelope = {
+  revision: number | null;
+  executionContext: NonNullable<SharedEmberExecutionContext>;
 };
 
 type PortfolioProjection = Pick<
@@ -106,7 +86,6 @@ const DIRECT_HIRE_MESSAGE =
   'Use the portfolio manager to onboard and activate the managed lending agent.';
 const DIRECT_FIRE_MESSAGE =
   'Use the portfolio manager to deactivate the managed lending agent.';
-const EMBER_LENDING_ONBOARDING_OWNER_AGENT_ID = 'portfolio-manager';
 const SHARED_EMBER_NETWORK = 'arbitrum';
 
 function buildDefaultLifecycleState(): EmberLendingLifecycleState {
@@ -164,33 +143,28 @@ function isSharedEmberRevisionConflict(error: unknown): boolean {
   );
 }
 
-async function readSharedEmberWalletAccountingState(input: {
+async function readSharedEmberExecutionContext(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
-  ownerAgentId: string;
-  walletAddress: `0x${string}`;
-}): Promise<{
-  revision: number;
-  onboardingState: NonNullable<OnboardingState>;
-}> {
+  threadId: string;
+  agentId: string;
+}): Promise<SharedEmberExecutionContextEnvelope> {
   const response = (await input.protocolHost.handleJsonRpc({
     jsonrpc: '2.0',
-    id: `shared-ember-wallet-accounting-${input.ownerAgentId}-${input.walletAddress}`,
-    method: 'orchestrator.readOnboardingState.v1',
+    id: `shared-ember-${input.threadId}-read-execution-context`,
+    method: 'subagent.readExecutionContext.v1',
     params: {
-      agent_id: input.ownerAgentId,
-      wallet_address: input.walletAddress,
-      network: SHARED_EMBER_NETWORK,
+      agent_id: input.agentId,
     },
-  })) as OnboardingStateResponse;
+  })) as ExecutionContextResponse;
 
-  const onboardingState = response.result?.onboarding_state;
-  if (!onboardingState) {
-    throw new Error('Shared Ember onboarding state response was missing onboarding_state.');
+  const executionContext = response.result?.execution_context;
+  if (!executionContext || !isRecord(executionContext)) {
+    throw new Error('Shared Ember execution context response was missing execution_context.');
   }
 
   return {
-    revision: response.result?.revision ?? 0,
-    onboardingState,
+    revision: response.result?.revision ?? null,
+    executionContext,
   };
 }
 
@@ -209,6 +183,21 @@ async function readCurrentSharedEmberRevision(input: {
   })) as SharedEmberRevisionResponse;
 
   return response.result?.revision ?? 0;
+}
+
+function mergeKnownRevision(...revisions: Array<number | null | undefined>): number | null {
+  let highest: number | null = null;
+
+  for (const revision of revisions) {
+    if (typeof revision !== 'number') {
+      continue;
+    }
+    if (highest === null || revision > highest) {
+      highest = revision;
+    }
+  }
+
+  return highest;
 }
 
 async function runSharedEmberCommandWithResolvedRevision<T>(input: {
@@ -392,6 +381,74 @@ function mergePortfolioProjection(
   };
 }
 
+function readExecutionContextProjection(
+  executionContext: NonNullable<SharedEmberExecutionContext>,
+): Pick<
+  EmberLendingLifecycleState,
+  | 'mandateRef'
+  | 'mandateSummary'
+  | 'mandateContext'
+  | 'walletAddress'
+  | 'rootUserWalletAddress'
+  | 'rootedWalletContextId'
+  | 'lastReservationSummary'
+> {
+  const mandateContext =
+    (isRecord(executionContext.mandate_context) ? executionContext.mandate_context : null) ??
+    (() => {
+      const network = readString(executionContext.network);
+      return network ? { network } : null;
+    })();
+
+  return {
+    mandateRef: readString(executionContext.mandate_ref),
+    mandateSummary: readString(executionContext.mandate_summary),
+    mandateContext,
+    walletAddress: readHexAddress(executionContext.subagent_wallet_address),
+    rootUserWalletAddress: readHexAddress(executionContext.root_user_wallet_address),
+    rootedWalletContextId: null,
+    lastReservationSummary: null,
+  };
+}
+
+function mergeExecutionContextProjection(
+  state: EmberLendingLifecycleState,
+  executionContext: SharedEmberExecutionContext | null,
+): Pick<
+  EmberLendingLifecycleState,
+  | 'mandateRef'
+  | 'mandateSummary'
+  | 'mandateContext'
+  | 'walletAddress'
+  | 'rootUserWalletAddress'
+  | 'rootedWalletContextId'
+  | 'lastReservationSummary'
+> {
+  if (!executionContext || !isRecord(executionContext)) {
+    return {
+      mandateRef: state.mandateRef,
+      mandateSummary: state.mandateSummary,
+      mandateContext: state.mandateContext,
+      walletAddress: state.walletAddress,
+      rootUserWalletAddress: state.rootUserWalletAddress,
+      rootedWalletContextId: state.rootedWalletContextId,
+      lastReservationSummary: state.lastReservationSummary,
+    };
+  }
+
+  const projection = readExecutionContextProjection(executionContext);
+
+  return {
+    mandateRef: projection.mandateRef ?? state.mandateRef,
+    mandateSummary: projection.mandateSummary ?? state.mandateSummary,
+    mandateContext: projection.mandateContext ?? state.mandateContext,
+    walletAddress: projection.walletAddress ?? state.walletAddress,
+    rootUserWalletAddress: projection.rootUserWalletAddress ?? state.rootUserWalletAddress,
+    rootedWalletContextId: projection.rootedWalletContextId ?? state.rootedWalletContextId,
+    lastReservationSummary: projection.lastReservationSummary ?? state.lastReservationSummary,
+  };
+}
+
 function hasManagedPortfolioProjection(portfolioState: unknown): boolean {
   if (!isRecord(portfolioState)) {
     return false;
@@ -413,6 +470,20 @@ function hasManagedPortfolioProjection(portfolioState: unknown): boolean {
   );
 }
 
+function hasManagedExecutionContextProjection(executionContext: SharedEmberExecutionContext | null): boolean {
+  if (!executionContext || !isRecord(executionContext)) {
+    return false;
+  }
+
+  return (
+    readString(executionContext.mandate_ref) !== null ||
+    readString(executionContext.mandate_summary) !== null ||
+    isRecord(executionContext.mandate_context) ||
+    readHexAddress(executionContext.subagent_wallet_address) !== null ||
+    readHexAddress(executionContext.root_user_wallet_address) !== null
+  );
+}
+
 export function hasEmberLendingRuntimeProjection(state: unknown): boolean {
   if (!isRecord(state)) {
     return false;
@@ -428,81 +499,160 @@ export function hasEmberLendingRuntimeProjection(state: unknown): boolean {
   );
 }
 
-function buildSharedEmberAccountingContextXml(input:
-  | {
-      status: 'live';
-      revision: number;
-      onboardingState: NonNullable<OnboardingState>;
-    }
-  | {
-      status: 'unavailable';
-      walletAddress: `0x${string}`;
-      error: string;
-    }): string[] {
-  const generatedAt = new Date().toISOString();
+function readStateNetwork(state: EmberLendingLifecycleState): string | null {
+  return isRecord(state.mandateContext) ? readString(state.mandateContext['network']) : null;
+}
 
-  if (input.status === 'unavailable') {
-    return [
-      '<shared_ember_accounting_context status="unavailable">',
-      `  <generated_at>${escapeXml(generatedAt)}</generated_at>`,
-      `  <wallet_address>${escapeXml(input.walletAddress)}</wallet_address>`,
-      `  <network>${SHARED_EMBER_NETWORK}</network>`,
-      `  <error>${escapeXml(input.error)}</error>`,
-      '</shared_ember_accounting_context>',
-    ];
-  }
-
-  const unitsById = new Map(
-    (input.onboardingState.owned_units ?? []).map((ownedUnit) => [ownedUnit.unit_id, ownedUnit] as const),
+function shouldReadSharedEmberExecutionContext(state: EmberLendingLifecycleState): boolean {
+  return Boolean(
+    state.mandateRef ||
+      state.walletAddress ||
+      state.rootUserWalletAddress ||
+      state.lastSharedEmberRevision !== null ||
+      state.phase === 'active',
   );
+}
 
-  const lines = ['<shared_ember_accounting_context freshness="live">'];
+function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): string[] {
+  const lines = ['<ember_lending_execution_context freshness="cached">'];
+  lines.push(`  <generated_at>${escapeXml(new Date().toISOString())}</generated_at>`);
+  lines.push(`  <network>${escapeXml(readStateNetwork(state) ?? SHARED_EMBER_NETWORK)}</network>`);
+
+  if (state.mandateRef) {
+    lines.push(`  <mandate_ref>${escapeXml(state.mandateRef)}</mandate_ref>`);
+  }
+
+  if (state.mandateSummary) {
+    lines.push(`  <mandate_summary>${escapeXml(state.mandateSummary)}</mandate_summary>`);
+  }
+
+  if (state.mandateContext) {
+    lines.push(
+      `  <mandate_context_json>${escapeXml(JSON.stringify(state.mandateContext))}</mandate_context_json>`,
+    );
+  }
+
+  if (state.walletAddress) {
+    lines.push(`  <subagent_wallet_address>${state.walletAddress}</subagent_wallet_address>`);
+  }
+
+  if (state.rootUserWalletAddress) {
+    lines.push(
+      `  <root_user_wallet_address>${state.rootUserWalletAddress}</root_user_wallet_address>`,
+    );
+  }
+
+  lines.push('</ember_lending_execution_context>');
+  return lines;
+}
+
+function buildSharedEmberExecutionContextXml(
+  input:
+    | {
+        status: 'live';
+        executionContext: NonNullable<SharedEmberExecutionContext>;
+      }
+    | {
+        status: 'unavailable';
+        state: EmberLendingLifecycleState;
+        error: string;
+      },
+): string[] {
+  if (input.status === 'unavailable') {
+    const lines = buildFallbackExecutionContextXml(input.state);
+    lines[0] = '<ember_lending_execution_context status="unavailable">';
+    lines.splice(lines.length - 1, 0, `  <error>${escapeXml(input.error)}</error>`);
+    return lines;
+  }
+
+  const generatedAt = readString(input.executionContext.generated_at) ?? new Date().toISOString();
+  const network = readString(input.executionContext.network) ?? SHARED_EMBER_NETWORK;
+  const lines = ['<ember_lending_execution_context freshness="live">'];
   lines.push(`  <generated_at>${escapeXml(generatedAt)}</generated_at>`);
-  lines.push(`  <wallet_address>${escapeXml(input.onboardingState.wallet_address)}</wallet_address>`);
-  lines.push(`  <network>${escapeXml(input.onboardingState.network)}</network>`);
-  lines.push(`  <revision>${input.revision}</revision>`);
-  lines.push(`  <phase>${escapeXml(input.onboardingState.phase)}</phase>`);
-  lines.push('  <proofs>');
-  for (const [name, value] of Object.entries(input.onboardingState.proofs)) {
-    lines.push(`    <${name}>${value}</${name}>`);
+
+  const mandateRef = readString(input.executionContext.mandate_ref);
+  if (mandateRef) {
+    lines.push(`  <mandate_ref>${escapeXml(mandateRef)}</mandate_ref>`);
   }
-  lines.push('  </proofs>');
-  lines.push('  <assets>');
-  for (const asset of input.onboardingState.owned_units ?? []) {
-    lines.push(
-      `    <asset unit_id="${escapeXml(asset.unit_id)}"${
-        asset.reservation_id ? ` reservation_id="${escapeXml(asset.reservation_id)}"` : ''
-      }>`,
-    );
-    lines.push(`      <root_asset>${escapeXml(asset.root_asset)}</root_asset>`);
-    lines.push(`      <quantity>${escapeXml(asset.quantity)}</quantity>`);
-    lines.push(`      <status>${escapeXml(asset.status)}</status>`);
-    lines.push(`      <control_path>${escapeXml(asset.control_path)}</control_path>`);
-    lines.push('    </asset>');
+
+  const mandateSummary = readString(input.executionContext.mandate_summary);
+  if (mandateSummary) {
+    lines.push(`  <mandate_summary>${escapeXml(mandateSummary)}</mandate_summary>`);
   }
-  lines.push('  </assets>');
-  lines.push('  <reservations>');
-  for (const reservation of input.onboardingState.reservations ?? []) {
+
+  if (isRecord(input.executionContext.mandate_context)) {
     lines.push(
-      `    <reservation reservation_id="${escapeXml(reservation.reservation_id)}" agent_id="${escapeXml(reservation.agent_id)}">`,
+      `  <mandate_context_json>${escapeXml(
+        JSON.stringify(input.executionContext.mandate_context),
+      )}</mandate_context_json>`,
     );
-    lines.push(`      <purpose>${escapeXml(reservation.purpose)}</purpose>`);
-    lines.push(`      <status>${escapeXml(reservation.status)}</status>`);
-    lines.push(`      <control_path>${escapeXml(reservation.control_path)}</control_path>`);
-    lines.push('      <allocations>');
-    for (const allocation of reservation.unit_allocations) {
-      lines.push(`        <allocation unit_id="${escapeXml(allocation.unit_id)}">`);
-      lines.push(
-        `          <asset>${escapeXml(unitsById.get(allocation.unit_id)?.root_asset ?? 'unknown')}</asset>`,
-      );
-      lines.push(`          <quantity>${escapeXml(allocation.quantity)}</quantity>`);
-      lines.push('        </allocation>');
+  }
+
+  const subagentWalletAddress = readHexAddress(input.executionContext.subagent_wallet_address);
+  if (subagentWalletAddress) {
+    lines.push(`  <subagent_wallet_address>${subagentWalletAddress}</subagent_wallet_address>`);
+  }
+
+  const rootUserWalletAddress = readHexAddress(input.executionContext.root_user_wallet_address);
+  if (rootUserWalletAddress) {
+    lines.push(
+      `  <root_user_wallet_address>${rootUserWalletAddress}</root_user_wallet_address>`,
+    );
+  }
+
+  lines.push(`  <network>${escapeXml(network)}</network>`);
+
+  if (Array.isArray(input.executionContext.owned_units) && input.executionContext.owned_units.length > 0) {
+    lines.push('  <owned_units>');
+    for (const ownedUnit of input.executionContext.owned_units) {
+      const unitId = readString(ownedUnit.unit_id);
+      lines.push(`    <owned_unit${unitId ? ` unit_id="${escapeXml(unitId)}"` : ''}>`);
+
+      const rootAsset = readString(ownedUnit.root_asset);
+      if (rootAsset) {
+        lines.push(`      <root_asset>${escapeXml(rootAsset)}</root_asset>`);
+      }
+
+      const amount = readString(ownedUnit.amount);
+      if (amount) {
+        lines.push(`      <amount>${escapeXml(amount)}</amount>`);
+      }
+
+      const benchmarkValueUsd = readString(ownedUnit.benchmark_value_usd);
+      if (benchmarkValueUsd) {
+        lines.push(`      <benchmark_value_usd>${escapeXml(benchmarkValueUsd)}</benchmark_value_usd>`);
+      }
+
+      lines.push('    </owned_unit>');
     }
-    lines.push('      </allocations>');
-    lines.push('    </reservation>');
+    lines.push('  </owned_units>');
   }
-  lines.push('  </reservations>');
-  lines.push('</shared_ember_accounting_context>');
+
+  if (
+    Array.isArray(input.executionContext.wallet_contents) &&
+    input.executionContext.wallet_contents.length > 0
+  ) {
+    lines.push('  <wallet_contents>');
+    for (const walletBalance of input.executionContext.wallet_contents) {
+      const asset = readString(walletBalance.asset);
+      lines.push(`    <wallet_balance${asset ? ` asset="${escapeXml(asset)}"` : ''}>`);
+
+      const amount = readString(walletBalance.amount);
+      if (amount) {
+        lines.push(`      <amount>${escapeXml(amount)}</amount>`);
+      }
+
+      const benchmarkValueUsd = readString(walletBalance.benchmark_value_usd);
+      if (benchmarkValueUsd) {
+        lines.push(`      <benchmark_value_usd>${escapeXml(benchmarkValueUsd)}</benchmark_value_usd>`);
+      }
+
+      lines.push('    </wallet_balance>');
+    }
+    lines.push('  </wallet_contents>');
+  }
+
+  lines.push('</ember_lending_execution_context>');
   return lines;
 }
 
@@ -531,6 +681,44 @@ function readExecutionPortfolioState(executionResult: unknown): unknown {
   return isRecord(executionResult) ? executionResult['portfolio_state'] : null;
 }
 
+function readExecutionRequestResult(executionResult: unknown): Record<string, unknown> | null {
+  if (!isRecord(executionResult) || !isRecord(executionResult['request_result'])) {
+    return null;
+  }
+
+  return executionResult['request_result'];
+}
+
+function ensureSentence(value: string): string {
+  return /[.!?]$/.test(value) ? value : `${value}.`;
+}
+
+function readExecutionStatusMessage(executionResult: unknown): {
+  executionStatus: 'completed' | 'failed';
+  statusMessage: string;
+} {
+  const phase = isRecord(executionResult) ? readString(executionResult['phase']) : null;
+  if (phase !== 'blocked') {
+    return {
+      executionStatus: 'completed',
+      statusMessage: 'Lending transaction plan admitted and executed through Shared Ember.',
+    };
+  }
+
+  const requestResult = readExecutionRequestResult(executionResult);
+  const requestOutcome = readString(requestResult?.['result']);
+  const requestMessage = readString(requestResult?.['message']);
+  const prefix =
+    requestOutcome === 'denied'
+      ? 'Lending transaction execution request was denied by Shared Ember'
+      : 'Lending transaction execution request was blocked by Shared Ember';
+
+  return {
+    executionStatus: 'failed',
+    statusMessage: requestMessage ? `${prefix}: ${ensureSentence(requestMessage)}` : `${prefix}.`,
+  };
+}
+
 function readEscalationSummary(escalationRequest: unknown): string | null {
   if (!isRecord(escalationRequest)) {
     return null;
@@ -552,11 +740,10 @@ function readStringKey(
   return isRecord(input) ? readString(input[key]) : null;
 }
 
-function buildManagedSubagentHandoff(input: {
+function buildManagedSubagentHandoffBase(input: {
   state: EmberLendingLifecycleState;
   threadId: string;
   agentId: string;
-  operationInput: unknown;
 }): Record<string, unknown> | null {
   if (!input.state.walletAddress || !input.state.rootUserWalletAddress || !input.state.mandateRef) {
     return null;
@@ -566,41 +753,135 @@ function buildManagedSubagentHandoff(input: {
     return null;
   }
 
-  const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
-  const explicitHandoff =
-    'handoff' in commandInput && isRecord(commandInput['handoff']) ? commandInput['handoff'] : null;
-  const source =
-    explicitHandoff ??
-    Object.fromEntries(
-      Object.entries(commandInput).filter(
-        ([key]) => key !== 'idempotencyKey' && key !== 'result' && key !== 'transactionPlanId',
-      ),
-    );
-
-  const decisionContext =
-    'decision_context' in source && isRecord(source['decision_context'])
-      ? {
-          ...source['decision_context'],
-        }
-      : {};
-  if (input.state.mandateSummary) {
-    decisionContext['mandate_summary'] = input.state.mandateSummary;
-  }
-
-  const handoff: Record<string, unknown> = {
-    ...source,
-    handoff_id: readString(source['handoff_id']) ?? `handoff-${input.threadId}`,
+  return {
     agent_id: input.agentId,
     agent_wallet: input.state.walletAddress,
     root_user_wallet: input.state.rootUserWalletAddress,
     mandate_ref: input.state.mandateRef,
   };
+}
 
-  if (Object.keys(decisionContext).length > 0) {
+function buildManagedSubagentDecisionContext(input: {
+  source: Record<string, unknown>;
+  mandateSummary: string | null;
+}): Record<string, unknown> | null {
+  const decisionContext =
+    'decision_context' in input.source && isRecord(input.source['decision_context'])
+      ? {
+          ...input.source['decision_context'],
+        }
+      : {};
+  if (input.mandateSummary) {
+    decisionContext['mandate_summary'] = input.mandateSummary;
+  }
+
+  return Object.keys(decisionContext).length > 0 ? decisionContext : null;
+}
+
+function buildTransactionPlanningHandoff(input: {
+  state: EmberLendingLifecycleState;
+  threadId: string;
+  agentId: string;
+  operationInput: unknown;
+}): Record<string, unknown> | null {
+  const base = buildManagedSubagentHandoffBase(input);
+  if (!base) {
+    return null;
+  }
+
+  const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
+  const handoff: Record<string, unknown> = {
+    handoff_id: readString(commandInput['handoff_id']) ?? `handoff-${input.threadId}`,
+    ...base,
+  };
+  for (const key of [
+    'intent',
+    'action_summary',
+    'candidate_unit_ids',
+    'requested_quantities',
+  ] as const) {
+    if (key in commandInput) {
+      handoff[key] = commandInput[key];
+    }
+  }
+
+  const decisionContext = buildManagedSubagentDecisionContext({
+    source: commandInput,
+    mandateSummary: input.state.mandateSummary,
+  });
+  if (decisionContext) {
     handoff['decision_context'] = decisionContext;
   }
 
   return handoff;
+}
+
+function buildEscalationHandoff(input: {
+  state: EmberLendingLifecycleState;
+  threadId: string;
+  agentId: string;
+  operationInput: unknown;
+}): Record<string, unknown> | null {
+  const base = buildManagedSubagentHandoffBase(input);
+  if (!base) {
+    return null;
+  }
+
+  const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
+  const source =
+    'handoff' in commandInput && isRecord(commandInput['handoff']) ? commandInput['handoff'] : commandInput;
+
+  const handoff: Record<string, unknown> = {
+    handoff_id: readString(source['handoff_id']) ?? `handoff-${input.threadId}`,
+    ...base,
+  };
+  for (const key of [
+    'intent',
+    'action_summary',
+    'candidate_unit_ids',
+    'requested_quantities',
+    'payload_builder_output',
+  ] as const) {
+    if (key in source) {
+      handoff[key] = source[key];
+    }
+  }
+
+  const decisionContext = buildManagedSubagentDecisionContext({
+    source,
+    mandateSummary: input.state.mandateSummary,
+  });
+  if (decisionContext) {
+    handoff['decision_context'] = decisionContext;
+  }
+
+  return handoff;
+}
+
+function mergePortfolioProjectionPreservingKnownContext(
+  state: EmberLendingLifecycleState,
+  portfolioState: unknown,
+): Pick<
+  EmberLendingLifecycleState,
+  | 'mandateRef'
+  | 'mandateSummary'
+  | 'mandateContext'
+  | 'walletAddress'
+  | 'rootUserWalletAddress'
+  | 'rootedWalletContextId'
+  | 'lastReservationSummary'
+> {
+  const projection = mergePortfolioProjection(state, portfolioState);
+
+  return {
+    mandateRef: projection.mandateRef ?? state.mandateRef,
+    mandateSummary: projection.mandateSummary ?? state.mandateSummary,
+    mandateContext: projection.mandateContext ?? state.mandateContext,
+    walletAddress: projection.walletAddress ?? state.walletAddress,
+    rootUserWalletAddress: projection.rootUserWalletAddress ?? state.rootUserWalletAddress,
+    rootedWalletContextId: projection.rootedWalletContextId ?? state.rootedWalletContextId,
+    lastReservationSummary: projection.lastReservationSummary ?? state.lastReservationSummary,
+  };
 }
 
 function readTransactionPlanId(
@@ -635,8 +916,6 @@ export function createEmberLendingDomain(
   options: CreateEmberLendingDomainOptions = {},
 ): AgentRuntimeDomainConfig<EmberLendingLifecycleState> {
   const agentId = options.agentId ?? 'ember-lending';
-  const onboardingOwnerAgentId =
-    options.onboardingOwnerAgentId ?? EMBER_LENDING_ONBOARDING_OWNER_AGENT_ID;
 
   return {
     lifecycle: {
@@ -653,16 +932,13 @@ export function createEmberLendingDomain(
           description: 'Route managed-agent deactivation back to the portfolio manager.',
         },
         {
-          name: 'read_portfolio_state',
-          description: 'Read the current Shared Ember portfolio state for this managed lending lane.',
+          name: 'create_transaction_plan',
+          description: 'Create or refresh a candidate transaction plan for the managed lending lane.',
         },
         {
-          name: 'materialize_candidate_plan',
-          description: 'Ask Shared Ember to materialize a candidate transaction plan for the lending lane.',
-        },
-        {
-          name: 'execute_transaction_plan',
-          description: 'Execute the admitted lending transaction plan through the bounded Shared Ember surface.',
+          name: 'request_transaction_execution',
+          description:
+            'Request admission and execution for the current lending transaction plan through the bounded Shared Ember surface.',
         },
         {
           name: 'create_escalation_request',
@@ -672,104 +948,29 @@ export function createEmberLendingDomain(
       transitions: [],
       interrupts: [],
     },
-    systemContext: async ({ state }) => {
+    systemContext: async ({ state, threadId }) => {
       const currentState = state ?? buildDefaultLifecycleState();
-      const context = ['<ember_lending_context>'];
-
-      context.push(`  <lifecycle_phase>${currentState.phase}</lifecycle_phase>`);
-
-      if (currentState.mandateRef) {
-        context.push(`  <mandate_ref>${escapeXml(currentState.mandateRef)}</mandate_ref>`);
+      if (!options.protocolHost || !shouldReadSharedEmberExecutionContext(currentState)) {
+        return buildFallbackExecutionContextXml(currentState);
       }
 
-      if (currentState.mandateSummary) {
-        context.push(`  <mandate_summary>${escapeXml(currentState.mandateSummary)}</mandate_summary>`);
+      try {
+        const executionContext = await readSharedEmberExecutionContext({
+          protocolHost: options.protocolHost,
+          threadId,
+          agentId,
+        });
+        return buildSharedEmberExecutionContextXml({
+          status: 'live',
+          executionContext: executionContext.executionContext,
+        });
+      } catch (error) {
+        return buildSharedEmberExecutionContextXml({
+          status: 'unavailable',
+          state: currentState,
+          error: error instanceof Error ? error.message : 'Unknown Shared Ember error.',
+        });
       }
-
-      if (currentState.walletAddress) {
-        context.push(
-          `  <subagent_wallet_address>${currentState.walletAddress}</subagent_wallet_address>`,
-        );
-      }
-
-      if (currentState.rootUserWalletAddress) {
-        context.push(
-          `  <root_user_wallet_address>${currentState.rootUserWalletAddress}</root_user_wallet_address>`,
-        );
-      }
-
-      if (currentState.rootedWalletContextId) {
-        context.push(
-          `  <rooted_wallet_context_id>${escapeXml(currentState.rootedWalletContextId)}</rooted_wallet_context_id>`,
-        );
-      }
-
-      if (currentState.mandateContext) {
-        context.push(
-          `  <mandate_context_json>${escapeXml(
-            JSON.stringify(currentState.mandateContext),
-          )}</mandate_context_json>`,
-        );
-      }
-
-      if (currentState.lastReservationSummary) {
-        context.push(
-          `  <last_reservation_summary>${escapeXml(
-            currentState.lastReservationSummary,
-          )}</last_reservation_summary>`,
-        );
-      }
-
-      if (currentState.lastCandidatePlanSummary) {
-        context.push(
-          `  <last_candidate_plan_summary>${escapeXml(
-            currentState.lastCandidatePlanSummary,
-          )}</last_candidate_plan_summary>`,
-        );
-      }
-
-      if (currentState.lastExecutionTxHash) {
-        context.push(
-          `  <last_execution_tx_hash>${currentState.lastExecutionTxHash}</last_execution_tx_hash>`,
-        );
-      }
-
-      if (currentState.lastEscalationSummary) {
-        context.push(
-          `  <last_escalation_summary>${escapeXml(
-            currentState.lastEscalationSummary,
-          )}</last_escalation_summary>`,
-        );
-      }
-
-      context.push('</ember_lending_context>');
-
-      if (currentState.rootUserWalletAddress && options.protocolHost) {
-        try {
-          const { revision, onboardingState } = await readSharedEmberWalletAccountingState({
-            protocolHost: options.protocolHost,
-            ownerAgentId: onboardingOwnerAgentId,
-            walletAddress: currentState.rootUserWalletAddress,
-          });
-          context.push(
-            ...buildSharedEmberAccountingContextXml({
-              status: 'live',
-              revision,
-              onboardingState,
-            }),
-          );
-        } catch (error) {
-          context.push(
-            ...buildSharedEmberAccountingContextXml({
-              status: 'unavailable',
-              walletAddress: currentState.rootUserWalletAddress,
-              error: error instanceof Error ? error.message : 'Unknown Shared Ember error.',
-            }),
-          );
-        }
-      }
-
-      return context;
     },
     handleOperation: async ({ operation, state, threadId }) => {
       const currentState = state ?? buildDefaultLifecycleState();
@@ -798,16 +999,58 @@ export function createEmberLendingDomain(
           };
 
           const portfolioState = response.result?.portfolio_state ?? null;
-          const projection = mergePortfolioProjection(currentState, portfolioState);
+          let executionContextEnvelope: SharedEmberExecutionContextEnvelope | null = null;
+          try {
+            executionContextEnvelope = await readSharedEmberExecutionContext({
+              protocolHost: options.protocolHost,
+              threadId,
+              agentId,
+            });
+          } catch {
+            executionContextEnvelope = null;
+          }
+
+          const portfolioProjection = mergePortfolioProjection(currentState, portfolioState);
+          const stateWithPortfolioProjection: EmberLendingLifecycleState = {
+            ...currentState,
+            ...portfolioProjection,
+          };
+          const projection = mergeExecutionContextProjection(
+            stateWithPortfolioProjection,
+            executionContextEnvelope?.executionContext ?? null,
+          );
+          const nextState: EmberLendingLifecycleState = {
+            ...currentState,
+            ...projection,
+            phase:
+              hasManagedPortfolioProjection(portfolioState) ||
+              hasManagedExecutionContextProjection(executionContextEnvelope?.executionContext ?? null)
+                ? 'active'
+                : currentState.phase,
+            lastPortfolioState: portfolioState,
+            lastSharedEmberRevision: mergeKnownRevision(
+              response.result?.revision ?? null,
+              executionContextEnvelope?.revision ?? null,
+            ),
+          };
+
           return {
-            state: {
-              ...currentState,
-              phase: hasManagedPortfolioProjection(portfolioState) ? 'active' : currentState.phase,
-              ...projection,
-              lastPortfolioState: portfolioState,
-              lastSharedEmberRevision: response.result?.revision ?? null,
+            state: nextState,
+            outputs: {
+              status: {
+                executionStatus: 'completed',
+                statusMessage: 'Lending runtime projection hydrated from Shared Ember Domain Service.',
+              },
+              artifacts: [
+                {
+                  data: {
+                    type: 'shared-ember-portfolio-state',
+                    revision: nextState.lastSharedEmberRevision,
+                    portfolioState,
+                  },
+                },
+              ],
             },
-            outputs: {},
           };
         }
         case 'hire':
@@ -830,7 +1073,7 @@ export function createEmberLendingDomain(
               },
             },
           };
-        case 'read_portfolio_state': {
+        case 'create_transaction_plan': {
           if (!options.protocolHost) {
             return {
               state: currentState,
@@ -843,63 +1086,7 @@ export function createEmberLendingDomain(
             };
           }
 
-          const response = (await options.protocolHost.handleJsonRpc({
-            jsonrpc: '2.0',
-            id: `shared-ember-${threadId}-read-portfolio-state`,
-            method: 'subagent.readPortfolioState.v1',
-            params: {
-              agent_id: agentId,
-            },
-          })) as {
-            result?: {
-              revision?: number;
-              portfolio_state?: unknown;
-            };
-          };
-
-          const portfolioState = response.result?.portfolio_state ?? null;
-          const projection = mergePortfolioProjection(currentState, portfolioState);
-          const nextState: EmberLendingLifecycleState = {
-            ...currentState,
-            phase: hasManagedPortfolioProjection(portfolioState) ? 'active' : currentState.phase,
-            ...projection,
-            lastPortfolioState: portfolioState,
-            lastSharedEmberRevision: response.result?.revision ?? null,
-          };
-
-          return {
-            state: nextState,
-            outputs: {
-              status: {
-                executionStatus: 'completed',
-                statusMessage: 'Lending portfolio state refreshed from Shared Ember Domain Service.',
-              },
-              artifacts: [
-                {
-                  data: {
-                    type: 'shared-ember-portfolio-state',
-                    revision: nextState.lastSharedEmberRevision,
-                    portfolioState,
-                  },
-                },
-              ],
-            },
-          };
-        }
-        case 'materialize_candidate_plan': {
-          if (!options.protocolHost) {
-            return {
-              state: currentState,
-              outputs: {
-                status: {
-                  executionStatus: 'failed',
-                  statusMessage: 'Shared Ember Domain Service host is not configured.',
-                },
-              },
-            };
-          }
-
-          const handoff = buildManagedSubagentHandoff({
+          const handoff = buildTransactionPlanningHandoff({
             state: currentState,
             threadId,
             agentId,
@@ -912,7 +1099,7 @@ export function createEmberLendingDomain(
                 status: {
                   executionStatus: 'failed',
                   statusMessage:
-                    'Lending runtime context is incomplete. Refresh portfolio state before planning.',
+                    'Lending runtime context is incomplete. Wait for execution-context hydration before planning.',
                 },
               },
             };
@@ -920,7 +1107,7 @@ export function createEmberLendingDomain(
 
           const idempotencyKey =
             readStringKey(operation.input, 'idempotencyKey') ??
-            `idem-materialize-candidate-plan-${threadId}`;
+            `idem-create-transaction-plan-${threadId}`;
           const response = await runSharedEmberCommandWithResolvedRevision<{
             result?: {
               revision?: number;
@@ -934,8 +1121,8 @@ export function createEmberLendingDomain(
             currentRevision: currentState.lastSharedEmberRevision,
             buildRequest: (expectedRevision) => ({
               jsonrpc: '2.0',
-              id: `shared-ember-${threadId}-materialize-candidate-plan`,
-              method: 'subagent.materializeCandidatePlan.v1',
+              id: `shared-ember-${threadId}-create-transaction-plan`,
+              method: 'subagent.createTransactionPlan.v1',
               params: {
                 idempotency_key: idempotencyKey,
                 expected_revision: expectedRevision,
@@ -958,7 +1145,7 @@ export function createEmberLendingDomain(
             outputs: {
               status: {
                 executionStatus: 'completed',
-                statusMessage: 'Candidate lending plan materialized through Shared Ember.',
+                statusMessage: 'Candidate lending plan created through the Shared Ember planner.',
               },
               artifacts: [
                 {
@@ -973,7 +1160,7 @@ export function createEmberLendingDomain(
             },
           };
         }
-        case 'execute_transaction_plan': {
+        case 'request_transaction_execution': {
           if (!options.protocolHost) {
             return {
               state: currentState,
@@ -994,7 +1181,7 @@ export function createEmberLendingDomain(
                 status: {
                   executionStatus: 'failed',
                   statusMessage:
-                    'No lending transaction plan is available to execute. Materialize a candidate plan first.',
+                    'No lending transaction plan is available to execute. Create a candidate plan first.',
                 },
               },
             };
@@ -1017,7 +1204,7 @@ export function createEmberLendingDomain(
             buildRequest: (expectedRevision) => ({
               jsonrpc: '2.0',
               id: `shared-ember-${threadId}-execute-transaction-plan`,
-              method: 'subagent.executeTransactionPlan.v1',
+              method: 'subagent.requestTransactionExecution.v1',
               params: {
                 idempotency_key: idempotencyKey,
                 expected_revision: expectedRevision,
@@ -1028,7 +1215,11 @@ export function createEmberLendingDomain(
 
           const executionResult = response.result?.execution_result ?? null;
           const executionPortfolioState = readExecutionPortfolioState(executionResult);
-          const projection = mergePortfolioProjection(currentState, executionPortfolioState);
+          const projection = mergePortfolioProjectionPreservingKnownContext(
+            currentState,
+            executionPortfolioState,
+          );
+          const executionStatus = readExecutionStatusMessage(executionResult);
           const nextState: EmberLendingLifecycleState = {
             ...currentState,
             ...projection,
@@ -1043,8 +1234,8 @@ export function createEmberLendingDomain(
             state: nextState,
             outputs: {
               status: {
-                executionStatus: 'completed',
-                statusMessage: 'Lending transaction plan executed through Shared Ember.',
+                executionStatus: executionStatus.executionStatus,
+                statusMessage: executionStatus.statusMessage,
               },
               artifacts: [
                 {
@@ -1072,7 +1263,7 @@ export function createEmberLendingDomain(
             };
           }
 
-          const handoff = buildManagedSubagentHandoff({
+          const handoff = buildEscalationHandoff({
             state: currentState,
             threadId,
             agentId,
@@ -1085,7 +1276,7 @@ export function createEmberLendingDomain(
                 status: {
                   executionStatus: 'failed',
                   statusMessage:
-                    'Lending runtime context is incomplete. Refresh portfolio state before escalating.',
+                    'Lending runtime context is incomplete. Wait for execution-context hydration before escalating.',
                 },
               },
             };

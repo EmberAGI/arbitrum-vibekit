@@ -1,0 +1,81 @@
+# Source-Traced Portfolio Manager -> Ember Lending Sequence
+
+Status: Source-traced current implementation
+Scope: `typescript/clients/web-ag-ui/apps/agent-portfolio-manager` and `typescript/clients/web-ag-ui/apps/agent-ember-lending`
+
+Traced from:
+
+- `apps/agent-portfolio-manager/src/sharedEmberAdapter.ts`
+- `apps/agent-ember-lending/src/sharedEmberAdapter.ts`
+- `apps/agent-ember-lending/src/agUiServer.ts`
+
+## Boundary summary
+
+- Portfolio Manager owns mandate approval, rooted-signing collection, and submission of the managed-agent activation intent.
+- Ember Lending exposes exactly three model-visible tools:
+  - `create_transaction_plan`
+  - `request_transaction_execution`
+  - `create_escalation_request`
+- Runtime-internal reads stay hidden from the model:
+  - `subagent.readPortfolioState.v1` for connect-time hydration
+  - `subagent.readExecutionContext.v1` for connect-time hydration and system-context assembly
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Web
+  participant Runtime as AG-UI Runtime
+  participant PM as agent-portfolio-manager
+  participant EL as agent-ember-lending
+  participant SE as Shared Ember
+
+  PM->>SE: orchestrator.completeRootedBootstrapFromUserSigning.v1(portfolio + lending mandates, activation.agentId=ember-lending)
+  Note over SE: Observe rooted wallet and materialize the initial ember-lending lane internally
+  User->>Web: Open Ember Lending detail
+  Web->>Runtime: connect(agent-ember-lending, threadId)
+  Runtime->>EL: hydrate_runtime_projection (internal)
+  EL->>SE: subagent.readPortfolioState.v1
+  EL->>SE: subagent.readExecutionContext.v1
+  SE-->>EL: agent-scoped portfolio_state + revision
+  Runtime->>EL: build system context (internal)
+  EL->>SE: subagent.readExecutionContext.v1
+  SE-->>EL: execution_context with lane-scoped owned_units and rooted-wallet-wide wallet_contents
+  EL-->>Runtime: UI-ready state snapshot
+
+  User->>Web: create_transaction_plan
+  Web->>Runtime: run(create_transaction_plan)
+  Runtime->>EL: handleOperation(create_transaction_plan)
+  Note over EL: Build a bounded planning handoff from top-level planner fields only; do not forward planner-owned payload_builder_output
+  EL->>SE: subagent.createTransactionPlan.v1
+  Note over SE: Resolve planner-owned payload_builder_output through the Shared Ember planner path before materializing the candidate plan
+  SE-->>EL: candidate_plan + revision
+  EL-->>Runtime: candidate plan artifact + summary
+
+  User->>Web: request_transaction_execution
+  Web->>Runtime: run(request_transaction_execution)
+  Runtime->>EL: handleOperation(request_transaction_execution)
+  EL->>SE: subagent.requestTransactionExecution.v1
+  alt admit and execute
+    SE-->>EL: phase=completed + execution + portfolio_state
+    EL-->>Runtime: completed status + tx hash + artifact
+  else block or deny admission
+    SE-->>EL: phase=blocked + request_result + portfolio_state
+    EL-->>Runtime: failed status + blocked artifact
+    User->>Web: create_escalation_request
+    Web->>Runtime: run(create_escalation_request)
+    Runtime->>EL: handleOperation(create_escalation_request)
+    Note over EL: Reuse only the bounded escalation handoff fields plus the blocked result
+    EL->>SE: subagent.createEscalationRequest.v1
+    SE-->>EL: escalation_request
+    SE-->>PM: control-plane follow-up happens outside the lending runtime
+    EL-->>Runtime: escalation artifact + summary
+  end
+```
+
+## Notes
+
+- The model never sees `read_portfolio_state` or a refresh/sync bootstrap tool.
+- Blocked execution responses preserve the already-hydrated mandate and wallet context even when the blocked portfolio payload is sparse.
+- Nested raw `handoff` payloads, planner-owned `payload_builder_output`, and reasoning-trace fields are not forwarded on planning calls.
+- Escalation calls still forward only the bounded escalation handoff fields plus the blocked result.
+- In the current implementation, onboarding bootstrap creates the initial lending `owned_units`, `reservations`, and policy snapshot for `activation.agentId`, but `subagent_wallet_address` can still remain `null` until later delegation issuance.
