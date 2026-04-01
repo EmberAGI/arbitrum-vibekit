@@ -186,7 +186,7 @@ Current concrete managed-path specialization:
 
 - `agent-ember-lending`
   - owns the first bounded managed-subagent runtime
-  - consumes the Shared Ember subagent surface for `read_portfolio_state`, `materialize_candidate_plan`, `execute_transaction_plan`, and `create_escalation_request`
+  - consumes runtime-internal Shared Ember projection and execution-context reads plus the model-visible `create_transaction_plan`, `request_transaction_execution`, and `create_escalation_request` contract
   - projects lifecycle, wallet, mandate, reservation, planning, execution, and escalation state into the shared AG-UI thread contract
 
 ## 6. Dynamic views (sequence)

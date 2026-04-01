@@ -306,7 +306,7 @@ describe('agent-ember-lending AG-UI integration', () => {
             },
           },
         };
-      case 'subagent.materializeCandidatePlan.v1':
+      case 'subagent.createTransactionPlan.v1':
         return {
           jsonrpc: '2.0',
           id: 'shared-ember-thread-1-materialize-candidate-plan',
@@ -329,7 +329,7 @@ describe('agent-ember-lending AG-UI integration', () => {
             },
           },
         };
-      case 'subagent.executeTransactionPlan.v1':
+      case 'subagent.requestTransactionExecution.v1':
         return {
           jsonrpc: '2.0',
           id: 'shared-ember-thread-1-execute-transaction-plan',
@@ -569,7 +569,7 @@ describe('agent-ember-lending AG-UI integration', () => {
               },
             },
           };
-        case 'subagent.materializeCandidatePlan.v1':
+        case 'subagent.createTransactionPlan.v1':
           return {
             jsonrpc: '2.0',
             id: 'shared-ember-thread-lean-materialize-candidate-plan',
@@ -623,7 +623,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId: 'thread-lean-1',
       runId: 'run-plan-lean-1',
       command: {
-        name: 'materialize_candidate_plan',
+        name: 'create_transaction_plan',
         input: createCandidatePlanInput(),
       },
     });
@@ -646,21 +646,19 @@ describe('agent-ember-lending AG-UI integration', () => {
 
     expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        method: 'subagent.materializeCandidatePlan.v1',
+        method: 'subagent.createTransactionPlan.v1',
       }),
     );
   });
 
-  it('serves lending state refresh and candidate-plan materialization over real AG-UI HTTP endpoints', async () => {
-    const { events: refreshEvents, snapshot: refreshSnapshot } = await runAgUiCommand({
+  it('serves lending candidate-plan materialization over real AG-UI HTTP endpoints after connect hydration', async () => {
+    const { events: connectEvents, snapshot: connectSnapshot } = await runAgUiConnect({
       baseUrl,
-      runId: 'run-refresh',
-      command: {
-        name: 'read_portfolio_state',
-      },
+      threadId: 'thread-plan-1',
+      runId: 'run-connect-plan',
     });
 
-    expect(refreshSnapshot).toMatchObject({
+    expect(connectSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
       snapshot: {
         thread: {
@@ -687,9 +685,10 @@ describe('agent-ember-lending AG-UI integration', () => {
 
     const { events: planEvents, snapshot: planSnapshot } = await runAgUiCommand({
       baseUrl,
+      threadId: 'thread-plan-1',
       runId: 'run-plan',
       command: {
-        name: 'materialize_candidate_plan',
+        name: 'create_transaction_plan',
         input: createCandidatePlanInput(),
       },
     });
@@ -719,7 +718,7 @@ describe('agent-ember-lending AG-UI integration', () => {
 
     expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
       expect.objectContaining({
-        method: 'subagent.materializeCandidatePlan.v1',
+        method: 'subagent.createTransactionPlan.v1',
         params: expect.objectContaining({
           handoff: expect.objectContaining({
             agent_id: 'ember-lending',
@@ -732,28 +731,28 @@ describe('agent-ember-lending AG-UI integration', () => {
   });
 
   it('serves lending execution over real AG-UI HTTP endpoints', async () => {
-    await runAgUiCommand({
+    await runAgUiConnect({
       baseUrl,
-      runId: 'run-refresh',
-      command: {
-        name: 'read_portfolio_state',
-      },
+      threadId: 'thread-execute-1',
+      runId: 'run-connect-execute',
     });
 
     await runAgUiCommand({
       baseUrl,
+      threadId: 'thread-execute-1',
       runId: 'run-plan',
       command: {
-        name: 'materialize_candidate_plan',
+        name: 'create_transaction_plan',
         input: createCandidatePlanInput(),
       },
     });
 
     const { snapshot: executeSnapshot } = await runAgUiCommand({
       baseUrl,
+      threadId: 'thread-execute-1',
       runId: 'run-execute',
       command: {
-        name: 'execute_transaction_plan',
+        name: 'request_transaction_execution',
       },
     });
 
@@ -785,7 +784,7 @@ describe('agent-ember-lending AG-UI integration', () => {
 
     expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
       expect.objectContaining({
-        method: 'subagent.executeTransactionPlan.v1',
+        method: 'subagent.requestTransactionExecution.v1',
         params: expect.objectContaining({
           expected_revision: 8,
           transaction_plan_id: 'txplan-ember-lending-001',
@@ -795,16 +794,15 @@ describe('agent-ember-lending AG-UI integration', () => {
   });
 
   it('serves lending escalation requests over real AG-UI HTTP endpoints', async () => {
-    await runAgUiCommand({
+    await runAgUiConnect({
       baseUrl,
-      runId: 'run-refresh',
-      command: {
-        name: 'read_portfolio_state',
-      },
+      threadId: 'thread-escalation-1',
+      runId: 'run-connect-escalation',
     });
 
     const { snapshot: escalationSnapshot } = await runAgUiCommand({
       baseUrl,
+      threadId: 'thread-escalation-1',
       runId: 'run-escalation',
       command: {
         name: 'create_escalation_request',
