@@ -467,7 +467,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
               }),
             ]),
             activation: {
-              agentId: 'portfolio-manager',
+              agentId: 'ember-lending',
               purpose: 'deploy',
               controlPath: 'unassigned',
             },

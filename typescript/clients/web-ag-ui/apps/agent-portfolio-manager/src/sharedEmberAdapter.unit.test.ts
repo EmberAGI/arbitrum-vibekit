@@ -6,17 +6,17 @@ function createPortfolioManagerSetupInput() {
   return {
     walletAddress: '0x00000000000000000000000000000000000000a1' as const,
     portfolioMandate: {
-      approved: true,
+      approved: true as const,
       riskLevel: 'medium' as const,
     },
     managedAgentMandates: [
       {
         agentKey: 'ember-lending-primary',
-        agentType: 'ember-lending',
-        approved: true,
+        agentType: 'ember-lending' as const,
+        approved: true as const,
         settings: {
-          network: 'arbitrum',
-          protocol: 'aave',
+          network: 'arbitrum' as const,
+          protocol: 'aave' as const,
           allowedCollateralAssets: ['USDC'],
           allowedBorrowAssets: ['USDC'],
           maxAllocationPct: 35,
@@ -77,7 +77,7 @@ function createOnboardingBootstrap() {
     ],
     userReservePolicies: [],
     activation: {
-      agentId: 'portfolio-manager',
+      agentId: 'ember-lending',
       purpose: 'deploy',
       controlPath: 'unassigned',
     },
@@ -334,7 +334,7 @@ describe('createPortfolioManagerDomain', () => {
               },
             ],
             activation: {
-              agentId: 'portfolio-manager',
+              agentId: 'ember-lending',
               purpose: 'deploy',
               controlPath: 'unassigned',
             },
@@ -348,7 +348,15 @@ describe('createPortfolioManagerDomain', () => {
       }),
     );
 
-    const rootedBootstrapRequest = protocolHost.handleJsonRpc.mock.calls[0]?.[0] as {
+    const rootedBootstrapCall = (protocolHost.handleJsonRpc.mock.calls as unknown as Array<
+      [unknown]
+    >)[0];
+    expect(rootedBootstrapCall).toBeDefined();
+    if (!rootedBootstrapCall) {
+      throw new Error('expected rooted bootstrap Shared Ember request');
+    }
+
+    const rootedBootstrapRequest = rootedBootstrapCall[0] as {
       params?: {
         onboarding?: Record<string, unknown>;
       };

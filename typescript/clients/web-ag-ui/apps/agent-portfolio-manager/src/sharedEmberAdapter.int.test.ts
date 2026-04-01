@@ -127,7 +127,7 @@ function createOnboardingBootstrap() {
     ],
     userReservePolicies: [],
     activation: {
-      agentId: 'portfolio-manager',
+      agentId: 'ember-lending',
       purpose: 'deploy',
       controlPath: 'unassigned',
     },

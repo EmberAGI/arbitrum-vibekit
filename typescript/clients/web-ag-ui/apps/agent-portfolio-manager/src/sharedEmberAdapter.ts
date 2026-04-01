@@ -522,6 +522,9 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
   const rootedWalletContextId = `rwc-${identity}`;
   const portfolioMandateRef = `mandate-portfolio-${identity}`;
   const firstManagedAgentMandate = params.approvedMandateEnvelope.managedAgentMandates[0];
+  if (!firstManagedAgentMandate) {
+    throw new Error('portfolio manager onboarding requires at least one managed agent mandate');
+  }
   const managedAgentKeySegment = sanitizeIdentitySegment(firstManagedAgentMandate.agentKey);
   const managedAgentMandateRef = `mandate-${managedAgentKeySegment}-${identity}`;
 
@@ -554,7 +557,7 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
     ],
     userReservePolicies: [],
     activation: {
-      agentId: params.agentId,
+      agentId: firstManagedAgentMandate.agentType,
       purpose: PORTFOLIO_MANAGER_ACTIVATION_PURPOSE,
       controlPath: PORTFOLIO_MANAGER_CONTROL_PATH,
     },
