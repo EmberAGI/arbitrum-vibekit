@@ -339,6 +339,43 @@ describe('agent-ember-lending AG-UI integration', () => {
             },
           },
         };
+      case 'subagent.readExecutionContext.v1':
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-read-execution-context',
+          result: {
+            protocol_version: 'v1',
+            revision: 11,
+            execution_context: {
+              generated_at: '2026-04-01T06:00:00.000Z',
+              network: 'arbitrum',
+              mandate_ref: 'mandate-ember-lending-001',
+              mandate_summary:
+                'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+              mandate_context: {
+                network: 'arbitrum',
+                protocol: 'aave',
+              },
+              subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
+              root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+              owned_units: [
+                {
+                  unit_id: 'unit-ember-lending-001',
+                  root_asset: 'USDC',
+                  amount: '10',
+                  benchmark_value_usd: '10.00',
+                },
+              ],
+              wallet_contents: [
+                {
+                  asset: 'USDC',
+                  amount: '10',
+                  benchmark_value_usd: '10.00',
+                },
+              ],
+            },
+          },
+        };
       case 'subagent.createTransactionPlan.v1':
         return {
           jsonrpc: '2.0',
@@ -564,6 +601,14 @@ describe('agent-ember-lending AG-UI integration', () => {
         },
       }),
     );
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.readExecutionContext.v1',
+        params: {
+          agent_id: 'ember-lending',
+        },
+      }),
+    );
   });
 
   it('does not fabricate handoff identity over AG-UI when the live portfolio payload omits it', async () => {
@@ -685,6 +730,82 @@ describe('agent-ember-lending AG-UI integration', () => {
     );
   });
 
+  it('hydrates a managed lending thread from execution context when the portfolio state is still empty', async () => {
+    protocolHost.handleJsonRpc.mockImplementation(async (input: unknown) => {
+      const request =
+        typeof input === 'object' && input !== null
+          ? (input as { method?: unknown })
+          : {};
+
+      switch (request.method) {
+        case 'subagent.readPortfolioState.v1':
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-execctx-read-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: 9,
+              portfolio_state: {
+                agent_id: 'ember-lending',
+                owned_units: [],
+                reservations: [],
+              },
+            },
+          };
+        case 'subagent.readExecutionContext.v1':
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-execctx-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: 10,
+              execution_context: {
+                generated_at: '2026-04-01T06:30:00.000Z',
+                network: 'arbitrum',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary:
+                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                mandate_context: null,
+                subagent_wallet_address: null,
+                root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                owned_units: [],
+                wallet_contents: [],
+              },
+            },
+          };
+        default:
+          throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }
+    });
+
+    const { snapshot } = await runAgUiConnect({
+      baseUrl,
+      threadId: 'thread-connect-execution-context-1',
+      runId: 'run-connect-execution-context-1',
+    });
+
+    expect(snapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            mandateRef: 'mandate-ember-lending-001',
+            mandateSummary:
+              'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+            mandateContext: {
+              network: 'arbitrum',
+            },
+            walletAddress: null,
+            rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+            rootedWalletContextId: null,
+            lastReservationSummary: null,
+          },
+        },
+      },
+    });
+  });
+
   it('serves lending candidate-plan materialization over real AG-UI HTTP endpoints after connect hydration', async () => {
     const { events: connectEvents, snapshot: connectSnapshot } = await runAgUiConnect({
       baseUrl,
@@ -709,7 +830,7 @@ describe('agent-ember-lending AG-UI integration', () => {
             current: {
               data: {
                 type: 'shared-ember-portfolio-state',
-                revision: 7,
+                revision: 11,
               },
             },
           },

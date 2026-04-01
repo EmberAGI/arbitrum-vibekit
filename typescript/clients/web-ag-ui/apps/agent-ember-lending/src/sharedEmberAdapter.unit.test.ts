@@ -172,6 +172,51 @@ function createExecutionContextResponse() {
   };
 }
 
+function createMandatedExecutionContextResponse() {
+  return {
+    jsonrpc: '2.0',
+    id: 'shared-ember-thread-1-read-execution-context',
+    result: {
+      protocol_version: 'v1',
+      revision: 10,
+      execution_context: {
+        generated_at: '2026-04-01T06:30:00.000Z',
+        network: 'arbitrum',
+        mandate_ref: 'mandate-ember-lending-001',
+        mandate_summary:
+          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+        mandate_context: null,
+        subagent_wallet_address: null,
+        root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+        owned_units: [],
+        wallet_contents: [],
+      },
+    },
+  };
+}
+
+function createEmptyExecutionContextResponse() {
+  return {
+    jsonrpc: '2.0',
+    id: 'shared-ember-thread-1-read-execution-context',
+    result: {
+      protocol_version: 'v1',
+      revision: 9,
+      execution_context: {
+        generated_at: '2026-04-01T06:45:00.000Z',
+        network: 'arbitrum',
+        mandate_ref: null,
+        mandate_summary: null,
+        mandate_context: null,
+        subagent_wallet_address: null,
+        root_user_wallet_address: null,
+        owned_units: [],
+        wallet_contents: [],
+      },
+    },
+  };
+}
+
 function createEmptyPortfolioStateResponse() {
   return {
     jsonrpc: '2.0',
@@ -420,7 +465,7 @@ describe('createEmberLendingDomain', () => {
         walletAddress: '0x00000000000000000000000000000000000000b1',
         rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
         rootedWalletContextId: 'rwc-ember-lending-thread-001',
-        lastSharedEmberRevision: 7,
+        lastSharedEmberRevision: 11,
         lastReservationSummary:
           'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
       },
@@ -433,7 +478,7 @@ describe('createEmberLendingDomain', () => {
           {
             data: {
               type: 'shared-ember-portfolio-state',
-              revision: 7,
+              revision: 11,
             },
           },
         ],
@@ -444,6 +489,14 @@ describe('createEmberLendingDomain', () => {
       jsonrpc: '2.0',
       id: 'shared-ember-thread-1-hydrate-runtime-projection',
       method: 'subagent.readPortfolioState.v1',
+      params: {
+        agent_id: 'ember-lending',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-read-execution-context',
+      method: 'subagent.readExecutionContext.v1',
       params: {
         agent_id: 'ember-lending',
       },
@@ -596,7 +649,17 @@ describe('createEmberLendingDomain', () => {
 
   it('does not promote the thread to active when Shared Ember returns no managed-lane execution context', async () => {
     const protocolHost = {
-      handleJsonRpc: vi.fn(async () => createEmptyPortfolioStateResponse()),
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+        if (request.method === 'subagent.readPortfolioState.v1') {
+          return createEmptyPortfolioStateResponse();
+        }
+        if (request.method === 'subagent.readExecutionContext.v1') {
+          return createEmptyExecutionContextResponse();
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }),
       readCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
         revision: 9,
@@ -649,6 +712,85 @@ describe('createEmberLendingDomain', () => {
           reservations: [],
         },
         lastSharedEmberRevision: 9,
+      },
+    });
+  });
+
+  it('promotes the thread to active from execution context when the managed portfolio is still empty', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+        if (request.method === 'subagent.readPortfolioState.v1') {
+          return createEmptyPortfolioStateResponse();
+        }
+        if (request.method === 'subagent.readExecutionContext.v1') {
+          return createMandatedExecutionContextResponse();
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        phase: 'prehire',
+        mandateRef: null,
+        mandateSummary: null,
+        mandateContext: null,
+        walletAddress: null,
+        rootUserWalletAddress: null,
+        rootedWalletContextId: null,
+        lastPortfolioState: null,
+        lastSharedEmberRevision: null,
+        lastReservationSummary: null,
+        lastCandidatePlan: null,
+        lastCandidatePlanSummary: null,
+        lastExecutionResult: null,
+        lastExecutionTxHash: null,
+        lastEscalationRequest: null,
+        lastEscalationSummary: null,
+      },
+      operation: {
+        source: 'tool',
+        name: EMBER_LENDING_INTERNAL_HYDRATE_COMMAND,
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        mandateRef: 'mandate-ember-lending-001',
+        mandateSummary:
+          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+        mandateContext: {
+          network: 'arbitrum',
+        },
+        walletAddress: null,
+        rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+        rootedWalletContextId: null,
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          owned_units: [],
+          reservations: [],
+        },
+        lastSharedEmberRevision: 10,
+        lastReservationSummary: null,
       },
     });
   });

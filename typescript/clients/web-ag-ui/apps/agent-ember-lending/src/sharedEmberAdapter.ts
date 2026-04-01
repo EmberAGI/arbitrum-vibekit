@@ -66,6 +66,11 @@ type ExecutionContextResponse = {
   };
 };
 
+type SharedEmberExecutionContextEnvelope = {
+  revision: number | null;
+  executionContext: NonNullable<SharedEmberExecutionContext>;
+};
+
 type PortfolioProjection = Pick<
   EmberLendingLifecycleState,
   | 'mandateRef'
@@ -142,7 +147,7 @@ async function readSharedEmberExecutionContext(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
   threadId: string;
   agentId: string;
-}): Promise<NonNullable<SharedEmberExecutionContext>> {
+}): Promise<SharedEmberExecutionContextEnvelope> {
   const response = (await input.protocolHost.handleJsonRpc({
     jsonrpc: '2.0',
     id: `shared-ember-${input.threadId}-read-execution-context`,
@@ -157,7 +162,10 @@ async function readSharedEmberExecutionContext(input: {
     throw new Error('Shared Ember execution context response was missing execution_context.');
   }
 
-  return executionContext;
+  return {
+    revision: response.result?.revision ?? null,
+    executionContext,
+  };
 }
 
 async function readCurrentSharedEmberRevision(input: {
@@ -175,6 +183,21 @@ async function readCurrentSharedEmberRevision(input: {
   })) as SharedEmberRevisionResponse;
 
   return response.result?.revision ?? 0;
+}
+
+function mergeKnownRevision(...revisions: Array<number | null | undefined>): number | null {
+  let highest: number | null = null;
+
+  for (const revision of revisions) {
+    if (typeof revision !== 'number') {
+      continue;
+    }
+    if (highest === null || revision > highest) {
+      highest = revision;
+    }
+  }
+
+  return highest;
 }
 
 async function runSharedEmberCommandWithResolvedRevision<T>(input: {
@@ -358,6 +381,74 @@ function mergePortfolioProjection(
   };
 }
 
+function readExecutionContextProjection(
+  executionContext: NonNullable<SharedEmberExecutionContext>,
+): Pick<
+  EmberLendingLifecycleState,
+  | 'mandateRef'
+  | 'mandateSummary'
+  | 'mandateContext'
+  | 'walletAddress'
+  | 'rootUserWalletAddress'
+  | 'rootedWalletContextId'
+  | 'lastReservationSummary'
+> {
+  const mandateContext =
+    (isRecord(executionContext.mandate_context) ? executionContext.mandate_context : null) ??
+    (() => {
+      const network = readString(executionContext.network);
+      return network ? { network } : null;
+    })();
+
+  return {
+    mandateRef: readString(executionContext.mandate_ref),
+    mandateSummary: readString(executionContext.mandate_summary),
+    mandateContext,
+    walletAddress: readHexAddress(executionContext.subagent_wallet_address),
+    rootUserWalletAddress: readHexAddress(executionContext.root_user_wallet_address),
+    rootedWalletContextId: null,
+    lastReservationSummary: null,
+  };
+}
+
+function mergeExecutionContextProjection(
+  state: EmberLendingLifecycleState,
+  executionContext: SharedEmberExecutionContext | null,
+): Pick<
+  EmberLendingLifecycleState,
+  | 'mandateRef'
+  | 'mandateSummary'
+  | 'mandateContext'
+  | 'walletAddress'
+  | 'rootUserWalletAddress'
+  | 'rootedWalletContextId'
+  | 'lastReservationSummary'
+> {
+  if (!executionContext || !isRecord(executionContext)) {
+    return {
+      mandateRef: state.mandateRef,
+      mandateSummary: state.mandateSummary,
+      mandateContext: state.mandateContext,
+      walletAddress: state.walletAddress,
+      rootUserWalletAddress: state.rootUserWalletAddress,
+      rootedWalletContextId: state.rootedWalletContextId,
+      lastReservationSummary: state.lastReservationSummary,
+    };
+  }
+
+  const projection = readExecutionContextProjection(executionContext);
+
+  return {
+    mandateRef: projection.mandateRef ?? state.mandateRef,
+    mandateSummary: projection.mandateSummary ?? state.mandateSummary,
+    mandateContext: projection.mandateContext ?? state.mandateContext,
+    walletAddress: projection.walletAddress ?? state.walletAddress,
+    rootUserWalletAddress: projection.rootUserWalletAddress ?? state.rootUserWalletAddress,
+    rootedWalletContextId: projection.rootedWalletContextId ?? state.rootedWalletContextId,
+    lastReservationSummary: projection.lastReservationSummary ?? state.lastReservationSummary,
+  };
+}
+
 function hasManagedPortfolioProjection(portfolioState: unknown): boolean {
   if (!isRecord(portfolioState)) {
     return false;
@@ -376,6 +467,20 @@ function hasManagedPortfolioProjection(portfolioState: unknown): boolean {
     readHexAddress(portfolioState['agent_wallet']) !== null ||
     readHexAddress(portfolioState['root_user_wallet']) !== null ||
     readString(portfolioState['rooted_wallet_context_id']) !== null
+  );
+}
+
+function hasManagedExecutionContextProjection(executionContext: SharedEmberExecutionContext | null): boolean {
+  if (!executionContext || !isRecord(executionContext)) {
+    return false;
+  }
+
+  return (
+    readString(executionContext.mandate_ref) !== null ||
+    readString(executionContext.mandate_summary) !== null ||
+    isRecord(executionContext.mandate_context) ||
+    readHexAddress(executionContext.subagent_wallet_address) !== null ||
+    readHexAddress(executionContext.root_user_wallet_address) !== null
   );
 }
 
@@ -857,7 +962,7 @@ export function createEmberLendingDomain(
         });
         return buildSharedEmberExecutionContextXml({
           status: 'live',
-          executionContext,
+          executionContext: executionContext.executionContext,
         });
       } catch (error) {
         return buildSharedEmberExecutionContextXml({
@@ -894,13 +999,39 @@ export function createEmberLendingDomain(
           };
 
           const portfolioState = response.result?.portfolio_state ?? null;
-          const projection = mergePortfolioProjection(currentState, portfolioState);
+          let executionContextEnvelope: SharedEmberExecutionContextEnvelope | null = null;
+          try {
+            executionContextEnvelope = await readSharedEmberExecutionContext({
+              protocolHost: options.protocolHost,
+              threadId,
+              agentId,
+            });
+          } catch {
+            executionContextEnvelope = null;
+          }
+
+          const portfolioProjection = mergePortfolioProjection(currentState, portfolioState);
+          const stateWithPortfolioProjection: EmberLendingLifecycleState = {
+            ...currentState,
+            ...portfolioProjection,
+          };
+          const projection = mergeExecutionContextProjection(
+            stateWithPortfolioProjection,
+            executionContextEnvelope?.executionContext ?? null,
+          );
           const nextState: EmberLendingLifecycleState = {
             ...currentState,
-            phase: hasManagedPortfolioProjection(portfolioState) ? 'active' : currentState.phase,
             ...projection,
+            phase:
+              hasManagedPortfolioProjection(portfolioState) ||
+              hasManagedExecutionContextProjection(executionContextEnvelope?.executionContext ?? null)
+                ? 'active'
+                : currentState.phase,
             lastPortfolioState: portfolioState,
-            lastSharedEmberRevision: response.result?.revision ?? null,
+            lastSharedEmberRevision: mergeKnownRevision(
+              response.result?.revision ?? null,
+              executionContextEnvelope?.revision ?? null,
+            ),
           };
 
           return {
