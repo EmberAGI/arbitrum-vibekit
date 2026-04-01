@@ -576,6 +576,44 @@ function readExecutionPortfolioState(executionResult: unknown): unknown {
   return isRecord(executionResult) ? executionResult['portfolio_state'] : null;
 }
 
+function readExecutionRequestResult(executionResult: unknown): Record<string, unknown> | null {
+  if (!isRecord(executionResult) || !isRecord(executionResult['request_result'])) {
+    return null;
+  }
+
+  return executionResult['request_result'];
+}
+
+function ensureSentence(value: string): string {
+  return /[.!?]$/.test(value) ? value : `${value}.`;
+}
+
+function readExecutionStatusMessage(executionResult: unknown): {
+  executionStatus: 'completed' | 'failed';
+  statusMessage: string;
+} {
+  const phase = isRecord(executionResult) ? readString(executionResult['phase']) : null;
+  if (phase !== 'blocked') {
+    return {
+      executionStatus: 'completed',
+      statusMessage: 'Lending transaction plan admitted and executed through Shared Ember.',
+    };
+  }
+
+  const requestResult = readExecutionRequestResult(executionResult);
+  const requestOutcome = readString(requestResult?.['result']);
+  const requestMessage = readString(requestResult?.['message']);
+  const prefix =
+    requestOutcome === 'denied'
+      ? 'Lending transaction execution request was denied by Shared Ember'
+      : 'Lending transaction execution request was blocked by Shared Ember';
+
+  return {
+    executionStatus: 'failed',
+    statusMessage: requestMessage ? `${prefix}: ${ensureSentence(requestMessage)}` : `${prefix}.`,
+  };
+}
+
 function readEscalationSummary(escalationRequest: unknown): string | null {
   if (!isRecord(escalationRequest)) {
     return null;
@@ -597,11 +635,10 @@ function readStringKey(
   return isRecord(input) ? readString(input[key]) : null;
 }
 
-function buildManagedSubagentHandoff(input: {
+function buildManagedSubagentHandoffBase(input: {
   state: EmberLendingLifecycleState;
   threadId: string;
   agentId: string;
-  operationInput: unknown;
 }): Record<string, unknown> | null {
   if (!input.state.walletAddress || !input.state.rootUserWalletAddress || !input.state.mandateRef) {
     return null;
@@ -611,41 +648,136 @@ function buildManagedSubagentHandoff(input: {
     return null;
   }
 
-  const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
-  const explicitHandoff =
-    'handoff' in commandInput && isRecord(commandInput['handoff']) ? commandInput['handoff'] : null;
-  const source =
-    explicitHandoff ??
-    Object.fromEntries(
-      Object.entries(commandInput).filter(
-        ([key]) => key !== 'idempotencyKey' && key !== 'result' && key !== 'transactionPlanId',
-      ),
-    );
-
-  const decisionContext =
-    'decision_context' in source && isRecord(source['decision_context'])
-      ? {
-          ...source['decision_context'],
-        }
-      : {};
-  if (input.state.mandateSummary) {
-    decisionContext['mandate_summary'] = input.state.mandateSummary;
-  }
-
-  const handoff: Record<string, unknown> = {
-    ...source,
-    handoff_id: readString(source['handoff_id']) ?? `handoff-${input.threadId}`,
+  return {
     agent_id: input.agentId,
     agent_wallet: input.state.walletAddress,
     root_user_wallet: input.state.rootUserWalletAddress,
     mandate_ref: input.state.mandateRef,
   };
+}
 
-  if (Object.keys(decisionContext).length > 0) {
+function buildManagedSubagentDecisionContext(input: {
+  source: Record<string, unknown>;
+  mandateSummary: string | null;
+}): Record<string, unknown> | null {
+  const decisionContext =
+    'decision_context' in input.source && isRecord(input.source['decision_context'])
+      ? {
+          ...input.source['decision_context'],
+        }
+      : {};
+  if (input.mandateSummary) {
+    decisionContext['mandate_summary'] = input.mandateSummary;
+  }
+
+  return Object.keys(decisionContext).length > 0 ? decisionContext : null;
+}
+
+function buildTransactionPlanningHandoff(input: {
+  state: EmberLendingLifecycleState;
+  threadId: string;
+  agentId: string;
+  operationInput: unknown;
+}): Record<string, unknown> | null {
+  const base = buildManagedSubagentHandoffBase(input);
+  if (!base) {
+    return null;
+  }
+
+  const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
+  const handoff: Record<string, unknown> = {
+    handoff_id: readString(commandInput['handoff_id']) ?? `handoff-${input.threadId}`,
+    ...base,
+  };
+  for (const key of [
+    'intent',
+    'action_summary',
+    'candidate_unit_ids',
+    'requested_quantities',
+    'payload_builder_output',
+  ] as const) {
+    if (key in commandInput) {
+      handoff[key] = commandInput[key];
+    }
+  }
+
+  const decisionContext = buildManagedSubagentDecisionContext({
+    source: commandInput,
+    mandateSummary: input.state.mandateSummary,
+  });
+  if (decisionContext) {
     handoff['decision_context'] = decisionContext;
   }
 
   return handoff;
+}
+
+function buildEscalationHandoff(input: {
+  state: EmberLendingLifecycleState;
+  threadId: string;
+  agentId: string;
+  operationInput: unknown;
+}): Record<string, unknown> | null {
+  const base = buildManagedSubagentHandoffBase(input);
+  if (!base) {
+    return null;
+  }
+
+  const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
+  const source =
+    'handoff' in commandInput && isRecord(commandInput['handoff']) ? commandInput['handoff'] : commandInput;
+
+  const handoff: Record<string, unknown> = {
+    handoff_id: readString(source['handoff_id']) ?? `handoff-${input.threadId}`,
+    ...base,
+  };
+  for (const key of [
+    'intent',
+    'action_summary',
+    'candidate_unit_ids',
+    'requested_quantities',
+    'payload_builder_output',
+  ] as const) {
+    if (key in source) {
+      handoff[key] = source[key];
+    }
+  }
+
+  const decisionContext = buildManagedSubagentDecisionContext({
+    source,
+    mandateSummary: input.state.mandateSummary,
+  });
+  if (decisionContext) {
+    handoff['decision_context'] = decisionContext;
+  }
+
+  return handoff;
+}
+
+function mergePortfolioProjectionPreservingKnownContext(
+  state: EmberLendingLifecycleState,
+  portfolioState: unknown,
+): Pick<
+  EmberLendingLifecycleState,
+  | 'mandateRef'
+  | 'mandateSummary'
+  | 'mandateContext'
+  | 'walletAddress'
+  | 'rootUserWalletAddress'
+  | 'rootedWalletContextId'
+  | 'lastReservationSummary'
+> {
+  const projection = mergePortfolioProjection(state, portfolioState);
+
+  return {
+    mandateRef: projection.mandateRef ?? state.mandateRef,
+    mandateSummary: projection.mandateSummary ?? state.mandateSummary,
+    mandateContext: projection.mandateContext ?? state.mandateContext,
+    walletAddress: projection.walletAddress ?? state.walletAddress,
+    rootUserWalletAddress: projection.rootUserWalletAddress ?? state.rootUserWalletAddress,
+    rootedWalletContextId: projection.rootedWalletContextId ?? state.rootedWalletContextId,
+    lastReservationSummary: projection.lastReservationSummary ?? state.lastReservationSummary,
+  };
 }
 
 function readTransactionPlanId(
@@ -824,7 +956,7 @@ export function createEmberLendingDomain(
             };
           }
 
-          const handoff = buildManagedSubagentHandoff({
+          const handoff = buildTransactionPlanningHandoff({
             state: currentState,
             threadId,
             agentId,
@@ -953,7 +1085,11 @@ export function createEmberLendingDomain(
 
           const executionResult = response.result?.execution_result ?? null;
           const executionPortfolioState = readExecutionPortfolioState(executionResult);
-          const projection = mergePortfolioProjection(currentState, executionPortfolioState);
+          const projection = mergePortfolioProjectionPreservingKnownContext(
+            currentState,
+            executionPortfolioState,
+          );
+          const executionStatus = readExecutionStatusMessage(executionResult);
           const nextState: EmberLendingLifecycleState = {
             ...currentState,
             ...projection,
@@ -968,8 +1104,8 @@ export function createEmberLendingDomain(
             state: nextState,
             outputs: {
               status: {
-                executionStatus: 'completed',
-                statusMessage: 'Lending transaction plan executed through Shared Ember.',
+                executionStatus: executionStatus.executionStatus,
+                statusMessage: executionStatus.statusMessage,
               },
               artifacts: [
                 {
@@ -997,7 +1133,7 @@ export function createEmberLendingDomain(
             };
           }
 
-          const handoff = buildManagedSubagentHandoff({
+          const handoff = buildEscalationHandoff({
             state: currentState,
             threadId,
             agentId,

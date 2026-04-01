@@ -212,6 +212,10 @@ function createCandidatePlanInput() {
       required_control_path: 'lending.supply',
       network: 'arbitrum',
     },
+    handoff: {
+      handoff_id: 'handoff-stale-input-should-not-leak',
+      raw_reasoning_trace: 'planner requests must not forward raw model reasoning',
+    },
   };
 }
 
@@ -240,10 +244,12 @@ function createEscalationRequestInput() {
         required_control_path: 'lending.supply',
         network: 'arbitrum',
       },
+      raw_reasoning_trace: 'escalation requests must not forward raw model reasoning',
     },
     result: {
       phase: 'blocked',
       transaction_plan_id: 'txplan-ember-lending-001',
+      request_id: 'req-ember-lending-blocked-001',
       request_result: {
         result: 'needs_release_or_transfer',
         request_id: 'req-ember-lending-blocked-001',
@@ -257,6 +263,33 @@ function createEscalationRequestInput() {
         owned_units: [],
         reservations: [],
       },
+    },
+  };
+}
+
+function createBlockedExecutionResult(input: {
+  result: 'needs_release_or_transfer' | 'denied';
+  requestId: string;
+  message: string;
+  blockingReasonCode: string;
+  nextAction: 'escalate_to_control_plane' | 'stop';
+}) {
+  return {
+    phase: 'blocked',
+    transaction_plan_id: 'txplan-ember-lending-001',
+    request_id: input.requestId,
+    request_result: {
+      result: input.result,
+      request_id: input.requestId,
+      message: input.message,
+      reservation_id: 'reservation-ember-lending-001',
+      blocking_reason_code: input.blockingReasonCode,
+      next_action: input.nextAction,
+    },
+    portfolio_state: {
+      agent_id: 'ember-lending',
+      owned_units: [],
+      reservations: [],
     },
   };
 }
@@ -869,6 +902,7 @@ describe('createEmberLendingDomain', () => {
           execution_result: {
             phase: 'completed',
             transaction_plan_id: 'txplan-ember-lending-001',
+            request_id: 'req-ember-lending-execution-001',
             execution: {
               execution_id: 'exec-ember-lending-001',
               status: 'confirmed',
@@ -945,7 +979,7 @@ describe('createEmberLendingDomain', () => {
       outputs: {
         status: {
           executionStatus: 'completed',
-          statusMessage: 'Lending transaction plan executed through Shared Ember.',
+          statusMessage: 'Lending transaction plan admitted and executed through Shared Ember.',
         },
         artifacts: [
           {
@@ -969,6 +1003,185 @@ describe('createEmberLendingDomain', () => {
         idempotency_key: 'idem-execute-transaction-plan-thread-1',
         expected_revision: 7,
         transaction_plan_id: 'txplan-ember-lending-001',
+      },
+    });
+  });
+
+  it('surfaces blocked execution requests without claiming the transaction plan executed', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-execute-transaction-plan',
+        result: {
+          protocol_version: 'v1',
+          revision: 9,
+          committed_event_ids: ['evt-request-execution-blocked-1'],
+          execution_result: createBlockedExecutionResult({
+            result: 'needs_release_or_transfer',
+            requestId: 'req-ember-lending-blocked-001',
+            message: 'reserved capital is still claimed by another agent',
+            blockingReasonCode: 'reserved_for_other_agent',
+            nextAction: 'escalate_to_control_plane',
+          }),
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        mandateRef: 'mandate-ember-lending-001',
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+        lastSharedEmberRevision: 9,
+        lastExecutionTxHash: null,
+        lastReservationSummary:
+          'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+        lastExecutionResult: {
+          phase: 'blocked',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-blocked-001',
+          request_result: {
+            result: 'needs_release_or_transfer',
+          },
+        },
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending transaction execution request was blocked by Shared Ember: reserved capital is still claimed by another agent.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'shared-ember-execution-result',
+              revision: 9,
+              executionResult: {
+                phase: 'blocked',
+                transaction_plan_id: 'txplan-ember-lending-001',
+                request_id: 'req-ember-lending-blocked-001',
+              },
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it('surfaces denied execution requests with the denied admission reason', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-execute-transaction-plan',
+        result: {
+          protocol_version: 'v1',
+          revision: 9,
+          committed_event_ids: ['evt-request-execution-denied-1'],
+          execution_result: createBlockedExecutionResult({
+            result: 'denied',
+            requestId: 'req-ember-lending-denied-001',
+            message: 'risk policy denied the requested lending path',
+            blockingReasonCode: 'policy_denied',
+            nextAction: 'stop',
+          }),
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 9,
+        lastExecutionTxHash: null,
+        lastExecutionResult: {
+          phase: 'blocked',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-denied-001',
+          request_result: {
+            result: 'denied',
+          },
+        },
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending transaction execution request was denied by Shared Ember: risk policy denied the requested lending path.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'shared-ember-execution-result',
+              revision: 9,
+              executionResult: {
+                phase: 'blocked',
+                transaction_plan_id: 'txplan-ember-lending-001',
+                request_id: 'req-ember-lending-denied-001',
+              },
+            },
+          },
+        ],
       },
     });
   });
@@ -1040,10 +1253,12 @@ describe('createEmberLendingDomain', () => {
               required_control_path: 'lending.supply',
               network: 'arbitrum',
             },
+            raw_reasoning_trace: 'escalation requests must not forward raw model reasoning',
           },
           result: {
             phase: 'blocked',
             transaction_plan_id: 'txplan-ember-lending-001',
+            request_id: 'req-ember-lending-blocked-001',
             request_result: {
               result: 'needs_release_or_transfer',
               request_id: 'req-ember-lending-blocked-001',
@@ -1126,6 +1341,7 @@ describe('createEmberLendingDomain', () => {
         result: {
           phase: 'blocked',
           transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-blocked-001',
           request_result: {
             result: 'needs_release_or_transfer',
             request_id: 'req-ember-lending-blocked-001',

@@ -150,6 +150,10 @@ function createCandidatePlanInput() {
       required_control_path: 'lending.supply',
       network: 'arbitrum',
     },
+    handoff: {
+      handoff_id: 'handoff-stale-input-should-not-leak',
+      raw_reasoning_trace: 'planner requests must not forward raw model reasoning',
+    },
   };
 }
 
@@ -178,10 +182,12 @@ function createEscalationRequestInput() {
         required_control_path: 'lending.supply',
         network: 'arbitrum',
       },
+      raw_reasoning_trace: 'escalation requests must not forward raw model reasoning',
     },
     result: {
       phase: 'blocked',
       transaction_plan_id: 'txplan-ember-lending-001',
+      request_id: 'req-ember-lending-blocked-001',
       request_result: {
         result: 'needs_release_or_transfer',
         request_id: 'req-ember-lending-blocked-001',
@@ -195,6 +201,33 @@ function createEscalationRequestInput() {
         owned_units: [],
         reservations: [],
       },
+    },
+  };
+}
+
+function createBlockedExecutionResult(input: {
+  result: 'needs_release_or_transfer' | 'denied';
+  requestId: string;
+  message: string;
+  blockingReasonCode: string;
+  nextAction: 'escalate_to_control_plane' | 'stop';
+}) {
+  return {
+    phase: 'blocked',
+    transaction_plan_id: 'txplan-ember-lending-001',
+    request_id: input.requestId,
+    request_result: {
+      result: input.result,
+      request_id: input.requestId,
+      message: input.message,
+      reservation_id: 'reservation-ember-lending-001',
+      blocking_reason_code: input.blockingReasonCode,
+      next_action: input.nextAction,
+    },
+    portfolio_state: {
+      agent_id: 'ember-lending',
+      owned_units: [],
+      reservations: [],
     },
   };
 }
@@ -339,6 +372,7 @@ describe('agent-ember-lending AG-UI integration', () => {
             committed_event_ids: ['evt-execution-1'],
             execution_result: {
               transaction_plan_id: 'txplan-ember-lending-001',
+              request_id: 'req-ember-lending-execution-001',
               execution: {
                 execution_id: 'exec-ember-lending-001',
                 status: 'confirmed',
@@ -791,6 +825,168 @@ describe('agent-ember-lending AG-UI integration', () => {
         }),
       }),
     );
+  });
+
+  it('serves blocked lending execution requests over real AG-UI HTTP endpoints without claiming execution success', async () => {
+    protocolHost.handleJsonRpc.mockImplementation(async (input: unknown) => {
+      const request =
+        typeof input === 'object' && input !== null
+          ? (input as { method?: unknown })
+          : {};
+
+      if (request.method === 'subagent.requestTransactionExecution.v1') {
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-execute-transaction-plan',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-execution-blocked-1'],
+            execution_result: createBlockedExecutionResult({
+              result: 'needs_release_or_transfer',
+              requestId: 'req-ember-lending-blocked-001',
+              message: 'reserved capital is still claimed by another agent',
+              blockingReasonCode: 'reserved_for_other_agent',
+              nextAction: 'escalate_to_control_plane',
+            }),
+          },
+        };
+      }
+
+      return defaultHandleJsonRpc(input);
+    });
+
+    await runAgUiConnect({
+      baseUrl,
+      threadId: 'thread-execute-blocked-1',
+      runId: 'run-connect-execute-blocked',
+    });
+
+    await runAgUiCommand({
+      baseUrl,
+      threadId: 'thread-execute-blocked-1',
+      runId: 'run-plan-blocked',
+      command: {
+        name: 'create_transaction_plan',
+        input: createCandidatePlanInput(),
+      },
+    });
+
+    const { snapshot: executeSnapshot } = await runAgUiCommand({
+      baseUrl,
+      threadId: 'thread-execute-blocked-1',
+      runId: 'run-execute-blocked',
+      command: {
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(executeSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            lastReservationSummary:
+              'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+          },
+          artifacts: {
+            current: {
+              data: {
+                type: 'shared-ember-execution-result',
+                revision: 9,
+                executionResult: {
+                  phase: 'blocked',
+                  transaction_plan_id: 'txplan-ember-lending-001',
+                  request_id: 'req-ember-lending-blocked-001',
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it('serves denied lending execution requests over real AG-UI HTTP endpoints with the denied admission artifact', async () => {
+    protocolHost.handleJsonRpc.mockImplementation(async (input: unknown) => {
+      const request =
+        typeof input === 'object' && input !== null
+          ? (input as { method?: unknown })
+          : {};
+
+      if (request.method === 'subagent.requestTransactionExecution.v1') {
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-execute-transaction-plan',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-execution-denied-1'],
+            execution_result: createBlockedExecutionResult({
+              result: 'denied',
+              requestId: 'req-ember-lending-denied-001',
+              message: 'risk policy denied the requested lending path',
+              blockingReasonCode: 'policy_denied',
+              nextAction: 'stop',
+            }),
+          },
+        };
+      }
+
+      return defaultHandleJsonRpc(input);
+    });
+
+    await runAgUiConnect({
+      baseUrl,
+      threadId: 'thread-execute-denied-1',
+      runId: 'run-connect-execute-denied',
+    });
+
+    await runAgUiCommand({
+      baseUrl,
+      threadId: 'thread-execute-denied-1',
+      runId: 'run-plan-denied',
+      command: {
+        name: 'create_transaction_plan',
+        input: createCandidatePlanInput(),
+      },
+    });
+
+    const { snapshot: executeSnapshot } = await runAgUiCommand({
+      baseUrl,
+      threadId: 'thread-execute-denied-1',
+      runId: 'run-execute-denied',
+      command: {
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(executeSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            lastReservationSummary:
+              'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+          },
+          artifacts: {
+            current: {
+              data: {
+                type: 'shared-ember-execution-result',
+                revision: 9,
+                executionResult: {
+                  phase: 'blocked',
+                  transaction_plan_id: 'txplan-ember-lending-001',
+                  request_id: 'req-ember-lending-denied-001',
+                },
+              },
+            },
+          },
+        },
+      },
+    });
   });
 
   it('serves lending escalation requests over real AG-UI HTTP endpoints', async () => {
