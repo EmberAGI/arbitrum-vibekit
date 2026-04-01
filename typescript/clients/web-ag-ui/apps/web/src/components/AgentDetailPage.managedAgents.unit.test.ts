@@ -97,7 +97,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).toContain('Send message');
   });
 
-  it('falls back to the last portfolio state for sparse lending runtime context and keeps chat enabled', () => {
+  it('does not invent a subagent wallet from sparse lending portfolio state and keeps chat enabled', () => {
     const html = renderManagedAgentDetail({
       isHired: true,
       initialTab: 'chat',
@@ -139,8 +139,8 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).toContain('active');
     expect(html).toContain('Lane');
     expect(html).toContain('Arbitrum / Lending');
-    expect(html).toContain('Subagent wallet');
-    expect(html).toContain('0x00000000000000000000000000000000000000b1');
+    expect(html).not.toContain('Subagent wallet');
+    expect(html).not.toContain('0x00000000000000000000000000000000000000b1');
     expect(html).toContain(
       'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
     );

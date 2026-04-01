@@ -632,8 +632,7 @@ function buildEmberLendingRuntimeView(
       readString(mandateContext?.['network']) ?? portfolioNetwork,
       readString(mandateContext?.['protocol']) ?? portfolioProtocol,
     ),
-    walletAddress:
-      readString(lifecycleRecord['walletAddress']) ?? readString(portfolioOwnedUnit?.['wallet_address']),
+    walletAddress: readString(lifecycleRecord['walletAddress']),
     mandateSummary:
       readString(lifecycleRecord['mandateSummary']) ??
       readString(lastPortfolioState?.['mandate_summary']) ??

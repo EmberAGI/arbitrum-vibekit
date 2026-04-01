@@ -264,31 +264,95 @@ async function runAgUiConnect(input: {
 describe('agent-ember-lending AG-UI integration', () => {
   let server: Server;
   let baseUrl: string;
-  const protocolHost = {
-    handleJsonRpc: vi.fn(async (input: unknown) => {
-      const request =
-        typeof input === 'object' && input !== null
-          ? (input as { method?: unknown })
-          : {};
+  const defaultHandleJsonRpc = async (input: unknown) => {
+    const request =
+      typeof input === 'object' && input !== null
+        ? (input as { method?: unknown })
+        : {};
 
-      switch (request.method) {
-        case 'subagent.readPortfolioState.v1':
-          return {
-            jsonrpc: '2.0',
-            id: 'shared-ember-thread-1-read-portfolio-state',
-            result: {
-              protocol_version: 'v1',
-              revision: 7,
+    switch (request.method) {
+      case 'subagent.readPortfolioState.v1':
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-read-portfolio-state',
+          result: {
+            protocol_version: 'v1',
+            revision: 7,
+            portfolio_state: {
+              agent_id: 'ember-lending',
+              rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
+              root_user_wallet: '0x00000000000000000000000000000000000000a1',
+              agent_wallet: '0x00000000000000000000000000000000000000b1',
+              mandate: {
+                mandate_ref: 'mandate-ember-lending-001',
+                summary:
+                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+              },
+              reservations: [
+                {
+                  reservation_id: 'reservation-ember-lending-001',
+                  purpose: 'deploy',
+                  control_path: 'lending.supply',
+                },
+              ],
+              owned_units: [
+                {
+                  unit_id: 'unit-ember-lending-001',
+                  root_asset: 'USDC',
+                  quantity: '10',
+                  reservation_id: 'reservation-ember-lending-001',
+                },
+              ],
+            },
+          },
+        };
+      case 'subagent.materializeCandidatePlan.v1':
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-materialize-candidate-plan',
+          result: {
+            protocol_version: 'v1',
+            revision: 8,
+            committed_event_ids: ['evt-candidate-plan-1'],
+            candidate_plan: {
+              planning_kind: 'subagent_handoff',
+              transaction_plan_id: 'txplan-ember-lending-001',
+              handoff: {
+                handoff_id: 'handoff-thread-1',
+              },
+              compact_plan_summary: {
+                control_path: 'lending.supply',
+                asset: 'USDC',
+                amount: '10',
+                summary: 'supply reserved USDC on Aave',
+              },
+            },
+          },
+        };
+      case 'subagent.executeTransactionPlan.v1':
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-execute-transaction-plan',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-execution-1'],
+            execution_result: {
+              transaction_plan_id: 'txplan-ember-lending-001',
+              execution: {
+                execution_id: 'exec-ember-lending-001',
+                status: 'confirmed',
+                transaction_hash:
+                  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+                successor_unit_ids: ['unit-ember-lending-successor-001'],
+              },
               portfolio_state: {
                 agent_id: 'ember-lending',
-                rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
-                root_user_wallet: '0x00000000000000000000000000000000000000a1',
                 agent_wallet: '0x00000000000000000000000000000000000000b1',
-                mandate: {
-                  mandate_ref: 'mandate-ember-lending-001',
-                  summary:
-                    'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-                },
+                root_user_wallet: '0x00000000000000000000000000000000000000a1',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary:
+                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
                 reservations: [
                   {
                     reservation_id: 'reservation-ember-lending-001',
@@ -298,7 +362,7 @@ describe('agent-ember-lending AG-UI integration', () => {
                 ],
                 owned_units: [
                   {
-                    unit_id: 'unit-ember-lending-001',
+                    unit_id: 'unit-ember-lending-successor-001',
                     root_asset: 'USDC',
                     quantity: '10',
                     reservation_id: 'reservation-ember-lending-001',
@@ -306,92 +370,29 @@ describe('agent-ember-lending AG-UI integration', () => {
                 ],
               },
             },
-          };
-        case 'subagent.materializeCandidatePlan.v1':
-          return {
-            jsonrpc: '2.0',
-            id: 'shared-ember-thread-1-materialize-candidate-plan',
-            result: {
-              protocol_version: 'v1',
-              revision: 8,
-              committed_event_ids: ['evt-candidate-plan-1'],
-              candidate_plan: {
-                planning_kind: 'subagent_handoff',
-                transaction_plan_id: 'txplan-ember-lending-001',
-                handoff: {
-                  handoff_id: 'handoff-thread-1',
-                },
-                compact_plan_summary: {
-                  control_path: 'lending.supply',
-                  asset: 'USDC',
-                  amount: '10',
-                  summary: 'supply reserved USDC on Aave',
-                },
-              },
+          },
+        };
+      case 'subagent.createEscalationRequest.v1':
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-create-escalation-request',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            escalation_request: {
+              source: 'subagent_loop',
+              request_kind: 'release_or_transfer_request',
+              request_id: 'req-ember-lending-escalation-001',
+              handoff_id: 'handoff-ember-lending-escalation-001',
             },
-          };
-        case 'subagent.executeTransactionPlan.v1':
-          return {
-            jsonrpc: '2.0',
-            id: 'shared-ember-thread-1-execute-transaction-plan',
-            result: {
-              protocol_version: 'v1',
-              revision: 9,
-              committed_event_ids: ['evt-execution-1'],
-              execution_result: {
-                transaction_plan_id: 'txplan-ember-lending-001',
-                execution: {
-                  execution_id: 'exec-ember-lending-001',
-                  status: 'confirmed',
-                  transaction_hash:
-                    '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
-                  successor_unit_ids: ['unit-ember-lending-successor-001'],
-                },
-                portfolio_state: {
-                  agent_id: 'ember-lending',
-                  agent_wallet: '0x00000000000000000000000000000000000000b1',
-                  root_user_wallet: '0x00000000000000000000000000000000000000a1',
-                  mandate_ref: 'mandate-ember-lending-001',
-                  mandate_summary:
-                    'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-                  reservations: [
-                    {
-                      reservation_id: 'reservation-ember-lending-001',
-                      purpose: 'deploy',
-                      control_path: 'lending.supply',
-                    },
-                  ],
-                  owned_units: [
-                    {
-                      unit_id: 'unit-ember-lending-successor-001',
-                      root_asset: 'USDC',
-                      quantity: '10',
-                      reservation_id: 'reservation-ember-lending-001',
-                    },
-                  ],
-                },
-              },
-            },
-          };
-        case 'subagent.createEscalationRequest.v1':
-          return {
-            jsonrpc: '2.0',
-            id: 'shared-ember-thread-1-create-escalation-request',
-            result: {
-              protocol_version: 'v1',
-              revision: 10,
-              escalation_request: {
-                source: 'subagent_loop',
-                request_kind: 'release_or_transfer_request',
-                request_id: 'req-ember-lending-escalation-001',
-                handoff_id: 'handoff-ember-lending-escalation-001',
-              },
-            },
-          };
-        default:
-          throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
-      }
-    }),
+          },
+        };
+      default:
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+    }
+  };
+  const protocolHost = {
+    handleJsonRpc: vi.fn(defaultHandleJsonRpc),
     readCommittedEventOutbox: vi.fn(async () => ({
       protocol_version: 'v1',
       revision: 8,
@@ -491,7 +492,8 @@ describe('agent-ember-lending AG-UI integration', () => {
         resolve();
       });
     });
-    protocolHost.handleJsonRpc.mockClear();
+    protocolHost.handleJsonRpc.mockReset();
+    protocolHost.handleJsonRpc.mockImplementation(defaultHandleJsonRpc);
     protocolHost.readCommittedEventOutbox.mockClear();
     protocolHost.acknowledgeCommittedEventOutbox.mockClear();
   });
@@ -526,6 +528,125 @@ describe('agent-ember-lending AG-UI integration', () => {
         params: {
           agent_id: 'ember-lending',
         },
+      }),
+    );
+  });
+
+  it('does not fabricate handoff identity over AG-UI when the live portfolio payload omits it', async () => {
+    protocolHost.handleJsonRpc.mockImplementation(async (input: unknown) => {
+      const request =
+        typeof input === 'object' && input !== null
+          ? (input as { method?: unknown })
+          : {};
+
+      switch (request.method) {
+        case 'subagent.readPortfolioState.v1':
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-lean-read-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: 7,
+              portfolio_state: {
+                agent_id: 'ember-lending',
+                owned_units: [
+                  {
+                    unit_id: 'unit-emberlendingprimary-thread-001',
+                    network: 'arbitrum',
+                    wallet_address: '0x00000000000000000000000000000000000000a1',
+                    root_asset: 'USDC',
+                    quantity: '10',
+                    reservation_id: 'reservation-emberlendingprimary-thread-001',
+                  },
+                ],
+                reservations: [
+                  {
+                    reservation_id: 'reservation-emberlendingprimary-thread-001',
+                    purpose: 'deploy',
+                    control_path: 'lending.supply',
+                  },
+                ],
+              },
+            },
+          };
+        case 'subagent.materializeCandidatePlan.v1':
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-lean-materialize-candidate-plan',
+            result: {
+              protocol_version: 'v1',
+              revision: 8,
+              committed_event_ids: ['evt-candidate-plan-lean-1'],
+              candidate_plan: {
+                planning_kind: 'subagent_handoff',
+                transaction_plan_id: 'txplan-ember-lending-lean-001',
+                handoff: {
+                  handoff_id: 'handoff-thread-lean-1',
+                },
+                compact_plan_summary: {
+                  control_path: 'lending.supply',
+                  asset: 'USDC',
+                  amount: '10',
+                  summary: 'supply reserved USDC on Aave',
+                },
+              },
+            },
+          };
+        default:
+          throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }
+    });
+
+    const { snapshot: connectSnapshot } = await runAgUiConnect({
+      baseUrl,
+      threadId: 'thread-lean-1',
+      runId: 'run-connect-lean-1',
+    });
+
+    expect(connectSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            mandateRef: null,
+            walletAddress: null,
+            rootUserWalletAddress: null,
+            rootedWalletContextId: null,
+          },
+        },
+      },
+    });
+
+    const { snapshot: planSnapshot } = await runAgUiCommand({
+      baseUrl,
+      threadId: 'thread-lean-1',
+      runId: 'run-plan-lean-1',
+      command: {
+        name: 'materialize_candidate_plan',
+        input: createCandidatePlanInput(),
+      },
+    });
+
+    expect(planSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            mandateRef: null,
+            walletAddress: null,
+            rootUserWalletAddress: null,
+            rootedWalletContextId: null,
+            lastCandidatePlanSummary: null,
+          },
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.materializeCandidatePlan.v1',
       }),
     );
   });

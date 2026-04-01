@@ -342,14 +342,12 @@ function readMandateProjection(portfolioState: Record<string, unknown>): Portfol
       : null) ??
     (mandateRecord && isRecord(mandateRecord['context']) ? mandateRecord['context'] : null) ??
     readLaneContextFallback(portfolioState);
-  const ownedUnit = readPortfolioOwnedUnit(portfolioState);
 
   return {
     mandateRef,
     mandateSummary,
     mandateContext,
-    walletAddress:
-      readHexAddress(portfolioState['agent_wallet']) ?? readHexAddress(ownedUnit?.['wallet_address']),
+    walletAddress: readHexAddress(portfolioState['agent_wallet']),
     rootUserWalletAddress: readHexAddress(portfolioState['root_user_wallet']),
     rootedWalletContextId: readString(portfolioState['rooted_wallet_context_id']),
     lastReservationSummary: summarizeReservation(portfolioState),
@@ -384,13 +382,13 @@ function mergePortfolioProjection(
   const projection = readMandateProjection(portfolioState);
 
   return {
-    mandateRef: projection.mandateRef ?? state.mandateRef,
-    mandateSummary: projection.mandateSummary ?? state.mandateSummary,
-    mandateContext: projection.mandateContext ?? state.mandateContext,
-    walletAddress: projection.walletAddress ?? state.walletAddress,
-    rootUserWalletAddress: projection.rootUserWalletAddress ?? state.rootUserWalletAddress,
-    rootedWalletContextId: projection.rootedWalletContextId ?? state.rootedWalletContextId,
-    lastReservationSummary: projection.lastReservationSummary ?? state.lastReservationSummary,
+    mandateRef: projection.mandateRef,
+    mandateSummary: projection.mandateSummary,
+    mandateContext: projection.mandateContext,
+    walletAddress: projection.walletAddress,
+    rootUserWalletAddress: projection.rootUserWalletAddress,
+    rootedWalletContextId: projection.rootedWalletContextId,
+    lastReservationSummary: projection.lastReservationSummary,
   };
 }
 
@@ -561,6 +559,10 @@ function buildManagedSubagentHandoff(input: {
   operationInput: unknown;
 }): Record<string, unknown> | null {
   if (!input.state.walletAddress || !input.state.rootUserWalletAddress || !input.state.mandateRef) {
+    return null;
+  }
+
+  if (input.state.walletAddress === input.state.rootUserWalletAddress) {
     return null;
   }
 
