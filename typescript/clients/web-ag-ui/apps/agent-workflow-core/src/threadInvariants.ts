@@ -1,4 +1,4 @@
-import type { TaskState } from './taskLifecycle.js';
+import type { TaskState } from './taskState.js';
 
 type ThreadRecord = Record<string, unknown>;
 type MaybeThreadRecord = ThreadRecord | null;
@@ -124,7 +124,7 @@ const resolveNormalizedThreadTask = (input: {
 };
 
 export function shouldPersistInputRequiredCheckpoint(input: {
-  currentTaskState?: TaskState | string | null;
+  currentTaskState?: TaskState | null;
   currentTaskMessage?: string | null;
   currentOnboardingKey?: string | null;
   nextOnboardingKey?: string | null;

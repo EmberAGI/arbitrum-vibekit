@@ -14,7 +14,7 @@ import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 
 type CommandTarget = CommandRoutingTarget;
 
-export function extractCommandEnvelope(messages: ClmmState['messages']): CommandEnvelope | null {
+export function extractCommandEnvelope(messages: ClmmState['messages']): CommandEnvelope<AgentCommand> | null {
   return extractCommandEnvelopeFromMessages(messages);
 }
 

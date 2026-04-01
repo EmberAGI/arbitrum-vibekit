@@ -66,4 +66,56 @@ describe('resolveSidebarTaskState', () => {
       }),
     ).toBeUndefined();
   });
+
+  it('suppresses current prehire runtime chat state when onboarding has not started', () => {
+    expect(
+      resolveSidebarTaskState({
+        runtimeTaskState: 'working',
+        runtimeLifecyclePhase: 'prehire',
+        runtimeTaskMessage: 'Ready for a live runtime conversation.',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('suppresses current null-lifecycle idle-ready runtime state', () => {
+    expect(
+      resolveSidebarTaskState({
+        runtimeTaskState: 'working',
+        runtimeLifecyclePhase: null,
+        runtimeTaskMessage: 'Ready for a live runtime conversation.',
+        fallbackToListWhenRuntimeMissing: false,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('suppresses polled prehire list state when onboarding has not started', () => {
+    expect(
+      resolveSidebarTaskState({
+        listTaskState: 'working',
+        listLifecyclePhase: 'prehire',
+        listOnboardingStatus: 'completed',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('keeps prehire onboarding state visible while onboarding is in progress', () => {
+    expect(
+      resolveSidebarTaskState({
+        listTaskState: 'input-required',
+        listLifecyclePhase: 'prehire',
+        listOnboardingStatus: 'in_progress',
+      }),
+    ).toBe('input-required');
+  });
+
+  it('keeps a fired prehire runtime state visible when it is terminal', () => {
+    expect(
+      resolveSidebarTaskState({
+        runtimeTaskState: 'completed',
+        runtimeLifecyclePhase: 'prehire',
+        runtimeTaskMessage: 'Portfolio manager fired. Ready to hire again.',
+        fallbackToListWhenRuntimeMissing: false,
+      }),
+    ).toBe('completed');
+  });
 });

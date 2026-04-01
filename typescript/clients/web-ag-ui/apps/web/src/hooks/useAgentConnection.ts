@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { useCopilotContext, useLangGraphInterruptRender } from '@copilotkit/react-core';
+import { useState, useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
+import type { Message } from '@ag-ui/core';
+import { useCopilotContext } from '@copilotkit/react-core';
 import {
   useAgent,
   useCopilotKit,
@@ -22,7 +23,9 @@ import {
   type AgentInterrupt,
   type OperatorConfigInput,
   type PendleSetupInput,
+  type PortfolioManagerSetupInput,
   type GmxSetupInput,
+  type PiOperatorNoteInput,
   type FundingTokenInput,
   type DelegationSigningResponse,
   type FundWalletAcknowledgement,
@@ -53,10 +56,86 @@ import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import { getAgentThreadId } from '../utils/agentThread';
 import {
   isAgentInterrupt,
+  normalizeAgentInterrupt,
   selectActiveInterrupt,
 } from '../utils/interruptSelection';
 
 const CONNECT_BUSY_RETRY_MS = 2_000;
+
+function messagesEqual(left: Message[], right: Message[]): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftMessage = left[index];
+    const rightMessage = right[index];
+    if (leftMessage.id !== rightMessage.id) return false;
+    if (leftMessage.role !== rightMessage.role) return false;
+    if (JSON.stringify(leftMessage.content) !== JSON.stringify(rightMessage.content)) return false;
+  }
+
+  return true;
+}
+
+function deriveSyncedInterrupt(state: ThreadSnapshot): AgentInterrupt | null {
+  const threadState = state.thread;
+
+  if (threadState?.task?.taskStatus?.state !== 'input-required') {
+    return null;
+  }
+
+  const taskInterrupts = Array.isArray(state.tasks) ? state.tasks : [];
+
+  for (let taskIndex = taskInterrupts.length - 1; taskIndex >= 0; taskIndex -= 1) {
+    const task = taskInterrupts[taskIndex];
+    const interrupts = Array.isArray(task?.interrupts) ? task.interrupts : [];
+
+    for (let interruptIndex = interrupts.length - 1; interruptIndex >= 0; interruptIndex -= 1) {
+      const interrupt = interrupts[interruptIndex];
+      if (typeof interrupt !== 'object' || interrupt === null || !('value' in interrupt)) {
+        continue;
+      }
+
+      const normalizedInterrupt = normalizeAgentInterrupt(interrupt.value);
+      if (normalizedInterrupt) {
+        return normalizedInterrupt;
+      }
+    }
+  }
+
+  const events = threadState.activity?.events ?? [];
+
+  for (let eventIndex = events.length - 1; eventIndex >= 0; eventIndex -= 1) {
+    const event = events[eventIndex];
+    if (event?.type !== 'dispatch-response') {
+      continue;
+    }
+
+    for (let partIndex = event.parts.length - 1; partIndex >= 0; partIndex -= 1) {
+      const part = event.parts[partIndex];
+      if (part.kind !== 'a2ui') {
+        continue;
+      }
+
+      const payloadEnvelope =
+        typeof part.data === 'object' &&
+        part.data !== null &&
+        'payload' in part.data &&
+        typeof part.data.payload === 'object' &&
+        part.data.payload !== null
+          ? (part.data.payload as { kind?: unknown; payload?: unknown })
+          : null;
+
+      if (payloadEnvelope?.kind !== 'interrupt') {
+        continue;
+      }
+
+      return normalizeAgentInterrupt(payloadEnvelope.payload);
+    }
+  }
+
+  return null;
+}
 
 export type {
   ThreadSnapshot,
@@ -69,7 +148,9 @@ export type {
   AgentInterrupt,
   OperatorConfigInput,
   PendleSetupInput,
+  PortfolioManagerSetupInput,
   GmxSetupInput,
+  PiOperatorNoteInput,
   FundWalletAcknowledgement,
   FundingTokenInput,
   Transaction,
@@ -81,7 +162,7 @@ export interface UseAgentConnectionResult {
   isConnected: boolean;
   hasLoadedView: boolean;
   threadId: string | undefined;
-  interruptRenderer: ReturnType<typeof useLangGraphInterruptRender>;
+  interruptRenderer: ReactNode | null;
   uiError: string | null;
   clearUiError: () => void;
 
@@ -92,6 +173,8 @@ export interface UseAgentConnectionResult {
   activity: ThreadActivity;
   transactionHistory: Transaction[];
   events: ClmmEvent[];
+  messages: Message[];
+  messageSnapshotEpoch: number;
   settings: AgentSettings;
 
   // Derived state
@@ -108,11 +191,14 @@ export interface UseAgentConnectionResult {
   runHire: () => void;
   runFire: () => void;
   runSync: () => void;
+  sendChatMessage: (content: string) => void;
   resolveInterrupt: (
     input:
       | OperatorConfigInput
       | PendleSetupInput
+      | PortfolioManagerSetupInput
       | GmxSetupInput
+      | PiOperatorNoteInput
       | FundWalletAcknowledgement
       | FundingTokenInput
       | DelegationSigningResponse,
@@ -151,6 +237,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     clientMutationId: null,
   });
   const [uiError, setUiError] = useState<string | null>(null);
+  const [messageSnapshotEpoch, setMessageSnapshotEpoch] = useState(0);
   const lastConnectedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
   const threadIdRef = useRef<string | undefined>(undefined);
@@ -161,7 +248,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     threadId: undefined,
     runId: null,
   });
-  const messagesSnapshotRef = useRef(false);
   const runInFlightRef = useRef(false);
   const commandSchedulerRef = useRef<ReturnType<typeof createAgentCommandScheduler<HookAgent>> | null>(
     null,
@@ -189,10 +275,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const threadId = getAgentThreadId(agentId, privyWallet?.address) ?? copilotThreadId;
   const runtimeStatus = copilotkit.runtimeConnectionStatus;
 
-  const { activeInterrupt, canResolve, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
+  const { activeInterrupt } = useLangGraphInterruptCustomUI<AgentInterrupt>({
     enabled: isAgentInterrupt,
   });
-  const interruptRenderer = useLangGraphInterruptRender(agent);
+  const interruptRenderer = null;
 
   const debugConnect = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === 'true';
 
@@ -329,7 +415,39 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [],
   );
 
-  const runCommand = useCallback((command: string) => dispatchCommand(command), [dispatchCommand]);
+  const runDirectCommand = useCallback(
+    (command: string) => {
+      const scheduler = commandSchedulerRef.current;
+      if (!scheduler) {
+        return false;
+      }
+
+      return scheduler.dispatchCustom({
+        command,
+        run: async (currentAgent) =>
+          copilotkit.runAgent({
+            agent: currentAgent,
+            forwardedProps: {
+              command: {
+                name: command,
+              },
+            },
+          } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+      });
+    },
+    [copilotkit],
+  );
+
+  const runCommand = useCallback(
+    (command: string) => {
+      if (config.imperativeCommandTransport === 'forwarded-props') {
+        return runDirectCommand(command);
+      }
+
+      return dispatchCommand(command);
+    },
+    [config.imperativeCommandTransport, dispatchCommand, runDirectCommand],
+  );
 
   const setRunInFlight = useCallback((next: boolean) => {
     runInFlightRef.current = next;
@@ -510,6 +628,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           typeof statePayload === 'object' && statePayload !== null
             ? Object.keys(statePayload as Record<string, unknown>).slice(0, 20)
             : null,
+        hasTopLevelTasks:
+          typeof statePayload === 'object' &&
+          statePayload !== null &&
+          Array.isArray((statePayload as { tasks?: unknown[] }).tasks),
+        topLevelTaskCount:
+          typeof statePayload === 'object' &&
+          statePayload !== null &&
+          Array.isArray((statePayload as { tasks?: unknown[] }).tasks)
+            ? (statePayload as { tasks: unknown[] }).tasks.length
+            : null,
       });
       const appliedMutationId = extractAppliedMutationId(statePayload);
       const pendingSyncMutation = pendingSyncMutationRef.current;
@@ -546,24 +674,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           nextTaskState: projectedThread?.task?.taskStatus?.state ?? null,
           previousEventCount: previousThread?.activity?.events?.length ?? null,
           nextEventCount: projectedThread?.activity?.events?.length ?? null,
+          nextTopLevelTaskCount: Array.isArray(projectedState.tasks) ? projectedState.tasks.length : null,
         });
         agent.setState(projectedState);
         return;
       }
 
-      if (projectDetailStateFromPayload(agent.state)) {
-        emitConnectTrace('state-apply-noop', {
-          reason: 'no-projected-state-existing-state-kept',
-          currentThreadId: threadIdRef.current ?? null,
-        });
-        return;
-      }
-
-      emitConnectTrace('state-apply-reset', {
-        reason: 'no-projected-state-reset-to-initial',
+      emitConnectTrace('state-apply-noop', {
+        reason: 'no-projected-state-existing-state-kept',
         currentThreadId: threadIdRef.current ?? null,
       });
-      agent.setState(initialAgentState);
     };
 
     const extractSnapshotState = (payload: unknown): unknown => {
@@ -573,6 +693,24 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       if (typeof event !== 'object' || event === null) return null;
       if (!('snapshot' in event)) return null;
       return (event as { snapshot?: unknown }).snapshot ?? null;
+    };
+
+    const applyMessages = (nextMessages: unknown, options?: { resetVisibleOrder?: boolean }) => {
+      const normalized = Array.isArray(nextMessages) ? (nextMessages as Message[]) : [];
+      const previousState = hasStateValues(agent.state) ? (agent.state as ThreadSnapshot) : initialAgentState;
+      const previousMessages = Array.isArray(previousState.messages)
+        ? (previousState.messages as Message[])
+        : [];
+      if (messagesEqual(previousMessages, normalized)) {
+        return;
+      }
+      if (options?.resetVisibleOrder) {
+        setMessageSnapshotEpoch((current) => current + 1);
+      }
+      agent.setState({
+        ...previousState,
+        messages: normalized,
+      });
     };
 
     const subscription = agent.subscribe({
@@ -586,7 +724,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       onRunFailed: (payload) => clearRunFlag(payload),
       onRunFinalized: (payload) => clearRunFlag(payload),
       onRunInitialized: (payload) => {
-        const accepted = shouldApplyRunScopedState(payload);
+        const accepted = isCurrentThreadEvent(payload);
         emitConnectTrace('run-initialized', {
           accepted,
           inputThreadId: getInputThreadId(payload),
@@ -628,7 +766,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           inputRunId: getInputRunId(payload),
           currentThreadId: threadIdRef.current ?? null,
         });
-        messagesSnapshotRef.current = true;
+        applyMessages(payload.messages, { resetVisibleOrder: true });
+      },
+      onMessagesChanged: (payload) => {
+        if (!isCurrentThreadEvent(payload)) return;
+        applyMessages(payload.messages);
       },
     });
 
@@ -819,7 +961,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     });
 
     lastConnectedThreadRef.current = null;
-    messagesSnapshotRef.current = false;
     clearConnectRetryTimer();
   }, [
     agent,
@@ -852,7 +993,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       currentAgent.threadId = threadId;
       lastConnectedThreadRef.current = threadId;
       disconnectRequestKeyRef.current = null;
-      messagesSnapshotRef.current = false;
 
       const hasConnectAgent = typeof currentAgent.connectAgent === 'function';
 
@@ -959,7 +1099,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           ? latestEvent.parts[0]?.kind ?? null
           : null;
   const settings = currentState.settings ?? defaultSettings;
-
+  const messages = useMemo(
+    () => (Array.isArray(currentState.messages) ? (currentState.messages as Message[]) : []),
+    [currentState.messages],
+  );
+  const syncedPendingInterrupt = deriveSyncedInterrupt(currentState);
   useEffect(() => {
     emitConnectTrace('state-applied', {
       taskId: threadState.task?.id ?? null,
@@ -1087,10 +1231,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             copilotkit.runAgent({
               agent: current,
             } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+          runDirectCommand: async (current, commandName) =>
+            copilotkit.runAgent({
+              agent: current,
+              forwardedProps: {
+                command: {
+                  name: commandName,
+                },
+              },
+            } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
           preemptActiveRun: async (current) => copilotkit.stopAgent({ agent: current }),
           threadId,
           runInFlightRef,
           createId: v7,
+          commandTransport: config.imperativeCommandTransport,
           onError: (message) => {
             setUiError(message);
             setIsFiring(false);
@@ -1123,39 +1277,99 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     }
 
     setTimeout(() => setIsFiring(false), 3000);
-  }, [copilotkit, isFiring, threadId]);
+  }, [config.imperativeCommandTransport, copilotkit, isFiring, threadId]);
+
+  const sendChatMessage = useCallback(
+    (content: string) => {
+      const trimmed = content.trim();
+      if (trimmed.length === 0) {
+        return;
+      }
+
+      setUiError(null);
+      const scheduler = commandSchedulerRef.current;
+      if (!scheduler) {
+        setUiError('Unable to send a message right now. Please retry.');
+        return;
+      }
+
+      const messageId = v7();
+      const accepted = scheduler.dispatchCustom({
+        command: 'chat',
+        run: async (currentAgent) => {
+          currentAgent.addMessage({
+            id: messageId,
+            role: 'user',
+            content: trimmed,
+          });
+          await copilotkit.runAgent({ agent: currentAgent });
+        },
+      });
+
+      if (accepted) {
+        return;
+      }
+
+      if (!accepted) {
+        setUiError('Unable to send a message while another run is active.');
+      }
+    },
+    [copilotkit],
+  );
 
   const clearUiError = useCallback(() => setUiError(null), []);
   const effectiveActiveInterrupt = selectActiveInterrupt({
     streamInterrupt: activeInterrupt ?? null,
-    syncPendingInterrupt: null,
+    syncPendingInterrupt: syncedPendingInterrupt,
   });
+
+  useEffect(() => {
+    if (!debugConnect) return;
+
+    emitConnectTrace('interrupt-selection', {
+      hasTopLevelTasks: Array.isArray(currentState.tasks),
+      topLevelTaskCount: Array.isArray(currentState.tasks) ? currentState.tasks.length : 0,
+      taskState: threadState.task?.taskStatus?.state ?? null,
+      streamInterruptType: activeInterrupt?.type ?? null,
+      syncedInterruptType: syncedPendingInterrupt?.type ?? null,
+      effectiveInterruptType: effectiveActiveInterrupt?.type ?? null,
+    });
+  }, [
+    activeInterrupt?.type,
+    currentState.tasks,
+    debugConnect,
+    effectiveActiveInterrupt?.type,
+    emitConnectTrace,
+    syncedPendingInterrupt?.type,
+    threadState.task?.taskStatus?.state,
+  ]);
 
   const resolveInterrupt = useCallback(
     (
       input:
         | OperatorConfigInput
         | PendleSetupInput
+        | PortfolioManagerSetupInput
         | GmxSetupInput
+        | PiOperatorNoteInput
         | FundWalletAcknowledgement
         | FundingTokenInput
         | DelegationSigningResponse,
     ) => {
       const serializedInput = JSON.stringify(input);
       const interruptType = effectiveActiveInterrupt?.type;
-      const hasStreamInterrupt = activeInterrupt !== null;
-
-      if (hasStreamInterrupt && canResolve()) {
-        resolve(serializedInput);
-        scheduleCycleAfterInterruptResolution({
-          interruptType,
-          runCommand,
-        });
-        return;
-      }
-
+      emitConnectTrace('interrupt-submit-attempt', {
+        interruptType: interruptType ?? null,
+        runInFlight: runInFlightRef.current,
+        hasScheduler: commandSchedulerRef.current !== null,
+        payloadLength: serializedInput.length,
+      });
       const scheduler = commandSchedulerRef.current;
       if (!scheduler) {
+        emitConnectTrace('interrupt-submit-missing-scheduler', {
+          interruptType: interruptType ?? null,
+          runInFlight: runInFlightRef.current,
+        });
         setUiError('Unable to submit onboarding input right now. Please retry.');
         return;
       }
@@ -1163,13 +1377,28 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       const accepted = scheduler.dispatchCustom({
         command: 'resume',
         run: async (currentAgent) => {
+          emitConnectTrace('interrupt-submit-run-start', {
+            interruptType: interruptType ?? null,
+            runInFlight: runInFlightRef.current,
+          });
           const resumed = await resumeInterruptViaAgent({
-            agent: currentAgent as Parameters<typeof resumeInterruptViaAgent>[0]['agent'],
+            agent: currentAgent,
             resumePayload: serializedInput,
+            runResume: ({ agent: resumeAgent, payload }) =>
+              copilotkit.runAgent({
+                agent: resumeAgent,
+                forwardedProps: payload.forwardedProps,
+              }),
           });
           if (!resumed) {
+            emitConnectTrace('interrupt-submit-run-returned-false', {
+              interruptType: interruptType ?? null,
+            });
             throw new Error('Unable to submit onboarding input right now. Please retry.');
           }
+          emitConnectTrace('interrupt-submit-run-complete', {
+            interruptType: interruptType ?? null,
+          });
           scheduleCycleAfterInterruptResolution({
             interruptType,
             runCommand,
@@ -1178,11 +1407,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       });
 
       if (!accepted) {
+        emitConnectTrace('interrupt-submit-scheduler-rejected', {
+          interruptType: interruptType ?? null,
+          runInFlight: runInFlightRef.current,
+        });
         setUiError('Unable to submit onboarding input right now. Please retry.');
         return;
       }
+
+      emitConnectTrace('interrupt-submit-dispatched', {
+        interruptType: interruptType ?? null,
+        runInFlight: runInFlightRef.current,
+      });
     },
-    [activeInterrupt, canResolve, effectiveActiveInterrupt?.type, resolve, runCommand],
+    [copilotkit, effectiveActiveInterrupt?.type, emitConnectTrace, runCommand],
   );
 
   // Local settings mutation helper; caller decides whether to enqueue a sync run.
@@ -1245,6 +1483,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     activity,
     transactionHistory,
     events,
+    messages,
+    messageSnapshotEpoch,
     settings,
     isHired,
     isActive,
@@ -1255,6 +1495,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     runHire,
     runFire,
     runSync,
+    sendChatMessage,
     resolveInterrupt,
     updateSettings,
     saveSettings,

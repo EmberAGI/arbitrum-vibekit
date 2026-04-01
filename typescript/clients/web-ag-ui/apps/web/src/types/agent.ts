@@ -179,6 +179,12 @@ export type GmxSetupRequestInterrupt = {
   payloadSchema?: Record<string, unknown>;
 };
 
+export type PortfolioManagerSetupRequestInterrupt = {
+  type: 'portfolio-manager-setup-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+};
+
 export type FundingTokenRequestInterrupt = {
   type: 'clmm-funding-token-request' | 'pendle-funding-token-request' | 'gmx-funding-token-request';
   message: string;
@@ -208,7 +214,8 @@ export type DelegationSigningRequestInterrupt = {
   type:
     | 'clmm-delegation-signing-request'
     | 'pendle-delegation-signing-request'
-    | 'gmx-delegation-signing-request';
+    | 'gmx-delegation-signing-request'
+    | 'portfolio-manager-delegation-signing-request';
   message: string;
   payloadSchema?: unknown;
   chainId: number;
@@ -226,6 +233,7 @@ export type AgentInterrupt =
   | PendleFundWalletRequestInterrupt
   | GmxFundWalletRequestInterrupt
   | GmxSetupRequestInterrupt
+  | PortfolioManagerSetupRequestInterrupt
   | FundingTokenRequestInterrupt
   | DelegationSigningRequestInterrupt;
 
@@ -241,6 +249,10 @@ export interface PendleSetupInput {
   baseContributionUsd: number;
 }
 
+export interface PortfolioManagerSetupInput {
+  walletAddress: `0x${string}`;
+}
+
 export interface FundWalletAcknowledgement {
   acknowledged: true;
 }
@@ -249,6 +261,10 @@ export interface GmxSetupInput {
   walletAddress: `0x${string}`;
   baseContributionUsd: number;
   targetMarket: 'BTC' | 'ETH';
+}
+
+export interface PiOperatorNoteInput {
+  operatorNote: string;
 }
 
 export interface FundingTokenInput {
@@ -392,7 +408,12 @@ export interface ThreadState {
   task?: Task;
   onboardingFlow?: OnboardingFlow;
   poolArtifact?: Artifact;
-  operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput;
+  operatorInput?:
+    | OperatorConfigInput
+    | PendleSetupInput
+    | PortfolioManagerSetupInput
+    | GmxSetupInput
+    | PiOperatorNoteInput;
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: Pool;
   operatorConfig?: unknown;
@@ -428,7 +449,12 @@ export interface UiState {
   task?: Task;
   onboardingFlow?: OnboardingFlow;
   poolArtifact?: Artifact;
-  operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput;
+  operatorInput?:
+    | OperatorConfigInput
+    | PendleSetupInput
+    | PortfolioManagerSetupInput
+    | GmxSetupInput
+    | PiOperatorNoteInput;
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: Pool;
   operatorConfig?: unknown;
@@ -444,6 +470,14 @@ export interface UiState {
   selectors: UiSelectors;
 }
 
+export interface ThreadTaskInterrupt {
+  value?: unknown;
+}
+
+export interface ThreadTaskEntry {
+  interrupts?: ThreadTaskInterrupt[];
+}
+
 // AG-UI thread snapshot envelope
 export interface ThreadSnapshot {
   messages?: unknown[];
@@ -454,6 +488,7 @@ export interface ThreadSnapshot {
   settings: AgentSettings;
   private?: AgentPrivateState;
   thread: ThreadState;
+  tasks?: ThreadTaskEntry[];
 }
 
 // Simplified types for UI components

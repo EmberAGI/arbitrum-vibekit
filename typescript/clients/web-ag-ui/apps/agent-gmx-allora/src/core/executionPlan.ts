@@ -24,12 +24,14 @@ export type ExecutionPlan =
 
 type BuildPlanParams = {
   telemetry: GmxAlloraTelemetry;
+  txExecutionMode: 'plan' | 'execute';
   chainId: string;
   marketAddress: `0x${string}`;
   walletAddress: `0x${string}`;
   payTokenAddress: `0x${string}`;
   collateralTokenAddress: `0x${string}`;
-  currentPositionSide?: 'long' | 'short';
+  actualPositionSide?: 'long' | 'short';
+  assumedPositionSide?: 'long' | 'short';
   positionContractKey?: string;
   positionSizeInUsd?: string;
 };
@@ -144,17 +146,31 @@ export function buildPerpetualExecutionPlan(params: BuildPlanParams): ExecutionP
       };
     }
 
+    const priorPositionSide = params.actualPositionSide ?? params.assumedPositionSide;
+    const openRequest = buildOpenRequest(params);
+    const shouldDirectPlanFlipOpen =
+      params.txExecutionMode === 'plan' &&
+      params.actualPositionSide === undefined &&
+      params.assumedPositionSide !== undefined &&
+      telemetry.side !== params.assumedPositionSide &&
+      openRequest?.amount !== undefined;
+    if (shouldDirectPlanFlipOpen && openRequest) {
+      return {
+        action: telemetry.side === 'long' ? 'long' : 'short',
+        request: openRequest,
+      };
+    }
+
     const closeRequest: PerpetualCloseRequest = {
       walletAddress: params.walletAddress,
       marketAddress: params.marketAddress,
-      positionSide: params.currentPositionSide ?? telemetry.side,
+      positionSide: priorPositionSide ?? telemetry.side,
       isLimit: false,
     };
     const nextPositionSide = telemetry.side;
-    const openRequest = buildOpenRequest(params);
     const shouldFlip =
-      params.currentPositionSide !== undefined &&
-      nextPositionSide !== params.currentPositionSide &&
+      priorPositionSide !== undefined &&
+      nextPositionSide !== priorPositionSide &&
       openRequest?.amount !== undefined;
     if (shouldFlip && openRequest) {
       return {

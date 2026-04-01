@@ -1,0 +1,126 @@
+# ADR 0009: postgres-centered-persistence-for-pi-runtime
+
+Status: Accepted
+Date: 2026-03-17
+
+## Context
+
+This ADR builds on ADR 0006 and locks the persistence mechanism and durability shape for the Pi-backed runtime.
+
+ADR 0006 established the core runtime model:
+- `PiThread`
+- `PiExecution`
+- `PiAutomation`
+- `AutomationRun`
+
+It also locked durability tier B, durable automation/background state, and exactly-once-ish dedupe for risky side effects. What remained open was the concrete persistence architecture.
+
+In this initiative, durability tier B means:
+- durable user-facing thread state survives restart
+- durable automation definitions and queued/scheduled automation work survive restart
+- pending structured interrupts survive restart and can be resurfaced
+- visible current-state artifacts and append-only activity history survive restart
+- durable outbox/dedupe state for risky side effects survives restart
+- exact in-flight execution-step resume is not required
+
+Put differently:
+- after restart, the runtime must be able to recover durable thread/automation truth and pending durable work
+- after restart, the runtime may recreate or restart interrupted `PiExecution` work from the last durable state rather than resuming an exact mid-step checkpoint
+
+The Pi-backed runtime is intended to be:
+- a standalone long-lived service
+- the canonical runtime-of-record for Pi-backed agents
+- reusable across multiple clients such as AG-UI and future Telegram support
+- capable of structured interrupts, durable automation scheduling, and replay-safe side effects
+
+That makes persistence requirements materially stronger than a local single-process chat app:
+- multiple runtime entry points may touch the same state
+- execution, automation, interrupt, and outbox transitions need clear transactional boundaries
+- queued/background work must survive restart
+- risky side effects need dedupe constraints that are stronger than in-memory checks
+
+The persistence choice also affects developer experience. A file-based store or SQLite default could simplify local startup, but they would introduce either weaker concurrency semantics or a second primary persistence mode that differs from production.
+
+## Decision
+
+Adopt a Postgres-centered hybrid persistence architecture for the Pi-backed runtime.
+
+Rules:
+- Postgres is the canonical system of record for:
+  - `PiThread`
+  - `PiExecution`
+  - `PiAutomation`
+  - `AutomationRun`
+  - interrupt state
+  - visible artifact metadata/state
+  - durable scheduler state
+  - durable outbox and dedupe state
+- The persistence model is hybrid:
+  - relational current-state records for canonical runtime entities
+  - append-only execution/activity history where auditability or replay matters
+- Scheduling uses a DB-backed queue/lease model initially.
+- Exactly-once-ish risky side effects use a durable outbox plus unique wallet/account + action-fingerprint constraints in Postgres.
+- Redis is not part of the initial persistence architecture.
+- SQLite is not the default backend, including for `npx` startup flows.
+- Local developer UX and `npx pi-agent` should make Postgres feel automatic rather than introducing a second default storage mode.
+- Zero-config local-first UX is still a requirement:
+  - developers should be able to start Pi and spawn sub-process work without manually provisioning database infrastructure first
+  - local-first UX should be achieved by packaging/bootstrap automation around the canonical store, not by replacing the canonical store with a weaker default architecture
+- Session/runtime maintenance is a first-class architectural concern, not a cleanup afterthought:
+  - retention/archival policy for activity history and artifacts must be explicit
+  - maintenance/cleanup workflows must preserve canonical thread/execution truth
+  - operator-facing inspection/maintenance surfaces should rely on the canonical Postgres store rather than scraping transport logs
+- The persistence architecture must satisfy durability tier B explicitly:
+  - preserve durable thread, interrupt, artifact, automation, queue, and outbox state across restart
+  - permit execution restart/recreation from durable state instead of requiring exact in-flight resume
+
+Expected implementation shape:
+- normalized tables for root entities and queue/outbox state
+- append-only execution/activity/event tables where history matters
+- transactional boundaries around automation firing, execution checkpoints, and side-effect intent persistence
+
+## Rationale
+
+- Matches the service-grade runtime shape better than file-backed JSON/JSONL storage.
+- Gives clear transactional semantics for execution, automation, interrupt, and outbox state.
+- Supports exactly-once-ish dedupe with database-enforced uniqueness instead of ad hoc file locking.
+- Keeps local and production persistence behavior aligned.
+- Avoids introducing Redis before there is evidence that coordination or throughput requires it.
+- Avoids making SQLite the default and thereby creating a second primary operational mode with different concurrency behavior.
+- Preserves room for Codex/OpenCode-like low-latency local UX without giving up a stronger gateway durability model.
+
+This also aligns with the strongest patterns we want to borrow from adjacent systems:
+- LangGraph’s durable checkpointing and server-grade persistence expectations
+- OpenClaw’s separation of canonical session state from isolated automation execution contexts
+- Codex’s durable thread identity and append-only session history
+- OpenClaw’s treatment of session maintenance/cleanup as real architecture
+
+## Alternatives Considered
+
+- File-based JSON/JSONL as the primary store:
+  - Rejected because cross-file atomicity, concurrency, dedupe, and recovery semantics are too weak for the intended multi-client long-lived runtime.
+- SQLite as the default backend:
+  - Rejected because it would create a second primary persistence mode with meaningfully different concurrency and operational characteristics from production.
+- Redis as the primary store:
+  - Rejected because the runtime’s core problems are durable relational state, transactions, dedupe, and recovery rather than ephemeral coordination.
+- Postgres + Redis from day one:
+  - Rejected because it adds cross-store complexity before there is evidence that the simpler DB-backed queue/lease model is insufficient.
+- Pure event sourcing:
+  - Rejected because it adds machinery beyond what the current runtime and durability requirements need.
+
+## Consequences
+
+- Positive:
+  - Stronger correctness and recovery guarantees.
+  - Cleaner exactly-once-ish outbox design.
+  - Better fit for multi-client and future horizontal runtime growth.
+  - Easier operational querying and debugging of runtime state.
+- Tradeoffs:
+  - Local startup is heavier unless the repo provides a bootstrap path.
+  - Requires migration tooling and deployment discipline around schema changes.
+- Follow-on work:
+  - Make local startup and `npx pi-agent` bootstrap Postgres automatically when no external `DATABASE_URL` is provided.
+  - Define how ephemeral local/sub-process runs can use parent-owned persistence or other zero-config bootstrap paths without creating a second canonical store.
+  - Define the concrete schema and transactional boundaries for `PiThread`, `PiExecution`, `PiAutomation`, `AutomationRun`, scheduler rows, and outbox rows.
+  - Define retention, archival, and maintenance policy for thread activity, artifacts, and operator-facing history views.
+  - Add readiness/health checks and migration handling around the Postgres dependency.

@@ -353,4 +353,194 @@ describe('LangGraphAgent connect pagination', () => {
 
     expect(taskStates).toContain('cycle-2');
   });
+
+  it('accepts persisted role-only user messages when emitting connect snapshots', async () => {
+    const LangGraphAgent = await loadLangGraphAgent();
+    const stopPolling = new Error('stop-test-after-initial-message-snapshot');
+
+    const client = {
+      assistants: {
+        search: vi.fn(async () => [{ graph_id: 'graph-clmm', assistant_id: 'assistant-clmm' }]),
+        getGraph: vi.fn(async () => ({ nodes: [], edges: [] })),
+        getSchemas: vi.fn(async () => ({
+          input_schema: { properties: {} },
+          output_schema: { properties: {} },
+          context_schema: { properties: {} },
+          config_schema: { properties: {} },
+        })),
+      },
+      threads: {
+        getState: vi.fn(async () => ({
+          values: {
+            messages: [
+              {
+                id: 'message-cycle-1',
+                role: 'user',
+                content: '{"command":"cycle"}',
+              },
+            ],
+          },
+          tasks: [],
+          next: [],
+          metadata: {},
+        })),
+      },
+      runs: {
+        list: vi.fn(async () => {
+          throw stopPolling;
+        }),
+      },
+    };
+
+    const agent = new LangGraphAgent({
+      deploymentUrl: 'http://localhost:8124',
+      graphId: 'graph-clmm',
+      agentName: 'agent-clmm',
+      client,
+    }) as LangGraphAgentConstructor & {
+      dispatchEvent: (event: { type?: string; messages?: Array<{ id: string; role: string; content: string }> }) => boolean;
+    };
+    agent.threadId = 'thread-clmm';
+
+    const messageSnapshots: Array<Array<{ id: string; role: string; content: string }>> = [];
+    const originalDispatchEvent = agent.dispatchEvent.bind(agent);
+    agent.dispatchEvent = (event) => {
+      if (event.type === 'MESSAGES_SNAPSHOT' && Array.isArray(event.messages)) {
+        messageSnapshots.push(event.messages);
+      }
+
+      return originalDispatchEvent(event);
+    };
+
+    await expect(
+      agent.connectAgent(
+        {
+          forwardedProps: {
+            connectPollIntervalMs: 0,
+          },
+        },
+        {},
+      ),
+    ).rejects.toThrow(stopPolling.message);
+
+    expect(messageSnapshots).toEqual([
+      [
+        {
+          id: 'message-cycle-1',
+          role: 'user',
+          content: '{"command":"cycle"}',
+        },
+      ],
+    ]);
+  });
+
+  it('rechecks a previously empty tail page so later same-thread runs beyond the original window are discovered', async () => {
+    const LangGraphAgent = await loadLangGraphAgent();
+    const stopPolling = new Error('stop-test-after-tail-growth');
+    let listCallCount = 0;
+    const listOffsets: number[] = [];
+
+    const client = {
+      assistants: {
+        search: vi.fn(async () => [{ graph_id: 'graph-clmm', assistant_id: 'assistant-clmm' }]),
+        getGraph: vi.fn(async () => ({ nodes: [], edges: [] })),
+        getSchemas: vi.fn(async () => ({
+          input_schema: { properties: {} },
+          output_schema: { properties: {} },
+          context_schema: { properties: {} },
+          config_schema: { properties: {} },
+        })),
+      },
+      threads: {
+        getState: vi.fn(async () => ({
+          values: {
+            messages: [],
+            thread: {
+              task: {
+                id: 'cycle-2',
+                taskStatus: {
+                  state: 'cycle-2',
+                },
+              },
+            },
+          },
+          tasks: [],
+          next: [],
+          metadata: {},
+        })),
+      },
+      runs: {
+        list: vi.fn(async (_threadId: string, params: { limit: number; offset: number }) => {
+          listCallCount += 1;
+          listOffsets.push(params.offset);
+
+          if (params.limit !== 3) {
+            throw new Error(`unexpected limit ${params.limit}`);
+          }
+
+          if (listCallCount === 1 && params.offset === 0) {
+            return [
+              { run_id: 'run-0001', status: 'completed' as const, created_at: '2026-03-11T01:21:00.000Z' },
+              { run_id: 'run-0002', status: 'completed' as const, created_at: '2026-03-11T01:22:00.000Z' },
+              { run_id: 'run-0003', status: 'completed' as const, created_at: '2026-03-11T01:23:00.000Z' },
+            ];
+          }
+
+          if (listCallCount === 2 && params.offset === 3) {
+            return [];
+          }
+
+          if (listCallCount === 3 && params.offset === 3) {
+            return [
+              {
+                run_id: 'run-0004',
+                status: 'completed' as const,
+                created_at: '2026-03-11T01:24:00.000Z',
+                updated_at: '2026-03-11T01:24:10.000Z',
+              },
+            ];
+          }
+
+          throw stopPolling;
+        }),
+      },
+    };
+
+    const agent = new LangGraphAgent({
+      deploymentUrl: 'http://localhost:8124',
+      graphId: 'graph-clmm',
+      agentName: 'agent-clmm',
+      client,
+    }) as LangGraphAgentConstructor & {
+      dispatchEvent: (event: { type?: string; runId?: string }) => boolean;
+    };
+    agent.threadId = 'thread-clmm';
+
+    const dispatchedRunIds: string[] = [];
+    const originalDispatchEvent = agent.dispatchEvent.bind(agent);
+    agent.dispatchEvent = (event) => {
+      if (event.type === 'RUN_STARTED' && event.runId) {
+        dispatchedRunIds.push(event.runId);
+      }
+
+      return originalDispatchEvent(event);
+    };
+
+    await expect(
+      agent.connectAgent(
+        {
+          forwardedProps: {
+            connectPollIntervalMs: 0,
+            connectRunListLimit: 3,
+            connectRunWindowSize: 3,
+          },
+        },
+        {},
+      ),
+    ).rejects.toThrow(stopPolling.message);
+
+    expect(listOffsets.slice(0, 2)).toEqual([0, 3]);
+    expect(listOffsets.filter((offset) => offset === 3).length).toBeGreaterThanOrEqual(2);
+    expect(dispatchedRunIds).toContain('run-0004');
+  });
 });

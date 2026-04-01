@@ -1,0 +1,31 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "DELEGATIONS_BYPASS",
+    "NODE_EXTRA_CA_CERTS",
+    "ONCHAIN_ACTIONS_API_URL",
+    "PENDLE_LATENCY_LOG_PATH",
+    "PENDLE_SMOKE_MODE",
+    "PENDLE_POLL_INTERVAL_MS",
+    "A2A_TEST_AGENT_NODE_PRIVATE_KEY",
+    "NEXT_PUBLIC_WALLET_BYPASS_ADDRESS"
+  ],
+  "tasks": {
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "start": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "persistent": true
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    }
+  }
+}

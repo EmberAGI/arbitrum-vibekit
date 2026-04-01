@@ -114,7 +114,7 @@ const buildRunPayload = (params: {
     source: 'starter-cron',
   },
   stream_mode: ['events', 'values', 'messages'],
-  stream_resumable: true,
+  stream_resumable: false,
 });
 
 const buildThreadPayload = (threadId: string): ThreadCreatePayload => ({

@@ -1,6 +1,7 @@
 import {
   defaultActivity,
   defaultMetrics,
+  type OnboardingStatus,
   defaultProfile,
   type ThreadLifecyclePhase,
   type ThreadState,
@@ -8,6 +9,7 @@ import {
   type UiState,
 } from '../types/agent';
 import { deriveTaskStateForUi } from './deriveTaskStateForUi';
+import { extractTaskStatusMessage } from './extractTaskStatusMessage';
 
 const ensureArray = <T>(value: T[] | undefined | null): T[] => (Array.isArray(value) ? value : []);
 
@@ -33,11 +35,7 @@ function cloneActivity(activity: ThreadState['activity'] | undefined): UiState['
 }
 
 function extractTaskMessage(threadState: ThreadState): string | null {
-  const message = threadState.task?.taskStatus?.message;
-  if (typeof message !== 'object' || message === null) return null;
-  if (!('content' in message)) return null;
-  const content = (message as { content?: unknown }).content;
-  return typeof content === 'string' ? content : null;
+  return extractTaskStatusMessage(threadState.task?.taskStatus?.message) ?? null;
 }
 
 function resolveOnboardingActive(params: {
@@ -55,6 +53,51 @@ function resolveOnboardingActive(params: {
   return params.effectiveTaskState === 'input-required';
 }
 
+function shouldUseTaskProgressForHiredState(params: {
+  lifecyclePhase: ThreadLifecyclePhase | null;
+  onboardingStatus: OnboardingStatus | undefined;
+  runtimeHasLoadedSnapshot: boolean;
+  effectiveTaskState: string | null;
+}): boolean {
+  if (!params.runtimeHasLoadedSnapshot) {
+    return false;
+  }
+
+  if (params.onboardingStatus === 'in_progress') {
+    return true;
+  }
+
+  if (params.lifecyclePhase === 'prehire') {
+    return false;
+  }
+
+  return (
+    params.effectiveTaskState === 'input-required' ||
+    params.effectiveTaskState === 'working' ||
+    params.effectiveTaskState === 'submitted'
+  );
+}
+
+function shouldUseTaskProgressForActiveState(params: {
+  lifecyclePhase: ThreadLifecyclePhase | null;
+  onboardingStatus: OnboardingStatus | undefined;
+  effectiveTaskState: string | null;
+}): boolean {
+  if (params.onboardingStatus === 'in_progress') {
+    return true;
+  }
+
+  if (params.lifecyclePhase === 'prehire') {
+    return false;
+  }
+
+  return (
+    params.effectiveTaskState === 'submitted' ||
+    params.effectiveTaskState === 'working' ||
+    params.effectiveTaskState === 'input-required'
+  );
+}
+
 export function deriveUiState(params: {
   threadState: ThreadState;
   runtime: UiRuntimeState;
@@ -67,17 +110,29 @@ export function deriveUiState(params: {
     taskState: threadState.task?.taskStatus?.state ?? null,
     taskMessage: extractTaskMessage(threadState),
   }) ?? null;
+  const onboardingStatus = threadState.onboardingFlow?.status;
+  const taskProgressIndicatesHired = shouldUseTaskProgressForHiredState({
+    lifecyclePhase,
+    onboardingStatus,
+    runtimeHasLoadedSnapshot: runtime.hasLoadedSnapshot,
+    effectiveTaskState,
+  });
   const isHired =
-    lifecyclePhase === 'onboarding' || lifecyclePhase === 'active' || lifecyclePhase === 'firing';
+    lifecyclePhase === 'onboarding' ||
+    lifecyclePhase === 'active' ||
+    lifecyclePhase === 'firing' ||
+    taskProgressIndicatesHired;
   const isOnboardingActive = resolveOnboardingActive({
-    onboardingStatus: threadState.onboardingFlow?.status,
+    onboardingStatus,
+    effectiveTaskState,
+  });
+  const taskProgressIndicatesActive = shouldUseTaskProgressForActiveState({
+    lifecyclePhase,
+    onboardingStatus,
     effectiveTaskState,
   });
   const isActive =
-    effectiveTaskState === 'submitted' ||
-    effectiveTaskState === 'working' ||
-    effectiveTaskState === 'input-required' ||
-    threadState.onboardingFlow?.status === 'in_progress' ||
+    taskProgressIndicatesActive ||
     runtime.commandInFlight ||
     runtime.syncPending;
 

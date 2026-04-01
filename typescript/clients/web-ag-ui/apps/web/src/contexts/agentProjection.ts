@@ -79,6 +79,10 @@ function mergeStatePayload(projected: ThreadSnapshot, incoming: Partial<ThreadSn
     };
   }
 
+  if (Array.isArray(incoming.tasks)) {
+    projected.tasks = incoming.tasks;
+  }
+
   projected.thread = {
     ...projected.thread,
     ...incomingThread,
@@ -141,6 +145,8 @@ export function projectDetailStateFromPayload(
 
 export function projectAgentListUpdateFromState(state: ThreadSnapshot): Partial<AgentListEntry> {
   return projectAgentListUpdate({
+    lifecycle: state.thread.lifecycle,
+    onboardingFlow: state.thread.onboardingFlow,
     profile: state.thread.profile,
     metrics: state.thread.metrics,
     task: state.thread.task,

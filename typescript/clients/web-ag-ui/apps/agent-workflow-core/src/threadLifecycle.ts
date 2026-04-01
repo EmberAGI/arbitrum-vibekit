@@ -1,10 +1,10 @@
-import { isTaskTerminalState, type TaskState } from './taskLifecycle.js';
+import { isTaskTerminalState, type TaskState } from './taskState.js';
 
 export type ThreadLifecyclePhase = 'prehire' | 'onboarding' | 'active' | 'firing' | 'inactive';
 
 export const resolveThreadLifecyclePhase = (input: {
   previousPhase?: ThreadLifecyclePhase;
-  taskState?: string | TaskState | null;
+  taskState?: TaskState | null;
   onboardingFlowStatus?: string | null;
   onboardingStep?: number | null;
   explicitLifecyclePhase?: ThreadLifecyclePhase;
@@ -14,7 +14,7 @@ export const resolveThreadLifecyclePhase = (input: {
   fireRequested?: boolean;
 }): ThreadLifecyclePhase => {
   const taskState = input.taskState ?? null;
-  const hasTerminalTask = typeof taskState === 'string' && isTaskTerminalState(taskState);
+  const hasTerminalTask = taskState !== null && isTaskTerminalState(taskState);
   const fireRequested =
     input.fireRequested === true || input.explicitLifecyclePhase === 'firing';
 
@@ -26,16 +26,10 @@ export const resolveThreadLifecyclePhase = (input: {
     return 'inactive';
   }
 
-  // Fire terminal updates can arrive without a persisted prior `firing` phase
-  // (for example when only final node patch is checkpointed). Honor explicit
-  // inactive on terminal tasks before setup-completion promotion runs.
   if (input.explicitLifecyclePhase === 'inactive' && hasTerminalTask) {
     return 'inactive';
   }
 
-  // Fire completion often leaves setup/delegation signals intact. Preserve the
-  // inactive lifecycle on subsequent terminal snapshots unless a new explicit
-  // phase is provided.
   if (input.previousPhase === 'inactive' && hasTerminalTask && !input.explicitLifecyclePhase) {
     return 'inactive';
   }

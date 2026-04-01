@@ -2,9 +2,12 @@ import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
 import {
-  analyzeCycleProjectionThread,
+  restorePersistedCronSchedulesWithRunReconciliation,
   configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,
+} from 'agent-runtime-langgraph';
+import {
+  analyzeCycleProjectionThread,
   projectCycleCommandThread,
 } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
@@ -20,7 +23,7 @@ import {
   getBackgroundCycleReadiness,
 } from './workflow/backgroundCycleReadiness.js';
 import { ClmmStateAnnotation, memory } from './workflow/context.js';
-import { configureCronExecutor } from './workflow/cronScheduler.js';
+import { configureCronExecutor, ensureCronForThread } from './workflow/cronScheduler.js';
 import {
   resolvePostBootstrap,
   resolvePostCollectDelegations,
@@ -258,7 +261,7 @@ async function createRun(params: {
     },
     metadata: { source: 'cron' },
     stream_mode: ['events', 'values', 'messages'],
-    stream_resumable: true,
+    stream_resumable: false,
   });
   if (!body) {
     throw new Error('[cron] Failed to serialize LangGraph run create request body');
@@ -370,6 +373,19 @@ export async function startCron(
 }
 
 configureCronExecutor(runGraphOnce);
+try {
+  const recoveredCronThreads = await restorePersistedCronSchedulesWithRunReconciliation({
+    baseUrl: resolveLangGraphDeploymentUrl(),
+    scheduleThread: ensureCronForThread,
+  });
+  if (recoveredCronThreads.length > 0) {
+    console.info('[cron] Recovered persisted cron schedules', {
+      threadIds: recoveredCronThreads.map((candidate) => candidate.threadId),
+    });
+  }
+} catch (error) {
+  console.error('[cron] Failed to recover persisted cron schedules', error);
+}
 
 const invokedAsEntryPoint =
   process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;

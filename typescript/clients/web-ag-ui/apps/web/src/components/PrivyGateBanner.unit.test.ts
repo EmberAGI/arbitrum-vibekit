@@ -1,0 +1,49 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { PrivyGateBanner } from './PrivyGateBanner';
+
+const mocks = vi.hoisted(() => ({
+  pathname: '/hire-agents/agent-clmm',
+  privyWalletAddress: null as string | null,
+  login: vi.fn(),
+}));
+
+vi.mock('@privy-io/react-auth', () => ({
+  useLogin: () => ({
+    login: mocks.login,
+  }),
+}));
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => mocks.pathname,
+}));
+
+vi.mock('@/hooks/usePrivyWalletClient', () => ({
+  usePrivyWalletClient: () => ({
+    privyWallet: mocks.privyWalletAddress ? { address: mocks.privyWalletAddress } : null,
+  }),
+}));
+
+describe('PrivyGateBanner', () => {
+  beforeEach(() => {
+    mocks.pathname = '/hire-agents/agent-clmm';
+    mocks.privyWalletAddress = null;
+    mocks.login.mockReset();
+  });
+
+  it('hides the sign-in banner for the Pi example hire route without a wallet', () => {
+    mocks.pathname = '/hire-agents/agent-pi-example';
+
+    const html = renderToStaticMarkup(React.createElement(PrivyGateBanner));
+
+    expect(html).toBe('');
+  });
+
+  it('keeps the sign-in banner for non-Pi hire routes without a wallet', () => {
+    const html = renderToStaticMarkup(React.createElement(PrivyGateBanner));
+
+    expect(html).toContain('Sign in with Privy to create a thread and interact with agents.');
+  });
+});

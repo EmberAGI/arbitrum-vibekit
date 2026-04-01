@@ -2,9 +2,13 @@ import { pathToFileURL } from 'node:url';
 
 import { END, START, StateGraph } from '@langchain/langgraph';
 import {
-  analyzeCycleProjectionThread,
+  cancelLangGraphRun,
   configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,
+  restorePersistedCronSchedulesWithRunReconciliation,
+} from 'agent-runtime-langgraph';
+import {
+  analyzeCycleProjectionThread,
   projectCycleCommandThread,
 } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
@@ -17,7 +21,7 @@ import {
 } from './config/serviceConfig.js';
 import { setupAgentLocalE2EMocksIfNeeded } from './e2e/agentLocalMocks.js';
 import { ClmmStateAnnotation, logWarn, memory, type ClmmState } from './workflow/context.js';
-import { configureCronExecutor } from './workflow/cronScheduler.js';
+import { configureCronExecutor, ensureCronForThread } from './workflow/cronScheduler.js';
 import { acknowledgeFundWalletNode } from './workflow/nodes/acknowledgeFundWallet.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
 import { collectDelegationsNode } from './workflow/nodes/collectDelegations.js';
@@ -271,6 +275,14 @@ const RunResponseSchema = z
   .catchall(z.unknown());
 
 type RunStatus = string | undefined;
+const DEFAULT_RUN_STREAM_SILENCE_TIMEOUT_MS = 90_000;
+
+class RunStreamTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`LangGraph run stream produced no chunks for ${timeoutMs}ms`);
+    this.name = 'RunStreamTimeoutError';
+  }
+}
 
 function resolveLangGraphDeploymentUrl(): string {
   const raw = process.env['LANGGRAPH_DEPLOYMENT_URL'] ?? 'http://localhost:8126';
@@ -283,6 +295,20 @@ function resolveLangGraphGraphId(): string {
 
 function isStrictInactiveCycleProjectionAssertEnabled(): boolean {
   return process.env['AGENT_STRICT_INACTIVE_CYCLE_ASSERT'] === 'true';
+}
+
+function resolveRunStreamSilenceTimeoutMs(): number {
+  const raw = process.env['LANGGRAPH_RUN_STREAM_TIMEOUT_MS'];
+  if (!raw) {
+    return DEFAULT_RUN_STREAM_SILENCE_TIMEOUT_MS;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_RUN_STREAM_SILENCE_TIMEOUT_MS;
+  }
+
+  return Math.max(1, Math.trunc(parsed));
 }
 
 async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>): Promise<T> {
@@ -433,7 +459,7 @@ async function createRun(params: {
       },
       metadata: { source: 'cron' },
       stream_mode: ['events', 'values', 'messages'],
-      stream_resumable: true,
+      stream_resumable: false,
     }),
   });
 
@@ -452,6 +478,37 @@ async function createRun(params: {
 async function fetchRun(baseUrl: string, threadId: string, runId: string) {
   const response = await fetch(`${baseUrl}/threads/${threadId}/runs/${runId}`);
   return parseJsonResponse(response, RunResponseSchema);
+}
+
+function timeoutAfter(ms: number): Promise<never> {
+  return new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new RunStreamTimeoutError(ms));
+    }, ms);
+  });
+}
+
+async function drainRunStreamWithSilenceTimeout(
+  stream: ReadableStream<Uint8Array>,
+  timeoutMs: number,
+): Promise<void> {
+  const reader = stream.getReader();
+
+  try {
+    while (true) {
+      const result = await Promise.race([reader.read(), timeoutAfter(timeoutMs)]);
+
+      if (result.done) {
+        return;
+      }
+    }
+  } finally {
+    try {
+      void reader.cancel();
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
 }
 
 async function waitForRunStreamCompletion(params: {
@@ -474,8 +531,20 @@ async function waitForRunStreamCompletion(params: {
 
   const stream = response.body;
   if (stream) {
-    for await (const chunk of stream) {
-      void chunk;
+    const timeoutMs = resolveRunStreamSilenceTimeoutMs();
+    try {
+      await drainRunStreamWithSilenceTimeout(stream, timeoutMs);
+    } catch (error) {
+      if (!(error instanceof RunStreamTimeoutError)) {
+        throw error;
+      }
+
+      console.warn('[cron] Run stream stalled; canceling run', {
+        threadId: params.threadId,
+        runId: params.runId,
+        timeoutMs,
+      });
+      await cancelLangGraphRun(params.baseUrl, params.threadId, params.runId, { wait: true });
     }
   }
 
@@ -541,6 +610,19 @@ export async function startCron(threadId: string, options?: { durability?: LangG
 }
 
 configureCronExecutor(runGraphOnce);
+try {
+  const recoveredCronThreads = await restorePersistedCronSchedulesWithRunReconciliation({
+    baseUrl: resolveLangGraphDeploymentUrl(),
+    scheduleThread: ensureCronForThread,
+  });
+  if (recoveredCronThreads.length > 0) {
+    console.info('[cron] Recovered persisted cron schedules', {
+      threadIds: recoveredCronThreads.map((candidate) => candidate.threadId),
+    });
+  }
+} catch (error) {
+  console.error('[cron] Failed to recover persisted cron schedules', error);
+}
 
 const invokedAsEntryPoint =
   process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;

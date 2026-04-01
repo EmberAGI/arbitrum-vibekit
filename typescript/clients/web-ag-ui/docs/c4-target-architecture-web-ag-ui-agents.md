@@ -3,6 +3,12 @@
 Status: Draft (target vision)
 Scope: `typescript/clients/web-ag-ui/apps/web` and `typescript/clients/web-ag-ui/apps/agent*`
 
+See also:
+
+- `docs/c4-pi-runtime-architecture-and-boundaries.md` for the Pi-backed runtime specialization of this target architecture
+- `docs/ag-ui-client-runtime-invariants.md`
+- `docs/ag-ui-frontend-backend-contract-ui-stability.md`
+
 ## 1. Why this document exists
 
 This C4 document describes the target architecture we want to converge to from the current implementation:
@@ -135,10 +141,17 @@ Explicit non-goal container:
 - `CopilotKit Runtime Route` (`/api/copilotkit`):
   - The only server route used by web for agent communication.
   - Exposes AG-UI `connect`, `run`, and `stop` semantics used by web.
+  - For standalone Pi-backed agents, imports runtime-owned transport helpers rather than defining Pi-specific transport behavior locally.
 
 - `Agent Registry`:
   - Maps agent ids to runtime endpoints and capabilities.
   - Provides metadata only; does not mirror thread state.
+  - Must support multiple runtime families cleanly, including standalone Pi gateway-backed agents registered through `HttpAgent` rather than in-process runtime embedding.
+
+- Pi-backed runtime package ownership:
+  - The `agent-runtime` package family owns the reusable Pi AG-UI HTTP adapter/server layer.
+  - The `agent-runtime` package family also owns the Pi-capable `HttpAgent` implementation used by `apps/web` to consume that AG-UI surface.
+  - Concrete Pi-backed agent apps should mostly provide domain/runtime assembly and app-specific bootstrap, not reimplement generic AG-UI transport glue.
 
 ### 5.3 Agent runtime components (shared pattern)
 

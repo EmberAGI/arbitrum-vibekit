@@ -20,8 +20,9 @@ type CoingeckoSearchResponse = {
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const cache = new Map<string, { expiresAt: number; uri: string | null }>();
-const COINGECKO_MAX_RETRIES = 4;
+const COINGECKO_MAX_RETRIES = 2;
 const COINGECKO_REQUEST_DELAY_MS = 120;
+const COINGECKO_REQUEST_TIMEOUT_MS = 1_500;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -80,13 +81,19 @@ async function fetchCoingeckoSearchWithRetry(symbolKey: string): Promise<Respons
     const searchUrl = new URL('https://api.coingecko.com/api/v3/search');
     searchUrl.searchParams.set('query', symbolKey);
 
-    const response = await fetch(searchUrl.toString(), {
-      headers: {
-        // A descriptive UA improves reliability with some CDNs.
-        'User-Agent': 'forge-web-ag-ui (icon lookup)',
-        Accept: 'application/json',
-      },
-    });
+    let response: Response;
+    try {
+      response = await fetch(searchUrl.toString(), {
+        headers: {
+          // A descriptive UA improves reliability with some CDNs.
+          'User-Agent': 'forge-web-ag-ui (icon lookup)',
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(COINGECKO_REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      return null;
+    }
 
     if (response.status !== 429) return response;
     attempt += 1;
@@ -141,28 +148,46 @@ export async function GET(request: Request) {
     }
   }
 
-  for (const symbolKey of symbolsToResolve) {
-    const onchainIcon = onchainActionsMatches[symbolKey];
-    if (onchainIcon) {
-      cache.set(symbolKey, { expiresAt: Date.now() + CACHE_TTL_MS, uri: onchainIcon });
-      icons[symbolKey] = onchainIcon;
-      continue;
-    }
+  const resolutionResults = await Promise.all(
+    symbolsToResolve.map(async (symbolKey) => {
+      try {
+        const onchainIcon = onchainActionsMatches[symbolKey];
+        if (onchainIcon) {
+          return {
+            symbolKey,
+            iconUri: onchainIcon,
+          };
+        }
 
-    const response = await fetchCoingeckoSearchWithRetry(symbolKey);
-    if (!response || !response.ok) {
-      missing.push(symbolKey);
-      continue;
-    }
+        const response = await fetchCoingeckoSearchWithRetry(symbolKey);
+        if (!response || !response.ok) {
+          return {
+            symbolKey,
+            iconUri: null,
+          };
+        }
 
-    const payload = (await response.json()) as CoingeckoSearchResponse;
-    const iconUri = pickBestIconUri({ symbolKey, payload });
+        const payload = (await response.json()) as CoingeckoSearchResponse;
+        const iconUri = pickBestIconUri({ symbolKey, payload });
+        await sleep(COINGECKO_REQUEST_DELAY_MS);
 
+        return {
+          symbolKey,
+          iconUri,
+        };
+      } catch {
+        return {
+          symbolKey,
+          iconUri: null,
+        };
+      }
+    }),
+  );
+
+  for (const { symbolKey, iconUri } of resolutionResults) {
     cache.set(symbolKey, { expiresAt: Date.now() + CACHE_TTL_MS, uri: iconUri });
     if (iconUri) icons[symbolKey] = iconUri;
     else missing.push(symbolKey);
-
-    await sleep(COINGECKO_REQUEST_DELAY_MS);
   }
 
   const result: TokenIconsResponse = { icons, missing };

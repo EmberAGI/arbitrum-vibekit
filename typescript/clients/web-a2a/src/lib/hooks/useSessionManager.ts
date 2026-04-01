@@ -85,6 +85,7 @@ export function useSessionManager(): UseSessionManagerReturn {
 
     console.log('[SessionManager] Initializing...');
     const loadedState = loadSessions();
+    let nextState: SessionState;
 
     if (loadedState && Object.keys(loadedState.sessions).length > 0) {
       console.log(
@@ -112,7 +113,7 @@ export function useSessionManager(): UseSessionManagerReturn {
         }
       }
 
-      setState(loadedState);
+      nextState = loadedState;
     } else {
       // Create initial conversation session (main chat)
       console.log('[SessionManager] No saved sessions, creating initial conversation');
@@ -132,14 +133,17 @@ export function useSessionManager(): UseSessionManagerReturn {
         isMainChat: true,
       };
 
-      setState({
+      nextState = {
         sessions: { [initialSession.id]: initialSession },
         activeSessionId: initialSession.id,
         sessionOrder: [initialSession.id],
-      });
+      };
     }
 
-    isInitializedRef.current = true;
+    queueMicrotask(() => {
+      setState(nextState);
+      isInitializedRef.current = true;
+    });
   }, []);
 
   // Auto-save sessions with debouncing

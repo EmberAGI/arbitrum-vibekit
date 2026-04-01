@@ -10,7 +10,12 @@ import { AgentProvider, InactiveAgentProvider, useAgent } from '../contexts/Agen
 import { projectAgentListUpdate } from '../contexts/agentListProjection';
 import { useAgentList } from '../contexts/AgentListContext';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
-import { getAgentThreadId, resolveAgentThreadWalletAddress } from '../utils/agentThread';
+import {
+  ensureAnonymousAgentThreadId,
+  getAgentThreadId,
+  resolveAgentThreadWalletAddress,
+} from '../utils/agentThread';
+import { emitAgentConnectDebug } from '../utils/agentConnectDebug';
 
 function AgentListRuntimeBridge() {
   const agent = useAgent();
@@ -89,12 +94,42 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   const threadWalletAddress = resolveAgentThreadWalletAddress(privyWallet?.address);
+  const walletThreadId = agentId ? getAgentThreadId(agentId, threadWalletAddress) : null;
+  const anonymousThreadId = useMemo(() => {
+    if (!agentId || walletThreadId) {
+      return null;
+    }
+    return ensureAnonymousAgentThreadId(agentId);
+  }, [agentId, walletThreadId]);
+
+  useEffect(() => {
+    emitAgentConnectDebug({
+      event: 'runtime-provider-state',
+      agentId: agentId ?? 'inactive-agent',
+      threadId: walletThreadId ?? anonymousThreadId ?? null,
+      payload: {
+        pathname,
+        privyWalletAddress: privyWallet?.address ?? null,
+        threadWalletAddress,
+        walletThreadId,
+        anonymousThreadId,
+        willUseInactiveProvider: !agentId || !(walletThreadId ?? anonymousThreadId),
+      },
+    });
+  }, [
+    agentId,
+    anonymousThreadId,
+    pathname,
+    privyWallet?.address,
+    threadWalletAddress,
+    walletThreadId,
+  ]);
 
   if (!agentId) {
     return <InactiveAgentProvider>{children}</InactiveAgentProvider>;
   }
 
-  const threadId = getAgentThreadId(agentId, threadWalletAddress);
+  const threadId = walletThreadId ?? anonymousThreadId;
 
   if (!threadId) {
     return <InactiveAgentProvider>{children}</InactiveAgentProvider>;

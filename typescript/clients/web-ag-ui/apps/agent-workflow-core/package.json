@@ -24,7 +24,9 @@
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   },
+  "dependenciesMeta": {},
   "dependencies": {
-    "@langchain/langgraph": "1.0.2"
+    "@a2a-js/sdk": "^0.3.13",
+    "agent-runtime-langgraph": "workspace:^"
   }
 }
