@@ -14,7 +14,7 @@ The intended downstream role for this agent is to act on a bounded Shared Ember
 subagent surface for:
 
 - portfolio-state reads
-- candidate-plan materialization
+- planner-backed candidate-plan creation
 - transaction-plan execution
 - escalation requests
 

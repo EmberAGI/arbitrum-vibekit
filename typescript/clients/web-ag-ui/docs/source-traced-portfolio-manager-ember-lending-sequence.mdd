@@ -43,8 +43,9 @@ sequenceDiagram
   User->>Web: create_transaction_plan
   Web->>Runtime: run(create_transaction_plan)
   Runtime->>EL: handleOperation(create_transaction_plan)
-  Note over EL: Build a bounded planning handoff from top-level planner fields only
+  Note over EL: Build a bounded planning handoff from top-level planner fields only; do not forward planner-owned payload_builder_output
   EL->>SE: subagent.createTransactionPlan.v1
+  Note over SE: Resolve planner-owned payload_builder_output through the Shared Ember planner path before materializing the candidate plan
   SE-->>EL: candidate_plan + revision
   EL-->>Runtime: candidate plan artifact + summary
 
@@ -73,4 +74,5 @@ sequenceDiagram
 
 - The model never sees `read_portfolio_state` or a refresh/sync bootstrap tool.
 - Blocked execution responses preserve the already-hydrated mandate and wallet context even when the blocked portfolio payload is sparse.
-- Nested raw `handoff` payloads and reasoning-trace fields are not forwarded on planning or escalation calls.
+- Nested raw `handoff` payloads, planner-owned `payload_builder_output`, and reasoning-trace fields are not forwarded on planning calls.
+- Escalation calls still forward only the bounded escalation handoff fields plus the blocked result.

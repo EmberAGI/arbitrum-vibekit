@@ -15,7 +15,8 @@ Scope: managed Portfolio Manager -> Ember Lending coordination over Shared Ember
   - `subagent.readExecutionContext.v1` during system-context assembly
   - revision refresh / retry handling after Shared Ember conflicts
 - Planner note:
-  - `subagent.createTransactionPlan.v1` is the downstream planning contract and is expected to route upstream through the `ember-cli` planner path rather than the retired generic materialization wrapper.
+  - `subagent.createTransactionPlan.v1` accepts a bounded planning handoff without planner-owned `payload_builder_output`.
+  - Shared Ember routes that request through the `ember-cli` planner path and returns the planner-generated payload output in `candidate_plan.handoff`.
 
 ```mermaid
 sequenceDiagram
@@ -39,7 +40,7 @@ sequenceDiagram
   User->>Web: create_transaction_plan
   Web->>Runtime: run(create_transaction_plan)
   Runtime->>EL: handleOperation(create_transaction_plan)
-  EL->>SE: subagent.createTransactionPlan.v1(bounded planning handoff)
+  EL->>SE: subagent.createTransactionPlan.v1(bounded planning handoff without planner-owned payload output)
   SE->>Planner: plan from mandate + execution context
   Planner-->>SE: candidate plan
   SE-->>EL: candidate_plan + revision

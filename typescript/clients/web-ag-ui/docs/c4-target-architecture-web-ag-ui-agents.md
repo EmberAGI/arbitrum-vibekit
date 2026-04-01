@@ -189,7 +189,8 @@ Current concrete managed-path specialization:
 - `agent-ember-lending`
   - owns the first bounded managed-subagent runtime
   - consumes runtime-internal Shared Ember projection and execution-context reads plus the model-visible `create_transaction_plan`, `request_transaction_execution`, and `create_escalation_request` contract
-  - keeps planning on the bounded Shared Ember planner contract and treats execution as admit-and-execute or blocked/denied admission rather than an execution-only success path
+  - keeps planning on the bounded Shared Ember planner contract, sending only a bounded planning handoff while receiving planner-generated payload output back in the candidate plan
+  - treats execution as admit-and-execute or blocked/denied admission rather than an execution-only success path
   - projects lifecycle, wallet, mandate, reservation, planning, execution, and escalation state into the shared AG-UI thread contract
 
 ## 6. Dynamic views (sequence)
