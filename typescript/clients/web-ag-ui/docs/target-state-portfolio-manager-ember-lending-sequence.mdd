@@ -1,0 +1,72 @@
+# Target-State Portfolio Manager -> Ember Lending Sequence
+
+Status: Target-state contract for issue `#555`
+Scope: managed Portfolio Manager -> Ember Lending coordination over Shared Ember
+
+## Contract summary
+
+- Portfolio Manager remains the owner of onboarding, reservations, and control-plane interventions.
+- Ember Lending keeps exactly three model-visible tools:
+  - `create_transaction_plan`
+  - `request_transaction_execution`
+  - `create_escalation_request`
+- Runtime-only behavior remains hidden:
+  - connect-time projection hydration
+  - `subagent.readExecutionContext.v1` during system-context assembly
+  - revision refresh / retry handling after Shared Ember conflicts
+- Planner note:
+  - `subagent.createTransactionPlan.v1` is the downstream planning contract and is expected to route upstream through the `ember-cli` planner path rather than the retired generic materialization wrapper.
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Web
+  participant Runtime as AG-UI Runtime
+  participant PM as agent-portfolio-manager
+  participant EL as agent-ember-lending
+  participant SE as Shared Ember
+  participant Planner as ember-cli planner path
+
+  PM->>SE: approve mandate + reserve capital + activate lending lane
+  User->>Web: Open Ember Lending detail
+  Web->>Runtime: connect(agent-ember-lending, threadId)
+  Runtime->>EL: runtime-owned hydrate + system-context assembly
+  EL->>SE: subagent.readPortfolioState.v1
+  EL->>SE: subagent.readExecutionContext.v1
+  SE-->>EL: managed projection + minimal execution_context
+  EL-->>Runtime: ready snapshot with minimal execution contract
+
+  User->>Web: create_transaction_plan
+  Web->>Runtime: run(create_transaction_plan)
+  Runtime->>EL: handleOperation(create_transaction_plan)
+  EL->>SE: subagent.createTransactionPlan.v1(bounded planning handoff)
+  SE->>Planner: plan from mandate + execution context
+  Planner-->>SE: candidate plan
+  SE-->>EL: candidate_plan + revision
+  EL-->>Runtime: candidate plan artifact
+
+  User->>Web: request_transaction_execution
+  Web->>Runtime: run(request_transaction_execution)
+  Runtime->>EL: handleOperation(request_transaction_execution)
+  EL->>SE: subagent.requestTransactionExecution.v1(transaction_plan_id)
+  alt admit and execute now
+    SE-->>EL: phase=completed + execution + portfolio_state
+    EL-->>Runtime: completed status + tx hash + artifact
+  else block or deny admission
+    SE-->>EL: phase=blocked + request_result + portfolio_state
+    EL-->>Runtime: failed status + blocked artifact
+    User->>Web: create_escalation_request
+    Web->>Runtime: run(create_escalation_request)
+    Runtime->>EL: handleOperation(create_escalation_request)
+    EL->>SE: subagent.createEscalationRequest.v1(bounded escalation handoff, blocked result)
+    SE-->>PM: control-plane resolution request
+    SE-->>EL: escalation_request
+    EL-->>Runtime: escalation artifact + summary
+  end
+```
+
+## Notes
+
+- There is no model-visible `read_portfolio_state` tool.
+- There is no model-visible onboarding-context read or manual sync/bootstrap step.
+- `request_transaction_execution` must surface admit-and-execute, blocked, and denied admission outcomes explicitly in status and artifacts.

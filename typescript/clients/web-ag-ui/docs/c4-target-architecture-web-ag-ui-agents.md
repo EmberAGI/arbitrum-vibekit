@@ -8,6 +8,8 @@ See also:
 - `docs/c4-pi-runtime-architecture-and-boundaries.md` for the Pi-backed runtime specialization of this target architecture
 - `docs/ag-ui-client-runtime-invariants.md`
 - `docs/ag-ui-frontend-backend-contract-ui-stability.md`
+- `docs/source-traced-portfolio-manager-ember-lending-sequence.mdd`
+- `docs/target-state-portfolio-manager-ember-lending-sequence.mdd`
 
 ## 1. Why this document exists
 
@@ -187,6 +189,7 @@ Current concrete managed-path specialization:
 - `agent-ember-lending`
   - owns the first bounded managed-subagent runtime
   - consumes runtime-internal Shared Ember projection and execution-context reads plus the model-visible `create_transaction_plan`, `request_transaction_execution`, and `create_escalation_request` contract
+  - keeps planning on the bounded Shared Ember planner contract and treats execution as admit-and-execute or blocked/denied admission rather than an execution-only success path
   - projects lifecycle, wallet, mandate, reservation, planning, execution, and escalation state into the shared AG-UI thread contract
 
 ## 6. Dynamic views (sequence)
