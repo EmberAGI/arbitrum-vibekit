@@ -158,11 +158,11 @@ const PORTFOLIO_MANAGER_DELEGATION_SALT =
 const PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP = '2026-03-30T00:00:00.000Z';
 const PORTFOLIO_MANAGER_PROTOCOL_SOURCE = 'onboarding_scan';
 const PORTFOLIO_MANAGER_DEFAULT_RISK_LEVEL = 'medium';
+const PORTFOLIO_MANAGER_ACTIVATION_PURPOSE = 'deploy';
+const PORTFOLIO_MANAGER_CONTROL_PATH = 'unassigned';
 const FIRST_MANAGED_AGENT_TYPE = 'ember-lending';
 const FIRST_MANAGED_AGENT_PROTOCOL = 'aave';
 const FIRST_MANAGED_AGENT_ROOT_ASSET = 'USDC';
-const FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY = '10';
-const FIRST_MANAGED_AGENT_CONTROL_PATH = 'lending.supply';
 
 type PortfolioManagerPortfolioMandate = {
   approved: true;
@@ -520,15 +520,10 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
   const identity = sanitizeIdentitySegment(`${params.threadId}-${params.walletAddress}`);
   const userId = `user-${identity}`;
   const rootedWalletContextId = `rwc-${identity}`;
-  const valuationRef = `valuation-${identity}`;
-  const capitalObservationId = `observation-${identity}`;
   const portfolioMandateRef = `mandate-portfolio-${identity}`;
   const firstManagedAgentMandate = params.approvedMandateEnvelope.managedAgentMandates[0];
   const managedAgentKeySegment = sanitizeIdentitySegment(firstManagedAgentMandate.agentKey);
   const managedAgentMandateRef = `mandate-${managedAgentKeySegment}-${identity}`;
-  const seededUnitId = `unit-${managedAgentKeySegment}-${identity}`;
-  const seededReservationId = `reservation-${managedAgentKeySegment}-${identity}`;
-  const seededPolicySnapshotRef = `policy-${managedAgentKeySegment}-${identity}`;
 
   return {
     occurredAt: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
@@ -557,83 +552,12 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
         mandate_summary: buildManagedAgentMandateSummary(firstManagedAgentMandate),
       },
     ],
-    capitalObservation: {
-      observation_id: capitalObservationId,
-      kind: 'onboarding_scan',
-      wallet_address: params.walletAddress,
-      network: PORTFOLIO_MANAGER_NETWORK,
-      observed_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
-      benchmark_asset: 'USD',
-      valuation_ref: valuationRef,
-      asset_deltas: [
-        {
-          root_asset: FIRST_MANAGED_AGENT_ROOT_ASSET,
-          quantity_delta: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
-        },
-      ],
-      affected_unit_ids: [seededUnitId],
-    },
     userReservePolicies: [],
-    ownedUnits: [
-      {
-        unit_id: seededUnitId,
-        root_asset: FIRST_MANAGED_AGENT_ROOT_ASSET,
-        network: PORTFOLIO_MANAGER_NETWORK,
-        wallet_address: params.walletAddress,
-        quantity: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
-        owner_type: 'user_idle',
-        owner_id: userId,
-        status: 'reserved',
-        reservation_id: seededReservationId,
-        delegation_id: null,
-        control_path: 'unassigned',
-        position_kind: 'spot',
-        benchmark_asset: 'USD',
-        benchmark_value: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
-        valuation_ref: valuationRef,
-        cost_basis: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
-        opened_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
-        closed_at: null,
-        parent_unit_ids: [],
-        metadata: {
-          source: PORTFOLIO_MANAGER_PROTOCOL_SOURCE,
-        },
-      },
-    ],
-    reservations: [
-      {
-        reservation_id: seededReservationId,
-        agent_id: FIRST_MANAGED_AGENT_TYPE,
-        owner_id: userId,
-        purpose: 'deploy',
-        control_path: FIRST_MANAGED_AGENT_CONTROL_PATH,
-        unit_allocations: [
-          {
-            unit_id: seededUnitId,
-            quantity: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
-          },
-        ],
-        status: 'active',
-        created_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
-        released_at: null,
-        superseded_by: null,
-      },
-    ],
-    policySnapshots: [
-      {
-        policy_snapshot_ref: seededPolicySnapshotRef,
-        agent_id: FIRST_MANAGED_AGENT_TYPE,
-        network: PORTFOLIO_MANAGER_NETWORK,
-        control_paths: [FIRST_MANAGED_AGENT_CONTROL_PATH],
-        unit_bounds: [
-          {
-            unit_id: seededUnitId,
-            quantity: FIRST_MANAGED_AGENT_ALLOCATION_QUANTITY,
-          },
-        ],
-        created_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
-      },
-    ],
+    activation: {
+      agentId: params.agentId,
+      purpose: PORTFOLIO_MANAGER_ACTIVATION_PURPOSE,
+      controlPath: PORTFOLIO_MANAGER_CONTROL_PATH,
+    },
   };
 }
 
