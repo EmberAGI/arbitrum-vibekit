@@ -762,6 +762,16 @@ describe('agent-ember-lending AG-UI integration', () => {
         }),
       }),
     );
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+        params: expect.objectContaining({
+          handoff: expect.objectContaining({
+            payload_builder_output: expect.anything(),
+          }),
+        }),
+      }),
+    );
   });
 
   it('serves lending execution over real AG-UI HTTP endpoints', async () => {

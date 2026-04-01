@@ -832,7 +832,7 @@ describe('createEmberLendingDomain', () => {
       outputs: {
         status: {
           executionStatus: 'completed',
-          statusMessage: 'Candidate lending plan materialized through Shared Ember.',
+          statusMessage: 'Candidate lending plan created through the Shared Ember planner.',
         },
         artifacts: [
           {
@@ -850,7 +850,7 @@ describe('createEmberLendingDomain', () => {
 
     expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
       jsonrpc: '2.0',
-      id: 'shared-ember-thread-1-materialize-candidate-plan',
+      id: 'shared-ember-thread-1-create-transaction-plan',
       method: 'subagent.createTransactionPlan.v1',
       params: {
         idempotency_key: 'idem-candidate-plan-001',
@@ -879,11 +879,6 @@ describe('createEmberLendingDomain', () => {
             why_this_path_is_best: 'lending.supply is the admitted path for this reservation',
             consequence_if_delayed: 'reserved capital remains idle',
             alternatives_considered: ['leave the unit idle'],
-          },
-          payload_builder_output: {
-            transaction_payload_ref: 'tx-lending-supply-001',
-            required_control_path: 'lending.supply',
-            network: 'arbitrum',
           },
         },
       },

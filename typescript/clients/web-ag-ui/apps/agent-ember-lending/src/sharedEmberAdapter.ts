@@ -694,7 +694,6 @@ function buildTransactionPlanningHandoff(input: {
     'action_summary',
     'candidate_unit_ids',
     'requested_quantities',
-    'payload_builder_output',
   ] as const) {
     if (key in commandInput) {
       handoff[key] = commandInput[key];
@@ -977,7 +976,7 @@ export function createEmberLendingDomain(
 
           const idempotencyKey =
             readStringKey(operation.input, 'idempotencyKey') ??
-            `idem-materialize-candidate-plan-${threadId}`;
+            `idem-create-transaction-plan-${threadId}`;
           const response = await runSharedEmberCommandWithResolvedRevision<{
             result?: {
               revision?: number;
@@ -991,7 +990,7 @@ export function createEmberLendingDomain(
             currentRevision: currentState.lastSharedEmberRevision,
             buildRequest: (expectedRevision) => ({
               jsonrpc: '2.0',
-              id: `shared-ember-${threadId}-materialize-candidate-plan`,
+              id: `shared-ember-${threadId}-create-transaction-plan`,
               method: 'subagent.createTransactionPlan.v1',
               params: {
                 idempotency_key: idempotencyKey,
@@ -1015,7 +1014,7 @@ export function createEmberLendingDomain(
             outputs: {
               status: {
                 executionStatus: 'completed',
-                statusMessage: 'Candidate lending plan materialized through Shared Ember.',
+                statusMessage: 'Candidate lending plan created through the Shared Ember planner.',
               },
               artifacts: [
                 {
@@ -1051,7 +1050,7 @@ export function createEmberLendingDomain(
                 status: {
                   executionStatus: 'failed',
                   statusMessage:
-                    'No lending transaction plan is available to execute. Materialize a candidate plan first.',
+                    'No lending transaction plan is available to execute. Create a candidate plan first.',
                 },
               },
             };
