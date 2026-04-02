@@ -4,6 +4,10 @@ import type {
 
 import { createEmberLendingDomain, type EmberLendingLifecycleState } from './sharedEmberAdapter.js';
 import {
+  createEmberLendingLocalOwsExecutionSigner,
+  resolveEmberLendingLocalOwsBaseUrl,
+} from './localOwsExecutionSigner.js';
+import {
   createEmberLendingSharedEmberHttpHost,
   resolveEmberLendingSharedEmberBaseUrl,
 } from './sharedEmberHttpHost.js';
@@ -18,6 +22,7 @@ export type EmberLendingGatewayEnv = NodeJS.ProcessEnv & {
   EMBER_LENDING_MODEL?: string;
   DATABASE_URL?: string;
   SHARED_EMBER_BASE_URL?: string;
+  EMBER_LENDING_OWS_BASE_URL?: string;
 };
 
 type EmberLendingAgentRuntimeOptions = CreateAgentRuntimeOptions<EmberLendingLifecycleState>;
@@ -67,9 +72,15 @@ export function createEmberLendingAgentConfig(
   const apiKey = requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.EMBER_LENDING_MODEL?.trim() || DEFAULT_EMBER_LENDING_MODEL;
   const sharedEmberBaseUrl = resolveEmberLendingSharedEmberBaseUrl(env);
+  const localOwsBaseUrl = resolveEmberLendingLocalOwsBaseUrl(env);
   const protocolHost = sharedEmberBaseUrl
     ? createEmberLendingSharedEmberHttpHost({
         baseUrl: sharedEmberBaseUrl,
+      })
+    : undefined;
+  const executionSigner = localOwsBaseUrl
+    ? createEmberLendingLocalOwsExecutionSigner({
+        baseUrl: localOwsBaseUrl,
       })
     : undefined;
 
@@ -80,6 +91,7 @@ export function createEmberLendingAgentConfig(
     tools: [],
     domain: createEmberLendingDomain({
       protocolHost,
+      executionSigner,
     }),
     agentOptions: {
       initialState: {

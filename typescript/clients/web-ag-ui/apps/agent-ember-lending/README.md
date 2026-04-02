@@ -15,7 +15,7 @@ subagent surface for:
 
 - portfolio-state reads
 - planner-backed candidate-plan creation
-- transaction-plan execution
+- transaction execution preparation and local signing behind one execution tool
 - escalation requests
 
 Direct lending-agent onboarding is intentionally out of scope here. The
@@ -33,6 +33,19 @@ Current execution-context semantics:
   sparse
 - `subagent_wallet_address` can still be `null` until a later delegation
   issuance path assigns a dedicated subagent wallet
+- local OWS signing stays inside the downstream service layer and must fail
+  closed if the prepared signing package does not match the resolved dedicated
+  subagent wallet identity
+
+Runtime wiring:
+
+- `SHARED_EMBER_BASE_URL` points the app at the bounded Shared Ember HTTP
+  surface
+- `EMBER_LENDING_OWS_BASE_URL` points the app at the local OWS signing surface
+  used for redelegation and execution signing
+- when `EMBER_LENDING_OWS_BASE_URL` is not configured, execution still uses the
+  new prepare path but fails locally when Shared Ember reaches a signing-ready
+  stage instead of falling back to the retired single-call execution path
 
 Like the portfolio manager app, this package should stay a thin downstream app.
 Shared Ember business logic and durable truth remain outside the app behind the
