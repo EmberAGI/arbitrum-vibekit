@@ -6,7 +6,7 @@ Scope: managed Portfolio Manager -> Ember Lending coordination over Shared Ember
 Follow-on note:
 - Issue `#559` supersedes this file's single-call execution-path assumptions.
 - Keep this file as the durable target-state contract for the `#555` three-tool surface and minimal execution-context boundary.
-- For the multi-call execution-preparation and local OWS signing follow-up, see `target-state-portfolio-manager-ember-lending-execution-signing-sequence.mdd`.
+- For the multi-call execution-preparation and direct OWS signing follow-up, see `target-state-portfolio-manager-ember-lending-execution-signing-sequence.mdd`.
 
 ## Contract summary
 
@@ -16,7 +16,7 @@ Follow-on note:
   - `request_transaction_execution`
   - `create_escalation_request`
 - Runtime-only behavior remains hidden:
-  - startup identity proof / rotation against local OWS + Shared Ember before the managed path is considered ready
+  - startup identity proof / rotation against direct OWS + Shared Ember before the managed path is considered ready
   - connect-time projection hydration
   - `subagent.readExecutionContext.v1` during system-context assembly
   - revision refresh / retry handling after Shared Ember conflicts
@@ -35,7 +35,7 @@ sequenceDiagram
   participant PM as agent-portfolio-manager
   participant EL as agent-ember-lending
   participant SE as Shared Ember
-  participant OWS as local OWS identity surface
+  participant OWS as direct OWS wallet resolution
   participant Planner as ember-cli planner path
 
   PM->>OWS: resolve controller wallet
@@ -95,4 +95,4 @@ sequenceDiagram
 - The managed lending mandate supplied at bootstrap should carry `managed_onboarding` so Shared Ember can derive the initial lane and delegation inputs from structured mandate data.
 - Portfolio-manager wallet accounting should resolve its onboarding-state `agent_id` from the activated managed mandate so operator-visible reservations and policy snapshots match the managed lane Ember Lending sees.
 - When Shared Ember has a durable subagent identity ready during onboarding, the first post-bootstrap execution-context read should already expose a non-null `subagent_wallet_address`, and Ember Lending should project it without any manual reseed step.
-- The current repo-local smoke for this contract is `pnpm smoke:managed-identities`; it intentionally stays on the downstream OWS-facing HTTP seam and does not absorb the separate OWS-internals follow-up.
+- The current repo-local smoke for this contract is `pnpm smoke:managed-identities`; it intentionally stays on the downstream runtime-owned direct OWS path and does not absorb the separate OWS-internals follow-up.
