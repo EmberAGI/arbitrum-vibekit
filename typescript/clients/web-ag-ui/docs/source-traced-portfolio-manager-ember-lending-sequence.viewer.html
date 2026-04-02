@@ -1,0 +1,1801 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Source-Traced Portfolio Manager to Ember Lending Sequence</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #ffffff;
+        color: #111827;
+      }
+
+      h1 {
+        margin-top: 0;
+      }
+
+      .topbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(320px, 480px) 1fr;
+        gap: 24px;
+      }
+
+      .layout.sidebar-collapsed {
+        grid-template-columns: 1fr;
+      }
+
+      .layout.sidebar-collapsed .editor-pane {
+        display: none;
+      }
+
+      .review-panel {
+        margin-bottom: 16px;
+        padding: 12px;
+        border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+        border-radius: 10px;
+        background: #ffffff;
+      }
+
+      .review-panel h2 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+
+      .review-panel p {
+        margin: 0 0 8px;
+        font-size: 14px;
+        opacity: 0.8;
+      }
+
+      .review-feed {
+        width: 100%;
+        min-height: 140px;
+        box-sizing: border-box;
+        font:
+          13px/1.45 ui-monospace,
+          SFMono-Regular,
+          monospace;
+        white-space: pre;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 70vh;
+        box-sizing: border-box;
+        background: #ffffff;
+        color: #111827;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font:
+          14px/1.4 ui-monospace,
+          SFMono-Regular,
+          monospace;
+      }
+
+      #diagram {
+        display: inline-block;
+        min-width: max-content;
+      }
+
+      button {
+        margin-top: 12px;
+        padding: 10px 14px;
+        background: #ffffff;
+        color: #111827;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+        align-items: center;
+      }
+
+      .controls button {
+        margin-top: 0;
+      }
+
+      .zoom-label {
+        font-size: 14px;
+        opacity: 0.8;
+      }
+
+      .diagram-stage {
+        position: relative;
+        overflow: auto;
+        border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+        border-radius: 8px;
+        padding: 16px;
+        min-height: 70vh;
+        cursor: grab;
+      }
+
+      .diagram-stage.panning {
+        cursor: grabbing;
+        user-select: none;
+      }
+
+      .diagram-stage svg text,
+      .diagram-stage svg tspan {
+        cursor: text;
+      }
+
+      .annotated-target.messageText,
+      .annotated-target.noteText,
+      .annotated-target.text,
+      .annotated-target.actor-box,
+      .annotated-target.labelText,
+      .annotated-target.loopText {
+        fill: #b45309;
+        font-weight: 600;
+      }
+
+      .annotated-target.messageLine0,
+      .annotated-target.messageLine1 {
+        stroke: #b45309 !important;
+        stroke-width: 4px !important;
+      }
+
+      .annotated-target.note,
+      .annotated-target.rect,
+      .annotated-target.actor,
+      .annotated-target.labelBox {
+        stroke: #b45309;
+        stroke-width: 2.5px;
+      }
+
+      .annotation-highlight.messageText,
+      .annotation-highlight.noteText,
+      .annotation-highlight.text,
+      .annotation-highlight.actor-box,
+      .annotation-highlight.labelText,
+      .annotation-highlight.loopText {
+        fill: #92400e;
+        font-weight: 700;
+      }
+
+      .annotation-highlight.messageLine0,
+      .annotation-highlight.messageLine1 {
+        stroke: #92400e !important;
+        stroke-width: 5px !important;
+      }
+
+      .annotation-highlight.note,
+      .annotation-highlight.rect,
+      .annotation-highlight.actor,
+      .annotation-highlight.labelBox {
+        stroke: #92400e;
+        stroke-width: 3px;
+      }
+
+      .annotation-dot {
+        fill: #f59e0b;
+        stroke: white;
+        stroke-width: 1.5px;
+      }
+
+      .annotation-tooltip {
+        position: absolute;
+        z-index: 10;
+        max-width: 320px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+        background: color-mix(in srgb, white 92%, #f59e0b 8%);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+        font-size: 14px;
+        line-height: 1.4;
+        display: none;
+      }
+
+      .annotation-tooltip.visible {
+        display: block;
+      }
+
+      .annotation-tooltip header {
+        font-size: 12px;
+        opacity: 0.8;
+        margin-bottom: 8px;
+      }
+
+      .annotation-tooltip .selection {
+        margin: 0 0 8px;
+        font:
+          12px/1.4 ui-monospace,
+          SFMono-Regular,
+          monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+        opacity: 0.85;
+      }
+
+      .annotation-tooltip .note {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .annotation-tooltip .meta,
+      .annotation-tooltip .discussion {
+        margin: 0 0 8px;
+        font-size: 12px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
+        opacity: 0.85;
+      }
+
+      .annotation-tooltip textarea {
+        width: 100%;
+        min-height: 88px;
+        margin: 8px 0;
+        box-sizing: border-box;
+        font:
+          13px/1.4 ui-monospace,
+          SFMono-Regular,
+          monospace;
+      }
+
+      .annotation-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .annotation-actions button {
+        margin-top: 0;
+        padding: 8px 10px;
+      }
+
+      #annotation-banner {
+        display: none;
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: color-mix(in srgb, #f59e0b 20%, transparent);
+        font-size: 14px;
+      }
+
+      #annotation-banner.visible {
+        display: block;
+      }
+
+      .annotation-highlight {
+        fill: color-mix(in srgb, #f59e0b 20%, white);
+        stroke: #f59e0b;
+        stroke-width: 1.5px;
+      }
+
+      .column-overlay {
+        position: absolute;
+        top: 0;
+        z-index: 6;
+        display: none;
+        height: 92px;
+        pointer-events: none;
+        overflow: hidden;
+      }
+
+      .column-overlay.visible {
+        display: block;
+      }
+
+      .column-overlay.fixed {
+        position: fixed;
+        top: 0;
+      }
+
+      .column-overlay-track {
+        position: relative;
+        height: 100%;
+        will-change: transform;
+      }
+
+      .column-overlay-item {
+        position: absolute;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+        border-bottom-width: 2px;
+        border-radius: 0 0 12px 12px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+        backdrop-filter: blur(6px);
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .column-overlay-item.group {
+        top: 0;
+        height: 30px;
+        padding: 6px 10px;
+        border-radius: 0 0 10px 10px;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        justify-content: flex-start;
+        text-align: left;
+      }
+
+      .column-overlay-item.participant {
+        top: 38px;
+        height: 42px;
+        border-radius: 0 0 12px 12px;
+      }
+
+      dialog {
+        width: min(720px, calc(100vw - 48px));
+        border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+        border-radius: 12px;
+        padding: 0;
+        background: #ffffff;
+        color: #111827;
+      }
+
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.35);
+      }
+
+      .dialog-body {
+        padding: 16px;
+      }
+
+      .dialog-body h2 {
+        margin-top: 0;
+      }
+
+      .dialog-body textarea {
+        min-height: 240px;
+      }
+
+      @media (max-width: 900px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Source-Traced Portfolio Manager to Ember Lending Sequence</h1>
+    <section class="review-panel">
+      <h2>Review Feed</h2>
+      <p>
+        Use this block for durable review. It mirrors the current saved
+        annotations in a simple text format.
+      </p>
+      <textarea id="review-feed" class="review-feed" readonly></textarea>
+    </section>
+    <div class="topbar">
+      <button id="toggle-sidebar" type="button">Hide Code</button>
+      <button id="render" type="button">Render Diagram</button>
+      <button id="zoom-out" type="button">-</button>
+      <button id="zoom-reset" type="button">100%</button>
+      <button id="zoom-in" type="button">+</button>
+      <button id="export-annotations" type="button">Export Annotations</button>
+      <button id="import-annotations" type="button">Import Annotations</button>
+      <button id="clear-annotations" type="button">Clear Annotations</button>
+      <span id="zoom-label" class="zoom-label">Zoom: 100%</span>
+    </div>
+    <div class="layout">
+      <div class="editor-pane">
+        <textarea id="source">
+sequenceDiagram
+  participant User
+  participant Web as apps/web
+  participant Wallet as Privy wallet + delegation toolkit
+  participant CK as /api/copilotkit
+  participant PM as agent-portfolio-manager
+  participant SE as Shared Ember Domain Service
+  participant EL as agent-ember-lending (lending subagent)
+  participant Model as OpenRouter model
+
+  rect rgba(15, 118, 110, 0.08)
+    Note over User,SE: Portfolio Manager onboarding writes the durable Shared Ember records later re-read by Ember Lending.
+    User->>Web: Click Hire on Portfolio Manager
+    Web->>CK: AG-UI run(command.name="hire")
+    CK->>PM: forwardedProps.command.name="hire"
+    PM-->>CK: input-required "portfolio-manager-setup-request"
+    CK-->>Web: setup interrupt
+
+    User->>Web: Submit connected wallet
+    Web->>Web: buildPortfolioManagerSetupInput(walletAddress)
+    Web->>CK: AG-UI run(command.resume=setup JSON)
+    CK->>PM: resume setup interrupt
+    PM->>PM: save phase=onboarding + activeWalletAddress + pendingOnboardingWalletAddress + pendingApprovedMandateEnvelope
+    PM-->>CK: input-required "portfolio-manager-delegation-signing-request"
+    CK-->>Web: unsigned delegation payload
+
+    User->>Wallet: Sign delegation(s)
+    Wallet-->>Web: signedDelegations[]
+    Web->>CK: AG-UI run(command.resume=signed JSON)
+    CK->>PM: resume signing interrupt
+    PM->>PM: build onboarding bootstrap + root-delegation handoff
+
+    PM->>SE: subagent.readPortfolioState.v1(agent_id="portfolio-manager")
+    SE-->>PM: current revision
+    PM->>SE: orchestrator.completeRootedBootstrapFromUserSigning.v1(idempotency_key, expected_revision, onboarding, handoff)
+    Note right of SE: onboarding seeds rootedWalletContext,<br/>mandates[portfolio-manager, ember-lending],<br/>capitalObservation, userReservePolicies[],<br/>ownedUnits, reservations, and policySnapshots
+    Note right of SE: handoff seeds handoff_id, root_delegation_id,<br/>user_id, user_wallet, orchestrator_wallet,<br/>network, artifact_ref, and metadata
+    opt protocol_conflict(expected_revision)
+      SE-->>PM: protocol_conflict
+      PM->>SE: subagent.readPortfolioState.v1(agent_id="portfolio-manager")
+      SE-->>PM: refreshed revision
+      PM->>SE: orchestrator.completeRootedBootstrapFromUserSigning.v1(...)
+    end
+    SE-->>PM: revision + committed_event_ids + rooted_wallet_context_id + root_delegation
+    PM-->>CK: working status + state.phase=active + shared-ember-rooted-bootstrap artifact
+    CK-->>Web: active Portfolio Manager snapshot
+  end
+
+  rect rgba(180, 120, 0, 0.08)
+    Note over PM,EL: These runtimes do not call each other directly. Shared Ember is the only persisted handoff between them.
+    Note over User,EL: Direct Ember Lending hire/fire commands exist, but they only return "use the portfolio manager" failures.
+    User->>Web: Open Ember Lending detail page
+    Web->>CK: AG-UI connect(agent-ember-lending, threadId)
+    CK->>EL: POST /connect
+    EL->>EL: service.control.listThreads()
+    alt persisted runtime projection already exists
+      EL-->>CK: connect snapshot from persisted PI-runtime thread state
+    else no persisted managed projection for thread
+      EL->>EL: internal run(command.name="hydrate_runtime_projection")
+      EL->>SE: subagent.readPortfolioState.v1(agent_id="ember-lending")
+      SE-->>EL: revision + portfolio_state
+      alt portfolio_state contains owned_units, reservations, mandate_ref, or identity fields
+        EL->>EL: set phase=active
+      else no managed projection in portfolio_state
+        EL->>EL: keep current phase
+      end
+      EL->>EL: persist lastPortfolioState + lastSharedEmberRevision
+      alt portfolio_state is a record
+        EL->>EL: replace mandate/wallet/rooted-wallet projection from this payload, and missing fields inside the record become null
+      else portfolio_state is null or non-record
+        EL->>EL: preserve prior mandate/wallet/rooted-wallet projection
+      end
+    end
+    EL-->>CK: connect snapshot
+    CK-->>Web: first Ember Lending snapshot
+  end
+
+  rect rgba(11, 87, 208, 0.08)
+    User->>Web: Ask Ember Lending to deploy or supply reserved capital
+    Web->>CK: AG-UI run(messages)
+    CK->>EL: run without forwardedProps.command
+
+    EL->>EL: build systemContext through agent-runtime
+    opt rootUserWalletAddress is present and protocol host is configured
+      EL->>SE: orchestrator.readOnboardingState.v1(agent_id="portfolio-manager", wallet_address=rootUserWalletAddress, network="arbitrum")
+      alt onboarding_state returned
+        SE-->>EL: revision + onboarding_state(wallet_address, network, phase, proofs, rooted_wallet_context, root_delegation, owned_units, reservations)
+      else read fails or onboarding_state missing
+        SE-->>EL: error
+        EL->>EL: append shared_ember_accounting_context status="unavailable"
+      end
+    end
+    EL->>Model: invoke inference with systemPrompt + Ember Lending systemContext
+    Note over EL,Model: systemContext includes lifecycle phase, mandateRef, mandateSummary,<br/>mandateContext JSON, subagent/root wallets, reservation summary,<br/>last candidate plan summary, last execution tx hash,<br/>last escalation summary, and optional Shared Ember accounting context
+
+    opt model refreshes lending-lane state first
+      Model->>EL: agent_runtime_domain_command(name="read_portfolio_state", inputJson)
+      EL->>SE: subagent.readPortfolioState.v1(agent_id="ember-lending")
+      SE-->>EL: revision + portfolio_state
+      EL->>EL: persist lastPortfolioState + lastSharedEmberRevision
+      alt portfolio_state is a record
+        EL->>EL: replace projected mandate/wallet/rooted-wallet fields from this payload, and omitted fields inside the record become null
+      else portfolio_state is null or non-record
+        EL->>EL: preserve prior projected mandate/wallet/rooted-wallet fields
+      end
+      EL->>EL: set phase=active only when portfolio_state still has a managed projection
+      EL-->>CK: shared-ember-portfolio-state artifact
+      CK-->>Web: refreshed lending-lane snapshot
+    end
+
+    Model->>EL: agent_runtime_domain_command(name="materialize_candidate_plan", inputJson)
+    EL->>EL: buildManagedSubagentHandoff(state + tool input)
+    alt walletAddress/rootUserWalletAddress/mandateRef missing or agent wallet equals root user wallet
+      EL-->>CK: failed status "Lending runtime context is incomplete. Refresh portfolio state before planning."
+      CK-->>Web: failed planning snapshot
+    else handoff accepted
+      EL->>SE: subagent.materializeCandidatePlan.v1(idempotency_key, expected_revision, handoff)
+      opt protocol_conflict(expected_revision)
+        SE-->>EL: protocol_conflict
+        EL->>SE: subagent.readPortfolioState.v1(agent_id="ember-lending")
+        SE-->>EL: refreshed revision
+        EL->>SE: subagent.materializeCandidatePlan.v1(...)
+      end
+      SE-->>EL: revision + committed_event_ids + candidate_plan(transaction_plan_id, compact_plan_summary)
+      EL->>EL: set phase=active + save lastCandidatePlan + lastCandidatePlanSummary
+      EL-->>CK: shared-ember-candidate-plan artifact
+      CK-->>Web: candidate transaction plan snapshot
+    end
+
+    Model->>EL: agent_runtime_domain_command(name="execute_transaction_plan", inputJson)
+    EL->>EL: read transaction_plan_id from input or lastCandidatePlan
+    alt no transaction_plan_id in input or lastCandidatePlan
+      EL-->>CK: failed status "No lending transaction plan is available to execute. Materialize a candidate plan first."
+      CK-->>Web: failed execution snapshot
+    else transaction_plan_id available
+      EL->>SE: subagent.executeTransactionPlan.v1(idempotency_key, expected_revision, transaction_plan_id)
+      opt protocol_conflict(expected_revision)
+        SE-->>EL: protocol_conflict
+        EL->>SE: subagent.readPortfolioState.v1(agent_id="ember-lending")
+        SE-->>EL: refreshed revision
+        EL->>SE: subagent.executeTransactionPlan.v1(...)
+      end
+      SE-->>EL: revision + committed_event_ids + execution_result(transaction_hash, portfolio_state)
+      EL->>EL: set phase=active + save lastExecutionResult + lastExecutionTxHash
+      alt execution_result.portfolio_state is a record
+        EL->>EL: persist it as lastPortfolioState and replace projected mandate/wallet/rooted-wallet fields from that payload
+      else execution_result.portfolio_state is null or non-record
+        EL->>EL: keep prior lastPortfolioState and prior projected mandate/wallet/rooted-wallet fields
+      end
+      Note over EL,SE: Current source submits through Shared Ember directly.<br/>There is no separate Ember Lending wallet-signature UI step.
+      EL-->>CK: shared-ember-execution-result artifact
+      CK-->>Web: updated task/activity/tx snapshot
+      Web-->>User: show executed lending transaction + tx hash
+    end
+
+    opt model escalates a blocked outcome instead of continuing locally
+      Model->>EL: agent_runtime_domain_command(name="create_escalation_request", inputJson)
+      EL->>EL: buildManagedSubagentHandoff(state + tool input)
+      alt walletAddress/rootUserWalletAddress/mandateRef missing or agent wallet equals root user wallet
+        EL-->>CK: failed status "Lending runtime context is incomplete. Refresh portfolio state before escalating."
+        CK-->>Web: failed escalation snapshot
+      else handoff accepted
+        EL->>EL: read result from input.result or full input
+        EL->>SE: subagent.createEscalationRequest.v1(handoff, result)
+        SE-->>EL: revision + escalation_request
+        EL->>EL: set phase=active + save lastEscalationRequest + lastEscalationSummary
+        EL-->>CK: shared-ember-escalation-request artifact
+        CK-->>Web: blocked/escalation snapshot
+      end
+    end
+  end</textarea
+        >
+      </div>
+      <div class="diagram-stage">
+        <div id="annotation-banner"></div>
+        <div id="column-overlay" class="column-overlay"></div>
+        <div id="diagram"></div>
+        <div id="annotation-tooltip" class="annotation-tooltip"></div>
+      </div>
+    </div>
+    <dialog id="annotations-dialog">
+      <div class="dialog-body">
+        <h2 id="annotations-dialog-title">Annotations</h2>
+        <textarea id="annotations-json"></textarea>
+        <div class="annotation-actions">
+          <button id="copy-annotations" type="button">Copy JSON</button>
+          <button id="apply-annotations" type="button">Apply JSON</button>
+          <button id="close-annotations-dialog" type="button">Close</button>
+        </div>
+      </div>
+    </dialog>
+
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "default",
+        securityLevel: "loose",
+      });
+
+      const sourceEl = document.getElementById("source");
+      const diagramEl = document.getElementById("diagram");
+      const renderButton = document.getElementById("render");
+      const layoutEl = document.querySelector(".layout");
+      const diagramStageEl = document.querySelector(".diagram-stage");
+      const zoomInButton = document.getElementById("zoom-in");
+      const zoomOutButton = document.getElementById("zoom-out");
+      const zoomResetButton = document.getElementById("zoom-reset");
+      const zoomLabel = document.getElementById("zoom-label");
+      const toggleSidebarButton = document.getElementById("toggle-sidebar");
+      const exportAnnotationsButton =
+        document.getElementById("export-annotations");
+      const importAnnotationsButton =
+        document.getElementById("import-annotations");
+      const clearAnnotationsButton =
+        document.getElementById("clear-annotations");
+      const annotationBannerEl = document.getElementById("annotation-banner");
+      const columnOverlayEl = document.getElementById("column-overlay");
+      const annotationTooltipEl = document.getElementById("annotation-tooltip");
+      const reviewFeedEl = document.getElementById("review-feed");
+      const annotationsDialogEl = document.getElementById("annotations-dialog");
+      const annotationsDialogTitleEl = document.getElementById(
+        "annotations-dialog-title",
+      );
+      const annotationsJsonEl = document.getElementById("annotations-json");
+      const copyAnnotationsButton = document.getElementById("copy-annotations");
+      const applyAnnotationsButton =
+        document.getElementById("apply-annotations");
+      const closeAnnotationsDialogButton = document.getElementById(
+        "close-annotations-dialog",
+      );
+      const annotationStorageKey = `annotatable-mermaid-viewer:${window.location.pathname}:annotations`;
+      const stickyOverlayStagePadding = 16;
+      const stickyOverlayHeight = 92;
+      let zoom = 1;
+      let sidebarCollapsed = false;
+      let isPanning = false;
+      let panStartX = 0;
+      let panStartY = 0;
+      let panScrollLeft = 0;
+      let panScrollTop = 0;
+      let annotations = loadAnnotations();
+      let pinnedAnnotationId = null;
+      let editingAnnotationId = null;
+      let draftSelection = null;
+
+      function normalizeAnnotationType(note) {
+        const trimmedNote = note.trim().toLowerCase();
+        if (!trimmedNote) {
+          return "note";
+        }
+
+        if (trimmedNote.endsWith("?")) {
+          return "question";
+        }
+
+        return /^(who|what|when|where|why|how|should|could|would|can|is|are|do|does|did)\b/.test(
+          trimmedNote,
+        )
+          ? "question"
+          : "note";
+      }
+
+      function normalizeAnnotation(annotation) {
+        const note =
+          typeof annotation.note === "string"
+            ? annotation.note
+            : "(No note provided)";
+
+        return {
+          ...annotation,
+          note,
+          targetId:
+            typeof annotation.targetId === "string" ? annotation.targetId : "",
+          targetKind:
+            typeof annotation.targetKind === "string"
+              ? annotation.targetKind
+              : "",
+          type:
+            annotation.type === "question" || annotation.type === "note"
+              ? annotation.type
+              : normalizeAnnotationType(note),
+          status: annotation.status === "addressed" ? "addressed" : "open",
+          discussion:
+            typeof annotation.discussion === "string"
+              ? annotation.discussion
+              : "",
+        };
+      }
+
+      function loadAnnotations() {
+        try {
+          const raw = window.localStorage.getItem(annotationStorageKey);
+          if (!raw) {
+            return [];
+          }
+
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed.map(normalizeAnnotation) : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function getActiveAnnotations() {
+        return annotations.filter(
+          (annotation) => annotation.status !== "addressed",
+        );
+      }
+
+      function persistAnnotations() {
+        annotations = annotations.map(normalizeAnnotation);
+        if (annotations.length === 0) {
+          window.localStorage.removeItem(annotationStorageKey);
+        } else {
+          window.localStorage.setItem(
+            annotationStorageKey,
+            JSON.stringify(annotations),
+          );
+        }
+        window.__ANNOTATION_STORAGE_KEY__ = annotationStorageKey;
+        window.__ANNOTATIONS__ = annotations;
+        window.__ANNOTATIONS_TEXT__ = annotations
+          .map((item) =>
+            [
+              `#${item.id}`,
+              `STATUS: ${item.status}`,
+              `TYPE: ${item.type}`,
+              `SOURCE: ${item.source}`,
+              item.targetKind
+                ? `TARGET: ${item.targetKind}${item.targetId ? ` · ${item.targetId}` : ""}`
+                : "",
+              `SELECTION: ${item.selection}`,
+              `NOTE: ${item.note}`,
+              item.discussion ? `DISCUSSION: ${item.discussion}` : "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          )
+          .join("\n\n---\n\n");
+        reviewFeedEl.value = window.__ANNOTATIONS_TEXT__ || "";
+      }
+
+      function resetAnnotationState() {
+        annotations = [];
+        pinnedAnnotationId = null;
+        editingAnnotationId = null;
+        draftSelection = null;
+        persistAnnotations();
+        clearDiagramHighlights();
+        columnOverlayEl.innerHTML = "";
+        columnOverlayEl.classList.remove("visible");
+        annotationTooltipEl.classList.remove("visible");
+        renderAnnotations();
+      }
+
+      persistAnnotations();
+
+      function showAnnotationBanner(message) {
+        annotationBannerEl.textContent = message;
+        annotationBannerEl.classList.add("visible");
+        window.clearTimeout(showAnnotationBanner.timeoutId);
+        showAnnotationBanner.timeoutId = window.setTimeout(() => {
+          annotationBannerEl.classList.remove("visible");
+        }, 2500);
+      }
+
+      function clearDiagramHighlights() {
+        diagramEl.querySelectorAll(".annotation-highlight").forEach((node) => {
+          node.classList.remove("annotation-highlight");
+        });
+      }
+
+      function clearIndexedTargets() {
+        diagramEl
+          .querySelectorAll("[data-annotation-target-id]")
+          .forEach((node) => {
+            delete node.dataset.annotationTargetId;
+            delete node.dataset.annotationTargetKind;
+            delete node.dataset.annotationTargetRole;
+          });
+      }
+
+      function assignTarget(nodes, targetId, targetKind) {
+        nodes.forEach((node) => {
+          if (!node) {
+            return;
+          }
+
+          node.dataset.annotationTargetId = targetId;
+          node.dataset.annotationTargetKind = targetKind;
+          node.dataset.annotationTargetRole =
+            node instanceof SVGTextElement || node instanceof SVGTSpanElement
+              ? "text"
+              : "shape";
+        });
+      }
+
+      function indexDiagramTargets() {
+        const svgEl = diagramEl.querySelector("svg");
+        if (!svgEl) {
+          return;
+        }
+
+        clearIndexedTargets();
+
+        svgEl.querySelectorAll("g").forEach((group, index) => {
+          const noteRect = group.querySelector(":scope > rect.note");
+          const noteText = group.querySelector(":scope > text.noteText");
+          if (noteRect && noteText) {
+            assignTarget(
+              [noteRect, noteText, ...noteText.querySelectorAll("tspan")],
+              `note:${index}`,
+              "note",
+            );
+          }
+        });
+
+        svgEl.querySelectorAll("g[id^='root-']").forEach((group, index) => {
+          const actorRect = group.querySelector(":scope > rect.actor");
+          const actorText = group.querySelector(":scope > text.actor-box");
+          if (actorRect && actorText) {
+            assignTarget(
+              [actorRect, actorText, ...actorText.querySelectorAll("tspan")],
+              `actor:${index}`,
+              "actor",
+            );
+          }
+        });
+
+        svgEl.querySelectorAll("g").forEach((group, index) => {
+          const boxRect = group.querySelector(":scope > rect.rect");
+          const boxText = group.querySelector(":scope > text.text");
+          if (
+            boxRect &&
+            boxText &&
+            Number(boxRect.getAttribute("y") || 0) <= 0
+          ) {
+            assignTarget(
+              [boxRect, boxText, ...boxText.querySelectorAll("tspan")],
+              `box:${index}`,
+              "box",
+            );
+          }
+        });
+
+        const messageTexts = [...svgEl.querySelectorAll("text.messageText")];
+        const messageLines = [
+          ...svgEl.querySelectorAll("line.messageLine0, line.messageLine1"),
+        ];
+        messageTexts.forEach((textNode, index) => {
+          assignTarget(
+            [
+              textNode,
+              ...textNode.querySelectorAll("tspan"),
+              messageLines[index],
+            ].filter(Boolean),
+            `message:${index}`,
+            "message",
+          );
+        });
+
+        let genericIndex = 0;
+        svgEl.querySelectorAll("text, tspan").forEach((node) => {
+          if (!node.dataset.annotationTargetId) {
+            assignTarget([node], `text:${genericIndex}`, "text");
+            genericIndex += 1;
+          }
+        });
+      }
+
+      function getAnnotationNodes(annotation) {
+        const svgEl = diagramEl.querySelector("svg");
+        if (!svgEl) {
+          return [];
+        }
+
+        if (annotation.targetId) {
+          const matches = [
+            ...svgEl.querySelectorAll(
+              `[data-annotation-target-id="${CSS.escape(annotation.targetId)}"]`,
+            ),
+          ];
+          if (matches.length > 0) {
+            return matches;
+          }
+        }
+
+        const normalizedSelection = annotation.selection
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
+        if (!normalizedSelection) {
+          return [];
+        }
+
+        const exactMatches = [...svgEl.querySelectorAll("text, tspan")].filter(
+          (node) => {
+            const text = node.textContent
+              ?.replace(/\s+/g, " ")
+              .trim()
+              .toLowerCase();
+            return text === normalizedSelection;
+          },
+        );
+        if (exactMatches.length > 0) {
+          return exactMatches;
+        }
+
+        return [...svgEl.querySelectorAll("text, tspan")].filter((node) => {
+          const text = node.textContent
+            ?.replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase();
+          return text && text.includes(normalizedSelection);
+        });
+      }
+
+      function getAnnotationAnchor(nodes) {
+        return (
+          nodes.find((node) => node.dataset.annotationTargetRole === "text") ||
+          nodes.find((node) => typeof node.getBBox === "function") ||
+          null
+        );
+      }
+
+      function highlightAnnotation(annotation) {
+        clearDiagramHighlights();
+        getAnnotationNodes(annotation).forEach((node) => {
+          node.classList.add("annotation-highlight");
+        });
+      }
+
+      function hideAnnotationTooltip() {
+        if (
+          pinnedAnnotationId !== null ||
+          editingAnnotationId !== null ||
+          draftSelection !== null
+        ) {
+          return;
+        }
+
+        annotationTooltipEl.classList.remove("visible");
+      }
+
+      function positionTooltip(anchor) {
+        const stageRect = diagramStageEl.getBoundingClientRect();
+        const targetRect =
+          "rect" in anchor ? anchor.rect : anchor.getBoundingClientRect();
+        const top =
+          targetRect.top - stageRect.top + diagramStageEl.scrollTop - 12;
+        const left =
+          targetRect.left -
+          stageRect.left +
+          diagramStageEl.scrollLeft +
+          targetRect.width +
+          12;
+        annotationTooltipEl.style.top = `${Math.max(8, top)}px`;
+        annotationTooltipEl.style.left = `${Math.max(8, left)}px`;
+      }
+
+      function preserveViewport(callback) {
+        const pageX = window.scrollX;
+        const pageY = window.scrollY;
+        const stageLeft = diagramStageEl.scrollLeft;
+        const stageTop = diagramStageEl.scrollTop;
+
+        callback();
+
+        window.scrollTo(pageX, pageY);
+        diagramStageEl.scrollLeft = stageLeft;
+        diagramStageEl.scrollTop = stageTop;
+      }
+
+      function showAnnotationTooltip(annotation, anchor, expanded = false) {
+        preserveViewport(() => {
+          annotationTooltipEl.innerHTML = `
+            <header>${annotation.source} · #${annotation.id}</header>
+            <p class="selection">${annotation.selection}</p>
+            <p class="meta">type: ${annotation.type} · status: ${annotation.status}</p>
+            <p class="note">${expanded ? annotation.note : annotation.note.slice(0, 120)}${expanded || annotation.note.length <= 120 ? "" : "..."}</p>
+            ${expanded && annotation.discussion ? `<p class="discussion">discussion: ${annotation.discussion}</p>` : ""}
+            ${
+              expanded
+                ? `<div class="annotation-actions">
+                    <button id="edit-annotation" type="button">Edit</button>
+                    ${
+                      annotation.status === "addressed"
+                        ? ""
+                        : annotation.type === "question"
+                          ? '<button id="resolve-annotation" type="button">Answer & Address</button>'
+                          : '<button id="resolve-annotation" type="button">Mark Addressed</button>'
+                    }
+                    <button id="close-annotation" type="button">Close</button>
+                  </div>`
+                : ""
+            }
+          `;
+          positionTooltip(anchor);
+          annotationTooltipEl.classList.add("visible");
+        });
+
+        if (expanded) {
+          annotationTooltipEl
+            .querySelector("#edit-annotation")
+            ?.addEventListener("click", (event) => {
+              event.stopPropagation();
+              showAnnotationEditor(annotation, anchor);
+            });
+          annotationTooltipEl
+            .querySelector("#resolve-annotation")
+            ?.addEventListener("click", (event) => {
+              event.stopPropagation();
+              if (annotation.type === "question") {
+                showAnnotationResolutionEditor(annotation, anchor);
+                return;
+              }
+
+              annotations = annotations.map((item) =>
+                item.id === annotation.id
+                  ? { ...item, status: "addressed" }
+                  : item,
+              );
+              editingAnnotationId = null;
+              draftSelection = null;
+              pinnedAnnotationId = null;
+              persistAnnotations();
+              clearDiagramHighlights();
+              annotationTooltipEl.classList.remove("visible");
+              renderAnnotations();
+              showAnnotationBanner(
+                "Annotation marked addressed and removed from the active canvas.",
+              );
+            });
+          annotationTooltipEl
+            .querySelector("#close-annotation")
+            ?.addEventListener("click", (event) => {
+              event.stopPropagation();
+              editingAnnotationId = null;
+              draftSelection = null;
+              pinnedAnnotationId = null;
+              clearDiagramHighlights();
+              annotationTooltipEl.classList.remove("visible");
+            });
+        }
+      }
+
+      function showAnnotationResolutionEditor(annotation, anchor) {
+        preserveViewport(() => {
+          annotationTooltipEl.innerHTML = `
+            <header>${annotation.source} · #${annotation.id}</header>
+            <p class="selection">${annotation.selection}</p>
+            <p class="note">${annotation.note}</p>
+            <textarea id="annotation-discussion-input" placeholder="Answer the question or add the discussion that resolves it...">${annotation.discussion}</textarea>
+            <div class="annotation-actions">
+              <button id="save-annotation-resolution" type="button">Save Response & Address</button>
+              <button id="cancel-annotation-resolution" type="button">Cancel</button>
+            </div>
+          `;
+          positionTooltip(anchor);
+          annotationTooltipEl.classList.add("visible");
+        });
+
+        const input = annotationTooltipEl.querySelector(
+          "#annotation-discussion-input",
+        );
+        input?.focus({ preventScroll: true });
+
+        annotationTooltipEl
+          .querySelector("#save-annotation-resolution")
+          ?.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const discussion = input?.value.trim() || "";
+            if (!discussion) {
+              showAnnotationBanner(
+                "Question annotations need an explicit answer or discussion before they are addressed.",
+              );
+              return;
+            }
+
+            annotations = annotations.map((item) =>
+              item.id === annotation.id
+                ? { ...item, discussion, status: "addressed" }
+                : item,
+            );
+            editingAnnotationId = null;
+            draftSelection = null;
+            pinnedAnnotationId = null;
+            persistAnnotations();
+            clearDiagramHighlights();
+            annotationTooltipEl.classList.remove("visible");
+            renderAnnotations();
+            showAnnotationBanner(
+              "Question answered and cleared from the active canvas.",
+            );
+          });
+
+        annotationTooltipEl
+          .querySelector("#cancel-annotation-resolution")
+          ?.addEventListener("click", (event) => {
+            event.stopPropagation();
+            showAnnotationTooltip(annotation, anchor, true);
+          });
+      }
+
+      function showAnnotationEditor(annotationOrDraft, anchor) {
+        const isExisting = Object.prototype.hasOwnProperty.call(
+          annotationOrDraft,
+          "id",
+        );
+        editingAnnotationId = isExisting ? annotationOrDraft.id : null;
+        draftSelection = isExisting ? null : annotationOrDraft;
+
+        preserveViewport(() => {
+          annotationTooltipEl.innerHTML = `
+            <header>${annotationOrDraft.source}${isExisting ? ` · #${annotationOrDraft.id}` : " · new annotation"}</header>
+            <p class="selection">${annotationOrDraft.selection}</p>
+            <textarea id="annotation-note-input" placeholder="Add annotation feedback...">${isExisting ? annotationOrDraft.note : ""}</textarea>
+            <div class="annotation-actions">
+              <button id="save-annotation" type="button">${isExisting ? "Save" : "Add Annotation"}</button>
+              <button id="cancel-annotation" type="button">Cancel</button>
+            </div>
+          `;
+          positionTooltip(anchor);
+          annotationTooltipEl.classList.add("visible");
+        });
+
+        const input = annotationTooltipEl.querySelector(
+          "#annotation-note-input",
+        );
+        input?.focus({ preventScroll: true });
+
+        annotationTooltipEl
+          .querySelector("#save-annotation")
+          ?.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const note = input?.value.trim() || "(No note provided)";
+            const type = normalizeAnnotationType(note);
+
+            if (isExisting) {
+              annotations = annotations.map((item) =>
+                item.id === annotationOrDraft.id
+                  ? { ...item, note, type }
+                  : item,
+              );
+              pinnedAnnotationId = annotationOrDraft.id;
+            } else {
+              const nextId =
+                annotations.reduce((max, item) => Math.max(max, item.id), 0) +
+                1;
+              annotations = [
+                ...annotations,
+                {
+                  ...annotationOrDraft,
+                  id: nextId,
+                  note,
+                  type,
+                  status: "open",
+                },
+              ];
+              pinnedAnnotationId = nextId;
+            }
+
+            persistAnnotations();
+            renderAnnotations();
+            const latest = annotations.find(
+              (item) => item.id === pinnedAnnotationId,
+            );
+            const latestTarget = latest
+              ? getAnnotationAnchor(getAnnotationNodes(latest))
+              : null;
+            if (latest && latestTarget) {
+              highlightAnnotation(latest);
+              showAnnotationTooltip(latest, latestTarget, true);
+            }
+            editingAnnotationId = null;
+            draftSelection = null;
+            showAnnotationBanner(
+              isExisting ? "Annotation updated." : "Annotation added.",
+            );
+          });
+
+        annotationTooltipEl
+          .querySelector("#cancel-annotation")
+          ?.addEventListener("click", (event) => {
+            event.stopPropagation();
+            editingAnnotationId = null;
+            draftSelection = null;
+            if (isExisting) {
+              showAnnotationTooltip(annotationOrDraft, anchor, true);
+              return;
+            }
+            clearDiagramHighlights();
+            annotationTooltipEl.classList.remove("visible");
+          });
+      }
+
+      function renderAnnotations() {
+        diagramEl
+          .querySelectorAll(".annotation-dot")
+          .forEach((node) => node.remove());
+        diagramEl
+          .querySelectorAll("[data-viewer-annotation-id]")
+          .forEach((node) => {
+            node.removeAttribute("data-viewer-annotation-id");
+            node.classList.remove("annotated-target", "annotation-highlight");
+            node.onmouseenter = null;
+            node.onmouseleave = null;
+            node.onclick = null;
+          });
+        annotationTooltipEl.classList.remove("visible");
+        if (editingAnnotationId === null && draftSelection === null) {
+          pinnedAnnotationId = null;
+        }
+
+        getActiveAnnotations().forEach((annotation) => {
+          const matches = getAnnotationNodes(annotation);
+          if (matches.length === 0) {
+            return;
+          }
+
+          matches.forEach((match) => {
+            match.dataset.viewerAnnotationId = String(annotation.id);
+            match.classList.add("annotated-target");
+
+            match.onmouseenter = () => {
+              if (
+                pinnedAnnotationId !== null &&
+                pinnedAnnotationId !== annotation.id
+              ) {
+                return;
+              }
+              const anchor = getAnnotationAnchor(matches) || match;
+              showAnnotationTooltip(annotation, anchor, false);
+            };
+
+            match.onmouseleave = () => {
+              if (pinnedAnnotationId === annotation.id) {
+                return;
+              }
+              hideAnnotationTooltip();
+            };
+
+            match.onclick = (event) => {
+              event.stopPropagation();
+              pinnedAnnotationId =
+                pinnedAnnotationId === annotation.id ? null : annotation.id;
+              highlightAnnotation(annotation);
+              if (pinnedAnnotationId === annotation.id) {
+                const anchor = getAnnotationAnchor(matches) || match;
+                showAnnotationTooltip(annotation, anchor, true);
+              } else {
+                clearDiagramHighlights();
+                hideAnnotationTooltip();
+              }
+            };
+          });
+
+          const anchor = getAnnotationAnchor(matches);
+          if (anchor?.ownerSVGElement) {
+            const bbox = anchor.getBBox();
+            const dot = document.createElementNS(
+              "http://www.w3.org/2000/svg",
+              "circle",
+            );
+            dot.setAttribute("cx", String(bbox.x + bbox.width + 8));
+            dot.setAttribute("cy", String(bbox.y + bbox.height / 2));
+            dot.setAttribute("r", "4");
+            dot.setAttribute("class", "annotation-dot");
+            anchor.ownerSVGElement.append(dot);
+          }
+        });
+      }
+
+      function getSelectionContext() {
+        const selectedText = window.getSelection()?.toString().trim() || "";
+        if (!selectedText) {
+          return null;
+        }
+
+        const activeElement = document.activeElement;
+        if (activeElement === sourceEl) {
+          return { source: "Mermaid Source", selection: selectedText };
+        }
+
+        const selection = window.getSelection();
+        if (selection && diagramStageEl.contains(selection.anchorNode)) {
+          const range =
+            selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+          const rect = range ? range.getBoundingClientRect() : null;
+          const targetIds = range
+            ? [
+                ...new Set(
+                  [...diagramEl.querySelectorAll("svg text, svg tspan")]
+                    .filter((node) => {
+                      try {
+                        return range.intersectsNode(node);
+                      } catch {
+                        return false;
+                      }
+                    })
+                    .map((node) => node.dataset.annotationTargetId)
+                    .filter(Boolean),
+                ),
+              ]
+            : [];
+
+          if (targetIds.length > 1) {
+            showAnnotationBanner(
+              "Selection spans multiple diagram items. Select one item at a time.",
+            );
+            return null;
+          }
+
+          const targetNode = targetIds[0]
+            ? diagramEl.querySelector(
+                `[data-annotation-target-id="${CSS.escape(targetIds[0])}"]`,
+              )
+            : null;
+          if (rect && rect.width > 0 && rect.height > 0) {
+            return {
+              source: "Rendered Diagram",
+              selection: selectedText,
+              targetId: targetIds[0] || "",
+              targetKind: targetNode?.dataset.annotationTargetKind || "",
+              anchorRect: {
+                top: rect.top,
+                left: rect.left,
+                width: rect.width,
+                height: rect.height,
+              },
+            };
+          }
+
+          return {
+            source: "Rendered Diagram",
+            selection: selectedText,
+            targetId: targetIds[0] || "",
+            targetKind: targetNode?.dataset.annotationTargetKind || "",
+          };
+        }
+
+        return { source: "Viewer", selection: selectedText };
+      }
+
+      function beginInlineAnnotation() {
+        const context = getSelectionContext();
+        if (!context) {
+          return;
+        }
+
+        const targetEl =
+          getAnnotationAnchor(getAnnotationNodes(context)) ||
+          diagramEl.querySelector("svg text, svg tspan");
+
+        if (!targetEl) {
+          showAnnotationBanner(
+            "Selection does not map to rendered diagram text yet.",
+          );
+          return;
+        }
+
+        pinnedAnnotationId = null;
+        clearDiagramHighlights();
+        getAnnotationNodes(context).forEach((node) =>
+          node.classList.add("annotation-highlight"),
+        );
+        if (context.anchorRect) {
+          showAnnotationEditor(context, { rect: context.anchorRect });
+          return;
+        }
+
+        showAnnotationEditor(context, targetEl);
+      }
+
+      function openAnnotationsDialog(mode) {
+        annotationsDialogTitleEl.textContent =
+          mode === "import" ? "Import Annotations" : "Export Annotations";
+        annotationsJsonEl.value = JSON.stringify(annotations, null, 2);
+        applyAnnotationsButton.style.display =
+          mode === "import" ? "inline-block" : "none";
+        copyAnnotationsButton.style.display =
+          mode === "export" ? "inline-block" : "none";
+        annotationsDialogEl.showModal();
+        annotationsJsonEl.focus();
+        annotationsJsonEl.select();
+      }
+
+      function escapeOverlayLabel(label) {
+        return label
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function unwrapMermaidLabel(label) {
+        const trimmed = label.trim();
+        if (
+          (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+          (trimmed.startsWith("'") && trimmed.endsWith("'"))
+        ) {
+          return trimmed.slice(1, -1);
+        }
+
+        return trimmed;
+      }
+
+      function parseStickyOverlayGroups(source) {
+        const groups = [];
+        let activeGroup = null;
+
+        source.split("\n").forEach((line) => {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("%%")) {
+            return;
+          }
+
+          if (trimmed.startsWith("box ")) {
+            let boxSpec = trimmed.slice(4).trim();
+            let fill = "";
+
+            if (boxSpec.startsWith("rgb(") || boxSpec.startsWith("rgba(")) {
+              const endIndex = boxSpec.indexOf(")");
+              if (endIndex !== -1) {
+                fill = boxSpec.slice(0, endIndex + 1);
+                boxSpec = boxSpec.slice(endIndex + 1).trim();
+              }
+            }
+
+            activeGroup = {
+              fill,
+              label: unwrapMermaidLabel(boxSpec),
+              participants: [],
+            };
+            groups.push(activeGroup);
+            return;
+          }
+
+          if (trimmed === "end") {
+            activeGroup = null;
+            return;
+          }
+
+          if (!activeGroup || !trimmed.startsWith("participant ")) {
+            return;
+          }
+
+          const participantMatch = trimmed.match(
+            /^participant\s+([A-Za-z0-9_]+)(?:\s+as\s+(.+))?$/,
+          );
+          if (!participantMatch) {
+            return;
+          }
+
+          activeGroup.participants.push(
+            unwrapMermaidLabel(participantMatch[2] || participantMatch[1]),
+          );
+        });
+
+        return groups.filter(
+          (group) => group.label && group.participants.length > 0,
+        );
+      }
+
+      function getStickyOverlayEntries(svgEl) {
+        const participantEntries = [...svgEl.querySelectorAll("g[id^='root-']")]
+          .map((group) => {
+            const rect = group.querySelector(":scope > rect.actor");
+            const text = group.querySelector(":scope > text.actor-box");
+            if (!rect || !text) {
+              return null;
+            }
+
+            return {
+              kind: "participant",
+              label: text.textContent?.trim() || "",
+              x: Number(rect.getAttribute("x") || 0),
+              width: Number(rect.getAttribute("width") || 0),
+              fill: rect.getAttribute("fill") || "rgba(255,255,255,0.92)",
+            };
+          })
+          .filter(Boolean)
+          .sort((left, right) => left.x - right.x);
+
+        let participantIndex = 0;
+        const groupEntries = parseStickyOverlayGroups(sourceEl.value)
+          .map((group) => {
+            const members = participantEntries.slice(
+              participantIndex,
+              participantIndex + group.participants.length,
+            );
+            participantIndex += group.participants.length;
+
+            if (members.length === 0) {
+              return null;
+            }
+
+            const x = Math.min(...members.map((member) => member.x));
+            const right = Math.max(
+              ...members.map((member) => member.x + member.width),
+            );
+            return {
+              kind: "group",
+              label: group.label,
+              x,
+              width: right - x,
+              fill: group.fill || "rgba(255,255,255,0.92)",
+            };
+          })
+          .filter(Boolean);
+
+        return { groupEntries, participantEntries };
+      }
+
+      function renderStickyColumnOverlay() {
+        const svgEl = diagramEl.querySelector("svg");
+        if (!svgEl) {
+          columnOverlayEl.innerHTML = "";
+          columnOverlayEl.classList.remove("visible");
+          return;
+        }
+
+        const viewBox = svgEl.viewBox.baseVal;
+        const { groupEntries, participantEntries } =
+          getStickyOverlayEntries(svgEl);
+
+        if (groupEntries.length === 0 && participantEntries.length === 0) {
+          columnOverlayEl.innerHTML = "";
+          columnOverlayEl.classList.remove("visible");
+          return;
+        }
+
+        const overlayWidth = viewBox.width * zoom;
+        columnOverlayEl.dataset.contentWidth = String(overlayWidth);
+        columnOverlayEl.style.height = `${stickyOverlayHeight}px`;
+        columnOverlayEl.innerHTML = `
+          <div class="column-overlay-track" style="width:${overlayWidth}px;">
+            ${groupEntries
+              .map((column) => {
+                const left = (column.x - viewBox.x) * zoom;
+                const width = column.width * zoom;
+                return `<div class="column-overlay-item group" style="left:${left}px;width:${width}px;background:${column.fill};">${escapeOverlayLabel(column.label)}</div>`;
+              })
+              .join("")}
+            ${participantEntries
+              .map((column) => {
+                const left = (column.x - viewBox.x) * zoom;
+                const width = column.width * zoom;
+                return `<div class="column-overlay-item participant" style="left:${left}px;width:${width}px;background:${column.fill};">${escapeOverlayLabel(column.label)}</div>`;
+              })
+              .join("")}
+          </div>
+        `;
+        columnOverlayEl.classList.add("visible");
+        updateStickyColumnOverlayPosition();
+      }
+
+      function updateStickyColumnOverlayPosition() {
+        if (!columnOverlayEl.classList.contains("visible")) {
+          return;
+        }
+
+        const overlayTrackEl = columnOverlayEl.querySelector(
+          ".column-overlay-track",
+        );
+        if (!overlayTrackEl) {
+          return;
+        }
+
+        const stageRect = diagramStageEl.getBoundingClientRect();
+        const overlayHeight =
+          columnOverlayEl.offsetHeight || stickyOverlayHeight;
+        const fixedWidth = Math.max(
+          0,
+          stageRect.width - stickyOverlayStagePadding * 2,
+        );
+        const shouldFix =
+          stageRect.top <= 0 && stageRect.bottom - overlayHeight > 0;
+        const overlayWidth = Number(columnOverlayEl.dataset.contentWidth || 0);
+
+        columnOverlayEl.classList.toggle("fixed", shouldFix);
+        columnOverlayEl.style.left = shouldFix
+          ? `${stageRect.left + stickyOverlayStagePadding}px`
+          : `${stickyOverlayStagePadding}px`;
+        columnOverlayEl.style.top = shouldFix
+          ? "0px"
+          : `${stickyOverlayStagePadding}px`;
+        columnOverlayEl.style.width = shouldFix
+          ? `${fixedWidth}px`
+          : `${overlayWidth}px`;
+        overlayTrackEl.style.transform = shouldFix
+          ? `translateX(${-diagramStageEl.scrollLeft}px)`
+          : "translateX(0px)";
+      }
+
+      function applyZoom() {
+        const svgEl = diagramEl.querySelector("svg");
+        if (!svgEl) {
+          zoomLabel.textContent = `Zoom: ${Math.round(zoom * 100)}%`;
+          renderStickyColumnOverlay();
+          return;
+        }
+
+        const viewBox = svgEl.getAttribute("viewBox")?.split(/\s+/).map(Number);
+        const baseWidthAttr = Number(svgEl.dataset.baseWidth || 0);
+        const baseHeightAttr = Number(svgEl.dataset.baseHeight || 0);
+        const baseWidth =
+          baseWidthAttr ||
+          viewBox?.[2] ||
+          svgEl.getBoundingClientRect().width ||
+          0;
+        const baseHeight =
+          baseHeightAttr ||
+          viewBox?.[3] ||
+          svgEl.getBoundingClientRect().height ||
+          0;
+
+        if (!svgEl.dataset.baseWidth) {
+          svgEl.dataset.baseWidth = String(baseWidth);
+        }
+
+        if (!svgEl.dataset.baseHeight) {
+          svgEl.dataset.baseHeight = String(baseHeight);
+        }
+
+        svgEl.style.maxWidth = "none";
+        svgEl.style.width = `${baseWidth * zoom}px`;
+        svgEl.style.height = `${baseHeight * zoom}px`;
+        zoomLabel.textContent = `Zoom: ${Math.round(zoom * 100)}%`;
+        renderStickyColumnOverlay();
+      }
+
+      async function render() {
+        const source = sourceEl.value;
+        const id = `diagram-${Date.now()}`;
+        const { svg } = await mermaid.render(id, source);
+        diagramEl.innerHTML = svg;
+        indexDiagramTargets();
+        clearDiagramHighlights();
+        applyZoom();
+        renderAnnotations();
+      }
+
+      renderButton.addEventListener("click", () => {
+        void render();
+      });
+
+      zoomInButton.addEventListener("click", () => {
+        zoom = Math.min(zoom + 0.1, 3);
+        applyZoom();
+      });
+
+      zoomOutButton.addEventListener("click", () => {
+        zoom = Math.max(zoom - 0.1, 0.3);
+        applyZoom();
+      });
+
+      zoomResetButton.addEventListener("click", () => {
+        zoom = 1;
+        applyZoom();
+      });
+
+      toggleSidebarButton.addEventListener("click", () => {
+        sidebarCollapsed = !sidebarCollapsed;
+        layoutEl.classList.toggle("sidebar-collapsed", sidebarCollapsed);
+        toggleSidebarButton.textContent = sidebarCollapsed
+          ? "Show Code"
+          : "Hide Code";
+      });
+
+      exportAnnotationsButton.addEventListener("click", () => {
+        openAnnotationsDialog("export");
+      });
+
+      importAnnotationsButton.addEventListener("click", () => {
+        openAnnotationsDialog("import");
+      });
+
+      clearAnnotationsButton.addEventListener("click", () => {
+        resetAnnotationState();
+        showAnnotationBanner("Annotations cleared.");
+      });
+
+      copyAnnotationsButton.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(annotationsJsonEl.value);
+        showAnnotationBanner("Annotations JSON copied.");
+      });
+
+      applyAnnotationsButton.addEventListener("click", () => {
+        try {
+          const parsed = JSON.parse(annotationsJsonEl.value);
+          if (!Array.isArray(parsed)) {
+            throw new Error("Annotations JSON must be an array.");
+          }
+
+          annotations = parsed;
+          persistAnnotations();
+          renderAnnotations();
+          annotationsDialogEl.close();
+          showAnnotationBanner("Annotations imported.");
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Invalid annotations JSON.";
+          showAnnotationBanner(message);
+        }
+      });
+
+      closeAnnotationsDialogButton.addEventListener("click", () => {
+        annotationsDialogEl.close();
+      });
+
+      diagramStageEl.addEventListener("mousedown", (event) => {
+        if (event.button !== 0) {
+          return;
+        }
+
+        const target = event.target;
+        if (
+          target instanceof SVGTextElement ||
+          target instanceof SVGTSpanElement
+        ) {
+          return;
+        }
+
+        if (window.getSelection()?.toString()) {
+          return;
+        }
+
+        isPanning = true;
+        panStartX = event.clientX;
+        panStartY = event.clientY;
+        panScrollLeft = diagramStageEl.scrollLeft;
+        panScrollTop = diagramStageEl.scrollTop;
+        diagramStageEl.classList.add("panning");
+      });
+
+      window.addEventListener("mousemove", (event) => {
+        if (!isPanning) {
+          return;
+        }
+
+        const dx = event.clientX - panStartX;
+        const dy = event.clientY - panStartY;
+        diagramStageEl.scrollLeft = panScrollLeft - dx;
+        diagramStageEl.scrollTop = panScrollTop - dy;
+      });
+
+      function stopPanning() {
+        if (!isPanning) {
+          return;
+        }
+
+        isPanning = false;
+        diagramStageEl.classList.remove("panning");
+      }
+
+      window.addEventListener("mouseup", stopPanning);
+      sourceEl.addEventListener("mouseup", () => {
+        window.setTimeout(beginInlineAnnotation, 0);
+      });
+      diagramEl.addEventListener("mouseup", () => {
+        window.setTimeout(beginInlineAnnotation, 0);
+      });
+      diagramStageEl.addEventListener("mouseleave", stopPanning);
+      diagramStageEl.addEventListener(
+        "scroll",
+        updateStickyColumnOverlayPosition,
+        { passive: true },
+      );
+      window.addEventListener("scroll", updateStickyColumnOverlayPosition, {
+        passive: true,
+      });
+      window.addEventListener("resize", updateStickyColumnOverlayPosition);
+      diagramStageEl.addEventListener("click", (event) => {
+        if (
+          event.target === annotationTooltipEl ||
+          annotationTooltipEl.contains(event.target)
+        ) {
+          return;
+        }
+        editingAnnotationId = null;
+        draftSelection = null;
+        pinnedAnnotationId = null;
+        clearDiagramHighlights();
+        annotationTooltipEl.classList.remove("visible");
+      });
+
+      void render();
+    </script>
+  </body>
+</html>
