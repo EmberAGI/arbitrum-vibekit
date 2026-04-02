@@ -100,6 +100,7 @@ Container responsibilities:
 - Managed downstream note: `agent-portfolio-manager` owns managed onboarding/control-plane flows, while `agent-ember-lending` stays on the bounded subagent read/plan/execute/escalate surface against Shared Ember.
   - Shared Ember, not the portfolio-manager runtime, owns the durable wallet observation, managed-lane owned units, reservations, and policy snapshots produced during onboarding completion.
   - Portfolio-manager wallet/accounting context must read `orchestrator.readOnboardingState.v1` through the activated managed mandate lane so the operator sees the same `lending.supply` reservation and policy state that Ember Lending consumes.
+  - During migration, portfolio-manager keeps a read-side fallback for older stored bootstrap payloads that only recorded `activation.agentId`; current writes still use `activation.mandateRef`.
 
 Explicit non-goal container:
 

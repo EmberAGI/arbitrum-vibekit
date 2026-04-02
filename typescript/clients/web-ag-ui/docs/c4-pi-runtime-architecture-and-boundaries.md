@@ -158,6 +158,7 @@ Container responsibilities:
 - Current managed-runtime example:
   - `agent-portfolio-manager` owns onboarding approval, rooted-signing collection, and managed-agent control-plane projection, but Shared Ember owns the durable reservation and owned-unit truth created during onboarding completion.
   - `agent-portfolio-manager` wallet-accounting reads must target the activated managed mandate lane, not the portfolio-manager lane, so reservation and policy-snapshot context comes from the same agent scope that Shared Ember activated during bootstrap.
+  - The current portfolio-manager implementation writes `activation.mandateRef` on new bootstrap completions but still tolerates legacy stored bootstrap payloads that only captured `activation.agentId` until older thread state is replaced.
   - `agent-ember-lending` owns the bounded subagent read/plan/execute/escalate runtime against Shared Ember and consumes agent-scoped lane data plus rooted-wallet-wide wallet contents from Shared Ember execution context.
 
 Important web constraint:

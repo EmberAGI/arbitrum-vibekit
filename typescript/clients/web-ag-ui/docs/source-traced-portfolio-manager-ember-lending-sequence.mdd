@@ -82,4 +82,5 @@ sequenceDiagram
 - Escalation calls still forward only the bounded escalation handoff fields plus the blocked result.
 - The selected managed lending mandate now carries `managed_onboarding` so Shared Ember can derive the initial lane from structured mandate data instead of a summary-only agent selector.
 - Portfolio-manager wallet-accounting reads must resolve the agent scope from the activated managed mandate so `owned_units`, `reservations`, and `policy_snapshots` come back from the `lending.supply` lane rather than the portfolio-manager lane shell.
+- Current bootstrap writes `activation.mandateRef`, but the accounting-agent resolver still accepts legacy stored bootstrap payloads that only expose `activation.agentId` while pre-upgrade thread state drains.
 - Ember Lending still treats Shared Ember as the wallet source of truth: if the first `subagent.readExecutionContext.v1` response includes a non-null `subagent_wallet_address`, the runtime/UI projects it immediately; if upstream returns `null`, downstream leaves it unset.
