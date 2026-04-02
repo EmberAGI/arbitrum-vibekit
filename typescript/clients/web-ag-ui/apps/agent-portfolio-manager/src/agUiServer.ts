@@ -4,7 +4,9 @@ import {
   createPortfolioManagerAgentConfig,
   type PortfolioManagerAgentConfig,
   type PortfolioManagerGatewayEnv,
+  resolvePortfolioManagerGatewayDependencies,
 } from './portfolioManagerFoundation.js';
+import { ensurePortfolioManagerServiceIdentity } from './serviceIdentityPreflight.js';
 
 export const PORTFOLIO_MANAGER_AGENT_ID = 'agent-portfolio-manager';
 export const PORTFOLIO_MANAGER_AG_UI_BASE_PATH = '/ag-ui';
@@ -23,6 +25,8 @@ type PortfolioManagerGatewayServiceOptions = {
 };
 
 type PortfolioManagerGatewayInternalOptions = PortfolioManagerGatewayServiceOptions & {
+  __internalCreateAgentRuntime?: typeof createAgentRuntime;
+  __internalEnsureServiceIdentity?: typeof ensurePortfolioManagerServiceIdentity;
   __internalPostgres?: {
     ensureReady?: (options?: { env?: { DATABASE_URL?: string } }) => Promise<{
       databaseUrl: string;
@@ -39,8 +43,45 @@ export async function createPortfolioManagerGatewayService(
 export async function createPortfolioManagerGatewayService(
   options: PortfolioManagerGatewayInternalOptions = {},
 ): Promise<AgentRuntimeService> {
-  const runtimeConfig = options.runtimeConfig ?? createPortfolioManagerAgentConfig(options.env);
-  const runtime = await createAgentRuntime({
+  const createAgentRuntimeImpl = options.__internalCreateAgentRuntime ?? createAgentRuntime;
+  let controllerWalletAddress: `0x${string}` | undefined;
+
+  if (options.runtimeConfig === undefined) {
+    const dependencies = resolvePortfolioManagerGatewayDependencies(options.env);
+    if (dependencies.protocolHost) {
+      const readControllerWalletAddress =
+        dependencies.controllerWallet?.readControllerWalletAddress;
+      if (!readControllerWalletAddress) {
+        throw new Error(
+          'Portfolio-manager startup identity preflight requires PORTFOLIO_MANAGER_OWS_BASE_URL to resolve the local controller wallet.',
+        );
+      }
+
+      const ensuredIdentity = await (
+        options.__internalEnsureServiceIdentity ?? ensurePortfolioManagerServiceIdentity
+      )({
+        protocolHost: dependencies.protocolHost,
+        readControllerWalletAddress,
+      });
+      const identity =
+        typeof ensuredIdentity.identity === 'object' && ensuredIdentity.identity !== null
+          ? ensuredIdentity.identity
+          : null;
+      const walletAddress =
+        identity && 'wallet_address' in identity && typeof identity['wallet_address'] === 'string'
+          ? identity['wallet_address']
+          : null;
+      controllerWalletAddress =
+        walletAddress?.startsWith('0x') ? (walletAddress as `0x${string}`) : undefined;
+    }
+  }
+
+  const runtimeConfig =
+    options.runtimeConfig ??
+    createPortfolioManagerAgentConfig(options.env, {
+      ...(controllerWalletAddress ? { controllerWalletAddress } : {}),
+    });
+  const runtime = await createAgentRuntimeImpl({
     ...runtimeConfig,
     ...(options.now ? { now: options.now } : {}),
     ...(options.__internalPostgres ? { __internalPostgres: options.__internalPostgres } : {}),

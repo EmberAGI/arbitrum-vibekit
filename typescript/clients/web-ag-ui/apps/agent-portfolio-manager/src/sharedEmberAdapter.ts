@@ -12,6 +12,8 @@ export type PortfolioManagerSharedEmberProtocolHost = {
   acknowledgeCommittedEventOutbox: (input: unknown) => Promise<unknown>;
 };
 
+export const PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID = 'portfolio-manager';
+
 export type PortfolioManagerLifecycleState = {
   phase: 'prehire' | 'onboarding' | 'active';
   lastPortfolioState: unknown;
@@ -27,6 +29,7 @@ export type PortfolioManagerLifecycleState = {
 type CreatePortfolioManagerDomainOptions = {
   protocolHost?: PortfolioManagerSharedEmberProtocolHost;
   agentId?: string;
+  controllerWalletAddress?: `0x${string}`;
 };
 
 type SharedEmberRevisionResponse = {
@@ -39,6 +42,19 @@ type OnboardingMandateSource = {
   mandate_ref: string;
   agent_id: string;
   mandate_summary: string;
+};
+
+type AgentServiceIdentityRole = 'orchestrator' | 'subagent';
+
+type AgentServiceIdentity = {
+  identity_ref: string;
+  agent_id: string;
+  role: AgentServiceIdentityRole;
+  wallet_address: `0x${string}`;
+  wallet_source: string;
+  capability_metadata: Record<string, unknown>;
+  registration_version: number;
+  registered_at: string;
 };
 
 function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
@@ -88,6 +104,65 @@ function escapeXml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function readHexAddress(value: unknown): `0x${string}` | null {
+  const normalized = readString(value);
+  return normalized?.startsWith('0x') ? (normalized as `0x${string}`) : null;
+}
+
+function readInt(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function readAgentServiceIdentity(
+  value: unknown,
+  expectedRole: AgentServiceIdentityRole,
+): AgentServiceIdentity | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const identityRef = readString(value['identity_ref']);
+  const agentId = readString(value['agent_id']);
+  const walletAddress = readHexAddress(value['wallet_address']);
+  const walletSource = readString(value['wallet_source']);
+  const registrationVersion = readInt(value['registration_version']);
+  const registeredAt = readString(value['registered_at']);
+  const capabilityMetadata = isRecord(value['capability_metadata'])
+    ? value['capability_metadata']
+    : null;
+
+  if (
+    identityRef === null ||
+    agentId === null ||
+    walletAddress === null ||
+    walletSource === null ||
+    registrationVersion === null ||
+    registeredAt === null ||
+    capabilityMetadata === null
+  ) {
+    return null;
+  }
+
+  return {
+    identity_ref: identityRef,
+    agent_id: agentId,
+    role: expectedRole,
+    wallet_address: walletAddress,
+    wallet_source: walletSource,
+    capability_metadata: capabilityMetadata,
+    registration_version: registrationVersion,
+    registered_at: registeredAt,
+  };
 }
 
 function isSharedEmberRevisionConflict(error: unknown): boolean {
@@ -140,6 +215,31 @@ async function runSharedEmberCommandWithResolvedRevision<T>(input: {
     expectedRevision = refreshedRevision;
     return (await input.protocolHost.handleJsonRpc(input.buildRequest(expectedRevision))) as T;
   }
+}
+
+async function readSharedEmberAgentServiceIdentity(input: {
+  protocolHost: PortfolioManagerSharedEmberProtocolHost;
+  agentId: string;
+  role: AgentServiceIdentityRole;
+}): Promise<{
+  revision: number;
+  identity: AgentServiceIdentity | null;
+}> {
+  const response = await input.protocolHost.handleJsonRpc({
+    jsonrpc: '2.0',
+    id: 'rpc-agent-service-identity-read',
+    method: 'orchestrator.readAgentServiceIdentity.v1',
+    params: {
+      agent_id: input.agentId,
+      role: input.role,
+    },
+  });
+  const result = isRecord(response) && isRecord(response['result']) ? response['result'] : null;
+
+  return {
+    revision: readInt(result?.['revision']) ?? 0,
+    identity: readAgentServiceIdentity(result?.['agent_service_identity'] ?? null, input.role),
+  };
 }
 
 const PORTFOLIO_MANAGER_SETUP_INTERRUPT_TYPE = 'portfolio-manager-setup-request';
@@ -486,9 +586,10 @@ function isPortfolioManagerSigningRejected(input: unknown): boolean {
 
 function buildPortfolioManagerUnsignedDelegation(
   walletAddress: `0x${string}`,
+  controllerWalletAddress: `0x${string}`,
 ): PortfolioManagerUnsignedDelegation {
   return {
-    delegate: PORTFOLIO_MANAGER_ORCHESTRATOR_WALLET,
+    delegate: controllerWalletAddress,
     delegator: walletAddress,
     authority: PORTFOLIO_MANAGER_ROOT_AUTHORITY,
     caveats: [],
@@ -496,7 +597,10 @@ function buildPortfolioManagerUnsignedDelegation(
   };
 }
 
-function buildPortfolioManagerSigningInterrupt(setup: PortfolioManagerSetupInput) {
+function buildPortfolioManagerSigningInterrupt(
+  setup: PortfolioManagerSetupInput,
+  controllerWalletAddress: `0x${string}`,
+) {
   return {
     type: PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE,
     surfacedInThread: true,
@@ -505,8 +609,10 @@ function buildPortfolioManagerSigningInterrupt(setup: PortfolioManagerSetupInput
       chainId: PORTFOLIO_MANAGER_CHAIN_ID,
       delegationManager: PORTFOLIO_MANAGER_DELEGATION_MANAGER,
       delegatorAddress: setup.walletAddress,
-      delegateeAddress: PORTFOLIO_MANAGER_ORCHESTRATOR_WALLET,
-      delegationsToSign: [buildPortfolioManagerUnsignedDelegation(setup.walletAddress)],
+      delegateeAddress: controllerWalletAddress,
+      delegationsToSign: [
+        buildPortfolioManagerUnsignedDelegation(setup.walletAddress, controllerWalletAddress),
+      ],
       descriptions: ['Authorize the portfolio manager to operate through your root delegation.'],
       warnings: ['Only continue if you trust this portfolio-manager session.'],
     },
@@ -615,7 +721,9 @@ function buildPortfolioManagerRootDelegationHandoff(params: {
 export function createPortfolioManagerDomain(
   options: CreatePortfolioManagerDomainOptions = {},
 ): AgentRuntimeDomainConfig<PortfolioManagerLifecycleState> {
-  const agentId = options.agentId ?? 'portfolio-manager';
+  const agentId = options.agentId ?? PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID;
+  const controllerWalletAddress =
+    options.controllerWalletAddress ?? PORTFOLIO_MANAGER_ORCHESTRATOR_WALLET;
 
   return {
     lifecycle: {
@@ -896,15 +1004,18 @@ export function createPortfolioManagerDomain(
 
           return {
             state: nextState,
-            outputs: {
-              status: {
-                executionStatus: 'interrupted',
-                statusMessage: PORTFOLIO_MANAGER_SIGNING_MESSAGE,
+              outputs: {
+                status: {
+                  executionStatus: 'interrupted',
+                  statusMessage: PORTFOLIO_MANAGER_SIGNING_MESSAGE,
+                },
+                interrupt: buildPortfolioManagerSigningInterrupt(
+                  setupInput,
+                  controllerWalletAddress,
+                ),
               },
-              interrupt: buildPortfolioManagerSigningInterrupt(setupInput),
-            },
-          };
-        }
+            };
+          }
         case PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE: {
           if (isPortfolioManagerSigningRejected(operation.input)) {
             return {
@@ -950,6 +1061,55 @@ export function createPortfolioManagerDomain(
                 status: {
                   executionStatus: 'failed',
                   statusMessage: 'Shared Ember Domain Service host is not configured.',
+                },
+              },
+            };
+          }
+
+          const orchestratorIdentity = await readSharedEmberAgentServiceIdentity({
+            protocolHost: options.protocolHost,
+            agentId,
+            role: 'orchestrator',
+          });
+          if (!orchestratorIdentity.identity) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio manager onboarding is blocked until the portfolio-manager service registers its orchestrator identity in Shared Ember.',
+                },
+              },
+            };
+          }
+
+          if (orchestratorIdentity.identity.wallet_address !== controllerWalletAddress) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio manager onboarding is blocked because the registered portfolio-manager orchestrator wallet does not match this session controller wallet.',
+                },
+              },
+            };
+          }
+
+          const managedSubagentIdentity = await readSharedEmberAgentServiceIdentity({
+            protocolHost: options.protocolHost,
+            agentId: FIRST_MANAGED_AGENT_TYPE,
+            role: 'subagent',
+          });
+          if (!managedSubagentIdentity.identity) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio manager onboarding is blocked until the ember-lending service registers its subagent identity in Shared Ember.',
                 },
               },
             };

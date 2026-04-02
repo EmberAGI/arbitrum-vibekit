@@ -23,16 +23,30 @@ function readErrorMessage(body: unknown): string | null {
   return typeof message === 'string' && message.trim().length > 0 ? message : null;
 }
 
-async function postJson(input: {
+function readWalletAddress(body: unknown): `0x${string}` | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+
+  const walletAddress =
+    body['wallet_address'] ?? body['signer_wallet_address'] ?? body['signer_address'];
+
+  return typeof walletAddress === 'string' && walletAddress.startsWith('0x')
+    ? (walletAddress as `0x${string}`)
+    : null;
+}
+
+async function requestJson(input: {
   url: string;
-  body: unknown;
+  method?: 'GET' | 'POST';
+  body?: unknown;
 }): Promise<unknown> {
   const response = await fetch(input.url, {
-    method: 'POST',
+    method: input.method ?? 'POST',
     headers: {
       'content-type': jsonContentType,
     },
-    body: JSON.stringify(input.body),
+    body: input.body === undefined ? undefined : JSON.stringify(input.body),
   });
 
   const rawBody = await response.text();
@@ -63,15 +77,28 @@ export function createEmberLendingLocalOwsExecutionSigner(input: {
   const baseUrl = trimTrailingSlash(input.baseUrl);
 
   return {
+    async readSignerWalletAddress() {
+      const responseBody = await requestJson({
+        url: `${baseUrl}/identity`,
+        method: 'GET',
+      });
+      const walletAddress = readWalletAddress(responseBody);
+      if (!walletAddress) {
+        throw new Error('Local OWS signer identity response was missing a wallet address.');
+      }
+
+      return walletAddress;
+    },
+
     async signExecutionPackage(request) {
-      return (await postJson({
+      return (await requestJson({
         url: `${baseUrl}/sign/execution`,
         body: request,
       })) as Awaited<ReturnType<EmberLendingExecutionSigner['signExecutionPackage']>>;
     },
 
     async signRedelegationPackage(request) {
-      return (await postJson({
+      return (await requestJson({
         url: `${baseUrl}/sign/redelegation`,
         body: request,
       })) as Awaited<

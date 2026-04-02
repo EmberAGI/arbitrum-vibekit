@@ -11,6 +11,10 @@ import {
 import { createPortfolioManagerDiagnosticTool } from './diagnosticTool.js';
 import { createPortfolioManagerWalletAccountingTool } from './walletAccountingTool.js';
 import { PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID } from './sharedEmberOnboardingState.js';
+import {
+  createPortfolioManagerLocalOwsControllerWallet,
+  resolvePortfolioManagerLocalOwsBaseUrl,
+} from './localOwsControllerWallet.js';
 
 const DEFAULT_PORTFOLIO_MANAGER_MODEL = 'openai/gpt-5.4-mini';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -23,6 +27,7 @@ export type PortfolioManagerGatewayEnv = NodeJS.ProcessEnv & {
   PORTFOLIO_MANAGER_ENABLE_DIAGNOSTIC_TOOLS?: string;
   DATABASE_URL?: string;
   SHARED_EMBER_BASE_URL?: string;
+  PORTFOLIO_MANAGER_OWS_BASE_URL?: string;
 };
 
 type PortfolioManagerAgentRuntimeOptions = CreateAgentRuntimeOptions<PortfolioManagerLifecycleState>;
@@ -33,6 +38,15 @@ export type PortfolioManagerAgentConfig = Pick<
 >;
 
 type PortfolioManagerGatewayModel = PortfolioManagerAgentConfig['model'];
+
+export type PortfolioManagerGatewayDependencies = {
+  protocolHost: ReturnType<typeof createPortfolioManagerSharedEmberHttpHost> | null;
+  controllerWallet: ReturnType<typeof createPortfolioManagerLocalOwsControllerWallet> | undefined;
+};
+
+type CreatePortfolioManagerAgentConfigOptions = {
+  controllerWalletAddress?: `0x${string}`;
+};
 
 function requireEnvValue(
   value: string | undefined,
@@ -68,16 +82,12 @@ function createOpenRouterModel(modelId: string): PortfolioManagerGatewayModel {
 
 export function createPortfolioManagerAgentConfig(
   env: PortfolioManagerGatewayEnv = process.env,
+  options: CreatePortfolioManagerAgentConfigOptions = {},
 ): PortfolioManagerAgentConfig {
   const apiKey = requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.PORTFOLIO_MANAGER_MODEL?.trim() || DEFAULT_PORTFOLIO_MANAGER_MODEL;
   const enableDiagnosticTools = env.PORTFOLIO_MANAGER_ENABLE_DIAGNOSTIC_TOOLS?.trim() === '1';
-  const sharedEmberBaseUrl = resolvePortfolioManagerSharedEmberBaseUrl(env);
-  const protocolHost = sharedEmberBaseUrl
-    ? createPortfolioManagerSharedEmberHttpHost({
-        baseUrl: sharedEmberBaseUrl,
-      })
-    : null;
+  const { protocolHost } = resolvePortfolioManagerGatewayDependencies(env);
 
   return {
     model: createOpenRouterModel(modelId),
@@ -100,6 +110,11 @@ export function createPortfolioManagerAgentConfig(
             protocolHost,
           }
         : {}),
+      ...(options.controllerWalletAddress
+        ? {
+            controllerWalletAddress: options.controllerWalletAddress,
+          }
+        : {}),
     }),
     agentOptions: {
       initialState: {
@@ -107,5 +122,25 @@ export function createPortfolioManagerAgentConfig(
       },
       getApiKey: () => apiKey,
     },
+  };
+}
+
+export function resolvePortfolioManagerGatewayDependencies(
+  env: PortfolioManagerGatewayEnv = process.env,
+): PortfolioManagerGatewayDependencies {
+  const sharedEmberBaseUrl = resolvePortfolioManagerSharedEmberBaseUrl(env);
+  const localOwsBaseUrl = resolvePortfolioManagerLocalOwsBaseUrl(env);
+
+  return {
+    protocolHost: sharedEmberBaseUrl
+      ? createPortfolioManagerSharedEmberHttpHost({
+          baseUrl: sharedEmberBaseUrl,
+        })
+      : null,
+    controllerWallet: localOwsBaseUrl
+      ? createPortfolioManagerLocalOwsControllerWallet({
+          baseUrl: localOwsBaseUrl,
+        })
+      : undefined,
   };
 }

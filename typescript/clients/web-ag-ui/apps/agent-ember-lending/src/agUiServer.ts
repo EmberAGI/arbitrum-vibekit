@@ -4,11 +4,13 @@ import {
   createEmberLendingAgentConfig,
   type EmberLendingAgentConfig,
   type EmberLendingGatewayEnv,
+  resolveEmberLendingGatewayDependencies,
 } from './emberLendingFoundation.js';
 import {
   EMBER_LENDING_INTERNAL_HYDRATE_COMMAND,
   hasEmberLendingRuntimeProjection,
 } from './sharedEmberAdapter.js';
+import { ensureEmberLendingServiceIdentity } from './serviceIdentityPreflight.js';
 
 export const EMBER_LENDING_AGENT_ID = 'agent-ember-lending';
 export const EMBER_LENDING_AG_UI_BASE_PATH = '/ag-ui';
@@ -27,6 +29,8 @@ type EmberLendingGatewayServiceOptions = {
 };
 
 type EmberLendingGatewayInternalOptions = EmberLendingGatewayServiceOptions & {
+  __internalCreateAgentRuntime?: typeof createAgentRuntime;
+  __internalEnsureServiceIdentity?: typeof ensureEmberLendingServiceIdentity;
   __internalPostgres?: {
     ensureReady?: (options?: { env?: { DATABASE_URL?: string } }) => Promise<{
       databaseUrl: string;
@@ -111,8 +115,27 @@ export async function createEmberLendingGatewayService(
 export async function createEmberLendingGatewayService(
   options: EmberLendingGatewayInternalOptions = {},
 ): Promise<AgentRuntimeService> {
+  const createAgentRuntimeImpl = options.__internalCreateAgentRuntime ?? createAgentRuntime;
+
+  if (options.runtimeConfig === undefined) {
+    const dependencies = resolveEmberLendingGatewayDependencies(options.env);
+    if (dependencies.protocolHost) {
+      const readSignerWalletAddress = dependencies.executionSigner?.readSignerWalletAddress;
+      if (!readSignerWalletAddress) {
+        throw new Error(
+          'Lending startup identity preflight requires EMBER_LENDING_OWS_BASE_URL to resolve the local signer wallet.',
+        );
+      }
+
+      await (options.__internalEnsureServiceIdentity ?? ensureEmberLendingServiceIdentity)({
+        protocolHost: dependencies.protocolHost,
+        readSignerWalletAddress,
+      });
+    }
+  }
+
   const runtimeConfig = options.runtimeConfig ?? createEmberLendingAgentConfig(options.env);
-  const runtime = await createAgentRuntime({
+  const runtime = await createAgentRuntimeImpl({
     ...runtimeConfig,
     ...(options.now ? { now: options.now } : {}),
     ...(options.__internalPostgres ? { __internalPostgres: options.__internalPostgres } : {}),
