@@ -67,3 +67,18 @@ For real Shared Ember integration coverage, use the opt-in sidecar lane:
 When `EMBER_ORCHESTRATION_V1_SPEC_ROOT` is set, the integration test imports
 the private repo's repo-local harness only to boot the HTTP service. The
 assertions themselves still run against the HTTP/JSON-RPC boundary.
+
+For the audited managed-onboarding proof on the current downstream boundary,
+run from `typescript/clients/web-ag-ui/`:
+
+- `pnpm smoke:managed-identities`
+
+That smoke confirms:
+
+- `portfolio-manager` / `orchestrator` resolves non-null in Shared Ember
+- `ember-lending` / `subagent` resolves non-null in Shared Ember
+- after rooted bootstrap, `subagent.readExecutionContext.v1` returns a non-null
+  `subagent_wallet_address`
+
+The smoke intentionally uses the current downstream OWS-facing HTTP seam rather
+than solving the separate follow-on OWS-internals issue.

@@ -95,3 +95,4 @@ sequenceDiagram
 - The managed lending mandate supplied at bootstrap should carry `managed_onboarding` so Shared Ember can derive the initial lane and delegation inputs from structured mandate data.
 - Portfolio-manager wallet accounting should resolve its onboarding-state `agent_id` from the activated managed mandate so operator-visible reservations and policy snapshots match the managed lane Ember Lending sees.
 - When Shared Ember has a durable subagent identity ready during onboarding, the first post-bootstrap execution-context read should already expose a non-null `subagent_wallet_address`, and Ember Lending should project it without any manual reseed step.
+- The current repo-local smoke for this contract is `pnpm smoke:managed-identities`; it intentionally stays on the downstream OWS-facing HTTP seam and does not absorb the separate OWS-internals follow-up.

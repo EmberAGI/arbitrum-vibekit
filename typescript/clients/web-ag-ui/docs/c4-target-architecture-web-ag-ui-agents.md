@@ -207,6 +207,11 @@ Current concrete managed-path specialization:
   - projects lifecycle, wallet, mandate, reservation, planning, execution, and escalation state into the shared AG-UI thread contract
   - treats `owned_units` and `reservations` as lending-lane truth while treating `wallet_contents` as rooted-wallet-wide context for prompt visibility
 
+Validation note:
+
+- `pnpm smoke:managed-identities` is the current repo-local proof for the two non-null identity reads plus the non-null post-bootstrap `subagent_wallet_address`.
+- That smoke stays on the current downstream OWS-facing HTTP seam; deeper OWS-internals changes are intentionally handled elsewhere.
+
 ## 6. Dynamic views (sequence)
 
 ### 6.1 Detail page open (active stream)

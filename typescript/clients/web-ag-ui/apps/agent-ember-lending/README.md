@@ -70,3 +70,11 @@ Runtime wiring:
 Like the portfolio manager app, this package should stay a thin downstream app.
 Shared Ember business logic and durable truth remain outside the app behind the
 Shared Ember Domain Service boundary.
+
+Validation note:
+
+- run `pnpm smoke:managed-identities` from `typescript/clients/web-ag-ui/` to
+  prove the current downstream pair can confirm both durable identities and
+  surface a non-null post-bootstrap `subagent_wallet_address`
+- that smoke stays on the current downstream OWS-facing HTTP seam; deeper OWS
+  integration is tracked separately

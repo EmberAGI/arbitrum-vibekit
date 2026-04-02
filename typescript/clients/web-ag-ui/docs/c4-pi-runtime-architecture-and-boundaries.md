@@ -36,6 +36,7 @@ Related docs:
 - `docs/adr/0007-sibling-channel-adapters-and-canonical-thread-identity.md`
 - `docs/adr/0008-runtime-agnostic-shared-contract-extraction.md`
 - `docs/adr/0011-blessed-agent-runtime-factory-and-runtime-owned-projection-assembly.md`
+- `docs/adr/0014-fail-closed-service-identity-preflight-for-managed-shared-ember-agents.md`
 
 ## 2. Boundary rules
 
@@ -164,6 +165,7 @@ Container responsibilities:
   - `agent-ember-lending` owns the bounded subagent read/plan/execute/escalate runtime against Shared Ember and consumes agent-scoped lane data plus rooted-wallet-wide wallet contents from Shared Ember execution context.
   - `agent-ember-lending` startup must resolve the local OWS signer wallet, confirm or rewrite the durable `ember-lending` / `subagent` identity with an identity-scoped idempotency key, and fail closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address.
   - After healthy identity preflight plus onboarding, the first healthy `subagent.readExecutionContext.v1` read is expected to expose a non-null `subagent_wallet_address`.
+  - The repo-local validation lane for this boundary is `pnpm smoke:managed-identities`; deeper OWS-internals refactors remain out of scope for this contract.
 
 Important web constraint:
 
