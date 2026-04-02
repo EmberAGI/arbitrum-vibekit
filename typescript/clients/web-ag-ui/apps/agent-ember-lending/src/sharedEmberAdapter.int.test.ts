@@ -3,7 +3,6 @@ import type { AddressInfo } from 'node:net';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createEmberLendingLocalOwsExecutionSigner } from './localOwsExecutionSigner.js';
 import { createEmberLendingDomain } from './sharedEmberAdapter.js';
 import {
   createSharedEmberExecutionSeed,
@@ -18,9 +17,11 @@ import { createEmberLendingSharedEmberHttpHost } from './sharedEmberHttpHost.js'
 const runSharedEmberIntegration = process.env['RUN_SHARED_EMBER_INT']?.trim() === '1';
 const describeSharedEmberIntegration = runSharedEmberIntegration ? describe : describe.skip;
 
-type SignerRequestRecord = {
-  path: string;
-  body: Record<string, unknown>;
+type SigningRequestRecord = {
+  signerRef: string;
+  expectedAddress: `0x${string}`;
+  payloadKind: string;
+  payload: Record<string, unknown>;
 };
 
 type ForwardedJsonResponse = {
@@ -41,6 +42,11 @@ type AuthorityPreparationRecoveryProxy = {
   close: () => Promise<void>;
   preparationPhases: string[];
 };
+
+const TEST_TRANSACTION_SIGNATURE =
+  '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
+const TEST_REDELEGATION_SIGNATURE =
+  '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 
 function createManagedLifecycleState() {
   return {
@@ -303,97 +309,69 @@ async function startAuthorityPreparationRecoveryProxy(input: {
   };
 }
 
+function createRuntimeSigningHarness() {
+  const signingRequests: SigningRequestRecord[] = [];
+
+  return {
+    signingRequests,
+    runtimeSigning: {
+      async readAddress() {
+        return TEST_EMBER_LENDING_AGENT_WALLET;
+      },
+      async signPayload(input: {
+        signerRef: string;
+        expectedAddress: `0x${string}`;
+        payloadKind: string;
+        payload: Record<string, unknown>;
+      }) {
+        signingRequests.push({
+          signerRef: input.signerRef,
+          expectedAddress: input.expectedAddress,
+          payloadKind: input.payloadKind,
+          payload: input.payload,
+        });
+
+        if (input.payloadKind === 'typed-data') {
+          return {
+            confirmedAddress: TEST_EMBER_LENDING_AGENT_WALLET,
+            signedPayload: {
+              signature: TEST_REDELEGATION_SIGNATURE,
+            },
+          };
+        }
+
+        return {
+          confirmedAddress: TEST_EMBER_LENDING_AGENT_WALLET,
+          signedPayload: {
+            signature: TEST_TRANSACTION_SIGNATURE,
+            recoveryId: 1,
+          },
+        };
+      },
+    },
+  };
+}
+
 describeSharedEmberIntegration('ember-lending Shared Ember execution integration', () => {
   let target: StartedSharedEmberTarget;
-  let signerServer: Server;
-  let signerBaseUrl: string;
-  let signerRequests: SignerRequestRecord[];
 
   beforeEach(async () => {
     target = await resolveSharedEmberTarget();
-    signerRequests = [];
-
-    signerServer = createServer((request: IncomingMessage, response: ServerResponse) => {
-      void (async () => {
-        if (request.url !== '/sign/redelegation' && request.url !== '/sign/execution') {
-          response.writeHead(404);
-          response.end();
-          return;
-        }
-
-        const body = await readRequestBody(request);
-        signerRequests.push({
-          path: request.url,
-          body,
-        });
-
-        if (request.url === '/sign/redelegation') {
-          const signingPackage = isRecord(body['redelegationSigningPackage'])
-            ? body['redelegationSigningPackage']
-            : {};
-
-          response.writeHead(200, {
-            'content-type': 'application/json; charset=utf-8',
-          });
-          response.end(
-            JSON.stringify({
-              signer_wallet_address: body['walletAddress'],
-              signed_redelegation: {
-                ...signingPackage,
-                artifact_ref: 'artifact-ember-lending-int-002',
-                issued_at: '2026-04-01T06:16:00Z',
-                activated_at: '2026-04-01T06:16:05Z',
-                policy_hash: 'hash-ember-lending-int-002',
-              },
-            }),
-          );
-          return;
-        }
-
-        response.writeHead(200, {
-          'content-type': 'application/json; charset=utf-8',
-        });
-        response.end(
-          JSON.stringify({
-            signer_wallet_address: body['walletAddress'],
-            signer_address: body['walletAddress'],
-            raw_transaction:
-              '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-          }),
-        );
-      })().catch((error: unknown) => {
-        response.writeHead(500);
-        response.end(error instanceof Error ? error.message : 'unknown error');
-      });
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      signerServer.once('error', reject);
-      signerServer.listen(0, '127.0.0.1', () => {
-        signerServer.off('error', reject);
-        resolve();
-      });
-    });
-
-    const address = signerServer.address() as AddressInfo;
-    signerBaseUrl = `http://127.0.0.1:${address.port}`;
   });
 
   afterEach(async () => {
-    await closeServer(signerServer);
     await target?.close().catch(() => undefined);
   });
 
   it('executes the real Shared Ember request, redelegation registration, and signed-transaction flow through the lending agent service', async () => {
+    const { runtimeSigning, signingRequests } = createRuntimeSigningHarness();
     const protocolHost = createEmberLendingSharedEmberHttpHost({
       baseUrl: target.baseUrl,
     });
-    const executionSigner = createEmberLendingLocalOwsExecutionSigner({
-      baseUrl: signerBaseUrl,
-    });
     const domain = createEmberLendingDomain({
       protocolHost,
-      executionSigner,
+      runtimeSigning,
+      runtimeSignerRef: 'service-wallet',
       agentId: TEST_EMBER_LENDING_AGENT_ID,
     });
 
@@ -461,9 +439,9 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       },
     });
 
-    expect(signerRequests.map((entry) => entry.path)).toEqual([
-      '/sign/redelegation',
-      '/sign/execution',
+    expect(signingRequests.map((entry) => entry.payloadKind)).toEqual([
+      'typed-data',
+      'transaction',
     ]);
 
     const transactionPlanId =
@@ -471,24 +449,23 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         ? planResult?.state?.lastCandidatePlan['transaction_plan_id']
         : null) ?? null;
 
-    expect(signerRequests[0]?.body).toMatchObject({
-      walletAddress: TEST_EMBER_LENDING_AGENT_WALLET,
-      transactionPlanId,
-      requestId: expect.any(String),
-      redelegationSigningPackage: {
-        agent_wallet: TEST_EMBER_LENDING_AGENT_WALLET,
-        transaction_plan_id: transactionPlanId,
+    expect(signingRequests[0]).toMatchObject({
+      signerRef: 'service-wallet',
+      expectedAddress: TEST_EMBER_LENDING_AGENT_WALLET,
+      payloadKind: 'typed-data',
+      payload: {
+        chain: 'evm',
+        typedData: expect.any(Object),
       },
     });
 
-    expect(signerRequests[1]?.body).toMatchObject({
-      walletAddress: TEST_EMBER_LENDING_AGENT_WALLET,
-      transactionPlanId,
-      requestId: expect.any(String),
-      executionSigningPackage: {
-        transaction_plan_id: transactionPlanId,
-        active_delegation_id: expect.any(String),
-        canonical_unsigned_payload_ref: expect.any(String),
+    expect(signingRequests[1]).toMatchObject({
+      signerRef: 'service-wallet',
+      expectedAddress: TEST_EMBER_LENDING_AGENT_WALLET,
+      payloadKind: 'transaction',
+      payload: {
+        chain: 'evm',
+        unsignedTransactionHex: expect.stringMatching(/^0x[0-9a-f]+$/),
       },
     });
   });
@@ -506,12 +483,11 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
     const protocolHost = createEmberLendingSharedEmberHttpHost({
       baseUrl: target.baseUrl,
     });
-    const executionSigner = createEmberLendingLocalOwsExecutionSigner({
-      baseUrl: signerBaseUrl,
-    });
+    const { runtimeSigning, signingRequests } = createRuntimeSigningHarness();
     const domain = createEmberLendingDomain({
       protocolHost,
-      executionSigner,
+      runtimeSigning,
+      runtimeSignerRef: 'service-wallet',
       agentId: TEST_EMBER_LENDING_AGENT_ID,
     });
 
@@ -563,7 +539,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       },
     });
 
-    expect(signerRequests).toEqual([]);
+    expect(signingRequests).toEqual([]);
   });
 
   it('polls through a repo-backed authority-preparation response before reaching local execution signing', async () => {
@@ -584,12 +560,11 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       const protocolHost = createEmberLendingSharedEmberHttpHost({
         baseUrl: proxy.baseUrl,
       });
-      const executionSigner = createEmberLendingLocalOwsExecutionSigner({
-        baseUrl: signerBaseUrl,
-      });
+      const { runtimeSigning, signingRequests } = createRuntimeSigningHarness();
       const domain = createEmberLendingDomain({
         protocolHost,
-        executionSigner,
+        runtimeSigning,
+        runtimeSignerRef: 'service-wallet',
         agentId: TEST_EMBER_LENDING_AGENT_ID,
       });
 
@@ -636,9 +611,9 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         'authority_preparation_needed',
         'ready_for_redelegation',
       ]);
-      expect(signerRequests.map((entry) => entry.path)).toEqual([
-        '/sign/redelegation',
-        '/sign/execution',
+      expect(signingRequests.map((entry) => entry.payloadKind)).toEqual([
+        'typed-data',
+        'transaction',
       ]);
     } finally {
       await proxy.close();
@@ -654,12 +629,11 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       const protocolHost = createEmberLendingSharedEmberHttpHost({
         baseUrl: proxy.baseUrl,
       });
-      const executionSigner = createEmberLendingLocalOwsExecutionSigner({
-        baseUrl: signerBaseUrl,
-      });
+      const { runtimeSigning, signingRequests } = createRuntimeSigningHarness();
       const domain = createEmberLendingDomain({
         protocolHost,
-        executionSigner,
+        runtimeSigning,
+        runtimeSignerRef: 'service-wallet',
         agentId: TEST_EMBER_LENDING_AGENT_ID,
       });
       const threadId = 'thread-ember-lending-int-transport-retry';
@@ -735,9 +709,9 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
           },
         },
       });
-      expect(signerRequests.map((entry) => entry.path)).toEqual([
-        '/sign/redelegation',
-        '/sign/execution',
+      expect(signingRequests.map((entry) => entry.payloadKind)).toEqual([
+        'typed-data',
+        'transaction',
       ]);
     } finally {
       await proxy.close();

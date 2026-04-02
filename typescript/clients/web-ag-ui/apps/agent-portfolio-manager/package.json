@@ -42,6 +42,7 @@
     }
   },
   "devDependencies": {
+    "@open-wallet-standard/core": "^1.2.0",
     "@types/node": "^22.19.2",
     "tsx": "catalog:",
     "typescript": "^5.9.3",

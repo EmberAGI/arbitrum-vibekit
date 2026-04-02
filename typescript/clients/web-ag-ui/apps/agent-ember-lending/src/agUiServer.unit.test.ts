@@ -33,53 +33,76 @@ describe('createEmberLendingGatewayService', () => {
         wallet_address: '0x00000000000000000000000000000000000000b1',
       },
     }));
-    const createAgentRuntime = vi.fn(async () => ({
-      service,
-    }));
+    const runtimeCreated = vi.fn();
+    const createAgentRuntimeKernel = vi.fn(async ({ createRuntimeOptions }) => {
+      const signing = {
+        readAddress: vi.fn(async () => '0x00000000000000000000000000000000000000b1' as const),
+        signPayload: vi.fn(),
+      };
+      await createRuntimeOptions({
+        signing,
+      });
+      runtimeCreated();
+      return {
+        service,
+        signing,
+      };
+    });
 
     await expect(
       createEmberLendingGatewayService({
         env: {
           OPENROUTER_API_KEY: 'test-openrouter-key',
           SHARED_EMBER_BASE_URL: 'http://127.0.0.1:56436',
-          EMBER_LENDING_OWS_BASE_URL: 'http://127.0.0.1:4020',
+          EMBER_LENDING_OWS_WALLET_NAME: 'ember-lending-service-wallet',
+          EMBER_LENDING_OWS_VAULT_PATH: '/tmp/ember-lending-ows-vault',
         },
         __internalEnsureServiceIdentity: ensureServiceIdentity,
-        __internalCreateAgentRuntime: createAgentRuntime,
+        __internalCreateAgentRuntimeKernel: createAgentRuntimeKernel,
       } as never),
     ).resolves.toBe(service);
 
     expect(ensureServiceIdentity).toHaveBeenCalledOnce();
-    expect(createAgentRuntime).toHaveBeenCalledOnce();
-    expect(ensureServiceIdentity.mock.invocationCallOrder[0]).toBeLessThan(
-      createAgentRuntime.mock.invocationCallOrder[0],
-    );
+    expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
+    const ensureCallOrder = ensureServiceIdentity.mock.invocationCallOrder.at(0);
+    const runtimeCallOrder = runtimeCreated.mock.invocationCallOrder.at(0);
+    expect(ensureCallOrder).toBeDefined();
+    expect(runtimeCallOrder).toBeDefined();
+    expect(ensureCallOrder!).toBeLessThan(runtimeCallOrder!);
   });
 
   it('fails closed before runtime creation when the lending service identity cannot be established', async () => {
     const ensureServiceIdentity = vi.fn(async () => {
       throw new Error(
-        'Lending startup identity preflight failed because the local OWS signer did not resolve a wallet address.',
+        'Lending startup identity preflight failed because the configured OWS wallet did not resolve an EVM address.',
       );
     });
-    const createAgentRuntime = vi.fn(async () => ({
-      service: createStubService(),
-    }));
+    const createAgentRuntimeKernel = vi.fn(async ({ createRuntimeOptions }) => {
+      const signing = {
+        readAddress: vi.fn(async () => '0x00000000000000000000000000000000000000b1' as const),
+        signPayload: vi.fn(),
+      };
+      await createRuntimeOptions({
+        signing,
+      });
+      throw new Error('runtime creation should not be reached');
+    });
 
     await expect(
       createEmberLendingGatewayService({
         env: {
           OPENROUTER_API_KEY: 'test-openrouter-key',
           SHARED_EMBER_BASE_URL: 'http://127.0.0.1:56436',
-          EMBER_LENDING_OWS_BASE_URL: 'http://127.0.0.1:4020',
+          EMBER_LENDING_OWS_WALLET_NAME: 'ember-lending-service-wallet',
+          EMBER_LENDING_OWS_VAULT_PATH: '/tmp/ember-lending-ows-vault',
         },
         __internalEnsureServiceIdentity: ensureServiceIdentity,
-        __internalCreateAgentRuntime: createAgentRuntime,
+        __internalCreateAgentRuntimeKernel: createAgentRuntimeKernel,
       } as never),
     ).rejects.toThrow(
-      'Lending startup identity preflight failed because the local OWS signer did not resolve a wallet address.',
+      'Lending startup identity preflight failed because the configured OWS wallet did not resolve an EVM address.',
     );
 
-    expect(createAgentRuntime).not.toHaveBeenCalled();
+    expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
   });
 });

@@ -33,58 +33,76 @@ describe('createPortfolioManagerGatewayService', () => {
         wallet_address: '0x00000000000000000000000000000000000000c1',
       },
     }));
-    const createAgentRuntime = vi.fn(async () => ({
-      service,
-    }));
+    const runtimeCreated = vi.fn();
+    const createAgentRuntimeKernel = vi.fn(async ({ createRuntimeOptions }) => {
+      const signing = {
+        readAddress: vi.fn(async () => '0x00000000000000000000000000000000000000c1' as const),
+        signPayload: vi.fn(),
+      };
+      await createRuntimeOptions({
+        signing,
+      });
+      runtimeCreated();
+      return {
+        service,
+        signing,
+      };
+    });
 
     await expect(
       createPortfolioManagerGatewayService({
         env: {
           OPENROUTER_API_KEY: 'test-openrouter-key',
           SHARED_EMBER_BASE_URL: 'http://127.0.0.1:56436',
-          PORTFOLIO_MANAGER_OWS_BASE_URL: 'http://127.0.0.1:4030',
+          PORTFOLIO_MANAGER_OWS_WALLET_NAME: 'portfolio-manager-controller-wallet',
+          PORTFOLIO_MANAGER_OWS_VAULT_PATH: '/tmp/portfolio-manager-ows-vault',
         },
         __internalEnsureServiceIdentity: ensureServiceIdentity,
-        __internalCreateAgentRuntime: createAgentRuntime,
+        __internalCreateAgentRuntimeKernel: createAgentRuntimeKernel,
       } as never),
     ).resolves.toBe(service);
 
     expect(ensureServiceIdentity).toHaveBeenCalledOnce();
-    expect(createAgentRuntime).toHaveBeenCalledOnce();
-    const ensureInvocationOrder = ensureServiceIdentity.mock.invocationCallOrder[0];
-    const runtimeInvocationOrder = createAgentRuntime.mock.invocationCallOrder[0];
-    expect(ensureInvocationOrder).toEqual(expect.any(Number));
-    expect(runtimeInvocationOrder).toEqual(expect.any(Number));
-    if (ensureInvocationOrder === undefined || runtimeInvocationOrder === undefined) {
-      throw new Error('expected both preflight and runtime creation to be invoked');
-    }
-    expect(ensureInvocationOrder).toBeLessThan(runtimeInvocationOrder);
+    expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
+    const ensureCallOrder = ensureServiceIdentity.mock.invocationCallOrder.at(0);
+    const runtimeCallOrder = runtimeCreated.mock.invocationCallOrder.at(0);
+    expect(ensureCallOrder).toBeDefined();
+    expect(runtimeCallOrder).toBeDefined();
+    expect(ensureCallOrder!).toBeLessThan(runtimeCallOrder!);
   });
 
   it('fails closed before runtime creation when the controller wallet identity cannot be established', async () => {
     const ensureServiceIdentity = vi.fn(async () => {
       throw new Error(
-        'Portfolio-manager startup identity preflight failed because the local OWS controller did not resolve a wallet address.',
+        'Portfolio-manager startup identity preflight failed because the configured OWS wallet did not resolve an EVM address.',
       );
     });
-    const createAgentRuntime = vi.fn(async () => ({
-      service: createStubService(),
-    }));
+    const createAgentRuntimeKernel = vi.fn(async ({ createRuntimeOptions }) => {
+      const signing = {
+        readAddress: vi.fn(async () => '0x00000000000000000000000000000000000000c1' as const),
+        signPayload: vi.fn(),
+      };
+      await createRuntimeOptions({
+        signing,
+      });
+      throw new Error('runtime creation should not be reached');
+    });
 
     await expect(
       createPortfolioManagerGatewayService({
         env: {
           OPENROUTER_API_KEY: 'test-openrouter-key',
           SHARED_EMBER_BASE_URL: 'http://127.0.0.1:56436',
-          PORTFOLIO_MANAGER_OWS_BASE_URL: 'http://127.0.0.1:4030',
+          PORTFOLIO_MANAGER_OWS_WALLET_NAME: 'portfolio-manager-controller-wallet',
+          PORTFOLIO_MANAGER_OWS_VAULT_PATH: '/tmp/portfolio-manager-ows-vault',
         },
         __internalEnsureServiceIdentity: ensureServiceIdentity,
-        __internalCreateAgentRuntime: createAgentRuntime,
+        __internalCreateAgentRuntimeKernel: createAgentRuntimeKernel,
       } as never),
     ).rejects.toThrow(
-      'Portfolio-manager startup identity preflight failed because the local OWS controller did not resolve a wallet address.',
+      'Portfolio-manager startup identity preflight failed because the configured OWS wallet did not resolve an EVM address.',
     );
 
-    expect(createAgentRuntime).not.toHaveBeenCalled();
+    expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
   });
 });

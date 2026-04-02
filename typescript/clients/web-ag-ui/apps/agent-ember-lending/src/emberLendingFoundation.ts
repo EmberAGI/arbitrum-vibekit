@@ -1,12 +1,9 @@
 import type {
   CreateAgentRuntimeOptions,
 } from 'agent-runtime';
+import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 
 import { createEmberLendingDomain, type EmberLendingLifecycleState } from './sharedEmberAdapter.js';
-import {
-  createEmberLendingLocalOwsExecutionSigner,
-  resolveEmberLendingLocalOwsBaseUrl,
-} from './localOwsExecutionSigner.js';
 import {
   createEmberLendingSharedEmberHttpHost,
   resolveEmberLendingSharedEmberBaseUrl,
@@ -22,7 +19,9 @@ export type EmberLendingGatewayEnv = NodeJS.ProcessEnv & {
   EMBER_LENDING_MODEL?: string;
   DATABASE_URL?: string;
   SHARED_EMBER_BASE_URL?: string;
-  EMBER_LENDING_OWS_BASE_URL?: string;
+  EMBER_LENDING_OWS_WALLET_NAME?: string;
+  EMBER_LENDING_OWS_PASSPHRASE?: string;
+  EMBER_LENDING_OWS_VAULT_PATH?: string;
 };
 
 type EmberLendingAgentRuntimeOptions = CreateAgentRuntimeOptions<EmberLendingLifecycleState>;
@@ -36,7 +35,11 @@ type EmberLendingGatewayModel = EmberLendingAgentConfig['model'];
 
 export type EmberLendingGatewayDependencies = {
   protocolHost: ReturnType<typeof createEmberLendingSharedEmberHttpHost> | undefined;
-  executionSigner: ReturnType<typeof createEmberLendingLocalOwsExecutionSigner> | undefined;
+};
+
+type CreateEmberLendingAgentConfigOptions = {
+  runtimeSigning?: AgentRuntimeSigningService;
+  runtimeSignerRef?: string;
 };
 
 function requireEnvValue(
@@ -73,10 +76,11 @@ function createOpenRouterModel(modelId: string): EmberLendingGatewayModel {
 
 export function createEmberLendingAgentConfig(
   env: EmberLendingGatewayEnv = process.env,
+  options: CreateEmberLendingAgentConfigOptions = {},
 ): EmberLendingAgentConfig {
   const apiKey = requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.EMBER_LENDING_MODEL?.trim() || DEFAULT_EMBER_LENDING_MODEL;
-  const { protocolHost, executionSigner } = resolveEmberLendingGatewayDependencies(env);
+  const { protocolHost } = resolveEmberLendingGatewayDependencies(env);
 
   return {
     model: createOpenRouterModel(modelId),
@@ -85,7 +89,8 @@ export function createEmberLendingAgentConfig(
     tools: [],
     domain: createEmberLendingDomain({
       protocolHost,
-      executionSigner,
+      runtimeSigning: options.runtimeSigning,
+      runtimeSignerRef: options.runtimeSignerRef,
     }),
     agentOptions: {
       initialState: {
@@ -100,17 +105,11 @@ export function resolveEmberLendingGatewayDependencies(
   env: EmberLendingGatewayEnv = process.env,
 ): EmberLendingGatewayDependencies {
   const sharedEmberBaseUrl = resolveEmberLendingSharedEmberBaseUrl(env);
-  const localOwsBaseUrl = resolveEmberLendingLocalOwsBaseUrl(env);
 
   return {
     protocolHost: sharedEmberBaseUrl
       ? createEmberLendingSharedEmberHttpHost({
           baseUrl: sharedEmberBaseUrl,
-        })
-      : undefined,
-    executionSigner: localOwsBaseUrl
-      ? createEmberLendingLocalOwsExecutionSigner({
-          baseUrl: localOwsBaseUrl,
         })
       : undefined,
   };
