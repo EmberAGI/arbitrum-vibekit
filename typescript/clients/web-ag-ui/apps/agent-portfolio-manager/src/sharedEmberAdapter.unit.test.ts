@@ -370,9 +370,23 @@ describe('createPortfolioManagerDomain', () => {
 
     const rootedBootstrapRequest = rootedBootstrapCall[0] as {
       params?: {
-        onboarding?: Record<string, unknown>;
+        onboarding?: {
+          mandates?: Array<{
+            mandate_ref?: string;
+            agent_id?: string;
+          }>;
+          activation?: {
+            mandateRef?: string;
+          };
+        } & Record<string, unknown>;
       };
     };
+
+    const managedMandateRef = rootedBootstrapRequest.params?.onboarding?.mandates?.find(
+      (mandate) => mandate.agent_id === 'ember-lending',
+    )?.mandate_ref;
+    expect(managedMandateRef).toEqual(expect.any(String));
+    expect(rootedBootstrapRequest.params?.onboarding?.activation?.mandateRef).toBe(managedMandateRef);
 
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('capitalObservation');
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('ownedUnits');
@@ -1158,7 +1172,7 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async () => ({
         jsonrpc: '2.0',
-        id: 'shared-ember-wallet-accounting-portfolio-manager-0x00000000000000000000000000000000000000a1',
+        id: 'shared-ember-wallet-accounting-ember-lending-0x00000000000000000000000000000000000000a1',
         result: {
           revision: 4,
           onboarding_state: {
@@ -1189,17 +1203,17 @@ describe('createPortfolioManagerDomain', () => {
                 root_asset: 'USDC',
                 quantity: '10',
                 status: 'reserved',
-                control_path: 'unassigned',
+                control_path: 'lending.supply',
                 reservation_id: 'reservation-a1',
               },
             ],
             reservations: [
               {
                 reservation_id: 'reservation-a1',
-                agent_id: 'portfolio-manager',
+                agent_id: 'ember-lending',
                 purpose: 'deploy',
                 status: 'active',
-                control_path: 'unassigned',
+                control_path: 'lending.supply',
                 unit_allocations: [
                   {
                     unit_id: 'unit-a1',
@@ -1245,7 +1259,7 @@ describe('createPortfolioManagerDomain', () => {
         '  <revision>4</revision>',
         '  <phase>active</phase>',
         '    <asset unit_id="unit-a1" reservation_id="reservation-a1">',
-        '    <reservation reservation_id="reservation-a1" agent_id="portfolio-manager">',
+        '    <reservation reservation_id="reservation-a1" agent_id="ember-lending">',
       ]),
     );
   });

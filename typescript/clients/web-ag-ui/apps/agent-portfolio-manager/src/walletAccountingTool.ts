@@ -3,6 +3,7 @@ import type { CreateAgentRuntimeOptions } from 'agent-runtime';
 import type { PortfolioManagerSharedEmberProtocolHost } from './sharedEmberAdapter.js';
 import {
   buildPortfolioManagerWalletAccountingDetails,
+  PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID,
   PORTFOLIO_MANAGER_SHARED_EMBER_NETWORK,
   readPortfolioManagerOnboardingState,
   type PortfolioManagerWalletAccountingDetails,
@@ -81,7 +82,7 @@ export function createPortfolioManagerWalletAccountingTool(input: {
       const toolArgs = parseWalletAccountingToolArgs(args);
       const { revision, onboardingState } = await readPortfolioManagerOnboardingState({
         protocolHost: input.protocolHost,
-        agentId: input.agentId,
+        agentId: input.agentId || PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID,
         walletAddress: toolArgs.walletAddress,
         network: PORTFOLIO_MANAGER_SHARED_EMBER_NETWORK,
       });

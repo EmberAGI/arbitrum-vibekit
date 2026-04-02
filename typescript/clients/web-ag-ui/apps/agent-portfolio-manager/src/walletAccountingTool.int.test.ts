@@ -1,51 +1,15 @@
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createPortfolioManagerDomain } from './sharedEmberAdapter.js';
 import { createPortfolioManagerSharedEmberHttpHost } from './sharedEmberHttpHost.js';
+import {
+  resolveSharedEmberTarget,
+  type StartedSharedEmberTarget,
+} from './sharedEmberIntegrationHarness.js';
 import { createPortfolioManagerWalletAccountingTool } from './walletAccountingTool.js';
-
-type StartedSharedEmberTarget = {
-  baseUrl: string;
-  close: () => Promise<void>;
-};
 
 const runSharedEmberIntegration = process.env['RUN_SHARED_EMBER_INT']?.trim() === '1';
 const describeSharedEmberIntegration = runSharedEmberIntegration ? describe : describe.skip;
-
-async function resolveSharedEmberTarget(): Promise<StartedSharedEmberTarget> {
-  const explicitBaseUrl = process.env['SHARED_EMBER_BASE_URL']?.trim();
-  if (explicitBaseUrl) {
-    return {
-      baseUrl: explicitBaseUrl,
-      close: async () => undefined,
-    };
-  }
-
-  const privateRepoRoot = process.env['EMBER_ORCHESTRATION_V1_SPEC_ROOT']?.trim();
-  if (!privateRepoRoot) {
-    throw new Error(
-      'Set SHARED_EMBER_BASE_URL or EMBER_ORCHESTRATION_V1_SPEC_ROOT when RUN_SHARED_EMBER_INT=1.',
-    );
-  }
-
-  if (!existsSync(path.join(privateRepoRoot, 'node_modules'))) {
-    throw new Error(
-      'The private ember-orchestration-v1-spec repo must have dependencies installed before running shared Ember integration tests.',
-    );
-  }
-
-  const harnessModule = (await import(
-    pathToFileURL(path.join(privateRepoRoot, 'scripts/shared-domain-service-repo-harness.ts')).href
-  )) as {
-    startRepoLocalSharedEmberDomainProtocolHttpServer: () => Promise<StartedSharedEmberTarget>;
-  };
-
-  return harnessModule.startRepoLocalSharedEmberDomainProtocolHttpServer();
-}
 
 function createUniqueWalletAddress(seed: number): `0x${string}` {
   return `0x${seed.toString(16).padStart(40, '0')}` as `0x${string}`;
@@ -85,87 +49,28 @@ function createOnboardingBootstrap(suffix: string, walletAddress: `0x${string}`)
     },
     mandates: [
       {
-        mandate_ref: `mandate-wallet-accounting-${suffix}`,
+        mandate_ref: `mandate-portfolio-manager-${suffix}`,
         agent_id: 'portfolio-manager',
         mandate_summary: 'activate portfolio manager reserves',
+        managed_onboarding: null,
       },
-    ],
-    capitalObservation: {
-      observation_id: `observation-wallet-accounting-${suffix}`,
-      kind: 'onboarding_scan',
-      wallet_address: walletAddress,
-      network: 'arbitrum',
-      observed_at: '2026-03-30T00:00:00.000Z',
-      benchmark_asset: 'USD',
-      valuation_ref: `valuation-wallet-accounting-${suffix}`,
-      asset_deltas: [{ root_asset: 'USDC', quantity_delta: '10' }],
-      affected_unit_ids: [`unit-wallet-accounting-${suffix}`],
-    },
-    userReservePolicies: [
       {
-        reserve_policy_ref: `reserve-policy-wallet-accounting-${suffix}`,
-        summary: 'reserve 10 USDC for portfolio manager',
-        user_reserve_rules: [
-          {
-            root_asset: 'USDC',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            reserved_quantity: '10',
-            reason: 'portfolio manager bootstrap reserve',
-          },
-        ],
-      },
-    ],
-    ownedUnits: [
-      {
-        unit_id: `unit-wallet-accounting-${suffix}`,
-        root_asset: 'USDC',
-        network: 'arbitrum',
-        wallet_address: walletAddress,
-        quantity: '10',
-        owner_type: 'user_idle',
-        owner_id: `user-wallet-accounting-${suffix}`,
-        status: 'reserved',
-        reservation_id: `reservation-wallet-accounting-${suffix}`,
-        delegation_id: null,
-        control_path: 'unassigned',
-        position_kind: 'unassigned',
-        benchmark_asset: 'USD',
-        benchmark_value: '10',
-        valuation_ref: `valuation-wallet-accounting-${suffix}`,
-        cost_basis: '10',
-        opened_at: '2026-03-30T00:00:00.000Z',
-        closed_at: null,
-        parent_unit_ids: [],
-        metadata: {
-          source: 'onboarding_scan',
+        mandate_ref: `mandate-ember-lending-${suffix}`,
+        agent_id: 'ember-lending',
+        mandate_summary: 'lend USDC through the managed lending lane',
+        managed_onboarding: {
+          root_asset: 'USDC',
+          benchmark_asset: 'USD',
+          allocation_mode: 'allocable_idle',
+          intent: 'deploy',
+          control_path: 'lending.supply',
         },
       },
     ],
-    reservations: [
-      {
-        reservation_id: `reservation-wallet-accounting-${suffix}`,
-        agent_id: 'portfolio-manager',
-        owner_id: `user-wallet-accounting-${suffix}`,
-        purpose: 'deploy',
-        control_path: 'unassigned',
-        unit_allocations: [{ unit_id: `unit-wallet-accounting-${suffix}`, quantity: '10' }],
-        status: 'active',
-        created_at: '2026-03-30T00:00:00.000Z',
-        released_at: null,
-        superseded_by: null,
-      },
-    ],
-    policySnapshots: [
-      {
-        policy_snapshot_ref: `policy-wallet-accounting-${suffix}`,
-        agent_id: 'portfolio-manager',
-        network: 'arbitrum',
-        control_paths: ['unassigned'],
-        unit_bounds: [{ unit_id: `unit-wallet-accounting-${suffix}`, quantity: '10' }],
-        created_at: '2026-03-30T00:00:00.000Z',
-      },
-    ],
+    userReservePolicies: [],
+    activation: {
+      mandateRef: `mandate-ember-lending-${suffix}`,
+    },
   };
 }
 
@@ -192,7 +97,7 @@ describeSharedEmberIntegration('wallet accounting tool Shared Ember integration'
     });
     const tool = createPortfolioManagerWalletAccountingTool({
       protocolHost,
-      agentId: 'portfolio-manager',
+      agentId: 'ember-lending',
     });
 
     await expect(
@@ -248,13 +153,13 @@ describeSharedEmberIntegration('wallet accounting tool Shared Ember integration'
           expect.objectContaining({
             asset: 'USDC',
             quantity: '10',
-            controlPath: 'unassigned',
+            controlPath: 'lending.supply',
           }),
         ],
         reservations: [
           expect.objectContaining({
-            agentId: 'portfolio-manager',
-            controlPath: 'unassigned',
+            agentId: 'ember-lending',
+            controlPath: 'lending.supply',
           }),
         ],
       },

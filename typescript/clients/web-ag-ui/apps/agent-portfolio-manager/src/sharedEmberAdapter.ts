@@ -2,6 +2,7 @@ import type { AgentRuntimeDomainConfig } from 'agent-runtime';
 import {
   buildPortfolioManagerWalletAccountingDetails,
   buildSharedEmberAccountingContextXml,
+  resolvePortfolioManagerAccountingAgentId,
   readPortfolioManagerOnboardingState,
 } from './sharedEmberOnboardingState.js';
 
@@ -791,9 +792,12 @@ export function createPortfolioManagerDomain(
       const walletAddress = readPortfolioManagerContextWalletAddress(currentState);
       if (walletAddress && options.protocolHost) {
         try {
+          const accountingAgentId = resolvePortfolioManagerAccountingAgentId(
+            currentState.lastOnboardingBootstrap,
+          );
           const { revision, onboardingState } = await readPortfolioManagerOnboardingState({
             protocolHost: options.protocolHost,
-            agentId,
+            agentId: accountingAgentId,
             walletAddress,
           });
           context.push(

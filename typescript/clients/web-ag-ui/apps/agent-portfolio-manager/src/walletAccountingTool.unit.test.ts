@@ -12,7 +12,7 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
           protocol_version: 'v1',
           revision: 4,
           onboarding_state: {
-            agent_id: 'portfolio-manager',
+            agent_id: 'ember-lending',
             wallet_address: '0x00000000000000000000000000000000000000a1',
             network: 'arbitrum',
             phase: 'active',
@@ -41,17 +41,17 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
                 root_asset: 'USDC',
                 quantity: '10',
                 status: 'reserved',
-                control_path: 'unassigned',
+                control_path: 'lending.supply',
                 reservation_id: 'reservation-usdc-a1',
               },
             ],
             reservations: [
               {
                 reservation_id: 'reservation-usdc-a1',
-                agent_id: 'portfolio-manager',
+                agent_id: 'ember-lending',
                 purpose: 'deploy',
                 status: 'active',
-                control_path: 'unassigned',
+                control_path: 'lending.supply',
                 unit_allocations: [
                   {
                     unit_id: 'unit-usdc-a1',
@@ -63,7 +63,7 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
             policy_snapshots: [
               {
                 policy_snapshot_ref: 'policy-usdc-a1',
-                control_paths: ['unassigned'],
+                control_paths: ['lending.supply'],
               },
             ],
           },
@@ -75,7 +75,7 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
 
     const tool = createPortfolioManagerWalletAccountingTool({
       protocolHost,
-      agentId: 'portfolio-manager',
+      agentId: 'ember-lending',
     });
 
     const result = await tool.execute?.('tool-wallet-accounting-1', {
@@ -84,10 +84,10 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
 
     expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
       jsonrpc: '2.0',
-      id: 'shared-ember-wallet-accounting-portfolio-manager-0x00000000000000000000000000000000000000a1',
+      id: 'shared-ember-wallet-accounting-ember-lending-0x00000000000000000000000000000000000000a1',
       method: 'orchestrator.readOnboardingState.v1',
       params: {
-        agent_id: 'portfolio-manager',
+        agent_id: 'ember-lending',
         wallet_address: '0x00000000000000000000000000000000000000a1',
         network: 'arbitrum',
       },
@@ -114,14 +114,14 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
             asset: 'USDC',
             quantity: '10',
             status: 'reserved',
-            controlPath: 'unassigned',
+            controlPath: 'lending.supply',
           },
         ],
         reservations: [
           {
             reservationId: 'reservation-usdc-a1',
-            agentId: 'portfolio-manager',
-            controlPath: 'unassigned',
+            agentId: 'ember-lending',
+            controlPath: 'lending.supply',
             allocations: [
               {
                 unitId: 'unit-usdc-a1',
@@ -177,7 +177,7 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
 
     const tool = createPortfolioManagerWalletAccountingTool({
       protocolHost,
-      agentId: 'portfolio-manager',
+      agentId: 'ember-lending',
     });
 
     const result = await tool.execute?.('tool-wallet-accounting-2', {

@@ -1,6 +1,7 @@
 import type { PortfolioManagerSharedEmberProtocolHost } from './sharedEmberAdapter.js';
 
 export const PORTFOLIO_MANAGER_SHARED_EMBER_NETWORK = 'arbitrum';
+export const PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID = 'ember-lending';
 
 export type OnboardingProofs = {
   rooted_wallet_context_registered: boolean;
@@ -58,6 +59,12 @@ type OnboardingStateResponse = {
   };
 };
 
+type OnboardingBootstrapMandate = {
+  mandate_ref?: string;
+  agent_id?: string;
+  managed_onboarding?: unknown;
+};
+
 export type PortfolioManagerWalletAccountingDetails = {
   wallet: {
     address: string;
@@ -100,6 +107,39 @@ function escapeXml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;');
+}
+
+export function resolvePortfolioManagerAccountingAgentId(onboardingBootstrap: unknown): string {
+  if (typeof onboardingBootstrap !== 'object' || onboardingBootstrap === null) {
+    return PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID;
+  }
+
+  const onboardingBootstrapRecord = onboardingBootstrap as Record<string, unknown>;
+  const mandates = Array.isArray(onboardingBootstrapRecord['mandates'])
+    ? (onboardingBootstrapRecord['mandates'] as OnboardingBootstrapMandate[])
+    : [];
+  const activation =
+    typeof onboardingBootstrapRecord['activation'] === 'object' &&
+    onboardingBootstrapRecord['activation'] !== null
+      ? onboardingBootstrapRecord['activation']
+      : null;
+  const activatedMandateRef =
+    activation && 'mandateRef' in activation && typeof activation.mandateRef === 'string'
+      ? activation.mandateRef
+      : null;
+
+  const managedMandates = mandates.filter(
+    (mandate) => typeof mandate.agent_id === 'string' && mandate.managed_onboarding !== null,
+  );
+  const activatedManagedMandate = managedMandates.find(
+    (mandate) => mandate.mandate_ref === activatedMandateRef,
+  );
+
+  return (
+    activatedManagedMandate?.agent_id ??
+    managedMandates[0]?.agent_id ??
+    PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID
+  );
 }
 
 export async function readPortfolioManagerOnboardingState(input: {

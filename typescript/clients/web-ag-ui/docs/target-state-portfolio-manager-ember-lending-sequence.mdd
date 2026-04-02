@@ -33,6 +33,8 @@ sequenceDiagram
 
   PM->>SE: complete rooted bootstrap with activation.mandateRef targeting the approved lending mandate
   Note over SE: Wallet observation, accounting-unit ingestion, reservation creation, and policy snapshot materialization happen inside Shared Ember
+  PM->>SE: read onboarding/accounting state through the activated managed mandate lane
+  Note over PM,SE: Portfolio-manager accounting context follows the same managed `lending.supply` lane that bootstrap activated
   User->>Web: Open Ember Lending detail
   Web->>Runtime: connect(agent-ember-lending, threadId)
   Runtime->>EL: runtime-owned hydrate + system-context assembly
@@ -76,4 +78,5 @@ sequenceDiagram
 - There is no model-visible onboarding-context read or manual sync/bootstrap step.
 - `request_transaction_execution` must surface admit-and-execute, blocked, and denied admission outcomes explicitly in status and artifacts.
 - The managed lending mandate supplied at bootstrap should carry `managed_onboarding` so Shared Ember can derive the initial lane and delegation inputs from structured mandate data.
+- Portfolio-manager wallet accounting should resolve its onboarding-state `agent_id` from the activated managed mandate so operator-visible reservations and policy snapshots match the managed lane Ember Lending sees.
 - When Shared Ember has a durable subagent identity ready during onboarding, the first post-bootstrap execution-context read should already expose a non-null `subagent_wallet_address`, and Ember Lending should project it without any manual reseed step.

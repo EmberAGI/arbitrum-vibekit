@@ -10,6 +10,7 @@ import {
 } from './sharedEmberHttpHost.js';
 import { createPortfolioManagerDiagnosticTool } from './diagnosticTool.js';
 import { createPortfolioManagerWalletAccountingTool } from './walletAccountingTool.js';
+import { PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID } from './sharedEmberOnboardingState.js';
 
 const DEFAULT_PORTFOLIO_MANAGER_MODEL = 'openai/gpt-5.4-mini';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -87,7 +88,7 @@ export function createPortfolioManagerAgentConfig(
         ? [
             createPortfolioManagerWalletAccountingTool({
               protocolHost,
-              agentId: 'portfolio-manager',
+              agentId: PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID,
             }),
           ]
         : []),

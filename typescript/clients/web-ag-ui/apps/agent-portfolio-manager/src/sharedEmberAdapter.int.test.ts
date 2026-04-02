@@ -1,16 +1,11 @@
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createPortfolioManagerDomain } from './sharedEmberAdapter.js';
 import { createPortfolioManagerSharedEmberHttpHost } from './sharedEmberHttpHost.js';
-
-type StartedSharedEmberTarget = {
-  baseUrl: string;
-  close: () => Promise<void>;
-};
+import {
+  resolveSharedEmberTarget,
+  type StartedSharedEmberTarget,
+} from './sharedEmberIntegrationHarness.js';
 
 const runSharedEmberIntegration = process.env['RUN_SHARED_EMBER_INT']?.trim() === '1';
 const describeSharedEmberIntegration = runSharedEmberIntegration ? describe : describe.skip;
@@ -19,37 +14,6 @@ const TEST_USER_WALLET = '0x00000000000000000000000000000000000000b1' as const;
 const TEST_ORCHESTRATOR_WALLET = '0x00000000000000000000000000000000000000b2' as const;
 const TEST_DELEGATION_MANAGER = '0x00000000000000000000000000000000000000b3' as const;
 
-async function resolveSharedEmberTarget(): Promise<StartedSharedEmberTarget> {
-  const explicitBaseUrl = process.env['SHARED_EMBER_BASE_URL']?.trim();
-  if (explicitBaseUrl) {
-    return {
-      baseUrl: explicitBaseUrl,
-      close: async () => undefined,
-    };
-  }
-
-  const privateRepoRoot = process.env['EMBER_ORCHESTRATION_V1_SPEC_ROOT']?.trim();
-  if (!privateRepoRoot) {
-    throw new Error(
-      'Set SHARED_EMBER_BASE_URL or EMBER_ORCHESTRATION_V1_SPEC_ROOT when RUN_SHARED_EMBER_INT=1.',
-    );
-  }
-
-  if (!existsSync(path.join(privateRepoRoot, 'node_modules'))) {
-    throw new Error(
-      'The private ember-orchestration-v1-spec repo must have dependencies installed before running shared Ember integration tests.',
-    );
-  }
-
-  const harnessModule = (await import(
-    pathToFileURL(path.join(privateRepoRoot, 'scripts/shared-domain-service-repo-harness.ts')).href
-  )) as {
-    startRepoLocalSharedEmberDomainProtocolHttpServer: () => Promise<StartedSharedEmberTarget>;
-  };
-
-  return harnessModule.startRepoLocalSharedEmberDomainProtocolHttpServer();
-}
-
 function createRootDelegationHandoff(suffix: string) {
   return {
     handoff_id: `handoff-root-portfolio-int-${suffix}`,
@@ -57,7 +21,7 @@ function createRootDelegationHandoff(suffix: string) {
     user_id: 'user_idle',
     user_wallet: TEST_USER_WALLET,
     orchestrator_wallet: TEST_ORCHESTRATOR_WALLET,
-    network: 'base',
+    network: 'arbitrum',
     artifact_ref: `artifact-root-portfolio-int-${suffix}`,
     issued_at: '2026-03-29T00:00:00Z',
     activated_at: '2026-03-29T00:00:05Z',
@@ -112,7 +76,7 @@ function createOnboardingBootstrap() {
       rooted_wallet_context_id: 'rwc-user-protocol-001',
       user_id: 'user_idle',
       wallet_address: TEST_USER_WALLET,
-      network: 'base',
+      network: 'arbitrum',
       registered_at: '2026-03-29T00:00:00Z',
       metadata: {
         source: 'onboarding_scan',
@@ -149,11 +113,11 @@ function createOnboardingBootstrap() {
 describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integration', () => {
   let target: StartedSharedEmberTarget;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     target = await resolveSharedEmberTarget();
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await target?.close();
   });
 
@@ -386,7 +350,7 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
         id: `rpc-shared-ember-int-read-onboarding-${suffix}`,
         method: 'orchestrator.readOnboardingState.v1',
         params: {
-          agent_id: 'portfolio-manager',
+          agent_id: 'ember-lending',
           wallet_address: onboarding.rootedWalletContext.wallet_address,
           network: onboarding.rootedWalletContext.network,
         },
@@ -400,17 +364,17 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
           phase: 'active',
           owned_units: [
             expect.objectContaining({
-              control_path: 'unassigned',
+              control_path: 'lending.supply',
             }),
           ],
           reservations: [
             expect.objectContaining({
-              control_path: 'unassigned',
+              control_path: 'lending.supply',
             }),
           ],
           policy_snapshots: [
             expect.objectContaining({
-              control_paths: ['unassigned'],
+              control_paths: ['lending.supply'],
             }),
           ],
         },
@@ -519,7 +483,7 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
         id: `rpc-shared-ember-int-read-onboarding-signing-${suffix}`,
         method: 'orchestrator.readOnboardingState.v1',
         params: {
-          agent_id: 'portfolio-manager',
+          agent_id: 'ember-lending',
           wallet_address: walletAddress,
           network: 'arbitrum',
         },
@@ -536,12 +500,12 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
           },
           reservations: expect.arrayContaining([
             expect.objectContaining({
-              control_path: 'unassigned',
+              control_path: 'lending.supply',
             }),
           ]),
           policy_snapshots: expect.arrayContaining([
             expect.objectContaining({
-              control_paths: ['unassigned'],
+              control_paths: ['lending.supply'],
             }),
           ]),
         },
