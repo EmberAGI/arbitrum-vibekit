@@ -6,6 +6,28 @@ export type EmberLendingSharedEmberProtocolHost = {
   acknowledgeCommittedEventOutbox: (input: unknown) => Promise<unknown>;
 };
 
+export type EmberLendingExecutionSigner = {
+  signRedelegationPackage?: (input: {
+    walletAddress: `0x${string}`;
+    transactionPlanId: string;
+    requestId: string;
+    redelegationSigningPackage: Record<string, unknown>;
+  }) => Promise<{
+    signer_wallet_address?: string;
+    signed_redelegation?: Record<string, unknown>;
+  }>;
+  signExecutionPackage: (input: {
+    walletAddress: `0x${string}`;
+    transactionPlanId: string;
+    requestId: string;
+    executionSigningPackage: Record<string, unknown>;
+  }) => Promise<{
+    signer_wallet_address?: string;
+    signer_address?: string;
+    raw_transaction?: string;
+  }>;
+};
+
 export const EMBER_LENDING_INTERNAL_HYDRATE_COMMAND = 'hydrate_runtime_projection';
 
 export type EmberLendingLifecycleState = {
@@ -23,13 +45,23 @@ export type EmberLendingLifecycleState = {
   lastCandidatePlanSummary: string | null;
   lastExecutionResult: unknown;
   lastExecutionTxHash: `0x${string}` | null;
+  pendingExecutionSubmission?: PendingExecutionSubmission | null;
   lastEscalationRequest: unknown;
   lastEscalationSummary: string | null;
 };
 
 type CreateEmberLendingDomainOptions = {
   protocolHost?: EmberLendingSharedEmberProtocolHost;
+  executionSigner?: EmberLendingExecutionSigner;
   agentId?: string;
+};
+
+type RequestTransactionExecutionResponse = {
+  result?: {
+    revision?: number;
+    committed_event_ids?: string[];
+    execution_result?: unknown;
+  };
 };
 
 type SharedEmberRevisionResponse = {
@@ -71,6 +103,22 @@ type SharedEmberExecutionContextEnvelope = {
   executionContext: NonNullable<SharedEmberExecutionContext>;
 };
 
+type PendingExecutionSubmission = {
+  transactionPlanId: string;
+  requestId: string;
+  idempotencyKey: string;
+  signedTransaction: Record<string, unknown>;
+  revision: number | null;
+};
+
+type SharedEmberCommittedEvent = {
+  sequence?: number;
+  aggregate?: string;
+  aggregate_id?: string;
+  event_type?: string;
+  payload?: Record<string, unknown>;
+};
+
 type PortfolioProjection = Pick<
   EmberLendingLifecycleState,
   | 'mandateRef'
@@ -87,6 +135,29 @@ const DIRECT_HIRE_MESSAGE =
 const DIRECT_FIRE_MESSAGE =
   'Use the portfolio manager to deactivate the managed lending agent.';
 const SHARED_EMBER_NETWORK = 'arbitrum';
+const MAX_PREPARE_TRANSACTION_ATTEMPTS = 3;
+
+class LocalExecutionFailureError extends Error {
+  revision: number | null;
+
+  constructor(message: string, revision: number | null) {
+    super(message);
+    this.name = 'LocalExecutionFailureError';
+    this.revision = revision;
+  }
+}
+
+class PendingExecutionSubmissionError extends Error {
+  revision: number | null;
+  pendingSubmission: PendingExecutionSubmission;
+
+  constructor(message: string, revision: number | null, pendingSubmission: PendingExecutionSubmission) {
+    super(message);
+    this.name = 'PendingExecutionSubmissionError';
+    this.revision = revision;
+    this.pendingSubmission = pendingSubmission;
+  }
+}
 
 function buildDefaultLifecycleState(): EmberLendingLifecycleState {
   return {
@@ -104,6 +175,7 @@ function buildDefaultLifecycleState(): EmberLendingLifecycleState {
     lastCandidatePlanSummary: null,
     lastExecutionResult: null,
     lastExecutionTxHash: null,
+    pendingExecutionSubmission: null,
     lastEscalationRequest: null,
     lastEscalationSummary: null,
   };
@@ -670,7 +742,16 @@ function readCandidatePlanSummary(candidatePlan: unknown): string | null {
 }
 
 function readExecutionTxHash(executionResult: unknown): `0x${string}` | null {
-  if (!isRecord(executionResult) || !isRecord(executionResult['execution'])) {
+  if (!isRecord(executionResult)) {
+    return null;
+  }
+
+  const topLevel = readHexAddress(executionResult['transaction_hash']);
+  if (topLevel) {
+    return topLevel;
+  }
+
+  if (!isRecord(executionResult['execution'])) {
     return null;
   }
 
@@ -689,6 +770,20 @@ function readExecutionRequestResult(executionResult: unknown): Record<string, un
   return executionResult['request_result'];
 }
 
+function readCommittedEvent(value: unknown): SharedEmberCommittedEvent | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    sequence: typeof value['sequence'] === 'number' ? value['sequence'] : undefined,
+    aggregate: readString(value['aggregate']) ?? undefined,
+    aggregate_id: readString(value['aggregate_id']) ?? undefined,
+    event_type: readString(value['event_type']) ?? undefined,
+    payload: isRecord(value['payload']) ? value['payload'] : undefined,
+  };
+}
+
 function ensureSentence(value: string): string {
   return /[.!?]$/.test(value) ? value : `${value}.`;
 }
@@ -698,6 +793,44 @@ function readExecutionStatusMessage(executionResult: unknown): {
   statusMessage: string;
 } {
   const phase = isRecord(executionResult) ? readString(executionResult['phase']) : null;
+  const execution = readRecordKey(executionResult, 'execution');
+  const status = readString(execution?.['status']);
+
+  if (phase === 'completed' && status === 'confirmed') {
+    return {
+      executionStatus: 'completed',
+      statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+    };
+  }
+
+  if (phase === 'completed' && status === 'submitted') {
+    return {
+      executionStatus: 'completed',
+      statusMessage: 'Lending transaction submitted through Shared Ember.',
+    };
+  }
+
+  if (phase === 'completed' && status === 'failed_before_submission') {
+    return {
+      executionStatus: 'failed',
+      statusMessage: 'Lending transaction failed before submission through Shared Ember.',
+    };
+  }
+
+  if (phase === 'completed' && status === 'failed_after_submission') {
+    return {
+      executionStatus: 'failed',
+      statusMessage: 'Lending transaction failed after submission through Shared Ember.',
+    };
+  }
+
+  if (phase === 'completed' && status === 'partial_settlement') {
+    return {
+      executionStatus: 'failed',
+      statusMessage: 'Lending transaction reached partial settlement through Shared Ember.',
+    };
+  }
+
   if (phase !== 'blocked') {
     return {
       executionStatus: 'completed',
@@ -733,6 +866,50 @@ function readEscalationSummary(escalationRequest: unknown): string | null {
   return `${requestKind} escalation ${requestId} created from blocked lending execution.`;
 }
 
+function readExecutionOutcome(executionResult: unknown): string | null {
+  const phase = readStringKey(executionResult, 'phase');
+  const execution = readRecordKey(executionResult, 'execution');
+  const status = readString(execution?.['status']);
+
+  if (phase === 'completed' && status) {
+    return status;
+  }
+
+  if (phase && phase !== 'blocked') {
+    return phase;
+  }
+
+  const requestOutcome = readString(readExecutionRequestResult(executionResult)?.['result']);
+  return requestOutcome === 'denied' ? 'denied' : 'blocked';
+}
+
+function buildExecutionArtifactData(input: {
+  revision: number | null;
+  executionResult: unknown;
+  executionStatus: 'completed' | 'failed';
+  statusMessage: string;
+}) {
+  return {
+    type: 'shared-ember-execution-result',
+    revision: input.revision,
+    ...(readExecutionOutcome(input.executionResult)
+      ? {
+          outcome: readExecutionOutcome(input.executionResult),
+        }
+      : {}),
+    ...(readExecutionTxHash(input.executionResult)
+      ? {
+          transactionHash: readExecutionTxHash(input.executionResult),
+        }
+      : {}),
+    ...(input.executionStatus === 'failed'
+      ? {
+          message: input.statusMessage,
+        }
+      : {}),
+  };
+}
+
 function readStringKey(
   input: unknown,
   key: string,
@@ -740,9 +917,231 @@ function readStringKey(
   return isRecord(input) ? readString(input[key]) : null;
 }
 
+function readRecordKey(input: unknown, key: string): Record<string, unknown> | null {
+  return isRecord(input) && isRecord(input[key]) ? input[key] : null;
+}
+
+function readExecutionSigningPackage(
+  preparationResult: unknown,
+): Record<string, unknown> | null {
+  return readRecordKey(preparationResult, 'execution_signing_package');
+}
+
+function readExecutionPreparation(
+  executionResult: unknown,
+): Record<string, unknown> | null {
+  return readRecordKey(executionResult, 'execution_preparation');
+}
+
+function readRedelegationSigningPackage(
+  preparationResult: unknown,
+): Record<string, unknown> | null {
+  return readRecordKey(preparationResult, 'redelegation_signing_package');
+}
+
+function readPreparedExecutionWalletAddress(
+  executionResult: unknown,
+): `0x${string}` | null {
+  const executionPreparation = readExecutionPreparation(executionResult);
+  return readHexAddress(executionPreparation?.['agent_wallet']);
+}
+
+function readPreparedRedelegationWalletAddress(
+  executionResult: unknown,
+): `0x${string}` | null {
+  const redelegationSigningPackage = readRedelegationSigningPackage(executionResult);
+  return (
+    readHexAddress(redelegationSigningPackage?.['agent_wallet']) ??
+    readPreparedExecutionWalletAddress(executionResult)
+  );
+}
+
+function hasExecutionSigningPreparation(
+  executionResult: unknown,
+): executionResult is Record<string, unknown> {
+  return (
+    isRecord(executionResult) &&
+    readString(executionResult['phase']) === 'ready_for_execution_signing' &&
+    readString(executionResult['request_id']) !== null &&
+    readString(executionResult['transaction_plan_id']) !== null &&
+    readExecutionPreparation(executionResult) !== null &&
+    readExecutionSigningPackage(executionResult) !== null
+  );
+}
+
+function hasRedelegationSigningPreparation(
+  executionResult: unknown,
+): executionResult is Record<string, unknown> {
+  return (
+    isRecord(executionResult) &&
+    readString(executionResult['phase']) === 'ready_for_redelegation' &&
+    readString(executionResult['request_id']) !== null &&
+    readString(executionResult['transaction_plan_id']) !== null &&
+    readExecutionPreparation(executionResult) !== null &&
+    readRedelegationSigningPackage(executionResult) !== null
+  );
+}
+
+function readSignerWalletAddress(result: unknown): `0x${string}` | null {
+  if (!isRecord(result)) {
+    return null;
+  }
+
+  return readHexAddress(result['signer_wallet_address']) ?? readHexAddress(result['signer_address']);
+}
+
+async function registerSignedRedelegation(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  threadId: string;
+  agentId: string;
+  currentRevision: number | null;
+  transactionPlanId: string;
+  requestId: string;
+  idempotencyKey: string;
+  signedRedelegation: Record<string, unknown>;
+}): Promise<{
+  revision: number | null;
+  committedEventIds: string[];
+  executionResult: unknown;
+}> {
+  const response = await runSharedEmberCommandWithResolvedRevision<{
+    result?: {
+      revision?: number;
+      committed_event_ids?: string[];
+      execution_result?: unknown;
+    };
+  }>({
+    protocolHost: input.protocolHost,
+    threadId: input.threadId,
+    agentId: input.agentId,
+    currentRevision: input.currentRevision,
+    buildRequest: (expectedRevision) => ({
+      jsonrpc: '2.0',
+      id: `shared-ember-${input.threadId}-register-signed-redelegation`,
+      method: 'orchestrator.registerSignedRedelegation.v1',
+      params: {
+        idempotency_key: `${input.idempotencyKey}:register-redelegation:${input.requestId}`,
+        expected_revision: expectedRevision,
+        transaction_plan_id: input.transactionPlanId,
+        signed_redelegation: input.signedRedelegation,
+      },
+    }),
+  });
+
+  return {
+    revision: response.result?.revision ?? null,
+    committedEventIds: response.result?.committed_event_ids ?? [],
+    executionResult: response.result?.execution_result ?? null,
+  };
+}
+
+async function submitSignedTransaction(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  threadId: string;
+  agentId: string;
+  currentRevision: number | null;
+  transactionPlanId: string;
+  requestId: string;
+  idempotencyKey: string;
+  signedTransaction: Record<string, unknown>;
+}): Promise<{
+  revision: number | null;
+  committedEventIds: string[];
+  executionResult: unknown;
+}> {
+  const response = await runSharedEmberCommandWithResolvedRevision<{
+    result?: {
+      revision?: number;
+      committed_event_ids?: string[];
+      execution_result?: unknown;
+    };
+  }>({
+    protocolHost: input.protocolHost,
+    threadId: input.threadId,
+    agentId: input.agentId,
+    currentRevision: input.currentRevision,
+    buildRequest: (expectedRevision) => ({
+      jsonrpc: '2.0',
+      id: `shared-ember-${input.threadId}-submit-signed-transaction`,
+      method: 'subagent.submitSignedTransaction.v1',
+      params: {
+        idempotency_key: `${input.idempotencyKey}:submit-transaction:${input.requestId}`,
+        expected_revision: expectedRevision,
+        transaction_plan_id: input.transactionPlanId,
+        signed_transaction: input.signedTransaction,
+      },
+    }),
+  });
+
+  return {
+    revision: response.result?.revision ?? null,
+    committedEventIds: response.result?.committed_event_ids ?? [],
+    executionResult: response.result?.execution_result ?? null,
+  };
+}
+
+async function readRecoveredExecutionResultFromOutbox(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  agentId: string;
+  requestId: string;
+}): Promise<{
+  revision: number | null;
+  executionResult: unknown;
+} | null> {
+  const outboxPage = (await input.protocolHost.readCommittedEventOutbox({
+    protocol_version: 'v1',
+    consumer_id: `${input.agentId}-${input.requestId}`,
+    after_sequence: 0,
+    limit: 100,
+  })) as {
+    revision?: number;
+    events?: unknown[];
+  };
+
+  const matchingEvent = (outboxPage.events ?? [])
+    .map((event) => readCommittedEvent(event))
+    .filter((event): event is SharedEmberCommittedEvent => event !== null)
+    .filter(
+      (event) =>
+        event.aggregate === 'request' &&
+        event.aggregate_id === input.requestId &&
+        (event.event_type === 'requestExecution.submitted.v1' ||
+          event.event_type === 'requestExecution.completed.v1'),
+    )
+    .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0))
+    .at(-1);
+
+  if (!matchingEvent) {
+    return null;
+  }
+
+  const status = readString(matchingEvent.payload?.['status']);
+  const executionId = readString(matchingEvent.payload?.['execution_id']);
+  const transactionHash = readHexAddress(matchingEvent.payload?.['transaction_hash']);
+  const transactionPlanId = readString(matchingEvent.payload?.['transaction_plan_id']);
+  const requestId = readString(matchingEvent.payload?.['request_id']);
+
+  if (!status || !transactionPlanId || !requestId) {
+    return null;
+  }
+
+  return {
+    revision: outboxPage.revision ?? null,
+    executionResult: {
+      phase: 'completed',
+      request_id: requestId,
+      transaction_plan_id: transactionPlanId,
+      execution: {
+        status,
+        ...(executionId ? { execution_id: executionId } : {}),
+        ...(transactionHash ? { transaction_hash: transactionHash } : {}),
+      },
+    },
+  };
+}
+
 function buildManagedSubagentHandoffBase(input: {
   state: EmberLendingLifecycleState;
-  threadId: string;
   agentId: string;
 }): Record<string, unknown> | null {
   if (!input.state.walletAddress || !input.state.rootUserWalletAddress || !input.state.mandateRef) {
@@ -755,7 +1154,6 @@ function buildManagedSubagentHandoffBase(input: {
 
   return {
     agent_id: input.agentId,
-    agent_wallet: input.state.walletAddress,
     root_user_wallet: input.state.rootUserWalletAddress,
     mandate_ref: input.state.mandateRef,
   };
@@ -902,6 +1300,302 @@ function readTransactionPlanId(
   }
 
   return null;
+}
+
+function buildExecutionPreparationRequestIdempotencyKey(input: {
+  baseIdempotencyKey: string;
+  attempt: number;
+  priorRevision: number | null;
+}): string {
+  if (input.attempt <= 1) {
+    return input.baseIdempotencyKey;
+  }
+
+  return `${input.baseIdempotencyKey}:await-authority-preparation:${input.priorRevision ?? input.attempt - 1}`;
+}
+
+async function runPreparedExecutionFlow(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  executionSigner?: EmberLendingExecutionSigner;
+  threadId: string;
+  agentId: string;
+  currentState: EmberLendingLifecycleState;
+  transactionPlanId: string;
+  idempotencyKey: string;
+}): Promise<{
+  revision: number | null;
+  committedEventIds: string[];
+  executionResult: unknown;
+}> {
+  let requestResponse = await runSharedEmberCommandWithResolvedRevision<RequestTransactionExecutionResponse>({
+    protocolHost: input.protocolHost,
+    threadId: input.threadId,
+    agentId: input.agentId,
+    currentRevision: input.currentState.lastSharedEmberRevision,
+    buildRequest: (expectedRevision) => ({
+      jsonrpc: '2.0',
+      id: `shared-ember-${input.threadId}-request-transaction-execution`,
+      method: 'subagent.requestTransactionExecution.v1',
+      params: {
+        idempotency_key: buildExecutionPreparationRequestIdempotencyKey({
+          baseIdempotencyKey: input.idempotencyKey,
+          attempt: 1,
+          priorRevision: input.currentState.lastSharedEmberRevision,
+        }),
+        expected_revision: expectedRevision,
+        transaction_plan_id: input.transactionPlanId,
+      },
+    }),
+  });
+  let committedEventIds = [...(requestResponse.result?.committed_event_ids ?? [])];
+  let executionResult: unknown = requestResponse.result?.execution_result ?? null;
+  let requestAttempts = 1;
+
+  while (
+    isRecord(executionResult) &&
+    readString(executionResult['phase']) === 'authority_preparation_needed'
+  ) {
+    if (requestAttempts >= MAX_PREPARE_TRANSACTION_ATTEMPTS) {
+      throw new LocalExecutionFailureError(
+        'Lending transaction execution could not continue because Shared Ember did not complete authority preparation.',
+        requestResponse.result?.revision ?? null,
+      );
+    }
+
+    requestAttempts += 1;
+    requestResponse = await runSharedEmberCommandWithResolvedRevision<RequestTransactionExecutionResponse>({
+      protocolHost: input.protocolHost,
+      threadId: input.threadId,
+      agentId: input.agentId,
+      currentRevision: requestResponse.result?.revision ?? null,
+      buildRequest: (expectedRevision) => ({
+        jsonrpc: '2.0',
+        id: `shared-ember-${input.threadId}-request-transaction-execution`,
+        method: 'subagent.requestTransactionExecution.v1',
+        params: {
+          idempotency_key: buildExecutionPreparationRequestIdempotencyKey({
+            baseIdempotencyKey: input.idempotencyKey,
+            attempt: requestAttempts,
+            priorRevision: requestResponse.result?.revision ?? null,
+          }),
+          expected_revision: expectedRevision,
+          transaction_plan_id: input.transactionPlanId,
+        },
+      }),
+    });
+    committedEventIds.push(...(requestResponse.result?.committed_event_ids ?? []));
+    executionResult = requestResponse.result?.execution_result ?? null;
+  }
+
+  if (hasRedelegationSigningPreparation(executionResult)) {
+    const preparedWalletAddress = readPreparedRedelegationWalletAddress(executionResult);
+    if (!input.currentState.walletAddress || !preparedWalletAddress) {
+      throw new LocalExecutionFailureError(
+        'Lending redelegation signing could not continue because the dedicated subagent wallet identity is incomplete.',
+        requestResponse.result?.revision ?? null,
+      );
+    }
+    if (preparedWalletAddress !== input.currentState.walletAddress) {
+      throw new LocalExecutionFailureError(
+        'Lending redelegation signing could not continue because the prepared signing package does not match the dedicated subagent wallet.',
+        requestResponse.result?.revision ?? null,
+      );
+    }
+    if (!input.executionSigner?.signRedelegationPackage) {
+      throw new LocalExecutionFailureError(
+        'Local OWS signer is not configured for lending transaction execution.',
+        requestResponse.result?.revision ?? null,
+      );
+    }
+
+    const requestId = readString(executionResult['request_id']);
+    const signedRedelegation = await input.executionSigner.signRedelegationPackage({
+      walletAddress: input.currentState.walletAddress,
+      transactionPlanId: input.transactionPlanId,
+      requestId: requestId!,
+      redelegationSigningPackage: readRedelegationSigningPackage(executionResult)!,
+    });
+
+    const signerWalletAddress = readSignerWalletAddress(signedRedelegation);
+    if (!signerWalletAddress || signerWalletAddress !== input.currentState.walletAddress) {
+      throw new LocalExecutionFailureError(
+        'Lending redelegation signing could not continue because the local signer did not confirm the dedicated subagent wallet identity.',
+        requestResponse.result?.revision ?? null,
+      );
+    }
+
+    const signedRedelegationRecord = readRecordKey(signedRedelegation, 'signed_redelegation');
+    if (!signedRedelegationRecord) {
+      throw new LocalExecutionFailureError(
+        'Lending redelegation signing could not continue because the local signer did not return a signed redelegation payload.',
+        requestResponse.result?.revision ?? null,
+      );
+    }
+
+    const redelegationResponse = await registerSignedRedelegation({
+      protocolHost: input.protocolHost,
+      threadId: input.threadId,
+      agentId: input.agentId,
+      currentRevision: requestResponse.result?.revision ?? null,
+      transactionPlanId: input.transactionPlanId,
+      requestId: requestId!,
+      idempotencyKey: input.idempotencyKey,
+      signedRedelegation: signedRedelegationRecord,
+    });
+
+    committedEventIds.push(...redelegationResponse.committedEventIds);
+    executionResult = redelegationResponse.executionResult;
+    requestResponse = {
+      result: {
+        revision: redelegationResponse.revision ?? undefined,
+      },
+    };
+  }
+
+  if (!hasExecutionSigningPreparation(executionResult)) {
+    return {
+      revision: requestResponse.result?.revision ?? null,
+      committedEventIds,
+      executionResult,
+    };
+  }
+
+  const preparedWalletAddress = readPreparedExecutionWalletAddress(executionResult);
+  if (!input.currentState.walletAddress || !preparedWalletAddress) {
+    throw new LocalExecutionFailureError(
+      'Lending execution signing could not continue because the dedicated subagent wallet identity is incomplete.',
+      requestResponse.result?.revision ?? null,
+    );
+  }
+  if (preparedWalletAddress !== input.currentState.walletAddress) {
+    throw new LocalExecutionFailureError(
+      'Lending execution signing could not continue because the prepared signing package does not match the dedicated subagent wallet.',
+      requestResponse.result?.revision ?? null,
+    );
+  }
+
+  const requestId = readString(executionResult['request_id']);
+  if (!input.executionSigner) {
+    throw new LocalExecutionFailureError(
+      'Local OWS signer is not configured for lending transaction execution.',
+      requestResponse.result?.revision ?? null,
+    );
+  }
+  const signedExecution = await input.executionSigner.signExecutionPackage({
+    walletAddress: input.currentState.walletAddress,
+    transactionPlanId: input.transactionPlanId,
+    requestId: requestId!,
+    executionSigningPackage: readExecutionSigningPackage(executionResult)!,
+  });
+
+  const signerWalletAddress = readSignerWalletAddress(signedExecution);
+  if (!signerWalletAddress || signerWalletAddress !== input.currentState.walletAddress) {
+    throw new LocalExecutionFailureError(
+      'Lending execution signing could not continue because the local signer did not confirm the dedicated subagent wallet identity.',
+      requestResponse.result?.revision ?? null,
+    );
+  }
+
+  const signerAddress = readHexAddress(signedExecution.signer_address) ?? signerWalletAddress;
+  const rawTransaction = readString(signedExecution.raw_transaction);
+  if (!signerAddress || !rawTransaction) {
+    throw new LocalExecutionFailureError(
+      'Lending execution signing could not continue because the local signer did not return a signed transaction payload.',
+      requestResponse.result?.revision ?? null,
+    );
+  }
+
+  const signedTransaction = {
+    ...readExecutionSigningPackage(executionResult)!,
+    signer_address: signerAddress,
+    raw_transaction: rawTransaction,
+  };
+
+  const submitResponse = await submitSignedTransaction({
+    protocolHost: input.protocolHost,
+    threadId: input.threadId,
+    agentId: input.agentId,
+    currentRevision: requestResponse.result?.revision ?? null,
+    transactionPlanId: input.transactionPlanId,
+    requestId: requestId!,
+    idempotencyKey: input.idempotencyKey,
+    signedTransaction,
+  }).catch((error: unknown) => {
+    if (!(error instanceof Error)) {
+      throw error;
+    }
+
+    throw new PendingExecutionSubmissionError(error.message, requestResponse.result?.revision ?? null, {
+      transactionPlanId: input.transactionPlanId,
+      requestId: requestId!,
+      idempotencyKey: input.idempotencyKey,
+      signedTransaction,
+      revision: requestResponse.result?.revision ?? null,
+    });
+  });
+
+  return {
+    revision: submitResponse.revision,
+    committedEventIds: [
+      ...committedEventIds,
+      ...submitResponse.committedEventIds,
+    ],
+    executionResult: submitResponse.executionResult,
+  };
+}
+
+async function resumePendingExecutionSubmission(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  threadId: string;
+  agentId: string;
+  pendingSubmission: PendingExecutionSubmission;
+}): Promise<{
+  revision: number | null;
+  committedEventIds: string[];
+  executionResult: unknown;
+}> {
+  const recoveredResult = await readRecoveredExecutionResultFromOutbox({
+    protocolHost: input.protocolHost,
+    agentId: input.agentId,
+    requestId: input.pendingSubmission.requestId,
+  });
+
+  if (recoveredResult) {
+    return {
+      revision: recoveredResult.revision,
+      committedEventIds: [],
+      executionResult: recoveredResult.executionResult,
+    };
+  }
+
+  try {
+    const submitResponse = await submitSignedTransaction({
+      protocolHost: input.protocolHost,
+      threadId: input.threadId,
+      agentId: input.agentId,
+      currentRevision: input.pendingSubmission.revision,
+      transactionPlanId: input.pendingSubmission.transactionPlanId,
+      requestId: input.pendingSubmission.requestId,
+      idempotencyKey: input.pendingSubmission.idempotencyKey,
+      signedTransaction: input.pendingSubmission.signedTransaction,
+    });
+
+    return {
+      revision: submitResponse.revision,
+      committedEventIds: submitResponse.committedEventIds,
+      executionResult: submitResponse.executionResult,
+    };
+  } catch (error) {
+    if (!(error instanceof Error)) {
+      throw error;
+    }
+
+    throw new PendingExecutionSubmissionError(
+      error.message,
+      input.pendingSubmission.revision,
+      input.pendingSubmission,
+    );
+  }
 }
 
 function readEscalationResult(operationInput: unknown): unknown {
@@ -1190,30 +1884,57 @@ export function createEmberLendingDomain(
           const idempotencyKey =
             readStringKey(operation.input, 'idempotencyKey') ??
             `idem-execute-transaction-plan-${threadId}`;
-          const response = await runSharedEmberCommandWithResolvedRevision<{
-            result?: {
-              revision?: number;
-              committed_event_ids?: string[];
-              execution_result?: unknown;
-            };
-          }>({
-            protocolHost: options.protocolHost,
-            threadId,
-            agentId,
-            currentRevision: currentState.lastSharedEmberRevision,
-            buildRequest: (expectedRevision) => ({
-              jsonrpc: '2.0',
-              id: `shared-ember-${threadId}-execute-transaction-plan`,
-              method: 'subagent.requestTransactionExecution.v1',
-              params: {
-                idempotency_key: idempotencyKey,
-                expected_revision: expectedRevision,
-                transaction_plan_id: transactionPlanId,
-              },
-            }),
-          });
+          let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>>;
+          try {
+            preparedExecutionResult =
+              currentState.pendingExecutionSubmission?.transactionPlanId === transactionPlanId &&
+              currentState.pendingExecutionSubmission?.idempotencyKey === idempotencyKey
+                ? await resumePendingExecutionSubmission({
+                    protocolHost: options.protocolHost,
+                    threadId,
+                    agentId,
+                    pendingSubmission: currentState.pendingExecutionSubmission,
+                  })
+                : await runPreparedExecutionFlow({
+                    protocolHost: options.protocolHost,
+                    executionSigner: options.executionSigner,
+                    threadId,
+                    agentId,
+                    currentState,
+                    transactionPlanId,
+                    idempotencyKey,
+                  });
+          } catch (error) {
+            if (!(error instanceof Error)) {
+              throw error;
+            }
 
-          const executionResult = response.result?.execution_result ?? null;
+            return {
+              state: {
+                ...currentState,
+                phase: 'active',
+                lastSharedEmberRevision:
+                  error instanceof LocalExecutionFailureError ||
+                  error instanceof PendingExecutionSubmissionError
+                    ? error.revision ?? currentState.lastSharedEmberRevision
+                    : currentState.lastSharedEmberRevision,
+                lastExecutionResult: currentState.lastExecutionResult,
+                lastExecutionTxHash: null,
+                pendingExecutionSubmission:
+                  error instanceof PendingExecutionSubmissionError
+                    ? error.pendingSubmission
+                    : null,
+              },
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage: error.message,
+                },
+              },
+            };
+          }
+
+          const executionResult = preparedExecutionResult.executionResult ?? null;
           const executionPortfolioState = readExecutionPortfolioState(executionResult);
           const projection = mergePortfolioProjectionPreservingKnownContext(
             currentState,
@@ -1225,9 +1946,10 @@ export function createEmberLendingDomain(
             ...projection,
             phase: 'active',
             lastPortfolioState: executionPortfolioState ?? currentState.lastPortfolioState,
-            lastSharedEmberRevision: response.result?.revision ?? null,
+            lastSharedEmberRevision: preparedExecutionResult.revision,
             lastExecutionResult: executionResult,
             lastExecutionTxHash: readExecutionTxHash(executionResult),
+            pendingExecutionSubmission: null,
           };
 
           return {
@@ -1239,12 +1961,12 @@ export function createEmberLendingDomain(
               },
               artifacts: [
                 {
-                  data: {
-                    type: 'shared-ember-execution-result',
+                  data: buildExecutionArtifactData({
                     revision: nextState.lastSharedEmberRevision,
-                    committedEventIds: response.result?.committed_event_ids ?? [],
                     executionResult,
-                  },
+                    executionStatus: executionStatus.executionStatus,
+                    statusMessage: executionStatus.statusMessage,
+                  }),
                 },
               ],
             },

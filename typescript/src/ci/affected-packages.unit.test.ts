@@ -95,6 +95,35 @@ describe("resolveAffectedPackages", () => {
     expect(result.selectedPackageNames).toEqual([]);
   });
 
+  it("ignores package-local docs so app changes do not pull in the web-ag-ui root package", () => {
+    const packages: WorkspacePackage[] = [
+      {
+        name: "langgraph-js-starter",
+        rootRelativeDir: "clients/web-ag-ui",
+        workspaceDependencies: [],
+      },
+      {
+        name: "agent-ember-lending",
+        rootRelativeDir: "clients/web-ag-ui/apps/agent-ember-lending",
+        workspaceDependencies: [],
+      },
+    ];
+
+    const result = resolveAffectedPackages({
+      changedFiles: [
+        "clients/web-ag-ui/apps/agent-ember-lending/src/sharedEmberAdapter.ts",
+        "clients/web-ag-ui/docs/c4-target-architecture-web-ag-ui-agents.md",
+        "clients/web-ag-ui/apps/agent-ember-lending/README.md",
+      ],
+      globalInvalidators: ["pnpm-workspace.yaml"],
+      ignoredPaths: ["README.md", "**/README.md", "docs/", "**/docs/"],
+      packages,
+    });
+
+    expect(result.scope).toBe("partial");
+    expect(result.selectedPackageNames).toEqual(["agent-ember-lending"]);
+  });
+
   it("treats the top-level agent-runtime tree as the deepest owning package set and expands to facade dependents", () => {
     const packages: WorkspacePackage[] = [
       {
@@ -228,6 +257,56 @@ describe("resolveAffectedPackages", () => {
       expect(result.scope).toBe("none");
       expect(result.selectedPackageNames).toEqual([]);
       expect(result.selectedPackageDirs).toEqual([]);
+    } finally {
+      await rm(workspaceRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("uses default rules to ignore nested package docs and readmes", async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), "affected-packages-"));
+
+    try {
+      await writeFile(
+        path.join(workspaceRoot, "package.json"),
+        JSON.stringify({
+          name: "monorepo-root",
+          version: "1.0.0",
+        }),
+      );
+      await writeFile(
+        path.join(workspaceRoot, "pnpm-workspace.yaml"),
+        "packages:\n  - 'clients/web-ag-ui'\n  - 'clients/web-ag-ui/apps/*'\n",
+      );
+      await mkdir(path.join(workspaceRoot, "clients/web-ag-ui/apps/agent-ember-lending/src"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(workspaceRoot, "clients/web-ag-ui/package.json"),
+        JSON.stringify({
+          name: "langgraph-js-starter",
+          version: "1.0.0",
+        }),
+      );
+      await writeFile(
+        path.join(workspaceRoot, "clients/web-ag-ui/apps/agent-ember-lending/package.json"),
+        JSON.stringify({
+          name: "agent-ember-lending",
+          version: "1.0.0",
+        }),
+      );
+
+      const result = await detectAffectedPackages({
+        changedFiles: [
+          "clients/web-ag-ui/apps/agent-ember-lending/src/sharedEmberAdapter.ts",
+          "clients/web-ag-ui/docs/c4-target-architecture-web-ag-ui-agents.md",
+          "clients/web-ag-ui/apps/agent-ember-lending/README.md",
+        ],
+        workspaceRoot,
+      });
+
+      expect(result.scope).toBe("partial");
+      expect(result.selectedPackageNames).toEqual(["agent-ember-lending"]);
+      expect(result.selectedPackageDirs).toEqual(["clients/web-ag-ui/apps/agent-ember-lending"]);
     } finally {
       await rm(workspaceRoot, { force: true, recursive: true });
     }

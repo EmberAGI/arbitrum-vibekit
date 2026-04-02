@@ -232,6 +232,110 @@ function createBlockedExecutionResult(input: {
   };
 }
 
+function createBlockedPreparationResult(input: {
+  result: 'needs_release_or_transfer' | 'denied';
+  requestId: string;
+  message: string;
+  blockingReasonCode: string;
+  nextAction: 'escalate_to_control_plane' | 'stop';
+}) {
+  return {
+    phase: 'blocked',
+    transaction_plan_id: 'txplan-ember-lending-001',
+    request_id: input.requestId,
+    request_result: {
+      result: input.result,
+      request_id: input.requestId,
+      message: input.message,
+      reservation_id: 'reservation-ember-lending-001',
+      blocking_reason_code: input.blockingReasonCode,
+      next_action: input.nextAction,
+    },
+    portfolio_state: {
+      agent_id: 'ember-lending',
+      owned_units: [],
+      reservations: [],
+    },
+  };
+}
+
+function createReadyForExecutionSigningPreparationResult() {
+  return {
+    phase: 'ready_for_execution_signing',
+    transaction_plan_id: 'txplan-ember-lending-001',
+    request_id: 'req-ember-lending-execution-001',
+    execution_preparation: {
+      execution_preparation_id: 'execprep-ember-lending-001',
+      transaction_plan_id: 'txplan-ember-lending-001',
+      request_id: 'req-ember-lending-execution-001',
+      agent_id: 'ember-lending',
+      agent_wallet: '0x00000000000000000000000000000000000000b1',
+      root_user_wallet: '0x00000000000000000000000000000000000000a1',
+      network: 'arbitrum',
+      reservation_id: 'reservation-ember-lending-001',
+      required_control_path: 'lending.supply',
+      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+      active_delegation_id: 'del-ember-lending-001',
+      root_delegation_id: 'root-user-ember-lending-001',
+      prepared_at: '2026-04-01T06:15:00.000Z',
+      metadata: {},
+    },
+    execution_signing_package: {
+      execution_preparation_id: 'execprep-ember-lending-001',
+      transaction_plan_id: 'txplan-ember-lending-001',
+      request_id: 'req-ember-lending-execution-001',
+      active_delegation_id: 'del-ember-lending-001',
+      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+    },
+  };
+}
+
+function createTerminalExecutionResult(input: {
+  status:
+    | 'submitted'
+    | 'confirmed'
+    | 'failed_before_submission'
+    | 'failed_after_submission'
+    | 'partial_settlement';
+  transactionHash?: `0x${string}`;
+}) {
+  return {
+    phase: 'completed',
+    transaction_plan_id: 'txplan-ember-lending-001',
+    request_id: 'req-ember-lending-execution-001',
+    execution: {
+      execution_id: 'exec-ember-lending-001',
+      status: input.status,
+      transaction_hash: input.transactionHash ?? null,
+      successor_unit_ids:
+        input.status === 'failed_before_submission' ? [] : ['unit-ember-lending-successor-001'],
+    },
+    portfolio_state: {
+      agent_id: 'ember-lending',
+      agent_wallet: '0x00000000000000000000000000000000000000b1',
+      root_user_wallet: '0x00000000000000000000000000000000000000a1',
+      mandate_ref: 'mandate-ember-lending-001',
+      mandate_summary:
+        'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+      reservations: [
+        {
+          reservation_id: 'reservation-ember-lending-001',
+          purpose: 'deploy',
+          control_path: 'lending.supply',
+        },
+      ],
+      owned_units: [
+        {
+          unit_id: 'unit-ember-lending-successor-001',
+          root_asset: 'USDC',
+          quantity: '10',
+          reservation_id: 'reservation-ember-lending-001',
+        },
+      ],
+    },
+  };
+}
+
 async function runAgUiCommand(input: {
   baseUrl: string;
   runId: string;
@@ -297,6 +401,9 @@ async function runAgUiConnect(input: {
 describe('agent-ember-lending AG-UI integration', () => {
   let server: Server;
   let baseUrl: string;
+  let executionSigner: {
+    signExecutionPackage: ReturnType<typeof vi.fn>;
+  };
   const defaultHandleJsonRpc = async (input: unknown) => {
     const request =
       typeof input === 'object' && input !== null
@@ -402,45 +509,27 @@ describe('agent-ember-lending AG-UI integration', () => {
       case 'subagent.requestTransactionExecution.v1':
         return {
           jsonrpc: '2.0',
-          id: 'shared-ember-thread-1-execute-transaction-plan',
+          id: 'shared-ember-thread-1-request-transaction-execution',
           result: {
             protocol_version: 'v1',
             revision: 9,
-            committed_event_ids: ['evt-execution-1'],
-            execution_result: {
-              transaction_plan_id: 'txplan-ember-lending-001',
-              request_id: 'req-ember-lending-execution-001',
-              execution: {
-                execution_id: 'exec-ember-lending-001',
-                status: 'confirmed',
-                transaction_hash:
-                  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
-                successor_unit_ids: ['unit-ember-lending-successor-001'],
-              },
-              portfolio_state: {
-                agent_id: 'ember-lending',
-                agent_wallet: '0x00000000000000000000000000000000000000b1',
-                root_user_wallet: '0x00000000000000000000000000000000000000a1',
-                mandate_ref: 'mandate-ember-lending-001',
-                mandate_summary:
-                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-                reservations: [
-                  {
-                    reservation_id: 'reservation-ember-lending-001',
-                    purpose: 'deploy',
-                    control_path: 'lending.supply',
-                  },
-                ],
-                owned_units: [
-                  {
-                    unit_id: 'unit-ember-lending-successor-001',
-                    root_asset: 'USDC',
-                    quantity: '10',
-                    reservation_id: 'reservation-ember-lending-001',
-                  },
-                ],
-              },
-            },
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        };
+      case 'subagent.submitSignedTransaction.v1':
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-signed-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-submit-execution-1'],
+            execution_result: createTerminalExecutionResult({
+              status: 'confirmed',
+              transactionHash:
+                '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+            }),
           },
         };
       case 'subagent.createEscalationRequest.v1':
@@ -478,6 +567,14 @@ describe('agent-ember-lending AG-UI integration', () => {
   };
 
   beforeEach(async () => {
+    executionSigner = {
+      signExecutionPackage: vi.fn(async () => ({
+        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+        signer_address: '0x00000000000000000000000000000000000000b1',
+        raw_transaction:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      })),
+    };
     const service = await createEmberLendingGatewayService({
       runtimeConfig: {
         model: {
@@ -492,6 +589,7 @@ describe('agent-ember-lending AG-UI integration', () => {
         tools: [],
         domain: createEmberLendingDomain({
           protocolHost,
+          executionSigner,
           agentId: 'ember-lending',
         }),
         agentOptions: {
@@ -877,7 +975,6 @@ describe('agent-ember-lending AG-UI integration', () => {
         params: expect.objectContaining({
           handoff: expect.objectContaining({
             agent_id: 'ember-lending',
-            agent_wallet: '0x00000000000000000000000000000000000000b1',
             mandate_ref: 'mandate-ember-lending-001',
           }),
         }),
@@ -936,10 +1033,10 @@ describe('agent-ember-lending AG-UI integration', () => {
             current: {
               data: {
                 type: 'shared-ember-execution-result',
-                revision: 9,
-                executionResult: {
-                  transaction_plan_id: 'txplan-ember-lending-001',
-                },
+                revision: 10,
+                outcome: 'confirmed',
+                transactionHash:
+                  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
               },
             },
           },
@@ -947,6 +1044,18 @@ describe('agent-ember-lending AG-UI integration', () => {
       },
     });
 
+    expect(executionSigner.signExecutionPackage).toHaveBeenCalledWith({
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      transactionPlanId: 'txplan-ember-lending-001',
+      requestId: 'req-ember-lending-execution-001',
+      executionSigningPackage: {
+        execution_preparation_id: 'execprep-ember-lending-001',
+        transaction_plan_id: 'txplan-ember-lending-001',
+        request_id: 'req-ember-lending-execution-001',
+        active_delegation_id: 'del-ember-lending-001',
+        canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+      },
+    });
     expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'subagent.requestTransactionExecution.v1',
@@ -968,12 +1077,12 @@ describe('agent-ember-lending AG-UI integration', () => {
       if (request.method === 'subagent.requestTransactionExecution.v1') {
         return {
           jsonrpc: '2.0',
-          id: 'shared-ember-thread-1-execute-transaction-plan',
+          id: 'shared-ember-thread-1-request-transaction-execution',
           result: {
             protocol_version: 'v1',
             revision: 9,
             committed_event_ids: ['evt-execution-blocked-1'],
-            execution_result: createBlockedExecutionResult({
+            execution_result: createBlockedPreparationResult({
               result: 'needs_release_or_transfer',
               requestId: 'req-ember-lending-blocked-001',
               message: 'reserved capital is still claimed by another agent',
@@ -1026,11 +1135,9 @@ describe('agent-ember-lending AG-UI integration', () => {
               data: {
                 type: 'shared-ember-execution-result',
                 revision: 9,
-                executionResult: {
-                  phase: 'blocked',
-                  transaction_plan_id: 'txplan-ember-lending-001',
-                  request_id: 'req-ember-lending-blocked-001',
-                },
+                outcome: 'blocked',
+                message:
+                  'Lending transaction execution request was blocked by Shared Ember: reserved capital is still claimed by another agent.',
               },
             },
           },
@@ -1049,12 +1156,12 @@ describe('agent-ember-lending AG-UI integration', () => {
       if (request.method === 'subagent.requestTransactionExecution.v1') {
         return {
           jsonrpc: '2.0',
-          id: 'shared-ember-thread-1-execute-transaction-plan',
+          id: 'shared-ember-thread-1-request-transaction-execution',
           result: {
             protocol_version: 'v1',
             revision: 9,
             committed_event_ids: ['evt-execution-denied-1'],
-            execution_result: createBlockedExecutionResult({
+            execution_result: createBlockedPreparationResult({
               result: 'denied',
               requestId: 'req-ember-lending-denied-001',
               message: 'risk policy denied the requested lending path',
@@ -1107,11 +1214,9 @@ describe('agent-ember-lending AG-UI integration', () => {
               data: {
                 type: 'shared-ember-execution-result',
                 revision: 9,
-                executionResult: {
-                  phase: 'blocked',
-                  transaction_plan_id: 'txplan-ember-lending-001',
-                  request_id: 'req-ember-lending-denied-001',
-                },
+                outcome: 'denied',
+                message:
+                  'Lending transaction execution request was denied by Shared Ember: risk policy denied the requested lending path.',
               },
             },
           },
@@ -1167,7 +1272,6 @@ describe('agent-ember-lending AG-UI integration', () => {
         params: expect.objectContaining({
           handoff: expect.objectContaining({
             agent_id: 'ember-lending',
-            agent_wallet: '0x00000000000000000000000000000000000000b1',
             mandate_ref: 'mandate-ember-lending-001',
           }),
           result: expect.objectContaining({

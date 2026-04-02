@@ -339,6 +339,156 @@ function createBlockedExecutionResult(input: {
   };
 }
 
+function createReadyForExecutionSigningPreparationResult(input?: {
+  signerWalletAddress?: string;
+}) {
+  return {
+    phase: 'ready_for_execution_signing',
+    transaction_plan_id: 'txplan-ember-lending-001',
+    request_id: 'req-ember-lending-execution-001',
+    execution_preparation: {
+      execution_preparation_id: 'execprep-ember-lending-001',
+      transaction_plan_id: 'txplan-ember-lending-001',
+      request_id: 'req-ember-lending-execution-001',
+      agent_id: 'ember-lending',
+      agent_wallet:
+        input?.signerWalletAddress ?? '0x00000000000000000000000000000000000000b1',
+      root_user_wallet: '0x00000000000000000000000000000000000000a1',
+      network: 'arbitrum',
+      reservation_id: 'reservation-ember-lending-001',
+      required_control_path: 'lending.supply',
+      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+      active_delegation_id: 'del-ember-lending-001',
+      root_delegation_id: 'root-user-ember-lending-001',
+      prepared_at: '2026-04-01T06:15:00.000Z',
+      metadata: {},
+    },
+    execution_signing_package: {
+      execution_preparation_id: 'execprep-ember-lending-001',
+      transaction_plan_id: 'txplan-ember-lending-001',
+      request_id: 'req-ember-lending-execution-001',
+      active_delegation_id: 'del-ember-lending-001',
+      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+    },
+  };
+}
+
+function createBlockedPreparationResult(input: {
+  result: 'needs_release_or_transfer' | 'denied';
+  requestId: string;
+  message: string;
+  blockingReasonCode: string;
+  nextAction: 'escalate_to_control_plane' | 'stop';
+}) {
+  return {
+    phase: 'blocked',
+    transaction_plan_id: 'txplan-ember-lending-001',
+    request_id: input.requestId,
+    request_result: {
+      result: input.result,
+      request_id: input.requestId,
+      message: input.message,
+      reservation_id: 'reservation-ember-lending-001',
+      blocking_reason_code: input.blockingReasonCode,
+      next_action: input.nextAction,
+    },
+    portfolio_state: {
+      agent_id: 'ember-lending',
+      owned_units: [],
+      reservations: [],
+    },
+  };
+}
+
+function createAuthorityPreparationRequiredResult() {
+  return {
+    phase: 'authority_preparation_needed',
+    transaction_plan_id: 'txplan-ember-lending-001',
+    request_id: 'req-ember-lending-execution-001',
+    authority_gap: 'missing_root_delegation',
+  };
+}
+
+function createReadyForRedelegationSigningPreparationResult() {
+  return {
+    phase: 'ready_for_redelegation',
+    transaction_plan_id: 'txplan-ember-lending-001',
+    request_id: 'req-ember-lending-execution-001',
+    execution_preparation: {
+      execution_preparation_id: 'execprep-ember-lending-001',
+      transaction_plan_id: 'txplan-ember-lending-001',
+      request_id: 'req-ember-lending-execution-001',
+      agent_id: 'ember-lending',
+      agent_wallet: '0x00000000000000000000000000000000000000b1',
+      root_user_wallet: '0x00000000000000000000000000000000000000a1',
+      network: 'arbitrum',
+      reservation_id: 'reservation-ember-lending-001',
+      required_control_path: 'lending.supply',
+      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+      active_delegation_id: 'del-ember-lending-001',
+      root_delegation_id: 'root-user-ember-lending-001',
+      prepared_at: '2026-04-01T06:15:00.000Z',
+      metadata: {},
+    },
+    redelegation_signing_package: {
+      execution_preparation_id: 'execprep-ember-lending-001',
+      transaction_plan_id: 'txplan-ember-lending-001',
+      request_id: 'req-ember-lending-execution-001',
+      redelegation_intent_id: 'reintent-ember-lending-001',
+      active_delegation_id: 'del-ember-lending-001',
+      delegation_id: 'del-ember-lending-002',
+      delegation_plan_id: 'plan-ember-lending-002',
+      root_delegation_id: 'root-user-ember-lending-001',
+      root_delegation_artifact_ref: 'artifact-root-ember-lending-001',
+      delegator_address: '0x00000000000000000000000000000000000000a1',
+      agent_id: 'ember-lending',
+      agent_wallet: '0x00000000000000000000000000000000000000b1',
+      network: 'arbitrum',
+      reservation_ids: ['reservation-ember-lending-001'],
+      unit_ids: ['unit-ember-lending-001'],
+      control_paths: ['lending.supply'],
+      zero_capacity: false,
+      policy_snapshot_ref: 'pol-ember-lending-001',
+      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+    },
+  };
+}
+
+function createReadyForExecutionSigningResult() {
+  return createReadyForExecutionSigningPreparationResult();
+}
+
+function createTerminalExecutionResult(input: {
+  status:
+    | 'submitted'
+    | 'confirmed'
+    | 'failed_before_submission'
+    | 'failed_after_submission'
+    | 'partial_settlement';
+  transactionHash?: `0x${string}`;
+}) {
+  return {
+    phase: 'completed',
+    transaction_plan_id: 'txplan-ember-lending-001',
+    request_id: 'req-ember-lending-execution-001',
+    execution: {
+      execution_id: 'exec-ember-lending-001',
+      status: input.status,
+      transaction_hash: input.transactionHash ?? null,
+      successor_unit_ids:
+        input.status === 'failed_before_submission' ? [] : ['unit-ember-lending-successor-001'],
+    },
+    portfolio_state: {
+      agent_id: 'ember-lending',
+      agent_wallet: '0x00000000000000000000000000000000000000b1',
+      root_user_wallet: '0x00000000000000000000000000000000000000a1',
+      mandate_ref: 'mandate-ember-lending-001',
+      reservations: [],
+      owned_units: [],
+    },
+  };
+}
+
 describe('createEmberLendingDomain', () => {
   it('exposes only the three model-visible lending tools plus managed lifecycle controls', () => {
     const domain = createEmberLendingDomain({
@@ -1000,7 +1150,6 @@ describe('createEmberLendingDomain', () => {
         handoff: {
           handoff_id: 'handoff-thread-1',
           agent_id: 'ember-lending',
-          agent_wallet: '0x00000000000000000000000000000000000000b1',
           root_user_wallet: '0x00000000000000000000000000000000000000a1',
           mandate_ref: 'mandate-ember-lending-001',
           intent: 'deploy',
@@ -1027,49 +1176,16 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
-  it('executes the latest candidate plan through the bounded subagent surface and records the tx hash', async () => {
+  it('fails execution when Shared Ember prepares signing but no local OWS signer is configured', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async () => ({
         jsonrpc: '2.0',
-        id: 'shared-ember-thread-1-execute-transaction-plan',
+        id: 'shared-ember-thread-1-request-transaction-execution',
         result: {
           protocol_version: 'v1',
           revision: 9,
-          committed_event_ids: ['evt-request-execution-2'],
-          execution_result: {
-            phase: 'completed',
-            transaction_plan_id: 'txplan-ember-lending-001',
-            request_id: 'req-ember-lending-execution-001',
-            execution: {
-              execution_id: 'exec-ember-lending-001',
-              status: 'confirmed',
-              transaction_hash: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
-              successor_unit_ids: ['unit-ember-lending-successor-001'],
-            },
-            portfolio_state: {
-              agent_id: 'ember-lending',
-              agent_wallet: '0x00000000000000000000000000000000000000b1',
-              root_user_wallet: '0x00000000000000000000000000000000000000a1',
-              mandate_ref: 'mandate-ember-lending-001',
-              mandate_summary:
-                'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-              reservations: [
-                {
-                  reservation_id: 'reservation-ember-lending-001',
-                  purpose: 'deploy',
-                  control_path: 'lending.supply',
-                },
-              ],
-              owned_units: [
-                {
-                  unit_id: 'unit-ember-lending-successor-001',
-                  root_asset: 'USDC',
-                  quantity: '10',
-                  reservation_id: 'reservation-ember-lending-001',
-                },
-              ],
-            },
-          },
+          committed_event_ids: ['evt-prepare-execution-1'],
+          execution_result: createReadyForExecutionSigningPreparationResult(),
         },
       })),
       readCommittedEventOutbox: vi.fn(async () => ({
@@ -1108,33 +1224,20 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'active',
         lastSharedEmberRevision: 9,
-        lastExecutionTxHash:
-          '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
-        lastReservationSummary:
-          'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+        lastExecutionResult: null,
+        lastExecutionTxHash: null,
       },
       outputs: {
         status: {
-          executionStatus: 'completed',
-          statusMessage: 'Lending transaction plan admitted and executed through Shared Ember.',
+          executionStatus: 'failed',
+          statusMessage: 'Local OWS signer is not configured for lending transaction execution.',
         },
-        artifacts: [
-          {
-            data: {
-              type: 'shared-ember-execution-result',
-              revision: 9,
-              executionResult: {
-                transaction_plan_id: 'txplan-ember-lending-001',
-              },
-            },
-          },
-        ],
       },
     });
 
     expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
       jsonrpc: '2.0',
-      id: 'shared-ember-thread-1-execute-transaction-plan',
+      id: 'shared-ember-thread-1-request-transaction-execution',
       method: 'subagent.requestTransactionExecution.v1',
       params: {
         idempotency_key: 'idem-execute-transaction-plan-thread-1',
@@ -1144,16 +1247,1183 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
+  it('signs execution packages locally and submits them back to Shared Ember before returning the final outcome', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-signed-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-submit-execution-1'],
+            execution_result: createTerminalExecutionResult({
+              status: 'confirmed',
+              transactionHash:
+                '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+            }),
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const executionSigner = {
+      signExecutionPackage: vi.fn(async () => ({
+        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+        signer_address: '0x00000000000000000000000000000000000000b1',
+        raw_transaction:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      executionSigner,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(executionSigner.signExecutionPackage).toHaveBeenCalledWith({
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      transactionPlanId: 'txplan-ember-lending-001',
+      requestId: 'req-ember-lending-execution-001',
+      executionSigningPackage: {
+        execution_preparation_id: 'execprep-ember-lending-001',
+        transaction_plan_id: 'txplan-ember-lending-001',
+        request_id: 'req-ember-lending-execution-001',
+        active_delegation_id: 'del-ember-lending-001',
+        canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-request-transaction-execution',
+      method: 'subagent.requestTransactionExecution.v1',
+      params: {
+        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        expected_revision: 7,
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-submit-signed-transaction',
+      method: 'subagent.submitSignedTransaction.v1',
+      params: {
+        idempotency_key: 'idem-execute-transaction-plan-thread-1:submit-transaction:req-ember-lending-execution-001',
+        expected_revision: 9,
+        transaction_plan_id: 'txplan-ember-lending-001',
+        signed_transaction: {
+          execution_preparation_id: 'execprep-ember-lending-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-execution-001',
+          active_delegation_id: 'del-ember-lending-001',
+          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+          signer_address: '0x00000000000000000000000000000000000000b1',
+          raw_transaction:
+            '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 10,
+        lastExecutionTxHash:
+          '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        lastReservationSummary:
+          'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+        },
+      },
+    });
+  });
+
+  it('surfaces blocked preparation results from the multi-call execution path without signing or submitting', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-request-transaction-execution',
+        result: {
+          protocol_version: 'v1',
+          revision: 9,
+          committed_event_ids: ['evt-prepare-execution-blocked-1'],
+          execution_result: createBlockedPreparationResult({
+            result: 'needs_release_or_transfer',
+            requestId: 'req-ember-lending-blocked-001',
+            message: 'reserved capital is still claimed by another agent',
+            blockingReasonCode: 'reserved_for_other_agent',
+            nextAction: 'escalate_to_control_plane',
+          }),
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const executionSigner = {
+      signExecutionPackage: vi.fn(async () => ({
+        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+        signer_address: '0x00000000000000000000000000000000000000b1',
+        raw_transaction:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      executionSigner,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(executionSigner.signExecutionPackage).not.toHaveBeenCalled();
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(1);
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 9,
+        lastExecutionTxHash: null,
+        lastExecutionResult: {
+          phase: 'blocked',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-blocked-001',
+          request_result: {
+            result: 'needs_release_or_transfer',
+          },
+        },
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending transaction execution request was blocked by Shared Ember: reserved capital is still claimed by another agent.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'shared-ember-execution-result',
+              revision: 9,
+              outcome: 'blocked',
+              message:
+                'Lending transaction execution request was blocked by Shared Ember: reserved capital is still claimed by another agent.',
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it('fails closed when the prepared execution signing package does not match the dedicated subagent wallet', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-request-transaction-execution',
+        result: {
+          protocol_version: 'v1',
+          revision: 9,
+          committed_event_ids: ['evt-prepare-execution-1'],
+          execution_result: createReadyForExecutionSigningPreparationResult({
+            signerWalletAddress: '0x00000000000000000000000000000000000000c1',
+          }),
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const executionSigner = {
+      signExecutionPackage: vi.fn(async () => ({
+        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+        signer_address: '0x00000000000000000000000000000000000000b1',
+        raw_transaction:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      executionSigner,
+      agentId: 'ember-lending',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          ...createManagedLifecycleState(),
+          lastCandidatePlan: {
+            transaction_plan_id: 'txplan-ember-lending-001',
+          },
+          lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+        },
+        operation: {
+          source: 'tool',
+          name: 'request_transaction_execution',
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 9,
+        lastExecutionResult: null,
+        lastExecutionTxHash: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending execution signing could not continue because the prepared signing package does not match the dedicated subagent wallet.',
+        },
+      },
+    });
+
+    expect(executionSigner.signExecutionPackage).not.toHaveBeenCalled();
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries preparation internally when Shared Ember reports authority preparation is still pending', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 8,
+            committed_event_ids: ['evt-prepare-authority-1'],
+            execution_result: createAuthorityPreparationRequiredResult(),
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-signed-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-submit-execution-1'],
+            execution_result: {
+              ...createTerminalExecutionResult({
+                status: 'confirmed',
+                transactionHash:
+                  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+              }),
+            },
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const executionSigner = {
+      signExecutionPackage: vi.fn(async () => ({
+        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+        signer_address: '0x00000000000000000000000000000000000000b1',
+        raw_transaction:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      executionSigner,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-request-transaction-execution',
+      method: 'subagent.requestTransactionExecution.v1',
+      params: {
+        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        expected_revision: 7,
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-request-transaction-execution',
+      method: 'subagent.requestTransactionExecution.v1',
+      params: {
+        idempotency_key: 'idem-execute-transaction-plan-thread-1:await-authority-preparation:8',
+        expected_revision: 8,
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(3, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-submit-signed-transaction',
+      method: 'subagent.submitSignedTransaction.v1',
+      params: {
+        idempotency_key: 'idem-execute-transaction-plan-thread-1:submit-transaction:req-ember-lending-execution-001',
+        expected_revision: 9,
+        transaction_plan_id: 'txplan-ember-lending-001',
+        signed_transaction: {
+          execution_preparation_id: 'execprep-ember-lending-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-execution-001',
+          active_delegation_id: 'del-ember-lending-001',
+          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+          signer_address: '0x00000000000000000000000000000000000000b1',
+          raw_transaction:
+            '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 10,
+        lastExecutionTxHash:
+          '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+        },
+      },
+    });
+  });
+
+  it('signs redelegation artifacts locally before completing execution signing and submission', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-request-transaction-execution',
+        result: {
+          protocol_version: 'v1',
+          revision: 9,
+          committed_event_ids: ['evt-prepare-redelegation-1'],
+          execution_result: createReadyForRedelegationSigningPreparationResult(),
+        },
+      })
+      .mockResolvedValueOnce({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-register-signed-redelegation',
+        result: {
+          protocol_version: 'v1',
+          revision: 10,
+          committed_event_ids: ['evt-submit-redelegation-1'],
+            execution_result: createReadyForExecutionSigningResult(),
+          },
+      })
+      .mockResolvedValueOnce({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-submit-signed-transaction',
+        result: {
+          protocol_version: 'v1',
+          revision: 11,
+          committed_event_ids: ['evt-submit-execution-1'],
+          execution_result: createTerminalExecutionResult({
+            status: 'confirmed',
+            transactionHash:
+              '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          }),
+        },
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const executionSigner = {
+      signRedelegationPackage: vi.fn(async () => ({
+        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+        signed_redelegation: {
+          execution_preparation_id: 'execprep-ember-lending-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-execution-001',
+          redelegation_intent_id: 'reintent-ember-lending-001',
+          active_delegation_id: 'del-ember-lending-001',
+          delegation_id: 'del-ember-lending-002',
+          delegation_plan_id: 'plan-ember-lending-002',
+          root_delegation_id: 'root-user-ember-lending-001',
+          root_delegation_artifact_ref: 'artifact-root-ember-lending-001',
+          delegator_address: '0x00000000000000000000000000000000000000a1',
+          agent_id: 'ember-lending',
+          agent_wallet: '0x00000000000000000000000000000000000000b1',
+          network: 'arbitrum',
+          reservation_ids: ['reservation-ember-lending-001'],
+          unit_ids: ['unit-ember-lending-001'],
+          control_paths: ['lending.supply'],
+          zero_capacity: false,
+          policy_snapshot_ref: 'pol-ember-lending-001',
+          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+          artifact_ref: 'artifact-ember-lending-002',
+          issued_at: '2026-04-01T06:16:00.000Z',
+          activated_at: '2026-04-01T06:16:05.000Z',
+          policy_hash: 'hash-ember-lending-002',
+        },
+      })),
+      signExecutionPackage: vi.fn(async () => ({
+        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+        signer_address: '0x00000000000000000000000000000000000000b1',
+        raw_transaction:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      executionSigner,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(executionSigner.signRedelegationPackage).toHaveBeenCalledWith({
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      transactionPlanId: 'txplan-ember-lending-001',
+      requestId: 'req-ember-lending-execution-001',
+      redelegationSigningPackage: {
+        execution_preparation_id: 'execprep-ember-lending-001',
+        transaction_plan_id: 'txplan-ember-lending-001',
+        request_id: 'req-ember-lending-execution-001',
+        redelegation_intent_id: 'reintent-ember-lending-001',
+        active_delegation_id: 'del-ember-lending-001',
+        delegation_id: 'del-ember-lending-002',
+        delegation_plan_id: 'plan-ember-lending-002',
+        root_delegation_id: 'root-user-ember-lending-001',
+        root_delegation_artifact_ref: 'artifact-root-ember-lending-001',
+        delegator_address: '0x00000000000000000000000000000000000000a1',
+        agent_id: 'ember-lending',
+        agent_wallet: '0x00000000000000000000000000000000000000b1',
+        network: 'arbitrum',
+        reservation_ids: ['reservation-ember-lending-001'],
+        unit_ids: ['unit-ember-lending-001'],
+        control_paths: ['lending.supply'],
+        zero_capacity: false,
+        policy_snapshot_ref: 'pol-ember-lending-001',
+        canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+      },
+    });
+    expect(executionSigner.signExecutionPackage).toHaveBeenCalledWith({
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      transactionPlanId: 'txplan-ember-lending-001',
+      requestId: 'req-ember-lending-execution-001',
+      executionSigningPackage: {
+        execution_preparation_id: 'execprep-ember-lending-001',
+        transaction_plan_id: 'txplan-ember-lending-001',
+        request_id: 'req-ember-lending-execution-001',
+        active_delegation_id: 'del-ember-lending-001',
+        canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-register-signed-redelegation',
+      method: 'orchestrator.registerSignedRedelegation.v1',
+      params: {
+        idempotency_key: 'idem-execute-transaction-plan-thread-1:register-redelegation:req-ember-lending-execution-001',
+        expected_revision: 9,
+        transaction_plan_id: 'txplan-ember-lending-001',
+        signed_redelegation: {
+          execution_preparation_id: 'execprep-ember-lending-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-execution-001',
+          redelegation_intent_id: 'reintent-ember-lending-001',
+          active_delegation_id: 'del-ember-lending-001',
+          delegation_id: 'del-ember-lending-002',
+          delegation_plan_id: 'plan-ember-lending-002',
+          root_delegation_id: 'root-user-ember-lending-001',
+          root_delegation_artifact_ref: 'artifact-root-ember-lending-001',
+          delegator_address: '0x00000000000000000000000000000000000000a1',
+          agent_id: 'ember-lending',
+          agent_wallet: '0x00000000000000000000000000000000000000b1',
+          network: 'arbitrum',
+          reservation_ids: ['reservation-ember-lending-001'],
+          unit_ids: ['unit-ember-lending-001'],
+          control_paths: ['lending.supply'],
+          zero_capacity: false,
+          policy_snapshot_ref: 'pol-ember-lending-001',
+          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+          artifact_ref: 'artifact-ember-lending-002',
+          issued_at: '2026-04-01T06:16:00.000Z',
+          activated_at: '2026-04-01T06:16:05.000Z',
+          policy_hash: 'hash-ember-lending-002',
+        },
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(3, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-submit-signed-transaction',
+      method: 'subagent.submitSignedTransaction.v1',
+      params: {
+        idempotency_key: 'idem-execute-transaction-plan-thread-1:submit-transaction:req-ember-lending-execution-001',
+        expected_revision: 10,
+        transaction_plan_id: 'txplan-ember-lending-001',
+        signed_transaction: {
+          execution_preparation_id: 'execprep-ember-lending-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-execution-001',
+          active_delegation_id: 'del-ember-lending-001',
+          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+          signer_address: '0x00000000000000000000000000000000000000b1',
+          raw_transaction:
+            '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 11,
+        lastExecutionTxHash:
+          '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+        },
+      },
+    });
+  });
+
+  it('maps submitted and terminal execution outcomes from the signed-artifact flow without treating failures as success', async () => {
+    const scenarios = [
+      {
+        status: 'submitted' as const,
+        transactionHash:
+          '0x1111111111111111111111111111111111111111111111111111111111111111' as const,
+        expectedStatus: 'completed' as const,
+        expectedMessage: 'Lending transaction submitted through Shared Ember.',
+      },
+      {
+        status: 'failed_before_submission' as const,
+        transactionHash: undefined,
+        expectedStatus: 'failed' as const,
+        expectedMessage: 'Lending transaction failed before submission through Shared Ember.',
+      },
+      {
+        status: 'failed_after_submission' as const,
+        transactionHash:
+          '0x2222222222222222222222222222222222222222222222222222222222222222' as const,
+        expectedStatus: 'failed' as const,
+        expectedMessage: 'Lending transaction failed after submission through Shared Ember.',
+      },
+      {
+        status: 'partial_settlement' as const,
+        transactionHash:
+          '0x3333333333333333333333333333333333333333333333333333333333333333' as const,
+        expectedStatus: 'failed' as const,
+        expectedMessage: 'Lending transaction reached partial settlement through Shared Ember.',
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const protocolHost = {
+        handleJsonRpc: vi
+          .fn()
+          .mockResolvedValueOnce({
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-request-transaction-execution',
+            result: {
+              protocol_version: 'v1',
+              revision: 9,
+              committed_event_ids: ['evt-prepare-execution-1'],
+              execution_result: createReadyForExecutionSigningPreparationResult(),
+            },
+          })
+          .mockResolvedValueOnce({
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-submit-signed-transaction',
+            result: {
+              protocol_version: 'v1',
+              revision: 10,
+              committed_event_ids: ['evt-submit-execution-1'],
+              execution_result: createTerminalExecutionResult({
+                status: scenario.status,
+                transactionHash: scenario.transactionHash,
+              }),
+            },
+          }),
+        readCommittedEventOutbox: vi.fn(async () => ({
+          protocol_version: 'v1',
+          revision: 10,
+          events: [],
+        })),
+        acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+          protocol_version: 'v1',
+          revision: 10,
+          consumer_id: 'ember-lending',
+          acknowledged_through_sequence: 0,
+        })),
+      };
+      const executionSigner = {
+        signExecutionPackage: vi.fn(async () => ({
+          signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+          signer_address: '0x00000000000000000000000000000000000000b1',
+          raw_transaction:
+            '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        })),
+      };
+      const domain = createEmberLendingDomain({
+        protocolHost,
+        executionSigner,
+        agentId: 'ember-lending',
+      });
+
+      const result = await domain.handleOperation?.({
+        threadId: `thread-${scenario.status}`,
+        state: {
+          ...createManagedLifecycleState(),
+          lastCandidatePlan: {
+            transaction_plan_id: 'txplan-ember-lending-001',
+          },
+          lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+        },
+        operation: {
+          source: 'tool',
+          name: 'request_transaction_execution',
+        },
+      });
+
+      expect(result).toMatchObject({
+        state: {
+          phase: 'active',
+          lastSharedEmberRevision: 10,
+          lastExecutionTxHash: scenario.transactionHash ?? null,
+          lastExecutionResult: {
+            phase: 'completed',
+            execution: {
+              status: scenario.status,
+            },
+          },
+        },
+        outputs: {
+          status: {
+            executionStatus: scenario.expectedStatus,
+            statusMessage: scenario.expectedMessage,
+          },
+        },
+      });
+    }
+  });
+
+  it('retries prepare and submit with refreshed revisions while keeping deterministic idempotency keys', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new Error(
+            'Shared Ember Domain Service JSON-RPC error: protocol_conflict expected_revision=7 actual_revision=8',
+          ),
+        )
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-read-current-revision',
+          result: {
+            protocol_version: 'v1',
+            revision: 8,
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockRejectedValueOnce(
+          new Error(
+            'Shared Ember Domain Service JSON-RPC error: protocol_conflict expected_revision=9 actual_revision=10',
+          ),
+        )
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-read-current-revision',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-signed-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 11,
+            committed_event_ids: ['evt-submit-execution-1'],
+            execution_result: createTerminalExecutionResult({
+              status: 'confirmed',
+              transactionHash:
+                '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+            }),
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const executionSigner = {
+      signExecutionPackage: vi.fn(async () => ({
+        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+        signer_address: '0x00000000000000000000000000000000000000b1',
+        raw_transaction:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      executionSigner,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(executionSigner.signExecutionPackage).toHaveBeenCalledTimes(1);
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-request-transaction-execution',
+      method: 'subagent.requestTransactionExecution.v1',
+      params: {
+        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        expected_revision: 7,
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-read-current-revision',
+      method: 'subagent.readPortfolioState.v1',
+      params: {
+        agent_id: 'ember-lending',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(3, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-request-transaction-execution',
+      method: 'subagent.requestTransactionExecution.v1',
+      params: {
+        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        expected_revision: 8,
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(4, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-submit-signed-transaction',
+      method: 'subagent.submitSignedTransaction.v1',
+      params: {
+        idempotency_key: 'idem-execute-transaction-plan-thread-1:submit-transaction:req-ember-lending-execution-001',
+        expected_revision: 9,
+        transaction_plan_id: 'txplan-ember-lending-001',
+        signed_transaction: {
+          execution_preparation_id: 'execprep-ember-lending-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-execution-001',
+          active_delegation_id: 'del-ember-lending-001',
+          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+          signer_address: '0x00000000000000000000000000000000000000b1',
+          raw_transaction:
+            '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        },
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(5, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-read-current-revision',
+      method: 'subagent.readPortfolioState.v1',
+      params: {
+        agent_id: 'ember-lending',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(6, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-submit-signed-transaction',
+      method: 'subagent.submitSignedTransaction.v1',
+      params: {
+        idempotency_key: 'idem-execute-transaction-plan-thread-1:submit-transaction:req-ember-lending-execution-001',
+        expected_revision: 10,
+        transaction_plan_id: 'txplan-ember-lending-001',
+        signed_transaction: {
+          execution_preparation_id: 'execprep-ember-lending-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-execution-001',
+          active_delegation_id: 'del-ember-lending-001',
+          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+          signer_address: '0x00000000000000000000000000000000000000b1',
+          raw_transaction:
+            '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 11,
+        lastExecutionTxHash:
+          '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+        },
+      },
+    });
+  });
+
+  it('returns a failed execution result when signed-artifact submission hits a local transport error', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:4010')),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const executionSigner = {
+      signExecutionPackage: vi.fn(async () => ({
+        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+        signer_address: '0x00000000000000000000000000000000000000b1',
+        raw_transaction:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      executionSigner,
+      agentId: 'ember-lending',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          ...createManagedLifecycleState(),
+          lastCandidatePlan: {
+            transaction_plan_id: 'txplan-ember-lending-001',
+          },
+          lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+        },
+        operation: {
+          source: 'tool',
+          name: 'request_transaction_execution',
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 9,
+        lastExecutionResult: null,
+        lastExecutionTxHash: null,
+        pendingExecutionSubmission: {
+          transactionPlanId: 'txplan-ember-lending-001',
+          requestId: 'req-ember-lending-execution-001',
+          idempotencyKey: 'idem-execute-transaction-plan-thread-1',
+        },
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage: 'connect ECONNREFUSED 127.0.0.1:4010',
+        },
+      },
+    });
+  });
+
+  it('recovers a dropped submit response from the committed-event outbox without signing again', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:4010')),
+      readCommittedEventOutbox: vi
+        .fn()
+        .mockResolvedValueOnce({
+          protocol_version: 'v1',
+          revision: 10,
+          events: [
+            {
+              event_id: 'evt-request-execution-3',
+              sequence: 3,
+              aggregate: 'request',
+              aggregate_id: 'req-ember-lending-execution-001',
+              event_type: 'requestExecution.completed.v1',
+              committed_at: '2026-04-01T06:18:00Z',
+              payload: {
+                request_id: 'req-ember-lending-execution-001',
+                transaction_plan_id: 'txplan-ember-lending-001',
+                execution_id: 'exec-ember-lending-001',
+                status: 'confirmed',
+                transaction_hash:
+                  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+              },
+            },
+          ],
+        }),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const executionSigner = {
+      signExecutionPackage: vi.fn(async () => ({
+        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+        signer_address: '0x00000000000000000000000000000000000000b1',
+        raw_transaction:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      executionSigner,
+      agentId: 'ember-lending',
+    });
+    const initialState = {
+      ...createManagedLifecycleState(),
+      lastCandidatePlan: {
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+      lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+    };
+
+    const firstAttempt = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: initialState,
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    const resumedAttempt = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: firstAttempt?.state,
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(executionSigner.signExecutionPackage).toHaveBeenCalledTimes(1);
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(2);
+    expect(protocolHost.readCommittedEventOutbox).toHaveBeenNthCalledWith(1, {
+      protocol_version: 'v1',
+      consumer_id: 'ember-lending-req-ember-lending-execution-001',
+      after_sequence: 0,
+      limit: 100,
+    });
+    expect(resumedAttempt).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 10,
+        lastExecutionResult: {
+          phase: 'completed',
+          request_id: 'req-ember-lending-execution-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          execution: {
+            execution_id: 'exec-ember-lending-001',
+            status: 'confirmed',
+            transaction_hash:
+              '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          },
+        },
+        lastExecutionTxHash:
+          '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        pendingExecutionSubmission: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+        },
+      },
+    });
+  });
+
   it('surfaces blocked execution requests without claiming the transaction plan executed', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async () => ({
         jsonrpc: '2.0',
-        id: 'shared-ember-thread-1-execute-transaction-plan',
+        id: 'shared-ember-thread-1-request-transaction-execution',
         result: {
           protocol_version: 'v1',
           revision: 9,
           committed_event_ids: ['evt-request-execution-blocked-1'],
-          execution_result: createBlockedExecutionResult({
+          execution_result: createBlockedPreparationResult({
             result: 'needs_release_or_transfer',
             requestId: 'req-ember-lending-blocked-001',
             message: 'reserved capital is still claimed by another agent',
@@ -1224,11 +2494,9 @@ describe('createEmberLendingDomain', () => {
             data: {
               type: 'shared-ember-execution-result',
               revision: 9,
-              executionResult: {
-                phase: 'blocked',
-                transaction_plan_id: 'txplan-ember-lending-001',
-                request_id: 'req-ember-lending-blocked-001',
-              },
+              outcome: 'blocked',
+              message:
+                'Lending transaction execution request was blocked by Shared Ember: reserved capital is still claimed by another agent.',
             },
           },
         ],
@@ -1240,12 +2508,12 @@ describe('createEmberLendingDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async () => ({
         jsonrpc: '2.0',
-        id: 'shared-ember-thread-1-execute-transaction-plan',
+        id: 'shared-ember-thread-1-request-transaction-execution',
         result: {
           protocol_version: 'v1',
           revision: 9,
           committed_event_ids: ['evt-request-execution-denied-1'],
-          execution_result: createBlockedExecutionResult({
+          execution_result: createBlockedPreparationResult({
             result: 'denied',
             requestId: 'req-ember-lending-denied-001',
             message: 'risk policy denied the requested lending path',
@@ -1311,11 +2579,9 @@ describe('createEmberLendingDomain', () => {
             data: {
               type: 'shared-ember-execution-result',
               revision: 9,
-              executionResult: {
-                phase: 'blocked',
-                transaction_plan_id: 'txplan-ember-lending-001',
-                request_id: 'req-ember-lending-denied-001',
-              },
+              outcome: 'denied',
+              message:
+                'Lending transaction execution request was denied by Shared Ember: risk policy denied the requested lending path.',
             },
           },
         ],
@@ -1447,7 +2713,6 @@ describe('createEmberLendingDomain', () => {
         handoff: {
           handoff_id: 'handoff-ember-lending-escalation-001',
           agent_id: 'ember-lending',
-          agent_wallet: '0x00000000000000000000000000000000000000b1',
           root_user_wallet: '0x00000000000000000000000000000000000000a1',
           mandate_ref: 'mandate-ember-lending-001',
           intent: 'deploy',

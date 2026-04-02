@@ -1,0 +1,118 @@
+# Target-State Portfolio Manager -> Ember Lending Execution Signing Sequence
+
+Status: Target-state contract for issue `#559`
+Scope: managed Portfolio Manager -> Ember Lending execution-preparation, local OWS signing, and Shared Ember submission behind `request_transaction_execution`
+
+## Contract summary
+
+- Portfolio Manager remains the owner of onboarding approval, rooted-signing collection, and control-plane interventions.
+- Ember Lending keeps exactly three model-visible tools:
+  - `create_transaction_plan`
+  - `request_transaction_execution`
+  - `create_escalation_request`
+- `request_transaction_execution` remains a model-visible tool on the lending agent. It is not a separate web command-lane concept.
+- Runtime-only behavior remains hidden:
+  - execution preparation
+  - authority-preparation retry loops
+  - stage-scoped idempotency for authority-preparation re-polls
+  - local redelegation signing
+  - local execution signing
+  - signed-artifact submission back to Shared Ember
+  - committed-event outbox recovery after dropped submit responses
+  - Ember-owned submission/final-outcome waiting
+  - revision refresh / retry handling after Shared Ember conflicts
+- Shared Ember owns:
+  - capital admission
+  - redelegation semantics
+  - canonical unsigned signing packages
+  - transaction submission
+  - settlement tracking
+  - accounting reconciliation
+- Ember Lending owns:
+  - local OWS-backed wallet identity resolution
+  - local OWS redelegation signing
+  - local OWS execution signing
+  - translation of upstream execution outcomes into the minimal runtime-facing result
+- Fail-closed signing rule:
+  - if the runtime cannot prove that the prepared signing package matches the dedicated subagent wallet resolved through local OWS identity state, it must stop and fail
+  - there is no fallback to the portfolio-manager wallet, root user wallet, injected signer callbacks, web-side signing, or local chain submission
+- Internal Shared Ember RPCs for this slice:
+  - `subagent.requestTransactionExecution.v1`
+  - `orchestrator.registerSignedRedelegation.v1`
+  - `subagent.submitSignedTransaction.v1`
+
+## Internal result taxonomy
+
+- `subagent.requestTransactionExecution.v1` returns one of:
+  - `blocked`
+  - `authority_preparation_needed`
+  - `ready_for_redelegation`
+  - `ready_for_execution_signing`
+- `orchestrator.registerSignedRedelegation.v1` returns one of:
+  - `blocked`
+  - `ready_for_execution_signing`
+  - `completed`
+- `subagent.submitSignedTransaction.v1` returns:
+  - `submitted`
+  - `confirmed`
+  - `failed_before_submission`
+  - `failed_after_submission`
+  - `partial_settlement`
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Web
+  participant Runtime as AG-UI Runtime
+  participant EL as agent-ember-lending
+  participant SE as Shared Ember
+  participant OWS as local OWS signer
+
+  User->>Web: request_transaction_execution
+  Web->>Runtime: run(request_transaction_execution)
+  Runtime->>EL: handleOperation(request_transaction_execution)
+  EL->>SE: subagent.requestTransactionExecution.v1(transaction_plan_id)
+
+  alt blocked
+    SE-->>EL: execution_result.phase=blocked
+    EL-->>Runtime: failed status + blocking message
+  else authority preparation required
+    SE-->>EL: execution_result.phase=authority_preparation_needed
+    Note over EL,SE: keep authority-preparation recovery internal and advance with a stage-scoped retry idempotency key
+    EL->>SE: subagent.requestTransactionExecution.v1(transaction_plan_id)
+  else ready for redelegation signing
+    SE-->>EL: execution_result.phase=ready_for_redelegation + redelegation_signing_package + ids
+    EL->>OWS: sign redelegation package
+    OWS-->>EL: signed redelegation
+    EL->>SE: orchestrator.registerSignedRedelegation.v1(signed_redelegation + ids)
+    SE-->>EL: execution_result.phase=ready_for_execution_signing
+    EL->>OWS: sign execution package
+    OWS-->>EL: signer_address + raw_transaction
+    EL->>SE: subagent.submitSignedTransaction.v1(signed_transaction + ids)
+    SE-->>EL: execution_result.phase=completed + execution.status
+    EL-->>Runtime: minimal status + tx hash when available
+  else ready for execution signing
+    SE-->>EL: execution_result.phase=ready_for_execution_signing + execution_signing_package + ids
+    EL->>OWS: sign execution package
+    OWS-->>EL: signer_address + raw_transaction
+    EL->>SE: subagent.submitSignedTransaction.v1(signed_transaction + ids)
+    SE-->>EL: execution_result.phase=completed + execution.status
+    EL-->>Runtime: minimal status + tx hash when available
+  end
+```
+
+## Notes
+
+- There is still no model-visible `read_portfolio_state` tool.
+- There is still no model-visible onboarding-context read or manual sync/bootstrap step.
+- By default, the runtime-facing result should include only:
+  - final `status`
+  - `transaction_hash` when available
+  - blocking or failure `message` when applicable
+- Internal ids such as `request_id`, `execution_id`, and `transaction_plan_id` may be required inside the glue layer, but they should stay out of the model-visible tool result and shared web-gating contract by default.
+- Only Shared Ember capital/control-plane blockers should flow into `create_escalation_request`.
+- Local OWS identity, signing, or transport failures should remain local execution failures rather than escalations.
+- Multi-call retries must be idempotent and must not create a second signing or submission side effect when the runtime retries after a conflict or transport interruption.
+- Authority-preparation re-polls must not reuse the original request idempotency key once Shared Ember has already acknowledged the waiting state; a stage-scoped retry key lets the real upstream contract advance after the missing authority is repaired.
+- After a local transport interruption during `subagent.submitSignedTransaction.v1`, Ember Lending should first reconcile through the committed-event outbox before deciding whether an idempotent resubmit is still needed.
+- When the committed-event outbox already contains the execution event, recovery should preserve `transaction_hash` from that event payload while converging on the terminal status.

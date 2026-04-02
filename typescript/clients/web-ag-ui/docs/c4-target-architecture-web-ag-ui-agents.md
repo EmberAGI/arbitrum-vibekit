@@ -194,7 +194,10 @@ Current concrete managed-path specialization:
   - owns the first bounded managed-subagent runtime
   - consumes runtime-internal Shared Ember projection and execution-context reads plus the model-visible `create_transaction_plan`, `request_transaction_execution`, and `create_escalation_request` contract
   - keeps planning on the bounded Shared Ember planner contract, sending only a bounded planning handoff while receiving planner-generated payload output back in the candidate plan
-  - treats execution as admit-and-execute or blocked/denied admission rather than an execution-only success path
+  - keeps `request_transaction_execution` as one model-visible tool while internally composing Shared Ember execution preparation, local OWS redelegation/execution signing, and Ember-owned submission/finalization
+  - treats `authority_preparation_needed` as an internal wait state and re-polls the Shared Ember execution request with a stage-scoped retry idempotency key instead of exposing a second tool or reusing the original acknowledged request key
+  - reconciles dropped signed-transaction submit responses through the Shared Ember committed-event outbox before replaying an idempotent submit
+  - fails closed when the local OWS identity/signing path cannot prove it matches the prepared dedicated subagent signing package
   - projects lifecycle, wallet, mandate, reservation, planning, execution, and escalation state into the shared AG-UI thread contract
   - treats `owned_units` and `reservations` as lending-lane truth while treating `wallet_contents` as rooted-wallet-wide context for prompt visibility
 
