@@ -29,8 +29,10 @@ sequenceDiagram
   participant EL as agent-ember-lending
   participant SE as Shared Ember
 
-  PM->>SE: orchestrator.completeRootedBootstrapFromUserSigning.v1(portfolio + lending mandates, activation.agentId=ember-lending)
+  PM->>SE: orchestrator.completeRootedBootstrapFromUserSigning.v1(portfolio mandate + managed lending mandate, activation.mandateRef=<approved lending mandate>)
   Note over SE: Observe rooted wallet and materialize the initial ember-lending lane internally
+  PM->>SE: orchestrator.readOnboardingState.v1(agent_id=<activated managed mandate agent>)
+  Note over PM,SE: Portfolio-manager wallet accounting and system context read back the activated managed lane, not the portfolio-manager lane
   User->>Web: Open Ember Lending detail
   Web->>Runtime: connect(agent-ember-lending, threadId)
   Runtime->>EL: hydrate_runtime_projection (internal)
@@ -78,4 +80,7 @@ sequenceDiagram
 - Blocked execution responses preserve the already-hydrated mandate and wallet context even when the blocked portfolio payload is sparse.
 - Nested raw `handoff` payloads, planner-owned `payload_builder_output`, and reasoning-trace fields are not forwarded on planning calls.
 - Escalation calls still forward only the bounded escalation handoff fields plus the blocked result.
-- In the current implementation, onboarding bootstrap creates the initial lending `owned_units`, `reservations`, and policy snapshot for `activation.agentId`, but `subagent_wallet_address` can still remain `null` until later delegation issuance.
+- The selected managed lending mandate now carries `managed_onboarding` so Shared Ember can derive the initial lane from structured mandate data instead of a summary-only agent selector.
+- Portfolio-manager wallet-accounting reads must resolve the agent scope from the activated managed mandate so `owned_units`, `reservations`, and `policy_snapshots` come back from the `lending.supply` lane rather than the portfolio-manager lane shell.
+- Current bootstrap writes `activation.mandateRef`, but the accounting-agent resolver still accepts legacy stored bootstrap payloads that only expose `activation.agentId` while pre-upgrade thread state drains.
+- Ember Lending still treats Shared Ember as the wallet source of truth: if the first `subagent.readExecutionContext.v1` response includes a non-null `subagent_wallet_address`, the runtime/UI projects it immediately; if upstream returns `null`, downstream leaves it unset.

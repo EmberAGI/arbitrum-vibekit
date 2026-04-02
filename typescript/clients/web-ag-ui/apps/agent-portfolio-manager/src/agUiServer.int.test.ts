@@ -461,15 +461,21 @@ describe('agent-portfolio-manager AG-UI integration', () => {
             mandates: expect.arrayContaining([
               expect.objectContaining({
                 agent_id: 'portfolio-manager',
+                managed_onboarding: null,
               }),
               expect.objectContaining({
                 agent_id: 'ember-lending',
+                managed_onboarding: {
+                  root_asset: 'USDC',
+                  benchmark_asset: 'USD',
+                  allocation_mode: 'allocable_idle',
+                  intent: 'deploy',
+                  control_path: 'lending.supply',
+                },
               }),
             ]),
             activation: {
-              agentId: 'ember-lending',
-              purpose: 'deploy',
-              controlPath: 'unassigned',
+              mandateRef: expect.stringContaining('mandate-'),
             },
           }),
           handoff: expect.objectContaining({
@@ -488,9 +494,23 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         request.method === 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
     )?.[0] as {
       params?: {
-        onboarding?: Record<string, unknown>;
+        onboarding?: {
+          mandates?: Array<{
+            mandate_ref?: string;
+            agent_id?: string;
+          }>;
+          activation?: {
+            mandateRef?: string;
+          };
+        } & Record<string, unknown>;
       };
     };
+
+    const managedMandateRef = rootedBootstrapRequest.params?.onboarding?.mandates?.find(
+      (mandate) => mandate.agent_id === 'ember-lending',
+    )?.mandate_ref;
+    expect(managedMandateRef).toEqual(expect.any(String));
+    expect(rootedBootstrapRequest.params?.onboarding?.activation?.mandateRef).toBe(managedMandateRef);
 
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('capitalObservation');
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('ownedUnits');
