@@ -3,6 +3,11 @@
 Status: Target-state contract for issue `#555`
 Scope: managed Portfolio Manager -> Ember Lending coordination over Shared Ember
 
+Follow-on note:
+- Issue `#559` supersedes this file's single-call execution-path assumptions.
+- Keep this file as the durable target-state contract for the `#555` three-tool surface and minimal execution-context boundary.
+- For the multi-call execution-preparation and local OWS signing follow-up, see `target-state-portfolio-manager-ember-lending-execution-signing-sequence.mdd`.
+
 ## Contract summary
 
 - Portfolio Manager remains the owner of onboarding approval, rooted-signing collection, and control-plane interventions.
