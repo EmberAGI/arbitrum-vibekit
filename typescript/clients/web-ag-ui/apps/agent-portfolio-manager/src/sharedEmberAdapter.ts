@@ -125,6 +125,7 @@ function readInt(value: unknown): number | null {
 
 function readAgentServiceIdentity(
   value: unknown,
+  expectedAgentId: string,
   expectedRole: AgentServiceIdentityRole,
 ): AgentServiceIdentity | null {
   if (!isRecord(value)) {
@@ -144,6 +145,8 @@ function readAgentServiceIdentity(
   if (
     identityRef === null ||
     agentId === null ||
+    agentId !== expectedAgentId ||
+    readString(value['role']) !== expectedRole ||
     walletAddress === null ||
     walletSource === null ||
     registrationVersion === null ||
@@ -238,7 +241,11 @@ async function readSharedEmberAgentServiceIdentity(input: {
 
   return {
     revision: readInt(result?.['revision']) ?? 0,
-    identity: readAgentServiceIdentity(result?.['agent_service_identity'] ?? null, input.role),
+    identity: readAgentServiceIdentity(
+      result?.['agent_service_identity'] ?? null,
+      input.agentId,
+      input.role,
+    ),
   };
 }
 
