@@ -735,6 +735,128 @@ describe('agent-portfolio-manager AG-UI integration', () => {
     );
   });
 
+  it('blocks onboarding over AG-UI when the portfolio-manager orchestrator identity is missing', async () => {
+    protocolHost.handleJsonRpc.mockImplementation(async (input: unknown): Promise<unknown> => {
+      const request =
+        typeof input === 'object' && input !== null
+          ? (input as { method?: unknown; params?: Record<string, unknown> })
+          : {};
+
+      if (request.method === 'orchestrator.readAgentServiceIdentity.v1') {
+        if (
+          request.params?.['agent_id'] === 'portfolio-manager' &&
+          request.params['role'] === 'orchestrator'
+        ) {
+          return {
+            jsonrpc: '2.0',
+            id: 'rpc-agent-service-identity-read',
+            result: {
+              protocol_version: 'v1',
+              revision: 0,
+              agent_service_identity: null,
+            },
+          };
+        }
+      }
+
+      return handleDefaultSharedEmberJsonRpc(input);
+    });
+
+    const hireResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-blocked-orchestrator',
+        runId: 'run-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    });
+    expect(hireResponse.ok).toBe(true);
+
+    const setupResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-blocked-orchestrator',
+        runId: 'run-setup',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify(createPortfolioManagerSetupInput()),
+          },
+        },
+      }),
+    });
+    expect(setupResponse.ok).toBe(true);
+
+    const signingResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-blocked-orchestrator',
+        runId: 'run-signing',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify({
+              outcome: 'signed',
+              signedDelegations: [
+                {
+                  delegate: '0x2222222222222222222222222222222222222222',
+                  delegator: '0x00000000000000000000000000000000000000a1',
+                  authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+                  caveats: [],
+                  salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+                  signature: '0x1234',
+                },
+              ],
+            }),
+          },
+        },
+      }),
+    });
+
+    expect(signingResponse.ok).toBe(true);
+    const signingEvents = parseEventStreamBody(await signingResponse.text());
+    const signingSnapshot = findStateSnapshot(signingEvents);
+
+    expect(signingSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'onboarding',
+            activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+            pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          },
+          task: {
+            taskStatus: {
+              state: 'failed',
+              message: {
+                content:
+                  'Portfolio manager onboarding is blocked until the portfolio-manager service registers its orchestrator identity in Shared Ember.',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+      }),
+    );
+  });
+
   it('clears wallet-local onboarding state when delegation signing is rejected', async () => {
     const hireResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
       method: 'POST',
