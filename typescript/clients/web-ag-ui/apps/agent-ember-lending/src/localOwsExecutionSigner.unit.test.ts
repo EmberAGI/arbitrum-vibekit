@@ -29,7 +29,11 @@ describe('createEmberLendingLocalOwsExecutionSigner', () => {
     responseBody = null;
     server = createServer((request: IncomingMessage, response: ServerResponse) => {
       void (async () => {
-        if (request.url !== '/sign/execution' && request.url !== '/sign/redelegation') {
+        if (
+          request.url !== '/sign/execution' &&
+          request.url !== '/sign/redelegation' &&
+          request.url !== '/identity'
+        ) {
           response.writeHead(404);
           response.end();
           return;
@@ -40,11 +44,16 @@ describe('createEmberLendingLocalOwsExecutionSigner', () => {
         });
         response.end(
           JSON.stringify(
-            responseBody ?? {
-              ok: true,
-              path: request.url,
-              received: await readRequestBody(request),
-            },
+            responseBody ??
+              (request.url === '/identity'
+                ? {
+                    wallet_address: '0x00000000000000000000000000000000000000b1',
+                  }
+                : {
+                    ok: true,
+                    path: request.url,
+                    received: await readRequestBody(request),
+                  }),
           ),
         );
       })().catch((error: unknown) => {
@@ -196,6 +205,20 @@ describe('createEmberLendingLocalOwsExecutionSigner', () => {
         },
       }),
     ).rejects.toThrow('execution signer unavailable');
+  });
+
+  it('reads the local OWS signer wallet identity from the sidecar identity endpoint', async () => {
+    responseBody = {
+      wallet_address: '0x00000000000000000000000000000000000000b1',
+    };
+
+    const signer = createEmberLendingLocalOwsExecutionSigner({
+      baseUrl,
+    });
+
+    await expect(signer.readSignerWalletAddress?.()).resolves.toBe(
+      '0x00000000000000000000000000000000000000b1',
+    );
   });
 
   it('normalizes the optional local OWS base URL from env', () => {

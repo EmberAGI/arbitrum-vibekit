@@ -34,6 +34,11 @@ export type EmberLendingAgentConfig = Pick<
 
 type EmberLendingGatewayModel = EmberLendingAgentConfig['model'];
 
+export type EmberLendingGatewayDependencies = {
+  protocolHost: ReturnType<typeof createEmberLendingSharedEmberHttpHost> | undefined;
+  executionSigner: ReturnType<typeof createEmberLendingLocalOwsExecutionSigner> | undefined;
+};
+
 function requireEnvValue(
   value: string | undefined,
   name: keyof EmberLendingGatewayEnv,
@@ -71,18 +76,7 @@ export function createEmberLendingAgentConfig(
 ): EmberLendingAgentConfig {
   const apiKey = requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.EMBER_LENDING_MODEL?.trim() || DEFAULT_EMBER_LENDING_MODEL;
-  const sharedEmberBaseUrl = resolveEmberLendingSharedEmberBaseUrl(env);
-  const localOwsBaseUrl = resolveEmberLendingLocalOwsBaseUrl(env);
-  const protocolHost = sharedEmberBaseUrl
-    ? createEmberLendingSharedEmberHttpHost({
-        baseUrl: sharedEmberBaseUrl,
-      })
-    : undefined;
-  const executionSigner = localOwsBaseUrl
-    ? createEmberLendingLocalOwsExecutionSigner({
-        baseUrl: localOwsBaseUrl,
-      })
-    : undefined;
+  const { protocolHost, executionSigner } = resolveEmberLendingGatewayDependencies(env);
 
   return {
     model: createOpenRouterModel(modelId),
@@ -99,5 +93,25 @@ export function createEmberLendingAgentConfig(
       },
       getApiKey: () => apiKey,
     },
+  };
+}
+
+export function resolveEmberLendingGatewayDependencies(
+  env: EmberLendingGatewayEnv = process.env,
+): EmberLendingGatewayDependencies {
+  const sharedEmberBaseUrl = resolveEmberLendingSharedEmberBaseUrl(env);
+  const localOwsBaseUrl = resolveEmberLendingLocalOwsBaseUrl(env);
+
+  return {
+    protocolHost: sharedEmberBaseUrl
+      ? createEmberLendingSharedEmberHttpHost({
+          baseUrl: sharedEmberBaseUrl,
+        })
+      : undefined,
+    executionSigner: localOwsBaseUrl
+      ? createEmberLendingLocalOwsExecutionSigner({
+          baseUrl: localOwsBaseUrl,
+        })
+      : undefined,
   };
 }

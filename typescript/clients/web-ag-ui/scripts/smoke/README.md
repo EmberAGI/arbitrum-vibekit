@@ -19,6 +19,13 @@ These scripts are intentionally "thin" and rely on already-running local dev pro
   - If you interrupt the script, it attempts to close the Playwright browser. If you still see noisy polling
     afterward, run `pnpm reset:dev-stack` (it also kills stale Playwright headless shells).
 
+- `pnpm smoke:managed-identities`
+  - Boots the repo-local Shared Ember HTTP harness plus current downstream OWS-facing identity stubs.
+  - Confirms `portfolio-manager` / `orchestrator` and `ember-lending` / `subagent` are both non-null.
+  - Drives the portfolio-manager rooted-bootstrap path and verifies post-bootstrap
+    `subagent.readExecutionContext.v1` returns a non-null `subagent_wallet_address`.
+  - This smoke intentionally stays on the current downstream OWS HTTP seam; deeper OWS-internals changes belong to the separate follow-on issue.
+
 ## Typical Local Flow
 
 ```bash
@@ -33,4 +40,7 @@ PENDLE_POLL_INTERVAL_MS=5000 pnpm dev:delegations-bypass
 # in another terminal
 bash scripts/smoke/pendle-detail-page-health.sh
 bash scripts/smoke/pendle-cron-ui-updates.sh
+
+# managed Shared Ember identity proof
+pnpm smoke:managed-identities
 ```

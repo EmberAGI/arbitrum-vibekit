@@ -2,6 +2,40 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createPortfolioManagerDomain } from './sharedEmberAdapter.js';
 
+function createAgentServiceIdentityResponse(input: {
+  agentId: string;
+  role: 'orchestrator' | 'subagent';
+  walletAddress: `0x${string}`;
+  revision?: number;
+}) {
+  return {
+    jsonrpc: '2.0',
+    id: 'rpc-agent-service-identity-read',
+    result: {
+      revision: input.revision ?? 2,
+      agent_service_identity: {
+        identity_ref: `agent-service-identity-${input.agentId}-${input.role}-1`,
+        agent_id: input.agentId,
+        role: input.role,
+        wallet_address: input.walletAddress,
+        wallet_source: 'ember_local_write',
+        capability_metadata:
+          input.role === 'orchestrator'
+            ? {
+                onboarding: true,
+                root_registration: true,
+              }
+            : {
+                execution: true,
+                onboarding: true,
+              },
+        registration_version: 1,
+        registered_at: '2026-04-01T00:00:00.000Z',
+      },
+    },
+  };
+}
+
 function createPortfolioManagerSetupInput() {
   return {
     walletAddress: '0x00000000000000000000000000000000000000a1' as const,
@@ -203,21 +237,72 @@ describe('createPortfolioManagerDomain', () => {
       signature: '0x1234',
     };
     const protocolHost = {
-      handleJsonRpc: vi.fn(async () => ({
-        jsonrpc: '2.0',
-        id: 'shared-ember-thread-1-complete-rooted-bootstrap',
-        result: {
-          protocol_version: 'v1',
-          revision: 3,
-          committed_event_ids: ['evt-rooted-bootstrap-1', 'evt-rooted-bootstrap-2'],
-          rooted_wallet_context_id: 'rwc-user-protocol-001',
-          root_delegation: {
-            root_delegation_id: 'root-user-protocol-001',
-            user_wallet: '0x00000000000000000000000000000000000000a1',
-            status: 'active',
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+        const params =
+          typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
+            ? (jsonRpcRequest['params'] as Record<string, unknown>)
+            : null;
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1') {
+          if (params?.['agent_id'] === 'portfolio-manager' && params['role'] === 'orchestrator') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'portfolio-manager',
+              role: 'orchestrator',
+              walletAddress: '0x2222222222222222222222222222222222222222',
+            });
+          }
+
+          if (params?.['agent_id'] === 'ember-lending' && params['role'] === 'subagent') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'ember-lending',
+              role: 'subagent',
+              walletAddress: '0x00000000000000000000000000000000000000e1',
+            });
+          }
+        }
+
+        if (jsonRpcRequest?.['method'] === 'subagent.readExecutionContext.v1') {
+          expect(params?.['agent_id']).toBe('ember-lending');
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: 4,
+              execution_context: {
+                generated_at: '2026-04-02T15:00:00.000Z',
+                network: 'arbitrum',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary:
+                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                mandate_context: null,
+                subagent_wallet_address: '0x00000000000000000000000000000000000000e1',
+                root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                owned_units: [],
+                wallet_contents: [],
+              },
+            },
+          };
+        }
+
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-complete-rooted-bootstrap',
+          result: {
+            protocol_version: 'v1',
+            revision: 3,
+            committed_event_ids: ['evt-rooted-bootstrap-1', 'evt-rooted-bootstrap-2'],
+            rooted_wallet_context_id: 'rwc-user-protocol-001',
+            root_delegation: {
+              root_delegation_id: 'root-user-protocol-001',
+              user_wallet: '0x00000000000000000000000000000000000000a1',
+              status: 'active',
+            },
           },
-        },
-      })),
+        };
+      }),
       readCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
         revision: 3,
@@ -265,7 +350,7 @@ describe('createPortfolioManagerDomain', () => {
     ).resolves.toMatchObject({
       state: {
         phase: 'active',
-        lastSharedEmberRevision: 3,
+        lastSharedEmberRevision: 4,
         lastRootDelegation: {
           root_delegation_id: 'root-user-protocol-001',
           user_wallet: '0x00000000000000000000000000000000000000a1',
@@ -359,10 +444,25 @@ describe('createPortfolioManagerDomain', () => {
         }),
       }),
     );
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonrpc: '2.0',
+        method: 'subagent.readExecutionContext.v1',
+        params: {
+          agent_id: 'ember-lending',
+        },
+      }),
+    );
 
-    const rootedBootstrapCall = (protocolHost.handleJsonRpc.mock.calls as unknown as Array<
-      [unknown]
-    >)[0];
+    const rootedBootstrapCall = (
+      protocolHost.handleJsonRpc.mock.calls as unknown as Array<[unknown]>
+    ).find(
+      ([request]) =>
+        typeof request === 'object' &&
+        request !== null &&
+        'method' in request &&
+        request.method === 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+    );
     expect(rootedBootstrapCall).toBeDefined();
     if (!rootedBootstrapCall) {
       throw new Error('expected rooted bootstrap Shared Ember request');
@@ -392,6 +492,767 @@ describe('createPortfolioManagerDomain', () => {
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('ownedUnits');
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('reservations');
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('policySnapshots');
+  });
+
+  it('fails fast before rooted bootstrap when the managed ember-lending identity is missing', async () => {
+    const signedDelegation = {
+      delegate: '0x00000000000000000000000000000000000000c1',
+      delegator: '0x00000000000000000000000000000000000000a1',
+      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      caveats: [],
+      salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      signature: '0x1234',
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1') {
+          const params =
+            typeof jsonRpcRequest['params'] === 'object' && jsonRpcRequest['params'] !== null
+              ? (jsonRpcRequest['params'] as Record<string, unknown>)
+              : null;
+
+          if (
+            params?.['agent_id'] === 'portfolio-manager' &&
+            params['role'] === 'orchestrator'
+          ) {
+            return {
+              jsonrpc: '2.0',
+              id: 'rpc-agent-service-identity-read',
+              result: {
+                revision: 2,
+                agent_service_identity: {
+                  identity_ref: 'agent-service-identity-portfolio-manager-orchestrator-1',
+                  agent_id: 'portfolio-manager',
+                  role: 'orchestrator',
+                  wallet_address: '0x00000000000000000000000000000000000000c1',
+                  wallet_source: 'ember_local_write',
+                  capability_metadata: {
+                    onboarding: true,
+                    root_registration: true,
+                  },
+                  registration_version: 1,
+                  registered_at: '2026-04-01T00:00:00.000Z',
+                },
+              },
+            };
+          }
+
+          if (params?.['agent_id'] === 'ember-lending' && params['role'] === 'subagent') {
+            return {
+              jsonrpc: '2.0',
+              id: 'rpc-agent-service-identity-read',
+              result: {
+                revision: 2,
+                agent_service_identity: null,
+              },
+            };
+          }
+        }
+
+        return {
+          jsonrpc: '2.0',
+          id: 'unexpected',
+          result: {},
+        };
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 2,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 2,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+      controllerWalletAddress: '0x00000000000000000000000000000000000000c1',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 2,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingApprovedMandateEnvelope: {
+            portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+          },
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-delegation-signing-request',
+          input: {
+            outcome: 'signed',
+            signedDelegations: [signedDelegation],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'onboarding',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Portfolio manager onboarding is blocked until the ember-lending service registers its subagent identity in Shared Ember.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
+      jsonrpc: '2.0',
+      id: 'rpc-agent-service-identity-read',
+      method: 'orchestrator.readAgentServiceIdentity.v1',
+      params: {
+        agent_id: 'portfolio-manager',
+        role: 'orchestrator',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
+      jsonrpc: '2.0',
+      id: 'rpc-agent-service-identity-read',
+      method: 'orchestrator.readAgentServiceIdentity.v1',
+      params: {
+        agent_id: 'ember-lending',
+        role: 'subagent',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+      }),
+    );
+  });
+
+  it('fails fast before rooted bootstrap when the managed ember-lending identity echo is misaddressed', async () => {
+    const signedDelegation = {
+      delegate: '0x00000000000000000000000000000000000000c1',
+      delegator: '0x00000000000000000000000000000000000000a1',
+      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      caveats: [],
+      salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      signature: '0x1234',
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+        const params =
+          typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
+            ? (jsonRpcRequest['params'] as Record<string, unknown>)
+            : null;
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1') {
+          if (params?.['agent_id'] === 'portfolio-manager' && params['role'] === 'orchestrator') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'portfolio-manager',
+              role: 'orchestrator',
+              walletAddress: '0x00000000000000000000000000000000000000c1',
+            });
+          }
+
+          if (params?.['agent_id'] === 'ember-lending' && params['role'] === 'subagent') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'portfolio-manager',
+              role: 'orchestrator',
+              walletAddress: '0x00000000000000000000000000000000000000e1',
+            });
+          }
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 2,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 2,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+      controllerWalletAddress: '0x00000000000000000000000000000000000000c1',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 2,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingApprovedMandateEnvelope: {
+            portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+          },
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-delegation-signing-request',
+          input: {
+            outcome: 'signed',
+            signedDelegations: [signedDelegation],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'onboarding',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Portfolio manager onboarding is blocked until the ember-lending service registers its subagent identity in Shared Ember.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
+      jsonrpc: '2.0',
+      id: 'rpc-agent-service-identity-read',
+      method: 'orchestrator.readAgentServiceIdentity.v1',
+      params: {
+        agent_id: 'ember-lending',
+        role: 'subagent',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.readPortfolioState.v1',
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+      }),
+    );
+  });
+
+  it('fails fast before rooted bootstrap when the portfolio-manager orchestrator identity is missing', async () => {
+    const signedDelegation = {
+      delegate: '0x00000000000000000000000000000000000000c1',
+      delegator: '0x00000000000000000000000000000000000000a1',
+      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      caveats: [],
+      salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      signature: '0x1234',
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+        const params =
+          typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
+            ? (jsonRpcRequest['params'] as Record<string, unknown>)
+            : null;
+
+        if (
+          jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1' &&
+          params?.['agent_id'] === 'portfolio-manager' &&
+          params['role'] === 'orchestrator'
+        ) {
+          return {
+            jsonrpc: '2.0',
+            id: 'rpc-agent-service-identity-read',
+            result: {
+              revision: 2,
+              agent_service_identity: null,
+            },
+          };
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 2,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 2,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+      controllerWalletAddress: '0x00000000000000000000000000000000000000c1',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 2,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingApprovedMandateEnvelope: {
+            portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+          },
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-delegation-signing-request',
+          input: {
+            outcome: 'signed',
+            signedDelegations: [signedDelegation],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'onboarding',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Portfolio manager onboarding is blocked until the portfolio-manager service registers its orchestrator identity in Shared Ember.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
+      jsonrpc: '2.0',
+      id: 'rpc-agent-service-identity-read',
+      method: 'orchestrator.readAgentServiceIdentity.v1',
+      params: {
+        agent_id: 'portfolio-manager',
+        role: 'orchestrator',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({
+          agent_id: 'ember-lending',
+          role: 'subagent',
+        }),
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+      }),
+    );
+  });
+
+  it('fails fast before rooted bootstrap when the portfolio-manager orchestrator identity echo is misaddressed', async () => {
+    const signedDelegation = {
+      delegate: '0x00000000000000000000000000000000000000c1',
+      delegator: '0x00000000000000000000000000000000000000a1',
+      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      caveats: [],
+      salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      signature: '0x1234',
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+        const params =
+          typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
+            ? (jsonRpcRequest['params'] as Record<string, unknown>)
+            : null;
+
+        if (
+          jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1' &&
+          params?.['agent_id'] === 'portfolio-manager' &&
+          params['role'] === 'orchestrator'
+        ) {
+          return createAgentServiceIdentityResponse({
+            agentId: 'ember-lending',
+            role: 'subagent',
+            walletAddress: '0x00000000000000000000000000000000000000c1',
+          });
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 2,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 2,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+      controllerWalletAddress: '0x00000000000000000000000000000000000000c1',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 2,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingApprovedMandateEnvelope: {
+            portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+          },
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-delegation-signing-request',
+          input: {
+            outcome: 'signed',
+            signedDelegations: [signedDelegation],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'onboarding',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Portfolio manager onboarding is blocked until the portfolio-manager service registers its orchestrator identity in Shared Ember.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
+      jsonrpc: '2.0',
+      id: 'rpc-agent-service-identity-read',
+      method: 'orchestrator.readAgentServiceIdentity.v1',
+      params: {
+        agent_id: 'portfolio-manager',
+        role: 'orchestrator',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({
+          agent_id: 'ember-lending',
+          role: 'subagent',
+        }),
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+      }),
+    );
+  });
+
+  it('fails closed after rooted bootstrap when the managed ember-lending execution context still has no subagent wallet', async () => {
+    const signedDelegation = {
+      delegate: '0x00000000000000000000000000000000000000c1',
+      delegator: '0x00000000000000000000000000000000000000a1',
+      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      caveats: [],
+      salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      signature: '0x1234',
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+        const params =
+          typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
+            ? (jsonRpcRequest['params'] as Record<string, unknown>)
+            : null;
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1') {
+          if (params?.['agent_id'] === 'portfolio-manager' && params['role'] === 'orchestrator') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'portfolio-manager',
+              role: 'orchestrator',
+              walletAddress: '0x2222222222222222222222222222222222222222',
+            });
+          }
+
+          if (params?.['agent_id'] === 'ember-lending' && params['role'] === 'subagent') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'ember-lending',
+              role: 'subagent',
+              walletAddress: '0x00000000000000000000000000000000000000e1',
+            });
+          }
+        }
+
+        if (jsonRpcRequest?.['method'] === 'subagent.readExecutionContext.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: 4,
+              execution_context: {
+                generated_at: '2026-04-02T15:15:00.000Z',
+                network: 'arbitrum',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary:
+                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                mandate_context: null,
+                subagent_wallet_address: null,
+                root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                owned_units: [],
+                wallet_contents: [],
+              },
+            },
+          };
+        }
+
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-complete-rooted-bootstrap',
+          result: {
+            protocol_version: 'v1',
+            revision: 3,
+            committed_event_ids: ['evt-rooted-bootstrap-1', 'evt-rooted-bootstrap-2'],
+            rooted_wallet_context_id: 'rwc-user-protocol-001',
+            root_delegation: {
+              root_delegation_id: 'root-user-protocol-001',
+              user_wallet: '0x00000000000000000000000000000000000000a1',
+              status: 'active',
+            },
+          },
+        };
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 4,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 4,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 0,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingApprovedMandateEnvelope: {
+            portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+          },
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-delegation-signing-request',
+          input: {
+            outcome: 'signed',
+            signedDelegations: [signedDelegation],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'onboarding',
+        lastSharedEmberRevision: 4,
+        lastRootDelegation: {
+          root_delegation_id: 'root-user-protocol-001',
+          user_wallet: '0x00000000000000000000000000000000000000a1',
+          status: 'active',
+        },
+        lastRootedWalletContextId: 'rwc-user-protocol-001',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Portfolio manager onboarding is blocked because ember-lending did not expose a non-null subagent wallet in Shared Ember execution context after rooted bootstrap.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'shared-ember-rooted-bootstrap',
+              rootedWalletContextId: 'rwc-user-protocol-001',
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it('fails fast before subagent activation when the registered orchestrator wallet does not match the session controller wallet', async () => {
+    const signedDelegation = {
+      delegate: '0x00000000000000000000000000000000000000c1',
+      delegator: '0x00000000000000000000000000000000000000a1',
+      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      caveats: [],
+      salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      signature: '0x1234',
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+        const params =
+          typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
+            ? (jsonRpcRequest['params'] as Record<string, unknown>)
+            : null;
+
+        if (
+          jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1' &&
+          params?.['agent_id'] === 'portfolio-manager' &&
+          params['role'] === 'orchestrator'
+        ) {
+          return createAgentServiceIdentityResponse({
+            agentId: 'portfolio-manager',
+            role: 'orchestrator',
+            walletAddress: '0x00000000000000000000000000000000000000d1',
+          });
+        }
+
+        return {
+          jsonrpc: '2.0',
+          id: 'unexpected',
+          result: {},
+        };
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 2,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 2,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+      controllerWalletAddress: '0x00000000000000000000000000000000000000c1',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 2,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingApprovedMandateEnvelope: {
+            portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+          },
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-delegation-signing-request',
+          input: {
+            outcome: 'signed',
+            signedDelegations: [signedDelegation],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'onboarding',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Portfolio manager onboarding is blocked because the registered portfolio-manager orchestrator wallet does not match this session controller wallet.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(1);
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
+      jsonrpc: '2.0',
+      id: 'rpc-agent-service-identity-read',
+      method: 'orchestrator.readAgentServiceIdentity.v1',
+      params: {
+        agent_id: 'portfolio-manager',
+        role: 'orchestrator',
+      },
+    });
   });
 
   it('returns to prehire and clears wallet-local state when delegation signing is rejected', async () => {
@@ -451,6 +1312,31 @@ describe('createPortfolioManagerDomain', () => {
     };
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+        const params =
+          typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
+            ? (jsonRpcRequest['params'] as Record<string, unknown>)
+            : null;
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1') {
+          if (params?.['agent_id'] === 'portfolio-manager' && params['role'] === 'orchestrator') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'portfolio-manager',
+              role: 'orchestrator',
+              walletAddress: '0x2222222222222222222222222222222222222222',
+            });
+          }
+
+          if (params?.['agent_id'] === 'ember-lending' && params['role'] === 'subagent') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'ember-lending',
+              role: 'subagent',
+              walletAddress: '0x00000000000000000000000000000000000000e1',
+            });
+          }
+        }
+
         if (
           typeof request === 'object' &&
           request !== null &&
@@ -467,6 +1353,34 @@ describe('createPortfolioManagerDomain', () => {
                 agent_id: 'portfolio-manager',
                 owned_units: [],
                 reservations: [],
+              },
+            },
+          };
+        }
+
+        if (
+          typeof request === 'object' &&
+          request !== null &&
+          'method' in request &&
+          request.method === 'subagent.readExecutionContext.v1'
+        ) {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: 4,
+              execution_context: {
+                generated_at: '2026-04-02T15:10:00.000Z',
+                network: 'arbitrum',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary:
+                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                mandate_context: null,
+                subagent_wallet_address: '0x00000000000000000000000000000000000000e1',
+                root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                owned_units: [],
+                wallet_contents: [],
               },
             },
           };
@@ -542,6 +1456,24 @@ describe('createPortfolioManagerDomain', () => {
 
     expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
       jsonrpc: '2.0',
+      id: 'rpc-agent-service-identity-read',
+      method: 'orchestrator.readAgentServiceIdentity.v1',
+      params: {
+        agent_id: 'portfolio-manager',
+        role: 'orchestrator',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+      jsonrpc: '2.0',
+      id: 'rpc-agent-service-identity-read',
+      method: 'orchestrator.readAgentServiceIdentity.v1',
+      params: {
+        agent_id: 'ember-lending',
+        role: 'subagent',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(3, {
+      jsonrpc: '2.0',
       id: 'shared-ember-thread-1-read-current-revision',
       method: 'subagent.readPortfolioState.v1',
       params: {
@@ -549,7 +1481,7 @@ describe('createPortfolioManagerDomain', () => {
       },
     });
     expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
-      2,
+      4,
       expect.objectContaining({
         method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
         params: expect.objectContaining({
@@ -557,6 +1489,14 @@ describe('createPortfolioManagerDomain', () => {
         }),
       }),
     );
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(5, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-read-managed-subagent-execution-context',
+      method: 'subagent.readExecutionContext.v1',
+      params: {
+        agent_id: 'ember-lending',
+      },
+    });
   });
 
   it('moves back to prehire on fire and allows hire to start again', async () => {

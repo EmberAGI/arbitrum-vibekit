@@ -20,6 +20,35 @@ completion, so Shared Ember creates the initial `ember-lending` lane during
 rooted bootstrap instead of reserving that capital under the portfolio-manager
 agent id.
 
+Runtime wiring:
+
+- `SHARED_EMBER_BASE_URL` points the app at the bounded Shared Ember HTTP
+  surface.
+- `PORTFOLIO_MANAGER_OWS_BASE_URL` points the app at the local OWS controller
+  identity surface.
+- when `SHARED_EMBER_BASE_URL` is set for the live managed-onboarding path,
+  startup now resolves the local controller wallet from OWS and confirms the
+  durable `portfolio-manager` / `orchestrator` service identity in Shared Ember
+  before the runtime is considered ready
+- if the durable orchestrator identity is missing or points at a different
+  wallet than the current OWS-resolved controller wallet, startup rewrites the
+  durable identity record instead of continuing with stale state, using a fresh
+  identity-scoped idempotency key for each distinct write
+- startup treats the Shared Ember write as successful only when the response
+  echoes back the confirmed `portfolio-manager` / `orchestrator` identity with
+  the expected `agent_id`, `role`, and wallet address; if any part of that
+  confirmation is missing or mismatched, the runtime fails closed
+- onboarding re-reads both required durable service identities before rooted
+  bootstrap and blocks activation if either `portfolio-manager` /
+  `orchestrator` or `ember-lending` / `subagent` is missing or unverified
+- after rooted bootstrap succeeds, onboarding also reads
+  `subagent.readExecutionContext.v1` for `ember-lending` and refuses to mark
+  the portfolio manager active until Shared Ember exposes a non-null
+  `subagent_wallet_address` for the managed lending lane
+- if OWS is unavailable or does not resolve a controller wallet while Shared
+  Ember is configured, the runtime fails closed before managed onboarding can
+  proceed
+
 ## Shared Ember sidecar testing
 
 This package does not vendor or commit private `ember-orchestration-v1-spec`
@@ -31,8 +60,25 @@ For real Shared Ember integration coverage, use the opt-in sidecar lane:
 - set `SHARED_EMBER_BASE_URL` to an already running Shared Ember HTTP service
   or set `EMBER_ORCHESTRATION_V1_SPEC_ROOT` to a local private checkout with
   dependencies installed
+- set `PORTFOLIO_MANAGER_OWS_BASE_URL` when exercising the live startup
+  identity-preflight path
 - run `pnpm test:int`
 
 When `EMBER_ORCHESTRATION_V1_SPEC_ROOT` is set, the integration test imports
 the private repo's repo-local harness only to boot the HTTP service. The
 assertions themselves still run against the HTTP/JSON-RPC boundary.
+
+For the audited managed-onboarding proof on the current downstream boundary,
+run from `typescript/clients/web-ag-ui/`:
+
+- `pnpm smoke:managed-identities`
+
+That smoke confirms:
+
+- `portfolio-manager` / `orchestrator` resolves non-null in Shared Ember
+- `ember-lending` / `subagent` resolves non-null in Shared Ember
+- after rooted bootstrap, `subagent.readExecutionContext.v1` returns a non-null
+  `subagent_wallet_address`
+
+The smoke intentionally uses the current downstream OWS-facing HTTP seam rather
+than solving the separate follow-on OWS-internals issue.

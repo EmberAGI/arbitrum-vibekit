@@ -29,6 +29,10 @@ It includes:
 - Use app-specific READMEs for local startup details.
 - Use the docs in `docs/` and `docs/adr/` for the authoritative architecture direction.
 - Treat older LangGraph starter language as historical context, not the current architecture contract.
+- Use `pnpm smoke:managed-identities` to prove the current downstream Shared Ember + OWS-facing identity boundary:
+  - `portfolio-manager` / `orchestrator` is non-null
+  - `ember-lending` / `subagent` is non-null
+  - post-bootstrap `subagent.readExecutionContext.v1` exposes a non-null `subagent_wallet_address`
 
 ## Key Docs
 
@@ -36,5 +40,6 @@ It includes:
 - [C4 Target Architecture: Pi Runtime + AG-UI + Automations](./docs/c4-pi-runtime-architecture-and-boundaries.md)
 - [AG-UI Client Runtime Invariants](./docs/ag-ui-client-runtime-invariants.md)
 - [AG-UI Frontend/Backend Contract for UI Stability](./docs/ag-ui-frontend-backend-contract-ui-stability.md)
+- [ADR 0014: fail-closed-service-identity-preflight-for-managed-shared-ember-agents](./docs/adr/0014-fail-closed-service-identity-preflight-for-managed-shared-ember-agents.md)
 - [ADR 0011: blessed-agent-runtime-factory-and-runtime-owned-projection-assembly](./docs/adr/0011-blessed-agent-runtime-factory-and-runtime-owned-projection-assembly.md)
 - [ADR 0010: pluggable-agent-domain-modules-above-pi-core-runtime](./docs/adr/0010-pluggable-agent-domain-modules-above-pi-core-runtime.md) (superseded lineage)

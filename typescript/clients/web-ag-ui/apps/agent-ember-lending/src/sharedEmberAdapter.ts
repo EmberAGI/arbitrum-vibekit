@@ -7,6 +7,7 @@ export type EmberLendingSharedEmberProtocolHost = {
 };
 
 export type EmberLendingExecutionSigner = {
+  readSignerWalletAddress?: () => Promise<`0x${string}`>;
   signRedelegationPackage?: (input: {
     walletAddress: `0x${string}`;
     transactionPlanId: string;
@@ -29,6 +30,7 @@ export type EmberLendingExecutionSigner = {
 };
 
 export const EMBER_LENDING_INTERNAL_HYDRATE_COMMAND = 'hydrate_runtime_projection';
+export const EMBER_LENDING_SHARED_EMBER_AGENT_ID = 'ember-lending';
 
 export type EmberLendingLifecycleState = {
   phase: 'prehire' | 'onboarding' | 'active' | 'firing' | 'inactive';
@@ -1609,7 +1611,7 @@ function readEscalationResult(operationInput: unknown): unknown {
 export function createEmberLendingDomain(
   options: CreateEmberLendingDomainOptions = {},
 ): AgentRuntimeDomainConfig<EmberLendingLifecycleState> {
-  const agentId = options.agentId ?? 'ember-lending';
+  const agentId = options.agentId ?? EMBER_LENDING_SHARED_EMBER_AGENT_ID;
 
   return {
     lifecycle: {
