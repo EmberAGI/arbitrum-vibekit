@@ -1117,6 +1117,7 @@ async function readRecoveredExecutionResultFromOutbox(input: {
 
   const status = readString(matchingEvent.payload?.['status']);
   const executionId = readString(matchingEvent.payload?.['execution_id']);
+  const transactionHash = readHexAddress(matchingEvent.payload?.['transaction_hash']);
   const transactionPlanId = readString(matchingEvent.payload?.['transaction_plan_id']);
   const requestId = readString(matchingEvent.payload?.['request_id']);
 
@@ -1133,6 +1134,7 @@ async function readRecoveredExecutionResultFromOutbox(input: {
       execution: {
         status,
         ...(executionId ? { execution_id: executionId } : {}),
+        ...(transactionHash ? { transaction_hash: transactionHash } : {}),
       },
     },
   };

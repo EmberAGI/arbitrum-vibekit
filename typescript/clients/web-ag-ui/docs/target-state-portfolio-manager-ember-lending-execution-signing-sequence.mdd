@@ -113,4 +113,4 @@ sequenceDiagram
 - Local OWS identity, signing, or transport failures should remain local execution failures rather than escalations.
 - Multi-call retries must be idempotent and must not create a second signing or submission side effect when the runtime retries after a conflict or transport interruption.
 - After a local transport interruption during `subagent.submitSignedTransaction.v1`, Ember Lending should first reconcile through the committed-event outbox before deciding whether an idempotent resubmit is still needed.
-- When recovery converges from the outbox instead of the original submit response, the minimal runtime-facing result may omit `transaction_hash` even though terminal status is known.
+- When the committed-event outbox already contains the execution event, recovery should preserve `transaction_hash` from that event payload while converging on the terminal status.

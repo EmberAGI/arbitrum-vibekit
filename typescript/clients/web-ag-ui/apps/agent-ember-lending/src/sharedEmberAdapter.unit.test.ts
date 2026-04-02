@@ -2326,6 +2326,8 @@ describe('createEmberLendingDomain', () => {
                 transaction_plan_id: 'txplan-ember-lending-001',
                 execution_id: 'exec-ember-lending-001',
                 status: 'confirmed',
+                transaction_hash:
+                  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
               },
             },
           ],
@@ -2395,9 +2397,12 @@ describe('createEmberLendingDomain', () => {
           execution: {
             execution_id: 'exec-ember-lending-001',
             status: 'confirmed',
+            transaction_hash:
+              '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
           },
         },
-        lastExecutionTxHash: null,
+        lastExecutionTxHash:
+          '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
         pendingExecutionSubmission: null,
       },
       outputs: {

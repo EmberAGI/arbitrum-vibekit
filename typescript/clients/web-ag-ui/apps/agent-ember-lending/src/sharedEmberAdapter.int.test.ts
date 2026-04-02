@@ -466,7 +466,8 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
               status: 'confirmed',
             },
           },
-          lastExecutionTxHash: null,
+          lastExecutionTxHash:
+            '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
         },
         outputs: {
           status: {
