@@ -45,10 +45,20 @@ Runtime wiring:
 - `SHARED_EMBER_BASE_URL` points the app at the bounded Shared Ember HTTP
   surface
 - `EMBER_LENDING_OWS_BASE_URL` points the app at the local OWS signing surface
-  used for redelegation and execution signing
-- when `EMBER_LENDING_OWS_BASE_URL` is not configured, execution still uses the
-  new prepare path but fails locally when Shared Ember reaches a signing-ready
-  stage instead of falling back to the retired single-call execution path
+  used for startup identity proof, redelegation, and execution signing
+- when `SHARED_EMBER_BASE_URL` is set for the live managed path, startup now
+  resolves the local signer wallet from OWS and confirms the durable
+  `ember-lending` / `subagent` service identity in Shared Ember before the
+  runtime is considered ready
+- if the durable subagent identity is missing or points at a different wallet
+  than the current OWS-resolved signer wallet, startup rewrites the durable
+  identity record instead of continuing with stale state
+- if OWS is unavailable or does not resolve a signer wallet while Shared Ember
+  is configured, startup fails closed instead of waiting for a later
+  execution-time signing failure
+- portfolio-manager activation is expected to block until this durable
+  `ember-lending` / `subagent` identity exists and matches the current OWS
+  wallet
 
 Like the portfolio manager app, this package should stay a thin downstream app.
 Shared Ember business logic and durable truth remain outside the app behind the
