@@ -69,9 +69,13 @@ export const DEFAULT_GLOBAL_INVALIDATORS = [
 
 export const DEFAULT_IGNORED_PATHS = [
   "README.md",
+  "**/README.md",
   "docs/",
+  "**/docs/",
   "img/",
+  "**/img/",
   ".agent/",
+  "**/.agent/",
 ];
 
 function normalizePath(path: string): string {
@@ -108,6 +112,20 @@ function isWithinPackage(changedFile: string, rootRelativeDir: string): boolean 
 }
 
 function matchesPathRule(changedFile: string, rule: string): boolean {
+  if (rule.startsWith("**/")) {
+    const nestedRule = rule.slice(3);
+
+    if (nestedRule.endsWith("/")) {
+      const normalizedPrefix = nestedRule;
+      return (
+        changedFile.startsWith(normalizedPrefix) ||
+        changedFile.includes(`/${normalizedPrefix}`)
+      );
+    }
+
+    return changedFile === nestedRule || changedFile.endsWith(`/${nestedRule}`);
+  }
+
   return rule.endsWith("/")
     ? changedFile.startsWith(rule)
     : changedFile === rule;
