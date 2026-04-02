@@ -828,7 +828,7 @@ describe('agent-ember-lending AG-UI integration', () => {
     );
   });
 
-  it('hydrates a managed lending thread from execution context when the portfolio state is still empty', async () => {
+  it('hydrates a managed lending thread from execution context with a non-null subagent wallet when the portfolio state is still empty', async () => {
     protocolHost.handleJsonRpc.mockImplementation(async (input: unknown) => {
       const request =
         typeof input === 'object' && input !== null
@@ -864,7 +864,7 @@ describe('agent-ember-lending AG-UI integration', () => {
                 mandate_summary:
                   'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
                 mandate_context: null,
-                subagent_wallet_address: null,
+                subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
                 root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
                 owned_units: [],
                 wallet_contents: [],
@@ -894,7 +894,7 @@ describe('agent-ember-lending AG-UI integration', () => {
             mandateContext: {
               network: 'arbitrum',
             },
-            walletAddress: null,
+            walletAddress: '0x00000000000000000000000000000000000000b1',
             rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
             rootedWalletContextId: null,
             lastReservationSummary: null,

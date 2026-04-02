@@ -365,4 +365,58 @@ describe('ensureEmberLendingServiceIdentity', () => {
       'Lending startup identity preflight failed because Shared Ember did not confirm the expected subagent identity.',
     );
   });
+
+  it('fails when Shared Ember echoes the wrong role for the written subagent identity', async () => {
+    const handleJsonRpc = vi.fn(async (request: unknown) => {
+      const jsonRpcRequest =
+        typeof request === 'object' && request !== null
+          ? (request as { method?: string; params?: Record<string, unknown> })
+          : {};
+
+      if (jsonRpcRequest.method === 'orchestrator.readAgentServiceIdentity.v1') {
+        return {
+          jsonrpc: '2.0',
+          id: 'rpc-agent-service-identity-read',
+          result: {
+            protocol_version: 'v1',
+            revision: 4,
+            agent_service_identity: null,
+          },
+        };
+      }
+
+      if (jsonRpcRequest.method === 'orchestrator.writeAgentServiceIdentity.v1') {
+        return {
+          jsonrpc: '2.0',
+          id: 'rpc-agent-service-identity-write',
+          result: {
+            protocol_version: 'v1',
+            revision: 5,
+            agent_service_identity: {
+              ...(jsonRpcRequest.params?.agent_service_identity as Record<string, unknown>),
+              role: 'orchestrator',
+            },
+          },
+        };
+      }
+
+      throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest.method)}`);
+    });
+
+    await expect(
+      ensureEmberLendingServiceIdentity({
+        protocolHost: {
+          handleJsonRpc,
+          readCommittedEventOutbox: vi.fn(),
+          acknowledgeCommittedEventOutbox: vi.fn(),
+        },
+        readSignerWalletAddress: vi.fn(
+          async () => '0x00000000000000000000000000000000000000b1',
+        ),
+        now: () => new Date('2026-04-02T09:00:00.000Z'),
+      }),
+    ).rejects.toThrow(
+      'Lending startup identity preflight failed because Shared Ember did not confirm the expected subagent identity.',
+    );
+  });
 });

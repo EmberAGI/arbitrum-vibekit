@@ -73,6 +73,14 @@ function readAgentServiceIdentity(value: unknown): AgentServiceIdentity | null {
     return null;
   }
 
+  if (agentId !== PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID) {
+    return null;
+  }
+
+  if (readString(value['role']) !== PORTFOLIO_MANAGER_SERVICE_ROLE) {
+    return null;
+  }
+
   return {
     identity_ref: identityRef,
     agent_id: agentId,
@@ -135,10 +143,14 @@ async function writeIdentity(input: {
 }
 
 function requireConfirmedIdentity(input: {
-  expectedWalletAddress: `0x${string}`;
+  expectedIdentity: Pick<AgentServiceIdentity, 'agent_id' | 'role' | 'wallet_address'>;
   identity: AgentServiceIdentity | null;
 }): AgentServiceIdentity {
-  if (input.identity?.wallet_address !== input.expectedWalletAddress) {
+  if (
+    input.identity?.agent_id !== input.expectedIdentity.agent_id ||
+    input.identity?.role !== input.expectedIdentity.role ||
+    input.identity?.wallet_address !== input.expectedIdentity.wallet_address
+  ) {
     throw new Error(UNCONFIRMED_ORCHESTRATOR_IDENTITY_ERROR);
   }
 
@@ -182,7 +194,7 @@ export async function ensurePortfolioManagerServiceIdentity(
     identity,
   });
   const confirmedIdentity = requireConfirmedIdentity({
-    expectedWalletAddress: walletAddress,
+    expectedIdentity: identity,
     identity: written.identity,
   });
 

@@ -35,11 +35,16 @@ Runtime wiring:
   durable identity record instead of continuing with stale state, using a fresh
   identity-scoped idempotency key for each distinct write
 - startup treats the Shared Ember write as successful only when the response
-  echoes back the confirmed `portfolio-manager` / `orchestrator` identity; if
-  the confirmation is missing or mismatched, the runtime fails closed
+  echoes back the confirmed `portfolio-manager` / `orchestrator` identity with
+  the expected `agent_id`, `role`, and wallet address; if any part of that
+  confirmation is missing or mismatched, the runtime fails closed
 - onboarding re-reads both required durable service identities before rooted
   bootstrap and blocks activation if either `portfolio-manager` /
   `orchestrator` or `ember-lending` / `subagent` is missing or unverified
+- after rooted bootstrap succeeds, onboarding also reads
+  `subagent.readExecutionContext.v1` for `ember-lending` and refuses to mark
+  the portfolio manager active until Shared Ember exposes a non-null
+  `subagent_wallet_address` for the managed lending lane
 - if OWS is unavailable or does not resolve a controller wallet while Shared
   Ember is configured, the runtime fails closed before managed onboarding can
   proceed

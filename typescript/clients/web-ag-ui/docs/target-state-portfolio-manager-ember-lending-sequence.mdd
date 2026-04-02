@@ -40,10 +40,12 @@ sequenceDiagram
 
   PM->>OWS: resolve controller wallet
   PM->>SE: read/write `portfolio-manager` / `orchestrator` service identity
-  Note over PM,SE: each distinct startup identity write uses a fresh identity-scoped idempotency key and must echo a confirmed `agent_service_identity` or startup fails closed
+  Note over PM,SE: each distinct startup identity write uses a fresh identity-scoped idempotency key and must echo a confirmed `agent_service_identity` with the expected `agent_id`, `role`, and wallet or startup fails closed
   EL->>OWS: resolve signer wallet
   EL->>SE: read/write `ember-lending` / `subagent` service identity
   PM->>SE: complete rooted bootstrap with activation.mandateRef targeting the approved lending mandate
+  PM->>SE: read `subagent.readExecutionContext.v1` for `ember-lending`
+  Note over PM,SE: onboarding stays blocked until `subagent_wallet_address` is non-null in the post-bootstrap execution-context read
   Note over SE: Wallet observation, accounting-unit ingestion, reservation creation, and policy snapshot materialization happen inside Shared Ember
   PM->>SE: read onboarding/accounting state through the activated managed mandate lane
   Note over PM,SE: Portfolio-manager accounting context follows the same managed `lending.supply` lane that bootstrap activated
@@ -89,7 +91,7 @@ sequenceDiagram
 - There is no model-visible `read_portfolio_state` tool.
 - There is no model-visible onboarding-context read or manual sync/bootstrap step.
 - `request_transaction_execution` must surface admit-and-execute, blocked, and denied admission outcomes explicitly in status and artifacts.
-- Portfolio-manager and Ember Lending startup must both fail closed when Shared Ember does not echo back the confirmed durable service identity for the current OWS-resolved wallet.
+- Portfolio-manager and Ember Lending startup must both fail closed when Shared Ember does not echo back the confirmed durable service identity for the current OWS-resolved `agent_id`, `role`, and wallet.
 - The managed lending mandate supplied at bootstrap should carry `managed_onboarding` so Shared Ember can derive the initial lane and delegation inputs from structured mandate data.
 - Portfolio-manager wallet accounting should resolve its onboarding-state `agent_id` from the activated managed mandate so operator-visible reservations and policy snapshots match the managed lane Ember Lending sees.
 - When Shared Ember has a durable subagent identity ready during onboarding, the first post-bootstrap execution-context read should already expose a non-null `subagent_wallet_address`, and Ember Lending should project it without any manual reseed step.

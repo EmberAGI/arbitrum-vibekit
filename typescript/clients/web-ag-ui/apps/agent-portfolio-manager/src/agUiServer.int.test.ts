@@ -192,6 +192,18 @@ async function handleDefaultSharedEmberJsonRpc(input: unknown): Promise<unknown>
           },
         },
       };
+    case 'subagent.readExecutionContext.v1':
+      return {
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-read-execution-context',
+        result: {
+          protocol_version: 'v1',
+          revision: 4,
+          execution_context: {
+            subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
+          },
+        },
+      };
     default:
       throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
   }
@@ -547,6 +559,14 @@ describe('agent-portfolio-manager AG-UI integration', () => {
             orchestrator_wallet: '0x2222222222222222222222222222222222222222',
           }),
         }),
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.readExecutionContext.v1',
+        params: {
+          agent_id: 'ember-lending',
+        },
       }),
     );
 
@@ -944,5 +964,13 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         },
       },
     });
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.readExecutionContext.v1',
+        params: {
+          agent_id: 'ember-lending',
+        },
+      }),
+    );
   });
 });

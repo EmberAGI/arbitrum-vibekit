@@ -511,5 +511,25 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
         },
       },
     });
+
+    await expect(
+      protocolHost.handleJsonRpc({
+        jsonrpc: '2.0',
+        id: `rpc-shared-ember-int-read-execution-context-signing-${suffix}`,
+        method: 'subagent.readExecutionContext.v1',
+        params: {
+          agent_id: 'ember-lending',
+        },
+      }),
+    ).resolves.toMatchObject({
+      jsonrpc: '2.0',
+      id: `rpc-shared-ember-int-read-execution-context-signing-${suffix}`,
+      result: {
+        protocol_version: 'v1',
+        execution_context: {
+          subagent_wallet_address: expect.stringMatching(/^0x/),
+        },
+      },
+    });
   });
 });

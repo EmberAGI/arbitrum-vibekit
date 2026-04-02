@@ -263,6 +263,30 @@ describe('createPortfolioManagerDomain', () => {
           }
         }
 
+        if (jsonRpcRequest?.['method'] === 'subagent.readExecutionContext.v1') {
+          expect(params?.['agent_id']).toBe('ember-lending');
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: 4,
+              execution_context: {
+                generated_at: '2026-04-02T15:00:00.000Z',
+                network: 'arbitrum',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary:
+                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                mandate_context: null,
+                subagent_wallet_address: '0x00000000000000000000000000000000000000e1',
+                root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                owned_units: [],
+                wallet_contents: [],
+              },
+            },
+          };
+        }
+
         return {
           jsonrpc: '2.0',
           id: 'shared-ember-thread-1-complete-rooted-bootstrap',
@@ -326,7 +350,7 @@ describe('createPortfolioManagerDomain', () => {
     ).resolves.toMatchObject({
       state: {
         phase: 'active',
-        lastSharedEmberRevision: 3,
+        lastSharedEmberRevision: 4,
         lastRootDelegation: {
           root_delegation_id: 'root-user-protocol-001',
           user_wallet: '0x00000000000000000000000000000000000000a1',
@@ -418,6 +442,15 @@ describe('createPortfolioManagerDomain', () => {
             signer_kind: 'delegation_toolkit',
           }),
         }),
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonrpc: '2.0',
+        method: 'subagent.readExecutionContext.v1',
+        params: {
+          agent_id: 'ember-lending',
+        },
       }),
     );
 
@@ -608,6 +641,156 @@ describe('createPortfolioManagerDomain', () => {
         method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
       }),
     );
+  });
+
+  it('fails closed after rooted bootstrap when the managed ember-lending execution context still has no subagent wallet', async () => {
+    const signedDelegation = {
+      delegate: '0x00000000000000000000000000000000000000c1',
+      delegator: '0x00000000000000000000000000000000000000a1',
+      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      caveats: [],
+      salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      signature: '0x1234',
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+        const params =
+          typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
+            ? (jsonRpcRequest['params'] as Record<string, unknown>)
+            : null;
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1') {
+          if (params?.['agent_id'] === 'portfolio-manager' && params['role'] === 'orchestrator') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'portfolio-manager',
+              role: 'orchestrator',
+              walletAddress: '0x2222222222222222222222222222222222222222',
+            });
+          }
+
+          if (params?.['agent_id'] === 'ember-lending' && params['role'] === 'subagent') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'ember-lending',
+              role: 'subagent',
+              walletAddress: '0x00000000000000000000000000000000000000e1',
+            });
+          }
+        }
+
+        if (jsonRpcRequest?.['method'] === 'subagent.readExecutionContext.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: 4,
+              execution_context: {
+                generated_at: '2026-04-02T15:15:00.000Z',
+                network: 'arbitrum',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary:
+                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                mandate_context: null,
+                subagent_wallet_address: null,
+                root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                owned_units: [],
+                wallet_contents: [],
+              },
+            },
+          };
+        }
+
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-complete-rooted-bootstrap',
+          result: {
+            protocol_version: 'v1',
+            revision: 3,
+            committed_event_ids: ['evt-rooted-bootstrap-1', 'evt-rooted-bootstrap-2'],
+            rooted_wallet_context_id: 'rwc-user-protocol-001',
+            root_delegation: {
+              root_delegation_id: 'root-user-protocol-001',
+              user_wallet: '0x00000000000000000000000000000000000000a1',
+              status: 'active',
+            },
+          },
+        };
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 4,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 4,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 0,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingApprovedMandateEnvelope: {
+            portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+          },
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-delegation-signing-request',
+          input: {
+            outcome: 'signed',
+            signedDelegations: [signedDelegation],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'onboarding',
+        lastSharedEmberRevision: 4,
+        lastRootDelegation: {
+          root_delegation_id: 'root-user-protocol-001',
+          user_wallet: '0x00000000000000000000000000000000000000a1',
+          status: 'active',
+        },
+        lastRootedWalletContextId: 'rwc-user-protocol-001',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Portfolio manager onboarding is blocked because ember-lending did not expose a non-null subagent wallet in Shared Ember execution context after rooted bootstrap.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'shared-ember-rooted-bootstrap',
+              rootedWalletContextId: 'rwc-user-protocol-001',
+            },
+          },
+        ],
+      },
+    });
   });
 
   it('fails fast before subagent activation when the registered orchestrator wallet does not match the session controller wallet', async () => {
@@ -821,6 +1004,34 @@ describe('createPortfolioManagerDomain', () => {
           };
         }
 
+        if (
+          typeof request === 'object' &&
+          request !== null &&
+          'method' in request &&
+          request.method === 'subagent.readExecutionContext.v1'
+        ) {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: 4,
+              execution_context: {
+                generated_at: '2026-04-02T15:10:00.000Z',
+                network: 'arbitrum',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary:
+                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                mandate_context: null,
+                subagent_wallet_address: '0x00000000000000000000000000000000000000e1',
+                root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                owned_units: [],
+                wallet_contents: [],
+              },
+            },
+          };
+        }
+
         return {
           jsonrpc: '2.0',
           id: 'shared-ember-thread-1-complete-rooted-bootstrap',
@@ -924,6 +1135,14 @@ describe('createPortfolioManagerDomain', () => {
         }),
       }),
     );
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(5, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-read-managed-subagent-execution-context',
+      method: 'subagent.readExecutionContext.v1',
+      params: {
+        agent_id: 'ember-lending',
+      },
+    });
   });
 
   it('moves back to prehire on fire and allows hire to start again', async () => {

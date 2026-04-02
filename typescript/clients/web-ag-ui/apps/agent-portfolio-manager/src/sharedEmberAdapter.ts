@@ -242,6 +242,30 @@ async function readSharedEmberAgentServiceIdentity(input: {
   };
 }
 
+async function readSharedEmberSubagentWalletAddress(input: {
+  protocolHost: PortfolioManagerSharedEmberProtocolHost;
+  agentId: string;
+}): Promise<{
+  revision: number | null;
+  walletAddress: `0x${string}` | null;
+}> {
+  const response = await input.protocolHost.handleJsonRpc({
+    jsonrpc: '2.0',
+    id: 'shared-ember-read-managed-subagent-execution-context',
+    method: 'subagent.readExecutionContext.v1',
+    params: {
+      agent_id: input.agentId,
+    },
+  });
+  const result = isRecord(response) && isRecord(response['result']) ? response['result'] : null;
+  const executionContext = isRecord(result?.['execution_context']) ? result['execution_context'] : null;
+
+  return {
+    revision: readInt(result?.['revision']),
+    walletAddress: readHexAddress(executionContext?.['subagent_wallet_address']),
+  };
+}
+
 const PORTFOLIO_MANAGER_SETUP_INTERRUPT_TYPE = 'portfolio-manager-setup-request';
 const PORTFOLIO_MANAGER_SETUP_MESSAGE =
   'Connect the wallet you want the portfolio manager to onboard.';
@@ -1150,11 +1174,53 @@ export function createPortfolioManagerDomain(
               },
             }),
           });
+          const managedSubagentExecutionContext = await readSharedEmberSubagentWalletAddress({
+            protocolHost: options.protocolHost,
+            agentId: FIRST_MANAGED_AGENT_TYPE,
+          });
+          const nextRevision =
+            managedSubagentExecutionContext.revision ?? response.result?.revision ?? null;
+
+          if (!managedSubagentExecutionContext.walletAddress) {
+            const nextState: PortfolioManagerLifecycleState = {
+              phase: 'onboarding',
+              lastPortfolioState: currentState.lastPortfolioState,
+              lastSharedEmberRevision: nextRevision,
+              lastRootDelegation: response.result?.root_delegation ?? currentState.lastRootDelegation,
+              lastOnboardingBootstrap: onboarding,
+              lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
+              activeWalletAddress: walletAddress,
+              pendingOnboardingWalletAddress: walletAddress,
+              pendingApprovedMandateEnvelope: approvedMandateEnvelope,
+            };
+
+            return {
+              state: nextState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio manager onboarding is blocked because ember-lending did not expose a non-null subagent wallet in Shared Ember execution context after rooted bootstrap.',
+                },
+                artifacts: [
+                  {
+                    data: {
+                      type: 'shared-ember-rooted-bootstrap',
+                      revision: nextState.lastSharedEmberRevision,
+                      committedEventIds: response.result?.committed_event_ids ?? [],
+                      rootedWalletContextId: nextState.lastRootedWalletContextId,
+                      rootDelegation: nextState.lastRootDelegation,
+                    },
+                  },
+                ],
+              },
+            };
+          }
 
           const nextState: PortfolioManagerLifecycleState = {
             phase: 'active',
             lastPortfolioState: currentState.lastPortfolioState,
-            lastSharedEmberRevision: response.result?.revision ?? null,
+            lastSharedEmberRevision: nextRevision,
             lastRootDelegation: response.result?.root_delegation ?? currentState.lastRootDelegation,
             lastOnboardingBootstrap: onboarding,
             lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,

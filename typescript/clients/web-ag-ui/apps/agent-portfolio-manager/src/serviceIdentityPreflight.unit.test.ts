@@ -365,4 +365,58 @@ describe('ensurePortfolioManagerServiceIdentity', () => {
       'Portfolio-manager startup identity preflight failed because Shared Ember did not confirm the expected orchestrator identity.',
     );
   });
+
+  it('fails when Shared Ember echoes the wrong agent_id for the written orchestrator identity', async () => {
+    const handleJsonRpc = vi.fn(async (request: unknown) => {
+      const jsonRpcRequest =
+        typeof request === 'object' && request !== null
+          ? (request as { method?: string; params?: Record<string, unknown> })
+          : {};
+
+      if (jsonRpcRequest.method === 'orchestrator.readAgentServiceIdentity.v1') {
+        return {
+          jsonrpc: '2.0',
+          id: 'rpc-agent-service-identity-read',
+          result: {
+            protocol_version: 'v1',
+            revision: 2,
+            agent_service_identity: null,
+          },
+        };
+      }
+
+      if (jsonRpcRequest.method === 'orchestrator.writeAgentServiceIdentity.v1') {
+        return {
+          jsonrpc: '2.0',
+          id: 'rpc-agent-service-identity-write',
+          result: {
+            protocol_version: 'v1',
+            revision: 3,
+            agent_service_identity: {
+              ...(jsonRpcRequest.params?.['agent_service_identity'] as Record<string, unknown>),
+              agent_id: 'ember-lending',
+            },
+          },
+        };
+      }
+
+      throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest.method)}`);
+    });
+
+    await expect(
+      ensurePortfolioManagerServiceIdentity({
+        protocolHost: {
+          handleJsonRpc,
+          readCommittedEventOutbox: vi.fn(),
+          acknowledgeCommittedEventOutbox: vi.fn(),
+        },
+        readControllerWalletAddress: vi.fn(
+          async () => '0x00000000000000000000000000000000000000c1' as const,
+        ),
+        now: () => new Date('2026-04-02T09:30:00.000Z'),
+      }),
+    ).rejects.toThrow(
+      'Portfolio-manager startup identity preflight failed because Shared Ember did not confirm the expected orchestrator identity.',
+    );
+  });
 });
