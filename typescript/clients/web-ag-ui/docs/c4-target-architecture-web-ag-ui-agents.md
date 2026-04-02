@@ -187,17 +187,22 @@ Current concrete managed-path specialization:
 
 - `agent-portfolio-manager`
   - owns onboarding approval, rooted-signing collection, and managed-agent activation/deactivation intent submission
+  - resolves the local OWS controller wallet during startup and confirms or rewrites the durable `portfolio-manager` / `orchestrator` identity before boot
+  - treats each distinct startup identity rewrite as a new command with its own identity-scoped idempotency key and fails closed unless Shared Ember echoes the confirmed identity
   - submits the minimal rooted-bootstrap activation contract that tells Shared Ember which managed mandate should materialize the initial lane
   - consumes Shared Ember through a thin app-local adapter without owning Ember business logic
 
 - `agent-ember-lending`
   - owns the first bounded managed-subagent runtime
+  - resolves the local OWS signer wallet during startup and confirms or rewrites the durable `ember-lending` / `subagent` identity before boot
+  - treats each distinct startup identity rewrite as a new command with its own identity-scoped idempotency key and fails closed unless Shared Ember echoes the confirmed identity
   - consumes runtime-internal Shared Ember projection and execution-context reads plus the model-visible `create_transaction_plan`, `request_transaction_execution`, and `create_escalation_request` contract
   - keeps planning on the bounded Shared Ember planner contract, sending only a bounded planning handoff while receiving planner-generated payload output back in the candidate plan
   - keeps `request_transaction_execution` as one model-visible tool while internally composing Shared Ember execution preparation, local OWS redelegation/execution signing, and Ember-owned submission/finalization
   - treats `authority_preparation_needed` as an internal wait state and re-polls the Shared Ember execution request with a stage-scoped retry idempotency key instead of exposing a second tool or reusing the original acknowledged request key
   - reconciles dropped signed-transaction submit responses through the Shared Ember committed-event outbox before replaying an idempotent submit
   - fails closed when the local OWS identity/signing path cannot prove it matches the prepared dedicated subagent signing package
+  - expects the first healthy post-onboarding `subagent.readExecutionContext.v1` read to expose a non-null `subagent_wallet_address` without any manual reseed step
   - projects lifecycle, wallet, mandate, reservation, planning, execution, and escalation state into the shared AG-UI thread contract
   - treats `owned_units` and `reservations` as lending-lane truth while treating `wallet_contents` as rooted-wallet-wide context for prompt visibility
 

@@ -31,8 +31,10 @@ Current execution-context semantics:
 - `wallet_contents` reflects the full rooted wallet so the lending prompt can
   see total wallet inventory even when agent-scoped delegation state is still
   sparse
-- `subagent_wallet_address` can still be `null` until a later delegation
-  issuance path assigns a dedicated subagent wallet
+- before healthy managed onboarding completes or when startup identity proof has
+  not succeeded, `subagent_wallet_address` can still be `null`; after
+  successful identity registration plus onboarding, the first healthy
+  execution-context read is expected to expose the dedicated subagent wallet
 - `authority_preparation_needed` stays runtime-internal; the adapter re-polls
   Shared Ember with a stage-scoped retry idempotency key until readiness
   advances or the local execution attempt fails closed
@@ -52,7 +54,11 @@ Runtime wiring:
   runtime is considered ready
 - if the durable subagent identity is missing or points at a different wallet
   than the current OWS-resolved signer wallet, startup rewrites the durable
-  identity record instead of continuing with stale state
+  identity record instead of continuing with stale state, using a fresh
+  identity-scoped idempotency key for each distinct write
+- startup treats the Shared Ember write as successful only when the response
+  echoes back the confirmed `ember-lending` / `subagent` identity; if the
+  confirmation is missing or mismatched, the runtime fails closed
 - if OWS is unavailable or does not resolve a signer wallet while Shared Ember
   is configured, startup fails closed instead of waiting for a later
   execution-time signing failure

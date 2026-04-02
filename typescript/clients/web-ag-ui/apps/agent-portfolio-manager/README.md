@@ -32,7 +32,11 @@ Runtime wiring:
   before the runtime is considered ready
 - if the durable orchestrator identity is missing or points at a different
   wallet than the current OWS-resolved controller wallet, startup rewrites the
-  durable identity record instead of continuing with stale state
+  durable identity record instead of continuing with stale state, using a fresh
+  identity-scoped idempotency key for each distinct write
+- startup treats the Shared Ember write as successful only when the response
+  echoes back the confirmed `portfolio-manager` / `orchestrator` identity; if
+  the confirmation is missing or mismatched, the runtime fails closed
 - onboarding re-reads both required durable service identities before rooted
   bootstrap and blocks activation if either `portfolio-manager` /
   `orchestrator` or `ember-lending` / `subagent` is missing or unverified
