@@ -26,7 +26,13 @@ function createStubService(): AgentRuntimeService {
 describe('createEmberLendingGatewayService', () => {
   it('runs service-identity preflight before runtime creation when the live Shared Ember path is configured', async () => {
     const service = createStubService();
-    const ensureServiceIdentity = vi.fn(async () => undefined);
+    const ensureServiceIdentity = vi.fn(async () => ({
+      revision: 2,
+      wroteIdentity: false,
+      identity: {
+        wallet_address: '0x00000000000000000000000000000000000000b1',
+      },
+    }));
     const createAgentRuntime = vi.fn(async () => ({
       service,
     }));

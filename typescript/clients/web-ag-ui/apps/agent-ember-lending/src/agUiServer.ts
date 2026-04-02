@@ -127,10 +127,17 @@ export async function createEmberLendingGatewayService(
         );
       }
 
-      await (options.__internalEnsureServiceIdentity ?? ensureEmberLendingServiceIdentity)({
+      const ensuredIdentity = await (
+        options.__internalEnsureServiceIdentity ?? ensureEmberLendingServiceIdentity
+      )({
         protocolHost: dependencies.protocolHost,
         readSignerWalletAddress,
       });
+      if (!ensuredIdentity.identity.wallet_address.startsWith('0x')) {
+        throw new Error(
+          'Lending startup identity preflight failed because Shared Ember did not return a confirmed subagent wallet address.',
+        );
+      }
     }
   }
 

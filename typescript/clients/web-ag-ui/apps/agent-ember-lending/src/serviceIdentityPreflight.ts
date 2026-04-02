@@ -26,6 +26,8 @@ const EMBER_LENDING_CAPABILITY_METADATA = {
   execution: true,
   onboarding: true,
 };
+const UNCONFIRMED_SUBAGENT_IDENTITY_ERROR =
+  'Lending startup identity preflight failed because Shared Ember did not confirm the expected subagent identity.';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -119,7 +121,7 @@ async function writeIdentity(input: {
     id: 'rpc-agent-service-identity-write',
     method: 'orchestrator.writeAgentServiceIdentity.v1',
     params: {
-      idempotency_key: 'idem-ember-lending-subagent-service-identity-startup',
+      idempotency_key: `idem-agent-service-identity-${input.identity.identity_ref}`,
       expected_revision: input.expectedRevision,
       agent_service_identity: input.identity,
     },
@@ -132,12 +134,23 @@ async function writeIdentity(input: {
   };
 }
 
+function requireConfirmedIdentity(input: {
+  expectedWalletAddress: `0x${string}`;
+  identity: AgentServiceIdentity | null;
+}): AgentServiceIdentity {
+  if (input.identity?.wallet_address !== input.expectedWalletAddress) {
+    throw new Error(UNCONFIRMED_SUBAGENT_IDENTITY_ERROR);
+  }
+
+  return input.identity;
+}
+
 export async function ensureEmberLendingServiceIdentity(
   input: EnsureEmberLendingServiceIdentityInput,
 ): Promise<{
   revision: number | null;
   wroteIdentity: boolean;
-  identity: Record<string, unknown> | null;
+  identity: AgentServiceIdentity;
 }> {
   const walletAddress = await input.readSignerWalletAddress();
   const current = await readCurrentIdentity({
@@ -168,10 +181,14 @@ export async function ensureEmberLendingServiceIdentity(
     expectedRevision: current.revision,
     identity,
   });
+  const confirmedIdentity = requireConfirmedIdentity({
+    expectedWalletAddress: walletAddress,
+    identity: written.identity,
+  });
 
   return {
     revision: written.revision,
     wroteIdentity: true,
-    identity: written.identity,
+    identity: confirmedIdentity,
   };
 }

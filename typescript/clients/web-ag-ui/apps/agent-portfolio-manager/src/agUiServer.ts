@@ -63,16 +63,14 @@ export async function createPortfolioManagerGatewayService(
         protocolHost: dependencies.protocolHost,
         readControllerWalletAddress,
       });
-      const identity =
-        typeof ensuredIdentity.identity === 'object' && ensuredIdentity.identity !== null
-          ? ensuredIdentity.identity
-          : null;
-      const walletAddress =
-        identity && 'wallet_address' in identity && typeof identity['wallet_address'] === 'string'
-          ? identity['wallet_address']
-          : null;
-      controllerWalletAddress =
-        walletAddress?.startsWith('0x') ? (walletAddress as `0x${string}`) : undefined;
+      const walletAddress = ensuredIdentity.identity.wallet_address;
+      if (!walletAddress.startsWith('0x')) {
+        throw new Error(
+          'Portfolio-manager startup identity preflight failed because Shared Ember did not return a confirmed orchestrator wallet address.',
+        );
+      }
+
+      controllerWalletAddress = walletAddress;
     }
   }
 
