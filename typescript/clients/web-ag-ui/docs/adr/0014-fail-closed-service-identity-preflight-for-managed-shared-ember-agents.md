@@ -13,7 +13,8 @@ durable role-scoped service identities:
 
 Issue `#563` exposed that managed onboarding could appear healthy even when
 those durable records were missing, stale, or did not match the wallet
-currently resolved from the local OWS-facing service seam.
+currently resolved through the private `agent-runtime` identity/signing
+internals backed directly by `@open-wallet-standard/core`.
 
 The downstream apps also need a clear readiness rule for the first managed lane
 after rooted bootstrap:
@@ -22,18 +23,19 @@ after rooted bootstrap:
 - the portfolio-manager must not mark onboarding complete until Shared Ember
   exposes a non-null managed-lane `subagent_wallet_address`
 
-At the same time, the repo already has a separate follow-on issue for deeper
-OWS-internals refactoring. This ADR should ratify the current downstream
-contract without pulling that separate work into the managed-onboarding bugfix
-slice.
+ADR 0011 already ratifies that runtime assembly and private integration seams
+belong inside `agent-runtime`, not in downstream app-owned transport or helper
+surfaces. This ADR narrows that ownership to the fail-closed managed-identity
+readiness contract for Shared Ember onboarding.
 
 ## Decision
 
 For managed Shared Ember downstream agents in `web-ag-ui`:
 
 - each service owns its own startup identity preflight
-- each service must resolve its local wallet from the current OWS-facing HTTP
-  seam before the runtime is considered ready
+- each service must resolve its service wallet through private
+  `agent-runtime` identity/signing internals backed directly by
+  `@open-wallet-standard/core` before the runtime is considered ready
 - each service must read the current durable Shared Ember service identity for
   its own `agent_id` and role
 - if the durable identity is missing or points at a different wallet, the
@@ -55,19 +57,21 @@ Managed onboarding rules:
 
 Scope boundary:
 
-- this ADR governs the current downstream OWS-facing HTTP seam only
-- it does not decide where deeper OWS internals should eventually live
-- the separate OWS-internals follow-up remains responsible for that refactor
+- this ADR governs fail-closed managed-identity readiness on top of
+  runtime-owned direct OWS-core integration
+- it does not make OWS internals part of any public downstream app contract
+- the readiness and verification rules here must remain true even if the
+  private runtime implementation details change later
 
 ## Rationale
 
 - preserves correct ownership: orchestrator and subagent each prove only their
   own identity
 - prevents managed onboarding from succeeding on stale or guessed wallet state
-- makes local OWS resolution and Shared Ember durable state agree before the
-  runtime appears healthy
-- keeps the downstream managed-onboarding contract explicit while allowing a
-  separate issue to change OWS internals later
+- makes runtime-owned wallet resolution and Shared Ember durable state agree
+  before the runtime appears healthy
+- keeps the managed-onboarding contract explicit without teaching downstream
+  apps to depend on private OWS implementation seams
 - provides a concrete validation lane:
   - `pnpm smoke:managed-identities`
 
@@ -93,11 +97,13 @@ Scope boundary:
     downstream surprises
   - the repo has a repeatable smoke command for the audited proof surface
 - Tradeoffs:
-  - downstream apps remain temporarily coupled to the current OWS-facing HTTP
-    seam until the follow-on issue lands
+  - the readiness contract now depends on `agent-runtime` continuing to own the
+    private wallet-resolution path instead of downstream apps providing their
+    own seam
   - managed onboarding now depends on an extra post-bootstrap execution-context
     read before promotion to `active`
 - Follow-on work:
   - keep docs and smoke output aligned with the current contract
-  - let the separate OWS-internals issue change the seam later without
-    weakening the fail-closed identity contract
+  - keep ADR 0011 and this ADR aligned so runtime-owned OWS internals remain a
+    private implementation detail without weakening the fail-closed identity
+    contract
