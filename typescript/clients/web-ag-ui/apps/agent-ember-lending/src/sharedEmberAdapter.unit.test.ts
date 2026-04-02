@@ -2275,14 +2275,135 @@ describe('createEmberLendingDomain', () => {
     ).resolves.toMatchObject({
       state: {
         phase: 'active',
-        lastSharedEmberRevision: 7,
+        lastSharedEmberRevision: 9,
         lastExecutionResult: null,
         lastExecutionTxHash: null,
+        pendingExecutionSubmission: {
+          transactionPlanId: 'txplan-ember-lending-001',
+          requestId: 'req-ember-lending-execution-001',
+          idempotencyKey: 'idem-execute-transaction-plan-thread-1',
+        },
       },
       outputs: {
         status: {
           executionStatus: 'failed',
           statusMessage: 'connect ECONNREFUSED 127.0.0.1:4010',
+        },
+      },
+    });
+  });
+
+  it('recovers a dropped submit response from the committed-event outbox without signing again', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:4010')),
+      readCommittedEventOutbox: vi
+        .fn()
+        .mockResolvedValueOnce({
+          protocol_version: 'v1',
+          revision: 10,
+          events: [
+            {
+              event_id: 'evt-request-execution-3',
+              sequence: 3,
+              aggregate: 'request',
+              aggregate_id: 'req-ember-lending-execution-001',
+              event_type: 'requestExecution.completed.v1',
+              committed_at: '2026-04-01T06:18:00Z',
+              payload: {
+                request_id: 'req-ember-lending-execution-001',
+                transaction_plan_id: 'txplan-ember-lending-001',
+                execution_id: 'exec-ember-lending-001',
+                status: 'confirmed',
+              },
+            },
+          ],
+        }),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const executionSigner = {
+      signExecutionPackage: vi.fn(async () => ({
+        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
+        signer_address: '0x00000000000000000000000000000000000000b1',
+        raw_transaction:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      executionSigner,
+      agentId: 'ember-lending',
+    });
+    const initialState = {
+      ...createManagedLifecycleState(),
+      lastCandidatePlan: {
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+      lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+    };
+
+    const firstAttempt = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: initialState,
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    const resumedAttempt = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: firstAttempt?.state,
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(executionSigner.signExecutionPackage).toHaveBeenCalledTimes(1);
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(2);
+    expect(protocolHost.readCommittedEventOutbox).toHaveBeenNthCalledWith(1, {
+      protocol_version: 'v1',
+      consumer_id: 'ember-lending-req-ember-lending-execution-001',
+      after_sequence: 0,
+      limit: 100,
+    });
+    expect(resumedAttempt).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 10,
+        lastExecutionResult: {
+          phase: 'completed',
+          request_id: 'req-ember-lending-execution-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          execution: {
+            execution_id: 'exec-ember-lending-001',
+            status: 'confirmed',
+          },
+        },
+        lastExecutionTxHash: null,
+        pendingExecutionSubmission: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
         },
       },
     });

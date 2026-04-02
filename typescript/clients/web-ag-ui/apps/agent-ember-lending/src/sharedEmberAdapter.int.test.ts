@@ -22,6 +22,19 @@ type SignerRequestRecord = {
   body: Record<string, unknown>;
 };
 
+type ForwardedJsonResponse = {
+  status: number;
+  rawBody: string;
+  parsedBody: unknown;
+};
+
+type InterruptedSubmitProxy = {
+  baseUrl: string;
+  close: () => Promise<void>;
+  submitAttempts: Record<string, unknown>[];
+  interruptedSubmitResponse: unknown | null;
+};
+
 function createManagedLifecycleState() {
   return {
     phase: 'active' as const,
@@ -102,6 +115,98 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+async function closeServer(server: Server): Promise<void> {
+  server.closeAllConnections?.();
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+async function forwardJsonRequest(input: {
+  targetBaseUrl: string;
+  requestPath: string;
+  body: Record<string, unknown>;
+}): Promise<ForwardedJsonResponse> {
+  const response = await fetch(`${input.targetBaseUrl}${input.requestPath}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify(input.body),
+  });
+
+  const rawBody = await response.text();
+
+  return {
+    status: response.status,
+    rawBody,
+    parsedBody: rawBody.length === 0 ? null : (JSON.parse(rawBody) as unknown),
+  };
+}
+
+async function startInterruptedSubmitProxy(input: {
+  targetBaseUrl: string;
+}): Promise<InterruptedSubmitProxy> {
+  const submitAttempts: Record<string, unknown>[] = [];
+  let interruptedSubmitResponse: unknown | null = null;
+
+  const proxyServer = createServer((request: IncomingMessage, response: ServerResponse) => {
+    void (async () => {
+      const requestPath = request.url ?? '/jsonrpc';
+      const body = await readRequestBody(request);
+      const forwarded = await forwardJsonRequest({
+        targetBaseUrl: input.targetBaseUrl,
+        requestPath,
+        body,
+      });
+
+      if (requestPath === '/jsonrpc' && body['method'] === 'subagent.submitSignedTransaction.v1') {
+        submitAttempts.push(body);
+
+        if (submitAttempts.length === 1) {
+          interruptedSubmitResponse = forwarded.parsedBody;
+          response.destroy();
+          return;
+        }
+      }
+
+      response.writeHead(forwarded.status, {
+        'content-type': 'application/json; charset=utf-8',
+      });
+      response.end(forwarded.rawBody);
+    })().catch((error: unknown) => {
+      response.writeHead(500);
+      response.end(error instanceof Error ? error.message : 'unknown error');
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    proxyServer.once('error', reject);
+    proxyServer.listen(0, '127.0.0.1', () => {
+      proxyServer.off('error', reject);
+      resolve();
+    });
+  });
+
+  const address = proxyServer.address() as AddressInfo;
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: async () => closeServer(proxyServer),
+    submitAttempts,
+    get interruptedSubmitResponse() {
+      return interruptedSubmitResponse;
+    },
+  };
+}
+
 describeSharedEmberIntegration('ember-lending Shared Ember execution integration', () => {
   let target: StartedSharedEmberTarget;
   let signerServer: Server;
@@ -179,18 +284,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
   });
 
   afterEach(async () => {
-    signerServer.closeAllConnections?.();
-    await new Promise<void>((resolve, reject) => {
-      signerServer.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve();
-      });
-    });
-
+    await closeServer(signerServer);
     await target?.close();
   });
 
@@ -301,5 +395,103 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         canonical_unsigned_payload_ref: expect.any(String),
       },
     });
+  });
+
+  it('resumes after a dropped submit response without duplicate local signing or duplicate upstream submission', async () => {
+    const proxy = await startInterruptedSubmitProxy({
+      targetBaseUrl: target.baseUrl,
+    });
+
+    try {
+      const protocolHost = createEmberLendingSharedEmberHttpHost({
+        baseUrl: proxy.baseUrl,
+      });
+      const executionSigner = createEmberLendingLocalOwsExecutionSigner({
+        baseUrl: signerBaseUrl,
+      });
+      const domain = createEmberLendingDomain({
+        protocolHost,
+        executionSigner,
+        agentId: TEST_EMBER_LENDING_AGENT_ID,
+      });
+      const threadId = 'thread-ember-lending-int-transport-retry';
+      const executionInput = {
+        idempotencyKey: 'idem-execute-transaction-plan-ember-int-transport-retry',
+      };
+
+      const planResult = await domain.handleOperation?.({
+        threadId,
+        state: createManagedLifecycleState(),
+        operation: {
+          source: 'tool',
+          name: 'create_transaction_plan',
+          input: createCandidatePlanInput(),
+        },
+      });
+
+      const interruptedResult = await domain.handleOperation?.({
+        threadId,
+        state: planResult?.state,
+        operation: {
+          source: 'tool',
+          name: 'request_transaction_execution',
+          input: executionInput,
+        },
+      });
+
+      expect(interruptedResult).toMatchObject({
+        outputs: {
+          status: {
+            executionStatus: 'failed',
+          },
+        },
+      });
+
+      const resumedResult = await domain.handleOperation?.({
+        threadId,
+        state: interruptedResult?.state,
+        operation: {
+          source: 'tool',
+          name: 'request_transaction_execution',
+          input: executionInput,
+        },
+      });
+
+      expect(resumedResult).toMatchObject({
+        state: {
+          phase: 'active',
+          lastExecutionResult: {
+            phase: 'completed',
+            execution: {
+              status: 'confirmed',
+            },
+          },
+          lastExecutionTxHash: null,
+        },
+        outputs: {
+          status: {
+            executionStatus: 'completed',
+            statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+          },
+        },
+      });
+
+      expect(proxy.submitAttempts).toHaveLength(1);
+      expect(proxy.interruptedSubmitResponse).toMatchObject({
+        result: {
+          execution_result: {
+            execution: {
+              status: 'confirmed',
+            },
+          },
+        },
+      });
+      expect(signerRequests.map((entry) => entry.path)).toEqual([
+        '/sign/redelegation',
+        '/sign/execution',
+      ]);
+    } finally {
+      await proxy.close();
+    }
   });
 });

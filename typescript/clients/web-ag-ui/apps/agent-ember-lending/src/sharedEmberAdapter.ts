@@ -45,6 +45,7 @@ export type EmberLendingLifecycleState = {
   lastCandidatePlanSummary: string | null;
   lastExecutionResult: unknown;
   lastExecutionTxHash: `0x${string}` | null;
+  pendingExecutionSubmission?: PendingExecutionSubmission | null;
   lastEscalationRequest: unknown;
   lastEscalationSummary: string | null;
 };
@@ -102,6 +103,22 @@ type SharedEmberExecutionContextEnvelope = {
   executionContext: NonNullable<SharedEmberExecutionContext>;
 };
 
+type PendingExecutionSubmission = {
+  transactionPlanId: string;
+  requestId: string;
+  idempotencyKey: string;
+  signedTransaction: Record<string, unknown>;
+  revision: number | null;
+};
+
+type SharedEmberCommittedEvent = {
+  sequence?: number;
+  aggregate?: string;
+  aggregate_id?: string;
+  event_type?: string;
+  payload?: Record<string, unknown>;
+};
+
 type PortfolioProjection = Pick<
   EmberLendingLifecycleState,
   | 'mandateRef'
@@ -130,6 +147,18 @@ class LocalExecutionFailureError extends Error {
   }
 }
 
+class PendingExecutionSubmissionError extends Error {
+  revision: number | null;
+  pendingSubmission: PendingExecutionSubmission;
+
+  constructor(message: string, revision: number | null, pendingSubmission: PendingExecutionSubmission) {
+    super(message);
+    this.name = 'PendingExecutionSubmissionError';
+    this.revision = revision;
+    this.pendingSubmission = pendingSubmission;
+  }
+}
+
 function buildDefaultLifecycleState(): EmberLendingLifecycleState {
   return {
     phase: 'prehire',
@@ -146,6 +175,7 @@ function buildDefaultLifecycleState(): EmberLendingLifecycleState {
     lastCandidatePlanSummary: null,
     lastExecutionResult: null,
     lastExecutionTxHash: null,
+    pendingExecutionSubmission: null,
     lastEscalationRequest: null,
     lastEscalationSummary: null,
   };
@@ -740,6 +770,20 @@ function readExecutionRequestResult(executionResult: unknown): Record<string, un
   return executionResult['request_result'];
 }
 
+function readCommittedEvent(value: unknown): SharedEmberCommittedEvent | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    sequence: typeof value['sequence'] === 'number' ? value['sequence'] : undefined,
+    aggregate: readString(value['aggregate']) ?? undefined,
+    aggregate_id: readString(value['aggregate_id']) ?? undefined,
+    event_type: readString(value['event_type']) ?? undefined,
+    payload: isRecord(value['payload']) ? value['payload'] : undefined,
+  };
+}
+
 function ensureSentence(value: string): string {
   return /[.!?]$/.test(value) ? value : `${value}.`;
 }
@@ -1033,6 +1077,64 @@ async function submitSignedTransaction(input: {
     revision: response.result?.revision ?? null,
     committedEventIds: response.result?.committed_event_ids ?? [],
     executionResult: response.result?.execution_result ?? null,
+  };
+}
+
+async function readRecoveredExecutionResultFromOutbox(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  agentId: string;
+  requestId: string;
+}): Promise<{
+  revision: number | null;
+  executionResult: unknown;
+} | null> {
+  const outboxPage = (await input.protocolHost.readCommittedEventOutbox({
+    protocol_version: 'v1',
+    consumer_id: `${input.agentId}-${input.requestId}`,
+    after_sequence: 0,
+    limit: 100,
+  })) as {
+    revision?: number;
+    events?: unknown[];
+  };
+
+  const matchingEvent = (outboxPage.events ?? [])
+    .map((event) => readCommittedEvent(event))
+    .filter((event): event is SharedEmberCommittedEvent => event !== null)
+    .filter(
+      (event) =>
+        event.aggregate === 'request' &&
+        event.aggregate_id === input.requestId &&
+        (event.event_type === 'requestExecution.submitted.v1' ||
+          event.event_type === 'requestExecution.completed.v1'),
+    )
+    .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0))
+    .at(-1);
+
+  if (!matchingEvent) {
+    return null;
+  }
+
+  const status = readString(matchingEvent.payload?.['status']);
+  const executionId = readString(matchingEvent.payload?.['execution_id']);
+  const transactionPlanId = readString(matchingEvent.payload?.['transaction_plan_id']);
+  const requestId = readString(matchingEvent.payload?.['request_id']);
+
+  if (!status || !transactionPlanId || !requestId) {
+    return null;
+  }
+
+  return {
+    revision: outboxPage.revision ?? null,
+    executionResult: {
+      phase: 'completed',
+      request_id: requestId,
+      transaction_plan_id: transactionPlanId,
+      execution: {
+        status,
+        ...(executionId ? { execution_id: executionId } : {}),
+      },
+    },
   };
 }
 
@@ -1381,6 +1483,12 @@ async function runPreparedExecutionFlow(input: {
     );
   }
 
+  const signedTransaction = {
+    ...readExecutionSigningPackage(executionResult)!,
+    signer_address: signerAddress,
+    raw_transaction: rawTransaction,
+  };
+
   const submitResponse = await submitSignedTransaction({
     protocolHost: input.protocolHost,
     threadId: input.threadId,
@@ -1389,11 +1497,19 @@ async function runPreparedExecutionFlow(input: {
     transactionPlanId: input.transactionPlanId,
     requestId: requestId!,
     idempotencyKey: input.idempotencyKey,
-    signedTransaction: {
-      ...readExecutionSigningPackage(executionResult)!,
-      signer_address: signerAddress,
-      raw_transaction: rawTransaction,
-    },
+    signedTransaction,
+  }).catch((error: unknown) => {
+    if (!(error instanceof Error)) {
+      throw error;
+    }
+
+    throw new PendingExecutionSubmissionError(error.message, requestResponse.result?.revision ?? null, {
+      transactionPlanId: input.transactionPlanId,
+      requestId: requestId!,
+      idempotencyKey: input.idempotencyKey,
+      signedTransaction,
+      revision: requestResponse.result?.revision ?? null,
+    });
   });
 
   return {
@@ -1404,6 +1520,60 @@ async function runPreparedExecutionFlow(input: {
     ],
     executionResult: submitResponse.executionResult,
   };
+}
+
+async function resumePendingExecutionSubmission(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  threadId: string;
+  agentId: string;
+  pendingSubmission: PendingExecutionSubmission;
+}): Promise<{
+  revision: number | null;
+  committedEventIds: string[];
+  executionResult: unknown;
+}> {
+  const recoveredResult = await readRecoveredExecutionResultFromOutbox({
+    protocolHost: input.protocolHost,
+    agentId: input.agentId,
+    requestId: input.pendingSubmission.requestId,
+  });
+
+  if (recoveredResult) {
+    return {
+      revision: recoveredResult.revision,
+      committedEventIds: [],
+      executionResult: recoveredResult.executionResult,
+    };
+  }
+
+  try {
+    const submitResponse = await submitSignedTransaction({
+      protocolHost: input.protocolHost,
+      threadId: input.threadId,
+      agentId: input.agentId,
+      currentRevision: input.pendingSubmission.revision,
+      transactionPlanId: input.pendingSubmission.transactionPlanId,
+      requestId: input.pendingSubmission.requestId,
+      idempotencyKey: input.pendingSubmission.idempotencyKey,
+      signedTransaction: input.pendingSubmission.signedTransaction,
+    });
+
+    return {
+      revision: submitResponse.revision,
+      committedEventIds: submitResponse.committedEventIds,
+      executionResult: submitResponse.executionResult,
+    };
+  } catch (error) {
+    if (!(error instanceof Error)) {
+      throw error;
+    }
+
+    throw new PendingExecutionSubmissionError(
+      error.message,
+      input.pendingSubmission.revision,
+      input.pendingSubmission,
+    );
+  }
 }
 
 function readEscalationResult(operationInput: unknown): unknown {
@@ -1694,15 +1864,24 @@ export function createEmberLendingDomain(
             `idem-execute-transaction-plan-${threadId}`;
           let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>>;
           try {
-            preparedExecutionResult = await runPreparedExecutionFlow({
-              protocolHost: options.protocolHost,
-              executionSigner: options.executionSigner,
-              threadId,
-              agentId,
-              currentState,
-              transactionPlanId,
-              idempotencyKey,
-            });
+            preparedExecutionResult =
+              currentState.pendingExecutionSubmission?.transactionPlanId === transactionPlanId &&
+              currentState.pendingExecutionSubmission?.idempotencyKey === idempotencyKey
+                ? await resumePendingExecutionSubmission({
+                    protocolHost: options.protocolHost,
+                    threadId,
+                    agentId,
+                    pendingSubmission: currentState.pendingExecutionSubmission,
+                  })
+                : await runPreparedExecutionFlow({
+                    protocolHost: options.protocolHost,
+                    executionSigner: options.executionSigner,
+                    threadId,
+                    agentId,
+                    currentState,
+                    transactionPlanId,
+                    idempotencyKey,
+                  });
           } catch (error) {
             if (!(error instanceof Error)) {
               throw error;
@@ -1713,11 +1892,16 @@ export function createEmberLendingDomain(
                 ...currentState,
                 phase: 'active',
                 lastSharedEmberRevision:
-                  error instanceof LocalExecutionFailureError
+                  error instanceof LocalExecutionFailureError ||
+                  error instanceof PendingExecutionSubmissionError
                     ? error.revision ?? currentState.lastSharedEmberRevision
                     : currentState.lastSharedEmberRevision,
                 lastExecutionResult: currentState.lastExecutionResult,
                 lastExecutionTxHash: null,
+                pendingExecutionSubmission:
+                  error instanceof PendingExecutionSubmissionError
+                    ? error.pendingSubmission
+                    : null,
               },
               outputs: {
                 status: {
@@ -1743,6 +1927,7 @@ export function createEmberLendingDomain(
             lastSharedEmberRevision: preparedExecutionResult.revision,
             lastExecutionResult: executionResult,
             lastExecutionTxHash: readExecutionTxHash(executionResult),
+            pendingExecutionSubmission: null,
           };
 
           return {
