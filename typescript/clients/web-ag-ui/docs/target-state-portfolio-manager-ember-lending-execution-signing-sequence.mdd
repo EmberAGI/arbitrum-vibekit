@@ -14,6 +14,7 @@ Scope: managed Portfolio Manager -> Ember Lending execution-preparation, local O
 - Runtime-only behavior remains hidden:
   - execution preparation
   - authority-preparation retry loops
+  - stage-scoped idempotency for authority-preparation re-polls
   - local redelegation signing
   - local execution signing
   - signed-artifact submission back to Shared Ember
@@ -77,7 +78,7 @@ sequenceDiagram
     EL-->>Runtime: failed status + blocking message
   else authority preparation required
     SE-->>EL: execution_result.phase=authority_preparation_needed
-    Note over EL,SE: keep authority-preparation recovery internal
+    Note over EL,SE: keep authority-preparation recovery internal and advance with a stage-scoped retry idempotency key
     EL->>SE: subagent.requestTransactionExecution.v1(transaction_plan_id)
   else ready for redelegation signing
     SE-->>EL: execution_result.phase=ready_for_redelegation + redelegation_signing_package + ids
@@ -112,5 +113,6 @@ sequenceDiagram
 - Only Shared Ember capital/control-plane blockers should flow into `create_escalation_request`.
 - Local OWS identity, signing, or transport failures should remain local execution failures rather than escalations.
 - Multi-call retries must be idempotent and must not create a second signing or submission side effect when the runtime retries after a conflict or transport interruption.
+- Authority-preparation re-polls must not reuse the original request idempotency key once Shared Ember has already acknowledged the waiting state; a stage-scoped retry key lets the real upstream contract advance after the missing authority is repaired.
 - After a local transport interruption during `subagent.submitSignedTransaction.v1`, Ember Lending should first reconcile through the committed-event outbox before deciding whether an idempotent resubmit is still needed.
 - When the committed-event outbox already contains the execution event, recovery should preserve `transaction_hash` from that event payload while converging on the terminal status.

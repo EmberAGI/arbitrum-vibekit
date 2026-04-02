@@ -15,7 +15,19 @@ export const TEST_EMBER_LENDING_USER_WALLET =
 export const TEST_EMBER_LENDING_ORCHESTRATOR_WALLET =
   '0x00000000000000000000000000000000000000a2' as const;
 
-function createRedelegationExecutionSeed() {
+type SharedEmberExecutionSeed = ReturnType<typeof createBaseSharedEmberExecutionSeed>;
+
+type SharedEmberExecutionSeedOptions = {
+  competingReservation?: boolean;
+  omitAgentServiceIdentity?: boolean;
+};
+
+type SharedEmberIntegrationBootstrap = {
+  initialState?: SharedEmberExecutionSeed;
+  subagentRuntimes?: Record<string, ReturnType<typeof createSubagentRuntime>>;
+};
+
+function createBaseSharedEmberExecutionSeed() {
   return {
     owned_units: [
       {
@@ -160,6 +172,29 @@ function createRedelegationExecutionSeed() {
   };
 }
 
+export function createSharedEmberExecutionSeed(
+  options: SharedEmberExecutionSeedOptions = {},
+): SharedEmberExecutionSeed {
+  const seed = createBaseSharedEmberExecutionSeed();
+
+  if (options.competingReservation) {
+    seed.reservations = seed.reservations.map((reservation) => ({
+      ...reservation,
+      agent_id: 'competing-agent',
+    }));
+    seed.issued_delegations = seed.issued_delegations.map((delegation) => ({
+      ...delegation,
+      agent_id: 'competing-agent',
+    }));
+  }
+
+  if (options.omitAgentServiceIdentity) {
+    seed.agent_service_identities = [];
+  }
+
+  return seed;
+}
+
 function createSubagentRuntime() {
   return {
     agentWallet: TEST_EMBER_LENDING_AGENT_WALLET,
@@ -262,7 +297,9 @@ function createSubagentRuntime() {
   };
 }
 
-export async function resolveSharedEmberTarget(): Promise<StartedSharedEmberTarget> {
+export async function resolveSharedEmberTarget(input?: {
+  bootstrap?: SharedEmberIntegrationBootstrap;
+}): Promise<StartedSharedEmberTarget> {
   const explicitBaseUrl = process.env['SHARED_EMBER_BASE_URL']?.trim();
   if (explicitBaseUrl) {
     return {
@@ -294,8 +331,8 @@ export async function resolveSharedEmberTarget(): Promise<StartedSharedEmberTarg
 
   return harnessModule.startRepoLocalSharedEmberDomainProtocolHttpServer({
     bootstrap: {
-      initialState: createRedelegationExecutionSeed(),
-      subagentRuntimes: {
+      initialState: input?.bootstrap?.initialState ?? createSharedEmberExecutionSeed(),
+      subagentRuntimes: input?.bootstrap?.subagentRuntimes ?? {
         [TEST_EMBER_LENDING_AGENT_ID]: createSubagentRuntime(),
       },
     },

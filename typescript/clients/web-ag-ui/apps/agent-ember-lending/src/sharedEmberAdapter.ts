@@ -1302,6 +1302,18 @@ function readTransactionPlanId(
   return null;
 }
 
+function buildExecutionPreparationRequestIdempotencyKey(input: {
+  baseIdempotencyKey: string;
+  attempt: number;
+  priorRevision: number | null;
+}): string {
+  if (input.attempt <= 1) {
+    return input.baseIdempotencyKey;
+  }
+
+  return `${input.baseIdempotencyKey}:await-authority-preparation:${input.priorRevision ?? input.attempt - 1}`;
+}
+
 async function runPreparedExecutionFlow(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
   executionSigner?: EmberLendingExecutionSigner;
@@ -1325,7 +1337,11 @@ async function runPreparedExecutionFlow(input: {
       id: `shared-ember-${input.threadId}-request-transaction-execution`,
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-        idempotency_key: input.idempotencyKey,
+        idempotency_key: buildExecutionPreparationRequestIdempotencyKey({
+          baseIdempotencyKey: input.idempotencyKey,
+          attempt: 1,
+          priorRevision: input.currentState.lastSharedEmberRevision,
+        }),
         expected_revision: expectedRevision,
         transaction_plan_id: input.transactionPlanId,
       },
@@ -1357,7 +1373,11 @@ async function runPreparedExecutionFlow(input: {
         id: `shared-ember-${input.threadId}-request-transaction-execution`,
         method: 'subagent.requestTransactionExecution.v1',
         params: {
-          idempotency_key: input.idempotencyKey,
+          idempotency_key: buildExecutionPreparationRequestIdempotencyKey({
+            baseIdempotencyKey: input.idempotencyKey,
+            attempt: requestAttempts,
+            priorRevision: requestResponse.result?.revision ?? null,
+          }),
           expected_revision: expectedRevision,
           transaction_plan_id: input.transactionPlanId,
         },

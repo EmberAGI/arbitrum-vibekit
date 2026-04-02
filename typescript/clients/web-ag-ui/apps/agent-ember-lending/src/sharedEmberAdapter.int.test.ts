@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createEmberLendingLocalOwsExecutionSigner } from './localOwsExecutionSigner.js';
 import { createEmberLendingDomain } from './sharedEmberAdapter.js';
 import {
+  createSharedEmberExecutionSeed,
   resolveSharedEmberTarget,
   TEST_EMBER_LENDING_AGENT_ID,
   TEST_EMBER_LENDING_AGENT_WALLET,
@@ -33,6 +34,12 @@ type InterruptedSubmitProxy = {
   close: () => Promise<void>;
   submitAttempts: Record<string, unknown>[];
   interruptedSubmitResponse: unknown | null;
+};
+
+type AuthorityPreparationRecoveryProxy = {
+  baseUrl: string;
+  close: () => Promise<void>;
+  preparationPhases: string[];
 };
 
 function createManagedLifecycleState() {
@@ -207,6 +214,95 @@ async function startInterruptedSubmitProxy(input: {
   };
 }
 
+async function startAuthorityPreparationRecoveryProxy(input: {
+  targetBaseUrl: string;
+}): Promise<AuthorityPreparationRecoveryProxy> {
+  const preparationPhases: string[] = [];
+  let repairedAuthority = false;
+
+  const proxyServer = createServer((request: IncomingMessage, response: ServerResponse) => {
+    void (async () => {
+      const requestPath = request.url ?? '/jsonrpc';
+      const body = await readRequestBody(request);
+      const forwarded = await forwardJsonRequest({
+        targetBaseUrl: input.targetBaseUrl,
+        requestPath,
+        body,
+      });
+
+      if (requestPath === '/jsonrpc' && body['method'] === 'subagent.requestTransactionExecution.v1') {
+        const parsedBody = isRecord(forwarded.parsedBody) ? forwarded.parsedBody : null;
+        const result = parsedBody && isRecord(parsedBody['result']) ? parsedBody['result'] : null;
+        const executionResult = result && isRecord(result['execution_result']) ? result['execution_result'] : null;
+        const phase = executionResult ? executionResult['phase'] : null;
+
+        if (typeof phase === 'string') {
+          preparationPhases.push(phase);
+        }
+
+        if (
+          phase === 'authority_preparation_needed' &&
+          !repairedAuthority &&
+          typeof result?.['revision'] === 'number'
+        ) {
+          repairedAuthority = true;
+
+          await forwardJsonRequest({
+            targetBaseUrl: input.targetBaseUrl,
+            requestPath: '/jsonrpc',
+            body: {
+              jsonrpc: '2.0',
+              id: 'authority-preparation-repair-identity',
+              method: 'orchestrator.writeAgentServiceIdentity.v1',
+              params: {
+                idempotency_key: 'idem-authority-preparation-repair-identity',
+                expected_revision: result['revision'],
+                agent_service_identity: {
+                  identity_ref: 'agent-identity-ember-lending-repaired-001',
+                  agent_id: TEST_EMBER_LENDING_AGENT_ID,
+                  role: 'subagent',
+                  wallet_address: TEST_EMBER_LENDING_AGENT_WALLET,
+                  wallet_source: 'ember_local_write',
+                  capability_metadata: {
+                    execution: true,
+                    onboarding: true,
+                  },
+                  registration_version: 2,
+                  registered_at: '2026-04-01T06:15:00Z',
+                },
+              },
+            },
+          });
+        }
+      }
+
+      response.writeHead(forwarded.status, {
+        'content-type': 'application/json; charset=utf-8',
+      });
+      response.end(forwarded.rawBody);
+    })().catch((error: unknown) => {
+      response.writeHead(500);
+      response.end(error instanceof Error ? error.message : 'unknown error');
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    proxyServer.once('error', reject);
+    proxyServer.listen(0, '127.0.0.1', () => {
+      proxyServer.off('error', reject);
+      resolve();
+    });
+  });
+
+  const address = proxyServer.address() as AddressInfo;
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: async () => closeServer(proxyServer),
+    preparationPhases,
+  };
+}
+
 describeSharedEmberIntegration('ember-lending Shared Ember execution integration', () => {
   let target: StartedSharedEmberTarget;
   let signerServer: Server;
@@ -285,7 +381,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
 
   afterEach(async () => {
     await closeServer(signerServer);
-    await target?.close();
+    await target?.close().catch(() => undefined);
   });
 
   it('executes the real Shared Ember request, redelegation registration, and signed-transaction flow through the lending agent service', async () => {
@@ -395,6 +491,158 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         canonical_unsigned_payload_ref: expect.any(String),
       },
     });
+  });
+
+  it('surfaces a repo-backed blocked execution result without signing or submitting', async () => {
+    await target.close();
+    target = await resolveSharedEmberTarget({
+      bootstrap: {
+        initialState: createSharedEmberExecutionSeed({
+          competingReservation: true,
+        }),
+      },
+    });
+
+    const protocolHost = createEmberLendingSharedEmberHttpHost({
+      baseUrl: target.baseUrl,
+    });
+    const executionSigner = createEmberLendingLocalOwsExecutionSigner({
+      baseUrl: signerBaseUrl,
+    });
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      executionSigner,
+      agentId: TEST_EMBER_LENDING_AGENT_ID,
+    });
+
+    const planResult = await domain.handleOperation?.({
+      threadId: 'thread-ember-lending-int-blocked-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: createCandidatePlanInput(),
+      },
+    });
+
+    const executeResult = await domain.handleOperation?.({
+      threadId: 'thread-ember-lending-int-blocked-1',
+      state: planResult?.state,
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(executeResult).toMatchObject({
+      state: {
+        phase: 'active',
+        lastExecutionResult: {
+          phase: 'blocked',
+          request_result: {
+            result: 'needs_release_or_transfer',
+            blocking_reason_code: 'reserved_for_other_agent',
+          },
+        },
+        lastExecutionTxHash: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending transaction execution request was blocked by Shared Ember: another agent currently holds the controlling reservation.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'shared-ember-execution-result',
+              outcome: 'blocked',
+            },
+          },
+        ],
+      },
+    });
+
+    expect(signerRequests).toEqual([]);
+  });
+
+  it('polls through a repo-backed authority-preparation response before reaching local execution signing', async () => {
+    await target.close();
+    target = await resolveSharedEmberTarget({
+      bootstrap: {
+        initialState: createSharedEmberExecutionSeed({
+          omitAgentServiceIdentity: true,
+        }),
+      },
+    });
+
+    const proxy = await startAuthorityPreparationRecoveryProxy({
+      targetBaseUrl: target.baseUrl,
+    });
+
+    try {
+      const protocolHost = createEmberLendingSharedEmberHttpHost({
+        baseUrl: proxy.baseUrl,
+      });
+      const executionSigner = createEmberLendingLocalOwsExecutionSigner({
+        baseUrl: signerBaseUrl,
+      });
+      const domain = createEmberLendingDomain({
+        protocolHost,
+        executionSigner,
+        agentId: TEST_EMBER_LENDING_AGENT_ID,
+      });
+
+      const planResult = await domain.handleOperation?.({
+        threadId: 'thread-ember-lending-int-authority-prep-1',
+        state: createManagedLifecycleState(),
+        operation: {
+          source: 'tool',
+          name: 'create_transaction_plan',
+          input: createCandidatePlanInput(),
+        },
+      });
+
+      const executeResult = await domain.handleOperation?.({
+        threadId: 'thread-ember-lending-int-authority-prep-1',
+        state: planResult?.state,
+        operation: {
+          source: 'tool',
+          name: 'request_transaction_execution',
+        },
+      });
+
+      expect(executeResult).toMatchObject({
+        state: {
+          phase: 'active',
+          lastExecutionResult: {
+            phase: 'completed',
+            execution: {
+              status: 'confirmed',
+            },
+          },
+          lastExecutionTxHash:
+            '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        },
+        outputs: {
+          status: {
+            executionStatus: 'completed',
+            statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+          },
+        },
+      });
+
+      expect(proxy.preparationPhases).toEqual([
+        'authority_preparation_needed',
+        'ready_for_redelegation',
+      ]);
+      expect(signerRequests.map((entry) => entry.path)).toEqual([
+        '/sign/redelegation',
+        '/sign/execution',
+      ]);
+    } finally {
+      await proxy.close();
+    }
   });
 
   it('resumes after a dropped submit response without duplicate local signing or duplicate upstream submission', async () => {

@@ -33,6 +33,9 @@ Current execution-context semantics:
   sparse
 - `subagent_wallet_address` can still be `null` until a later delegation
   issuance path assigns a dedicated subagent wallet
+- `authority_preparation_needed` stays runtime-internal; the adapter re-polls
+  Shared Ember with a stage-scoped retry idempotency key until readiness
+  advances or the local execution attempt fails closed
 - local OWS signing stays inside the downstream service layer and must fail
   closed if the prepared signing package does not match the resolved dedicated
   subagent wallet identity

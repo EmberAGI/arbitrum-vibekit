@@ -1646,7 +1646,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-request-transaction-execution',
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        idempotency_key: 'idem-execute-transaction-plan-thread-1:await-authority-preparation:8',
         expected_revision: 8,
         transaction_plan_id: 'txplan-ember-lending-001',
       },
