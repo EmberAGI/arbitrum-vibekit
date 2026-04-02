@@ -159,10 +159,12 @@ const PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP = '2026-03-30T00:00:00.000Z';
 const PORTFOLIO_MANAGER_PROTOCOL_SOURCE = 'onboarding_scan';
 const PORTFOLIO_MANAGER_DEFAULT_RISK_LEVEL = 'medium';
 const PORTFOLIO_MANAGER_ACTIVATION_PURPOSE = 'deploy';
-const PORTFOLIO_MANAGER_CONTROL_PATH = 'unassigned';
 const FIRST_MANAGED_AGENT_TYPE = 'ember-lending';
 const FIRST_MANAGED_AGENT_PROTOCOL = 'aave';
 const FIRST_MANAGED_AGENT_ROOT_ASSET = 'USDC';
+const FIRST_MANAGED_AGENT_BENCHMARK_ASSET = 'USD';
+const FIRST_MANAGED_AGENT_ALLOCATION_MODE = 'allocable_idle';
+const FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH = 'lending.supply';
 
 type PortfolioManagerPortfolioMandate = {
   approved: true;
@@ -184,6 +186,14 @@ type PortfolioManagerManagedAgentMandate = {
   agentType: typeof FIRST_MANAGED_AGENT_TYPE;
   approved: true;
   settings: EmberLendingManagedAgentSettings;
+};
+
+type ManagedOnboardingMandate = {
+  root_asset: string;
+  benchmark_asset: string;
+  allocation_mode: typeof FIRST_MANAGED_AGENT_ALLOCATION_MODE;
+  intent: typeof PORTFOLIO_MANAGER_ACTIVATION_PURPOSE;
+  control_path: typeof FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH;
 };
 
 type PortfolioManagerApprovedMandateEnvelope = {
@@ -511,6 +521,18 @@ function buildManagedAgentMandateSummary(input: PortfolioManagerManagedAgentMand
   return `lend ${primaryAsset} on Aave within medium-risk allocation, LTV, and health-factor guardrails`;
 }
 
+function buildManagedOnboardingMandate(
+  input: PortfolioManagerManagedAgentMandate,
+): ManagedOnboardingMandate {
+  return {
+    root_asset: input.settings.allowedCollateralAssets[0] ?? FIRST_MANAGED_AGENT_ROOT_ASSET,
+    benchmark_asset: FIRST_MANAGED_AGENT_BENCHMARK_ASSET,
+    allocation_mode: FIRST_MANAGED_AGENT_ALLOCATION_MODE,
+    intent: PORTFOLIO_MANAGER_ACTIVATION_PURPOSE,
+    control_path: FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH,
+  };
+}
+
 function buildPortfolioManagerOnboardingBootstrap(params: {
   agentId: string;
   threadId: string;
@@ -548,18 +570,18 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
         mandate_summary: buildPortfolioManagerMandateSummary(
           params.approvedMandateEnvelope.portfolioMandate,
         ),
+        managed_onboarding: null,
       },
       {
         mandate_ref: managedAgentMandateRef,
         agent_id: FIRST_MANAGED_AGENT_TYPE,
         mandate_summary: buildManagedAgentMandateSummary(firstManagedAgentMandate),
+        managed_onboarding: buildManagedOnboardingMandate(firstManagedAgentMandate),
       },
     ],
     userReservePolicies: [],
     activation: {
-      agentId: firstManagedAgentMandate.agentType,
-      purpose: PORTFOLIO_MANAGER_ACTIVATION_PURPOSE,
-      controlPath: PORTFOLIO_MANAGER_CONTROL_PATH,
+      mandateRef: managedAgentMandateRef,
     },
   };
 }

@@ -68,18 +68,24 @@ function createOnboardingBootstrap() {
         mandate_ref: 'mandate-portfolio-protocol-001',
         agent_id: 'portfolio-manager',
         mandate_summary: 'preserve direct-user liquidity',
+        managed_onboarding: null,
       },
       {
         mandate_ref: 'mandate-ember-lending-protocol-001',
         agent_id: 'ember-lending',
         mandate_summary: 'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+        managed_onboarding: {
+          root_asset: 'USDC',
+          benchmark_asset: 'USD',
+          allocation_mode: 'allocable_idle',
+          intent: 'deploy',
+          control_path: 'lending.supply',
+        },
       },
     ],
     userReservePolicies: [],
     activation: {
-      agentId: 'ember-lending',
-      purpose: 'deploy',
-      controlPath: 'unassigned',
+      mandateRef: 'mandate-ember-lending-protocol-001',
     },
   };
 }
@@ -325,18 +331,24 @@ describe('createPortfolioManagerDomain', () => {
                 mandate_ref: expect.stringContaining('mandate-'),
                 agent_id: 'portfolio-manager',
                 mandate_summary: 'preserve direct-user liquidity at medium risk while coordinating managed subagents',
+                managed_onboarding: null,
               },
               {
                 mandate_ref: expect.stringContaining('mandate-'),
                 agent_id: 'ember-lending',
                 mandate_summary:
                   'lend USDC on Aave within medium-risk allocation, LTV, and health-factor guardrails',
+                managed_onboarding: {
+                  root_asset: 'USDC',
+                  benchmark_asset: 'USD',
+                  allocation_mode: 'allocable_idle',
+                  intent: 'deploy',
+                  control_path: 'lending.supply',
+                },
               },
             ],
             activation: {
-              agentId: 'ember-lending',
-              purpose: 'deploy',
-              controlPath: 'unassigned',
+              mandateRef: expect.stringContaining('mandate-'),
             },
           }),
           handoff: expect.objectContaining({
