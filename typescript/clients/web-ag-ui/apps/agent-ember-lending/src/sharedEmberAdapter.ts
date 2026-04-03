@@ -806,6 +806,34 @@ function readCandidatePlanCompactPlanSummary(
   };
 }
 
+function resolveCandidatePlanAnchoringFailureMessage(input: {
+  candidatePlan: unknown;
+  anchoredPayloadResolver?: EmberLendingAnchoredPayloadResolver;
+  walletAddress: `0x${string}` | null;
+  rootUserWalletAddress: `0x${string}` | null;
+  transactionPlanId: string | null;
+  payloadBuilderOutput: EmberLendingPayloadBuilderOutput | null;
+  compactPlanSummary: EmberLendingCompactPlanSummary | null;
+}): string | null {
+  if (!input.candidatePlan) {
+    return null;
+  }
+
+  if (!input.transactionPlanId || !input.payloadBuilderOutput || !input.compactPlanSummary) {
+    return 'Candidate lending plan could not be anchored behind the lending service boundary because Shared Ember omitted the planner payload metadata required for anchoring.';
+  }
+
+  if (!input.walletAddress || !input.rootUserWalletAddress) {
+    return 'Candidate lending plan could not be anchored behind the lending service boundary because the managed wallet context is incomplete.';
+  }
+
+  if (!input.anchoredPayloadResolver) {
+    return 'Candidate lending plan could not be anchored behind the lending service boundary because the anchored payload resolver is unavailable.';
+  }
+
+  return null;
+}
+
 function readExecutionTxHash(executionResult: unknown): `0x${string}` | null {
   if (!isRecord(executionResult)) {
     return null;
@@ -2190,25 +2218,57 @@ export function createEmberLendingDomain(
           const candidatePlanTransactionPlanId = readCandidatePlanTransactionPlanId(candidatePlan);
           const payloadBuilderOutput = readCandidatePlanPayloadBuilderOutput(candidatePlan);
           const compactPlanSummary = readCandidatePlanCompactPlanSummary(candidatePlan);
-          const anchoredPayloadRecord =
-            (
-            options.anchoredPayloadResolver &&
-            currentState.walletAddress &&
-            currentState.rootUserWalletAddress &&
-            candidatePlanTransactionPlanId &&
-            payloadBuilderOutput &&
-            compactPlanSummary
-            )
-              ? await options.anchoredPayloadResolver.anchorCandidatePlanPayload({
-                  agentId,
-                  threadId,
-                  transactionPlanId: candidatePlanTransactionPlanId,
-                  walletAddress: currentState.walletAddress,
-                  rootUserWalletAddress: currentState.rootUserWalletAddress,
-                  payloadBuilderOutput,
-                  compactPlanSummary,
-                })
-              : null;
+          const anchoringFailureMessage = resolveCandidatePlanAnchoringFailureMessage({
+            candidatePlan,
+            anchoredPayloadResolver: options.anchoredPayloadResolver,
+            walletAddress: currentState.walletAddress,
+            rootUserWalletAddress: currentState.rootUserWalletAddress,
+            transactionPlanId: candidatePlanTransactionPlanId,
+            payloadBuilderOutput,
+            compactPlanSummary,
+          });
+          if (anchoringFailureMessage) {
+            return {
+              state: {
+                ...currentState,
+                phase: 'active',
+                lastSharedEmberRevision: response.result?.revision ?? null,
+              },
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage: anchoringFailureMessage,
+                },
+              },
+            };
+          }
+
+          const anchoredPayloadRecord = await options.anchoredPayloadResolver!.anchorCandidatePlanPayload({
+            agentId,
+            threadId,
+            transactionPlanId: candidatePlanTransactionPlanId!,
+            walletAddress: currentState.walletAddress!,
+            rootUserWalletAddress: currentState.rootUserWalletAddress!,
+            payloadBuilderOutput: payloadBuilderOutput!,
+            compactPlanSummary: compactPlanSummary!,
+          });
+          if (!anchoredPayloadRecord) {
+            return {
+              state: {
+                ...currentState,
+                phase: 'active',
+                lastSharedEmberRevision: response.result?.revision ?? null,
+              },
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Candidate lending plan could not be anchored behind the lending service boundary because the anchored payload resolver did not persist the payload.',
+                },
+              },
+            };
+          }
+
           const nextState: EmberLendingLifecycleState = {
             ...currentState,
             phase: 'active',

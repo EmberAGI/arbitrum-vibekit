@@ -1163,7 +1163,7 @@ describe('createEmberLendingDomain', () => {
     );
   });
 
-  it('materializes candidate plans through the bounded subagent surface using managed state context', async () => {
+  it('fails candidate-plan creation when Shared Ember omits planner metadata required for service-owned anchoring', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async () => ({
         jsonrpc: '2.0',
@@ -1218,25 +1218,15 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'active',
         lastSharedEmberRevision: 8,
+        lastCandidatePlan: null,
         anchoredPayloadRecords: [],
-        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
       },
       outputs: {
         status: {
-          executionStatus: 'completed',
-          statusMessage: 'Candidate lending plan created through the Shared Ember planner.',
+          executionStatus: 'failed',
+          statusMessage:
+            'Candidate lending plan could not be anchored behind the lending service boundary because Shared Ember omitted the planner payload metadata required for anchoring.',
         },
-        artifacts: [
-          {
-            data: {
-              type: 'shared-ember-candidate-plan',
-              revision: 8,
-              candidatePlan: {
-                transaction_plan_id: 'txplan-ember-lending-001',
-              },
-            },
-          },
-        ],
       },
     });
 
@@ -1350,6 +1340,79 @@ describe('createEmberLendingDomain', () => {
         asset: 'USDC',
         amount: '10',
         summary: 'supply reserved USDC on Aave',
+      },
+    });
+  });
+
+  it('fails candidate-plan creation when the anchored payload resolver is unavailable', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-materialize-candidate-plan',
+        result: {
+          protocol_version: 'v1',
+          revision: 8,
+          committed_event_ids: ['evt-candidate-plan-1'],
+          candidate_plan: {
+            planning_kind: 'subagent_handoff',
+            transaction_plan_id: 'txplan-ember-lending-001',
+            handoff: {
+              handoff_id: 'handoff-thread-1',
+              payload_builder_output: {
+                transaction_payload_ref: 'txpayload-ember-lending-001',
+                required_control_path: 'lending.supply',
+                network: 'arbitrum',
+              },
+            },
+            compact_plan_summary: {
+              control_path: 'lending.supply',
+              asset: 'USDC',
+              amount: '10',
+              summary: 'supply reserved USDC on Aave',
+            },
+          },
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: createCandidatePlanInput(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 8,
+        lastCandidatePlan: null,
+        anchoredPayloadRecords: [],
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Candidate lending plan could not be anchored behind the lending service boundary because the anchored payload resolver is unavailable.',
+        },
       },
     });
   });

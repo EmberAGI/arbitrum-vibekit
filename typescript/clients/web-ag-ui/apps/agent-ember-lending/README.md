@@ -48,6 +48,10 @@ Current execution-context semantics:
   and resolves the exact unsigned transaction bytes for the requested step only
   at execution time using the managed wallet address plus chain RPC state,
   instead of relying on a process-local map or a test-only harness seam
+- `create_transaction_plan` now fails closed unless that service-owned
+  anchoring step succeeds; missing planner payload metadata, missing managed
+  wallet context, or missing anchored-resolver wiring must stop plan creation
+  before a locally executable candidate plan is recorded
 
 Runtime wiring:
 

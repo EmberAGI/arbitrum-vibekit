@@ -1,13 +1,19 @@
 # ADR 0015: service-owned-onchain-actions-transaction-resolution-for-managed-lending
 
-Status: Accepted
+Status: Proposed
 Date: 2026-04-03
+
+Approval trace: Pending explicit ADR approval on issue `#567` / PR `#568`
 
 ## Context
 
 Issue `#567` established that the managed lending runtime should own the
 concrete Onchain Actions adapter and keep raw transaction artifacts private
 behind the lending service boundary.
+
+This document captures the intended architecture for that slice, but the branch
+does not yet show the visible approval trace required to treat the decision as
+accepted.
 
 The first implementation slice improved the live path but left several
 important gaps:
@@ -36,6 +42,9 @@ For `agent-ember-lending`:
 - the lending service owns the concrete Onchain Actions adapter
 - `create_transaction_plan` may anchor only opaque refs and stable metadata back
   into the model-visible contract
+- `create_transaction_plan` must fail closed unless the lending service can
+  complete that private anchoring step with planner metadata, managed wallet
+  context, and the anchored payload resolver in place
 - the lending service privately stores the full ordered Onchain Actions
   transaction-request sequence (`to`, `data`, `value`, `chainId`) keyed by the
   anchored payload ref

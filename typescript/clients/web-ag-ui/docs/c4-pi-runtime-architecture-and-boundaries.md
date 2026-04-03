@@ -175,6 +175,11 @@ Container responsibilities:
     state, chain-aware unsigned-transaction preparation with the managed wallet
     plus RPC state, runtime-owned execution signing, and Shared Ember
     submission/finalization.
+  - `agent-ember-lending` also fails `create_transaction_plan` closed unless it
+    can persist the planner-returned payload behind that service-owned anchoring
+    boundary; missing planner metadata, missing managed wallet context, or
+    missing resolver wiring must stop plan creation before local state records a
+    candidate plan as executable.
   - The repo-local validation lane for the managed-identity boundary is
     `pnpm smoke:managed-identities`, and the repo-backed validation lane for
     the real redelegation signing seam is

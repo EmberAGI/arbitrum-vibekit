@@ -51,7 +51,12 @@ sequenceDiagram
   EL->>SE: subagent.createTransactionPlan.v1
   Note over SE: Resolve planner-owned payload_builder_output through the Shared Ember planner path before materializing the candidate plan
   SE-->>EL: candidate_plan + revision
-  EL-->>Runtime: candidate plan artifact + summary
+  Note over EL: Fail closed unless the lending service can privately anchor the returned payload ref and ordered transaction request sequence.
+  alt anchoring succeeds
+    EL-->>Runtime: candidate plan artifact + summary
+  else metadata or resolver is missing
+    EL-->>Runtime: failed status; do not record a locally executable candidate plan
+  end
 
   User->>Web: request_transaction_execution
   Web->>Runtime: run(request_transaction_execution)

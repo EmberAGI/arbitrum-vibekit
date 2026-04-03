@@ -14,6 +14,7 @@ runtime-owned OWS-core signing, and Shared Ember submission behind
   - `create_escalation_request`
 - `request_transaction_execution` remains a model-visible tool on the lending agent. It is not a separate web command-lane concept.
 - Runtime-only behavior remains hidden:
+  - fail-closed candidate-plan anchoring behind the lending-service payload boundary
   - execution preparation
   - authority-preparation retry loops
   - stage-scoped idempotency for authority-preparation re-polls
@@ -125,6 +126,10 @@ sequenceDiagram
   Actions transaction step over time; the lending service must preserve the full
   ordered transaction-request sequence instead of truncating to the terminal
   call.
+- `create_transaction_plan` should succeed only after the lending service has
+  privately anchored the planner-returned payload; missing planner metadata,
+  missing managed wallet context, or missing anchored-resolver wiring must fail
+  the plan-creation attempt before local state treats the plan as executable.
 - Authority-preparation re-polls must not reuse the original request idempotency key once Shared Ember has already acknowledged the waiting state; a stage-scoped retry key lets the real upstream contract advance after the missing authority is repaired.
 - After a local transport interruption during `subagent.submitSignedTransaction.v1`, Ember Lending should first reconcile through the committed-event outbox before deciding whether an idempotent resubmit is still needed.
 - When the committed-event outbox already contains the execution event, recovery should preserve `transaction_hash` from that event payload while converging on the terminal status.
