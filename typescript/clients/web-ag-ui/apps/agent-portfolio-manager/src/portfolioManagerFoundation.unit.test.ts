@@ -48,6 +48,9 @@ describe('createPortfolioManagerAgentConfig', () => {
           name: 'refresh_portfolio_state',
         },
         {
+          name: 'refresh_redelegation_work',
+        },
+        {
           name: 'complete_rooted_bootstrap_from_user_signing',
         },
       ],

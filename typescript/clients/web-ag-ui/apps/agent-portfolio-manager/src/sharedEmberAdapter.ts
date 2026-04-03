@@ -13,6 +13,7 @@ export type PortfolioManagerSharedEmberProtocolHost = {
 };
 
 export const PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID = 'portfolio-manager';
+const PORTFOLIO_MANAGER_REDELEGATION_OUTBOX_CONSUMER_ID = 'portfolio-manager-redelegation';
 
 export type PortfolioManagerLifecycleState = {
   phase: 'prehire' | 'onboarding' | 'active';
@@ -55,6 +56,15 @@ type AgentServiceIdentity = {
   capability_metadata: Record<string, unknown>;
   registration_version: number;
   registered_at: string;
+};
+
+type SharedEmberCommittedEvent = {
+  event_id: string;
+  sequence: number;
+  aggregate: string;
+  aggregate_id: string;
+  event_type: string;
+  payload: Record<string, unknown> | null;
 };
 
 function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
@@ -166,6 +176,80 @@ function readAgentServiceIdentity(
     registration_version: registrationVersion,
     registered_at: registeredAt,
   };
+}
+
+function readCommittedEvent(value: unknown): SharedEmberCommittedEvent | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const eventId = readString(value['event_id']);
+  const sequence = readInt(value['sequence']);
+  const aggregate = readString(value['aggregate']);
+  const aggregateId = readString(value['aggregate_id']);
+  const eventType = readString(value['event_type']);
+  const payload = isRecord(value['payload']) ? value['payload'] : null;
+
+  if (
+    eventId === null ||
+    sequence === null ||
+    aggregate === null ||
+    aggregateId === null ||
+    eventType === null
+  ) {
+    return null;
+  }
+
+  return {
+    event_id: eventId,
+    sequence,
+    aggregate,
+    aggregate_id: aggregateId,
+    event_type: eventType,
+    payload,
+  };
+}
+
+function readLatestReadyForRedelegationWork(events: unknown[]): {
+  eventId: string;
+  sequence: number;
+  requestId: string;
+  transactionPlanId: string;
+  phase: 'ready_for_redelegation';
+} | null {
+  const matchingEvent = events
+    .map((event) => readCommittedEvent(event))
+    .filter((event): event is SharedEmberCommittedEvent => event !== null)
+    .filter(
+      (event) =>
+        event.aggregate === 'request' && event.event_type === 'requestExecution.prepared.v1',
+    )
+    .map((event) => {
+      const requestId = readString(event.payload?.['request_id']);
+      const transactionPlanId = readString(event.payload?.['transaction_plan_id']);
+      const phase = readString(event.payload?.['phase']);
+
+      if (
+        requestId === null ||
+        transactionPlanId === null ||
+        phase !== 'ready_for_redelegation'
+      ) {
+        return null;
+      }
+
+      return {
+        eventId: event.event_id,
+        sequence: event.sequence,
+        requestId,
+        transactionPlanId,
+        phase: 'ready_for_redelegation' as const,
+      };
+    })
+    .filter((event): event is NonNullable<typeof event> => event !== null)
+    .sort((left, right) => left.sequence - right.sequence)
+    .at(-1);
+
+  return matchingEvent ?? null;
 }
 
 function isSharedEmberRevisionConflict(error: unknown): boolean {
@@ -783,6 +867,11 @@ export function createPortfolioManagerDomain(
             'Read the current Shared Ember portfolio state for the portfolio-manager subagent.',
         },
         {
+          name: 'refresh_redelegation_work',
+          description:
+            'Read committed redelegation work from the Shared Ember outbox for the portfolio-manager orchestrator.',
+        },
+        {
           name: 'complete_rooted_bootstrap_from_user_signing',
           description:
             'Complete the rooted bootstrap in one Shared Ember command using onboarding data and the signing handoff.',
@@ -1382,6 +1471,73 @@ export function createPortfolioManagerDomain(
                     type: 'shared-ember-portfolio-state',
                     revision: nextState.lastSharedEmberRevision,
                     portfolioState: nextState.lastPortfolioState,
+                  },
+                },
+              ],
+            },
+          };
+        }
+        case 'refresh_redelegation_work': {
+          if (!options.protocolHost) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage: 'Shared Ember Domain Service host is not configured.',
+                },
+              },
+            };
+          }
+
+          const outboxPage = (await options.protocolHost.readCommittedEventOutbox({
+            protocol_version: 'v1',
+            consumer_id: PORTFOLIO_MANAGER_REDELEGATION_OUTBOX_CONSUMER_ID,
+            after_sequence: 0,
+            limit: 100,
+          })) as {
+            revision?: number;
+            events?: unknown[];
+          };
+
+          const nextState: PortfolioManagerLifecycleState = {
+            ...currentState,
+            lastSharedEmberRevision: outboxPage.revision ?? currentState.lastSharedEmberRevision,
+          };
+          const redelegationWork = readLatestReadyForRedelegationWork(outboxPage.events ?? []);
+
+          if (redelegationWork === null) {
+            return {
+              state: nextState,
+              outputs: {
+                status: {
+                  executionStatus: 'completed',
+                  statusMessage: 'No redelegation work is currently pending in the Shared Ember outbox.',
+                },
+              },
+            };
+          }
+
+          return {
+            state: nextState,
+            outputs: {
+              status: {
+                executionStatus: 'completed',
+                statusMessage:
+                  'Redelegation work discovered in Shared Ember outbox. A follow-up public query is still required before the orchestrator can sign it.',
+              },
+              artifacts: [
+                {
+                  data: {
+                    type: 'shared-ember-redelegation-work',
+                    revision: nextState.lastSharedEmberRevision,
+                    consumerId: PORTFOLIO_MANAGER_REDELEGATION_OUTBOX_CONSUMER_ID,
+                    eventId: redelegationWork.eventId,
+                    sequence: redelegationWork.sequence,
+                    requestId: redelegationWork.requestId,
+                    transactionPlanId: redelegationWork.transactionPlanId,
+                    phase: redelegationWork.phase,
+                    needsFollowUpFetch: true,
                   },
                 },
               ],

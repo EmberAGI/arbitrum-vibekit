@@ -2068,6 +2068,118 @@ describe('createPortfolioManagerDomain', () => {
     });
   });
 
+  it('discovers redelegation work from the committed outbox without acknowledging it yet', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        acknowledged_through_sequence: 4,
+        next_cursor: 5,
+        has_more: false,
+        events: [
+          {
+            protocol_version: 'v1',
+            event_id: 'evt-request-execution-4',
+            sequence: 4,
+            aggregate: 'request',
+            aggregate_id: 'req-irrelevant-001',
+            event_type: 'requestExecution.completed.v1',
+            committed_at: '2026-04-01T06:18:00Z',
+            payload: {
+              request_id: 'req-irrelevant-001',
+              transaction_plan_id: 'txplan-irrelevant-001',
+              status: 'confirmed',
+            },
+          },
+          {
+            protocol_version: 'v1',
+            event_id: 'evt-request-execution-5',
+            sequence: 5,
+            aggregate: 'request',
+            aggregate_id: 'req-ember-lending-execution-001',
+            event_type: 'requestExecution.prepared.v1',
+            committed_at: '2026-04-01T06:19:00Z',
+            payload: {
+              request_id: 'req-ember-lending-execution-001',
+              transaction_plan_id: 'txplan-ember-lending-001',
+              phase: 'ready_for_redelegation',
+            },
+          },
+        ],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        consumer_id: 'portfolio-manager-redelegation',
+        acknowledged_through_sequence: 5,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 7,
+          lastRootDelegation: {
+            root_delegation_id: 'root-user-protocol-001',
+          },
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'refresh_redelegation_work',
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 8,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage:
+            'Redelegation work discovered in Shared Ember outbox. A follow-up public query is still required before the orchestrator can sign it.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'shared-ember-redelegation-work',
+              revision: 8,
+              consumerId: 'portfolio-manager-redelegation',
+              eventId: 'evt-request-execution-5',
+              sequence: 5,
+              requestId: 'req-ember-lending-execution-001',
+              transactionPlanId: 'txplan-ember-lending-001',
+              phase: 'ready_for_redelegation',
+              needsFollowUpFetch: true,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(protocolHost.readCommittedEventOutbox).toHaveBeenCalledWith({
+      protocol_version: 'v1',
+      consumer_id: 'portfolio-manager-redelegation',
+      after_sequence: 0,
+      limit: 100,
+    });
+    expect(protocolHost.acknowledgeCommittedEventOutbox).not.toHaveBeenCalled();
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalled();
+  });
+
   it('injects the portfolio mandate and managed lending mandate set into system context', async () => {
     const domain = createPortfolioManagerDomain({
       agentId: 'portfolio-manager',
