@@ -191,7 +191,7 @@ function createAnchoredPayloadResolver(input: {
 
       return {
         anchoredPayloadRef: request.payloadBuilderOutput.transaction_payload_ref,
-        transactionRequest,
+        transactionRequests: [transactionRequest],
         controlPath: request.payloadBuilderOutput.required_control_path,
         network: request.payloadBuilderOutput.network,
         transactionPlanId: request.transactionPlanId,

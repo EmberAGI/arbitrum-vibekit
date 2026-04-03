@@ -6,12 +6,14 @@ import {
 import { keccak256, parseSignature, parseTransaction, serializeTransaction, toHex } from 'viem';
 import type {
   EmberLendingAnchoredPayloadResolver,
+  EmberLendingAnchoredPayloadRecord,
   EmberLendingCompactPlanSummary,
   EmberLendingPayloadBuilderOutput,
 } from './onchainActionsPayloadResolver.js';
 
 export type {
   EmberLendingAnchoredPayloadResolver,
+  EmberLendingAnchoredPayloadRecord,
   EmberLendingCompactPlanSummary,
   EmberLendingPayloadBuilderOutput,
 } from './onchainActionsPayloadResolver.js';
@@ -38,6 +40,7 @@ export type EmberLendingLifecycleState = {
   lastReservationSummary: string | null;
   lastCandidatePlan: unknown;
   lastCandidatePlanSummary: string | null;
+  anchoredPayloadRecords: EmberLendingAnchoredPayloadRecord[];
   lastExecutionResult: unknown;
   lastExecutionTxHash: `0x${string}` | null;
   pendingExecutionSubmission?: PendingExecutionSubmission | null;
@@ -177,6 +180,7 @@ function buildDefaultLifecycleState(): EmberLendingLifecycleState {
     lastReservationSummary: null,
     lastCandidatePlan: null,
     lastCandidatePlanSummary: null,
+    anchoredPayloadRecords: [],
     lastExecutionResult: null,
     lastExecutionTxHash: null,
     pendingExecutionSubmission: null,
@@ -817,6 +821,20 @@ function readExecutionTxHash(executionResult: unknown): `0x${string}` | null {
   }
 
   return readHexAddress(executionResult['execution']['transaction_hash']);
+}
+
+function upsertAnchoredPayloadRecord(
+  records: EmberLendingAnchoredPayloadRecord[],
+  nextRecord: EmberLendingAnchoredPayloadRecord | null,
+): EmberLendingAnchoredPayloadRecord[] {
+  if (!nextRecord) {
+    return records;
+  }
+
+  const remainingRecords = records.filter(
+    (record) => record.anchoredPayloadRef !== nextRecord.anchoredPayloadRef,
+  );
+  return [...remainingRecords, nextRecord];
 }
 
 function readExecutionPortfolioState(executionResult: unknown): unknown {
@@ -1797,6 +1815,7 @@ async function runPreparedExecutionFlow(input: {
           walletAddress: input.currentState.walletAddress,
           network,
           requiredControlPath,
+          anchoredPayloadRecords: input.currentState.anchoredPayloadRecords,
         }))
       : null);
   if (!unsignedTransactionHex) {
@@ -2171,30 +2190,35 @@ export function createEmberLendingDomain(
           const candidatePlanTransactionPlanId = readCandidatePlanTransactionPlanId(candidatePlan);
           const payloadBuilderOutput = readCandidatePlanPayloadBuilderOutput(candidatePlan);
           const compactPlanSummary = readCandidatePlanCompactPlanSummary(candidatePlan);
-          if (
+          const anchoredPayloadRecord =
+            (
             options.anchoredPayloadResolver &&
             currentState.walletAddress &&
             currentState.rootUserWalletAddress &&
             candidatePlanTransactionPlanId &&
             payloadBuilderOutput &&
             compactPlanSummary
-          ) {
-            await options.anchoredPayloadResolver.anchorCandidatePlanPayload({
-              agentId,
-              threadId,
-              transactionPlanId: candidatePlanTransactionPlanId,
-              walletAddress: currentState.walletAddress,
-              rootUserWalletAddress: currentState.rootUserWalletAddress,
-              payloadBuilderOutput,
-              compactPlanSummary,
-            });
-          }
+            )
+              ? await options.anchoredPayloadResolver.anchorCandidatePlanPayload({
+                  agentId,
+                  threadId,
+                  transactionPlanId: candidatePlanTransactionPlanId,
+                  walletAddress: currentState.walletAddress,
+                  rootUserWalletAddress: currentState.rootUserWalletAddress,
+                  payloadBuilderOutput,
+                  compactPlanSummary,
+                })
+              : null;
           const nextState: EmberLendingLifecycleState = {
             ...currentState,
             phase: 'active',
             lastSharedEmberRevision: response.result?.revision ?? null,
             lastCandidatePlan: candidatePlan,
             lastCandidatePlanSummary: readCandidatePlanSummary(candidatePlan),
+            anchoredPayloadRecords: upsertAnchoredPayloadRecord(
+              currentState.anchoredPayloadRecords,
+              anchoredPayloadRecord,
+            ),
           };
 
           return {

@@ -202,9 +202,10 @@ Current concrete managed-path specialization:
   - keeps `request_transaction_execution` as one model-visible tool while
     internally composing Shared Ember execution preparation, runtime-owned OWS
     redelegation typed-data signing, service-owned anchored Onchain Actions
-    terminal transaction-request resolution, chain-aware unsigned-transaction
-    preparation with the managed wallet plus RPC state, runtime-owned
-    execution signing, and Ember-owned submission/finalization
+    ordered transaction-request persistence and step resolution in runtime-owned
+    domain state, chain-aware unsigned-transaction preparation with the managed
+    wallet plus RPC state, runtime-owned execution signing, and Ember-owned
+    submission/finalization
   - treats `authority_preparation_needed` as an internal wait state and re-polls the Shared Ember execution request with a stage-scoped retry idempotency key instead of exposing a second tool or reusing the original acknowledged request key
   - reconciles dropped signed-transaction submit responses through the Shared Ember committed-event outbox before replaying an idempotent submit
   - fails closed when the direct OWS identity/signing path cannot prove it matches the prepared dedicated subagent signing package

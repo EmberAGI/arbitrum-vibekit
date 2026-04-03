@@ -18,6 +18,25 @@ function createAnchoredPayloadResolverStub() {
   return {
     anchorCandidatePlanPayload: vi.fn(async () => ({
       anchoredPayloadRef: 'txpayload-ember-lending-001',
+      transactionRequests: [
+        {
+          type: 'EVM_TX',
+          to: '0x00000000000000000000000000000000000000d1',
+          value: '0',
+          data: '0x095ea7b3',
+          chainId: '42161',
+        },
+        {
+          type: 'EVM_TX',
+          to: '0x00000000000000000000000000000000000000d2',
+          value: '0',
+          data: '0x617ba037',
+          chainId: '42161',
+        },
+      ],
+      controlPath: 'lending.supply',
+      network: 'arbitrum',
+      transactionPlanId: 'txplan-ember-lending-001',
     })),
     resolvePreparedUnsignedTransaction: vi.fn(async () => TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX),
   };
@@ -44,6 +63,31 @@ const TEST_TRANSACTION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 const TEST_REDELEGATION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
+
+function createAnchoredPayloadRecord() {
+  return {
+    anchoredPayloadRef: 'txpayload-ember-lending-001',
+    transactionRequests: [
+      {
+        type: 'EVM_TX' as const,
+        to: '0x00000000000000000000000000000000000000d1',
+        value: '0',
+        data: '0x095ea7b3',
+        chainId: '42161',
+      },
+      {
+        type: 'EVM_TX' as const,
+        to: '0x00000000000000000000000000000000000000d2',
+        value: '0',
+        data: '0x617ba037',
+        chainId: '42161',
+      },
+    ],
+    controlPath: 'lending.supply',
+    network: 'arbitrum',
+    transactionPlanId: 'txplan-ember-lending-001',
+  };
+}
 
 function createManagedLifecycleState() {
   return {
@@ -84,6 +128,7 @@ function createManagedLifecycleState() {
     lastReservationSummary: 'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
     lastCandidatePlan: null,
     lastCandidatePlanSummary: null,
+    anchoredPayloadRecords: [],
     lastExecutionResult: null,
     lastExecutionTxHash: null,
     lastEscalationRequest: null,
@@ -1173,6 +1218,7 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'active',
         lastSharedEmberRevision: 8,
+        anchoredPayloadRecords: [],
         lastCandidatePlanSummary: 'supply reserved USDC on Aave',
       },
       outputs: {
@@ -1343,6 +1389,7 @@ describe('createEmberLendingDomain', () => {
       threadId: 'thread-1',
       state: {
         ...createManagedLifecycleState(),
+        anchoredPayloadRecords: [createAnchoredPayloadRecord()],
         lastCandidatePlan: {
           transaction_plan_id: 'txplan-ember-lending-001',
         },
@@ -1428,6 +1475,7 @@ describe('createEmberLendingDomain', () => {
       threadId: 'thread-1',
       state: {
         ...createManagedLifecycleState(),
+        anchoredPayloadRecords: [createAnchoredPayloadRecord()],
         lastCandidatePlan: {
           transaction_plan_id: 'txplan-ember-lending-001',
         },
@@ -1522,6 +1570,7 @@ describe('createEmberLendingDomain', () => {
       threadId: 'thread-1',
       state: {
         ...createManagedLifecycleState(),
+        anchoredPayloadRecords: [createAnchoredPayloadRecord()],
         lastCandidatePlan: {
           transaction_plan_id: 'txplan-ember-lending-001',
         },
@@ -1552,6 +1601,7 @@ describe('createEmberLendingDomain', () => {
       requestId: 'req-ember-lending-execution-001',
       requiredControlPath: 'lending.supply',
       transactionPlanId: 'txplan-ember-lending-001',
+      anchoredPayloadRecords: [createAnchoredPayloadRecord()],
     });
 
     expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
@@ -1666,6 +1716,7 @@ describe('createEmberLendingDomain', () => {
       threadId: 'thread-1',
       state: {
         ...createManagedLifecycleState(),
+        anchoredPayloadRecords: [createAnchoredPayloadRecord()],
         lastCandidatePlan: {
           transaction_plan_id: 'txplan-ember-lending-001',
           handoff: {
@@ -1694,6 +1745,7 @@ describe('createEmberLendingDomain', () => {
       requestId: 'req-ember-lending-execution-001',
       requiredControlPath: 'lending.supply',
       transactionPlanId: 'txplan-ember-lending-001',
+      anchoredPayloadRecords: [createAnchoredPayloadRecord()],
     });
   });
 

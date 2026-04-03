@@ -62,6 +62,7 @@ export type EmberLendingPreparedUnsignedTransactionResolutionInput = {
   walletAddress: `0x${string}`;
   network: string | null;
   requiredControlPath: string | null;
+  anchoredPayloadRecords?: EmberLendingAnchoredPayloadRecord[] | null;
 };
 
 export type EmberLendingPreparedUnsignedTransactionResolver = (
@@ -82,9 +83,13 @@ export type EmberLendingCompactPlanSummary = {
   protocol_summary?: string;
 };
 
+export type EmberLendingAnchoredTransactionRequest = z.infer<
+  typeof OnchainActionsTransactionPlanSchema
+>;
+
 export type EmberLendingAnchoredPayloadRecord = {
   anchoredPayloadRef: string;
-  transactionRequest: z.infer<typeof OnchainActionsTransactionPlanSchema>;
+  transactionRequests: EmberLendingAnchoredTransactionRequest[];
   controlPath: string;
   network: string;
   transactionPlanId: string;
@@ -427,6 +432,97 @@ function resolveAnchoredPayloadRef(input: {
     : input.canonicalUnsignedPayloadRef;
 }
 
+function readExplicitTransactionIndex(input: {
+  anchoredPayloadRef: string;
+  plannedTransactionPayloadRef: string | null;
+  canonicalUnsignedPayloadRef: string;
+}): number | null {
+  const candidates = [
+    input.plannedTransactionPayloadRef,
+    input.canonicalUnsignedPayloadRef.startsWith('unsigned-')
+      ? input.canonicalUnsignedPayloadRef.slice('unsigned-'.length)
+      : input.canonicalUnsignedPayloadRef,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate || candidate === input.anchoredPayloadRef) {
+      continue;
+    }
+    if (!candidate.startsWith(input.anchoredPayloadRef)) {
+      continue;
+    }
+
+    const suffix = candidate.slice(input.anchoredPayloadRef.length);
+    const stepMatch =
+      suffix.match(/^[:#/_-](\d+)$/u) ??
+      suffix.match(/^[:#/_-](?:step|tx|transaction)[-_:]?(\d+)$/iu) ??
+      suffix.match(/^(?:step|tx|transaction)[-_:]?(\d+)$/iu);
+    if (!stepMatch) {
+      continue;
+    }
+
+    const parsed = Number.parseInt(stepMatch[1] ?? '', 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function resolveAnchoredPayloadRecord(input: {
+  anchoredPayloadRecords?: EmberLendingAnchoredPayloadRecord[] | null;
+  anchoredPayloads: Map<string, EmberLendingAnchoredPayloadRecord>;
+  anchoredPayloadRef: string;
+}): EmberLendingAnchoredPayloadRecord | null {
+  const allRecords = [
+    ...(input.anchoredPayloadRecords ?? []),
+    ...input.anchoredPayloads.values(),
+  ];
+  const exactRecord =
+    allRecords.find((record) => record.anchoredPayloadRef === input.anchoredPayloadRef) ?? null;
+  if (exactRecord) {
+    return exactRecord;
+  }
+
+  let matchedRecord: EmberLendingAnchoredPayloadRecord | null = null;
+  for (const record of allRecords) {
+    if (!input.anchoredPayloadRef.startsWith(record.anchoredPayloadRef)) {
+      continue;
+    }
+    if (
+      matchedRecord === null ||
+      record.anchoredPayloadRef.length > matchedRecord.anchoredPayloadRef.length
+    ) {
+      matchedRecord = record;
+    }
+  }
+
+  return matchedRecord;
+}
+
+function resolveAnchoredTransactionRequest(input: {
+  anchoredPayload: EmberLendingAnchoredPayloadRecord;
+  plannedTransactionPayloadRef: string | null;
+  canonicalUnsignedPayloadRef: string;
+}): EmberLendingAnchoredTransactionRequest {
+  const transactionIndex =
+    readExplicitTransactionIndex({
+      anchoredPayloadRef: input.anchoredPayload.anchoredPayloadRef,
+      plannedTransactionPayloadRef: input.plannedTransactionPayloadRef,
+      canonicalUnsignedPayloadRef: input.canonicalUnsignedPayloadRef,
+    }) ?? 0;
+  const transaction = input.anchoredPayload.transactionRequests[transactionIndex];
+
+  if (!transaction) {
+    throw new Error(
+      `Anchored payload ref "${input.anchoredPayload.anchoredPayloadRef}" does not contain transaction step ${transactionIndex}.`,
+    );
+  }
+
+  return transaction;
+}
+
 export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: {
   baseUrl?: string;
   fetch?: typeof fetch;
@@ -470,14 +566,10 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
           ),
         },
       });
-      const terminalTransaction = response.transactions.at(-1);
-      if (!terminalTransaction) {
-        throw new Error('Onchain Actions did not return a terminal lending transaction.');
-      }
 
       const anchoredPayload: EmberLendingAnchoredPayloadRecord = {
         anchoredPayloadRef: request.payloadBuilderOutput.transaction_payload_ref,
-        transactionRequest: terminalTransaction,
+        transactionRequests: response.transactions,
         controlPath: request.payloadBuilderOutput.required_control_path,
         network: request.payloadBuilderOutput.network,
         transactionPlanId: request.transactionPlanId,
@@ -492,7 +584,11 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
         plannedTransactionPayloadRef: request.plannedTransactionPayloadRef,
         canonicalUnsignedPayloadRef: request.canonicalUnsignedPayloadRef,
       });
-      const anchoredPayload = anchoredPayloads.get(anchoredPayloadRef);
+      const anchoredPayload = resolveAnchoredPayloadRecord({
+        anchoredPayloadRecords: request.anchoredPayloadRecords,
+        anchoredPayloads,
+        anchoredPayloadRef,
+      });
       if (!anchoredPayload) {
         return null;
       }
@@ -501,7 +597,11 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
         publicClient: resolvePublicClient(
           resolveSupportedExecutionNetwork(anchoredPayload.network),
         ),
-        transaction: anchoredPayload.transactionRequest,
+        transaction: resolveAnchoredTransactionRequest({
+          anchoredPayload,
+          plannedTransactionPayloadRef: request.plannedTransactionPayloadRef,
+          canonicalUnsignedPayloadRef: request.canonicalUnsignedPayloadRef,
+        }),
         walletAddress: request.walletAddress,
       });
     },

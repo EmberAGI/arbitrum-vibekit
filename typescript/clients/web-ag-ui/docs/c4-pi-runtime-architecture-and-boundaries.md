@@ -170,10 +170,11 @@ Container responsibilities:
   - After healthy identity preflight plus onboarding, the first healthy `subagent.readExecutionContext.v1` read is expected to expose a non-null `subagent_wallet_address`.
   - `agent-ember-lending` keeps `request_transaction_execution` as one
     model-visible tool while internally composing runtime-owned redelegation
-    typed-data signing, service-owned anchored Onchain Actions terminal
-    transaction-request resolution, chain-aware unsigned-transaction
-    preparation with the managed wallet plus RPC state, runtime-owned execution
-    signing, and Shared Ember submission/finalization.
+    typed-data signing, service-owned anchored Onchain Actions ordered
+    transaction-request persistence and step resolution in runtime-owned domain
+    state, chain-aware unsigned-transaction preparation with the managed wallet
+    plus RPC state, runtime-owned execution signing, and Shared Ember
+    submission/finalization.
   - The repo-local validation lane for the managed-identity boundary is
     `pnpm smoke:managed-identities`, and the repo-backed validation lane for
     the real redelegation signing seam is

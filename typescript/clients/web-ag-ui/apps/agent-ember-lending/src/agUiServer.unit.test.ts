@@ -68,6 +68,7 @@ function createManagedLifecycleState() {
     lastReservationSummary: 'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
     lastCandidatePlan: null,
     lastCandidatePlanSummary: null,
+    anchoredPayloadRecords: [],
     lastExecutionResult: null,
     lastExecutionTxHash: null,
     pendingExecutionSubmission: null,
@@ -309,13 +310,22 @@ describe('createEmberLendingGatewayService', () => {
     const anchoredPayloadResolver = {
       anchorCandidatePlanPayload: vi.fn(async () => ({
         anchoredPayloadRef: 'txpayload-ember-lending-001',
-        transactionRequest: {
-          type: 'EVM_TX',
-          to: '0x00000000000000000000000000000000000000c1',
-          value: '0',
-          data: '0x',
-          chainId: '42161',
-        },
+        transactionRequests: [
+          {
+            type: 'EVM_TX',
+            to: '0x00000000000000000000000000000000000000c1',
+            value: '0',
+            data: '0x095ea7b3',
+            chainId: '42161',
+          },
+          {
+            type: 'EVM_TX',
+            to: '0x00000000000000000000000000000000000000d2',
+            value: '0',
+            data: '0x617ba037',
+            chainId: '42161',
+          },
+        ],
         controlPath: 'lending.supply',
         network: 'arbitrum',
         transactionPlanId: 'txplan-ember-lending-001',
@@ -418,6 +428,30 @@ describe('createEmberLendingGatewayService', () => {
       requestId: 'req-ember-lending-execution-001',
       requiredControlPath: 'lending.supply',
       transactionPlanId: 'txplan-ember-lending-001',
+      anchoredPayloadRecords: [
+        {
+          anchoredPayloadRef: 'txpayload-ember-lending-001',
+          transactionRequests: [
+            {
+              type: 'EVM_TX',
+              to: '0x00000000000000000000000000000000000000c1',
+              value: '0',
+              data: '0x095ea7b3',
+              chainId: '42161',
+            },
+            {
+              type: 'EVM_TX',
+              to: '0x00000000000000000000000000000000000000d2',
+              value: '0',
+              data: '0x617ba037',
+              chainId: '42161',
+            },
+          ],
+          controlPath: 'lending.supply',
+          network: 'arbitrum',
+          transactionPlanId: 'txplan-ember-lending-001',
+        },
+      ],
     });
   });
 });
