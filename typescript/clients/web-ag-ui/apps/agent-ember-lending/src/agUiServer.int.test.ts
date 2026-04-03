@@ -15,6 +15,36 @@ const TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX =
 const TEST_TRANSACTION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 
+function createAnchoredPayloadResolverStub() {
+  return {
+    anchorCandidatePlanPayload: vi.fn(async () => ({
+      anchoredPayloadRef: 'txpayload-ember-lending-001',
+      transactionRequests: [
+        {
+          type: 'EVM_TX' as const,
+          to: '0x00000000000000000000000000000000000000c1',
+          value: '0',
+          data: '0x095ea7b3',
+          chainId: '42161',
+        },
+        {
+          type: 'EVM_TX' as const,
+          to: '0x00000000000000000000000000000000000000d2',
+          value: '0',
+          data: '0x617ba037',
+          chainId: '42161',
+        },
+      ],
+      controlPath: 'lending.supply',
+      network: 'arbitrum',
+      transactionPlanId: 'txplan-ember-lending-001',
+    })),
+    resolvePreparedUnsignedTransaction: vi.fn(
+      async () => TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
+    ),
+  };
+}
+
 type AgUiEventEnvelope = {
   type: string;
   [key: string]: unknown;
@@ -293,7 +323,6 @@ function createReadyForExecutionSigningPreparationResult() {
       request_id: 'req-ember-lending-execution-001',
       active_delegation_id: 'del-ember-lending-001',
       canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
-      unsigned_transaction_hex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
     },
   };
 }
@@ -413,6 +442,7 @@ describe('agent-ember-lending AG-UI integration', () => {
     readAddress: ReturnType<typeof vi.fn>;
     signPayload: ReturnType<typeof vi.fn>;
   };
+  let anchoredPayloadResolver: ReturnType<typeof createAnchoredPayloadResolverStub>;
   const defaultHandleJsonRpc = async (input: unknown) => {
     const request =
       typeof input === 'object' && input !== null
@@ -505,6 +535,11 @@ describe('agent-ember-lending AG-UI integration', () => {
               transaction_plan_id: 'txplan-ember-lending-001',
               handoff: {
                 handoff_id: 'handoff-thread-1',
+                payload_builder_output: {
+                  transaction_payload_ref: 'txpayload-ember-lending-001',
+                  required_control_path: 'lending.supply',
+                  network: 'arbitrum',
+                },
               },
               compact_plan_summary: {
                 control_path: 'lending.supply',
@@ -576,6 +611,7 @@ describe('agent-ember-lending AG-UI integration', () => {
   };
 
   beforeEach(async () => {
+    anchoredPayloadResolver = createAnchoredPayloadResolverStub();
     runtimeSigning = {
       readAddress: vi.fn(async () => '0x00000000000000000000000000000000000000b1'),
       signPayload: vi.fn(async () => ({
@@ -601,6 +637,7 @@ describe('agent-ember-lending AG-UI integration', () => {
         domain: createEmberLendingDomain({
           protocolHost,
           runtimeSigning,
+          anchoredPayloadResolver,
           runtimeSignerRef: 'service-wallet',
           agentId: 'ember-lending',
         }),
@@ -992,6 +1029,24 @@ describe('agent-ember-lending AG-UI integration', () => {
         }),
       }),
     );
+    expect(anchoredPayloadResolver.anchorCandidatePlanPayload).toHaveBeenCalledWith({
+      agentId: 'ember-lending',
+      threadId: 'thread-plan-1',
+      transactionPlanId: 'txplan-ember-lending-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      payloadBuilderOutput: {
+        transaction_payload_ref: 'txpayload-ember-lending-001',
+        required_control_path: 'lending.supply',
+        network: 'arbitrum',
+      },
+      compactPlanSummary: {
+        control_path: 'lending.supply',
+        asset: 'USDC',
+        amount: '10',
+        summary: 'supply reserved USDC on Aave',
+      },
+    });
     expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'subagent.createTransactionPlan.v1',
@@ -1074,6 +1129,41 @@ describe('agent-ember-lending AG-UI integration', () => {
         }),
       }),
     );
+    expect(anchoredPayloadResolver.resolvePreparedUnsignedTransaction).toHaveBeenCalledWith({
+      agentId: 'ember-lending',
+      canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-001',
+      executionPreparationId: 'execprep-ember-lending-001',
+      network: 'arbitrum',
+      plannedTransactionPayloadRef: 'txpayload-ember-lending-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      requestId: 'req-ember-lending-execution-001',
+      requiredControlPath: 'lending.supply',
+      transactionPlanId: 'txplan-ember-lending-001',
+      anchoredPayloadRecords: [
+        {
+          anchoredPayloadRef: 'txpayload-ember-lending-001',
+          transactionRequests: [
+            {
+              type: 'EVM_TX',
+              to: '0x00000000000000000000000000000000000000c1',
+              value: '0',
+              data: '0x095ea7b3',
+              chainId: '42161',
+            },
+            {
+              type: 'EVM_TX',
+              to: '0x00000000000000000000000000000000000000d2',
+              value: '0',
+              data: '0x617ba037',
+              chainId: '42161',
+            },
+          ],
+          controlPath: 'lending.supply',
+          network: 'arbitrum',
+          transactionPlanId: 'txplan-ember-lending-001',
+        },
+      ],
+    });
   });
 
   it('serves blocked lending execution requests over real AG-UI HTTP endpoints without claiming execution success', async () => {

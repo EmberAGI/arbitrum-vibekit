@@ -1,9 +1,9 @@
 # ADR 0015: service-owned-onchain-actions-transaction-resolution-for-managed-lending
 
-Status: Proposed
+Status: Accepted
 Date: 2026-04-03
 
-Approval trace: Pending explicit ADR approval on issue `#567` / PR `#568`
+Approval trace: Approved on 2026-04-03 in issue `#567` comment https://github.com/EmberAGI/arbitrum-vibekit/issues/567#issuecomment-4182405423
 
 ## Context
 
@@ -11,9 +11,8 @@ Issue `#567` established that the managed lending runtime should own the
 concrete Onchain Actions adapter and keep raw transaction artifacts private
 behind the lending service boundary.
 
-This document captures the intended architecture for that slice, but the branch
-does not yet show the visible approval trace required to treat the decision as
-accepted.
+This document captures the approved architecture for that slice after the
+explicit issue-level approval trace was recorded on 2026-04-03.
 
 The first implementation slice improved the live path but left several
 important gaps:
