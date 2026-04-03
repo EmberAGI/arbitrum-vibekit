@@ -18,7 +18,8 @@ runtime-owned OWS-core signing, and Shared Ember submission behind
   - execution preparation
   - authority-preparation retry loops
   - stage-scoped idempotency for authority-preparation re-polls
-  - runtime-owned redelegation signing
+  - orchestrator-side redelegation signing coordinated by Shared Ember through
+    the public protocol boundary
   - concrete-service prepared unsigned-transaction resolution when Shared Ember
     returns canonical payload refs instead of inline unsigned transaction hex
   - runtime-owned execution signing
@@ -29,13 +30,21 @@ runtime-owned OWS-core signing, and Shared Ember submission behind
 - Shared Ember owns:
   - capital admission
   - redelegation semantics
+  - canonical redelegation packages
+  - redelegation coordination with the orchestrator over the public
+    JSON-RPC/outbox boundary
   - canonical unsigned signing packages
   - transaction submission
   - settlement tracking
   - accounting reconciliation
+- Portfolio Manager owns:
+  - runtime-owned OWS-core-backed controller wallet identity resolution
+  - runtime-owned orchestrator signing of canonical redelegation packages
+    prepared by Shared Ember
+  - the orchestrator-role consumer loop that reacts to Shared Ember
+    redelegation work without going through the lending agent
 - Ember Lending owns:
   - runtime-owned OWS-core-backed wallet identity resolution
-  - runtime-owned OWS redelegation typed-data signing
   - concrete-service prepared unsigned-transaction resolution from persisted
     anchored transaction-request sequences
   - runtime-owned OWS execution signing
@@ -47,6 +56,11 @@ runtime-owned OWS-core signing, and Shared Ember submission behind
   - `subagent.requestTransactionExecution.v1`
   - `orchestrator.registerSignedRedelegation.v1`
   - `subagent.submitSignedTransaction.v1`
+- Internal Shared Ember async coordination for this slice:
+  - committed-event outbox signaling that redelegation work is ready for the
+    orchestrator role
+  - orchestrator-side follow-up over the public protocol boundary rather than a
+    lending-owned service-to-service handoff
 
 ## Internal result taxonomy
 
@@ -72,8 +86,10 @@ sequenceDiagram
   participant Web
   participant Runtime as AG-UI Runtime
   participant EL as agent-ember-lending
+  participant PM as agent-portfolio-manager
   participant SE as Shared Ember
-  participant OWS as direct OWS core wallet
+  participant OWSC as controller OWS wallet
+  participant OWSS as subagent OWS wallet
 
   User->>Web: request_transaction_execution
   Web->>Runtime: run(request_transaction_execution)
@@ -89,21 +105,26 @@ sequenceDiagram
     EL->>SE: subagent.requestTransactionExecution.v1(transaction_plan_id)
   else ready for redelegation signing
     SE-->>EL: execution_result.phase=ready_for_redelegation + redelegation_signing_package + ids
-    EL->>OWS: sign redelegation package
-    OWS-->>EL: signed redelegation
-    EL->>SE: orchestrator.registerSignedRedelegation.v1(signed_redelegation + ids)
-    SE-->>EL: execution_result.phase=ready_for_execution_signing
+    Note over EL,SE: Lending does not sign or ferry redelegation work.
+    PM->>SE: read committed outbox / public redelegation work surface
+    SE-->>PM: canonical redelegation signing work for orchestrator role
+    PM->>OWSC: sign redelegation package
+    OWSC-->>PM: signed redelegation
+    PM->>SE: orchestrator.registerSignedRedelegation.v1(signed_redelegation + ids)
+    SE-->>PM: execution readiness advanced
+    EL->>SE: subagent.requestTransactionExecution.v1(transaction_plan_id)
+    SE-->>EL: execution_result.phase=ready_for_execution_signing + execution_signing_package + ids
     Note over EL,SE: Resolve the canonical unsigned payload ref through the concrete service integration layer from the persisted anchored transaction-request sequence when Shared Ember omits inline unsigned transaction hex.
-    EL->>OWS: sign execution package
-    OWS-->>EL: signer_address + raw_transaction
+    EL->>OWSS: sign execution package
+    OWSS-->>EL: signer_address + raw_transaction
     EL->>SE: subagent.submitSignedTransaction.v1(signed_transaction + ids)
     SE-->>EL: execution_result.phase=completed + execution.status
     EL-->>Runtime: minimal status + tx hash when available
   else ready for execution signing
     SE-->>EL: execution_result.phase=ready_for_execution_signing + execution_signing_package + ids
     Note over EL,SE: Resolve the canonical unsigned payload ref through the concrete service integration layer from the persisted anchored transaction-request sequence when Shared Ember omits inline unsigned transaction hex.
-    EL->>OWS: sign execution package
-    OWS-->>EL: signer_address + raw_transaction
+    EL->>OWSS: sign execution package
+    OWSS-->>EL: signer_address + raw_transaction
     EL->>SE: subagent.submitSignedTransaction.v1(signed_transaction + ids)
     SE-->>EL: execution_result.phase=completed + execution.status
     EL-->>Runtime: minimal status + tx hash when available
@@ -120,6 +141,8 @@ sequenceDiagram
   - blocking or failure `message` when applicable
 - Internal ids such as `request_id`, `execution_id`, and `transaction_plan_id` may be required inside the glue layer, but they should stay out of the model-visible tool result and shared web-gating contract by default.
 - Only Shared Ember capital/control-plane blockers should flow into `create_escalation_request`.
+- `ready_for_redelegation` is not an escalation and must not be routed through a
+  lending-originated escalation or service-to-service command lane.
 - Direct OWS identity, signing, or transport failures should remain local execution failures rather than escalations.
 - Multi-call retries must be idempotent and must not create a second signing or submission side effect when the runtime retries after a conflict or transport interruption.
 - Approval-required lending plans may resolve more than one anchored Onchain
@@ -131,10 +154,15 @@ sequenceDiagram
   missing managed wallet context, or missing anchored-resolver wiring must fail
   the plan-creation attempt before local state treats the plan as executable.
 - Authority-preparation re-polls must not reuse the original request idempotency key once Shared Ember has already acknowledged the waiting state; a stage-scoped retry key lets the real upstream contract advance after the missing authority is repaired.
+- The orchestrator redelegation loop must stay on the Shared Ember public
+  boundary. Lending must not broker redelegation packages to portfolio-manager;
+  Shared Ember should signal redelegation work through its committed outbox and
+  accept the signed artifact back through `orchestrator.registerSignedRedelegation.v1`.
 - After a local transport interruption during `subagent.submitSignedTransaction.v1`, Ember Lending should first reconcile through the committed-event outbox before deciding whether an idempotent resubmit is still needed.
 - When the committed-event outbox already contains the execution event, recovery should preserve `transaction_hash` from that event payload while converging on the terminal status.
 - The current validation lanes for this target-state contract are:
   - `pnpm smoke:managed-identities` for the runtime-owned managed-identity seam
     and post-bootstrap `subagent_wallet_address` hydration
-  - `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`
-    for the real runtime-owned redelegation typed-data signing seam
+  - focused Shared Ember integration coverage spanning the orchestrator
+    redelegation consumer loop plus lending execution-signing flow once the
+    public outbox/orchestrator-query seam is finalized
