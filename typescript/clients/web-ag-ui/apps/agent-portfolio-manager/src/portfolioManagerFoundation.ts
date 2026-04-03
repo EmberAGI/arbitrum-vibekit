@@ -1,4 +1,5 @@
 import type { CreateAgentRuntimeOptions } from 'agent-runtime';
+import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 
 import {
   createPortfolioManagerDomain,
@@ -43,6 +44,8 @@ export type PortfolioManagerGatewayDependencies = {
 
 type CreatePortfolioManagerAgentConfigOptions = {
   controllerWalletAddress?: `0x${string}`;
+  runtimeSigning?: AgentRuntimeSigningService;
+  runtimeSignerRef?: string;
 };
 
 function requireEnvValue(
@@ -105,6 +108,16 @@ export function createPortfolioManagerAgentConfig(
       ...(protocolHost
         ? {
             protocolHost,
+          }
+        : {}),
+      ...(options.runtimeSigning
+        ? {
+            runtimeSigning: options.runtimeSigning,
+          }
+        : {}),
+      ...(options.runtimeSignerRef
+        ? {
+            runtimeSignerRef: options.runtimeSignerRef,
           }
         : {}),
       ...(options.controllerWalletAddress

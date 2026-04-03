@@ -2,6 +2,33 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createPortfolioManagerDomain } from './sharedEmberAdapter.js';
 
+function createRuntimeSigningStub(
+  signPayload: ReturnType<typeof vi.fn>,
+) {
+  return {
+    readAddress: vi.fn(),
+    signPayload,
+  };
+}
+
+function decodeDelegationArtifactRef(
+  artifactRef: string,
+): Record<string, unknown> {
+  const prefix = 'metamask-delegation:';
+
+  if (!artifactRef.startsWith(prefix)) {
+    throw new Error(`Unsupported delegation artifact ref: ${artifactRef}`);
+  }
+
+  return JSON.parse(Buffer.from(artifactRef.slice(prefix.length), 'base64url').toString('utf8')) as Record<
+    string,
+    unknown
+  >;
+}
+
+const TEST_REDELEGATION_SIGNATURE =
+  '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
+
 function createAgentServiceIdentityResponse(input: {
   agentId: string;
   role: 'orchestrator' | 'subagent';
@@ -2068,9 +2095,22 @@ describe('createPortfolioManagerDomain', () => {
     });
   });
 
-  it('discovers redelegation work from the committed outbox without acknowledging it yet', async () => {
+  it('signs, registers, and acknowledges redelegation work from the committed outbox', async () => {
     const protocolHost = {
-      handleJsonRpc: vi.fn(),
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-register-signed-redelegation',
+        result: {
+          protocol_version: 'v1',
+          revision: 9,
+          committed_event_ids: ['evt-request-execution-6'],
+          execution_result: {
+            phase: 'ready_for_execution_signing',
+            request_id: 'req-ember-lending-execution-001',
+            transaction_plan_id: 'txplan-ember-lending-001',
+          },
+        },
+      })),
       readCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
         revision: 8,
@@ -2104,21 +2144,54 @@ describe('createPortfolioManagerDomain', () => {
               request_id: 'req-ember-lending-execution-001',
               transaction_plan_id: 'txplan-ember-lending-001',
               phase: 'ready_for_redelegation',
+              redelegation_signing_package: {
+                execution_preparation_id: 'execprep-ember-lending-001',
+                transaction_plan_id: 'txplan-ember-lending-001',
+                request_id: 'req-ember-lending-execution-001',
+                redelegation_intent_id: 'ri-req-ember-lending-execution-001',
+                active_delegation_id: 'del-ember-lending-001',
+                delegation_id: 'del-req-ember-lending-execution-001',
+                delegation_plan_id:
+                  'plan-req-ember-lending-execution-001-del-req-ember-lending-execution-001',
+                root_delegation_id: 'root-user-protocol-001',
+                root_delegation_artifact_ref: 'artifact-root-protocol-001',
+                delegator_address: '0x00000000000000000000000000000000000000a1',
+                agent_id: 'ember-lending',
+                agent_wallet: '0x00000000000000000000000000000000000000b1',
+                network: 'arbitrum',
+                reservation_ids: ['reservation-ember-lending-001'],
+                unit_ids: ['unit-ember-lending-001'],
+                control_paths: ['lending.supply'],
+                zero_capacity: false,
+                policy_snapshot_ref: 'pol-ember-lending-001',
+                canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
+              },
             },
           },
         ],
       })),
       acknowledgeCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
-        revision: 8,
+        revision: 9,
         consumer_id: 'portfolio-manager-redelegation',
         acknowledged_through_sequence: 5,
       })),
     };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000c1' as const,
+        signedPayload: {
+          signature: TEST_REDELEGATION_SIGNATURE,
+        },
+      })),
+    );
 
     const domain = createPortfolioManagerDomain({
       protocolHost,
       agentId: 'portfolio-manager',
+      controllerWalletAddress: '0x00000000000000000000000000000000000000c1',
+      runtimeSigning,
+      runtimeSignerRef: 'controller-wallet',
     });
 
     await expect(
@@ -2144,26 +2217,25 @@ describe('createPortfolioManagerDomain', () => {
     ).resolves.toMatchObject({
       state: {
         phase: 'active',
-        lastSharedEmberRevision: 8,
+        lastSharedEmberRevision: 9,
       },
       outputs: {
         status: {
           executionStatus: 'completed',
-          statusMessage:
-            'Redelegation work discovered in Shared Ember outbox. A follow-up public query is still required before the orchestrator can sign it.',
+          statusMessage: 'Redelegation signed, registered, and acknowledged through Shared Ember.',
         },
         artifacts: [
           {
             data: {
-              type: 'shared-ember-redelegation-work',
-              revision: 8,
+              type: 'shared-ember-redelegation-registration',
+              revision: 9,
               consumerId: 'portfolio-manager-redelegation',
               eventId: 'evt-request-execution-5',
               sequence: 5,
               requestId: 'req-ember-lending-execution-001',
               transactionPlanId: 'txplan-ember-lending-001',
-              phase: 'ready_for_redelegation',
-              needsFollowUpFetch: true,
+              committedEventIds: ['evt-request-execution-6'],
+              acknowledgedThroughSequence: 5,
             },
           },
         ],
@@ -2176,8 +2248,91 @@ describe('createPortfolioManagerDomain', () => {
       after_sequence: 0,
       limit: 100,
     });
-    expect(protocolHost.acknowledgeCommittedEventOutbox).not.toHaveBeenCalled();
-    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalled();
+    expect(runtimeSigning.signPayload).toHaveBeenCalledWith({
+      signerRef: 'controller-wallet',
+      expectedAddress: '0x00000000000000000000000000000000000000c1',
+      payloadKind: 'typed-data',
+      payload: {
+        chain: 'evm',
+        typedData: expect.objectContaining({
+          domain: expect.objectContaining({
+            chainId: 42161,
+            name: 'DelegationManager',
+            version: '1',
+          }),
+          primaryType: 'Delegation',
+          message: expect.objectContaining({
+            delegate: '0x00000000000000000000000000000000000000b1',
+            delegator: '0x00000000000000000000000000000000000000c1',
+            authority: expect.stringMatching(/^0x[0-9a-f]{64}$/),
+            caveats: [],
+          }),
+        }),
+      },
+    });
+
+    const registerSignedRedelegationRequest = protocolHost.handleJsonRpc.mock.calls[0]?.[0] as {
+      params: {
+        signed_redelegation: Record<string, unknown>;
+      };
+    };
+    expect(registerSignedRedelegationRequest).toMatchObject({
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-register-signed-redelegation',
+      method: 'orchestrator.registerSignedRedelegation.v1',
+      params: {
+        idempotency_key:
+          'idem-refresh-redelegation-work-thread-1:register-redelegation:req-ember-lending-execution-001',
+        expected_revision: 8,
+        transaction_plan_id: 'txplan-ember-lending-001',
+        signed_redelegation: {
+          execution_preparation_id: 'execprep-ember-lending-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          request_id: 'req-ember-lending-execution-001',
+          redelegation_intent_id: 'ri-req-ember-lending-execution-001',
+          active_delegation_id: 'del-ember-lending-001',
+          delegation_id: 'del-req-ember-lending-execution-001',
+          delegation_plan_id:
+            'plan-req-ember-lending-execution-001-del-req-ember-lending-execution-001',
+          root_delegation_id: 'root-user-protocol-001',
+          root_delegation_artifact_ref: 'artifact-root-protocol-001',
+          delegator_address: '0x00000000000000000000000000000000000000a1',
+          agent_id: 'ember-lending',
+          agent_wallet: '0x00000000000000000000000000000000000000b1',
+          network: 'arbitrum',
+          reservation_ids: ['reservation-ember-lending-001'],
+          unit_ids: ['unit-ember-lending-001'],
+          control_paths: ['lending.supply'],
+          zero_capacity: false,
+          policy_snapshot_ref: 'pol-ember-lending-001',
+          canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
+          artifact_ref: expect.stringMatching(/^metamask-delegation:/),
+          issued_at: expect.any(String),
+          activated_at: expect.any(String),
+          policy_hash: 'policy-pol-ember-lending-001',
+        },
+      },
+    });
+
+    const signedRedelegation =
+      registerSignedRedelegationRequest.params.signed_redelegation;
+    const decodedArtifact = decodeDelegationArtifactRef(
+      signedRedelegation['artifact_ref'] as string,
+    );
+    expect(decodedArtifact).toMatchObject({
+      delegate: '0x00000000000000000000000000000000000000b1',
+      delegator: '0x00000000000000000000000000000000000000c1',
+      authority: expect.stringMatching(/^0x[0-9a-f]{64}$/),
+      caveats: [],
+      salt: expect.stringMatching(/^0x[0-9a-f]+$/),
+      signature: TEST_REDELEGATION_SIGNATURE,
+    });
+
+    expect(protocolHost.acknowledgeCommittedEventOutbox).toHaveBeenCalledWith({
+      protocol_version: 'v1',
+      consumer_id: 'portfolio-manager-redelegation',
+      delivered_through_sequence: 5,
+    });
   });
 
   it('injects the portfolio mandate and managed lending mandate set into system context', async () => {

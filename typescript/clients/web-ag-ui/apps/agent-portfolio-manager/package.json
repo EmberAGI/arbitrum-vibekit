@@ -34,7 +34,8 @@
     "test:ci": "pnpm test:unit && pnpm test:int"
   },
   "dependencies": {
-    "agent-runtime": "workspace:^"
+    "agent-runtime": "workspace:^",
+    "viem": "catalog:"
   },
   "dependenciesMeta": {
     "agent-runtime": {

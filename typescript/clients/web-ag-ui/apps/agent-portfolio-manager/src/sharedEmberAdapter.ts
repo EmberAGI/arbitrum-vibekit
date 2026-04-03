@@ -1,4 +1,6 @@
 import type { AgentRuntimeDomainConfig } from 'agent-runtime';
+import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
+import { keccak256, toHex } from 'viem';
 import {
   buildPortfolioManagerWalletAccountingDetails,
   buildSharedEmberAccountingContextXml,
@@ -31,6 +33,8 @@ type CreatePortfolioManagerDomainOptions = {
   protocolHost?: PortfolioManagerSharedEmberProtocolHost;
   agentId?: string;
   controllerWalletAddress?: `0x${string}`;
+  runtimeSigning?: AgentRuntimeSigningService;
+  runtimeSignerRef?: string;
 };
 
 type SharedEmberRevisionResponse = {
@@ -66,6 +70,23 @@ type SharedEmberCommittedEvent = {
   event_type: string;
   payload: Record<string, unknown> | null;
 };
+
+type SharedEmberRedelegationWork = {
+  eventId: string;
+  sequence: number;
+  requestId: string;
+  transactionPlanId: string;
+  phase: 'ready_for_redelegation';
+  redelegationSigningPackage: Record<string, unknown>;
+};
+
+const OWS_SIGNING_CHAIN = 'evm';
+const DEFAULT_RUNTIME_SIGNER_REF = 'controller-wallet';
+const RUNTIME_REDELEGATION_DOMAIN_NAME = 'DelegationManager';
+const RUNTIME_REDELEGATION_DOMAIN_VERSION = '1';
+const RUNTIME_REDELEGATION_VERIFIER =
+  '0x00000000000000000000000000000000000000d1' as const;
+const RUNTIME_REDELEGATION_ARTIFACT_PREFIX = 'metamask-delegation:';
 
 function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
   return {
@@ -125,6 +146,11 @@ function readString(value: unknown): string | null {
 }
 
 function readHexAddress(value: unknown): `0x${string}` | null {
+  const normalized = readString(value);
+  return normalized?.startsWith('0x') ? (normalized as `0x${string}`) : null;
+}
+
+function readHexValue(value: unknown): `0x${string}` | null {
   const normalized = readString(value);
   return normalized?.startsWith('0x') ? (normalized as `0x${string}`) : null;
 }
@@ -210,46 +236,48 @@ function readCommittedEvent(value: unknown): SharedEmberCommittedEvent | null {
   };
 }
 
-function readLatestReadyForRedelegationWork(events: unknown[]): {
-  eventId: string;
-  sequence: number;
-  requestId: string;
-  transactionPlanId: string;
-  phase: 'ready_for_redelegation';
-} | null {
-  const matchingEvent = events
-    .map((event) => readCommittedEvent(event))
-    .filter((event): event is SharedEmberCommittedEvent => event !== null)
-    .filter(
-      (event) =>
-        event.aggregate === 'request' && event.event_type === 'requestExecution.prepared.v1',
-    )
-    .map((event) => {
-      const requestId = readString(event.payload?.['request_id']);
-      const transactionPlanId = readString(event.payload?.['transaction_plan_id']);
-      const phase = readString(event.payload?.['phase']);
+function readNextReadyForRedelegationWork(
+  events: unknown[],
+  acknowledgedThroughSequence: number,
+): SharedEmberRedelegationWork | null {
+  for (const rawEvent of events) {
+    const event = readCommittedEvent(rawEvent);
+    if (
+      event === null ||
+      event.sequence <= acknowledgedThroughSequence ||
+      event.aggregate !== 'request' ||
+      event.event_type !== 'requestExecution.prepared.v1'
+    ) {
+      continue;
+    }
 
-      if (
-        requestId === null ||
-        transactionPlanId === null ||
-        phase !== 'ready_for_redelegation'
-      ) {
-        return null;
-      }
+    const requestId = readString(event.payload?.['request_id']);
+    const transactionPlanId = readString(event.payload?.['transaction_plan_id']);
+    const phase = readString(event.payload?.['phase']);
+    const redelegationSigningPackage = isRecord(event.payload?.['redelegation_signing_package'])
+      ? event.payload['redelegation_signing_package']
+      : null;
 
-      return {
-        eventId: event.event_id,
-        sequence: event.sequence,
-        requestId,
-        transactionPlanId,
-        phase: 'ready_for_redelegation' as const,
-      };
-    })
-    .filter((event): event is NonNullable<typeof event> => event !== null)
-    .sort((left, right) => left.sequence - right.sequence)
-    .at(-1);
+    if (
+      requestId === null ||
+      transactionPlanId === null ||
+      phase !== 'ready_for_redelegation' ||
+      redelegationSigningPackage === null
+    ) {
+      continue;
+    }
 
-  return matchingEvent ?? null;
+    return {
+      eventId: event.event_id,
+      sequence: event.sequence,
+      requestId,
+      transactionPlanId,
+      phase: 'ready_for_redelegation',
+      redelegationSigningPackage,
+    };
+  }
+
+  return null;
 }
 
 function isSharedEmberRevisionConflict(error: unknown): boolean {
@@ -258,6 +286,126 @@ function isSharedEmberRevisionConflict(error: unknown): boolean {
     error.message.includes('Shared Ember Domain Service JSON-RPC error: protocol_conflict') &&
     error.message.includes('expected_revision')
   );
+}
+
+function resolveRuntimeRedelegationChainId(network: string): number {
+  switch (network.trim().toLowerCase()) {
+    case 'arbitrum':
+      return 42161;
+    case 'base':
+      return 8453;
+    case 'ethereum':
+    case 'mainnet':
+      return 1;
+    default:
+      throw new Error(`Unsupported redelegation network "${network}".`);
+  }
+}
+
+function buildRuntimeRedelegationAuthority(rootDelegationArtifactRef: string): `0x${string}` {
+  return keccak256(toHex(rootDelegationArtifactRef));
+}
+
+function buildRuntimeRedelegationSalt(requestId: string): `0x${string}` {
+  return keccak256(toHex(requestId));
+}
+
+function buildRuntimeRedelegationTypedData(input: {
+  redelegationSigningPackage: Record<string, unknown>;
+  signerAddress: `0x${string}`;
+}): Record<string, unknown> {
+  const network = readString(input.redelegationSigningPackage['network']);
+  const requestId = readString(input.redelegationSigningPackage['request_id']);
+  const rootDelegationArtifactRef = readString(
+    input.redelegationSigningPackage['root_delegation_artifact_ref'],
+  );
+  const agentWallet = readHexAddress(input.redelegationSigningPackage['agent_wallet']);
+
+  if (!network || !requestId || !rootDelegationArtifactRef || !agentWallet) {
+    throw new Error('missing redelegation package metadata');
+  }
+
+  return {
+    domain: {
+      chainId: resolveRuntimeRedelegationChainId(network),
+      name: RUNTIME_REDELEGATION_DOMAIN_NAME,
+      version: RUNTIME_REDELEGATION_DOMAIN_VERSION,
+      verifyingContract: RUNTIME_REDELEGATION_VERIFIER,
+    },
+    types: {
+      EIP712Domain: [
+        { name: 'name', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
+        { name: 'verifyingContract', type: 'address' },
+      ],
+      Caveat: [
+        { name: 'enforcer', type: 'address' },
+        { name: 'terms', type: 'bytes' },
+      ],
+      Delegation: [
+        { name: 'delegate', type: 'address' },
+        { name: 'delegator', type: 'address' },
+        { name: 'authority', type: 'bytes32' },
+        { name: 'caveats', type: 'Caveat[]' },
+        { name: 'salt', type: 'uint256' },
+      ],
+    },
+    primaryType: 'Delegation',
+    message: {
+      delegate: agentWallet,
+      delegator: input.signerAddress,
+      authority: buildRuntimeRedelegationAuthority(rootDelegationArtifactRef),
+      caveats: [],
+      salt: BigInt(buildRuntimeRedelegationSalt(requestId)),
+    },
+  };
+}
+
+function buildRuntimeSignedRedelegationRecord(input: {
+  redelegationSigningPackage: Record<string, unknown>;
+  signerAddress: `0x${string}`;
+  signature: `0x${string}`;
+}): Record<string, unknown> {
+  const requestId = readString(input.redelegationSigningPackage['request_id']);
+  const rootDelegationArtifactRef = readString(
+    input.redelegationSigningPackage['root_delegation_artifact_ref'],
+  );
+  const agentWallet = readHexAddress(input.redelegationSigningPackage['agent_wallet']);
+  const policySnapshotRef = readString(input.redelegationSigningPackage['policy_snapshot_ref']);
+
+  if (!requestId || !rootDelegationArtifactRef || !agentWallet || !policySnapshotRef) {
+    throw new Error('missing signed redelegation metadata');
+  }
+
+  const artifact = {
+    delegate: agentWallet,
+    delegator: input.signerAddress,
+    authority: buildRuntimeRedelegationAuthority(rootDelegationArtifactRef),
+    caveats: [],
+    salt: buildRuntimeRedelegationSalt(requestId),
+    signature: input.signature,
+  };
+  const issuedAt = new Date().toISOString();
+
+  return {
+    ...input.redelegationSigningPackage,
+    artifact_ref: `${RUNTIME_REDELEGATION_ARTIFACT_PREFIX}${Buffer.from(
+      JSON.stringify(artifact),
+      'utf8',
+    ).toString('base64url')}`,
+    issued_at: issuedAt,
+    activated_at: issuedAt,
+    policy_hash: `policy-${policySnapshotRef}`,
+  };
+}
+
+function readOutboxErrorMessage(value: unknown): string | null {
+  if (!isRecord(value) || !isRecord(value['error'])) {
+    return null;
+  }
+
+  return readString(value['error']['message']);
 }
 
 async function readCurrentSharedEmberRevision(input: {
@@ -1497,6 +1645,7 @@ export function createPortfolioManagerDomain(
             limit: 100,
           })) as {
             revision?: number;
+            acknowledged_through_sequence?: number;
             events?: unknown[];
           };
 
@@ -1504,7 +1653,10 @@ export function createPortfolioManagerDomain(
             ...currentState,
             lastSharedEmberRevision: outboxPage.revision ?? currentState.lastSharedEmberRevision,
           };
-          const redelegationWork = readLatestReadyForRedelegationWork(outboxPage.events ?? []);
+          const redelegationWork = readNextReadyForRedelegationWork(
+            outboxPage.events ?? [],
+            outboxPage.acknowledged_through_sequence ?? 0,
+          );
 
           if (redelegationWork === null) {
             return {
@@ -1518,26 +1670,156 @@ export function createPortfolioManagerDomain(
             };
           }
 
+          if (!options.runtimeSigning) {
+            return {
+              state: nextState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Runtime-owned signing service is not configured for portfolio-manager redelegation signing.',
+                },
+              },
+            };
+          }
+
+          let redelegationTypedData: Record<string, unknown>;
+          try {
+            redelegationTypedData = buildRuntimeRedelegationTypedData({
+              redelegationSigningPackage: redelegationWork.redelegationSigningPackage,
+              signerAddress: controllerWalletAddress,
+            });
+          } catch {
+            return {
+              state: nextState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio-manager redelegation signing could not continue because the canonical signing package was incomplete.',
+                },
+              },
+            };
+          }
+
+          const signedRedelegation = await options.runtimeSigning.signPayload({
+            signerRef: options.runtimeSignerRef ?? DEFAULT_RUNTIME_SIGNER_REF,
+            expectedAddress: controllerWalletAddress,
+            payloadKind: 'typed-data',
+            payload: {
+              chain: OWS_SIGNING_CHAIN,
+              typedData: redelegationTypedData,
+            },
+          });
+          const redelegationSignature = readHexValue(signedRedelegation.signedPayload.signature);
+
+          if (!redelegationSignature) {
+            return {
+              state: nextState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio-manager redelegation signing could not continue because the runtime signer did not return a redelegation signature.',
+                },
+              },
+            };
+          }
+
+          let signedRedelegationRecord: Record<string, unknown>;
+          try {
+            signedRedelegationRecord = buildRuntimeSignedRedelegationRecord({
+              redelegationSigningPackage: redelegationWork.redelegationSigningPackage,
+              signerAddress: signedRedelegation.confirmedAddress,
+              signature: redelegationSignature,
+            });
+          } catch {
+            return {
+              state: nextState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio-manager redelegation signing could not continue because the canonical signing package was incomplete.',
+                },
+              },
+            };
+          }
+
+          const registrationResponse = await runSharedEmberCommandWithResolvedRevision<{
+            result?: {
+              revision?: number;
+              committed_event_ids?: string[];
+              execution_result?: unknown;
+            };
+          }>({
+            protocolHost: options.protocolHost,
+            threadId,
+            agentId,
+            currentRevision: nextState.lastSharedEmberRevision,
+            buildRequest: (expectedRevision) => ({
+              jsonrpc: '2.0',
+              id: `shared-ember-${threadId}-register-signed-redelegation`,
+              method: 'orchestrator.registerSignedRedelegation.v1',
+              params: {
+                idempotency_key: `idem-refresh-redelegation-work-${threadId}:register-redelegation:${redelegationWork.requestId}`,
+                expected_revision: expectedRevision,
+                transaction_plan_id: redelegationWork.transactionPlanId,
+                signed_redelegation: signedRedelegationRecord,
+              },
+            }),
+          });
+
+          const acknowledgeResponse = await options.protocolHost.acknowledgeCommittedEventOutbox({
+            protocol_version: 'v1',
+            consumer_id: PORTFOLIO_MANAGER_REDELEGATION_OUTBOX_CONSUMER_ID,
+            delivered_through_sequence: redelegationWork.sequence,
+          });
+          const acknowledgeErrorMessage = readOutboxErrorMessage(acknowledgeResponse);
+
+          if (acknowledgeErrorMessage !== null) {
+            throw new Error(
+              `Shared Ember committed outbox acknowledgement failed: ${acknowledgeErrorMessage}`,
+            );
+          }
+
+          const registeredRevision =
+            readInt(registrationResponse.result?.revision) ?? nextState.lastSharedEmberRevision;
+          const acknowledgedRevision =
+            readInt(
+              isRecord(acknowledgeResponse) ? acknowledgeResponse['revision'] : null,
+            ) ?? registeredRevision;
+          const acknowledgedThroughSequence =
+            readInt(
+              isRecord(acknowledgeResponse)
+                ? acknowledgeResponse['acknowledged_through_sequence']
+                : null,
+            ) ?? redelegationWork.sequence;
+          const completedState: PortfolioManagerLifecycleState = {
+            ...nextState,
+            lastSharedEmberRevision: acknowledgedRevision,
+          };
+
           return {
-            state: nextState,
+            state: completedState,
             outputs: {
               status: {
                 executionStatus: 'completed',
                 statusMessage:
-                  'Redelegation work discovered in Shared Ember outbox. A follow-up public query is still required before the orchestrator can sign it.',
+                  'Redelegation signed, registered, and acknowledged through Shared Ember.',
               },
               artifacts: [
                 {
                   data: {
-                    type: 'shared-ember-redelegation-work',
-                    revision: nextState.lastSharedEmberRevision,
+                    type: 'shared-ember-redelegation-registration',
+                    revision: completedState.lastSharedEmberRevision,
                     consumerId: PORTFOLIO_MANAGER_REDELEGATION_OUTBOX_CONSUMER_ID,
                     eventId: redelegationWork.eventId,
                     sequence: redelegationWork.sequence,
                     requestId: redelegationWork.requestId,
                     transactionPlanId: redelegationWork.transactionPlanId,
-                    phase: redelegationWork.phase,
-                    needsFollowUpFetch: true,
+                    committedEventIds: registrationResponse.result?.committed_event_ids ?? [],
+                    acknowledgedThroughSequence,
                   },
                 },
               ],

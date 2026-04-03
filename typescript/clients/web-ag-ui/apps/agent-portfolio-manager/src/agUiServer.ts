@@ -116,6 +116,8 @@ export async function createPortfolioManagerGatewayService(
 
       return {
         ...createPortfolioManagerAgentConfig(options.env, {
+          runtimeSigning: signing,
+          runtimeSignerRef: PORTFOLIO_MANAGER_RUNTIME_SIGNER_REF,
           ...(controllerWalletAddress ? { controllerWalletAddress } : {}),
         }),
         ...(options.now ? { now: options.now } : {}),
