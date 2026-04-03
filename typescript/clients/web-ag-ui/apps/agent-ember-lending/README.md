@@ -15,7 +15,8 @@ subagent surface for:
 
 - portfolio-state reads
 - planner-backed candidate-plan creation
-- transaction execution preparation and local signing behind one execution tool
+- transaction execution preparation and runtime-owned signing behind one
+  execution tool
 - escalation requests
 
 Direct lending-agent onboarding is intentionally out of scope here. The
@@ -38,18 +39,22 @@ Current execution-context semantics:
 - `authority_preparation_needed` stays runtime-internal; the adapter re-polls
   Shared Ember with a stage-scoped retry idempotency key until readiness
   advances or the local execution attempt fails closed
-- local OWS signing stays inside the downstream service layer and must fail
-  closed if the prepared signing package does not match the resolved dedicated
-  subagent wallet identity
+- direct OWS signing stays inside the private runtime service layer and must
+  fail closed if the prepared signing package does not match the resolved
+  dedicated subagent wallet identity
 
 Runtime wiring:
 
 - `SHARED_EMBER_BASE_URL` points the app at the bounded Shared Ember HTTP
   surface
-- `EMBER_LENDING_OWS_BASE_URL` points the app at the local OWS signing surface
-  used for startup identity proof, redelegation, and execution signing
+- `EMBER_LENDING_OWS_WALLET_NAME` selects the direct OWS wallet the runtime
+  should use for startup identity proof, redelegation, and execution signing
+- `EMBER_LENDING_OWS_PASSPHRASE` optionally unlocks that wallet when the vault
+  requires it
+- `EMBER_LENDING_OWS_VAULT_PATH` points the runtime at the vault containing the
+  configured wallet
 - when `SHARED_EMBER_BASE_URL` is set for the live managed path, startup now
-  resolves the local signer wallet from OWS and confirms the durable
+  resolves the configured signer wallet directly from OWS core and confirms the durable
   `ember-lending` / `subagent` service identity in Shared Ember before the
   runtime is considered ready
 - if the durable subagent identity is missing or points at a different wallet
@@ -76,5 +81,8 @@ Validation note:
 - run `pnpm smoke:managed-identities` from `typescript/clients/web-ag-ui/` to
   prove the current downstream pair can confirm both durable identities and
   surface a non-null post-bootstrap `subagent_wallet_address`
-- that smoke stays on the current downstream OWS-facing HTTP seam; deeper OWS
-  integration is tracked separately
+- that smoke now exercises the runtime-owned direct OWS wallet path rather than
+  a repo-local HTTP sidecar seam
+- run `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`
+  to prove the real runtime-owned redelegation typed-data signing path plus the
+  concrete-service prepared unsigned-transaction resolution seam

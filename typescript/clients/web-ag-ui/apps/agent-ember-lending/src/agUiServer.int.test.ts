@@ -10,6 +10,11 @@ import {
 } from './agUiServer.js';
 import { createEmberLendingDomain } from './sharedEmberAdapter.js';
 
+const TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX =
+  '0x02e982a4b1018405f5e100843b9aca008252089400000000000000000000000000000000000000c18080c0';
+const TEST_TRANSACTION_SIGNATURE =
+  '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
+
 type AgUiEventEnvelope = {
   type: string;
   [key: string]: unknown;
@@ -274,18 +279,21 @@ function createReadyForExecutionSigningPreparationResult() {
       network: 'arbitrum',
       reservation_id: 'reservation-ember-lending-001',
       required_control_path: 'lending.supply',
-      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+      canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
       active_delegation_id: 'del-ember-lending-001',
       root_delegation_id: 'root-user-ember-lending-001',
       prepared_at: '2026-04-01T06:15:00.000Z',
-      metadata: {},
+      metadata: {
+        planned_transaction_payload_ref: 'txpayload-ember-lending-001',
+      },
     },
     execution_signing_package: {
       execution_preparation_id: 'execprep-ember-lending-001',
       transaction_plan_id: 'txplan-ember-lending-001',
       request_id: 'req-ember-lending-execution-001',
       active_delegation_id: 'del-ember-lending-001',
-      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+      canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
+      unsigned_transaction_hex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
     },
   };
 }
@@ -401,8 +409,9 @@ async function runAgUiConnect(input: {
 describe('agent-ember-lending AG-UI integration', () => {
   let server: Server;
   let baseUrl: string;
-  let executionSigner: {
-    signExecutionPackage: ReturnType<typeof vi.fn>;
+  let runtimeSigning: {
+    readAddress: ReturnType<typeof vi.fn>;
+    signPayload: ReturnType<typeof vi.fn>;
   };
   const defaultHandleJsonRpc = async (input: unknown) => {
     const request =
@@ -567,12 +576,14 @@ describe('agent-ember-lending AG-UI integration', () => {
   };
 
   beforeEach(async () => {
-    executionSigner = {
-      signExecutionPackage: vi.fn(async () => ({
-        signer_wallet_address: '0x00000000000000000000000000000000000000b1',
-        signer_address: '0x00000000000000000000000000000000000000b1',
-        raw_transaction:
-          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    runtimeSigning = {
+      readAddress: vi.fn(async () => '0x00000000000000000000000000000000000000b1'),
+      signPayload: vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
       })),
     };
     const service = await createEmberLendingGatewayService({
@@ -589,7 +600,8 @@ describe('agent-ember-lending AG-UI integration', () => {
         tools: [],
         domain: createEmberLendingDomain({
           protocolHost,
-          executionSigner,
+          runtimeSigning,
+          runtimeSignerRef: 'service-wallet',
           agentId: 'ember-lending',
         }),
         agentOptions: {
@@ -1044,16 +1056,13 @@ describe('agent-ember-lending AG-UI integration', () => {
       },
     });
 
-    expect(executionSigner.signExecutionPackage).toHaveBeenCalledWith({
-      walletAddress: '0x00000000000000000000000000000000000000b1',
-      transactionPlanId: 'txplan-ember-lending-001',
-      requestId: 'req-ember-lending-execution-001',
-      executionSigningPackage: {
-        execution_preparation_id: 'execprep-ember-lending-001',
-        transaction_plan_id: 'txplan-ember-lending-001',
-        request_id: 'req-ember-lending-execution-001',
-        active_delegation_id: 'del-ember-lending-001',
-        canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+    expect(runtimeSigning.signPayload).toHaveBeenCalledWith({
+      signerRef: 'service-wallet',
+      expectedAddress: '0x00000000000000000000000000000000000000b1',
+      payloadKind: 'transaction',
+      payload: {
+        chain: 'evm',
+        unsignedTransactionHex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
       },
     });
     expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(

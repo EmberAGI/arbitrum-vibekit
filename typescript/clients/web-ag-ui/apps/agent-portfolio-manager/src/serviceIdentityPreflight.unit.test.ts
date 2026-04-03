@@ -135,7 +135,7 @@ describe('ensurePortfolioManagerServiceIdentity', () => {
     });
   });
 
-  it('rotates the durable orchestrator identity when the local OWS controller wallet changes', async () => {
+  it('rotates the durable orchestrator identity when the configured OWS controller wallet changes', async () => {
     const handleJsonRpc = vi.fn(async (request: unknown) => {
       const jsonRpcRequest =
         typeof request === 'object' && request !== null

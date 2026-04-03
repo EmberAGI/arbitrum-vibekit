@@ -135,7 +135,7 @@ describe('ensureEmberLendingServiceIdentity', () => {
     });
   });
 
-  it('rotates the durable subagent identity when the local OWS signer wallet changes', async () => {
+  it('rotates the durable subagent identity when the configured OWS signer wallet changes', async () => {
     const handleJsonRpc = vi.fn(async (request: unknown) => {
       const jsonRpcRequest =
         typeof request === 'object' && request !== null

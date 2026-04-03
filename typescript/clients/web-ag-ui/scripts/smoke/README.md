@@ -1,6 +1,9 @@
 # Smoke Scripts
 
-These scripts are intentionally "thin" and rely on already-running local dev processes.
+The shell health scripts below are intentionally thin and rely on already-running
+local dev processes. The managed-identity smoke is different: it self-boots the
+repo-local Shared Ember harness plus the real runtime-owned gateway services for
+the managed pair.
 
 ## Assumptions
 
@@ -20,11 +23,15 @@ These scripts are intentionally "thin" and rely on already-running local dev pro
     afterward, run `pnpm reset:dev-stack` (it also kills stale Playwright headless shells).
 
 - `pnpm smoke:managed-identities`
-  - Boots the repo-local Shared Ember HTTP harness plus current downstream OWS-facing identity stubs.
+  - Boots the repo-local Shared Ember HTTP harness plus the real
+    `agent-portfolio-manager` and `agent-ember-lending` runtime gateway
+    services.
   - Confirms `portfolio-manager` / `orchestrator` and `ember-lending` / `subagent` are both non-null.
   - Drives the portfolio-manager rooted-bootstrap path and verifies post-bootstrap
     `subagent.readExecutionContext.v1` returns a non-null `subagent_wallet_address`.
-  - This smoke intentionally stays on the current downstream OWS HTTP seam; deeper OWS-internals changes belong to the separate follow-on issue.
+  - This smoke intentionally exercises the current downstream runtime-owned
+    direct OWS wallet path rather than `/identity` sidecars or injected
+    wallet-address callback seams.
 
 ## Typical Local Flow
 

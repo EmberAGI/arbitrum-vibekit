@@ -11,10 +11,6 @@ import {
 import { createPortfolioManagerDiagnosticTool } from './diagnosticTool.js';
 import { createPortfolioManagerWalletAccountingTool } from './walletAccountingTool.js';
 import { PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID } from './sharedEmberOnboardingState.js';
-import {
-  createPortfolioManagerLocalOwsControllerWallet,
-  resolvePortfolioManagerLocalOwsBaseUrl,
-} from './localOwsControllerWallet.js';
 
 const DEFAULT_PORTFOLIO_MANAGER_MODEL = 'openai/gpt-5.4-mini';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -27,7 +23,9 @@ export type PortfolioManagerGatewayEnv = NodeJS.ProcessEnv & {
   PORTFOLIO_MANAGER_ENABLE_DIAGNOSTIC_TOOLS?: string;
   DATABASE_URL?: string;
   SHARED_EMBER_BASE_URL?: string;
-  PORTFOLIO_MANAGER_OWS_BASE_URL?: string;
+  PORTFOLIO_MANAGER_OWS_WALLET_NAME?: string;
+  PORTFOLIO_MANAGER_OWS_PASSPHRASE?: string;
+  PORTFOLIO_MANAGER_OWS_VAULT_PATH?: string;
 };
 
 type PortfolioManagerAgentRuntimeOptions = CreateAgentRuntimeOptions<PortfolioManagerLifecycleState>;
@@ -41,7 +39,6 @@ type PortfolioManagerGatewayModel = PortfolioManagerAgentConfig['model'];
 
 export type PortfolioManagerGatewayDependencies = {
   protocolHost: ReturnType<typeof createPortfolioManagerSharedEmberHttpHost> | null;
-  controllerWallet: ReturnType<typeof createPortfolioManagerLocalOwsControllerWallet> | undefined;
 };
 
 type CreatePortfolioManagerAgentConfigOptions = {
@@ -129,7 +126,6 @@ export function resolvePortfolioManagerGatewayDependencies(
   env: PortfolioManagerGatewayEnv = process.env,
 ): PortfolioManagerGatewayDependencies {
   const sharedEmberBaseUrl = resolvePortfolioManagerSharedEmberBaseUrl(env);
-  const localOwsBaseUrl = resolvePortfolioManagerLocalOwsBaseUrl(env);
 
   return {
     protocolHost: sharedEmberBaseUrl
@@ -137,10 +133,5 @@ export function resolvePortfolioManagerGatewayDependencies(
           baseUrl: sharedEmberBaseUrl,
         })
       : null,
-    controllerWallet: localOwsBaseUrl
-      ? createPortfolioManagerLocalOwsControllerWallet({
-          baseUrl: localOwsBaseUrl,
-        })
-      : undefined,
   };
 }

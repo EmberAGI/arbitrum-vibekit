@@ -7,5 +7,10 @@
   },
   "include": [
     "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/managedOnboardingIdentitySmoke.ts",
+    "src/managedOnboardingIdentitySmokeSupport.ts",
+    "src/managedIdentitySmokeSupport.unit.test.ts"
   ]
 }

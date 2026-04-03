@@ -1,6 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { mkdtempSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 
+import { importWalletPrivateKey } from '@open-wallet-standard/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createPortfolioManagerGatewayService } from './agUiServer.js';
@@ -15,6 +19,46 @@ type StubResponse = {
   status?: number;
   body?: unknown;
 };
+
+const TEST_OWS_PRIVATE_KEY =
+  '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+const TEST_CONTROLLER_WALLET_ADDRESS = '0xfcad0b19bb29d4674531d6f115237e16afce377c' as const;
+
+function createOwsWalletFixture(walletName: string) {
+  const vaultPath = mkdtempSync(path.join(os.tmpdir(), 'portfolio-manager-ows-'));
+  importWalletPrivateKey(walletName, TEST_OWS_PRIVATE_KEY, undefined, vaultPath, 'evm');
+
+  return {
+    walletAddress: TEST_CONTROLLER_WALLET_ADDRESS,
+    env: {
+      PORTFOLIO_MANAGER_OWS_WALLET_NAME: walletName,
+      PORTFOLIO_MANAGER_OWS_VAULT_PATH: vaultPath,
+    },
+    cleanup() {
+      rmSync(vaultPath, {
+        recursive: true,
+        force: true,
+      });
+    },
+  };
+}
+
+function createEmptyOwsVaultFixture(walletName: string) {
+  const vaultPath = mkdtempSync(path.join(os.tmpdir(), 'portfolio-manager-ows-empty-'));
+
+  return {
+    env: {
+      PORTFOLIO_MANAGER_OWS_WALLET_NAME: walletName,
+      PORTFOLIO_MANAGER_OWS_VAULT_PATH: vaultPath,
+    },
+    cleanup() {
+      rmSync(vaultPath, {
+        recursive: true,
+        force: true,
+      });
+    },
+  };
+}
 
 async function readRequestBody(request: IncomingMessage): Promise<Uint8Array> {
   const chunks: Buffer[] = [];
@@ -119,8 +163,13 @@ describe('portfolio-manager startup identity preflight integration', () => {
     }
   });
 
-  it('writes the orchestrator identity through the live Shared Ember and local OWS HTTP boundaries before boot succeeds', async () => {
+  it('writes the orchestrator identity through the live Shared Ember and direct OWS runtime wallet lookup before boot succeeds', async () => {
     const sharedEmberRequests: Array<Record<string, unknown>> = [];
+    const owsWallet = createOwsWalletFixture('portfolio-manager-controller-wallet');
+    cleanupFns.push(async () => {
+      owsWallet.cleanup();
+    });
+
     const sharedEmber = await startJsonStubServer(async ({ path, body }) => {
       if (path !== '/jsonrpc') {
         return {
@@ -177,29 +226,11 @@ describe('portfolio-manager startup identity preflight integration', () => {
     });
     cleanupFns.push(sharedEmber.close);
 
-    const localOws = await startJsonStubServer(async ({ method, path }) => {
-      if (method === 'GET' && path === '/identity') {
-        return {
-          body: {
-            controller_wallet_address: '0x00000000000000000000000000000000000000c1',
-          },
-        };
-      }
-
-      return {
-        status: 404,
-        body: {
-          message: 'not found',
-        },
-      };
-    });
-    cleanupFns.push(localOws.close);
-
     const service = await createPortfolioManagerGatewayService({
       env: {
         OPENROUTER_API_KEY: 'test-openrouter-key',
         SHARED_EMBER_BASE_URL: sharedEmber.baseUrl,
-        PORTFOLIO_MANAGER_OWS_BASE_URL: localOws.baseUrl,
+        ...owsWallet.env,
       },
       __internalPostgres: createInternalPostgresHooks(),
     } as never);
@@ -223,7 +254,7 @@ describe('portfolio-manager startup identity preflight integration', () => {
         agent_service_identity: {
           agent_id: 'portfolio-manager',
           role: 'orchestrator',
-          wallet_address: '0x00000000000000000000000000000000000000c1',
+          wallet_address: TEST_CONTROLLER_WALLET_ADDRESS,
           registration_version: 1,
         },
       },
@@ -282,31 +313,17 @@ describe('portfolio-manager startup identity preflight integration', () => {
       };
     });
     cleanupFns.push(sharedEmber.close);
-
-    const localOws = await startJsonStubServer(async ({ method, path }) => {
-      if (method === 'GET' && path === '/identity') {
-        return {
-          body: {
-            controller_wallet_address: '0x00000000000000000000000000000000000000c1',
-          },
-        };
-      }
-
-      return {
-        status: 404,
-        body: {
-          message: 'not found',
-        },
-      };
+    const owsWallet = createOwsWalletFixture('portfolio-manager-controller-wallet');
+    cleanupFns.push(async () => {
+      owsWallet.cleanup();
     });
-    cleanupFns.push(localOws.close);
 
     await expect(
       createPortfolioManagerGatewayService({
         env: {
           OPENROUTER_API_KEY: 'test-openrouter-key',
           SHARED_EMBER_BASE_URL: sharedEmber.baseUrl,
-          PORTFOLIO_MANAGER_OWS_BASE_URL: localOws.baseUrl,
+          ...owsWallet.env,
         },
         __internalPostgres: createInternalPostgresHooks(),
       } as never),
@@ -320,8 +337,13 @@ describe('portfolio-manager startup identity preflight integration', () => {
     });
   });
 
-  it('fails closed before boot succeeds when the local OWS controller identity omits the wallet address', async () => {
+  it('fails closed before boot succeeds when the configured OWS wallet does not resolve an EVM address', async () => {
     const sharedEmberRequests: Array<Record<string, unknown>> = [];
+    const emptyVault = createEmptyOwsVaultFixture('missing-portfolio-manager-wallet');
+    cleanupFns.push(async () => {
+      emptyVault.cleanup();
+    });
+
     const sharedEmber = await startJsonStubServer(async ({ path, body }) => {
       if (path === '/jsonrpc' && typeof body === 'object' && body !== null) {
         sharedEmberRequests.push(body as Record<string, unknown>);
@@ -337,34 +359,18 @@ describe('portfolio-manager startup identity preflight integration', () => {
     });
     cleanupFns.push(sharedEmber.close);
 
-    const localOws = await startJsonStubServer(async ({ method, path }) => {
-      if (method === 'GET' && path === '/identity') {
-        return {
-          body: {
-            status: 'ok',
-          },
-        };
-      }
-
-      return {
-        status: 404,
-        body: {
-          message: 'not found',
-        },
-      };
-    });
-    cleanupFns.push(localOws.close);
-
     await expect(
       createPortfolioManagerGatewayService({
         env: {
           OPENROUTER_API_KEY: 'test-openrouter-key',
           SHARED_EMBER_BASE_URL: sharedEmber.baseUrl,
-          PORTFOLIO_MANAGER_OWS_BASE_URL: localOws.baseUrl,
+          ...emptyVault.env,
         },
         __internalPostgres: createInternalPostgresHooks(),
       } as never),
-    ).rejects.toThrow('Local OWS controller identity response was missing a wallet address.');
+    ).rejects.toThrow(
+      'Portfolio-manager startup identity preflight failed because the configured OWS wallet did not resolve an EVM address.',
+    );
 
     expect(sharedEmberRequests).toHaveLength(0);
   });

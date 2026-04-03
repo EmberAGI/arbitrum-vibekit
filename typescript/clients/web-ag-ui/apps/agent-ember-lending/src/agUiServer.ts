@@ -1,4 +1,10 @@
-import { createAgentRuntime, type AgentRuntimeService } from 'agent-runtime';
+import type { AgentRuntimeService } from 'agent-runtime';
+import {
+  AgentRuntimeSigningError,
+  createAgentRuntimeKernel,
+  type AgentRuntimeInternalPostgresHooks,
+  type AgentRuntimeSigningService,
+} from 'agent-runtime/internal';
 
 import {
   createEmberLendingAgentConfig,
@@ -14,6 +20,7 @@ import { ensureEmberLendingServiceIdentity } from './serviceIdentityPreflight.js
 
 export const EMBER_LENDING_AGENT_ID = 'agent-ember-lending';
 export const EMBER_LENDING_AG_UI_BASE_PATH = '/ag-ui';
+export const EMBER_LENDING_RUNTIME_SIGNER_REF = 'service-wallet';
 export type EmberLendingGatewayService = AgentRuntimeService;
 
 type EmberLendingAgUiHandlerOptions = {
@@ -29,16 +36,9 @@ type EmberLendingGatewayServiceOptions = {
 };
 
 type EmberLendingGatewayInternalOptions = EmberLendingGatewayServiceOptions & {
-  __internalCreateAgentRuntime?: typeof createAgentRuntime;
+  __internalCreateAgentRuntimeKernel?: typeof createAgentRuntimeKernel;
   __internalEnsureServiceIdentity?: typeof ensureEmberLendingServiceIdentity;
-  __internalPostgres?: {
-    ensureReady?: (options?: { env?: { DATABASE_URL?: string } }) => Promise<{
-      databaseUrl: string;
-    }>;
-    loadInspectionState?: (options: { databaseUrl: string }) => Promise<unknown>;
-    executeStatements?: (databaseUrl: string, statements: readonly unknown[]) => Promise<void>;
-    persistDirectExecution?: (options: unknown) => Promise<void>;
-  };
+  __internalPostgres?: AgentRuntimeInternalPostgresHooks;
 };
 
 const AGENT_RUNTIME_PERSISTED_DOMAIN_STATE_KEY = '__agentRuntimeDomainState';
@@ -85,6 +85,32 @@ async function consumeEventSource(events: Awaited<ReturnType<AgentRuntimeService
   }
 }
 
+async function readRequiredLendingSignerWalletAddress(input: {
+  signing: AgentRuntimeSigningService;
+}): Promise<`0x${string}`> {
+  try {
+    return await input.signing.readAddress({
+      signerRef: EMBER_LENDING_RUNTIME_SIGNER_REF,
+    });
+  } catch (error) {
+    if (error instanceof AgentRuntimeSigningError) {
+      if (error.code === 'signer_not_declared' || error.code === 'signer_not_configured') {
+        throw new Error(
+          'Lending startup identity preflight requires EMBER_LENDING_OWS_WALLET_NAME to resolve the configured service wallet.',
+        );
+      }
+
+      if (error.code === 'wallet_lookup_failed' || error.code === 'identity_address_missing') {
+        throw new Error(
+          'Lending startup identity preflight failed because the configured OWS wallet did not resolve an EVM address.',
+        );
+      }
+    }
+
+    throw error;
+  }
+}
+
 async function hydrateManagedProjectionIfNeeded(input: {
   service: EmberLendingGatewayService;
   threadId: string;
@@ -115,40 +141,58 @@ export async function createEmberLendingGatewayService(
 export async function createEmberLendingGatewayService(
   options: EmberLendingGatewayInternalOptions = {},
 ): Promise<AgentRuntimeService> {
-  const createAgentRuntimeImpl = options.__internalCreateAgentRuntime ?? createAgentRuntime;
+  const createAgentRuntimeKernelImpl =
+    options.__internalCreateAgentRuntimeKernel ?? createAgentRuntimeKernel;
 
-  if (options.runtimeConfig === undefined) {
-    const dependencies = resolveEmberLendingGatewayDependencies(options.env);
-    if (dependencies.protocolHost) {
-      const readSignerWalletAddress = dependencies.executionSigner?.readSignerWalletAddress;
-      if (!readSignerWalletAddress) {
-        throw new Error(
-          'Lending startup identity preflight requires EMBER_LENDING_OWS_BASE_URL to resolve the local signer wallet.',
-        );
+  const kernel = await createAgentRuntimeKernelImpl({
+    env: options.env,
+    owsSigners: [
+      {
+        signerRef: EMBER_LENDING_RUNTIME_SIGNER_REF,
+        walletNameOrIdEnvVar: 'EMBER_LENDING_OWS_WALLET_NAME',
+        passphraseEnvVar: 'EMBER_LENDING_OWS_PASSPHRASE',
+        vaultPathEnvVar: 'EMBER_LENDING_OWS_VAULT_PATH',
+      },
+    ],
+    createRuntimeOptions: async ({ signing }) => {
+      if (options.runtimeConfig) {
+        return {
+          ...options.runtimeConfig,
+          ...(options.now ? { now: options.now } : {}),
+          ...(options.__internalPostgres ? { __internalPostgres: options.__internalPostgres } : {}),
+        } as never;
       }
 
-      const ensuredIdentity = await (
-        options.__internalEnsureServiceIdentity ?? ensureEmberLendingServiceIdentity
-      )({
-        protocolHost: dependencies.protocolHost,
-        readSignerWalletAddress,
-      });
-      if (!ensuredIdentity.identity.wallet_address.startsWith('0x')) {
-        throw new Error(
-          'Lending startup identity preflight failed because Shared Ember did not return a confirmed subagent wallet address.',
-        );
+      const dependencies = resolveEmberLendingGatewayDependencies(options.env);
+      if (dependencies.protocolHost) {
+        const ensuredIdentity = await (
+          options.__internalEnsureServiceIdentity ?? ensureEmberLendingServiceIdentity
+        )({
+          protocolHost: dependencies.protocolHost,
+          readSignerWalletAddress: async () =>
+            await readRequiredLendingSignerWalletAddress({
+              signing,
+            }),
+        });
+        if (!ensuredIdentity.identity.wallet_address.startsWith('0x')) {
+          throw new Error(
+            'Lending startup identity preflight failed because Shared Ember did not return a confirmed subagent wallet address.',
+          );
+        }
       }
-    }
-  }
 
-  const runtimeConfig = options.runtimeConfig ?? createEmberLendingAgentConfig(options.env);
-  const runtime = await createAgentRuntimeImpl({
-    ...runtimeConfig,
-    ...(options.now ? { now: options.now } : {}),
-    ...(options.__internalPostgres ? { __internalPostgres: options.__internalPostgres } : {}),
-  } as never);
+      return {
+        ...createEmberLendingAgentConfig(options.env, {
+          runtimeSigning: signing,
+          runtimeSignerRef: EMBER_LENDING_RUNTIME_SIGNER_REF,
+        }),
+        ...(options.now ? { now: options.now } : {}),
+        ...(options.__internalPostgres ? { __internalPostgres: options.__internalPostgres } : {}),
+      } as never;
+    },
+  });
 
-  return runtime.service;
+  return kernel.service;
 }
 
 export function createEmberLendingAgUiHandler(options: EmberLendingAgUiHandlerOptions) {

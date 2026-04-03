@@ -24,10 +24,15 @@ Runtime wiring:
 
 - `SHARED_EMBER_BASE_URL` points the app at the bounded Shared Ember HTTP
   surface.
-- `PORTFOLIO_MANAGER_OWS_BASE_URL` points the app at the local OWS controller
-  identity surface.
+- `PORTFOLIO_MANAGER_OWS_WALLET_NAME` selects the direct OWS wallet the runtime
+  should use for the orchestrator identity.
+- `PORTFOLIO_MANAGER_OWS_PASSPHRASE` optionally unlocks that wallet when the
+  vault requires it.
+- `PORTFOLIO_MANAGER_OWS_VAULT_PATH` points the runtime at the vault containing
+  the configured controller wallet.
 - when `SHARED_EMBER_BASE_URL` is set for the live managed-onboarding path,
-  startup now resolves the local controller wallet from OWS and confirms the
+  startup now resolves the configured controller wallet directly from OWS core
+  and confirms the
   durable `portfolio-manager` / `orchestrator` service identity in Shared Ember
   before the runtime is considered ready
 - if the durable orchestrator identity is missing or points at a different
@@ -60,8 +65,8 @@ For real Shared Ember integration coverage, use the opt-in sidecar lane:
 - set `SHARED_EMBER_BASE_URL` to an already running Shared Ember HTTP service
   or set `EMBER_ORCHESTRATION_V1_SPEC_ROOT` to a local private checkout with
   dependencies installed
-- set `PORTFOLIO_MANAGER_OWS_BASE_URL` when exercising the live startup
-  identity-preflight path
+- set `PORTFOLIO_MANAGER_OWS_WALLET_NAME` and `PORTFOLIO_MANAGER_OWS_VAULT_PATH`
+  when exercising the live startup identity-preflight path
 - run `pnpm test:int`
 
 When `EMBER_ORCHESTRATION_V1_SPEC_ROOT` is set, the integration test imports
@@ -80,5 +85,7 @@ That smoke confirms:
 - after rooted bootstrap, `subagent.readExecutionContext.v1` returns a non-null
   `subagent_wallet_address`
 
-The smoke intentionally uses the current downstream OWS-facing HTTP seam rather
-than solving the separate follow-on OWS-internals issue.
+The smoke boots the real portfolio-manager and ember-lending runtime gateway
+services and intentionally uses the current runtime-owned direct OWS wallet
+path rather than `/identity` sidecars, repo-local identity stubs, or injected
+wallet-address callbacks.
