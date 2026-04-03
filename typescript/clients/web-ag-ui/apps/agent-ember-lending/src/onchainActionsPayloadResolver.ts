@@ -1,10 +1,13 @@
-import { serializeTransaction } from 'viem';
+import { createPublicClient, http, serializeTransaction } from 'viem';
+import { arbitrum, base, mainnet } from 'viem/chains';
 import { z } from 'zod';
 
 const DEFAULT_ONCHAIN_ACTIONS_API_URL = 'https://api.emberai.xyz';
-const DEFAULT_GAS_LIMIT = 210_000n;
-const DEFAULT_MAX_PRIORITY_FEE_PER_GAS = 1n;
-const DEFAULT_MAX_FEE_PER_GAS = 2n;
+const DEFAULT_ARBITRUM_RPC_URL = 'https://arb1.arbitrum.io/rpc';
+const DEFAULT_BASE_RPC_URL = 'https://mainnet.base.org';
+const DEFAULT_ETHEREUM_RPC_URL = 'https://eth.merkle.io';
+const RPC_RETRY_COUNT = 2;
+const RPC_TIMEOUT_MS = 8_000;
 
 const HexStringSchema = z.string().regex(/^0x[0-9a-fA-F]+$/u);
 const AddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/u);
@@ -56,6 +59,7 @@ export type EmberLendingPreparedUnsignedTransactionResolutionInput = {
   requestId: string;
   canonicalUnsignedPayloadRef: string;
   plannedTransactionPayloadRef: string | null;
+  walletAddress: `0x${string}`;
   network: string | null;
   requiredControlPath: string | null;
 };
@@ -80,7 +84,7 @@ export type EmberLendingCompactPlanSummary = {
 
 export type EmberLendingAnchoredPayloadRecord = {
   anchoredPayloadRef: string;
-  unsignedTransactionHex: `0x${string}`;
+  transactionRequest: z.infer<typeof OnchainActionsTransactionPlanSchema>;
   controlPath: string;
   network: string;
   transactionPlanId: string;
@@ -105,12 +109,51 @@ export type EmberLendingAnchoredPayloadResolver = {
 
 type OnchainActionsApiEnv = NodeJS.ProcessEnv & {
   ONCHAIN_ACTIONS_API_URL?: string;
+  ARBITRUM_RPC_URL?: string;
+  BASE_CHAIN_RPC_URL?: string;
+  ETHEREUM_RPC_URL?: string;
 };
 
 type LendingOperation = 'supply' | 'withdraw' | 'borrow' | 'repay';
+type SupportedExecutionNetwork = 'arbitrum' | 'base' | 'mainnet';
+type EmberLendingExecutionPublicClient = {
+  getTransactionCount: (input: {
+    address: `0x${string}`;
+    blockTag?: 'pending';
+  }) => Promise<number>;
+  estimateFeesPerGas: () => Promise<{
+    gasPrice?: bigint;
+    maxFeePerGas?: bigint;
+    maxPriorityFeePerGas?: bigint;
+  }>;
+  estimateGas: (input: {
+    account: `0x${string}`;
+    to: `0x${string}`;
+    value: bigint;
+    data: `0x${string}`;
+  }) => Promise<bigint>;
+};
+type ResolveExecutionPublicClient = (
+  network: SupportedExecutionNetwork,
+) => EmberLendingExecutionPublicClient;
 
 function trimTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
+}
+
+function createRpcTransport(url: string): ReturnType<typeof http> {
+  const baseTransport = http(url);
+  const baseTransportValue: unknown = baseTransport;
+  if (typeof baseTransportValue !== 'function') {
+    return baseTransport;
+  }
+
+  return ((params: Parameters<typeof baseTransport>[0]) =>
+    baseTransport({
+      ...params,
+      retryCount: RPC_RETRY_COUNT,
+      timeout: RPC_TIMEOUT_MS,
+    })) as ReturnType<typeof http>;
 }
 
 export function resolveEmberLendingOnchainActionsApiUrl(
@@ -137,6 +180,55 @@ function resolveChainId(network: string): string {
     default:
       throw new Error(`Unsupported lending execution network "${network}".`);
   }
+}
+
+function resolveSupportedExecutionNetwork(network: string): SupportedExecutionNetwork {
+  switch (network.trim().toLowerCase()) {
+    case 'arbitrum':
+      return 'arbitrum';
+    case 'base':
+      return 'base';
+    case 'ethereum':
+    case 'mainnet':
+      return 'mainnet';
+    default:
+      throw new Error(`Unsupported lending execution network "${network}".`);
+  }
+}
+
+function resolveRpcUrl(
+  network: SupportedExecutionNetwork,
+  env: OnchainActionsApiEnv,
+): string {
+  switch (network) {
+    case 'arbitrum':
+      return env.ARBITRUM_RPC_URL?.trim() || DEFAULT_ARBITRUM_RPC_URL;
+    case 'base':
+      return env.BASE_CHAIN_RPC_URL?.trim() || DEFAULT_BASE_RPC_URL;
+    case 'mainnet':
+      return env.ETHEREUM_RPC_URL?.trim() || DEFAULT_ETHEREUM_RPC_URL;
+  }
+}
+
+function createDefaultExecutionPublicClientResolver(
+  env: OnchainActionsApiEnv,
+): ResolveExecutionPublicClient {
+  const clients = new Map<SupportedExecutionNetwork, EmberLendingExecutionPublicClient>();
+
+  return (network) => {
+    const existingClient = clients.get(network);
+    if (existingClient) {
+      return existingClient;
+    }
+
+    const client = createPublicClient({
+      chain:
+        network === 'arbitrum' ? arbitrum : network === 'base' ? base : mainnet,
+      transport: createRpcTransport(resolveRpcUrl(network, env)),
+    }) as EmberLendingExecutionPublicClient;
+    clients.set(network, client);
+    return client;
+  };
 }
 
 function resolveLendingOperation(controlPath: string): LendingOperation {
@@ -184,36 +276,49 @@ async function resolveTokenIdentifier(input: {
   asset: string;
 }): Promise<z.infer<typeof TokenIdentifierSchema>> {
   const chainId = resolveChainId(input.network);
-  const response = await fetchJson({
-    fetchImpl: input.fetchImpl,
-    url: `${input.baseUrl}/tokens?${new URLSearchParams({
-      chainIds: chainId,
-    }).toString()}`,
-    schema: TokensResponseSchema,
-  });
   const normalizedAsset = input.asset.trim().toLowerCase();
-  const match =
-    response.tokens.find(
-      (token) =>
-        token.symbol.trim().toLowerCase() === normalizedAsset && token.isVetted,
-    ) ??
-    response.tokens.find(
-      (token) => token.symbol.trim().toLowerCase() === normalizedAsset,
-    ) ??
-    response.tokens.find(
-      (token) => token.name.trim().toLowerCase() === normalizedAsset && token.isVetted,
-    ) ??
-    response.tokens.find(
-      (token) => token.name.trim().toLowerCase() === normalizedAsset,
-    );
+  let page = 1;
 
-  if (!match) {
-    throw new Error(
-      `Onchain Actions did not return a token for ${input.asset} on ${input.network}.`,
-    );
+  while (true) {
+    const response = await fetchJson({
+      fetchImpl: input.fetchImpl,
+      url: `${input.baseUrl}/tokens?${new URLSearchParams({
+        chainIds: chainId,
+        page: String(page),
+      }).toString()}`,
+      schema: TokensResponseSchema,
+    });
+    const match =
+      response.tokens.find(
+        (token) =>
+          token.symbol.trim().toLowerCase() === normalizedAsset && token.isVetted,
+      ) ??
+      response.tokens.find(
+        (token) => token.symbol.trim().toLowerCase() === normalizedAsset,
+      ) ??
+      response.tokens.find(
+        (token) => token.name.trim().toLowerCase() === normalizedAsset && token.isVetted,
+      ) ??
+      response.tokens.find(
+        (token) => token.name.trim().toLowerCase() === normalizedAsset,
+      );
+
+    if (match) {
+      return match.tokenUid;
+    }
+
+    const currentPage = response.currentPage ?? page;
+    const totalPages = response.totalPages ?? currentPage;
+    if (currentPage >= totalPages) {
+      break;
+    }
+
+    page = currentPage + 1;
   }
 
-  return match.tokenUid;
+  throw new Error(
+    `Onchain Actions did not return a token for ${input.asset} on ${input.network}.`,
+  );
 }
 
 function buildLendingRequestBody(input: {
@@ -250,25 +355,63 @@ function buildLendingRequestBody(input: {
   }
 }
 
-function serializePreparedUnsignedTransaction(
-  transaction: z.infer<typeof OnchainActionsTransactionPlanSchema>,
-): `0x${string}` {
-  const chainId = Number(transaction.chainId);
+async function resolvePreparedUnsignedTransactionHex(input: {
+  publicClient: EmberLendingExecutionPublicClient;
+  transaction: z.infer<typeof OnchainActionsTransactionPlanSchema>;
+  walletAddress: `0x${string}`;
+}): Promise<`0x${string}`> {
+  const chainId = Number(input.transaction.chainId);
   if (!Number.isFinite(chainId) || chainId <= 0) {
-    throw new Error(`Invalid transaction chain id "${transaction.chainId}".`);
+    throw new Error(`Invalid transaction chain id "${input.transaction.chainId}".`);
   }
 
-  return serializeTransaction({
-    chainId,
-    type: 'eip1559',
-    nonce: 0,
-    gas: DEFAULT_GAS_LIMIT,
-    maxPriorityFeePerGas: DEFAULT_MAX_PRIORITY_FEE_PER_GAS,
-    maxFeePerGas: DEFAULT_MAX_FEE_PER_GAS,
-    to: transaction.to.toLowerCase() as `0x${string}`,
-    value: BigInt(transaction.value),
-    data: transaction.data.toLowerCase() as `0x${string}`,
-  });
+  const to = input.transaction.to.toLowerCase() as `0x${string}`;
+  const value = BigInt(input.transaction.value);
+  const data = input.transaction.data.toLowerCase() as `0x${string}`;
+  const [nonce, feeEstimate, gas] = await Promise.all([
+    input.publicClient.getTransactionCount({
+      address: input.walletAddress,
+      blockTag: 'pending',
+    }),
+    input.publicClient.estimateFeesPerGas(),
+    input.publicClient.estimateGas({
+      account: input.walletAddress,
+      to,
+      value,
+      data,
+    }),
+  ]);
+
+  if (
+    typeof feeEstimate.maxFeePerGas === 'bigint' &&
+    typeof feeEstimate.maxPriorityFeePerGas === 'bigint'
+  ) {
+    return serializeTransaction({
+      chainId,
+      type: 'eip1559',
+      nonce,
+      gas,
+      maxFeePerGas: feeEstimate.maxFeePerGas,
+      maxPriorityFeePerGas: feeEstimate.maxPriorityFeePerGas,
+      to,
+      value,
+      data,
+    });
+  }
+
+  if (typeof feeEstimate.gasPrice === 'bigint') {
+    return serializeTransaction({
+      chainId,
+      nonce,
+      gas,
+      gasPrice: feeEstimate.gasPrice,
+      to,
+      value,
+      data,
+    });
+  }
+
+  throw new Error('RPC fee estimation did not return a signable gas price or EIP-1559 fee pair.');
 }
 
 function resolveAnchoredPayloadRef(input: {
@@ -287,11 +430,16 @@ function resolveAnchoredPayloadRef(input: {
 export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: {
   baseUrl?: string;
   fetch?: typeof fetch;
+  env?: OnchainActionsApiEnv;
+  resolvePublicClient?: ResolveExecutionPublicClient;
 }): EmberLendingAnchoredPayloadResolver {
   const fetchImpl = input?.fetch ?? fetch;
+  const env = input?.env ?? process.env;
   const baseUrl = trimTrailingSlash(
-    input?.baseUrl ?? resolveEmberLendingOnchainActionsApiUrl(),
+    input?.baseUrl ?? resolveEmberLendingOnchainActionsApiUrl(env),
   );
+  const resolvePublicClient =
+    input?.resolvePublicClient ?? createDefaultExecutionPublicClientResolver(env);
   const anchoredPayloads = new Map<string, EmberLendingAnchoredPayloadRecord>();
 
   return {
@@ -329,7 +477,7 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
 
       const anchoredPayload: EmberLendingAnchoredPayloadRecord = {
         anchoredPayloadRef: request.payloadBuilderOutput.transaction_payload_ref,
-        unsignedTransactionHex: serializePreparedUnsignedTransaction(terminalTransaction),
+        transactionRequest: terminalTransaction,
         controlPath: request.payloadBuilderOutput.required_control_path,
         network: request.payloadBuilderOutput.network,
         transactionPlanId: request.transactionPlanId,
@@ -344,8 +492,18 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
         plannedTransactionPayloadRef: request.plannedTransactionPayloadRef,
         canonicalUnsignedPayloadRef: request.canonicalUnsignedPayloadRef,
       });
+      const anchoredPayload = anchoredPayloads.get(anchoredPayloadRef);
+      if (!anchoredPayload) {
+        return null;
+      }
 
-      return anchoredPayloads.get(anchoredPayloadRef)?.unsignedTransactionHex ?? null;
+      return resolvePreparedUnsignedTransactionHex({
+        publicClient: resolvePublicClient(
+          resolveSupportedExecutionNetwork(anchoredPayload.network),
+        ),
+        transaction: anchoredPayload.transactionRequest,
+        walletAddress: request.walletAddress,
+      });
     },
   };
 }

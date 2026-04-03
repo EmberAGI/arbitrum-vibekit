@@ -14,12 +14,6 @@ function createRuntimeSigningStub(
   };
 }
 
-function createPreparedUnsignedTransactionResolverStub(
-  implementation?: ReturnType<typeof vi.fn>,
-) {
-  return implementation ?? vi.fn(async () => TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX);
-}
-
 function createAnchoredPayloadResolverStub() {
   return {
     anchorCandidatePlanPayload: vi.fn(async () => ({
@@ -1515,11 +1509,11 @@ describe('createEmberLendingDomain', () => {
         },
       })),
     );
-    const resolvePreparedUnsignedTransaction = createPreparedUnsignedTransactionResolverStub();
+    const anchoredPayloadResolver = createAnchoredPayloadResolverStub();
     const domain = createEmberLendingDomain({
       protocolHost,
       runtimeSigning,
-      resolvePreparedUnsignedTransaction,
+      anchoredPayloadResolver,
       runtimeSignerRef: 'service-wallet',
       agentId: 'ember-lending',
     });
@@ -1548,12 +1542,13 @@ describe('createEmberLendingDomain', () => {
         unsignedTransactionHex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
       },
     });
-    expect(resolvePreparedUnsignedTransaction).toHaveBeenCalledWith({
+    expect(anchoredPayloadResolver.resolvePreparedUnsignedTransaction).toHaveBeenCalledWith({
       agentId: 'ember-lending',
       canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-001',
       executionPreparationId: 'execprep-ember-lending-001',
       network: 'arbitrum',
       plannedTransactionPayloadRef: 'txpayload-ember-lending-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
       requestId: 'req-ember-lending-execution-001',
       requiredControlPath: 'lending.supply',
       transactionPlanId: 'txplan-ember-lending-001',
@@ -1695,6 +1690,7 @@ describe('createEmberLendingDomain', () => {
       executionPreparationId: 'execprep-ember-lending-001',
       network: 'arbitrum',
       plannedTransactionPayloadRef: 'txpayload-ember-lending-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
       requestId: 'req-ember-lending-execution-001',
       requiredControlPath: 'lending.supply',
       transactionPlanId: 'txplan-ember-lending-001',

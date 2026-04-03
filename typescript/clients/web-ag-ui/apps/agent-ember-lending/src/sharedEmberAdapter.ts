@@ -8,14 +8,12 @@ import type {
   EmberLendingAnchoredPayloadResolver,
   EmberLendingCompactPlanSummary,
   EmberLendingPayloadBuilderOutput,
-  EmberLendingPreparedUnsignedTransactionResolver,
 } from './onchainActionsPayloadResolver.js';
 
 export type {
   EmberLendingAnchoredPayloadResolver,
   EmberLendingCompactPlanSummary,
   EmberLendingPayloadBuilderOutput,
-  EmberLendingPreparedUnsignedTransactionResolver,
 } from './onchainActionsPayloadResolver.js';
 
 export type EmberLendingSharedEmberProtocolHost = {
@@ -50,7 +48,6 @@ export type EmberLendingLifecycleState = {
 type CreateEmberLendingDomainOptions = {
   protocolHost?: EmberLendingSharedEmberProtocolHost;
   runtimeSigning?: AgentRuntimeSigningService;
-  resolvePreparedUnsignedTransaction?: EmberLendingPreparedUnsignedTransactionResolver;
   anchoredPayloadResolver?: EmberLendingAnchoredPayloadResolver;
   runtimeSignerRef?: string;
   agentId?: string;
@@ -1588,7 +1585,6 @@ async function signPayloadWithRuntimeService(input: {
 async function runPreparedExecutionFlow(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
   runtimeSigning?: AgentRuntimeSigningService;
-  resolvePreparedUnsignedTransaction?: EmberLendingPreparedUnsignedTransactionResolver;
   anchoredPayloadResolver?: EmberLendingAnchoredPayloadResolver;
   runtimeSignerRef?: string;
   threadId: string;
@@ -1791,23 +1787,14 @@ async function runPreparedExecutionFlow(input: {
   const unsignedTransactionHex =
     readExecutionUnsignedTransactionHex(executionResult) ??
     (executionPreparationId && canonicalUnsignedPayloadRef
-      ? (await input.resolvePreparedUnsignedTransaction?.({
+      ? (await input.anchoredPayloadResolver?.resolvePreparedUnsignedTransaction({
           agentId: input.agentId,
           executionPreparationId,
           transactionPlanId: input.transactionPlanId,
           requestId: requestId!,
           canonicalUnsignedPayloadRef,
           plannedTransactionPayloadRef,
-          network,
-          requiredControlPath,
-        })) ??
-        (await input.anchoredPayloadResolver?.resolvePreparedUnsignedTransaction({
-          agentId: input.agentId,
-          executionPreparationId,
-          transactionPlanId: input.transactionPlanId,
-          requestId: requestId!,
-          canonicalUnsignedPayloadRef,
-          plannedTransactionPayloadRef,
+          walletAddress: input.currentState.walletAddress,
           network,
           requiredControlPath,
         }))
@@ -2274,8 +2261,6 @@ export function createEmberLendingDomain(
                 : await runPreparedExecutionFlow({
                     protocolHost: options.protocolHost,
                     runtimeSigning: options.runtimeSigning,
-                    resolvePreparedUnsignedTransaction:
-                      options.resolvePreparedUnsignedTransaction,
                     anchoredPayloadResolver: options.anchoredPayloadResolver,
                     runtimeSignerRef: options.runtimeSignerRef,
                     threadId,

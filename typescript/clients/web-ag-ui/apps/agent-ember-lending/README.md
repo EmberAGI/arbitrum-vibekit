@@ -43,17 +43,21 @@ Current execution-context semantics:
   fail closed if the prepared signing package does not match the resolved
   dedicated subagent wallet identity
 - the live managed path now anchors planner-returned transaction payload refs
-  behind the lending service boundary via Onchain Actions and resolves the
-  prepared unsigned transaction from that private store during execution
-  signing, instead of relying on a test-only harness seam
+  behind the lending service boundary via Onchain Actions, stores the terminal
+  transaction request privately, and resolves the exact unsigned transaction
+  bytes only at execution time using the managed wallet address plus chain RPC
+  state, instead of relying on a test-only harness seam
 
 Runtime wiring:
 
 - `SHARED_EMBER_BASE_URL` points the app at the bounded Shared Ember HTTP
   surface
 - `ONCHAIN_ACTIONS_API_URL` optionally overrides the Onchain Actions API origin
-  used for service-owned planner payload anchoring and prepared unsigned
-  transaction resolution
+  used for service-owned planner payload anchoring and terminal transaction
+  request resolution
+- `ARBITRUM_RPC_URL`, `BASE_CHAIN_RPC_URL`, and `ETHEREUM_RPC_URL` optionally
+  override the chain RPC endpoints the lending service uses to prepare the
+  final unsigned transaction bytes just before runtime signing
 - `EMBER_LENDING_OWS_WALLET_NAME` selects the direct OWS wallet the runtime
   should use for startup identity proof, redelegation, and execution signing
 - `EMBER_LENDING_OWS_PASSPHRASE` optionally unlocks that wallet when the vault
@@ -92,4 +96,4 @@ Validation note:
   a repo-local HTTP sidecar seam
 - run `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`
   to prove the real runtime-owned redelegation typed-data signing path plus the
-  service-owned Onchain Actions prepared unsigned-transaction resolution seam
+  service-owned Onchain Actions anchored-payload resolution seam

@@ -7,7 +7,6 @@ import {
   createEmberLendingDomain,
   type EmberLendingAnchoredPayloadResolver,
   type EmberLendingLifecycleState,
-  type EmberLendingPreparedUnsignedTransactionResolver,
 } from './sharedEmberAdapter.js';
 import {
   createEmberLendingOnchainActionsAnchoredPayloadResolver,
@@ -29,6 +28,9 @@ export type EmberLendingGatewayEnv = NodeJS.ProcessEnv & {
   DATABASE_URL?: string;
   SHARED_EMBER_BASE_URL?: string;
   ONCHAIN_ACTIONS_API_URL?: string;
+  ARBITRUM_RPC_URL?: string;
+  BASE_CHAIN_RPC_URL?: string;
+  ETHEREUM_RPC_URL?: string;
   EMBER_LENDING_OWS_WALLET_NAME?: string;
   EMBER_LENDING_OWS_PASSPHRASE?: string;
   EMBER_LENDING_OWS_VAULT_PATH?: string;
@@ -50,7 +52,6 @@ export type EmberLendingGatewayDependencies = {
 
 type CreateEmberLendingAgentConfigOptions = {
   runtimeSigning?: AgentRuntimeSigningService;
-  resolvePreparedUnsignedTransaction?: EmberLendingPreparedUnsignedTransactionResolver;
   dependencies?: EmberLendingGatewayDependencies;
   runtimeSignerRef?: string;
 };
@@ -104,7 +105,6 @@ export function createEmberLendingAgentConfig(
     domain: createEmberLendingDomain({
       protocolHost,
       runtimeSigning: options.runtimeSigning,
-      resolvePreparedUnsignedTransaction: options.resolvePreparedUnsignedTransaction,
       anchoredPayloadResolver,
       runtimeSignerRef: options.runtimeSignerRef,
     }),
@@ -131,6 +131,7 @@ export function resolveEmberLendingGatewayDependencies(
       : undefined,
     anchoredPayloadResolver: createEmberLendingOnchainActionsAnchoredPayloadResolver({
       baseUrl: onchainActionsApiUrl,
+      env,
     }),
   };
 }

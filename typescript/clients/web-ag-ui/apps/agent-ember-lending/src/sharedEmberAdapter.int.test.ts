@@ -16,7 +16,7 @@ import {
   TEST_EMBER_LENDING_AGENT_WALLET,
   TEST_EMBER_LENDING_USER_WALLET,
   type StartedSharedEmberTarget,
-} from './sharedEmberIntegrationHarness.js';
+} from '../test-support/sharedEmberIntegrationHarness.js';
 import { createEmberLendingSharedEmberHttpHost } from './sharedEmberHttpHost.js';
 
 const runSharedEmberIntegration = process.env['RUN_SHARED_EMBER_INT']?.trim() === '1';
@@ -71,14 +71,14 @@ const TEST_REDELEGATION_SIGNATURE =
 const REAL_RUNTIME_PRIVATE_KEY =
   '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
-function requirePreparedUnsignedTransactionResolver(target: StartedSharedEmberTarget) {
-  if (!target.resolvePreparedUnsignedTransaction) {
+function requireAnchoredPayloadResolver(target: StartedSharedEmberTarget) {
+  if (!target.anchoredPayloadResolver) {
     throw new Error(
-      'Shared Ember execution integration tests require a prepared unsigned transaction resolver.',
+      'Shared Ember execution integration tests require an anchored payload resolver.',
     );
   }
 
-  return target.resolvePreparedUnsignedTransaction;
+  return target.anchoredPayloadResolver;
 }
 
 function createManagedLifecycleState() {
@@ -551,7 +551,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
     const domain = createEmberLendingDomain({
       protocolHost,
       runtimeSigning,
-      resolvePreparedUnsignedTransaction: requirePreparedUnsignedTransactionResolver(target),
+      anchoredPayloadResolver: requireAnchoredPayloadResolver(target),
       runtimeSignerRef: 'service-wallet',
       agentId: TEST_EMBER_LENDING_AGENT_ID,
     });
@@ -664,7 +664,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
     const domain = createEmberLendingDomain({
       protocolHost,
       runtimeSigning: signingFixture.runtimeSigning,
-      resolvePreparedUnsignedTransaction: requirePreparedUnsignedTransactionResolver(target),
+      anchoredPayloadResolver: requireAnchoredPayloadResolver(target),
       runtimeSignerRef: 'service-wallet',
       agentId: TEST_EMBER_LENDING_AGENT_ID,
     });
@@ -750,7 +750,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
     const domain = createEmberLendingDomain({
       protocolHost,
       runtimeSigning,
-      resolvePreparedUnsignedTransaction: requirePreparedUnsignedTransactionResolver(target),
+      anchoredPayloadResolver: requireAnchoredPayloadResolver(target),
       runtimeSignerRef: 'service-wallet',
       agentId: TEST_EMBER_LENDING_AGENT_ID,
     });
@@ -828,7 +828,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       const domain = createEmberLendingDomain({
         protocolHost,
         runtimeSigning,
-        resolvePreparedUnsignedTransaction: requirePreparedUnsignedTransactionResolver(target),
+        anchoredPayloadResolver: requireAnchoredPayloadResolver(target),
         runtimeSignerRef: 'service-wallet',
         agentId: TEST_EMBER_LENDING_AGENT_ID,
       });
@@ -898,7 +898,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       const domain = createEmberLendingDomain({
         protocolHost,
         runtimeSigning,
-        resolvePreparedUnsignedTransaction: requirePreparedUnsignedTransactionResolver(target),
+        anchoredPayloadResolver: requireAnchoredPayloadResolver(target),
         runtimeSignerRef: 'service-wallet',
         agentId: TEST_EMBER_LENDING_AGENT_ID,
       });

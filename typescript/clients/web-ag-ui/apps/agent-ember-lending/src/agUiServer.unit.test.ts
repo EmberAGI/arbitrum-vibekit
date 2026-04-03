@@ -309,7 +309,13 @@ describe('createEmberLendingGatewayService', () => {
     const anchoredPayloadResolver = {
       anchorCandidatePlanPayload: vi.fn(async () => ({
         anchoredPayloadRef: 'txpayload-ember-lending-001',
-        unsignedTransactionHex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
+        transactionRequest: {
+          type: 'EVM_TX',
+          to: '0x00000000000000000000000000000000000000c1',
+          value: '0',
+          data: '0x',
+          chainId: '42161',
+        },
         controlPath: 'lending.supply',
         network: 'arbitrum',
         transactionPlanId: 'txplan-ember-lending-001',
@@ -408,6 +414,7 @@ describe('createEmberLendingGatewayService', () => {
       executionPreparationId: 'execprep-ember-lending-001',
       network: 'arbitrum',
       plannedTransactionPayloadRef: 'txpayload-ember-lending-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
       requestId: 'req-ember-lending-execution-001',
       requiredControlPath: 'lending.supply',
       transactionPlanId: 'txplan-ember-lending-001',
