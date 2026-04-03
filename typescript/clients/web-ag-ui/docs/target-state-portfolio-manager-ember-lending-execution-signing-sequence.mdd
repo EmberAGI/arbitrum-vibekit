@@ -1,7 +1,9 @@
 # Target-State Portfolio Manager -> Ember Lending Execution Signing Sequence
 
 Status: Target-state contract for issue `#559`
-Scope: managed Portfolio Manager -> Ember Lending execution-preparation, direct OWS signing, and Shared Ember submission behind `request_transaction_execution`
+Scope: managed Portfolio Manager -> Ember Lending execution-preparation,
+runtime-owned OWS-core signing, and Shared Ember submission behind
+`request_transaction_execution`
 
 ## Contract summary
 
@@ -16,6 +18,8 @@ Scope: managed Portfolio Manager -> Ember Lending execution-preparation, direct 
   - authority-preparation retry loops
   - stage-scoped idempotency for authority-preparation re-polls
   - runtime-owned redelegation signing
+  - concrete-service prepared unsigned-transaction resolution when Shared Ember
+    returns canonical payload refs instead of inline unsigned transaction hex
   - runtime-owned execution signing
   - signed-artifact submission back to Shared Ember
   - committed-event outbox recovery after dropped submit responses
@@ -29,9 +33,10 @@ Scope: managed Portfolio Manager -> Ember Lending execution-preparation, direct 
   - settlement tracking
   - accounting reconciliation
 - Ember Lending owns:
-  - direct OWS-backed wallet identity resolution
-  - direct OWS redelegation signing
-  - direct OWS execution signing
+  - runtime-owned OWS-core-backed wallet identity resolution
+  - runtime-owned OWS redelegation typed-data signing
+  - concrete-service prepared unsigned-transaction resolution
+  - runtime-owned OWS execution signing
   - translation of upstream execution outcomes into the minimal runtime-facing result
 - Fail-closed signing rule:
   - if the runtime cannot prove that the prepared signing package matches the dedicated subagent wallet resolved through direct OWS identity state, it must stop and fail
@@ -86,6 +91,7 @@ sequenceDiagram
     OWS-->>EL: signed redelegation
     EL->>SE: orchestrator.registerSignedRedelegation.v1(signed_redelegation + ids)
     SE-->>EL: execution_result.phase=ready_for_execution_signing
+    Note over EL,SE: Resolve the canonical unsigned payload ref through the concrete service integration layer when Shared Ember omits inline unsigned transaction hex.
     EL->>OWS: sign execution package
     OWS-->>EL: signer_address + raw_transaction
     EL->>SE: subagent.submitSignedTransaction.v1(signed_transaction + ids)
@@ -93,6 +99,7 @@ sequenceDiagram
     EL-->>Runtime: minimal status + tx hash when available
   else ready for execution signing
     SE-->>EL: execution_result.phase=ready_for_execution_signing + execution_signing_package + ids
+    Note over EL,SE: Resolve the canonical unsigned payload ref through the concrete service integration layer when Shared Ember omits inline unsigned transaction hex.
     EL->>OWS: sign execution package
     OWS-->>EL: signer_address + raw_transaction
     EL->>SE: subagent.submitSignedTransaction.v1(signed_transaction + ids)
@@ -116,3 +123,8 @@ sequenceDiagram
 - Authority-preparation re-polls must not reuse the original request idempotency key once Shared Ember has already acknowledged the waiting state; a stage-scoped retry key lets the real upstream contract advance after the missing authority is repaired.
 - After a local transport interruption during `subagent.submitSignedTransaction.v1`, Ember Lending should first reconcile through the committed-event outbox before deciding whether an idempotent resubmit is still needed.
 - When the committed-event outbox already contains the execution event, recovery should preserve `transaction_hash` from that event payload while converging on the terminal status.
+- The current validation lanes for this target-state contract are:
+  - `pnpm smoke:managed-identities` for the runtime-owned managed-identity seam
+    and post-bootstrap `subagent_wallet_address` hydration
+  - `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`
+    for the real runtime-owned redelegation typed-data signing seam

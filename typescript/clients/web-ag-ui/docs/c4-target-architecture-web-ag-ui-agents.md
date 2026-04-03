@@ -199,7 +199,11 @@ Current concrete managed-path specialization:
   - treats each distinct startup identity rewrite as a new command with its own identity-scoped idempotency key and fails closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address
   - consumes runtime-internal Shared Ember projection and execution-context reads plus the model-visible `create_transaction_plan`, `request_transaction_execution`, and `create_escalation_request` contract
   - keeps planning on the bounded Shared Ember planner contract, sending only a bounded planning handoff while receiving planner-generated payload output back in the candidate plan
-  - keeps `request_transaction_execution` as one model-visible tool while internally composing Shared Ember execution preparation, direct OWS redelegation/execution signing, and Ember-owned submission/finalization
+  - keeps `request_transaction_execution` as one model-visible tool while
+    internally composing Shared Ember execution preparation, runtime-owned OWS
+    redelegation typed-data signing, concrete-service prepared unsigned-transaction
+    resolution, runtime-owned execution signing, and Ember-owned
+    submission/finalization
   - treats `authority_preparation_needed` as an internal wait state and re-polls the Shared Ember execution request with a stage-scoped retry idempotency key instead of exposing a second tool or reusing the original acknowledged request key
   - reconciles dropped signed-transaction submit responses through the Shared Ember committed-event outbox before replaying an idempotent submit
   - fails closed when the direct OWS identity/signing path cannot prove it matches the prepared dedicated subagent signing package
@@ -211,6 +215,9 @@ Validation note:
 
 - `pnpm smoke:managed-identities` is the current repo-local proof for the two non-null identity reads plus the non-null post-bootstrap `subagent_wallet_address`.
 - That smoke stays on the current downstream runtime-owned direct OWS path; deeper OWS-internals changes are intentionally handled elsewhere.
+- `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`
+  is the repo-backed proof for the real runtime-owned redelegation typed-data
+  signing seam.
 
 ## 6. Dynamic views (sequence)
 

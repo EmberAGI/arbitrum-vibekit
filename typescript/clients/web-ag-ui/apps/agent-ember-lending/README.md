@@ -15,7 +15,8 @@ subagent surface for:
 
 - portfolio-state reads
 - planner-backed candidate-plan creation
-- transaction execution preparation and local signing behind one execution tool
+- transaction execution preparation and runtime-owned signing behind one
+  execution tool
 - escalation requests
 
 Direct lending-agent onboarding is intentionally out of scope here. The
@@ -82,3 +83,6 @@ Validation note:
   surface a non-null post-bootstrap `subagent_wallet_address`
 - that smoke now exercises the runtime-owned direct OWS wallet path rather than
   a repo-local HTTP sidecar seam
+- run `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`
+  to prove the real runtime-owned redelegation typed-data signing path plus the
+  concrete-service prepared unsigned-transaction resolution seam

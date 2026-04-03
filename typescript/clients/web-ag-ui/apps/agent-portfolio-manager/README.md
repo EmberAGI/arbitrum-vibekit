@@ -85,5 +85,7 @@ That smoke confirms:
 - after rooted bootstrap, `subagent.readExecutionContext.v1` returns a non-null
   `subagent_wallet_address`
 
-The smoke intentionally uses the current runtime-owned direct OWS wallet path
-rather than a repo-local HTTP sidecar seam.
+The smoke boots the real portfolio-manager and ember-lending runtime gateway
+services and intentionally uses the current runtime-owned direct OWS wallet
+path rather than `/identity` sidecars, repo-local identity stubs, or injected
+wallet-address callbacks.

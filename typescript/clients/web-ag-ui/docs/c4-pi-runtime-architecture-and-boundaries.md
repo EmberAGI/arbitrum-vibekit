@@ -162,10 +162,20 @@ Container responsibilities:
   - `agent-portfolio-manager` does not mark managed onboarding complete until a follow-up `subagent.readExecutionContext.v1` read for `ember-lending` exposes a non-null `subagent_wallet_address`.
   - `agent-portfolio-manager` wallet-accounting reads must target the activated managed mandate lane, not the portfolio-manager lane, so reservation and policy-snapshot context comes from the same agent scope that Shared Ember activated during bootstrap.
   - The current portfolio-manager implementation writes `activation.mandateRef` on new bootstrap completions but still tolerates legacy stored bootstrap payloads that only captured `activation.agentId` until older thread state is replaced.
-  - `agent-ember-lending` owns the bounded subagent read/plan/execute/escalate runtime against Shared Ember and consumes agent-scoped lane data plus rooted-wallet-wide wallet contents from Shared Ember execution context.
+  - `agent-ember-lending` owns the bounded subagent read/plan/execute/escalate
+    runtime against Shared Ember and consumes agent-scoped lane data plus
+    rooted-wallet-wide wallet contents from Shared Ember execution context.
   - `agent-ember-lending` startup must resolve the configured direct OWS signer wallet, confirm or rewrite the durable `ember-lending` / `subagent` identity with an identity-scoped idempotency key, and fail closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address.
   - After healthy identity preflight plus onboarding, the first healthy `subagent.readExecutionContext.v1` read is expected to expose a non-null `subagent_wallet_address`.
-  - The repo-local validation lane for this boundary is `pnpm smoke:managed-identities`; deeper OWS-internals refactors remain out of scope for this contract.
+  - `agent-ember-lending` keeps `request_transaction_execution` as one
+    model-visible tool while internally composing runtime-owned redelegation
+    typed-data signing, concrete-service prepared unsigned-transaction
+    resolution, runtime-owned execution signing, and Shared Ember
+    submission/finalization.
+  - The repo-local validation lane for the managed-identity boundary is
+    `pnpm smoke:managed-identities`, and the repo-backed validation lane for
+    the real redelegation signing seam is
+    `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`.
 
 Important web constraint:
 

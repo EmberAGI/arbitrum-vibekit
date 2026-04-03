@@ -33,6 +33,9 @@ It includes:
   - `portfolio-manager` / `orchestrator` is non-null
   - `ember-lending` / `subagent` is non-null
   - post-bootstrap `subagent.readExecutionContext.v1` exposes a non-null `subagent_wallet_address`
+- Use `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`
+  to prove the real runtime-owned redelegation typed-data signing seam against
+  the repo-backed Shared Ember harness.
 
 ## Key Docs
 

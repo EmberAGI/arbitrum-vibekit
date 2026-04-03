@@ -73,7 +73,10 @@ Scope boundary:
 - keeps the managed-onboarding contract explicit without teaching downstream
   apps to depend on private OWS implementation seams
 - provides a concrete validation lane:
-  - `pnpm smoke:managed-identities`
+  - `pnpm smoke:managed-identities`, which boots the real managed-pair gateway
+    services, proves both durable role-scoped identities are non-null, and
+    proves rooted bootstrap hydrates a non-null managed-lane
+    `subagent_wallet_address`
 
 ## Alternatives Considered
 
