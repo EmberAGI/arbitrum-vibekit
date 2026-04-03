@@ -3,7 +3,7 @@ import {
   AgentRuntimeSigningError,
   type AgentRuntimeSigningService,
 } from 'agent-runtime/internal';
-import { keccak256, parseSignature, parseTransaction, serializeTransaction, toHex } from 'viem';
+import { parseSignature, parseTransaction, serializeTransaction } from 'viem';
 import type {
   EmberLendingAnchoredPayloadResolver,
   EmberLendingAnchoredPayloadRecord,
@@ -138,11 +138,7 @@ const SHARED_EMBER_NETWORK = 'arbitrum';
 const OWS_SIGNING_CHAIN = 'evm';
 const MAX_PREPARE_TRANSACTION_ATTEMPTS = 3;
 const DEFAULT_RUNTIME_SIGNER_REF = 'service-wallet';
-const RUNTIME_REDELEGATION_DOMAIN_NAME = 'DelegationManager';
-const RUNTIME_REDELEGATION_DOMAIN_VERSION = '1';
-const RUNTIME_REDELEGATION_VERIFIER =
-  '0x00000000000000000000000000000000000000d1' as const;
-const RUNTIME_REDELEGATION_ARTIFACT_PREFIX = 'metamask-delegation:';
+const REDELEGATION_WAIT_TIMEOUT_MS = 1_000;
 
 class LocalExecutionFailureError extends Error {
   revision: number | null;
@@ -892,6 +888,81 @@ function readCommittedEvent(value: unknown): SharedEmberCommittedEvent | null {
   };
 }
 
+function readCommittedExecutionProgressEvent(input: {
+  events: unknown[];
+  requestId: string;
+}): {
+  sequence: number;
+  executionResult: unknown;
+} | null {
+  const matchingEvent = input.events
+    .map((event) => readCommittedEvent(event))
+    .filter((event): event is SharedEmberCommittedEvent => event !== null)
+    .filter(
+      (event) =>
+        event.aggregate === 'request' &&
+        event.aggregate_id === input.requestId &&
+        typeof event.sequence === 'number' &&
+        (event.event_type === 'requestExecution.prepared.v1' ||
+          event.event_type === 'requestExecution.blocked.v1' ||
+          event.event_type === 'requestExecution.submitted.v1' ||
+          event.event_type === 'requestExecution.completed.v1'),
+    )
+    .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0))
+    .at(-1);
+
+  if (!matchingEvent || typeof matchingEvent.sequence !== 'number') {
+    return null;
+  }
+
+  const requestId = readString(matchingEvent.payload?.['request_id']);
+  const transactionPlanId = readString(matchingEvent.payload?.['transaction_plan_id']);
+  if (!requestId || !transactionPlanId) {
+    return null;
+  }
+
+  if (
+    matchingEvent.event_type === 'requestExecution.submitted.v1' ||
+    matchingEvent.event_type === 'requestExecution.completed.v1'
+  ) {
+    const status = readString(matchingEvent.payload?.['status']);
+    const executionId = readString(matchingEvent.payload?.['execution_id']);
+    const transactionHash = readHexAddress(matchingEvent.payload?.['transaction_hash']);
+
+    if (!status) {
+      return null;
+    }
+
+    return {
+      sequence: matchingEvent.sequence,
+      executionResult: {
+        phase: 'completed',
+        request_id: requestId,
+        transaction_plan_id: transactionPlanId,
+        execution: {
+          status,
+          ...(executionId ? { execution_id: executionId } : {}),
+          ...(transactionHash ? { transaction_hash: transactionHash } : {}),
+        },
+      },
+    };
+  }
+
+  const phase = readString(matchingEvent.payload?.['phase']);
+  if (!phase) {
+    return null;
+  }
+
+  return {
+    sequence: matchingEvent.sequence,
+    executionResult: {
+      phase,
+      request_id: requestId,
+      transaction_plan_id: transactionPlanId,
+    },
+  };
+}
+
 function ensureSentence(value: string): string {
   return /[.!?]$/.test(value) ? value : `${value}.`;
 }
@@ -936,6 +1007,14 @@ function readExecutionStatusMessage(executionResult: unknown): {
     return {
       executionStatus: 'failed',
       statusMessage: 'Lending transaction reached partial settlement through Shared Ember.',
+    };
+  }
+
+  if (phase === 'ready_for_redelegation') {
+    return {
+      executionStatus: 'completed',
+      statusMessage:
+        'Lending transaction execution is waiting for Shared Ember-managed redelegation.',
     };
   }
 
@@ -1047,12 +1126,6 @@ function readExecutionPreparationMetadata(
   return readRecordKey(readExecutionPreparation(executionResult), 'metadata');
 }
 
-function readRedelegationSigningPackage(
-  preparationResult: unknown,
-): Record<string, unknown> | null {
-  return readRecordKey(preparationResult, 'redelegation_signing_package');
-}
-
 function readExecutionUnsignedTransactionHex(
   preparationResult: unknown,
 ): `0x${string}` | null {
@@ -1106,16 +1179,6 @@ function readPreparedExecutionWalletAddress(
   return readHexAddress(executionPreparation?.['agent_wallet']);
 }
 
-function readPreparedRedelegationWalletAddress(
-  executionResult: unknown,
-): `0x${string}` | null {
-  const redelegationSigningPackage = readRedelegationSigningPackage(executionResult);
-  return (
-    readHexAddress(redelegationSigningPackage?.['agent_wallet']) ??
-    readPreparedExecutionWalletAddress(executionResult)
-  );
-}
-
 function hasExecutionSigningPreparation(
   executionResult: unknown,
 ): executionResult is Record<string, unknown> {
@@ -1129,19 +1192,6 @@ function hasExecutionSigningPreparation(
   );
 }
 
-function hasRedelegationSigningPreparation(
-  executionResult: unknown,
-): executionResult is Record<string, unknown> {
-  return (
-    isRecord(executionResult) &&
-    readString(executionResult['phase']) === 'ready_for_redelegation' &&
-    readString(executionResult['request_id']) !== null &&
-    readString(executionResult['transaction_plan_id']) !== null &&
-    readExecutionPreparation(executionResult) !== null &&
-    readRedelegationSigningPackage(executionResult) !== null
-  );
-}
-
 function buildSignedExecutionTransactionHex(input: {
   unsignedTransactionHex: `0x${string}`;
   signature: `0x${string}`;
@@ -1150,161 +1200,6 @@ function buildSignedExecutionTransactionHex(input: {
   const parsedSignature = parseSignature(input.signature);
 
   return serializeTransaction(parsedTransaction, parsedSignature);
-}
-
-function resolveRuntimeRedelegationChainId(network: string): number {
-  switch (network.trim().toLowerCase()) {
-    case 'arbitrum':
-      return 42161;
-    case 'base':
-      return 8453;
-    case 'ethereum':
-    case 'mainnet':
-      return 1;
-    default:
-      throw new Error(`Unsupported redelegation network "${network}".`);
-  }
-}
-
-function buildRuntimeRedelegationAuthority(rootDelegationArtifactRef: string): `0x${string}` {
-  return keccak256(toHex(rootDelegationArtifactRef));
-}
-
-function buildRuntimeRedelegationSalt(requestId: string): `0x${string}` {
-  return keccak256(toHex(requestId));
-}
-
-function buildRuntimeRedelegationTypedData(input: {
-  redelegationSigningPackage: Record<string, unknown>;
-  signerAddress: `0x${string}`;
-}): Record<string, unknown> {
-  const network = readString(input.redelegationSigningPackage['network']);
-  const requestId = readString(input.redelegationSigningPackage['request_id']);
-  const rootDelegationArtifactRef = readString(
-    input.redelegationSigningPackage['root_delegation_artifact_ref'],
-  );
-
-  if (!network || !requestId || !rootDelegationArtifactRef) {
-    throw new Error('missing redelegation package metadata');
-  }
-
-  return {
-    domain: {
-      chainId: resolveRuntimeRedelegationChainId(network),
-      name: RUNTIME_REDELEGATION_DOMAIN_NAME,
-      version: RUNTIME_REDELEGATION_DOMAIN_VERSION,
-      verifyingContract: RUNTIME_REDELEGATION_VERIFIER,
-    },
-    types: {
-      EIP712Domain: [
-        { name: 'name', type: 'string' },
-        { name: 'version', type: 'string' },
-        { name: 'chainId', type: 'uint256' },
-        { name: 'verifyingContract', type: 'address' },
-      ],
-      Caveat: [
-        { name: 'enforcer', type: 'address' },
-        { name: 'terms', type: 'bytes' },
-      ],
-      Delegation: [
-        { name: 'delegate', type: 'address' },
-        { name: 'delegator', type: 'address' },
-        { name: 'authority', type: 'bytes32' },
-        { name: 'caveats', type: 'Caveat[]' },
-        { name: 'salt', type: 'uint256' },
-      ],
-    },
-    primaryType: 'Delegation',
-    message: {
-      delegate: input.signerAddress,
-      delegator: input.signerAddress,
-      authority: buildRuntimeRedelegationAuthority(rootDelegationArtifactRef),
-      caveats: [],
-      salt: BigInt(buildRuntimeRedelegationSalt(requestId)),
-    },
-  };
-}
-
-function buildRuntimeSignedRedelegationRecord(input: {
-  redelegationSigningPackage: Record<string, unknown>;
-  signerAddress: `0x${string}`;
-  signature: `0x${string}`;
-}): Record<string, unknown> {
-  const requestId = readString(input.redelegationSigningPackage['request_id']);
-  const rootDelegationArtifactRef = readString(
-    input.redelegationSigningPackage['root_delegation_artifact_ref'],
-  );
-  const policySnapshotRef = readString(input.redelegationSigningPackage['policy_snapshot_ref']);
-
-  if (!requestId || !rootDelegationArtifactRef || !policySnapshotRef) {
-    throw new Error('missing signed redelegation metadata');
-  }
-
-  const artifact = {
-    delegate: input.signerAddress,
-    delegator: input.signerAddress,
-    authority: buildRuntimeRedelegationAuthority(rootDelegationArtifactRef),
-    caveats: [],
-    salt: buildRuntimeRedelegationSalt(requestId),
-    signature: input.signature,
-  };
-  const issuedAt = new Date().toISOString();
-
-  return {
-    ...input.redelegationSigningPackage,
-    artifact_ref: `${RUNTIME_REDELEGATION_ARTIFACT_PREFIX}${Buffer.from(
-      JSON.stringify(artifact),
-      'utf8',
-    ).toString('base64url')}`,
-    issued_at: issuedAt,
-    activated_at: issuedAt,
-    policy_hash: `policy-${policySnapshotRef}`,
-  };
-}
-
-async function registerSignedRedelegation(input: {
-  protocolHost: EmberLendingSharedEmberProtocolHost;
-  threadId: string;
-  agentId: string;
-  currentRevision: number | null;
-  transactionPlanId: string;
-  requestId: string;
-  idempotencyKey: string;
-  signedRedelegation: Record<string, unknown>;
-}): Promise<{
-  revision: number | null;
-  committedEventIds: string[];
-  executionResult: unknown;
-}> {
-  const response = await runSharedEmberCommandWithResolvedRevision<{
-    result?: {
-      revision?: number;
-      committed_event_ids?: string[];
-      execution_result?: unknown;
-    };
-  }>({
-    protocolHost: input.protocolHost,
-    threadId: input.threadId,
-    agentId: input.agentId,
-    currentRevision: input.currentRevision,
-    buildRequest: (expectedRevision) => ({
-      jsonrpc: '2.0',
-      id: `shared-ember-${input.threadId}-register-signed-redelegation`,
-      method: 'orchestrator.registerSignedRedelegation.v1',
-      params: {
-        idempotency_key: `${input.idempotencyKey}:register-redelegation:${input.requestId}`,
-        expected_revision: expectedRevision,
-        transaction_plan_id: input.transactionPlanId,
-        signed_redelegation: input.signedRedelegation,
-      },
-    }),
-  });
-
-  return {
-    revision: response.result?.revision ?? null,
-    committedEventIds: response.result?.committed_event_ids ?? [],
-    executionResult: response.result?.execution_result ?? null,
-  };
 }
 
 async function submitSignedTransaction(input: {
@@ -1370,45 +1265,98 @@ async function readRecoveredExecutionResultFromOutbox(input: {
     events?: unknown[];
   };
 
-  const matchingEvent = (outboxPage.events ?? [])
-    .map((event) => readCommittedEvent(event))
-    .filter((event): event is SharedEmberCommittedEvent => event !== null)
-    .filter(
-      (event) =>
-        event.aggregate === 'request' &&
-        event.aggregate_id === input.requestId &&
-        (event.event_type === 'requestExecution.submitted.v1' ||
-          event.event_type === 'requestExecution.completed.v1'),
-    )
-    .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0))
-    .at(-1);
+  const matchingEvent = readCommittedExecutionProgressEvent({
+    events: outboxPage.events ?? [],
+    requestId: input.requestId,
+  });
 
-  if (!matchingEvent) {
-    return null;
-  }
-
-  const status = readString(matchingEvent.payload?.['status']);
-  const executionId = readString(matchingEvent.payload?.['execution_id']);
-  const transactionHash = readHexAddress(matchingEvent.payload?.['transaction_hash']);
-  const transactionPlanId = readString(matchingEvent.payload?.['transaction_plan_id']);
-  const requestId = readString(matchingEvent.payload?.['request_id']);
-
-  if (!status || !transactionPlanId || !requestId) {
+  if (
+    matchingEvent === null ||
+    !isRecord(matchingEvent.executionResult) ||
+    readString(matchingEvent.executionResult['phase']) !== 'completed'
+  ) {
     return null;
   }
 
   return {
     revision: outboxPage.revision ?? null,
-    executionResult: {
-      phase: 'completed',
-      request_id: requestId,
-      transaction_plan_id: transactionPlanId,
-      execution: {
-        status,
-        ...(executionId ? { execution_id: executionId } : {}),
-        ...(transactionHash ? { transaction_hash: transactionHash } : {}),
-      },
+    executionResult: matchingEvent.executionResult,
+  };
+}
+
+async function readCommittedExecutionProgressFromOutbox(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  agentId: string;
+  requestId: string;
+}): Promise<{
+  revision: number | null;
+  latestSequence: number;
+  executionResult: unknown;
+} | null> {
+  const outboxPage = (await input.protocolHost.readCommittedEventOutbox({
+    protocol_version: 'v1',
+    consumer_id: `${input.agentId}-${input.requestId}`,
+    after_sequence: 0,
+    limit: 100,
+  })) as {
+    revision?: number;
+    events?: unknown[];
+  };
+
+  const latestEvent = readCommittedExecutionProgressEvent({
+    events: outboxPage.events ?? [],
+    requestId: input.requestId,
+  });
+  if (!latestEvent) {
+    return null;
+  }
+
+  return {
+    revision: outboxPage.revision ?? null,
+    latestSequence: latestEvent.sequence,
+    executionResult: latestEvent.executionResult,
+  };
+}
+
+async function waitForCommittedExecutionProgress(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  threadId: string;
+  requestId: string;
+  afterSequence: number;
+}): Promise<{
+  revision: number | null;
+  latestSequence: number;
+  executionResult: unknown;
+} | null> {
+  const response = (await input.protocolHost.handleJsonRpc({
+    jsonrpc: '2.0',
+    id: `shared-ember-${input.threadId}-wait-committed-event-outbox`,
+    method: 'waitCommittedEventOutbox.v1',
+    params: {
+      consumer_id: `${EMBER_LENDING_SHARED_EMBER_AGENT_ID}-${input.requestId}`,
+      after_sequence: input.afterSequence,
+      limit: 100,
+      timeout_ms: REDELEGATION_WAIT_TIMEOUT_MS,
     },
+  })) as {
+    result?: {
+      revision?: number;
+      events?: unknown[];
+    };
+  };
+
+  const latestEvent = readCommittedExecutionProgressEvent({
+    events: response.result?.events ?? [],
+    requestId: input.requestId,
+  });
+  if (!latestEvent) {
+    return null;
+  }
+
+  return {
+    revision: response.result?.revision ?? null,
+    latestSequence: latestEvent.sequence,
+    executionResult: latestEvent.executionResult,
   };
 }
 
@@ -1769,7 +1717,7 @@ function readTransactionPlanId(
   return null;
 }
 
-function buildExecutionPreparationRequestIdempotencyKey(input: {
+function buildExecutionPreparationContinuationIdempotencyKey(input: {
   baseIdempotencyKey: string;
   attempt: number;
   priorRevision: number | null;
@@ -1778,7 +1726,7 @@ function buildExecutionPreparationRequestIdempotencyKey(input: {
     return input.baseIdempotencyKey;
   }
 
-  return `${input.baseIdempotencyKey}:await-authority-preparation:${input.priorRevision ?? input.attempt - 1}`;
+  return `${input.baseIdempotencyKey}:await-execution-progress:${input.priorRevision ?? input.attempt - 1}`;
 }
 
 async function signPayloadWithRuntimeService(input: {
@@ -1849,7 +1797,7 @@ async function runPreparedExecutionFlow(input: {
       id: `shared-ember-${input.threadId}-request-transaction-execution`,
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-        idempotency_key: buildExecutionPreparationRequestIdempotencyKey({
+        idempotency_key: buildExecutionPreparationContinuationIdempotencyKey({
           baseIdempotencyKey: input.idempotencyKey,
           attempt: 1,
           priorRevision: input.currentState.lastSharedEmberRevision,
@@ -1885,7 +1833,7 @@ async function runPreparedExecutionFlow(input: {
         id: `shared-ember-${input.threadId}-request-transaction-execution`,
         method: 'subagent.requestTransactionExecution.v1',
         params: {
-          idempotency_key: buildExecutionPreparationRequestIdempotencyKey({
+          idempotency_key: buildExecutionPreparationContinuationIdempotencyKey({
             baseIdempotencyKey: input.idempotencyKey,
             attempt: requestAttempts,
             priorRevision: requestResponse.result?.revision ?? null,
@@ -1899,92 +1847,64 @@ async function runPreparedExecutionFlow(input: {
     executionResult = requestResponse.result?.execution_result ?? null;
   }
 
-  if (hasRedelegationSigningPreparation(executionResult)) {
-    const preparedWalletAddress = readPreparedRedelegationWalletAddress(executionResult);
-    if (!input.currentState.walletAddress || !preparedWalletAddress) {
-      throw new LocalExecutionFailureError(
-        'Lending redelegation signing could not continue because the dedicated subagent wallet identity is incomplete.',
-        requestResponse.result?.revision ?? null,
-      );
-    }
-    if (preparedWalletAddress !== input.currentState.walletAddress) {
-      throw new LocalExecutionFailureError(
-        'Lending redelegation signing could not continue because the prepared signing package does not match the dedicated subagent wallet.',
-        requestResponse.result?.revision ?? null,
-      );
-    }
-
+  if (isRecord(executionResult) && readString(executionResult['phase']) === 'ready_for_redelegation') {
     const requestId = readString(executionResult['request_id']);
-    const redelegationSigningPackage = readRedelegationSigningPackage(executionResult)!;
-    let redelegationTypedData: Record<string, unknown>;
-    try {
-      redelegationTypedData = buildRuntimeRedelegationTypedData({
-        redelegationSigningPackage,
-        signerAddress: input.currentState.walletAddress,
+
+    if (requestId) {
+      const currentProgress = await readCommittedExecutionProgressFromOutbox({
+        protocolHost: input.protocolHost,
+        agentId: input.agentId,
+        requestId,
       });
-    } catch {
-      throw new LocalExecutionFailureError(
-        'Lending redelegation signing could not continue because the prepared redelegation package was incomplete.',
-        requestResponse.result?.revision ?? null,
-      );
+      const latestProgress =
+        currentProgress === null
+          ? null
+          : await waitForCommittedExecutionProgress({
+              protocolHost: input.protocolHost,
+              threadId: input.threadId,
+              requestId,
+              afterSequence: currentProgress.latestSequence,
+            });
+      const latestPhase = isRecord(latestProgress?.executionResult)
+        ? readString(latestProgress.executionResult['phase'])
+        : null;
+
+      if (latestPhase === 'completed') {
+        return {
+          revision: latestProgress?.revision ?? requestResponse.result?.revision ?? null,
+          committedEventIds,
+          executionResult: latestProgress?.executionResult ?? executionResult,
+        };
+      }
+
+      if (latestPhase && latestPhase !== 'ready_for_redelegation') {
+        requestAttempts += 1;
+        requestResponse =
+          await runSharedEmberCommandWithResolvedRevision<RequestTransactionExecutionResponse>({
+            protocolHost: input.protocolHost,
+            threadId: input.threadId,
+            agentId: input.agentId,
+            currentRevision: latestProgress?.revision ?? requestResponse.result?.revision ?? null,
+            buildRequest: (expectedRevision) => ({
+              jsonrpc: '2.0',
+              id: `shared-ember-${input.threadId}-request-transaction-execution`,
+              method: 'subagent.requestTransactionExecution.v1',
+              params: {
+                idempotency_key: buildExecutionPreparationContinuationIdempotencyKey({
+                  baseIdempotencyKey: input.idempotencyKey,
+                  attempt: requestAttempts,
+                  priorRevision:
+                    latestProgress?.revision ?? requestResponse.result?.revision ?? null,
+                }),
+                expected_revision: expectedRevision,
+                transaction_plan_id: input.transactionPlanId,
+              },
+            }),
+          });
+        committedEventIds.push(...(requestResponse.result?.committed_event_ids ?? []));
+        executionResult = requestResponse.result?.execution_result ?? null;
+      }
     }
-
-    const signedRedelegation = await signPayloadWithRuntimeService({
-      runtimeSigning: input.runtimeSigning,
-      runtimeSignerRef: input.runtimeSignerRef,
-      revision: requestResponse.result?.revision ?? null,
-      expectedAddress: input.currentState.walletAddress,
-      payloadKind: 'typed-data',
-      payload: {
-        chain: OWS_SIGNING_CHAIN,
-        typedData: redelegationTypedData,
-      },
-      notConfiguredMessage:
-        'Runtime-owned signing service is not configured for lending transaction execution.',
-      addressMismatchMessage:
-        'Lending redelegation signing could not continue because the runtime signer did not confirm the dedicated subagent wallet identity.',
-    });
-
-    const redelegationSignature = readHexValue(signedRedelegation.signedPayload.signature);
-    if (!redelegationSignature) {
-      throw new LocalExecutionFailureError(
-        'Lending redelegation signing could not continue because the runtime signer did not return a redelegation signature.',
-        requestResponse.result?.revision ?? null,
-      );
-    }
-
-    let signedRedelegationRecord: Record<string, unknown>;
-    try {
-      signedRedelegationRecord = buildRuntimeSignedRedelegationRecord({
-        redelegationSigningPackage,
-        signerAddress: signedRedelegation.confirmedAddress,
-        signature: redelegationSignature,
-      });
-    } catch {
-      throw new LocalExecutionFailureError(
-        'Lending redelegation signing could not continue because the prepared redelegation package was incomplete.',
-        requestResponse.result?.revision ?? null,
-      );
-    }
-
-    const redelegationResponse = await registerSignedRedelegation({
-      protocolHost: input.protocolHost,
-      threadId: input.threadId,
-      agentId: input.agentId,
-      currentRevision: requestResponse.result?.revision ?? null,
-      transactionPlanId: input.transactionPlanId,
-      requestId: requestId!,
-      idempotencyKey: input.idempotencyKey,
-      signedRedelegation: signedRedelegationRecord,
-    });
-
-    committedEventIds.push(...redelegationResponse.committedEventIds);
-    executionResult = redelegationResponse.executionResult;
-    requestResponse = {
-      result: {
-        revision: redelegationResponse.revision ?? undefined,
-      },
-    };
   }
 
   if (!hasExecutionSigningPreparation(executionResult)) {

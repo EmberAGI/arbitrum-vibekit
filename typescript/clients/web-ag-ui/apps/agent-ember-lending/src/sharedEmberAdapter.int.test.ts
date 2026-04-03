@@ -54,6 +54,20 @@ type WalletRewriteProxy = {
   registerSignedRedelegationRequests: Record<string, unknown>[];
 };
 
+type ReadyForRedelegationWork = {
+  revision: number;
+  requestId: string;
+  transactionPlanId: string;
+  redelegationSigningPackage: Record<string, unknown>;
+};
+
+type RedelegationCompletionProxy = {
+  baseUrl: string;
+  close: () => Promise<void>;
+  waitRequests: Record<string, unknown>[];
+  registrationRequests: Record<string, unknown>[];
+};
+
 type RealRuntimeSigningFixture = {
   walletAddress: `0x${string}`;
   runtimeSigning: {
@@ -65,8 +79,6 @@ type RealRuntimeSigningFixture = {
 };
 
 const TEST_TRANSACTION_SIGNATURE =
-  '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
-const TEST_REDELEGATION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 const REAL_RUNTIME_PRIVATE_KEY =
   '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
@@ -116,8 +128,10 @@ function createManagedLifecycleState() {
       'Reservation reservation-ember-lending-001 unwinds 10 USDC via vault.withdraw.',
     lastCandidatePlan: null,
     lastCandidatePlanSummary: null,
+    anchoredPayloadRecords: [],
     lastExecutionResult: null,
     lastExecutionTxHash: null,
+    pendingExecutionSubmission: null,
     lastEscalationRequest: null,
     lastEscalationSummary: null,
   };
@@ -157,8 +171,67 @@ async function readRequestBody(request: IncomingMessage): Promise<Record<string,
   return JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
 }
 
+function readString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function readCommittedEvent(value: unknown): {
+  sequence?: number;
+  event_type?: string;
+  payload?: Record<string, unknown>;
+} | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    sequence: typeof value['sequence'] === 'number' ? value['sequence'] : undefined,
+    event_type: readString(value['event_type']) ?? undefined,
+    payload: isRecord(value['payload']) ? value['payload'] : undefined,
+  };
+}
+
+function readReadyForRedelegationWork(input: {
+  revision: number | null;
+  events: unknown[];
+}): ReadyForRedelegationWork | null {
+  if (input.revision === null) {
+    return null;
+  }
+
+  const matchingEvent = input.events
+    .map((event) => readCommittedEvent(event))
+    .filter((event): event is NonNullable<ReturnType<typeof readCommittedEvent>> => event !== null)
+    .filter(
+      (event) =>
+        event.event_type === 'requestExecution.prepared.v1' &&
+        readString(event.payload?.['phase']) === 'ready_for_redelegation',
+    )
+    .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0))
+    .at(-1);
+
+  const requestId = readString(matchingEvent?.payload?.['request_id']);
+  const transactionPlanId = readString(matchingEvent?.payload?.['transaction_plan_id']);
+  const redelegationSigningPackage = isRecord(
+    matchingEvent?.payload?.['redelegation_signing_package'],
+  )
+    ? matchingEvent.payload['redelegation_signing_package']
+    : null;
+
+  if (!requestId || !transactionPlanId || !redelegationSigningPackage) {
+    return null;
+  }
+
+  return {
+    revision: input.revision,
+    requestId,
+    transactionPlanId,
+    redelegationSigningPackage,
+  };
 }
 
 function rewriteWalletAddressInValue(input: {
@@ -440,6 +513,135 @@ async function startWalletRewriteProxy(input: {
   };
 }
 
+async function startRedelegationCompletionProxy(input: {
+  targetBaseUrl: string;
+}): Promise<RedelegationCompletionProxy> {
+  const waitRequests: Record<string, unknown>[] = [];
+  const registrationRequests: Record<string, unknown>[] = [];
+  let observedRedelegationWork: ReadyForRedelegationWork | null = null;
+  let completedRegistration = false;
+
+  const proxyServer = createServer((request: IncomingMessage, response: ServerResponse) => {
+    void (async () => {
+      const requestPath = request.url ?? '/jsonrpc';
+      const body = await readRequestBody(request);
+
+      if (requestPath === '/jsonrpc' && body['method'] === 'readCommittedEventOutbox.v1') {
+        const forwarded = await forwardJsonRequest({
+          targetBaseUrl: input.targetBaseUrl,
+          requestPath,
+          body,
+        });
+
+        const parsedBody = isRecord(forwarded.parsedBody) ? forwarded.parsedBody : null;
+        const result = parsedBody && isRecord(parsedBody['result']) ? parsedBody['result'] : null;
+        observedRedelegationWork =
+          readReadyForRedelegationWork({
+            revision: typeof result?.['revision'] === 'number' ? result['revision'] : null,
+            events: Array.isArray(result?.['events']) ? result['events'] : [],
+          }) ?? observedRedelegationWork;
+
+        response.writeHead(forwarded.status, {
+          'content-type': 'application/json; charset=utf-8',
+        });
+        response.end(forwarded.rawBody);
+        return;
+      }
+
+      if (requestPath === '/jsonrpc' && body['method'] === 'waitCommittedEventOutbox.v1') {
+        waitRequests.push(body);
+        const waitPromise = forwardJsonRequest({
+          targetBaseUrl: input.targetBaseUrl,
+          requestPath,
+          body,
+        });
+
+        if (!completedRegistration) {
+          if (!observedRedelegationWork) {
+            throw new Error(
+              'Expected a ready_for_redelegation committed outbox event before waitCommittedEventOutbox.',
+            );
+          }
+
+          completedRegistration = true;
+          const registrationRequest = {
+            jsonrpc: '2.0',
+            id: `redelegation-completion-${observedRedelegationWork.requestId}`,
+            method: 'orchestrator.registerSignedRedelegation.v1',
+            params: {
+              idempotency_key: `idem-redelegation-completion-${observedRedelegationWork.requestId}`,
+              expected_revision: observedRedelegationWork.revision,
+              transaction_plan_id: observedRedelegationWork.transactionPlanId,
+              signed_redelegation: {
+                ...observedRedelegationWork.redelegationSigningPackage,
+                artifact_ref: `artifact-redelegation-completion-${observedRedelegationWork.requestId}`,
+                issued_at: '2026-04-01T06:17:00Z',
+                activated_at: '2026-04-01T06:17:05Z',
+                policy_hash: `hash-redelegation-completion-${observedRedelegationWork.requestId}`,
+              },
+            },
+          } satisfies Record<string, unknown>;
+          registrationRequests.push(registrationRequest);
+          const registrationResponse = await forwardJsonRequest({
+            targetBaseUrl: input.targetBaseUrl,
+            requestPath: '/jsonrpc',
+            body: registrationRequest,
+          });
+
+          if (
+            isRecord(registrationResponse.parsedBody) &&
+            isRecord(registrationResponse.parsedBody['error'])
+          ) {
+            throw new Error(
+              `Redelegation completion proxy failed to register the signed redelegation: ${String(
+                registrationResponse.parsedBody['error']['message'],
+              )}`,
+            );
+          }
+        }
+
+        const forwarded = await waitPromise;
+        response.writeHead(forwarded.status, {
+          'content-type': 'application/json; charset=utf-8',
+        });
+        response.end(forwarded.rawBody);
+        return;
+      }
+
+      const forwarded = await forwardJsonRequest({
+        targetBaseUrl: input.targetBaseUrl,
+        requestPath,
+        body,
+      });
+
+      response.writeHead(forwarded.status, {
+        'content-type': 'application/json; charset=utf-8',
+      });
+      response.end(forwarded.rawBody);
+    })().catch((error: unknown) => {
+      response.writeHead(500);
+      response.end(error instanceof Error ? error.message : 'unknown error');
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    proxyServer.once('error', reject);
+    proxyServer.listen(0, '127.0.0.1', () => {
+      proxyServer.off('error', reject);
+      resolve();
+    });
+  });
+
+  const address = proxyServer.address() as AddressInfo;
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: async () => closeServer(proxyServer),
+    waitRequests,
+    registrationRequests,
+  };
+}
+
 async function createRealRuntimeSigningFixture(): Promise<RealRuntimeSigningFixture> {
   const vaultPath = mkdtempSync(path.join(os.tmpdir(), 'ember-lending-runtime-ows-'));
   importWalletPrivateKey('service-wallet', REAL_RUNTIME_PRIVATE_KEY, undefined, vaultPath, 'evm');
@@ -543,7 +745,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
     await target?.close().catch(() => undefined);
   });
 
-  it('executes the real Shared Ember request, redelegation registration, and signed-transaction flow through the lending agent service', async () => {
+  it('stops at Shared Ember-managed redelegation instead of signing and submitting locally', async () => {
     const { runtimeSigning, signingRequests } = createRuntimeSigningHarness();
     const protocolHost = createEmberLendingSharedEmberHttpHost({
       baseUrl: target.baseUrl,
@@ -594,64 +796,31 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       state: {
         phase: 'active',
         lastExecutionResult: {
-          phase: 'completed',
-          execution: {
-            status: 'confirmed',
-          },
+          phase: 'ready_for_redelegation',
         },
-        lastExecutionTxHash:
-          '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        lastExecutionTxHash: null,
       },
       outputs: {
         status: {
           executionStatus: 'completed',
-          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+          statusMessage:
+            'Lending transaction execution is waiting for Shared Ember-managed redelegation.',
         },
         artifacts: [
           {
             data: {
               type: 'shared-ember-execution-result',
-              outcome: 'confirmed',
-              transactionHash:
-                '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+              outcome: 'ready_for_redelegation',
             },
           },
         ],
       },
     });
 
-    expect(signingRequests.map((entry) => entry.payloadKind)).toEqual([
-      'typed-data',
-      'transaction',
-    ]);
-
-    const transactionPlanId =
-      (isRecord(planResult?.state?.lastCandidatePlan)
-        ? planResult?.state?.lastCandidatePlan['transaction_plan_id']
-        : null) ?? null;
-
-    expect(signingRequests[0]).toMatchObject({
-      signerRef: 'service-wallet',
-      expectedAddress: TEST_EMBER_LENDING_AGENT_WALLET,
-      payloadKind: 'typed-data',
-      payload: {
-        chain: 'evm',
-        typedData: expect.any(Object),
-      },
-    });
-
-    expect(signingRequests[1]).toMatchObject({
-      signerRef: 'service-wallet',
-      expectedAddress: TEST_EMBER_LENDING_AGENT_WALLET,
-      payloadKind: 'transaction',
-      payload: {
-        chain: 'evm',
-        unsignedTransactionHex: expect.stringMatching(/^0x[0-9a-f]+$/),
-      },
-    });
+    expect(signingRequests).toHaveLength(0);
   });
 
-  it('executes the redelegation path through the real runtime-owned typed-data signer', async () => {
+  it('does not use the real runtime-owned signer for redelegation while Shared Ember owns that control-plane step', async () => {
     const signingFixture = await createRealRuntimeSigningFixture();
     const walletRewriteProxy = await startWalletRewriteProxy({
       targetBaseUrl: target.baseUrl,
@@ -696,37 +865,20 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         state: {
           phase: 'active',
           lastExecutionResult: {
-            phase: 'completed',
-            execution: {
-              status: 'confirmed',
-            },
+            phase: 'ready_for_redelegation',
           },
         },
         outputs: {
           status: {
             executionStatus: 'completed',
-            statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+            statusMessage:
+              'Lending transaction execution is waiting for Shared Ember-managed redelegation.',
           },
         },
       });
 
-      expect(signingFixture.signingRequests.map((entry) => entry.payloadKind)).toEqual([
-        'typed-data',
-        'transaction',
-      ]);
-      expect(walletRewriteProxy.registerSignedRedelegationRequests).toHaveLength(1);
-      expect(walletRewriteProxy.registerSignedRedelegationRequests[0]).toMatchObject({
-        method: 'orchestrator.registerSignedRedelegation.v1',
-        params: {
-          signed_redelegation: {
-            agent_wallet: signingFixture.walletAddress,
-            artifact_ref: expect.stringMatching(/^metamask-delegation:/),
-            issued_at: expect.any(String),
-            activated_at: expect.any(String),
-            policy_hash: expect.stringMatching(/^policy-/),
-          },
-        },
-      });
+      expect(signingFixture.signingRequests).toHaveLength(0);
+      expect(walletRewriteProxy.registerSignedRedelegationRequests).toHaveLength(0);
     } finally {
       await walletRewriteProxy.close();
       signingFixture.cleanup();
@@ -806,7 +958,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
     expect(signingRequests).toEqual([]);
   });
 
-  it('polls through a repo-backed authority-preparation response before reaching local execution signing', async () => {
+  it('polls through authority preparation and then stops at Shared Ember-managed redelegation', async () => {
     await target.close();
     target = await resolveSharedEmberTarget({
       bootstrap: {
@@ -856,9 +1008,75 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         state: {
           phase: 'active',
           lastExecutionResult: {
+            phase: 'ready_for_redelegation',
+          },
+          lastExecutionTxHash: null,
+        },
+        outputs: {
+          status: {
+            executionStatus: 'completed',
+            statusMessage:
+              'Lending transaction execution is waiting for Shared Ember-managed redelegation.',
+          },
+        },
+      });
+
+      expect(proxy.preparationPhases).toEqual([
+        'authority_preparation_needed',
+        'ready_for_redelegation',
+      ]);
+      expect(signingRequests).toHaveLength(0);
+    } finally {
+      await proxy.close();
+    }
+  });
+
+  it('waits through repo-backed orchestrator progress and completes execution in the same call', async () => {
+    const proxy = await startRedelegationCompletionProxy({
+      targetBaseUrl: target.baseUrl,
+    });
+
+    try {
+      const protocolHost = createEmberLendingSharedEmberHttpHost({
+        baseUrl: proxy.baseUrl,
+      });
+      const { runtimeSigning, signingRequests } = createRuntimeSigningHarness();
+      const domain = createEmberLendingDomain({
+        protocolHost,
+        runtimeSigning,
+        anchoredPayloadResolver: requireAnchoredPayloadResolver(target),
+        runtimeSignerRef: 'service-wallet',
+        agentId: TEST_EMBER_LENDING_AGENT_ID,
+      });
+
+      const planResult = await domain.handleOperation?.({
+        threadId: 'thread-ember-lending-int-fast-resume-1',
+        state: createManagedLifecycleState(),
+        operation: {
+          source: 'tool',
+          name: 'create_transaction_plan',
+          input: createCandidatePlanInput(),
+        },
+      });
+
+      const executeResult = await domain.handleOperation?.({
+        threadId: 'thread-ember-lending-int-fast-resume-1',
+        state: planResult?.state,
+        operation: {
+          source: 'tool',
+          name: 'request_transaction_execution',
+        },
+      });
+
+      expect(executeResult).toMatchObject({
+        state: {
+          phase: 'active',
+          lastExecutionResult: {
             phase: 'completed',
             execution: {
               status: 'confirmed',
+              transaction_hash:
+                '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
             },
           },
           lastExecutionTxHash:
@@ -869,23 +1087,45 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
             executionStatus: 'completed',
             statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
           },
+          artifacts: [
+            {
+              data: {
+                type: 'shared-ember-execution-result',
+                outcome: 'confirmed',
+                transactionHash:
+                  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+              },
+            },
+          ],
         },
       });
 
-      expect(proxy.preparationPhases).toEqual([
-        'authority_preparation_needed',
-        'ready_for_redelegation',
-      ]);
-      expect(signingRequests.map((entry) => entry.payloadKind)).toEqual([
-        'typed-data',
-        'transaction',
-      ]);
+      expect(proxy.waitRequests).toHaveLength(1);
+      expect(proxy.registrationRequests).toHaveLength(1);
+      expect(proxy.registrationRequests[0]).toMatchObject({
+        method: 'orchestrator.registerSignedRedelegation.v1',
+        params: {
+          transaction_plan_id: expect.stringMatching(/^txplan-/),
+          signed_redelegation: expect.objectContaining({
+            request_id: expect.stringMatching(/^req-/),
+            transaction_plan_id: expect.stringMatching(/^txplan-/),
+            agent_id: TEST_EMBER_LENDING_AGENT_ID,
+            agent_wallet: TEST_EMBER_LENDING_AGENT_WALLET,
+          }),
+        },
+      });
+      expect(signingRequests).toHaveLength(1);
+      expect(signingRequests[0]).toMatchObject({
+        signerRef: 'service-wallet',
+        expectedAddress: TEST_EMBER_LENDING_AGENT_WALLET,
+        payloadKind: 'transaction',
+      });
     } finally {
       await proxy.close();
     }
   });
 
-  it('resumes after a dropped submit response without duplicate runtime-owned signing or duplicate upstream submission', async () => {
+  it('does not enter submit-retry handling before Shared Ember-managed redelegation completes', async () => {
     const proxy = await startInterruptedSubmitProxy({
       targetBaseUrl: target.baseUrl,
     });
@@ -928,9 +1168,18 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       });
 
       expect(interruptedResult).toMatchObject({
+        state: {
+          phase: 'active',
+          lastExecutionResult: {
+            phase: 'ready_for_redelegation',
+          },
+          lastExecutionTxHash: null,
+        },
         outputs: {
           status: {
-            executionStatus: 'failed',
+            executionStatus: 'completed',
+            statusMessage:
+              'Lending transaction execution is waiting for Shared Ember-managed redelegation.',
           },
         },
       });
@@ -949,36 +1198,22 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         state: {
           phase: 'active',
           lastExecutionResult: {
-            phase: 'completed',
-            execution: {
-              status: 'confirmed',
-            },
+            phase: 'ready_for_redelegation',
           },
-          lastExecutionTxHash:
-            '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          lastExecutionTxHash: null,
         },
         outputs: {
           status: {
             executionStatus: 'completed',
-            statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+            statusMessage:
+              'Lending transaction execution is waiting for Shared Ember-managed redelegation.',
           },
         },
       });
 
-      expect(proxy.submitAttempts).toHaveLength(1);
-      expect(proxy.interruptedSubmitResponse).toMatchObject({
-        result: {
-          execution_result: {
-            execution: {
-              status: 'confirmed',
-            },
-          },
-        },
-      });
-      expect(signingRequests.map((entry) => entry.payloadKind)).toEqual([
-        'typed-data',
-        'transaction',
-      ]);
+      expect(proxy.submitAttempts).toHaveLength(0);
+      expect(proxy.interruptedSubmitResponse).toBeNull();
+      expect(signingRequests).toHaveLength(0);
     } finally {
       await proxy.close();
     }
