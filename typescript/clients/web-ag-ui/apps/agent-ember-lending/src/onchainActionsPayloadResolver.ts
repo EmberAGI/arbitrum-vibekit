@@ -1,4 +1,4 @@
-import { createPublicClient, http, serializeTransaction } from 'viem';
+import { createPublicClient, http, parseUnits, serializeTransaction } from 'viem';
 import { arbitrum, base, mainnet } from 'viem/chains';
 import { z } from 'zod';
 
@@ -89,6 +89,7 @@ export type EmberLendingAnchoredTransactionRequest = z.infer<
 
 export type EmberLendingAnchoredPayloadRecord = {
   anchoredPayloadRef: string;
+  capitalOwnerWalletAddress: `0x${string}`;
   transactionRequests: EmberLendingAnchoredTransactionRequest[];
   controlPath: string;
   network: string;
@@ -274,12 +275,12 @@ async function fetchJson<T>(input: {
   return input.schema.parse(parsedBody);
 }
 
-async function resolveTokenIdentifier(input: {
+async function resolveToken(input: {
   fetchImpl: typeof fetch;
   baseUrl: string;
   network: string;
   asset: string;
-}): Promise<z.infer<typeof TokenIdentifierSchema>> {
+}): Promise<z.infer<typeof TokenSchema>> {
   const chainId = resolveChainId(input.network);
   const normalizedAsset = input.asset.trim().toLowerCase();
   let page = 1;
@@ -306,10 +307,10 @@ async function resolveTokenIdentifier(input: {
       ) ??
       response.tokens.find(
         (token) => token.name.trim().toLowerCase() === normalizedAsset,
-      );
+    );
 
     if (match) {
-      return match.tokenUid;
+      return match;
     }
 
     const currentPage = response.currentPage ?? page;
@@ -324,6 +325,13 @@ async function resolveTokenIdentifier(input: {
   throw new Error(
     `Onchain Actions did not return a token for ${input.asset} on ${input.network}.`,
   );
+}
+
+function resolveAmountBaseUnits(input: {
+  amount: string;
+  decimals: number;
+}): string {
+  return parseUnits(input.amount, input.decimals).toString();
 }
 
 function buildLendingRequestBody(input: {
@@ -523,6 +531,22 @@ function resolveAnchoredTransactionRequest(input: {
   return transaction;
 }
 
+function assertDirectExecutionWalletMatchesCapitalOwner(input: {
+  anchoredPayload: EmberLendingAnchoredPayloadRecord;
+  walletAddress: `0x${string}`;
+}): void {
+  if (
+    input.anchoredPayload.capitalOwnerWalletAddress.toLowerCase() ===
+    input.walletAddress.toLowerCase()
+  ) {
+    return;
+  }
+
+  throw new Error(
+    'Managed rooted-capital lending execution requires redelegated payload resolution because the capital-owning wallet and subagent signer differ.',
+  );
+}
+
 export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: {
   baseUrl?: string;
   fetch?: typeof fetch;
@@ -541,7 +565,7 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
   return {
     async anchorCandidatePlanPayload(request) {
       const operation = resolveLendingOperation(request.payloadBuilderOutput.required_control_path);
-      const tokenUid = await resolveTokenIdentifier({
+      const token = await resolveToken({
         fetchImpl,
         baseUrl,
         network: request.payloadBuilderOutput.network,
@@ -559,9 +583,12 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
           body: JSON.stringify(
             buildLendingRequestBody({
               operation,
-              walletAddress: request.walletAddress,
-              tokenUid,
-              amount: request.compactPlanSummary.amount,
+              walletAddress: request.rootUserWalletAddress,
+              tokenUid: token.tokenUid,
+              amount: resolveAmountBaseUnits({
+                amount: request.compactPlanSummary.amount,
+                decimals: token.decimals,
+              }),
             }),
           ),
         },
@@ -569,6 +596,7 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
 
       const anchoredPayload: EmberLendingAnchoredPayloadRecord = {
         anchoredPayloadRef: request.payloadBuilderOutput.transaction_payload_ref,
+        capitalOwnerWalletAddress: request.rootUserWalletAddress,
         transactionRequests: response.transactions,
         controlPath: request.payloadBuilderOutput.required_control_path,
         network: request.payloadBuilderOutput.network,
@@ -592,6 +620,11 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
       if (!anchoredPayload) {
         return null;
       }
+
+      assertDirectExecutionWalletMatchesCapitalOwner({
+        anchoredPayload,
+        walletAddress: request.walletAddress,
+      });
 
       return resolvePreparedUnsignedTransactionHex({
         publicClient: resolvePublicClient(

@@ -1856,6 +1856,89 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
+  it('surfaces rooted-capital execution mismatches from the anchored payload resolver as local execution failures', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-request-transaction-execution',
+        result: {
+          protocol_version: 'v1',
+          revision: 9,
+          committed_event_ids: ['evt-prepare-execution-1'],
+          execution_result: createReadyForExecutionSigningPreparationResult({
+            inlineUnsignedTransactionHex: null,
+          }),
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const anchoredPayloadResolver = createAnchoredPayloadResolverStub();
+    anchoredPayloadResolver.resolvePreparedUnsignedTransaction.mockRejectedValueOnce(
+      new Error(
+        'Managed rooted-capital lending execution requires redelegated payload resolution because the capital-owning wallet and subagent signer differ.',
+      ),
+    );
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      runtimeSigning,
+      anchoredPayloadResolver,
+      runtimeSignerRef: 'service-wallet',
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        anchoredPayloadRecords: [createAnchoredPayloadRecord()],
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 9,
+        lastExecutionResult: null,
+        lastExecutionTxHash: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Managed rooted-capital lending execution requires redelegated payload resolution because the capital-owning wallet and subagent signer differ.',
+        },
+      },
+    });
+    expect(runtimeSigning.signPayload).not.toHaveBeenCalled();
+  });
+
   it('resolves prepared unsigned transactions from the anchored lending-service payload store when no harness resolver is injected', async () => {
     const protocolHost = {
       handleJsonRpc: vi

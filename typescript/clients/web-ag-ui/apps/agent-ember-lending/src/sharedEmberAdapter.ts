@@ -2026,10 +2026,11 @@ async function runPreparedExecutionFlow(input: {
   );
   const network = readPreparedExecutionNetwork(executionResult);
   const requiredControlPath = readPreparedExecutionRequiredControlPath(executionResult);
-  const unsignedTransactionHex =
-    readExecutionUnsignedTransactionHex(executionResult) ??
-    (executionPreparationId && canonicalUnsignedPayloadRef
-      ? (await input.anchoredPayloadResolver?.resolvePreparedUnsignedTransaction({
+  let resolvedUnsignedTransactionHex: `0x${string}` | null = null;
+  if (executionPreparationId && canonicalUnsignedPayloadRef) {
+    try {
+      resolvedUnsignedTransactionHex =
+        (await input.anchoredPayloadResolver?.resolvePreparedUnsignedTransaction({
           agentId: input.agentId,
           executionPreparationId,
           transactionPlanId: input.transactionPlanId,
@@ -2040,8 +2041,17 @@ async function runPreparedExecutionFlow(input: {
           network,
           requiredControlPath,
           anchoredPayloadRecords: input.currentState.anchoredPayloadRecords,
-        }))
-      : null);
+        })) ?? null;
+    } catch (error) {
+      if (!(error instanceof Error)) {
+        throw error;
+      }
+
+      throw new LocalExecutionFailureError(error.message, requestResponse.result?.revision ?? null);
+    }
+  }
+  const unsignedTransactionHex =
+    readExecutionUnsignedTransactionHex(executionResult) ?? resolvedUnsignedTransactionHex;
   if (!unsignedTransactionHex) {
     throw new LocalExecutionFailureError(
       'Lending execution signing could not continue because the concrete service integration layer did not resolve the prepared unsigned transaction.',

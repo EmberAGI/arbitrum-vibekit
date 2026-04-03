@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { serializeTransaction } from 'viem';
+import { parseUnits, serializeTransaction } from 'viem';
 
 import {
   createEmberLendingOnchainActionsAnchoredPayloadResolver,
@@ -91,7 +91,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       threadId: 'thread-1',
       transactionPlanId: 'txplan-ember-lending-003',
       walletAddress: '0x00000000000000000000000000000000000000b1',
-      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000b1',
       payloadBuilderOutput: {
         transaction_payload_ref: 'txpayload-ember-lending-003',
         required_control_path: 'lending.supply',
@@ -277,14 +277,314 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          walletAddress: '0x00000000000000000000000000000000000000b1',
+          walletAddress: '0x00000000000000000000000000000000000000a1',
           supplyTokenUid: {
             chainId: '42161',
             address: '0x00000000000000000000000000000000000000c1',
           },
-          amount: '10',
+          amount: parseUnits('10', 6).toString(),
         }),
       },
+    );
+  });
+
+  it('converts decimal token quantities into base units before calling Onchain Actions', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000a1',
+                },
+                name: 'Wrapped Ether',
+                symbol: 'WETH',
+                isNative: false,
+                decimals: 18,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d2',
+                value: '0',
+                data: '0x617ba037',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+    });
+
+    await resolver.anchorCandidatePlanPayload({
+      agentId: 'ember-lending',
+      threadId: 'thread-1',
+      transactionPlanId: 'txplan-ember-lending-decimal-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      payloadBuilderOutput: {
+        transaction_payload_ref: 'txpayload-ember-lending-decimal-001',
+        required_control_path: 'lending.supply',
+        network: 'arbitrum',
+      },
+      compactPlanSummary: {
+        control_path: 'lending.supply',
+        asset: 'WETH',
+        amount: '0.005',
+        summary: 'supply reserved WETH on Aave',
+      },
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://api.emberai.xyz/lending/supply',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          supplyTokenUid: {
+            chainId: '42161',
+            address: '0x00000000000000000000000000000000000000a1',
+          },
+          amount: parseUnits('0.005', 18).toString(),
+        }),
+      },
+    );
+  });
+
+  it('uses the rooted user wallet as the capital-owning planning wallet when anchoring a managed lending payload', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000a1',
+                },
+                name: 'Wrapped Ether',
+                symbol: 'WETH',
+                isNative: false,
+                decimals: 18,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d2',
+                value: '0',
+                data: '0x617ba037',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+    });
+
+    await resolver.anchorCandidatePlanPayload({
+      agentId: 'ember-lending',
+      threadId: 'thread-rooted-capital-1',
+      transactionPlanId: 'txplan-ember-lending-rooted-capital-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      payloadBuilderOutput: {
+        transaction_payload_ref: 'txpayload-ember-lending-rooted-capital-001',
+        required_control_path: 'lending.supply',
+        network: 'arbitrum',
+      },
+      compactPlanSummary: {
+        control_path: 'lending.supply',
+        asset: 'WETH',
+        amount: '0.005',
+        summary: 'supply reserved WETH on Aave',
+      },
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://api.emberai.xyz/lending/supply',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          supplyTokenUid: {
+            chainId: '42161',
+            address: '0x00000000000000000000000000000000000000a1',
+          },
+          amount: parseUnits('0.005', 18).toString(),
+        }),
+      },
+    );
+  });
+
+  it('fails closed when managed rooted-capital execution would require redelegated payload resolution', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000a1',
+                },
+                name: 'Wrapped Ether',
+                symbol: 'WETH',
+                isNative: false,
+                decimals: 18,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d2',
+                value: '0',
+                data: '0x617ba037',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const rpcClient = {
+      getTransactionCount: vi.fn(async () => 7),
+      estimateFeesPerGas: vi.fn(async () => ({
+        maxFeePerGas: 200n,
+        maxPriorityFeePerGas: 3n,
+      })),
+      estimateGas: vi.fn(async () => 55_000n),
+    };
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+      resolvePublicClient: vi.fn(() => rpcClient),
+    });
+
+    await resolver.anchorCandidatePlanPayload({
+      agentId: 'ember-lending',
+      threadId: 'thread-rooted-capital-fail-1',
+      transactionPlanId: 'txplan-ember-lending-rooted-capital-fail-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      payloadBuilderOutput: {
+        transaction_payload_ref: 'txpayload-ember-lending-rooted-capital-fail-001',
+        required_control_path: 'lending.supply',
+        network: 'arbitrum',
+      },
+      compactPlanSummary: {
+        control_path: 'lending.supply',
+        asset: 'WETH',
+        amount: '0.005',
+        summary: 'supply reserved WETH on Aave',
+      },
+    });
+
+    await expect(
+      resolver.resolvePreparedUnsignedTransaction({
+        agentId: 'ember-lending',
+        executionPreparationId: 'execprep-ember-lending-rooted-capital-fail-001',
+        transactionPlanId: 'txplan-ember-lending-rooted-capital-fail-001',
+        requestId: 'req-ember-lending-rooted-capital-fail-001',
+        canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-rooted-capital-fail-001',
+        plannedTransactionPayloadRef: 'txpayload-ember-lending-rooted-capital-fail-001',
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        network: 'arbitrum',
+        requiredControlPath: 'lending.supply',
+      }),
+    ).rejects.toThrow(
+      'Managed rooted-capital lending execution requires redelegated payload resolution because the capital-owning wallet and subagent signer differ.',
     );
   });
 
@@ -364,7 +664,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       threadId: 'thread-1',
       transactionPlanId: 'txplan-ember-lending-001',
       walletAddress: '0x00000000000000000000000000000000000000b1',
-      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000b1',
       payloadBuilderOutput: {
         transaction_payload_ref: 'txpayload-ember-lending-001',
         required_control_path: 'lending.supply',
@@ -397,12 +697,13 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
             chainId: '42161',
             address: '0x00000000000000000000000000000000000000c1',
           },
-          amount: '10',
+          amount: parseUnits('10', 6).toString(),
         }),
       },
     );
     expect(anchoredPayload).toMatchObject({
       anchoredPayloadRef: 'txpayload-ember-lending-001',
+      capitalOwnerWalletAddress: '0x00000000000000000000000000000000000000b1',
       controlPath: 'lending.supply',
       network: 'arbitrum',
       transactionPlanId: 'txplan-ember-lending-001',
@@ -556,7 +857,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       threadId: 'thread-1',
       transactionPlanId: 'txplan-ember-lending-004',
       walletAddress: '0x00000000000000000000000000000000000000b1',
-      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000b1',
       payloadBuilderOutput: {
         transaction_payload_ref: 'txpayload-ember-lending-004',
         required_control_path: 'lending.supply',
