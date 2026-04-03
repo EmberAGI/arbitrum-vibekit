@@ -3,13 +3,24 @@ import {
   AgentRuntimeSigningError,
   type AgentRuntimeSigningService,
 } from 'agent-runtime/internal';
-import { parseSignature, parseTransaction, serializeTransaction } from 'viem';
+import { keccak256, parseSignature, parseTransaction, serializeTransaction, toHex } from 'viem';
 
 export type EmberLendingSharedEmberProtocolHost = {
   handleJsonRpc: (input: unknown) => Promise<unknown>;
   readCommittedEventOutbox: (input: unknown) => Promise<unknown>;
   acknowledgeCommittedEventOutbox: (input: unknown) => Promise<unknown>;
 };
+
+export type EmberLendingPreparedUnsignedTransactionResolver = (input: {
+  agentId: string;
+  executionPreparationId: string;
+  transactionPlanId: string;
+  requestId: string;
+  canonicalUnsignedPayloadRef: string;
+  plannedTransactionPayloadRef: string | null;
+  network: string | null;
+  requiredControlPath: string | null;
+}) => Promise<`0x${string}` | null>;
 
 export const EMBER_LENDING_INTERNAL_HYDRATE_COMMAND = 'hydrate_runtime_projection';
 export const EMBER_LENDING_SHARED_EMBER_AGENT_ID = 'ember-lending';
@@ -37,6 +48,7 @@ export type EmberLendingLifecycleState = {
 type CreateEmberLendingDomainOptions = {
   protocolHost?: EmberLendingSharedEmberProtocolHost;
   runtimeSigning?: AgentRuntimeSigningService;
+  resolvePreparedUnsignedTransaction?: EmberLendingPreparedUnsignedTransactionResolver;
   runtimeSignerRef?: string;
   agentId?: string;
 };
@@ -123,6 +135,11 @@ const SHARED_EMBER_NETWORK = 'arbitrum';
 const OWS_SIGNING_CHAIN = 'evm';
 const MAX_PREPARE_TRANSACTION_ATTEMPTS = 3;
 const DEFAULT_RUNTIME_SIGNER_REF = 'service-wallet';
+const RUNTIME_REDELEGATION_DOMAIN_NAME = 'DelegationManager';
+const RUNTIME_REDELEGATION_DOMAIN_VERSION = '1';
+const RUNTIME_REDELEGATION_VERIFIER =
+  '0x00000000000000000000000000000000000000d1' as const;
+const RUNTIME_REDELEGATION_ARTIFACT_PREFIX = 'metamask-delegation:';
 
 class LocalExecutionFailureError extends Error {
   revision: number | null;
@@ -925,6 +942,12 @@ function readExecutionPreparation(
   return readRecordKey(executionResult, 'execution_preparation');
 }
 
+function readExecutionPreparationMetadata(
+  executionResult: unknown,
+): Record<string, unknown> | null {
+  return readRecordKey(readExecutionPreparation(executionResult), 'metadata');
+}
+
 function readRedelegationSigningPackage(
   preparationResult: unknown,
 ): Record<string, unknown> | null {
@@ -942,15 +965,39 @@ function readExecutionUnsignedTransactionHex(
   );
 }
 
-function readRedelegationTypedDataPayload(
-  preparationResult: unknown,
-): Record<string, unknown> | null {
-  const redelegationSigningPackage = readRedelegationSigningPackage(preparationResult);
+function readPreparedExecutionId(
+  executionResult: unknown,
+): string | null {
+  return readString(readExecutionPreparation(executionResult)?.['execution_preparation_id']);
+}
+
+function readPreparedExecutionNetwork(
+  executionResult: unknown,
+): string | null {
+  return readString(readExecutionPreparation(executionResult)?.['network']);
+}
+
+function readPreparedExecutionRequiredControlPath(
+  executionResult: unknown,
+): string | null {
+  return readString(readExecutionPreparation(executionResult)?.['required_control_path']);
+}
+
+function readPreparedExecutionPlannedTransactionPayloadRef(
+  executionResult: unknown,
+): string | null {
+  const metadata = readExecutionPreparationMetadata(executionResult);
 
   return (
-    readRecordKey(redelegationSigningPackage, 'typed_data') ??
-    readRecordKey(redelegationSigningPackage, 'typedData')
+    readString(metadata?.['planned_transaction_payload_ref']) ??
+    readString(metadata?.['plannedTransactionPayloadRef'])
   );
+}
+
+function readExecutionSigningPackageCanonicalUnsignedPayloadRef(
+  executionResult: unknown,
+): string | null {
+  return readString(readExecutionSigningPackage(executionResult)?.['canonical_unsigned_payload_ref']);
 }
 
 function readPreparedExecutionWalletAddress(
@@ -1004,6 +1051,116 @@ function buildSignedExecutionTransactionHex(input: {
   const parsedSignature = parseSignature(input.signature);
 
   return serializeTransaction(parsedTransaction, parsedSignature);
+}
+
+function resolveRuntimeRedelegationChainId(network: string): number {
+  switch (network.trim().toLowerCase()) {
+    case 'arbitrum':
+      return 42161;
+    case 'base':
+      return 8453;
+    case 'ethereum':
+    case 'mainnet':
+      return 1;
+    default:
+      throw new Error(`Unsupported redelegation network "${network}".`);
+  }
+}
+
+function buildRuntimeRedelegationAuthority(rootDelegationArtifactRef: string): `0x${string}` {
+  return keccak256(toHex(rootDelegationArtifactRef));
+}
+
+function buildRuntimeRedelegationSalt(requestId: string): `0x${string}` {
+  return keccak256(toHex(requestId));
+}
+
+function buildRuntimeRedelegationTypedData(input: {
+  redelegationSigningPackage: Record<string, unknown>;
+  signerAddress: `0x${string}`;
+}): Record<string, unknown> {
+  const network = readString(input.redelegationSigningPackage['network']);
+  const requestId = readString(input.redelegationSigningPackage['request_id']);
+  const rootDelegationArtifactRef = readString(
+    input.redelegationSigningPackage['root_delegation_artifact_ref'],
+  );
+
+  if (!network || !requestId || !rootDelegationArtifactRef) {
+    throw new Error('missing redelegation package metadata');
+  }
+
+  return {
+    domain: {
+      chainId: resolveRuntimeRedelegationChainId(network),
+      name: RUNTIME_REDELEGATION_DOMAIN_NAME,
+      version: RUNTIME_REDELEGATION_DOMAIN_VERSION,
+      verifyingContract: RUNTIME_REDELEGATION_VERIFIER,
+    },
+    types: {
+      EIP712Domain: [
+        { name: 'name', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
+        { name: 'verifyingContract', type: 'address' },
+      ],
+      Caveat: [
+        { name: 'enforcer', type: 'address' },
+        { name: 'terms', type: 'bytes' },
+      ],
+      Delegation: [
+        { name: 'delegate', type: 'address' },
+        { name: 'delegator', type: 'address' },
+        { name: 'authority', type: 'bytes32' },
+        { name: 'caveats', type: 'Caveat[]' },
+        { name: 'salt', type: 'uint256' },
+      ],
+    },
+    primaryType: 'Delegation',
+    message: {
+      delegate: input.signerAddress,
+      delegator: input.signerAddress,
+      authority: buildRuntimeRedelegationAuthority(rootDelegationArtifactRef),
+      caveats: [],
+      salt: BigInt(buildRuntimeRedelegationSalt(requestId)),
+    },
+  };
+}
+
+function buildRuntimeSignedRedelegationRecord(input: {
+  redelegationSigningPackage: Record<string, unknown>;
+  signerAddress: `0x${string}`;
+  signature: `0x${string}`;
+}): Record<string, unknown> {
+  const requestId = readString(input.redelegationSigningPackage['request_id']);
+  const rootDelegationArtifactRef = readString(
+    input.redelegationSigningPackage['root_delegation_artifact_ref'],
+  );
+  const policySnapshotRef = readString(input.redelegationSigningPackage['policy_snapshot_ref']);
+
+  if (!requestId || !rootDelegationArtifactRef || !policySnapshotRef) {
+    throw new Error('missing signed redelegation metadata');
+  }
+
+  const artifact = {
+    delegate: input.signerAddress,
+    delegator: input.signerAddress,
+    authority: buildRuntimeRedelegationAuthority(rootDelegationArtifactRef),
+    caveats: [],
+    salt: buildRuntimeRedelegationSalt(requestId),
+    signature: input.signature,
+  };
+  const issuedAt = new Date().toISOString();
+
+  return {
+    ...input.redelegationSigningPackage,
+    artifact_ref: `${RUNTIME_REDELEGATION_ARTIFACT_PREFIX}${Buffer.from(
+      JSON.stringify(artifact),
+      'utf8',
+    ).toString('base64url')}`,
+    issued_at: issuedAt,
+    activated_at: issuedAt,
+    policy_hash: `policy-${policySnapshotRef}`,
+  };
 }
 
 async function registerSignedRedelegation(input: {
@@ -1376,6 +1533,7 @@ async function signPayloadWithRuntimeService(input: {
 async function runPreparedExecutionFlow(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
   runtimeSigning?: AgentRuntimeSigningService;
+  resolvePreparedUnsignedTransaction?: EmberLendingPreparedUnsignedTransactionResolver;
   runtimeSignerRef?: string;
   threadId: string;
   agentId: string;
@@ -1464,10 +1622,15 @@ async function runPreparedExecutionFlow(input: {
 
     const requestId = readString(executionResult['request_id']);
     const redelegationSigningPackage = readRedelegationSigningPackage(executionResult)!;
-    const redelegationTypedData = readRedelegationTypedDataPayload(executionResult);
-    if (!redelegationTypedData) {
+    let redelegationTypedData: Record<string, unknown>;
+    try {
+      redelegationTypedData = buildRuntimeRedelegationTypedData({
+        redelegationSigningPackage,
+        signerAddress: input.currentState.walletAddress,
+      });
+    } catch {
       throw new LocalExecutionFailureError(
-        'Lending redelegation signing could not continue because the prepared redelegation package did not include typed data.',
+        'Lending redelegation signing could not continue because the prepared redelegation package was incomplete.',
         requestResponse.result?.revision ?? null,
       );
     }
@@ -1482,24 +1645,33 @@ async function runPreparedExecutionFlow(input: {
         chain: OWS_SIGNING_CHAIN,
         typedData: redelegationTypedData,
       },
-      notConfiguredMessage: 'Local OWS signer is not configured for lending transaction execution.',
+      notConfiguredMessage:
+        'Runtime-owned signing service is not configured for lending transaction execution.',
       addressMismatchMessage:
-        'Lending redelegation signing could not continue because the local signer did not confirm the dedicated subagent wallet identity.',
+        'Lending redelegation signing could not continue because the runtime signer did not confirm the dedicated subagent wallet identity.',
     });
 
     const redelegationSignature = readHexValue(signedRedelegation.signedPayload.signature);
     if (!redelegationSignature) {
       throw new LocalExecutionFailureError(
-        'Lending redelegation signing could not continue because the local signer did not return a redelegation signature.',
+        'Lending redelegation signing could not continue because the runtime signer did not return a redelegation signature.',
         requestResponse.result?.revision ?? null,
       );
     }
 
-    const signedRedelegationRecord = {
-      ...redelegationSigningPackage,
-      signer_address: signedRedelegation.confirmedAddress,
-      signature: redelegationSignature,
-    };
+    let signedRedelegationRecord: Record<string, unknown>;
+    try {
+      signedRedelegationRecord = buildRuntimeSignedRedelegationRecord({
+        redelegationSigningPackage,
+        signerAddress: signedRedelegation.confirmedAddress,
+        signature: redelegationSignature,
+      });
+    } catch {
+      throw new LocalExecutionFailureError(
+        'Lending redelegation signing could not continue because the prepared redelegation package was incomplete.',
+        requestResponse.result?.revision ?? null,
+      );
+    }
 
     const redelegationResponse = await registerSignedRedelegation({
       protocolHost: input.protocolHost,
@@ -1545,10 +1717,35 @@ async function runPreparedExecutionFlow(input: {
 
   const requestId = readString(executionResult['request_id']);
   const executionSigningPackage = readExecutionSigningPackage(executionResult)!;
-  const unsignedTransactionHex = readExecutionUnsignedTransactionHex(executionResult);
+  if (!input.runtimeSigning) {
+    throw new LocalExecutionFailureError(
+      'Runtime-owned signing service is not configured for lending transaction execution.',
+      requestResponse.result?.revision ?? null,
+    );
+  }
+
+  const executionPreparationId = readPreparedExecutionId(executionResult);
+  const canonicalUnsignedPayloadRef =
+    readExecutionSigningPackageCanonicalUnsignedPayloadRef(executionResult);
+  const unsignedTransactionHex =
+    readExecutionUnsignedTransactionHex(executionResult) ??
+    (executionPreparationId && canonicalUnsignedPayloadRef
+      ? await input.resolvePreparedUnsignedTransaction?.({
+          agentId: input.agentId,
+          executionPreparationId,
+          transactionPlanId: input.transactionPlanId,
+          requestId: requestId!,
+          canonicalUnsignedPayloadRef,
+          plannedTransactionPayloadRef: readPreparedExecutionPlannedTransactionPayloadRef(
+            executionResult,
+          ),
+          network: readPreparedExecutionNetwork(executionResult),
+          requiredControlPath: readPreparedExecutionRequiredControlPath(executionResult),
+        })
+      : null);
   if (!unsignedTransactionHex) {
     throw new LocalExecutionFailureError(
-      'Lending execution signing could not continue because the prepared execution package did not include an unsigned transaction.',
+      'Lending execution signing could not continue because the concrete service integration layer did not resolve the prepared unsigned transaction.',
       requestResponse.result?.revision ?? null,
     );
   }
@@ -1563,15 +1760,16 @@ async function runPreparedExecutionFlow(input: {
       chain: OWS_SIGNING_CHAIN,
       unsignedTransactionHex,
     },
-    notConfiguredMessage: 'Local OWS signer is not configured for lending transaction execution.',
+    notConfiguredMessage:
+      'Runtime-owned signing service is not configured for lending transaction execution.',
     addressMismatchMessage:
-      'Lending execution signing could not continue because the local signer did not confirm the dedicated subagent wallet identity.',
+      'Lending execution signing could not continue because the runtime signer did not confirm the dedicated subagent wallet identity.',
   });
 
   const transactionSignature = readHexValue(signedExecution.signedPayload.signature);
   if (!transactionSignature) {
     throw new LocalExecutionFailureError(
-      'Lending execution signing could not continue because the local signer did not return a transaction signature.',
+      'Lending execution signing could not continue because the runtime signer did not return a transaction signature.',
       requestResponse.result?.revision ?? null,
     );
   }
@@ -1590,7 +1788,11 @@ async function runPreparedExecutionFlow(input: {
   }
 
   const signedTransaction = {
-    ...executionSigningPackage,
+    execution_preparation_id: executionPreparationId,
+    transaction_plan_id: input.transactionPlanId,
+    request_id: requestId,
+    active_delegation_id: readString(executionSigningPackage['active_delegation_id']),
+    canonical_unsigned_payload_ref: canonicalUnsignedPayloadRef,
     signer_address: signedExecution.confirmedAddress,
     raw_transaction: rawTransaction,
   };
@@ -1982,6 +2184,8 @@ export function createEmberLendingDomain(
                 : await runPreparedExecutionFlow({
                     protocolHost: options.protocolHost,
                     runtimeSigning: options.runtimeSigning,
+                    resolvePreparedUnsignedTransaction:
+                      options.resolvePreparedUnsignedTransaction,
                     runtimeSignerRef: options.runtimeSignerRef,
                     threadId,
                     agentId,

@@ -119,6 +119,7 @@ type TypedDataSigningPayload = {
 };
 
 const DEFAULT_ADDRESS_CHAIN_ID_PREFIX = 'eip155:';
+const MAX_DECIMAL_TYPED_DATA_BIGINT = 1n << 128n;
 
 export class AgentRuntimeSigningError extends Error {
   code: AgentRuntimeSigningErrorCode;
@@ -352,7 +353,15 @@ function parseTypedDataSigningPayload(
   const chain = readString(payload['chain']);
   const typedDataJson =
     readString(payload['typedDataJson']) ??
-    (isRecord(payload['typedData']) ? JSON.stringify(payload['typedData']) : null);
+    (isRecord(payload['typedData'])
+      ? JSON.stringify(payload['typedData'], (_key, value: unknown) =>
+          typeof value === 'bigint'
+            ? value >= MAX_DECIMAL_TYPED_DATA_BIGINT
+              ? `0x${value.toString(16)}`
+              : value.toString()
+            : value,
+        )
+      : null);
 
   if (!chain || !typedDataJson) {
     throw new AgentRuntimeSigningError({

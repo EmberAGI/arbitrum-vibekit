@@ -3,7 +3,11 @@ import type {
 } from 'agent-runtime';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 
-import { createEmberLendingDomain, type EmberLendingLifecycleState } from './sharedEmberAdapter.js';
+import {
+  createEmberLendingDomain,
+  type EmberLendingLifecycleState,
+  type EmberLendingPreparedUnsignedTransactionResolver,
+} from './sharedEmberAdapter.js';
 import {
   createEmberLendingSharedEmberHttpHost,
   resolveEmberLendingSharedEmberBaseUrl,
@@ -39,6 +43,7 @@ export type EmberLendingGatewayDependencies = {
 
 type CreateEmberLendingAgentConfigOptions = {
   runtimeSigning?: AgentRuntimeSigningService;
+  resolvePreparedUnsignedTransaction?: EmberLendingPreparedUnsignedTransactionResolver;
   runtimeSignerRef?: string;
 };
 
@@ -90,6 +95,7 @@ export function createEmberLendingAgentConfig(
     domain: createEmberLendingDomain({
       protocolHost,
       runtimeSigning: options.runtimeSigning,
+      resolvePreparedUnsignedTransaction: options.resolvePreparedUnsignedTransaction,
       runtimeSignerRef: options.runtimeSignerRef,
     }),
     agentOptions: {

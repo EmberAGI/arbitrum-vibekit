@@ -135,6 +135,126 @@ describe('agent-runtime internal signing surface', () => {
     });
   });
 
+  it('signs typed-data payloads through OWS core and returns a normalized signature envelope', async () => {
+    const fixture = createOwsTestSignerEnv();
+    cleanupFns.add(fixture.cleanup);
+
+    const signing = createSigningService(fixture.env);
+
+    await expect(
+      signing.signPayload({
+        signerRef: TEST_SIGNER_REF,
+        expectedAddress: TEST_EVM_ADDRESS,
+        payloadKind: 'typed-data',
+        payload: {
+          chain: 'evm',
+          typedData: {
+            domain: {
+              chainId: 42161,
+              name: 'DelegationManager',
+              version: '1',
+              verifyingContract: '0x00000000000000000000000000000000000000d1',
+            },
+            types: {
+              EIP712Domain: [
+                { name: 'name', type: 'string' },
+                { name: 'version', type: 'string' },
+                { name: 'chainId', type: 'uint256' },
+                { name: 'verifyingContract', type: 'address' },
+              ],
+              Caveat: [
+                { name: 'enforcer', type: 'address' },
+                { name: 'terms', type: 'bytes' },
+              ],
+              Delegation: [
+                { name: 'delegate', type: 'address' },
+                { name: 'delegator', type: 'address' },
+                { name: 'authority', type: 'bytes32' },
+                { name: 'caveats', type: 'Caveat[]' },
+                { name: 'salt', type: 'uint256' },
+              ],
+            },
+            primaryType: 'Delegation',
+            message: {
+              delegate: TEST_EVM_ADDRESS,
+              delegator: TEST_EVM_ADDRESS,
+              authority: '0x1111111111111111111111111111111111111111111111111111111111111111',
+              caveats: [],
+              salt: 0n,
+            },
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      confirmedAddress: TEST_EVM_ADDRESS,
+      signedPayload: {
+        signature: expect.stringMatching(/^0x[0-9a-f]+$/),
+        recoveryId: expect.any(Number),
+      },
+    });
+  });
+
+  it('signs typed-data payloads when uint256 fields exceed the decimal u128 encoding limit', async () => {
+    const fixture = createOwsTestSignerEnv();
+    cleanupFns.add(fixture.cleanup);
+
+    const signing = createSigningService(fixture.env);
+
+    await expect(
+      signing.signPayload({
+        signerRef: TEST_SIGNER_REF,
+        expectedAddress: TEST_EVM_ADDRESS,
+        payloadKind: 'typed-data',
+        payload: {
+          chain: 'evm',
+          typedData: {
+            domain: {
+              chainId: 42161,
+              name: 'DelegationManager',
+              version: '1',
+              verifyingContract: '0x00000000000000000000000000000000000000d1',
+            },
+            types: {
+              EIP712Domain: [
+                { name: 'name', type: 'string' },
+                { name: 'version', type: 'string' },
+                { name: 'chainId', type: 'uint256' },
+                { name: 'verifyingContract', type: 'address' },
+              ],
+              Caveat: [
+                { name: 'enforcer', type: 'address' },
+                { name: 'terms', type: 'bytes' },
+              ],
+              Delegation: [
+                { name: 'delegate', type: 'address' },
+                { name: 'delegator', type: 'address' },
+                { name: 'authority', type: 'bytes32' },
+                { name: 'caveats', type: 'Caveat[]' },
+                { name: 'salt', type: 'uint256' },
+              ],
+            },
+            primaryType: 'Delegation',
+            message: {
+              delegate: TEST_EVM_ADDRESS,
+              delegator: TEST_EVM_ADDRESS,
+              authority: '0x1111111111111111111111111111111111111111111111111111111111111111',
+              caveats: [],
+              salt: BigInt(
+                '0xf130f5c04f9d4f4c0fdc424b7d4c7e7ce7466afda419ac37ec6ea77dba7ca674',
+              ),
+            },
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      confirmedAddress: TEST_EVM_ADDRESS,
+      signedPayload: {
+        signature: expect.stringMatching(/^0x[0-9a-f]+$/),
+        recoveryId: expect.any(Number),
+      },
+    });
+  });
+
   it('fails closed when the expected address does not match the configured OWS wallet', async () => {
     const fixture = createOwsTestSignerEnv();
     cleanupFns.add(fixture.cleanup);

@@ -2,9 +2,14 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { encodeFunctionData, parseAbiItem, serializeTransaction, type AbiFunction } from 'viem';
+
+import type { EmberLendingPreparedUnsignedTransactionResolver } from './sharedEmberAdapter.js';
+
 export type StartedSharedEmberTarget = {
   baseUrl: string;
   close: () => Promise<void>;
+  resolvePreparedUnsignedTransaction?: EmberLendingPreparedUnsignedTransactionResolver;
 };
 
 export const TEST_EMBER_LENDING_AGENT_ID = 'ember-lending';
@@ -26,6 +31,143 @@ type SharedEmberIntegrationBootstrap = {
   initialState?: SharedEmberExecutionSeed;
   subagentRuntimes?: Record<string, ReturnType<typeof createSubagentRuntime>>;
 };
+
+type HarnessExecutionPayloadArtifact =
+  | {
+      action: 'raw';
+      transaction_payload_ref: string;
+      required_control_path: string;
+      network: string;
+      target: string;
+      callData: string;
+      value?: string;
+    }
+  | {
+      action: 'functionCall';
+      transaction_payload_ref: string;
+      required_control_path: string;
+      network: string;
+      target: string;
+      functionSignature: string;
+      args: string[];
+      value?: string;
+    };
+
+function readString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function resolveExecutionChainId(network: string): number {
+  switch (network.trim().toLowerCase()) {
+    case 'arbitrum':
+      return 42161;
+    case 'base':
+      return 8453;
+    case 'ethereum':
+    case 'mainnet':
+      return 1;
+    default:
+      throw new Error(`Unsupported execution network "${network}".`);
+  }
+}
+
+function coerceAbiArgument(type: string, value: string): unknown {
+  if (type.endsWith('[]')) {
+    const parsed = JSON.parse(value) as unknown[];
+
+    return parsed.map((item) =>
+      coerceAbiArgument(
+        type.slice(0, -2),
+        typeof item === 'string' ? item : JSON.stringify(item),
+      ),
+    );
+  }
+
+  if (type.startsWith('uint') || type.startsWith('int')) {
+    return BigInt(value);
+  }
+
+  if (type === 'bool') {
+    if (value === 'true') {
+      return true;
+    }
+    if (value === 'false') {
+      return false;
+    }
+
+    throw new Error(`Invalid boolean ABI argument ${value}.`);
+  }
+
+  return value;
+}
+
+function buildExecutionCallData(payload: HarnessExecutionPayloadArtifact): `0x${string}` {
+  if (payload.action === 'raw') {
+    return payload.callData as `0x${string}`;
+  }
+
+  const abiItem = parseAbiItem(`function ${payload.functionSignature}`) as AbiFunction;
+  const args = abiItem.inputs.map((input, index) =>
+    coerceAbiArgument(input.type, payload.args[index] ?? ''),
+  );
+
+  return encodeFunctionData({
+    abi: [abiItem],
+    functionName: abiItem.name,
+    args,
+  });
+}
+
+function buildPreparedUnsignedTransactionHex(
+  payload: HarnessExecutionPayloadArtifact,
+): `0x${string}` | null {
+  const target = readString(payload.target);
+  if (!target?.startsWith('0x')) {
+    return null;
+  }
+
+  return serializeTransaction({
+    chainId: resolveExecutionChainId(payload.network),
+    type: 'eip1559',
+    nonce: 1n,
+    gas: 21_000n,
+    maxPriorityFeePerGas: 100_000_000n,
+    maxFeePerGas: 1_000_000_000n,
+    to: target as `0x${string}`,
+    value: payload.value ? BigInt(payload.value) : 0n,
+    data: buildExecutionCallData(payload),
+  });
+}
+
+function createPreparedUnsignedTransactionResolver(input: {
+  bootstrap: SharedEmberIntegrationBootstrap;
+  defaultAgentId: string;
+}): EmberLendingPreparedUnsignedTransactionResolver {
+  return async (request) => {
+    const runtime =
+      input.bootstrap.subagentRuntimes?.[request.agentId] ??
+      (request.agentId === input.defaultAgentId ? createSubagentRuntime() : undefined);
+    if (!runtime) {
+      return null;
+    }
+
+    const plannedTransactionPayloadRef =
+      request.plannedTransactionPayloadRef ??
+      (request.canonicalUnsignedPayloadRef.startsWith('unsigned-')
+        ? request.canonicalUnsignedPayloadRef.slice('unsigned-'.length)
+        : null);
+    if (!plannedTransactionPayloadRef) {
+      return null;
+    }
+
+    const payload = await runtime.payloadStore.getExecutionPayload(plannedTransactionPayloadRef);
+    if (!payload) {
+      return null;
+    }
+
+    return buildPreparedUnsignedTransactionHex(payload as HarnessExecutionPayloadArtifact);
+  };
+}
 
 function createBaseSharedEmberExecutionSeed() {
   return {
@@ -329,12 +471,22 @@ export async function resolveSharedEmberTarget(input?: {
     }) => Promise<StartedSharedEmberTarget>;
   };
 
-  return harnessModule.startRepoLocalSharedEmberDomainProtocolHttpServer({
-    bootstrap: {
-      initialState: input?.bootstrap?.initialState ?? createSharedEmberExecutionSeed(),
-      subagentRuntimes: input?.bootstrap?.subagentRuntimes ?? {
-        [TEST_EMBER_LENDING_AGENT_ID]: createSubagentRuntime(),
-      },
+  const bootstrap = {
+    initialState: input?.bootstrap?.initialState ?? createSharedEmberExecutionSeed(),
+    subagentRuntimes: input?.bootstrap?.subagentRuntimes ?? {
+      [TEST_EMBER_LENDING_AGENT_ID]: createSubagentRuntime(),
     },
+  };
+
+  const startedTarget = await harnessModule.startRepoLocalSharedEmberDomainProtocolHttpServer({
+    bootstrap,
   });
+
+  return {
+    ...startedTarget,
+    resolvePreparedUnsignedTransaction: createPreparedUnsignedTransactionResolver({
+      bootstrap,
+      defaultAgentId: TEST_EMBER_LENDING_AGENT_ID,
+    }),
+  };
 }

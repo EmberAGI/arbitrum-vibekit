@@ -14,31 +14,33 @@ function createRuntimeSigningStub(
   };
 }
 
+function createPreparedUnsignedTransactionResolverStub(
+  implementation?: ReturnType<typeof vi.fn>,
+) {
+  return implementation ?? vi.fn(async () => TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX);
+}
+
+function decodeDelegationArtifactRef(
+  artifactRef: string,
+): Record<string, unknown> {
+  const prefix = 'metamask-delegation:';
+
+  if (!artifactRef.startsWith(prefix)) {
+    throw new Error(`Unsupported delegation artifact ref: ${artifactRef}`);
+  }
+
+  return JSON.parse(Buffer.from(artifactRef.slice(prefix.length), 'base64url').toString('utf8')) as Record<
+    string,
+    unknown
+  >;
+}
+
 const TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX =
   '0x02e982a4b1018405f5e100843b9aca008252089400000000000000000000000000000000000000c18080c0';
 const TEST_TRANSACTION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 const TEST_REDELEGATION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
-const TEST_REDELEGATION_TYPED_DATA = {
-  domain: {
-    name: 'SharedEmberDelegation',
-    version: '1',
-    chainId: 42161,
-    verifyingContract: '0x00000000000000000000000000000000000000d1',
-  },
-  types: {
-    Redelegation: [
-      { name: 'delegationId', type: 'bytes32' },
-      { name: 'agentWallet', type: 'address' },
-    ],
-  },
-  primaryType: 'Redelegation',
-  message: {
-    delegationId: '0x1111111111111111111111111111111111111111111111111111111111111111',
-    agentWallet: '0x00000000000000000000000000000000000000b1',
-  },
-};
 
 function createManagedLifecycleState() {
   return {
@@ -376,6 +378,7 @@ function createBlockedExecutionResult(input: {
 
 function createReadyForExecutionSigningPreparationResult(input?: {
   signerWalletAddress?: string;
+  inlineUnsignedTransactionHex?: `0x${string}` | null;
 }) {
   return {
     phase: 'ready_for_execution_signing',
@@ -392,19 +395,29 @@ function createReadyForExecutionSigningPreparationResult(input?: {
       network: 'arbitrum',
       reservation_id: 'reservation-ember-lending-001',
       required_control_path: 'lending.supply',
-      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+      canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
       active_delegation_id: 'del-ember-lending-001',
       root_delegation_id: 'root-user-ember-lending-001',
       prepared_at: '2026-04-01T06:15:00.000Z',
-      metadata: {},
+      metadata: {
+        planned_transaction_payload_ref: 'txpayload-ember-lending-001',
+      },
     },
     execution_signing_package: {
       execution_preparation_id: 'execprep-ember-lending-001',
       transaction_plan_id: 'txplan-ember-lending-001',
       request_id: 'req-ember-lending-execution-001',
       active_delegation_id: 'del-ember-lending-001',
-      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
-      unsigned_transaction_hex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
+      canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
+      ...(input?.inlineUnsignedTransactionHex === undefined
+        ? {
+            unsigned_transaction_hex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
+          }
+        : input.inlineUnsignedTransactionHex
+          ? {
+              unsigned_transaction_hex: input.inlineUnsignedTransactionHex,
+            }
+          : {}),
     },
   };
 }
@@ -460,11 +473,13 @@ function createReadyForRedelegationSigningPreparationResult() {
       network: 'arbitrum',
       reservation_id: 'reservation-ember-lending-001',
       required_control_path: 'lending.supply',
-      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
+      canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
       active_delegation_id: 'del-ember-lending-001',
       root_delegation_id: 'root-user-ember-lending-001',
       prepared_at: '2026-04-01T06:15:00.000Z',
-      metadata: {},
+      metadata: {
+        planned_transaction_payload_ref: 'txpayload-ember-lending-001',
+      },
     },
     redelegation_signing_package: {
       execution_preparation_id: 'execprep-ember-lending-001',
@@ -485,8 +500,7 @@ function createReadyForRedelegationSigningPreparationResult() {
       control_paths: ['lending.supply'],
       zero_capacity: false,
       policy_snapshot_ref: 'pol-ember-lending-001',
-      canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
-      typed_data: TEST_REDELEGATION_TYPED_DATA,
+      canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
     },
   };
 }
@@ -1222,7 +1236,9 @@ describe('createEmberLendingDomain', () => {
           protocol_version: 'v1',
           revision: 9,
           committed_event_ids: ['evt-prepare-execution-1'],
-          execution_result: createReadyForExecutionSigningPreparationResult(),
+          execution_result: createReadyForExecutionSigningPreparationResult({
+            inlineUnsignedTransactionHex: null,
+          }),
         },
       })),
       readCommittedEventOutbox: vi.fn(async () => ({
@@ -1267,7 +1283,8 @@ describe('createEmberLendingDomain', () => {
       outputs: {
         status: {
           executionStatus: 'failed',
-          statusMessage: 'Local OWS signer is not configured for lending transaction execution.',
+          statusMessage:
+            'Runtime-owned signing service is not configured for lending transaction execution.',
         },
       },
     });
@@ -1284,6 +1301,81 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
+  it('fails execution when Shared Ember omits inline unsigned transaction data and the concrete service layer does not resolve it', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-request-transaction-execution',
+        result: {
+          protocol_version: 'v1',
+          revision: 9,
+          committed_event_ids: ['evt-prepare-execution-1'],
+          execution_result: createReadyForExecutionSigningPreparationResult({
+            inlineUnsignedTransactionHex: null,
+          }),
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      runtimeSigning,
+      runtimeSignerRef: 'service-wallet',
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 9,
+        lastExecutionResult: null,
+        lastExecutionTxHash: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending execution signing could not continue because the concrete service integration layer did not resolve the prepared unsigned transaction.',
+        },
+      },
+    });
+    expect(runtimeSigning.signPayload).not.toHaveBeenCalled();
+  });
+
   it('signs execution packages locally and submits them back to Shared Ember before returning the final outcome', async () => {
     const protocolHost = {
       handleJsonRpc: vi
@@ -1291,13 +1383,15 @@ describe('createEmberLendingDomain', () => {
         .mockResolvedValueOnce({
           jsonrpc: '2.0',
           id: 'shared-ember-thread-1-request-transaction-execution',
-          result: {
-            protocol_version: 'v1',
-            revision: 9,
-            committed_event_ids: ['evt-prepare-execution-1'],
-            execution_result: createReadyForExecutionSigningPreparationResult(),
-          },
-        })
+        result: {
+          protocol_version: 'v1',
+          revision: 9,
+          committed_event_ids: ['evt-prepare-execution-1'],
+          execution_result: createReadyForExecutionSigningPreparationResult({
+            inlineUnsignedTransactionHex: null,
+          }),
+        },
+      })
         .mockResolvedValueOnce({
           jsonrpc: '2.0',
           id: 'shared-ember-thread-1-submit-signed-transaction',
@@ -1334,9 +1428,11 @@ describe('createEmberLendingDomain', () => {
         },
       })),
     );
+    const resolvePreparedUnsignedTransaction = createPreparedUnsignedTransactionResolverStub();
     const domain = createEmberLendingDomain({
       protocolHost,
       runtimeSigning,
+      resolvePreparedUnsignedTransaction,
       runtimeSignerRef: 'service-wallet',
       agentId: 'ember-lending',
     });
@@ -1365,6 +1461,16 @@ describe('createEmberLendingDomain', () => {
         unsignedTransactionHex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
       },
     });
+    expect(resolvePreparedUnsignedTransaction).toHaveBeenCalledWith({
+      agentId: 'ember-lending',
+      canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-001',
+      executionPreparationId: 'execprep-ember-lending-001',
+      network: 'arbitrum',
+      plannedTransactionPayloadRef: 'txpayload-ember-lending-001',
+      requestId: 'req-ember-lending-execution-001',
+      requiredControlPath: 'lending.supply',
+      transactionPlanId: 'txplan-ember-lending-001',
+    });
 
     expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
       jsonrpc: '2.0',
@@ -1389,8 +1495,7 @@ describe('createEmberLendingDomain', () => {
           transaction_plan_id: 'txplan-ember-lending-001',
           request_id: 'req-ember-lending-execution-001',
           active_delegation_id: 'del-ember-lending-001',
-          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
-          unsigned_transaction_hex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
+          canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
           signer_address: '0x00000000000000000000000000000000000000b1',
           raw_transaction: expect.stringMatching(/^0x[0-9a-f]+$/),
         }),
@@ -1608,13 +1713,15 @@ describe('createEmberLendingDomain', () => {
         .mockResolvedValueOnce({
           jsonrpc: '2.0',
           id: 'shared-ember-thread-1-request-transaction-execution',
-          result: {
-            protocol_version: 'v1',
-            revision: 9,
-            committed_event_ids: ['evt-prepare-execution-1'],
-            execution_result: createReadyForExecutionSigningPreparationResult(),
-          },
-        })
+        result: {
+          protocol_version: 'v1',
+          revision: 9,
+          committed_event_ids: ['evt-prepare-execution-1'],
+          execution_result: createReadyForExecutionSigningPreparationResult({
+            inlineUnsignedTransactionHex: undefined,
+          }),
+        },
+      })
         .mockResolvedValueOnce({
           jsonrpc: '2.0',
           id: 'shared-ember-thread-1-submit-signed-transaction',
@@ -1716,8 +1823,7 @@ describe('createEmberLendingDomain', () => {
           transaction_plan_id: 'txplan-ember-lending-001',
           request_id: 'req-ember-lending-execution-001',
           active_delegation_id: 'del-ember-lending-001',
-          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
-          unsigned_transaction_hex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
+          canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
           signer_address: '0x00000000000000000000000000000000000000b1',
           raw_transaction: expect.stringMatching(/^0x[0-9a-f]+$/),
         }),
@@ -1740,7 +1846,7 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
-  it('signs redelegation artifacts locally before completing execution signing and submission', async () => {
+  it('signs redelegation artifacts through the runtime-owned typed-data seam before completing execution signing and submission', async () => {
     const protocolHost = {
       handleJsonRpc: vi
         .fn()
@@ -1838,7 +1944,7 @@ describe('createEmberLendingDomain', () => {
       payloadKind: 'typed-data',
       payload: {
         chain: 'evm',
-        typedData: TEST_REDELEGATION_TYPED_DATA,
+        typedData: expect.any(Object),
       },
     });
     expect(runtimeSigning.signPayload).toHaveBeenNthCalledWith(2, {
@@ -1851,12 +1957,39 @@ describe('createEmberLendingDomain', () => {
       },
     });
 
-    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+    const redelegationTypedData = (
+      runtimeSigning.signPayload.mock.calls[0]?.[0] as {
+        payload: { typedData: Record<string, unknown> };
+      }
+    ).payload.typedData;
+    expect(redelegationTypedData).toMatchObject({
+      domain: {
+        chainId: 42161,
+        name: 'DelegationManager',
+        version: '1',
+      },
+      primaryType: 'Delegation',
+      message: {
+        delegate: '0x00000000000000000000000000000000000000b1',
+        delegator: '0x00000000000000000000000000000000000000b1',
+        authority: expect.stringMatching(/^0x[0-9a-f]{64}$/),
+        caveats: [],
+      },
+    });
+    expect(typeof (redelegationTypedData['message'] as { salt: unknown }).salt).toBe('bigint');
+
+    const registerSignedRedelegationRequest = protocolHost.handleJsonRpc.mock.calls[1]?.[0] as {
+      params: {
+        signed_redelegation: Record<string, unknown>;
+      };
+    };
+    expect(registerSignedRedelegationRequest).toMatchObject({
       jsonrpc: '2.0',
       id: 'shared-ember-thread-1-register-signed-redelegation',
       method: 'orchestrator.registerSignedRedelegation.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1:register-redelegation:req-ember-lending-execution-001',
+        idempotency_key:
+          'idem-execute-transaction-plan-thread-1:register-redelegation:req-ember-lending-execution-001',
         expected_revision: 9,
         transaction_plan_id: 'txplan-ember-lending-001',
         signed_redelegation: {
@@ -1878,12 +2011,27 @@ describe('createEmberLendingDomain', () => {
           control_paths: ['lending.supply'],
           zero_capacity: false,
           policy_snapshot_ref: 'pol-ember-lending-001',
-          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
-          typed_data: TEST_REDELEGATION_TYPED_DATA,
-          signer_address: '0x00000000000000000000000000000000000000b1',
-          signature: TEST_REDELEGATION_SIGNATURE,
+          canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
+          artifact_ref: expect.stringMatching(/^metamask-delegation:/),
+          issued_at: expect.any(String),
+          activated_at: expect.any(String),
+          policy_hash: 'policy-pol-ember-lending-001',
         },
       },
+    });
+
+    const signedRedelegation =
+      registerSignedRedelegationRequest.params.signed_redelegation;
+    const decodedArtifact = decodeDelegationArtifactRef(
+      signedRedelegation['artifact_ref'] as string,
+    );
+    expect(decodedArtifact).toMatchObject({
+      delegate: '0x00000000000000000000000000000000000000b1',
+      delegator: '0x00000000000000000000000000000000000000b1',
+      authority: expect.stringMatching(/^0x[0-9a-f]{64}$/),
+      caveats: [],
+      salt: expect.stringMatching(/^0x[0-9a-f]+$/),
+      signature: TEST_REDELEGATION_SIGNATURE,
     });
     expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(3, {
       jsonrpc: '2.0',
@@ -1898,8 +2046,7 @@ describe('createEmberLendingDomain', () => {
           transaction_plan_id: 'txplan-ember-lending-001',
           request_id: 'req-ember-lending-execution-001',
           active_delegation_id: 'del-ember-lending-001',
-          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
-          unsigned_transaction_hex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
+          canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
           signer_address: '0x00000000000000000000000000000000000000b1',
           raw_transaction: expect.stringMatching(/^0x[0-9a-f]+$/),
         }),
@@ -2184,8 +2331,7 @@ describe('createEmberLendingDomain', () => {
           transaction_plan_id: 'txplan-ember-lending-001',
           request_id: 'req-ember-lending-execution-001',
           active_delegation_id: 'del-ember-lending-001',
-          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
-          unsigned_transaction_hex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
+          canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
           signer_address: '0x00000000000000000000000000000000000000b1',
           raw_transaction: expect.stringMatching(/^0x[0-9a-f]+$/),
         }),
@@ -2212,8 +2358,7 @@ describe('createEmberLendingDomain', () => {
           transaction_plan_id: 'txplan-ember-lending-001',
           request_id: 'req-ember-lending-execution-001',
           active_delegation_id: 'del-ember-lending-001',
-          canonical_unsigned_payload_ref: 'txpayload-ember-lending-001',
-          unsigned_transaction_hex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
+          canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
           signer_address: '0x00000000000000000000000000000000000000b1',
           raw_transaction: expect.stringMatching(/^0x[0-9a-f]+$/),
         }),
