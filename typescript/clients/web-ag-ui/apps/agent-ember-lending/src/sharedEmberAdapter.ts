@@ -4,23 +4,25 @@ import {
   type AgentRuntimeSigningService,
 } from 'agent-runtime/internal';
 import { keccak256, parseSignature, parseTransaction, serializeTransaction, toHex } from 'viem';
+import type {
+  EmberLendingAnchoredPayloadResolver,
+  EmberLendingCompactPlanSummary,
+  EmberLendingPayloadBuilderOutput,
+  EmberLendingPreparedUnsignedTransactionResolver,
+} from './onchainActionsPayloadResolver.js';
+
+export type {
+  EmberLendingAnchoredPayloadResolver,
+  EmberLendingCompactPlanSummary,
+  EmberLendingPayloadBuilderOutput,
+  EmberLendingPreparedUnsignedTransactionResolver,
+} from './onchainActionsPayloadResolver.js';
 
 export type EmberLendingSharedEmberProtocolHost = {
   handleJsonRpc: (input: unknown) => Promise<unknown>;
   readCommittedEventOutbox: (input: unknown) => Promise<unknown>;
   acknowledgeCommittedEventOutbox: (input: unknown) => Promise<unknown>;
 };
-
-export type EmberLendingPreparedUnsignedTransactionResolver = (input: {
-  agentId: string;
-  executionPreparationId: string;
-  transactionPlanId: string;
-  requestId: string;
-  canonicalUnsignedPayloadRef: string;
-  plannedTransactionPayloadRef: string | null;
-  network: string | null;
-  requiredControlPath: string | null;
-}) => Promise<`0x${string}` | null>;
 
 export const EMBER_LENDING_INTERNAL_HYDRATE_COMMAND = 'hydrate_runtime_projection';
 export const EMBER_LENDING_SHARED_EMBER_AGENT_ID = 'ember-lending';
@@ -49,6 +51,7 @@ type CreateEmberLendingDomainOptions = {
   protocolHost?: EmberLendingSharedEmberProtocolHost;
   runtimeSigning?: AgentRuntimeSigningService;
   resolvePreparedUnsignedTransaction?: EmberLendingPreparedUnsignedTransactionResolver;
+  anchoredPayloadResolver?: EmberLendingAnchoredPayloadResolver;
   runtimeSignerRef?: string;
   agentId?: string;
 };
@@ -748,6 +751,58 @@ function readCandidatePlanSummary(candidatePlan: unknown): string | null {
       : null;
 
   return readString(compactPlanSummary?.['summary']) ?? readString(candidatePlan['transaction_plan_id']);
+}
+
+function readCandidatePlanTransactionPlanId(candidatePlan: unknown): string | null {
+  return readStringKey(candidatePlan, 'transaction_plan_id');
+}
+
+function readCandidatePlanPayloadBuilderOutput(
+  candidatePlan: unknown,
+): EmberLendingPayloadBuilderOutput | null {
+  const payloadBuilderOutput = readRecordKey(
+    readRecordKey(candidatePlan, 'handoff'),
+    'payload_builder_output',
+  );
+  const transactionPayloadRef = readString(payloadBuilderOutput?.['transaction_payload_ref']);
+  const requiredControlPath = readString(payloadBuilderOutput?.['required_control_path']);
+  const network = readString(payloadBuilderOutput?.['network']);
+
+  if (!transactionPayloadRef || !requiredControlPath || !network) {
+    return null;
+  }
+
+  return {
+    transaction_payload_ref: transactionPayloadRef,
+    required_control_path: requiredControlPath,
+    network,
+  };
+}
+
+function readCandidatePlanCompactPlanSummary(
+  candidatePlan: unknown,
+): EmberLendingCompactPlanSummary | null {
+  const compactPlanSummary = readRecordKey(candidatePlan, 'compact_plan_summary');
+  const controlPath = readString(compactPlanSummary?.['control_path']);
+  const asset = readString(compactPlanSummary?.['asset']);
+  const amount = readString(compactPlanSummary?.['amount']);
+  const summary = readString(compactPlanSummary?.['summary']);
+
+  if (!controlPath || !asset || !amount || !summary) {
+    return null;
+  }
+
+  return {
+    control_path: controlPath,
+    asset,
+    amount,
+    summary,
+    ...(readString(compactPlanSummary?.['protocol_summary'])
+      ? {
+          protocol_summary: readString(compactPlanSummary?.['protocol_summary'])!,
+        }
+      : {}),
+  };
 }
 
 function readExecutionTxHash(executionResult: unknown): `0x${string}` | null {
@@ -1534,6 +1589,7 @@ async function runPreparedExecutionFlow(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
   runtimeSigning?: AgentRuntimeSigningService;
   resolvePreparedUnsignedTransaction?: EmberLendingPreparedUnsignedTransactionResolver;
+  anchoredPayloadResolver?: EmberLendingAnchoredPayloadResolver;
   runtimeSignerRef?: string;
   threadId: string;
   agentId: string;
@@ -1727,21 +1783,34 @@ async function runPreparedExecutionFlow(input: {
   const executionPreparationId = readPreparedExecutionId(executionResult);
   const canonicalUnsignedPayloadRef =
     readExecutionSigningPackageCanonicalUnsignedPayloadRef(executionResult);
+  const plannedTransactionPayloadRef = readPreparedExecutionPlannedTransactionPayloadRef(
+    executionResult,
+  );
+  const network = readPreparedExecutionNetwork(executionResult);
+  const requiredControlPath = readPreparedExecutionRequiredControlPath(executionResult);
   const unsignedTransactionHex =
     readExecutionUnsignedTransactionHex(executionResult) ??
     (executionPreparationId && canonicalUnsignedPayloadRef
-      ? await input.resolvePreparedUnsignedTransaction?.({
+      ? (await input.resolvePreparedUnsignedTransaction?.({
           agentId: input.agentId,
           executionPreparationId,
           transactionPlanId: input.transactionPlanId,
           requestId: requestId!,
           canonicalUnsignedPayloadRef,
-          plannedTransactionPayloadRef: readPreparedExecutionPlannedTransactionPayloadRef(
-            executionResult,
-          ),
-          network: readPreparedExecutionNetwork(executionResult),
-          requiredControlPath: readPreparedExecutionRequiredControlPath(executionResult),
-        })
+          plannedTransactionPayloadRef,
+          network,
+          requiredControlPath,
+        })) ??
+        (await input.anchoredPayloadResolver?.resolvePreparedUnsignedTransaction({
+          agentId: input.agentId,
+          executionPreparationId,
+          transactionPlanId: input.transactionPlanId,
+          requestId: requestId!,
+          canonicalUnsignedPayloadRef,
+          plannedTransactionPayloadRef,
+          network,
+          requiredControlPath,
+        }))
       : null);
   if (!unsignedTransactionHex) {
     throw new LocalExecutionFailureError(
@@ -2112,6 +2181,27 @@ export function createEmberLendingDomain(
           });
 
           const candidatePlan = response.result?.candidate_plan ?? null;
+          const candidatePlanTransactionPlanId = readCandidatePlanTransactionPlanId(candidatePlan);
+          const payloadBuilderOutput = readCandidatePlanPayloadBuilderOutput(candidatePlan);
+          const compactPlanSummary = readCandidatePlanCompactPlanSummary(candidatePlan);
+          if (
+            options.anchoredPayloadResolver &&
+            currentState.walletAddress &&
+            currentState.rootUserWalletAddress &&
+            candidatePlanTransactionPlanId &&
+            payloadBuilderOutput &&
+            compactPlanSummary
+          ) {
+            await options.anchoredPayloadResolver.anchorCandidatePlanPayload({
+              agentId,
+              threadId,
+              transactionPlanId: candidatePlanTransactionPlanId,
+              walletAddress: currentState.walletAddress,
+              rootUserWalletAddress: currentState.rootUserWalletAddress,
+              payloadBuilderOutput,
+              compactPlanSummary,
+            });
+          }
           const nextState: EmberLendingLifecycleState = {
             ...currentState,
             phase: 'active',
@@ -2186,6 +2276,7 @@ export function createEmberLendingDomain(
                     runtimeSigning: options.runtimeSigning,
                     resolvePreparedUnsignedTransaction:
                       options.resolvePreparedUnsignedTransaction,
+                    anchoredPayloadResolver: options.anchoredPayloadResolver,
                     runtimeSignerRef: options.runtimeSignerRef,
                     threadId,
                     agentId,
