@@ -50,6 +50,58 @@ type AgUiEventEnvelope = {
   [key: string]: unknown;
 };
 
+type InternalPostgresStatement = {
+  tableName: string;
+  values: readonly unknown[];
+};
+
+type InternalPersistDirectExecutionOptions = {
+  threadId: string;
+  threadKey: string;
+  threadState: Record<string, unknown>;
+  now: Date;
+};
+
+type PersistedThreadRecord = {
+  threadId: string;
+  threadKey: string;
+  status: string;
+  threadState: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readPersistedLifecycleState(
+  threads: Iterable<PersistedThreadRecord> | unknown,
+  threadId: string,
+): Record<string, unknown> | null {
+  if (!Array.isArray(threads) && !(Symbol.iterator in Object(threads))) {
+    return null;
+  }
+
+  const threadList = Array.isArray(threads) ? threads : [...(threads as Iterable<PersistedThreadRecord>)];
+
+  const threadRecord =
+    threadList.find(
+      (candidate) =>
+        isRecord(candidate) &&
+        (candidate['threadId'] === threadId || candidate['threadKey'] === threadId) &&
+        isRecord(candidate['threadState']) &&
+        isRecord(candidate['threadState']['__agentRuntimeDomainState']),
+    ) ?? null;
+
+  if (!isRecord(threadRecord) || !isRecord(threadRecord['threadState'])) {
+    return null;
+  }
+
+  const domainState = threadRecord['threadState']['__agentRuntimeDomainState'];
+  return isRecord(domainState) ? domainState : null;
+}
+
 async function readRequestBody(request: IncomingMessage): Promise<Uint8Array> {
   const chunks: Buffer[] = [];
 
@@ -158,6 +210,64 @@ function createInternalPostgresHooks() {
     })),
     executeStatements: vi.fn(async () => undefined),
     persistDirectExecution: vi.fn(async () => undefined),
+  };
+}
+
+function createPersistingInternalPostgres() {
+  const persistedThreads = new Map<string, PersistedThreadRecord>();
+
+  return {
+    persistedThreads,
+    hooks: {
+      ensureReady: vi.fn(async () => ({
+        databaseUrl: 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime',
+      })),
+      loadInspectionState: vi.fn(async () => ({
+        threads: [...persistedThreads.values()],
+        executions: [],
+        automations: [],
+        automationRuns: [],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      })),
+      executeStatements: vi.fn(
+        async (_databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
+          for (const statement of statements) {
+            if (statement.tableName !== 'pi_threads') {
+              continue;
+            }
+
+            const [threadId, threadKey, status, threadStateValue, createdAt, updatedAt] =
+              statement.values;
+            persistedThreads.set(threadKey as string, {
+              threadId: threadId as string,
+              threadKey: threadKey as string,
+              status: status as string,
+              threadState:
+                typeof threadStateValue === 'string'
+                  ? (JSON.parse(threadStateValue) as Record<string, unknown>)
+                  : (threadStateValue as Record<string, unknown>),
+              createdAt: createdAt as Date,
+              updatedAt: updatedAt as Date,
+            });
+          }
+        },
+      ),
+      persistDirectExecution: vi.fn(async (options: unknown) => {
+        const params = options as InternalPersistDirectExecutionOptions;
+        persistedThreads.set(params.threadKey, {
+          threadId: params.threadId,
+          threadKey: params.threadKey,
+          status: 'active',
+          threadState: params.threadState,
+          createdAt: params.now,
+          updatedAt: params.now,
+        });
+      }),
+    },
   };
 }
 
@@ -438,6 +548,8 @@ async function runAgUiConnect(input: {
 describe('agent-ember-lending AG-UI integration', () => {
   let server: Server;
   let baseUrl: string;
+  let service: Awaited<ReturnType<typeof createEmberLendingGatewayService>>;
+  let persistedPostgres: ReturnType<typeof createPersistingInternalPostgres>;
   let runtimeSigning: {
     readAddress: ReturnType<typeof vi.fn>;
     signPayload: ReturnType<typeof vi.fn>;
@@ -612,6 +724,7 @@ describe('agent-ember-lending AG-UI integration', () => {
 
   beforeEach(async () => {
     anchoredPayloadResolver = createAnchoredPayloadResolverStub();
+    persistedPostgres = createPersistingInternalPostgres();
     runtimeSigning = {
       readAddress: vi.fn(async () => '0x00000000000000000000000000000000000000b1'),
       signPayload: vi.fn(async () => ({
@@ -622,7 +735,7 @@ describe('agent-ember-lending AG-UI integration', () => {
         },
       })),
     };
-    const service = await createEmberLendingGatewayService({
+    service = await createEmberLendingGatewayService({
       runtimeConfig: {
         model: {
           id: 'openai/gpt-5.4-mini',
@@ -648,7 +761,7 @@ describe('agent-ember-lending AG-UI integration', () => {
           getApiKey: () => 'test-openrouter-key',
         },
       },
-      __internalPostgres: createInternalPostgresHooks(),
+      __internalPostgres: persistedPostgres.hooks,
     } as any);
 
     const handler = createEmberLendingAgUiHandler({
@@ -949,6 +1062,146 @@ describe('agent-ember-lending AG-UI integration', () => {
             lastReservationSummary: null,
           },
         },
+      },
+    });
+  });
+
+  it('rehydrates an existing lending thread on reconnect when the cached projection is only a stale partial wallet snapshot', async () => {
+    let executionContextRevision = 2;
+
+    protocolHost.handleJsonRpc.mockImplementation(async (input: unknown) => {
+      const request =
+        typeof input === 'object' && input !== null
+          ? (input as { method?: unknown })
+          : {};
+
+      switch (request.method) {
+        case 'subagent.readPortfolioState.v1':
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-stale-read-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: executionContextRevision,
+              portfolio_state: {
+                agent_id: 'ember-lending',
+                owned_units: [],
+                reservations: [],
+              },
+            },
+          };
+        case 'subagent.readExecutionContext.v1':
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-stale-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: executionContextRevision,
+              execution_context:
+                executionContextRevision === 2
+                  ? {
+                      generated_at: '2026-04-01T06:30:00.000Z',
+                      network: 'arbitrum',
+                      mandate_ref: null,
+                      mandate_summary: null,
+                      mandate_context: null,
+                      subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
+                      root_user_wallet_address: null,
+                      owned_units: [],
+                      wallet_contents: [],
+                    }
+                  : {
+                      generated_at: '2026-04-01T06:31:00.000Z',
+                      network: 'arbitrum',
+                      mandate_ref: 'mandate-ember-lending-001',
+                      mandate_summary:
+                        'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                      mandate_context: null,
+                      subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
+                      root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                      owned_units: [
+                        {
+                          unit_id: 'unit-ember-lending-001',
+                          root_asset: 'USDC',
+                          amount: '10',
+                          benchmark_value_usd: '10',
+                        },
+                      ],
+                      wallet_contents: [
+                        {
+                          asset: 'USDC',
+                          amount: '10',
+                          benchmark_value_usd: '10',
+                        },
+                      ],
+                    },
+            },
+          };
+        default:
+          throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }
+    });
+
+    const { snapshot: firstSnapshot } = await runAgUiConnect({
+      baseUrl,
+      threadId: 'thread-connect-stale-refresh-1',
+      runId: 'run-connect-stale-refresh-1',
+    });
+
+    expect(firstSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            mandateRef: null,
+            walletAddress: '0x00000000000000000000000000000000000000b1',
+            rootUserWalletAddress: null,
+          },
+        },
+      },
+    });
+
+    executionContextRevision = 3;
+
+    const { snapshot: secondSnapshot } = await runAgUiConnect({
+      baseUrl,
+      threadId: 'thread-connect-stale-refresh-1',
+      runId: 'run-connect-stale-refresh-2',
+    });
+
+    expect(secondSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            mandateRef: 'mandate-ember-lending-001',
+            mandateSummary:
+              'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+            mandateContext: {
+              network: 'arbitrum',
+            },
+            walletAddress: '0x00000000000000000000000000000000000000b1',
+            rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+          },
+        },
+      },
+    });
+
+    const persistedLifecycle = readPersistedLifecycleState(
+      persistedPostgres.persistedThreads.values(),
+      'thread-connect-stale-refresh-1',
+    );
+
+    expect(persistedLifecycle).toMatchObject({
+      mandateRef: 'mandate-ember-lending-001',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      lastSharedEmberRevision: 3,
+      lastPortfolioState: {
+        agent_id: 'ember-lending',
+        owned_units: [],
+        reservations: [],
       },
     });
   });

@@ -569,18 +569,19 @@ function hasManagedExecutionContextProjection(executionContext: SharedEmberExecu
   );
 }
 
-export function hasEmberLendingRuntimeProjection(state: unknown): boolean {
+export function hasConnectReadyEmberLendingRuntimeProjection(state: unknown): boolean {
   if (!isRecord(state)) {
     return false;
   }
 
+  if (hasManagedPortfolioProjection(state['lastPortfolioState'])) {
+    return true;
+  }
+
   return (
-    readString(state['mandateRef']) !== null ||
-    readHexAddress(state['walletAddress']) !== null ||
-    readHexAddress(state['rootUserWalletAddress']) !== null ||
-    readString(state['rootedWalletContextId']) !== null ||
-    readString(state['lastReservationSummary']) !== null ||
-    hasManagedPortfolioProjection(state['lastPortfolioState'])
+    readString(state['mandateRef']) !== null &&
+    readHexAddress(state['walletAddress']) !== null &&
+    readHexAddress(state['rootUserWalletAddress']) !== null
   );
 }
 
@@ -1430,21 +1431,191 @@ function buildManagedSubagentHandoffBase(input: {
   };
 }
 
-function buildManagedSubagentDecisionContext(input: {
-  source: Record<string, unknown>;
-  mandateSummary: string | null;
-}): Record<string, unknown> | null {
-  const decisionContext =
-    'decision_context' in input.source && isRecord(input.source['decision_context'])
-      ? {
-          ...input.source['decision_context'],
-        }
-      : {};
-  if (input.mandateSummary) {
-    decisionContext['mandate_summary'] = input.mandateSummary;
+const REQUEST_INTENTS = new Set([
+  'deploy',
+  'rebalance',
+  'increase',
+  'decrease',
+  'unwind',
+  'transfer',
+]);
+
+function readIntent(value: unknown): string | null {
+  const normalized = readString(value)?.toLowerCase();
+  return normalized && REQUEST_INTENTS.has(normalized) ? normalized : null;
+}
+
+function readStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
   }
 
-  return Object.keys(decisionContext).length > 0 ? decisionContext : null;
+  const normalized = value
+    .map((entry) => readString(entry))
+    .filter((entry): entry is string => entry !== null);
+
+  return normalized.length > 0 ? normalized : null;
+}
+
+function readPortfolioReservation(portfolioState: unknown): Record<string, unknown> | null {
+  return isRecord(portfolioState) ? readFirstRecordFromArray(portfolioState['reservations']) : null;
+}
+
+function readManagedRequestedQuantities(
+  portfolioState: unknown,
+): Array<{ unit_id: string; quantity: string }> | null {
+  if (!isRecord(portfolioState)) {
+    return null;
+  }
+
+  const reservation = readPortfolioReservation(portfolioState);
+  if (reservation && Array.isArray(reservation['unit_allocations'])) {
+    const allocations = reservation['unit_allocations']
+      .map((candidate) => {
+        if (!isRecord(candidate)) {
+          return null;
+        }
+
+        const unitId = readString(candidate['unit_id']);
+        const quantity = readString(candidate['quantity']);
+        return unitId && quantity ? { unit_id: unitId, quantity } : null;
+      })
+      .filter((candidate): candidate is { unit_id: string; quantity: string } => candidate !== null);
+    if (allocations.length > 0) {
+      return allocations;
+    }
+  }
+
+  if (!Array.isArray(portfolioState['owned_units'])) {
+    return null;
+  }
+
+  const reservationId = readString(reservation?.['reservation_id']);
+  const requestedQuantities = portfolioState['owned_units']
+    .map((candidate) => {
+      if (!isRecord(candidate)) {
+        return null;
+      }
+
+      if (reservationId && readString(candidate['reservation_id']) !== reservationId) {
+        return null;
+      }
+
+      const unitId = readString(candidate['unit_id']);
+      const quantity = readString(candidate['quantity']);
+      return unitId && quantity ? { unit_id: unitId, quantity } : null;
+    })
+    .filter((candidate): candidate is { unit_id: string; quantity: string } => candidate !== null);
+
+  if (requestedQuantities.length > 0) {
+    return requestedQuantities;
+  }
+
+  const fallbackOwnedUnit = readPortfolioOwnedUnit(portfolioState);
+  const unitId = readString(fallbackOwnedUnit?.['unit_id']);
+  const quantity = readString(fallbackOwnedUnit?.['quantity']);
+  return unitId && quantity ? [{ unit_id: unitId, quantity }] : null;
+}
+
+function readManagedCandidateUnitIds(portfolioState: unknown): string[] | null {
+  const requestedQuantities = readManagedRequestedQuantities(portfolioState);
+  return requestedQuantities?.map((candidate) => candidate.unit_id) ?? null;
+}
+
+function readManagedActionVerb(controlPath: string | null, intent: string): string {
+  const pathAction = controlPath?.split('.').at(-1)?.trim().toLowerCase();
+  if (pathAction) {
+    return pathAction;
+  }
+
+  return intent === 'deploy' ? 'deploy' : intent;
+}
+
+function formatDisplayLabel(value: string): string {
+  return value.length > 0 ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
+}
+
+function buildFallbackActionSummary(input: {
+  source: Record<string, unknown>;
+  state: EmberLendingLifecycleState;
+  intent: string;
+}): string {
+  const portfolioState = isRecord(input.state.lastPortfolioState) ? input.state.lastPortfolioState : null;
+  const reservation = readPortfolioReservation(portfolioState);
+  const ownedUnit = portfolioState ? readPortfolioOwnedUnit(portfolioState) : null;
+  const requestedQuantities = readManagedRequestedQuantities(portfolioState);
+  const quantity = readString(input.source['amount']) ?? requestedQuantities?.[0]?.quantity ?? null;
+  const asset = readString(input.source['asset']) ?? readString(ownedUnit?.['root_asset']) ?? 'capital';
+  const protocol =
+    readString(input.source['protocol']) ??
+    (isRecord(input.state.mandateContext) ? readString(input.state.mandateContext['protocol']) : null);
+  const controlPath = readString(reservation?.['control_path']);
+  const verb = readManagedActionVerb(controlPath, input.intent);
+
+  if (quantity && protocol) {
+    return `${verb} reserved ${quantity} ${asset} on ${formatDisplayLabel(protocol)}`;
+  }
+
+  if (protocol) {
+    return `${verb} reserved ${asset} on ${formatDisplayLabel(protocol)}`;
+  }
+
+  if (quantity) {
+    return `${verb} reserved ${quantity} ${asset}`;
+  }
+
+  return input.state.lastReservationSummary ?? 'execute the approved lending action';
+}
+
+function buildFallbackObjectiveSummary(intent: string): string {
+  switch (intent) {
+    case 'rebalance':
+      return 'rebalance reserved capital within the approved lending lane';
+    case 'increase':
+      return 'increase the current lending position within the approved lane';
+    case 'decrease':
+      return 'decrease the current lending position within the approved lane';
+    case 'unwind':
+      return 'unwind the current lending position within the approved lane';
+    case 'transfer':
+      return 'transfer reserved capital within the approved managed flow';
+    default:
+      return 'deploy reserved capital into the approved lending lane';
+  }
+}
+
+function buildManagedSubagentDecisionContext(input: {
+  source: Record<string, unknown>;
+  state: EmberLendingLifecycleState;
+  mandateSummary: string | null;
+  intent: string;
+}): Record<string, unknown> {
+  const sourceDecisionContext =
+    'decision_context' in input.source && isRecord(input.source['decision_context'])
+      ? input.source['decision_context']
+      : null;
+
+  return {
+    mandate_summary:
+      input.mandateSummary ??
+      'operate within the current managed lending mandate and bounded guardrails',
+    objective_summary:
+      readString(sourceDecisionContext?.['objective_summary']) ??
+      buildFallbackObjectiveSummary(input.intent),
+    accounting_state_summary:
+      readString(sourceDecisionContext?.['accounting_state_summary']) ??
+      input.state.lastReservationSummary ??
+      'Reserved capital is hydrated for the managed lending lane.',
+    why_this_path_is_best:
+      readString(sourceDecisionContext?.['why_this_path_is_best']) ??
+      'This matches the current lending mandate and reserved control path.',
+    consequence_if_delayed:
+      readString(sourceDecisionContext?.['consequence_if_delayed']) ?? 'Reserved capital remains idle.',
+    alternatives_considered:
+      readStringArray(sourceDecisionContext?.['alternatives_considered']) ?? [
+        'wait and keep the capital idle',
+      ],
+  };
 }
 
 function buildTransactionPlanningHandoff(input: {
@@ -1459,28 +1630,43 @@ function buildTransactionPlanningHandoff(input: {
   }
 
   const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
+  const intent =
+    readIntent(commandInput['intent']) ??
+    readIntent(readPortfolioReservation(input.state.lastPortfolioState)?.['purpose']) ??
+    'deploy';
+  const candidateUnitIds =
+    readStringArray(commandInput['candidate_unit_ids']) ??
+    readManagedCandidateUnitIds(input.state.lastPortfolioState);
+  const requestedQuantities =
+    Array.isArray(commandInput['requested_quantities']) && commandInput['requested_quantities'].length > 0
+      ? commandInput['requested_quantities']
+      : readManagedRequestedQuantities(input.state.lastPortfolioState);
+  const actionSummary =
+    readString(commandInput['action_summary']) ??
+    buildFallbackActionSummary({
+      source: commandInput,
+      state: input.state,
+      intent,
+    });
+
+  if (!candidateUnitIds || !requestedQuantities) {
+    return null;
+  }
+
   const handoff: Record<string, unknown> = {
     handoff_id: readString(commandInput['handoff_id']) ?? `handoff-${input.threadId}`,
     ...base,
+    intent,
+    action_summary: actionSummary,
+    candidate_unit_ids: candidateUnitIds,
+    requested_quantities: requestedQuantities,
+    decision_context: buildManagedSubagentDecisionContext({
+      source: commandInput,
+      state: input.state,
+      mandateSummary: input.state.mandateSummary,
+      intent,
+    }),
   };
-  for (const key of [
-    'intent',
-    'action_summary',
-    'candidate_unit_ids',
-    'requested_quantities',
-  ] as const) {
-    if (key in commandInput) {
-      handoff[key] = commandInput[key];
-    }
-  }
-
-  const decisionContext = buildManagedSubagentDecisionContext({
-    source: commandInput,
-    mandateSummary: input.state.mandateSummary,
-  });
-  if (decisionContext) {
-    handoff['decision_context'] = decisionContext;
-  }
 
   return handoff;
 }
@@ -1499,14 +1685,25 @@ function buildEscalationHandoff(input: {
   const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
   const source =
     'handoff' in commandInput && isRecord(commandInput['handoff']) ? commandInput['handoff'] : commandInput;
+  const intent =
+    readIntent(source['intent']) ??
+    readIntent(readPortfolioReservation(input.state.lastPortfolioState)?.['purpose']) ??
+    'deploy';
+  const actionSummary =
+    readString(source['action_summary']) ??
+    buildFallbackActionSummary({
+      source,
+      state: input.state,
+      intent,
+    });
 
   const handoff: Record<string, unknown> = {
     handoff_id: readString(source['handoff_id']) ?? `handoff-${input.threadId}`,
     ...base,
+    intent,
+    action_summary: actionSummary,
   };
   for (const key of [
-    'intent',
-    'action_summary',
     'candidate_unit_ids',
     'requested_quantities',
     'payload_builder_output',
@@ -1516,13 +1713,12 @@ function buildEscalationHandoff(input: {
     }
   }
 
-  const decisionContext = buildManagedSubagentDecisionContext({
+  handoff['decision_context'] = buildManagedSubagentDecisionContext({
     source,
+    state: input.state,
     mandateSummary: input.state.mandateSummary,
+    intent,
   });
-  if (decisionContext) {
-    handoff['decision_context'] = decisionContext;
-  }
 
   return handoff;
 }

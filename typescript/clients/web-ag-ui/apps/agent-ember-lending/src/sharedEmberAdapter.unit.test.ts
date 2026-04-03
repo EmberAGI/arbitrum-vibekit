@@ -349,6 +349,19 @@ function createCandidatePlanInput() {
   };
 }
 
+function createThinCandidatePlanInput() {
+  return {
+    network: 'arbitrum',
+    asset: 'USDC',
+    protocol: 'aave',
+    amount: '10',
+    risk_profile: 'medium',
+    constraints: ['health factor >= 1.25'],
+    wallet_address: '0x00000000000000000000000000000000000000b1',
+    root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+  };
+}
+
 function createEscalationRequestInput() {
   return {
     handoff: {
@@ -1321,6 +1334,134 @@ describe('createEmberLendingDomain', () => {
         source: 'tool',
         name: 'create_transaction_plan',
         input: createCandidatePlanInput(),
+      },
+    });
+
+    expect(anchoredPayloadResolver.anchorCandidatePlanPayload).toHaveBeenCalledWith({
+      agentId: 'ember-lending',
+      threadId: 'thread-1',
+      transactionPlanId: 'txplan-ember-lending-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      payloadBuilderOutput: {
+        transaction_payload_ref: 'txpayload-ember-lending-001',
+        required_control_path: 'lending.supply',
+        network: 'arbitrum',
+      },
+      compactPlanSummary: {
+        control_path: 'lending.supply',
+        asset: 'USDC',
+        amount: '10',
+        summary: 'supply reserved USDC on Aave',
+      },
+    });
+  });
+
+  it('materializes candidate plans when model input omits required handoff fields but managed state is hydrated', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-materialize-thin-candidate-plan',
+        result: {
+          protocol_version: 'v1',
+          revision: 8,
+          committed_event_ids: ['evt-candidate-plan-1'],
+          candidate_plan: {
+            planning_kind: 'subagent_handoff',
+            transaction_plan_id: 'txplan-ember-lending-001',
+            handoff: {
+              handoff_id: 'handoff-thread-1',
+              payload_builder_output: {
+                transaction_payload_ref: 'txpayload-ember-lending-001',
+                required_control_path: 'lending.supply',
+                network: 'arbitrum',
+              },
+            },
+            compact_plan_summary: {
+              control_path: 'lending.supply',
+              asset: 'USDC',
+              amount: '10',
+              summary: 'supply reserved USDC on Aave',
+            },
+          },
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const anchoredPayloadResolver = createAnchoredPayloadResolverStub();
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver,
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: createThinCandidatePlanInput(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 8,
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Candidate lending plan created through the Shared Ember planner.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-create-transaction-plan',
+      method: 'subagent.createTransactionPlan.v1',
+      params: {
+        idempotency_key: 'idem-create-transaction-plan-thread-1',
+        expected_revision: 7,
+        handoff: {
+          handoff_id: 'handoff-thread-1',
+          agent_id: 'ember-lending',
+          root_user_wallet: '0x00000000000000000000000000000000000000a1',
+          mandate_ref: 'mandate-ember-lending-001',
+          intent: 'deploy',
+          action_summary: 'supply reserved 10 USDC on Aave',
+          candidate_unit_ids: ['unit-ember-lending-001'],
+          requested_quantities: [
+            {
+              unit_id: 'unit-ember-lending-001',
+              quantity: '10',
+            },
+          ],
+          decision_context: {
+            mandate_summary:
+              'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+            objective_summary: 'deploy reserved capital into the approved lending lane',
+            accounting_state_summary:
+              'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+            why_this_path_is_best:
+              'This matches the current lending mandate and reserved control path.',
+            consequence_if_delayed: 'Reserved capital remains idle.',
+            alternatives_considered: ['wait and keep the capital idle'],
+          },
+        },
       },
     });
 

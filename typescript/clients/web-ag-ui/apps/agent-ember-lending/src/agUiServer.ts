@@ -15,7 +15,7 @@ import {
 } from './emberLendingFoundation.js';
 import {
   EMBER_LENDING_INTERNAL_HYDRATE_COMMAND,
-  hasEmberLendingRuntimeProjection,
+  hasConnectReadyEmberLendingRuntimeProjection,
 } from './sharedEmberAdapter.js';
 import { ensureEmberLendingServiceIdentity } from './serviceIdentityPreflight.js';
 
@@ -122,7 +122,7 @@ async function hydrateManagedProjectionIfNeeded(input: {
   const threads = await input.service.control.listThreads();
   const persistedState = readPersistedEmberLendingState(findThreadRecord(threads, input.threadId));
 
-  if (hasEmberLendingRuntimeProjection(persistedState)) {
+  if (hasConnectReadyEmberLendingRuntimeProjection(persistedState)) {
     return;
   }
 

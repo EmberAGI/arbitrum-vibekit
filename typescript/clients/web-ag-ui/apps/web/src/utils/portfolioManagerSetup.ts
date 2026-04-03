@@ -13,8 +13,8 @@ const DEFAULT_PORTFOLIO_MANAGER_SETUP = {
       settings: {
         network: 'arbitrum',
         protocol: 'aave',
-        allowedCollateralAssets: ['USDC'],
-        allowedBorrowAssets: ['USDC'],
+        allowedCollateralAssets: ['WETH'],
+        allowedBorrowAssets: ['WETH'],
         maxAllocationPct: 35,
         maxLtvBps: 7000,
         minHealthFactor: '1.25',
