@@ -129,7 +129,7 @@ function buildPreparedUnsignedTransactionHex(
   return serializeTransaction({
     chainId: resolveExecutionChainId(payload.network),
     type: 'eip1559',
-    nonce: 1n,
+    nonce: 1,
     gas: 21_000n,
     maxPriorityFeePerGas: 100_000_000n,
     maxFeePerGas: 1_000_000_000n,
@@ -338,18 +338,20 @@ export function createSharedEmberExecutionSeed(
 }
 
 function createSubagentRuntime() {
+  const executionPayload: HarnessExecutionPayloadArtifact = {
+    action: 'raw',
+    transaction_payload_ref: 'txpayload-handoff-ember-lending-int-001',
+    required_control_path: 'vault.withdraw',
+    network: 'arbitrum',
+    target: '0x00000000000000000000000000000000000000c1',
+    callData: '0xdeadbeef',
+  };
+
   return {
     agentWallet: TEST_EMBER_LENDING_AGENT_WALLET,
     payloadStore: {
-      async getExecutionPayload() {
-        return {
-          action: 'raw' as const,
-          transaction_payload_ref: 'txpayload-handoff-ember-lending-int-001',
-          required_control_path: 'vault.withdraw' as const,
-          network: 'arbitrum',
-          target: '0x00000000000000000000000000000000000000c1',
-          callData: '0xdeadbeef',
-        };
+      async getExecutionPayload(_plannedTransactionPayloadRef: string) {
+        return executionPayload;
       },
     },
     issuer: {
