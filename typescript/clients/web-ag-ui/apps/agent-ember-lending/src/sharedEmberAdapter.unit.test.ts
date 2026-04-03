@@ -14,10 +14,32 @@ function createRuntimeSigningStub(
   };
 }
 
-function createPreparedUnsignedTransactionResolverStub(
-  implementation?: ReturnType<typeof vi.fn>,
-) {
-  return implementation ?? vi.fn(async () => TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX);
+function createAnchoredPayloadResolverStub() {
+  return {
+    anchorCandidatePlanPayload: vi.fn(async () => ({
+      anchoredPayloadRef: 'txpayload-ember-lending-001',
+      transactionRequests: [
+        {
+          type: 'EVM_TX',
+          to: '0x00000000000000000000000000000000000000d1',
+          value: '0',
+          data: '0x095ea7b3',
+          chainId: '42161',
+        },
+        {
+          type: 'EVM_TX',
+          to: '0x00000000000000000000000000000000000000d2',
+          value: '0',
+          data: '0x617ba037',
+          chainId: '42161',
+        },
+      ],
+      controlPath: 'lending.supply',
+      network: 'arbitrum',
+      transactionPlanId: 'txplan-ember-lending-001',
+    })),
+    resolvePreparedUnsignedTransaction: vi.fn(async () => TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX),
+  };
 }
 
 function decodeDelegationArtifactRef(
@@ -41,6 +63,31 @@ const TEST_TRANSACTION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 const TEST_REDELEGATION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
+
+function createAnchoredPayloadRecord() {
+  return {
+    anchoredPayloadRef: 'txpayload-ember-lending-001',
+    transactionRequests: [
+      {
+        type: 'EVM_TX' as const,
+        to: '0x00000000000000000000000000000000000000d1',
+        value: '0',
+        data: '0x095ea7b3',
+        chainId: '42161',
+      },
+      {
+        type: 'EVM_TX' as const,
+        to: '0x00000000000000000000000000000000000000d2',
+        value: '0',
+        data: '0x617ba037',
+        chainId: '42161',
+      },
+    ],
+    controlPath: 'lending.supply',
+    network: 'arbitrum',
+    transactionPlanId: 'txplan-ember-lending-001',
+  };
+}
 
 function createManagedLifecycleState() {
   return {
@@ -81,6 +128,7 @@ function createManagedLifecycleState() {
     lastReservationSummary: 'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
     lastCandidatePlan: null,
     lastCandidatePlanSummary: null,
+    anchoredPayloadRecords: [],
     lastExecutionResult: null,
     lastExecutionTxHash: null,
     lastEscalationRequest: null,
@@ -1115,7 +1163,7 @@ describe('createEmberLendingDomain', () => {
     );
   });
 
-  it('materializes candidate plans through the bounded subagent surface using managed state context', async () => {
+  it('fails candidate-plan creation when Shared Ember omits planner metadata required for service-owned anchoring', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async () => ({
         jsonrpc: '2.0',
@@ -1170,24 +1218,15 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'active',
         lastSharedEmberRevision: 8,
-        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+        lastCandidatePlan: null,
+        anchoredPayloadRecords: [],
       },
       outputs: {
         status: {
-          executionStatus: 'completed',
-          statusMessage: 'Candidate lending plan created through the Shared Ember planner.',
+          executionStatus: 'failed',
+          statusMessage:
+            'Candidate lending plan could not be anchored behind the lending service boundary because Shared Ember omitted the planner payload metadata required for anchoring.',
         },
-        artifacts: [
-          {
-            data: {
-              type: 'shared-ember-candidate-plan',
-              revision: 8,
-              candidatePlan: {
-                transaction_plan_id: 'txplan-ember-lending-001',
-              },
-            },
-          },
-        ],
       },
     });
 
@@ -1222,6 +1261,157 @@ describe('createEmberLendingDomain', () => {
             consequence_if_delayed: 'reserved capital remains idle',
             alternatives_considered: ['leave the unit idle'],
           },
+        },
+      },
+    });
+  });
+
+  it('anchors the planner-returned payload ref behind the lending service boundary during candidate-plan creation', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-materialize-candidate-plan',
+        result: {
+          protocol_version: 'v1',
+          revision: 8,
+          committed_event_ids: ['evt-candidate-plan-1'],
+          candidate_plan: {
+            planning_kind: 'subagent_handoff',
+            transaction_plan_id: 'txplan-ember-lending-001',
+            handoff: {
+              handoff_id: 'handoff-thread-1',
+              payload_builder_output: {
+                transaction_payload_ref: 'txpayload-ember-lending-001',
+                required_control_path: 'lending.supply',
+                network: 'arbitrum',
+              },
+            },
+            compact_plan_summary: {
+              control_path: 'lending.supply',
+              asset: 'USDC',
+              amount: '10',
+              summary: 'supply reserved USDC on Aave',
+            },
+          },
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const anchoredPayloadResolver = createAnchoredPayloadResolverStub();
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver,
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: createCandidatePlanInput(),
+      },
+    });
+
+    expect(anchoredPayloadResolver.anchorCandidatePlanPayload).toHaveBeenCalledWith({
+      agentId: 'ember-lending',
+      threadId: 'thread-1',
+      transactionPlanId: 'txplan-ember-lending-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      payloadBuilderOutput: {
+        transaction_payload_ref: 'txpayload-ember-lending-001',
+        required_control_path: 'lending.supply',
+        network: 'arbitrum',
+      },
+      compactPlanSummary: {
+        control_path: 'lending.supply',
+        asset: 'USDC',
+        amount: '10',
+        summary: 'supply reserved USDC on Aave',
+      },
+    });
+  });
+
+  it('fails candidate-plan creation when the anchored payload resolver is unavailable', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-materialize-candidate-plan',
+        result: {
+          protocol_version: 'v1',
+          revision: 8,
+          committed_event_ids: ['evt-candidate-plan-1'],
+          candidate_plan: {
+            planning_kind: 'subagent_handoff',
+            transaction_plan_id: 'txplan-ember-lending-001',
+            handoff: {
+              handoff_id: 'handoff-thread-1',
+              payload_builder_output: {
+                transaction_payload_ref: 'txpayload-ember-lending-001',
+                required_control_path: 'lending.supply',
+                network: 'arbitrum',
+              },
+            },
+            compact_plan_summary: {
+              control_path: 'lending.supply',
+              asset: 'USDC',
+              amount: '10',
+              summary: 'supply reserved USDC on Aave',
+            },
+          },
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: createCandidatePlanInput(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 8,
+        lastCandidatePlan: null,
+        anchoredPayloadRecords: [],
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Candidate lending plan could not be anchored behind the lending service boundary because the anchored payload resolver is unavailable.',
         },
       },
     });
@@ -1262,6 +1452,7 @@ describe('createEmberLendingDomain', () => {
       threadId: 'thread-1',
       state: {
         ...createManagedLifecycleState(),
+        anchoredPayloadRecords: [createAnchoredPayloadRecord()],
         lastCandidatePlan: {
           transaction_plan_id: 'txplan-ember-lending-001',
         },
@@ -1347,6 +1538,7 @@ describe('createEmberLendingDomain', () => {
       threadId: 'thread-1',
       state: {
         ...createManagedLifecycleState(),
+        anchoredPayloadRecords: [createAnchoredPayloadRecord()],
         lastCandidatePlan: {
           transaction_plan_id: 'txplan-ember-lending-001',
         },
@@ -1428,11 +1620,11 @@ describe('createEmberLendingDomain', () => {
         },
       })),
     );
-    const resolvePreparedUnsignedTransaction = createPreparedUnsignedTransactionResolverStub();
+    const anchoredPayloadResolver = createAnchoredPayloadResolverStub();
     const domain = createEmberLendingDomain({
       protocolHost,
       runtimeSigning,
-      resolvePreparedUnsignedTransaction,
+      anchoredPayloadResolver,
       runtimeSignerRef: 'service-wallet',
       agentId: 'ember-lending',
     });
@@ -1441,6 +1633,7 @@ describe('createEmberLendingDomain', () => {
       threadId: 'thread-1',
       state: {
         ...createManagedLifecycleState(),
+        anchoredPayloadRecords: [createAnchoredPayloadRecord()],
         lastCandidatePlan: {
           transaction_plan_id: 'txplan-ember-lending-001',
         },
@@ -1461,15 +1654,17 @@ describe('createEmberLendingDomain', () => {
         unsignedTransactionHex: TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX,
       },
     });
-    expect(resolvePreparedUnsignedTransaction).toHaveBeenCalledWith({
+    expect(anchoredPayloadResolver.resolvePreparedUnsignedTransaction).toHaveBeenCalledWith({
       agentId: 'ember-lending',
       canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-001',
       executionPreparationId: 'execprep-ember-lending-001',
       network: 'arbitrum',
       plannedTransactionPayloadRef: 'txpayload-ember-lending-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
       requestId: 'req-ember-lending-execution-001',
       requiredControlPath: 'lending.supply',
       transactionPlanId: 'txplan-ember-lending-001',
+      anchoredPayloadRecords: [createAnchoredPayloadRecord()],
     });
 
     expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
@@ -1517,6 +1712,103 @@ describe('createEmberLendingDomain', () => {
           statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
         },
       },
+    });
+  });
+
+  it('resolves prepared unsigned transactions from the anchored lending-service payload store when no harness resolver is injected', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult({
+              inlineUnsignedTransactionHex: null,
+            }),
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-signed-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-submit-execution-1'],
+            execution_result: createTerminalExecutionResult({
+              status: 'confirmed',
+              transactionHash:
+                '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+            }),
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const anchoredPayloadResolver = createAnchoredPayloadResolverStub();
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      runtimeSigning,
+      anchoredPayloadResolver,
+      runtimeSignerRef: 'service-wallet',
+      agentId: 'ember-lending',
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        anchoredPayloadRecords: [createAnchoredPayloadRecord()],
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+          handoff: {
+            payload_builder_output: {
+              transaction_payload_ref: 'txpayload-ember-lending-001',
+              required_control_path: 'lending.supply',
+              network: 'arbitrum',
+            },
+          },
+        },
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(anchoredPayloadResolver.resolvePreparedUnsignedTransaction).toHaveBeenCalledWith({
+      agentId: 'ember-lending',
+      canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-001',
+      executionPreparationId: 'execprep-ember-lending-001',
+      network: 'arbitrum',
+      plannedTransactionPayloadRef: 'txpayload-ember-lending-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      requestId: 'req-ember-lending-execution-001',
+      requiredControlPath: 'lending.supply',
+      transactionPlanId: 'txplan-ember-lending-001',
+      anchoredPayloadRecords: [createAnchoredPayloadRecord()],
     });
   });
 

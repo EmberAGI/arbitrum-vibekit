@@ -42,11 +42,27 @@ Current execution-context semantics:
 - direct OWS signing stays inside the private runtime service layer and must
   fail closed if the prepared signing package does not match the resolved
   dedicated subagent wallet identity
+- the live managed path now anchors planner-returned transaction payload refs
+  behind the lending service boundary via Onchain Actions, stores the full
+  ordered transaction-request sequence in runtime-owned persisted domain state,
+  and resolves the exact unsigned transaction bytes for the requested step only
+  at execution time using the managed wallet address plus chain RPC state,
+  instead of relying on a process-local map or a test-only harness seam
+- `create_transaction_plan` now fails closed unless that service-owned
+  anchoring step succeeds; missing planner payload metadata, missing managed
+  wallet context, or missing anchored-resolver wiring must stop plan creation
+  before a locally executable candidate plan is recorded
 
 Runtime wiring:
 
 - `SHARED_EMBER_BASE_URL` points the app at the bounded Shared Ember HTTP
   surface
+- `ONCHAIN_ACTIONS_API_URL` optionally overrides the Onchain Actions API origin
+  used for service-owned planner payload anchoring and ordered transaction-step
+  resolution
+- `ARBITRUM_RPC_URL`, `BASE_CHAIN_RPC_URL`, and `ETHEREUM_RPC_URL` optionally
+  override the chain RPC endpoints the lending service uses to prepare the
+  requested unsigned transaction bytes just before runtime signing
 - `EMBER_LENDING_OWS_WALLET_NAME` selects the direct OWS wallet the runtime
   should use for startup identity proof, redelegation, and execution signing
 - `EMBER_LENDING_OWS_PASSPHRASE` optionally unlocks that wallet when the vault
@@ -85,4 +101,4 @@ Validation note:
   a repo-local HTTP sidecar seam
 - run `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`
   to prove the real runtime-owned redelegation typed-data signing path plus the
-  concrete-service prepared unsigned-transaction resolution seam
+  service-owned Onchain Actions anchored-payload resolution seam

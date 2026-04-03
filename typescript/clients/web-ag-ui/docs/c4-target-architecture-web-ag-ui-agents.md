@@ -199,10 +199,13 @@ Current concrete managed-path specialization:
   - treats each distinct startup identity rewrite as a new command with its own identity-scoped idempotency key and fails closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address
   - consumes runtime-internal Shared Ember projection and execution-context reads plus the model-visible `create_transaction_plan`, `request_transaction_execution`, and `create_escalation_request` contract
   - keeps planning on the bounded Shared Ember planner contract, sending only a bounded planning handoff while receiving planner-generated payload output back in the candidate plan
+  - treats candidate-plan creation as complete only after the lending service has privately anchored that planner-returned payload; missing planner metadata, missing managed wallet context, or missing anchored-resolver wiring must fail closed instead of leaving an apparently executable local plan
   - keeps `request_transaction_execution` as one model-visible tool while
     internally composing Shared Ember execution preparation, runtime-owned OWS
-    redelegation typed-data signing, concrete-service prepared unsigned-transaction
-    resolution, runtime-owned execution signing, and Ember-owned
+    redelegation typed-data signing, service-owned anchored Onchain Actions
+    ordered transaction-request persistence and step resolution in runtime-owned
+    domain state, chain-aware unsigned-transaction preparation with the managed
+    wallet plus RPC state, runtime-owned execution signing, and Ember-owned
     submission/finalization
   - treats `authority_preparation_needed` as an internal wait state and re-polls the Shared Ember execution request with a stage-scoped retry idempotency key instead of exposing a second tool or reusing the original acknowledged request key
   - reconciles dropped signed-transaction submit responses through the Shared Ember committed-event outbox before replaying an idempotent submit

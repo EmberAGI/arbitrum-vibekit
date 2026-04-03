@@ -35,7 +35,8 @@
   },
   "dependencies": {
     "agent-runtime": "workspace:^",
-    "viem": "catalog:"
+    "viem": "catalog:",
+    "zod": "catalog:"
   },
   "dependenciesMeta": {
     "agent-runtime": {

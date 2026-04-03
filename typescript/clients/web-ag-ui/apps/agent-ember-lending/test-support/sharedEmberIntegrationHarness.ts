@@ -4,12 +4,12 @@ import { pathToFileURL } from 'node:url';
 
 import { encodeFunctionData, parseAbiItem, serializeTransaction, type AbiFunction } from 'viem';
 
-import type { EmberLendingPreparedUnsignedTransactionResolver } from './sharedEmberAdapter.js';
+import type { EmberLendingAnchoredPayloadResolver } from '../src/sharedEmberAdapter.js';
 
 export type StartedSharedEmberTarget = {
   baseUrl: string;
   close: () => Promise<void>;
-  resolvePreparedUnsignedTransaction?: EmberLendingPreparedUnsignedTransactionResolver;
+  anchoredPayloadResolver?: EmberLendingAnchoredPayloadResolver;
 };
 
 export const TEST_EMBER_LENDING_AGENT_ID = 'ember-lending';
@@ -139,33 +139,89 @@ function buildPreparedUnsignedTransactionHex(
   });
 }
 
-function createPreparedUnsignedTransactionResolver(input: {
+function buildAnchoredTransactionRequest(
+  payload: HarnessExecutionPayloadArtifact,
+): {
+  type: 'EVM_TX';
+  to: `0x${string}`;
+  value: string;
+  data: `0x${string}`;
+  chainId: string;
+} | null {
+  const target = readString(payload.target);
+  if (!target?.startsWith('0x')) {
+    return null;
+  }
+
+  return {
+    type: 'EVM_TX',
+    to: target as `0x${string}`,
+    value: payload.value ?? '0',
+    data: buildExecutionCallData(payload),
+    chainId: String(resolveExecutionChainId(payload.network)),
+  };
+}
+
+function createAnchoredPayloadResolver(input: {
   bootstrap: SharedEmberIntegrationBootstrap;
   defaultAgentId: string;
-}): EmberLendingPreparedUnsignedTransactionResolver {
-  return async (request) => {
-    const runtime =
-      input.bootstrap.subagentRuntimes?.[request.agentId] ??
-      (request.agentId === input.defaultAgentId ? createSubagentRuntime() : undefined);
-    if (!runtime) {
-      return null;
-    }
+}): EmberLendingAnchoredPayloadResolver {
+  return {
+    async anchorCandidatePlanPayload(request) {
+      const runtime =
+        input.bootstrap.subagentRuntimes?.[request.agentId] ??
+        (request.agentId === input.defaultAgentId ? createSubagentRuntime() : undefined);
+      if (!runtime) {
+        return null;
+      }
 
-    const plannedTransactionPayloadRef =
-      request.plannedTransactionPayloadRef ??
-      (request.canonicalUnsignedPayloadRef.startsWith('unsigned-')
-        ? request.canonicalUnsignedPayloadRef.slice('unsigned-'.length)
-        : null);
-    if (!plannedTransactionPayloadRef) {
-      return null;
-    }
+      const payload = await runtime.payloadStore.getExecutionPayload(
+        request.payloadBuilderOutput.transaction_payload_ref,
+      );
+      if (!payload) {
+        return null;
+      }
 
-    const payload = await runtime.payloadStore.getExecutionPayload(plannedTransactionPayloadRef);
-    if (!payload) {
-      return null;
-    }
+      const transactionRequest = buildAnchoredTransactionRequest(
+        payload as HarnessExecutionPayloadArtifact,
+      );
+      if (!transactionRequest) {
+        return null;
+      }
 
-    return buildPreparedUnsignedTransactionHex(payload as HarnessExecutionPayloadArtifact);
+      return {
+        anchoredPayloadRef: request.payloadBuilderOutput.transaction_payload_ref,
+        transactionRequests: [transactionRequest],
+        controlPath: request.payloadBuilderOutput.required_control_path,
+        network: request.payloadBuilderOutput.network,
+        transactionPlanId: request.transactionPlanId,
+      };
+    },
+
+    async resolvePreparedUnsignedTransaction(request) {
+      const runtime =
+        input.bootstrap.subagentRuntimes?.[request.agentId] ??
+        (request.agentId === input.defaultAgentId ? createSubagentRuntime() : undefined);
+      if (!runtime) {
+        return null;
+      }
+
+      const plannedTransactionPayloadRef =
+        request.plannedTransactionPayloadRef ??
+        (request.canonicalUnsignedPayloadRef.startsWith('unsigned-')
+          ? request.canonicalUnsignedPayloadRef.slice('unsigned-'.length)
+          : null);
+      if (!plannedTransactionPayloadRef) {
+        return null;
+      }
+
+      const payload = await runtime.payloadStore.getExecutionPayload(plannedTransactionPayloadRef);
+      if (!payload) {
+        return null;
+      }
+
+      return buildPreparedUnsignedTransactionHex(payload as HarnessExecutionPayloadArtifact);
+    },
   };
 }
 
@@ -486,7 +542,7 @@ export async function resolveSharedEmberTarget(input?: {
 
   return {
     ...startedTarget,
-    resolvePreparedUnsignedTransaction: createPreparedUnsignedTransactionResolver({
+    anchoredPayloadResolver: createAnchoredPayloadResolver({
       bootstrap,
       defaultAgentId: TEST_EMBER_LENDING_AGENT_ID,
     }),

@@ -9,6 +9,7 @@ import {
 import {
   createEmberLendingAgentConfig,
   type EmberLendingAgentConfig,
+  type EmberLendingGatewayDependencies,
   type EmberLendingGatewayEnv,
   resolveEmberLendingGatewayDependencies,
 } from './emberLendingFoundation.js';
@@ -38,6 +39,9 @@ type EmberLendingGatewayServiceOptions = {
 type EmberLendingGatewayInternalOptions = EmberLendingGatewayServiceOptions & {
   __internalCreateAgentRuntimeKernel?: typeof createAgentRuntimeKernel;
   __internalEnsureServiceIdentity?: typeof ensureEmberLendingServiceIdentity;
+  __internalResolveGatewayDependencies?: (
+    env?: EmberLendingGatewayEnv,
+  ) => EmberLendingGatewayDependencies;
   __internalPostgres?: AgentRuntimeInternalPostgresHooks;
 };
 
@@ -143,6 +147,8 @@ export async function createEmberLendingGatewayService(
 ): Promise<AgentRuntimeService> {
   const createAgentRuntimeKernelImpl =
     options.__internalCreateAgentRuntimeKernel ?? createAgentRuntimeKernel;
+  const resolveGatewayDependencies =
+    options.__internalResolveGatewayDependencies ?? resolveEmberLendingGatewayDependencies;
 
   const kernel = await createAgentRuntimeKernelImpl({
     env: options.env,
@@ -163,7 +169,7 @@ export async function createEmberLendingGatewayService(
         } as never;
       }
 
-      const dependencies = resolveEmberLendingGatewayDependencies(options.env);
+      const dependencies = resolveGatewayDependencies(options.env);
       if (dependencies.protocolHost) {
         const ensuredIdentity = await (
           options.__internalEnsureServiceIdentity ?? ensureEmberLendingServiceIdentity
@@ -183,6 +189,7 @@ export async function createEmberLendingGatewayService(
 
       return {
         ...createEmberLendingAgentConfig(options.env, {
+          dependencies,
           runtimeSigning: signing,
           runtimeSignerRef: EMBER_LENDING_RUNTIME_SIGNER_REF,
         }),

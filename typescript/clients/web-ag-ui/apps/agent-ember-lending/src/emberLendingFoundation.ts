@@ -5,9 +5,13 @@ import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 
 import {
   createEmberLendingDomain,
+  type EmberLendingAnchoredPayloadResolver,
   type EmberLendingLifecycleState,
-  type EmberLendingPreparedUnsignedTransactionResolver,
 } from './sharedEmberAdapter.js';
+import {
+  createEmberLendingOnchainActionsAnchoredPayloadResolver,
+  resolveEmberLendingOnchainActionsApiUrl,
+} from './onchainActionsPayloadResolver.js';
 import {
   createEmberLendingSharedEmberHttpHost,
   resolveEmberLendingSharedEmberBaseUrl,
@@ -23,6 +27,10 @@ export type EmberLendingGatewayEnv = NodeJS.ProcessEnv & {
   EMBER_LENDING_MODEL?: string;
   DATABASE_URL?: string;
   SHARED_EMBER_BASE_URL?: string;
+  ONCHAIN_ACTIONS_API_URL?: string;
+  ARBITRUM_RPC_URL?: string;
+  BASE_CHAIN_RPC_URL?: string;
+  ETHEREUM_RPC_URL?: string;
   EMBER_LENDING_OWS_WALLET_NAME?: string;
   EMBER_LENDING_OWS_PASSPHRASE?: string;
   EMBER_LENDING_OWS_VAULT_PATH?: string;
@@ -39,11 +47,12 @@ type EmberLendingGatewayModel = EmberLendingAgentConfig['model'];
 
 export type EmberLendingGatewayDependencies = {
   protocolHost: ReturnType<typeof createEmberLendingSharedEmberHttpHost> | undefined;
+  anchoredPayloadResolver: EmberLendingAnchoredPayloadResolver;
 };
 
 type CreateEmberLendingAgentConfigOptions = {
   runtimeSigning?: AgentRuntimeSigningService;
-  resolvePreparedUnsignedTransaction?: EmberLendingPreparedUnsignedTransactionResolver;
+  dependencies?: EmberLendingGatewayDependencies;
   runtimeSignerRef?: string;
 };
 
@@ -85,7 +94,8 @@ export function createEmberLendingAgentConfig(
 ): EmberLendingAgentConfig {
   const apiKey = requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.EMBER_LENDING_MODEL?.trim() || DEFAULT_EMBER_LENDING_MODEL;
-  const { protocolHost } = resolveEmberLendingGatewayDependencies(env);
+  const { protocolHost, anchoredPayloadResolver } =
+    options.dependencies ?? resolveEmberLendingGatewayDependencies(env);
 
   return {
     model: createOpenRouterModel(modelId),
@@ -95,7 +105,7 @@ export function createEmberLendingAgentConfig(
     domain: createEmberLendingDomain({
       protocolHost,
       runtimeSigning: options.runtimeSigning,
-      resolvePreparedUnsignedTransaction: options.resolvePreparedUnsignedTransaction,
+      anchoredPayloadResolver,
       runtimeSignerRef: options.runtimeSignerRef,
     }),
     agentOptions: {
@@ -111,6 +121,7 @@ export function resolveEmberLendingGatewayDependencies(
   env: EmberLendingGatewayEnv = process.env,
 ): EmberLendingGatewayDependencies {
   const sharedEmberBaseUrl = resolveEmberLendingSharedEmberBaseUrl(env);
+  const onchainActionsApiUrl = resolveEmberLendingOnchainActionsApiUrl(env);
 
   return {
     protocolHost: sharedEmberBaseUrl
@@ -118,5 +129,9 @@ export function resolveEmberLendingGatewayDependencies(
           baseUrl: sharedEmberBaseUrl,
         })
       : undefined,
+    anchoredPayloadResolver: createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: onchainActionsApiUrl,
+      env,
+    }),
   };
 }

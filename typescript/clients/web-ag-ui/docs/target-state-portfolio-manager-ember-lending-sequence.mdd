@@ -64,7 +64,12 @@ sequenceDiagram
   SE->>Planner: plan from mandate + execution context
   Planner-->>SE: candidate plan
   SE-->>EL: candidate_plan + revision
-  EL-->>Runtime: candidate plan artifact
+  Note over EL: Privately anchor the planner-returned payload behind the lending-service Onchain Actions boundary before recording a locally executable candidate plan.
+  alt anchoring succeeds
+    EL-->>Runtime: candidate plan artifact
+  else anchoring prerequisites or resolver are missing
+    EL-->>Runtime: failed status; candidate plan is not recorded as locally executable
+  end
 
   User->>Web: request_transaction_execution
   Web->>Runtime: run(request_transaction_execution)
