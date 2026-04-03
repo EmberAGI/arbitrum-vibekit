@@ -23,10 +23,12 @@ describe('createEmberLendingSharedEmberHttpHost', () => {
   let baseUrl: string;
   let responseStatus: number;
   let responseBody: unknown;
+  let lastRequestBody: unknown;
 
   beforeEach(async () => {
     responseStatus = 200;
     responseBody = null;
+    lastRequestBody = null;
     server = createServer((request: IncomingMessage, response: ServerResponse) => {
       void (async () => {
         if (request.url !== '/jsonrpc') {
@@ -35,6 +37,8 @@ describe('createEmberLendingSharedEmberHttpHost', () => {
           return;
         }
 
+        lastRequestBody = await readRequestBody(request);
+
         response.writeHead(responseStatus, {
           'content-type': 'application/json; charset=utf-8',
         });
@@ -42,7 +46,7 @@ describe('createEmberLendingSharedEmberHttpHost', () => {
           JSON.stringify(
             responseBody ?? {
               ok: true,
-              received: await readRequestBody(request),
+              received: lastRequestBody,
             },
           ),
         );
@@ -129,6 +133,126 @@ describe('createEmberLendingSharedEmberHttpHost', () => {
         },
       }),
     ).rejects.toThrow('expected revision mismatch');
+  });
+
+  it('routes committed outbox reads through jsonrpc and unwraps the outbox page', async () => {
+    responseBody = {
+      jsonrpc: '2.0',
+      id: 'rpc-shared-http-outbox-read',
+      result: {
+        protocol_version: 'v1',
+        revision: 7,
+        consumer_id: 'ember-lending-recovery',
+        acknowledged_through_sequence: 1,
+        next_cursor: 3,
+        has_more: false,
+        events: [
+          {
+            protocol_version: 'v1',
+            event_id: 'evt-request-execution-3',
+            sequence: 3,
+            aggregate: 'request',
+            aggregate_id: 'req-ember-lending-001',
+            event_type: 'requestExecution.completed.v1',
+            committed_at: '2026-03-29T00:00:05Z',
+            payload: {
+              request_id: 'req-ember-lending-001',
+              transaction_plan_id: 'txplan-ember-lending-001',
+              status: 'confirmed',
+            },
+          },
+        ],
+      },
+    };
+
+    const host = createEmberLendingSharedEmberHttpHost({
+      baseUrl,
+    });
+
+    await expect(
+      host.readCommittedEventOutbox({
+        protocol_version: 'v1',
+        consumer_id: 'ember-lending-recovery',
+        after_sequence: 0,
+        limit: 100,
+      }),
+    ).resolves.toEqual({
+      protocol_version: 'v1',
+      revision: 7,
+      consumer_id: 'ember-lending-recovery',
+      acknowledged_through_sequence: 1,
+      next_cursor: 3,
+      has_more: false,
+      events: [
+        {
+          protocol_version: 'v1',
+          event_id: 'evt-request-execution-3',
+          sequence: 3,
+          aggregate: 'request',
+          aggregate_id: 'req-ember-lending-001',
+          event_type: 'requestExecution.completed.v1',
+          committed_at: '2026-03-29T00:00:05Z',
+          payload: {
+            request_id: 'req-ember-lending-001',
+            transaction_plan_id: 'txplan-ember-lending-001',
+            status: 'confirmed',
+          },
+        },
+      ],
+    });
+
+    expect(lastRequestBody).toMatchObject({
+      jsonrpc: '2.0',
+      method: 'readCommittedEventOutbox.v1',
+      params: {
+        consumer_id: 'ember-lending-recovery',
+        after_sequence: 0,
+        limit: 100,
+      },
+    });
+  });
+
+  it('routes committed outbox acknowledgements through jsonrpc and preserves outbox-shaped errors', async () => {
+    responseBody = {
+      jsonrpc: '2.0',
+      id: 'rpc-shared-http-outbox-ack',
+      result: {
+        protocol_version: 'v1',
+        revision: 7,
+        error: {
+          code: -32001,
+          message: 'protocol_conflict: outbox acknowledgement cannot move backwards',
+        },
+      },
+    };
+
+    const host = createEmberLendingSharedEmberHttpHost({
+      baseUrl,
+    });
+
+    await expect(
+      host.acknowledgeCommittedEventOutbox({
+        protocol_version: 'v1',
+        consumer_id: 'ember-lending-recovery',
+        delivered_through_sequence: 3,
+      }),
+    ).resolves.toEqual({
+      protocol_version: 'v1',
+      revision: 7,
+      error: {
+        code: -32001,
+        message: 'protocol_conflict: outbox acknowledgement cannot move backwards',
+      },
+    });
+
+    expect(lastRequestBody).toMatchObject({
+      jsonrpc: '2.0',
+      method: 'ackCommittedEventOutbox.v1',
+      params: {
+        consumer_id: 'ember-lending-recovery',
+        delivered_through_sequence: 3,
+      },
+    });
   });
 
   it('normalizes the optional Shared Ember base URL from env', () => {
