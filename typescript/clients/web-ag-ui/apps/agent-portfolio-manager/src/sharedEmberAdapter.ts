@@ -1,5 +1,6 @@
 import type { AgentRuntimeDomainConfig } from 'agent-runtime';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
+import { getDeleGatorEnvironment } from '@metamask/delegation-toolkit';
 import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
 import { keccak256, toHex } from 'viem';
 import {
@@ -34,6 +35,7 @@ type CreatePortfolioManagerDomainOptions = {
   protocolHost?: PortfolioManagerSharedEmberProtocolHost;
   agentId?: string;
   controllerWalletAddress?: `0x${string}`;
+  controllerSignerAddress?: `0x${string}`;
   runtimeSigning?: AgentRuntimeSigningService;
   runtimeSignerRef?: string;
 };
@@ -83,10 +85,16 @@ type SharedEmberRedelegationWork = {
 
 const OWS_SIGNING_CHAIN = 'evm';
 const DEFAULT_RUNTIME_SIGNER_REF = 'controller-wallet';
+const PORTFOLIO_MANAGER_CHAIN_ID = 42161;
+const PORTFOLIO_MANAGER_NETWORK = 'arbitrum';
+const PORTFOLIO_MANAGER_SMART_ACCOUNT_ENVIRONMENT = getDeleGatorEnvironment(
+  PORTFOLIO_MANAGER_CHAIN_ID,
+);
+const PORTFOLIO_MANAGER_DELEGATION_MANAGER =
+  PORTFOLIO_MANAGER_SMART_ACCOUNT_ENVIRONMENT.DelegationManager as `0x${string}`;
 const RUNTIME_REDELEGATION_DOMAIN_NAME = 'DelegationManager';
 const RUNTIME_REDELEGATION_DOMAIN_VERSION = '1';
-const RUNTIME_REDELEGATION_VERIFIER =
-  '0x00000000000000000000000000000000000000d1' as const;
+const RUNTIME_REDELEGATION_VERIFIER = PORTFOLIO_MANAGER_DELEGATION_MANAGER;
 const METAMASK_DELEGATION_ARTIFACT_PREFIX = 'metamask-delegation:';
 
 function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
@@ -596,10 +604,6 @@ const PORTFOLIO_MANAGER_SETUP_MESSAGE =
 const PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE = 'portfolio-manager-delegation-signing-request';
 const PORTFOLIO_MANAGER_SIGNING_MESSAGE =
   'Review and sign the delegation needed to activate your portfolio manager.';
-const PORTFOLIO_MANAGER_CHAIN_ID = 42161;
-const PORTFOLIO_MANAGER_NETWORK = 'arbitrum';
-const PORTFOLIO_MANAGER_DELEGATION_MANAGER = '0x1111111111111111111111111111111111111111';
-const PORTFOLIO_MANAGER_ORCHESTRATOR_WALLET = '0x2222222222222222222222222222222222222222';
 const PORTFOLIO_MANAGER_ROOT_AUTHORITY =
   '0x0000000000000000000000000000000000000000000000000000000000000000';
 const PORTFOLIO_MANAGER_DELEGATION_SALT =
@@ -1070,8 +1074,8 @@ export function createPortfolioManagerDomain(
   options: CreatePortfolioManagerDomainOptions = {},
 ): AgentRuntimeDomainConfig<PortfolioManagerLifecycleState> {
   const agentId = options.agentId ?? PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID;
-  const controllerWalletAddress =
-    options.controllerWalletAddress ?? PORTFOLIO_MANAGER_ORCHESTRATOR_WALLET;
+  const controllerWalletAddress = options.controllerWalletAddress ?? null;
+  const controllerSignerAddress = options.controllerSignerAddress ?? null;
 
   return {
     lifecycle: {
@@ -1344,6 +1348,19 @@ export function createPortfolioManagerDomain(
             };
           }
 
+          if (!controllerWalletAddress) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio manager onboarding is blocked because the controller smart-account address is not configured.',
+                },
+              },
+            };
+          }
+
           const nextState: PortfolioManagerLifecycleState = {
             ...currentState,
             phase: 'onboarding',
@@ -1414,6 +1431,19 @@ export function createPortfolioManagerDomain(
                 status: {
                   executionStatus: 'failed',
                   statusMessage: 'Shared Ember Domain Service host is not configured.',
+                },
+              },
+            };
+          }
+
+          if (!controllerWalletAddress) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio manager onboarding is blocked because the controller smart-account address is not configured.',
                 },
               },
             };
@@ -1768,6 +1798,31 @@ export function createPortfolioManagerDomain(
             };
           }
 
+          if (!controllerWalletAddress) {
+            return {
+              state: nextState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio-manager redelegation signing is blocked because the controller smart-account address is not configured.',
+                },
+              },
+            };
+          }
+          if (!controllerSignerAddress) {
+            return {
+              state: nextState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio-manager redelegation signing is blocked because the controller signer address is not configured.',
+                },
+              },
+            };
+          }
+
           let redelegationTypedData: Record<string, unknown>;
           try {
             redelegationTypedData = buildRuntimeRedelegationTypedData({
@@ -1789,7 +1844,7 @@ export function createPortfolioManagerDomain(
 
           const signedRedelegation = await options.runtimeSigning.signPayload({
             signerRef: options.runtimeSignerRef ?? DEFAULT_RUNTIME_SIGNER_REF,
-            expectedAddress: controllerWalletAddress,
+            expectedAddress: controllerSignerAddress,
             payloadKind: 'typed-data',
             payload: {
               chain: OWS_SIGNING_CHAIN,
@@ -1815,7 +1870,7 @@ export function createPortfolioManagerDomain(
           try {
             signedRedelegationRecord = buildRuntimeSignedRedelegationRecord({
               redelegationSigningPackage: redelegationWork.redelegationSigningPackage,
-              signerAddress: signedRedelegation.confirmedAddress,
+              signerAddress: controllerWalletAddress,
               signature: redelegationSignature,
             });
           } catch {

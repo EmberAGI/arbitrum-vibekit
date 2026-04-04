@@ -23,6 +23,8 @@ type StubResponse = {
 const TEST_OWS_PRIVATE_KEY =
   '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const TEST_CONTROLLER_WALLET_ADDRESS = '0xfcad0b19bb29d4674531d6f115237e16afce377c' as const;
+const TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS =
+  '0x3b32650cefcb53bf0365058c5576d70226225fc4' as const;
 
 function createOwsWalletFixture(walletName: string) {
   const vaultPath = mkdtempSync(path.join(os.tmpdir(), 'portfolio-manager-ows-'));
@@ -232,6 +234,9 @@ describe('portfolio-manager startup identity preflight integration', () => {
         SHARED_EMBER_BASE_URL: sharedEmber.baseUrl,
         ...owsWallet.env,
       },
+      __internalDeriveControllerSmartAccountAddress: vi.fn(
+        async () => TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
+      ),
       __internalPostgres: createInternalPostgresHooks(),
     } as never);
 
@@ -254,7 +259,7 @@ describe('portfolio-manager startup identity preflight integration', () => {
         agent_service_identity: {
           agent_id: 'portfolio-manager',
           role: 'orchestrator',
-          wallet_address: TEST_CONTROLLER_WALLET_ADDRESS,
+          wallet_address: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
           registration_version: 1,
         },
       },
@@ -325,6 +330,9 @@ describe('portfolio-manager startup identity preflight integration', () => {
           SHARED_EMBER_BASE_URL: sharedEmber.baseUrl,
           ...owsWallet.env,
         },
+        __internalDeriveControllerSmartAccountAddress: vi.fn(
+          async () => TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
+        ),
         __internalPostgres: createInternalPostgresHooks(),
       } as never),
     ).rejects.toThrow(

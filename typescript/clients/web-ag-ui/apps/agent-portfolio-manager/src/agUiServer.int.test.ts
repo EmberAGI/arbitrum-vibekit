@@ -10,6 +10,10 @@ import {
 } from './agUiServer.js';
 import { createPortfolioManagerDomain } from './sharedEmberAdapter.js';
 
+const TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS =
+  '0x3b32650cefcb53bf0365058c5576d70226225fc4' as const;
+const TEST_DELEGATION_MANAGER = '0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3' as const;
+
 type AgUiEventEnvelope = {
   type: string;
   [key: string]: unknown;
@@ -144,7 +148,7 @@ async function handleDefaultSharedEmberJsonRpc(input: unknown): Promise<unknown>
         return createAgentServiceIdentityResponse({
           agentId: 'portfolio-manager',
           role: 'orchestrator',
-          walletAddress: '0x2222222222222222222222222222222222222222',
+          walletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
         });
       }
 
@@ -244,6 +248,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         domain: createPortfolioManagerDomain({
           protocolHost,
           agentId: 'portfolio-manager',
+          controllerWalletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
         }),
         agentOptions: {
           initialState: {
@@ -435,10 +440,10 @@ describe('agent-portfolio-manager AG-UI integration', () => {
                     data: expect.objectContaining({
                       payload: expect.objectContaining({
                         kind: 'interrupt',
-                        payload: expect.objectContaining({
-                          type: 'portfolio-manager-delegation-signing-request',
-                          delegationManager: '0x1111111111111111111111111111111111111111',
-                          delegateeAddress: '0x2222222222222222222222222222222222222222',
+                          payload: expect.objectContaining({
+                            type: 'portfolio-manager-delegation-signing-request',
+                          delegationManager: TEST_DELEGATION_MANAGER,
+                          delegateeAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
                         }),
                       }),
                     }),
@@ -465,7 +470,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
               outcome: 'signed',
               signedDelegations: [
                 {
-                  delegate: '0x2222222222222222222222222222222222222222',
+                  delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
                   delegator: '0x00000000000000000000000000000000000000a1',
                   authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
                   caveats: [],
@@ -556,7 +561,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           }),
           handoff: expect.objectContaining({
             user_wallet: '0x00000000000000000000000000000000000000a1',
-            orchestrator_wallet: '0x2222222222222222222222222222222222222222',
+            orchestrator_wallet: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
           }),
         }),
       }),
@@ -617,7 +622,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           return createAgentServiceIdentityResponse({
             agentId: 'portfolio-manager',
             role: 'orchestrator',
-            walletAddress: '0x2222222222222222222222222222222222222222',
+            walletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
           });
         }
 
@@ -688,7 +693,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
               outcome: 'signed',
               signedDelegations: [
                 {
-                  delegate: '0x2222222222222222222222222222222222222222',
+                  delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
                   delegator: '0x00000000000000000000000000000000000000a1',
                   authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
                   caveats: [],
@@ -810,7 +815,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
               outcome: 'signed',
               signedDelegations: [
                 {
-                  delegate: '0x2222222222222222222222222222222222222222',
+                  delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
                   delegator: '0x00000000000000000000000000000000000000a1',
                   authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
                   caveats: [],
@@ -991,7 +996,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
               outcome: 'signed',
               signedDelegations: [
                 {
-                  delegate: '0x2222222222222222222222222222222222222222',
+                  delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
                   delegator: '0x00000000000000000000000000000000000000a1',
                   authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
                   caveats: [],

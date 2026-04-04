@@ -48,6 +48,11 @@ function createSignedRootDelegation(delegate: `0x${string}`) {
 
 const TEST_REDELEGATION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
+const TEST_DELEGATION_MANAGER = '0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3';
+const TEST_CONTROLLER_SIGNER_ADDRESS =
+  '0x00000000000000000000000000000000000000c1' as const;
+const TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS =
+  '0x00000000000000000000000000000000000000c2' as const;
 
 function createAgentServiceIdentityResponse(input: {
   agentId: string;
@@ -218,6 +223,7 @@ describe('createPortfolioManagerDomain', () => {
   it('turns the approved mandate envelope into a delegation-signing interrupt', async () => {
     const domain = createPortfolioManagerDomain({
       agentId: 'portfolio-manager',
+      controllerWalletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
     });
 
     await expect(
@@ -257,12 +263,12 @@ describe('createPortfolioManagerDomain', () => {
           payload: {
             chainId: 42161,
             delegatorAddress: '0x00000000000000000000000000000000000000a1',
-            delegateeAddress: '0x2222222222222222222222222222222222222222',
-            delegationManager: '0x1111111111111111111111111111111111111111',
+            delegateeAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
+            delegationManager: TEST_DELEGATION_MANAGER,
             descriptions: ['Authorize the portfolio manager to operate through your root delegation.'],
             delegationsToSign: [
               expect.objectContaining({
-                delegate: '0x2222222222222222222222222222222222222222',
+                delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
                 delegator: '0x00000000000000000000000000000000000000a1',
                 authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
                 salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
@@ -274,10 +280,48 @@ describe('createPortfolioManagerDomain', () => {
     });
   });
 
+  it('fails closed when onboarding reaches delegation signing without a configured controller smart-account address', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: null,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: null,
+          activeWalletAddress: null,
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-setup-request',
+          input: createPortfolioManagerSetupInput(),
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'onboarding',
+        activeWalletAddress: null,
+        pendingOnboardingWalletAddress: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Portfolio manager onboarding is blocked because the controller smart-account address is not configured.',
+        },
+      },
+    });
+  });
+
   it('completes onboarding after signed delegations are supplied through the signing interrupt', async () => {
-    const signedDelegation = createSignedRootDelegation(
-      '0x2222222222222222222222222222222222222222',
-    );
+    const signedDelegation = createSignedRootDelegation(TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS);
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
@@ -292,7 +336,7 @@ describe('createPortfolioManagerDomain', () => {
             return createAgentServiceIdentityResponse({
               agentId: 'portfolio-manager',
               role: 'orchestrator',
-              walletAddress: '0x2222222222222222222222222222222222222222',
+              walletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
             });
           }
 
@@ -361,6 +405,7 @@ describe('createPortfolioManagerDomain', () => {
     const domain = createPortfolioManagerDomain({
       protocolHost,
       agentId: 'portfolio-manager',
+      controllerWalletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
     });
 
     await expect(
@@ -480,7 +525,7 @@ describe('createPortfolioManagerDomain', () => {
           }),
           handoff: expect.objectContaining({
             user_wallet: '0x00000000000000000000000000000000000000a1',
-            orchestrator_wallet: '0x2222222222222222222222222222222222222222',
+            orchestrator_wallet: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
             signer_kind: 'delegation_toolkit',
           }),
         }),
@@ -1049,7 +1094,7 @@ describe('createPortfolioManagerDomain', () => {
 
   it('fails closed after rooted bootstrap when the managed ember-lending execution context still has no subagent wallet', async () => {
     const signedDelegation = {
-      delegate: '0x00000000000000000000000000000000000000c1',
+      delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
       delegator: '0x00000000000000000000000000000000000000a1',
       authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
       caveats: [],
@@ -1070,7 +1115,7 @@ describe('createPortfolioManagerDomain', () => {
             return createAgentServiceIdentityResponse({
               agentId: 'portfolio-manager',
               role: 'orchestrator',
-              walletAddress: '0x2222222222222222222222222222222222222222',
+              walletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
             });
           }
 
@@ -1138,6 +1183,7 @@ describe('createPortfolioManagerDomain', () => {
     const domain = createPortfolioManagerDomain({
       protocolHost,
       agentId: 'portfolio-manager',
+      controllerWalletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
     });
 
     await expect(
@@ -1353,7 +1399,7 @@ describe('createPortfolioManagerDomain', () => {
 
   it('reads the current Shared Ember revision before completing onboarding when the thread has no cached revision', async () => {
     const signedDelegation = {
-      delegate: '0x2222222222222222222222222222222222222222',
+      delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
       delegator: '0x00000000000000000000000000000000000000a1',
       authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
       caveats: [],
@@ -1374,7 +1420,7 @@ describe('createPortfolioManagerDomain', () => {
             return createAgentServiceIdentityResponse({
               agentId: 'portfolio-manager',
               role: 'orchestrator',
-              walletAddress: '0x2222222222222222222222222222222222222222',
+              walletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
             });
           }
 
@@ -1468,6 +1514,7 @@ describe('createPortfolioManagerDomain', () => {
     const domain = createPortfolioManagerDomain({
       protocolHost,
       agentId: 'portfolio-manager',
+      controllerWalletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
     });
 
     await expect(
@@ -2216,7 +2263,8 @@ describe('createPortfolioManagerDomain', () => {
     const domain = createPortfolioManagerDomain({
       protocolHost,
       agentId: 'portfolio-manager',
-      controllerWalletAddress: '0x00000000000000000000000000000000000000c1',
+      controllerWalletAddress: '0x00000000000000000000000000000000000000c2',
+      controllerSignerAddress: '0x00000000000000000000000000000000000000c1',
       runtimeSigning,
       runtimeSignerRef: 'controller-wallet',
     });
@@ -2290,7 +2338,7 @@ describe('createPortfolioManagerDomain', () => {
           primaryType: 'Delegation',
           message: expect.objectContaining({
             delegate: '0x00000000000000000000000000000000000000b1',
-            delegator: '0x00000000000000000000000000000000000000c1',
+            delegator: '0x00000000000000000000000000000000000000c2',
             authority: expect.stringMatching(/^0x[0-9a-f]{64}$/),
             caveats: [],
           }),
@@ -2348,7 +2396,7 @@ describe('createPortfolioManagerDomain', () => {
     );
     expect(decodedArtifact).toMatchObject({
       delegate: '0x00000000000000000000000000000000000000b1',
-      delegator: '0x00000000000000000000000000000000000000c1',
+      delegator: '0x00000000000000000000000000000000000000c2',
       authority: getDelegationHashOffchain(rootSignedDelegation),
       caveats: [],
       salt: expect.stringMatching(/^0x[0-9a-f]+$/),
@@ -2360,6 +2408,104 @@ describe('createPortfolioManagerDomain', () => {
       consumer_id: 'portfolio-manager-redelegation',
       delivered_through_sequence: 5,
     });
+  });
+
+  it('fails closed when redelegation work arrives without a configured controller signer address', async () => {
+    const rootSignedDelegation = createSignedRootDelegation(TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS);
+    const rootDelegationArtifactRef = encodeDelegationArtifactRef(rootSignedDelegation);
+    const protocolHost = {
+      handleJsonRpc: vi.fn(),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        acknowledged_through_sequence: 0,
+        events: [
+          {
+            event_id: 'evt-request-execution-5',
+            sequence: 5,
+            aggregate: 'request',
+            aggregate_id: 'req-ember-lending-execution-001',
+            event_type: 'requestExecution.prepared.v1',
+            committed_at: '2026-04-01T06:19:00Z',
+            payload: {
+              request_id: 'req-ember-lending-execution-001',
+              transaction_plan_id: 'txplan-ember-lending-001',
+              phase: 'ready_for_redelegation',
+              redelegation_signing_package: {
+                execution_preparation_id: 'execprep-ember-lending-001',
+                transaction_plan_id: 'txplan-ember-lending-001',
+                request_id: 'req-ember-lending-execution-001',
+                redelegation_intent_id: 'ri-req-ember-lending-execution-001',
+                active_delegation_id: 'del-ember-lending-001',
+                delegation_id: 'del-req-ember-lending-execution-001',
+                delegation_plan_id:
+                  'plan-req-ember-lending-execution-001-del-req-ember-lending-execution-001',
+                root_delegation_id: 'root-user-protocol-001',
+                root_delegation_artifact_ref: rootDelegationArtifactRef,
+                delegator_address: '0x00000000000000000000000000000000000000a1',
+                agent_id: 'ember-lending',
+                agent_wallet: '0x00000000000000000000000000000000000000b1',
+                network: 'arbitrum',
+                reservation_ids: ['reservation-ember-lending-001'],
+                unit_ids: ['unit-ember-lending-001'],
+                control_paths: ['lending.supply'],
+                zero_capacity: false,
+                policy_snapshot_ref: 'pol-ember-lending-001',
+                canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
+              },
+            },
+          },
+        ],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const runtimeSigning = createRuntimeSigningStub(vi.fn());
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+      controllerWalletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
+      runtimeSigning,
+      runtimeSignerRef: 'controller-wallet',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 7,
+          lastRootDelegation: {
+            root_delegation_id: 'root-user-protocol-001',
+          },
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'refresh_redelegation_work',
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 8,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Portfolio-manager redelegation signing is blocked because the controller signer address is not configured.',
+        },
+      },
+    });
+
+    expect(runtimeSigning.signPayload).not.toHaveBeenCalled();
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalled();
+    expect(protocolHost.acknowledgeCommittedEventOutbox).not.toHaveBeenCalled();
   });
 
   it('injects the portfolio mandate and managed lending mandate set into system context', async () => {

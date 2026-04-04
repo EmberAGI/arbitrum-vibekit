@@ -44,6 +44,7 @@ export type PortfolioManagerGatewayDependencies = {
 
 type CreatePortfolioManagerAgentConfigOptions = {
   controllerWalletAddress?: `0x${string}`;
+  controllerSignerAddress?: `0x${string}`;
   runtimeSigning?: AgentRuntimeSigningService;
   runtimeSignerRef?: string;
 };
@@ -123,6 +124,11 @@ export function createPortfolioManagerAgentConfig(
       ...(options.controllerWalletAddress
         ? {
             controllerWalletAddress: options.controllerWalletAddress,
+          }
+        : {}),
+      ...(options.controllerSignerAddress
+        ? {
+            controllerSignerAddress: options.controllerSignerAddress,
           }
         : {}),
     }),

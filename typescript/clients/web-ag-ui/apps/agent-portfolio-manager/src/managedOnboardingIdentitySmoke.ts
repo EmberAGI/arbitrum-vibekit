@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createPortfolioManagerSharedEmberHttpHost } from './sharedEmberHttpHost.js';
 import { createPortfolioManagerDomain } from './sharedEmberAdapter.js';
+import { derivePortfolioManagerControllerSmartAccountAddress } from './controllerIdentity.js';
 import { resolveSharedEmberTarget } from './sharedEmberIntegrationHarness.js';
 import {
   createManagedIdentitySmokeWalletFixtures,
@@ -97,9 +98,9 @@ function createPortfolioManagerSetupInput() {
   };
 }
 
-function createSignedDelegation() {
+function createSignedDelegation(delegate: `0x${string}`) {
   return {
-    delegate: '0x2222222222222222222222222222222222222222',
+    delegate,
     delegator: USER_WALLET,
     authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
     caveats: [],
@@ -119,6 +120,9 @@ export async function runManagedOnboardingIdentitySmoke() {
     managedAgentId: 'ember-lending',
     managedAgentWalletAddress: walletFixtures.subagent.walletAddress,
   });
+  const controllerSmartAccountAddress = await derivePortfolioManagerControllerSmartAccountAddress({
+    signerAddress: walletFixtures.controller.walletAddress,
+  });
 
   const portfolioProtocolHost = createPortfolioManagerSharedEmberHttpHost({
     baseUrl: sharedEmberTarget.baseUrl,
@@ -128,7 +132,7 @@ export async function runManagedOnboardingIdentitySmoke() {
     const { orchestratorWallet, subagentWallet } =
       await ensureManagedRuntimeOwnedServiceIdentities({
         sharedEmberBaseUrl: sharedEmberTarget.baseUrl,
-        controllerWalletAddress: walletFixtures.controller.walletAddress,
+        controllerWalletAddress: controllerSmartAccountAddress,
         subagentWalletAddress: walletFixtures.subagent.walletAddress,
         controllerEnv: walletFixtures.controller.env,
         lendingEnv: walletFixtures.subagent.env,
@@ -137,7 +141,7 @@ export async function runManagedOnboardingIdentitySmoke() {
     const domain = createPortfolioManagerDomain({
       protocolHost: portfolioProtocolHost,
       agentId: 'portfolio-manager',
-      controllerWalletAddress: walletFixtures.controller.walletAddress,
+      controllerWalletAddress: controllerSmartAccountAddress,
     });
 
     const hireResult = await domain.handleOperation?.({
@@ -186,12 +190,12 @@ export async function runManagedOnboardingIdentitySmoke() {
       operation: {
         source: 'interrupt',
         name: 'portfolio-manager-delegation-signing-request',
-        input: {
-          outcome: 'signed',
-          signedDelegations: [createSignedDelegation()],
+          input: {
+            outcome: 'signed',
+            signedDelegations: [createSignedDelegation(controllerSmartAccountAddress)],
+          },
         },
-      },
-    });
+      });
 
     if (!signingResult?.state || !('phase' in signingResult.state) || signingResult.state.phase !== 'active') {
       throw new Error('Portfolio-manager rooted bootstrap did not promote the thread to active.');

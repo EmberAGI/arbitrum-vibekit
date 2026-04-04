@@ -26,11 +26,14 @@ function createStubService(): AgentRuntimeService {
 describe('createPortfolioManagerGatewayService', () => {
   it('runs controller-wallet identity preflight before runtime creation when the live Shared Ember path is configured', async () => {
     const service = createStubService();
+    const deriveControllerSmartAccountAddress = vi.fn(
+      async () => '0x00000000000000000000000000000000000000c2' as const,
+    );
     const ensureServiceIdentity = vi.fn(async () => ({
       revision: 2,
       wroteIdentity: false,
       identity: {
-        wallet_address: '0x00000000000000000000000000000000000000c1',
+        wallet_address: '0x00000000000000000000000000000000000000c2',
       },
     }));
     const runtimeCreated = vi.fn();
@@ -58,10 +61,14 @@ describe('createPortfolioManagerGatewayService', () => {
           PORTFOLIO_MANAGER_OWS_VAULT_PATH: '/tmp/portfolio-manager-ows-vault',
         },
         __internalEnsureServiceIdentity: ensureServiceIdentity,
+        __internalDeriveControllerSmartAccountAddress: deriveControllerSmartAccountAddress,
         __internalCreateAgentRuntimeKernel: createAgentRuntimeKernel,
       } as never),
     ).resolves.toBe(service);
 
+    expect(deriveControllerSmartAccountAddress).toHaveBeenCalledWith({
+      signerAddress: '0x00000000000000000000000000000000000000c1',
+    });
     expect(ensureServiceIdentity).toHaveBeenCalledOnce();
     expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
     const ensureCallOrder = ensureServiceIdentity.mock.invocationCallOrder.at(0);

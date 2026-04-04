@@ -3,7 +3,6 @@ import {
   AgentRuntimeSigningError,
   createAgentRuntimeKernel,
   type AgentRuntimeInternalPostgresHooks,
-  type AgentRuntimeSigningService,
 } from 'agent-runtime/internal';
 
 import {
@@ -12,6 +11,7 @@ import {
   type PortfolioManagerGatewayEnv,
   resolvePortfolioManagerGatewayDependencies,
 } from './portfolioManagerFoundation.js';
+import { derivePortfolioManagerControllerSmartAccountAddress } from './controllerIdentity.js';
 import { ensurePortfolioManagerServiceIdentity } from './serviceIdentityPreflight.js';
 
 export const PORTFOLIO_MANAGER_AGENT_ID = 'agent-portfolio-manager';
@@ -34,11 +34,14 @@ type PortfolioManagerGatewayServiceOptions = {
 type PortfolioManagerGatewayInternalOptions = PortfolioManagerGatewayServiceOptions & {
   __internalCreateAgentRuntimeKernel?: typeof createAgentRuntimeKernel;
   __internalEnsureServiceIdentity?: typeof ensurePortfolioManagerServiceIdentity;
+  __internalDeriveControllerSmartAccountAddress?: typeof derivePortfolioManagerControllerSmartAccountAddress;
   __internalPostgres?: AgentRuntimeInternalPostgresHooks;
 };
 
-async function readRequiredControllerWalletAddress(input: {
-  signing: AgentRuntimeSigningService;
+async function readRequiredControllerSignerAddress(input: {
+  signing: {
+    readAddress(input: { signerRef: string }): Promise<`0x${string}`>;
+  };
 }): Promise<`0x${string}`> {
   try {
     return await input.signing.readAddress({
@@ -93,16 +96,23 @@ export async function createPortfolioManagerGatewayService(
 
       const dependencies = resolvePortfolioManagerGatewayDependencies(options.env);
       let controllerWalletAddress: `0x${string}` | undefined;
+      let controllerSignerAddress: `0x${string}` | undefined;
 
       if (dependencies.protocolHost) {
+        controllerSignerAddress = await readRequiredControllerSignerAddress({
+          signing,
+        });
+        const controllerSmartAccountAddress = await (
+          options.__internalDeriveControllerSmartAccountAddress ??
+          derivePortfolioManagerControllerSmartAccountAddress
+        )({
+          signerAddress: controllerSignerAddress,
+        });
         const ensuredIdentity = await (
           options.__internalEnsureServiceIdentity ?? ensurePortfolioManagerServiceIdentity
         )({
           protocolHost: dependencies.protocolHost,
-          readControllerWalletAddress: async () =>
-            await readRequiredControllerWalletAddress({
-              signing,
-            }),
+          readControllerWalletAddress: async () => controllerSmartAccountAddress,
         });
         const walletAddress = ensuredIdentity.identity.wallet_address;
         if (!walletAddress.startsWith('0x')) {
@@ -118,6 +128,7 @@ export async function createPortfolioManagerGatewayService(
         ...createPortfolioManagerAgentConfig(options.env, {
           runtimeSigning: signing,
           runtimeSignerRef: PORTFOLIO_MANAGER_RUNTIME_SIGNER_REF,
+          ...(controllerSignerAddress ? { controllerSignerAddress } : {}),
           ...(controllerWalletAddress ? { controllerWalletAddress } : {}),
         }),
         ...(options.now ? { now: options.now } : {}),
