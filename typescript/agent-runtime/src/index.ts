@@ -28,6 +28,7 @@ import {
   buildCancelAutomationStatements,
   buildCompleteAutomationExecutionStatements,
   buildPersistAutomationDispatchStatements,
+  buildPersistExecutionCheckpointStatements,
   buildPersistInterruptCheckpointStatements,
   buildPersistThreadStateStatements,
   buildPiRuntimeStableUuid,
@@ -263,6 +264,13 @@ type AgentRuntimeAutomationRecord = {
   lastRunAt: string | null;
   lastRunStatus: string | null;
 };
+
+type PersistedExecutionCheckpointStatus =
+  | 'queued'
+  | 'working'
+  | 'interrupted'
+  | 'completed'
+  | 'failed';
 
 type AgentRuntimeAutomationRegistry = {
   upsert: (record: AgentRuntimeAutomationRecord) => AgentRuntimeAutomationRecord;
@@ -1340,6 +1348,7 @@ function tapAttachedEventSource(
   source: AgentRuntimeAttachedEventSource,
   onEvents: (events: readonly AgentRuntimeConnectEvent[]) => void,
   onComplete?: () => void,
+  onError?: (error: unknown) => Promise<void> | void,
 ): AgentRuntimeAttachedEventSource {
   if (Array.isArray(source)) {
     onEvents(source);
@@ -1350,25 +1359,45 @@ function tapAttachedEventSource(
   return {
     [Symbol.asyncIterator]() {
       const iterator = (source as AsyncIterable<AgentRuntimeConnectEvent>)[Symbol.asyncIterator]();
+      let completed = false;
+      const markComplete = () => {
+        if (completed) {
+          return;
+        }
+
+        completed = true;
+        onComplete?.();
+      };
 
       return {
         async next() {
-          const result = await iterator.next();
-          if (!result.done) {
-            onEvents([result.value]);
-          } else {
-            onComplete?.();
+          try {
+            const result = await iterator.next();
+            if (!result.done) {
+              onEvents([result.value]);
+            } else {
+              markComplete();
+            }
+            return result;
+          } catch (error) {
+            try {
+              await onError?.(error);
+            } catch {
+              // Preserve the original run-stream failure if checkpoint persistence also fails.
+            } finally {
+              markComplete();
+            }
+            throw error;
           }
-          return result;
         },
         async return() {
-          onComplete?.();
+          markComplete();
           return typeof iterator.return === 'function'
             ? await iterator.return()
             : { value: undefined, done: true };
         },
         async throw(error: unknown) {
-          onComplete?.();
+          markComplete();
           if (typeof iterator.throw === 'function') {
             return await iterator.throw(error);
           }
@@ -1378,6 +1407,27 @@ function tapAttachedEventSource(
       };
     },
   };
+}
+
+function mapSessionExecutionStatusToPersistedStatus(
+  status: AgentRuntimeExecutionStatus,
+): PersistedExecutionCheckpointStatus {
+  switch (status) {
+    case 'queued':
+      return 'queued';
+    case 'working':
+      return 'working';
+    case 'interrupted':
+      return 'interrupted';
+    case 'completed':
+      return 'completed';
+    case 'failed':
+      return 'failed';
+    case 'canceled':
+      return 'failed';
+    case 'auth-required':
+      return 'interrupted';
+  }
 }
 
 export interface CreateAgentRuntimeOptions<TState = unknown> {
@@ -1460,23 +1510,124 @@ export async function createAgentRuntime<TState = unknown>(
       databaseUrl: resolvedDatabaseUrl,
     });
   };
+  const resolvePersistedExecutionId = (
+    threadId: string,
+    session: PiRuntimeGatewaySession,
+  ): string => {
+    const defaultExecutionId = `agent-runtime:${threadId}`;
+    if (session.execution.id === defaultExecutionId) {
+      return buildPiRuntimeDirectExecutionRecordIdsInternal(threadId).executionId;
+    }
+
+    return session.execution.id;
+  };
+  const readCurrentInterruptPayload = (
+    session: PiRuntimeGatewaySession,
+  ): Record<string, unknown> | undefined => {
+    if (session.execution.status !== 'interrupted') {
+      return undefined;
+    }
+
+    if (session.a2ui?.kind !== 'interrupt') {
+      return undefined;
+    }
+
+    return isRecord(session.a2ui.payload) ? session.a2ui.payload : undefined;
+  };
   const persistSessionSnapshot = async (
     threadId: string,
     session: PiRuntimeGatewaySession = sessionStore.getSession(threadId),
   ): Promise<void> => {
     const ids = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+    const persistedExecutionId = resolvePersistedExecutionId(threadId, session);
+    const interruptPayload = readCurrentInterruptPayload(session);
+    const currentInterruptId = interruptPayload
+      ? buildPiRuntimeStableUuid('interrupt', `agent-runtime:execution:${persistedExecutionId}:interrupt`)
+      : null;
+    const executionSource = session.automation?.runId ? 'automation' : 'user';
+    const currentNow = new Date(now());
     const threadState = buildPersistedThreadStateSnapshot({
       session,
       state: domainStateStore.get(threadId),
     });
     await postgres.executeStatements(
       resolvedDatabaseUrl,
-      buildPersistThreadStateStatements({
-        threadId: ids.threadId,
-        threadKey: threadId,
-        threadState,
-        now: new Date(now()),
-      }),
+      [
+        ...buildPersistThreadStateStatements({
+          threadId: ids.threadId,
+          threadKey: threadId,
+          threadState,
+          now: currentNow,
+        }),
+        ...buildPersistExecutionCheckpointStatements({
+          executionId: persistedExecutionId,
+          threadId: ids.threadId,
+          automationRunId: session.automation?.runId ?? null,
+          status: mapSessionExecutionStatusToPersistedStatus(session.execution.status),
+          source: executionSource,
+          currentInterruptId,
+          interruptPayload,
+          surfacedInThread: true,
+          now: currentNow,
+        }),
+      ],
+    );
+  };
+  const isPersistedExecutionCheckpointOutOfSync = (params: {
+    threadId: string;
+    session: PiRuntimeGatewaySession;
+    inspectionState: PiRuntimeGatewayInspectionState;
+  }): boolean => {
+    const persistedExecutionId = resolvePersistedExecutionId(params.threadId, params.session);
+    const expectedStatus = mapSessionExecutionStatusToPersistedStatus(params.session.execution.status);
+    const expectedSource = params.session.automation?.runId ? 'automation' : 'user';
+    const interruptPayload = readCurrentInterruptPayload(params.session);
+    const expectedCurrentInterruptId = interruptPayload
+      ? buildPiRuntimeStableUuid(
+          'interrupt',
+          `agent-runtime:execution:${persistedExecutionId}:interrupt`,
+        )
+      : null;
+    const execution = params.inspectionState.executions.find(
+      (candidate) => candidate.executionId === persistedExecutionId,
+    );
+
+    if (!execution) {
+      return true;
+    }
+
+    const expectedCompleted = expectedStatus === 'completed' || expectedStatus === 'failed';
+    if (
+      execution.status !== expectedStatus ||
+      execution.source !== expectedSource ||
+      execution.currentInterruptId !== expectedCurrentInterruptId ||
+      (expectedCompleted ? execution.completedAt === null : execution.completedAt !== null)
+    ) {
+      return true;
+    }
+
+    const executionInterrupts = params.inspectionState.interrupts.filter(
+      (candidate) => candidate.executionId === persistedExecutionId,
+    );
+    const pendingInterrupts = executionInterrupts.filter(
+      (candidate) => candidate.status === 'pending',
+    );
+
+    if (expectedCurrentInterruptId === null) {
+      return pendingInterrupts.length > 0;
+    }
+
+    const currentInterrupt = executionInterrupts.find(
+      (candidate) => candidate.interruptId === expectedCurrentInterruptId,
+    );
+    if (!currentInterrupt) {
+      return true;
+    }
+
+    return (
+      currentInterrupt.status !== 'pending' ||
+      !currentInterrupt.surfacedInThread ||
+      pendingInterrupts.some((candidate) => candidate.interruptId !== expectedCurrentInterruptId)
     );
   };
   const hydrateThreadSession = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
@@ -1484,7 +1635,8 @@ export async function createAgentRuntime<TState = unknown>(
       return sessionStore.getSession(threadId);
     }
 
-    const persistedThread = (await loadInspectionState()).threads.find((candidate) => candidate.threadKey === threadId);
+    const inspectionState = await loadInspectionState();
+    const persistedThread = inspectionState.threads.find((candidate) => candidate.threadKey === threadId);
     if (persistedThread) {
       persistedThreads.add(threadId);
       const persistedSession = readPersistedSession(threadId, persistedThread.threadState);
@@ -1503,7 +1655,12 @@ export async function createAgentRuntime<TState = unknown>(
         }
         if (
           normalizedSession !== persistedSession ||
-          (persistedDomainState === undefined && recoveredLifecycleState !== undefined)
+          (persistedDomainState === undefined && recoveredLifecycleState !== undefined) ||
+          isPersistedExecutionCheckpointOutOfSync({
+            threadId,
+            session: hydratedSession,
+            inspectionState,
+          })
         ) {
           await persistSessionSnapshot(threadId, hydratedSession);
         }
@@ -1530,7 +1687,6 @@ export async function createAgentRuntime<TState = unknown>(
       threadKey: threadId,
       threadState,
       executionId: ids.executionId,
-      interruptId: ids.interruptId,
       artifactId: ids.artifactId,
       activityId: randomUUID(),
       now: new Date(now()),
@@ -1623,6 +1779,24 @@ export async function createAgentRuntime<TState = unknown>(
 
   const resumeInterruptedSession = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
     const nextSession = sessionStore.updateSession(threadId, resolveInterruptedSessionForUserInput);
+    await persistSessionSnapshot(threadId, nextSession);
+    return nextSession;
+  };
+
+  const persistFailedRun = async (
+    threadId: string,
+    error: unknown,
+  ): Promise<PiRuntimeGatewaySession> => {
+    const detail = error instanceof Error ? error.message : String(error);
+    const nextSession = sessionStore.updateSession(threadId, (session) => ({
+      ...session,
+      execution: {
+        ...session.execution,
+        status: 'failed',
+        statusMessage: detail,
+      },
+      a2ui: undefined,
+    }));
     await persistSessionSnapshot(threadId, nextSession);
     return nextSession;
   };
@@ -1923,7 +2097,10 @@ export async function createAgentRuntime<TState = unknown>(
           resolvedDatabaseUrl,
           buildPersistInterruptCheckpointStatements({
             executionId: directExecutionIds.executionId,
-            interruptId: buildPiRuntimeStableUuid('interrupt', `agent-runtime:${threadId}:interrupt`),
+            interruptId: buildPiRuntimeStableUuid(
+              'interrupt',
+              `agent-runtime:execution:${directExecutionIds.executionId}:interrupt`,
+            ),
             artifactId,
             activityId: buildPiRuntimeStableUuid('activity', `agent-runtime:${threadId}:interrupt-activity`),
             threadId: directExecutionIds.threadId,
@@ -2086,6 +2263,9 @@ export async function createAgentRuntime<TState = unknown>(
         await runtimeWithDomain.run(request),
         (events) => attachedRuns.appendRunEvents(request.threadId, request.runId, events),
         () => attachedRuns.finishRun(request.threadId, request.runId),
+        async (error) => {
+          await persistFailedRun(request.threadId, error);
+        },
       );
     },
     stop: async (request) =>

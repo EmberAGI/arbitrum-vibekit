@@ -150,6 +150,17 @@ describe('agent-runtime-pi package contract', () => {
           updatedAt: new Date('2026-03-20T17:59:00.000Z'),
           completedAt: null,
         },
+        {
+          executionId: 'exec-interrupted',
+          threadId: 'thread-1',
+          automationRunId: null,
+          status: 'interrupted' as const,
+          source: 'user' as const,
+          currentInterruptId: 'interrupt-1',
+          createdAt: new Date('2026-03-20T17:20:00.000Z'),
+          updatedAt: new Date('2026-03-20T17:40:00.000Z'),
+          completedAt: null,
+        },
       ],
       automations: [
         {
@@ -179,7 +190,7 @@ describe('agent-runtime-pi package contract', () => {
       interrupts: [
         {
           interruptId: 'interrupt-1',
-          executionId: 'exec-queued',
+          executionId: 'exec-interrupted',
           threadId: 'thread-1',
           status: 'pending' as const,
           surfacedInThread: true,
@@ -213,13 +224,14 @@ describe('agent-runtime-pi package contract', () => {
       status: 'degraded',
       dueAutomationIds: ['automation-1'],
       dueOutboxIds: ['outbox-1'],
-      interruptedExecutionIds: [],
+      interruptedExecutionIds: ['exec-interrupted'],
       pendingInterruptIds: ['interrupt-1'],
     });
     await expect(controlPlane.listThreads()).resolves.toEqual([
       expect.objectContaining({ threadId: 'thread-1' }),
     ]);
     await expect(controlPlane.listExecutions()).resolves.toEqual([
+      expect.objectContaining({ executionId: 'exec-interrupted' }),
       expect.objectContaining({ executionId: 'exec-queued' }),
     ]);
     await expect(controlPlane.listAutomations()).resolves.toEqual([

@@ -17,16 +17,19 @@ type GatewayEvent = Awaited<ReturnType<AgentRuntimeService['run']>> extends
   | AsyncIterable<infer TEvent>
   ? TEvent
   : never;
+type RunStartedEvent = Extract<GatewayEvent, { type: 'RUN_STARTED' }>;
 type StateSnapshotEvent = Extract<GatewayEvent, { snapshot: unknown }>;
 type MessagesSnapshotEvent = Extract<GatewayEvent, { messages: unknown }>;
 type InternalPostgresStatement = {
   tableName: string;
+  text: string;
   values: readonly unknown[];
 };
 type InternalPersistDirectExecutionOptions = {
   threadId: string;
   threadKey: string;
   threadState: Record<string, unknown>;
+  executionId: string;
   now: Date;
 };
 type PersistedThreadRecord = {
@@ -36,6 +39,26 @@ type PersistedThreadRecord = {
   threadState: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
+};
+type PersistedExecutionRecord = {
+  executionId: string;
+  threadId: string;
+  automationRunId: string | null;
+  status: string;
+  source: string;
+  currentInterruptId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt: Date | null;
+};
+type PersistedInterruptRecord = {
+  interruptId: string;
+  threadId: string;
+  executionId: string;
+  status: 'pending' | 'resolved';
+  surfacedInThread: boolean;
+  createdAt: Date;
+  resolvedAt: Date | null;
 };
 
 type LifecycleState = {
@@ -127,12 +150,14 @@ function createInternalPostgresHooks(
 
 function createPersistingInternalPostgres() {
   const persistedThreads = new Map<string, PersistedThreadRecord>();
+  const persistedExecutions = new Map<string, PersistedExecutionRecord>();
+  const persistedInterrupts = new Map<string, PersistedInterruptRecord>();
   const loadInspectionState = vi.fn(async () => ({
     threads: [...persistedThreads.values()],
-    executions: [],
+    executions: [...persistedExecutions.values()],
     automations: [],
     automationRuns: [],
-    interrupts: [],
+    interrupts: [...persistedInterrupts.values()],
     leases: [],
     outboxIntents: [],
     executionEvents: [],
@@ -148,32 +173,127 @@ function createPersistingInternalPostgres() {
       createdAt: params.now,
       updatedAt: params.now,
     });
+    persistedExecutions.set(params.executionId, {
+      executionId: params.executionId,
+      threadId: params.threadId,
+      automationRunId: null,
+      status: 'working',
+      source: 'user',
+      currentInterruptId: null,
+      createdAt: params.now,
+      updatedAt: params.now,
+      completedAt: null,
+    });
   });
   const executeStatements = vi.fn(
     async (_databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
       for (const statement of statements) {
-        if (statement.tableName !== 'pi_threads') {
+        if (statement.tableName === 'pi_threads') {
+          const [threadId, threadKey, status, threadStateValue, createdAt, updatedAt] = statement.values;
+          persistedThreads.set(threadKey as string, {
+            threadId: threadId as string,
+            threadKey: threadKey as string,
+            status: status as string,
+            threadState:
+              typeof threadStateValue === 'string'
+                ? (JSON.parse(threadStateValue) as Record<string, unknown>)
+                : (threadStateValue as Record<string, unknown>),
+            createdAt: createdAt as Date,
+            updatedAt: updatedAt as Date,
+          });
           continue;
         }
 
-        const [threadId, threadKey, status, threadStateValue, createdAt, updatedAt] = statement.values;
-        persistedThreads.set(threadKey as string, {
-          threadId: threadId as string,
-          threadKey: threadKey as string,
-          status: status as string,
-          threadState:
-            typeof threadStateValue === 'string'
-              ? (JSON.parse(threadStateValue) as Record<string, unknown>)
-              : (threadStateValue as Record<string, unknown>),
-          createdAt: createdAt as Date,
-          updatedAt: updatedAt as Date,
-        });
+        if (statement.tableName === 'pi_executions') {
+          if (statement.text.startsWith('insert into pi_executions')) {
+            const [
+              executionId,
+              threadId,
+              automationRunId,
+              status,
+              source,
+              currentInterruptId,
+              createdAt,
+              updatedAt,
+              completedAt,
+            ] = statement.values;
+            const existing = persistedExecutions.get(executionId as string);
+            persistedExecutions.set(executionId as string, {
+              executionId: executionId as string,
+              threadId: threadId as string,
+              automationRunId: (automationRunId as string | null) ?? existing?.automationRunId ?? null,
+              status: status as string,
+              source: source as string,
+              currentInterruptId: (currentInterruptId as string | null) ?? null,
+              createdAt: (existing?.createdAt ?? createdAt) as Date,
+              updatedAt: updatedAt as Date,
+              completedAt: (completedAt as Date | null) ?? null,
+            });
+          } else if (statement.text.startsWith('update pi_executions')) {
+            const [status, updatedAt, completedAt, executionId] = statement.values;
+            const existing = persistedExecutions.get(executionId as string);
+            if (existing) {
+              persistedExecutions.set(executionId as string, {
+                ...existing,
+                status: status as string,
+                updatedAt: updatedAt as Date,
+                completedAt: (completedAt as Date | null) ?? null,
+              });
+            }
+          }
+          continue;
+        }
+
+        if (statement.tableName === 'pi_interrupts') {
+          if (statement.text.startsWith('insert into pi_interrupts')) {
+            const [
+              interruptId,
+              threadId,
+              executionId,
+              _interruptType,
+              status,
+              surfacedInThread,
+              _requestPayload,
+              createdAt,
+            ] = statement.values;
+            persistedInterrupts.set(interruptId as string, {
+              interruptId: interruptId as string,
+              threadId: threadId as string,
+              executionId: executionId as string,
+              status: status as 'pending' | 'resolved',
+              surfacedInThread: surfacedInThread as boolean,
+              createdAt: createdAt as Date,
+              resolvedAt: null,
+            });
+          } else if (statement.text.startsWith('update pi_interrupts')) {
+            const [status, resolvedAt, executionId, currentInterruptId] = statement.values;
+            for (const [interruptId, interrupt] of persistedInterrupts.entries()) {
+              if (interrupt.executionId !== (executionId as string)) {
+                continue;
+              }
+              if (interrupt.status !== 'pending') {
+                continue;
+              }
+              if (typeof currentInterruptId === 'string' && interruptId === currentInterruptId) {
+                continue;
+              }
+              persistedInterrupts.set(interruptId, {
+                ...interrupt,
+                status: status as 'pending' | 'resolved',
+                resolvedAt: resolvedAt as Date,
+              });
+            }
+          }
+          continue;
+        }
       }
     },
   );
 
   return {
     persistedThreads,
+    persistedExecutions,
+    persistedInterrupts,
     hooks: createInternalPostgresHooks({
       loadInspectionState,
       executeStatements,
@@ -293,6 +413,69 @@ async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): P
   return events;
 }
 
+async function collectEventSourceUntilFailure<T>(source: readonly T[] | AsyncIterable<T>): Promise<{
+  events: T[];
+  error: Error | null;
+}> {
+  if (Array.isArray(source)) {
+    return {
+      events: Array.from(source),
+      error: null,
+    };
+  }
+
+  const events: T[] = [];
+  const iterator = source[Symbol.asyncIterator]();
+
+  while (true) {
+    try {
+      const result = await iterator.next();
+      if (result.done) {
+        return { events, error: null };
+      }
+      events.push(result.value);
+    } catch (error) {
+      return {
+        events,
+        error: error instanceof Error ? error : new Error(String(error)),
+      };
+    }
+  }
+}
+
+async function collectQueuedEvents<T>(
+  source: readonly T[] | AsyncIterable<T>,
+  timeoutMs = 25,
+): Promise<T[]> {
+  if (Array.isArray(source)) {
+    return Array.from(source);
+  }
+
+  const events: T[] = [];
+  const iterator = source[Symbol.asyncIterator]();
+
+  try {
+    while (true) {
+      const result = await Promise.race([
+        iterator.next(),
+        new Promise<'timeout'>((resolve) => {
+          setTimeout(() => resolve('timeout'), timeoutMs);
+        }),
+      ]);
+
+      if (result === 'timeout' || result.done) {
+        break;
+      }
+
+      events.push(result.value);
+    }
+  } finally {
+    await iterator.return?.();
+  }
+
+  return events;
+}
+
 async function readFirstMatchingEvent<T>(
   source: readonly T[] | AsyncIterable<T>,
   predicate: (event: T) => boolean,
@@ -324,6 +507,15 @@ function isStateSnapshotEvent(event: GatewayEvent): event is StateSnapshotEvent 
 
 function isMessagesSnapshotEvent(event: GatewayEvent): event is MessagesSnapshotEvent {
   return typeof event === 'object' && event !== null && 'messages' in event;
+}
+
+function isRunStartedEvent(event: GatewayEvent): event is RunStartedEvent {
+  if (typeof event !== 'object' || event === null || !('type' in event)) {
+    return false;
+  }
+
+  const candidateType = (event as { type?: unknown }).type;
+  return typeof candidateType === 'string' && candidateType === 'RUN_STARTED';
 }
 
 function hasSystemPromptFragments(
@@ -1285,5 +1477,288 @@ describe('agent-runtime integration', () => {
         operatorNote: null,
       },
     });
+  });
+
+  it('keeps persisted execution and interrupt checkpoints aligned across interrupt, resume, and completion', async () => {
+    const { persistedExecutions, persistedInterrupts, hooks: internalPostgres } =
+      createPersistingInternalPostgres();
+
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused after direct commands.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-checkpoint-alignment',
+        runId: 'run-hire-checkpoint-alignment',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    expect(persistedExecutions.size).toBe(1);
+    const persistedExecution = [...persistedExecutions.values()][0];
+    expect(persistedExecution).toMatchObject({
+      status: 'interrupted',
+    });
+    expect(persistedExecution?.currentInterruptId).toBeTruthy();
+    expect([...persistedInterrupts.values()]).toEqual([
+      expect.objectContaining({
+        executionId: persistedExecution?.executionId,
+        interruptId: persistedExecution?.currentInterruptId,
+        status: 'pending',
+      }),
+    ]);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-checkpoint-alignment',
+        runId: 'run-resume-checkpoint-alignment',
+        forwardedProps: {
+          command: {
+            resume: '{"operatorNote":"safe window approved"}',
+          },
+        },
+      }),
+    );
+
+    expect([...persistedExecutions.values()][0]).toMatchObject({
+      status: 'working',
+      currentInterruptId: null,
+      completedAt: null,
+    });
+    expect([...persistedInterrupts.values()]).toEqual([
+      expect.objectContaining({
+        executionId: persistedExecution?.executionId,
+        status: 'resolved',
+      }),
+    ]);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-checkpoint-alignment',
+        runId: 'run-complete-checkpoint-alignment',
+        forwardedProps: {
+          command: {
+            name: 'complete_onboarding',
+          },
+        },
+      }),
+    );
+
+    expect([...persistedExecutions.values()][0]).toMatchObject({
+      status: 'completed',
+      currentInterruptId: null,
+      completedAt: expect.any(Date),
+    });
+    expect(
+      [...persistedInterrupts.values()].filter((interrupt) => interrupt.status === 'pending'),
+    ).toHaveLength(0);
+  });
+
+  it('repairs drifted execution and interrupt checkpoints when reconnect hydrates persisted thread state after restart', async () => {
+    const { persistedExecutions, persistedInterrupts, hooks: internalPostgres } =
+      createPersistingInternalPostgres();
+
+    const runtimeA = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused after direct commands.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeA.service.run({
+        threadId: 'thread-hydrate-repair',
+        runId: 'run-hydrate-repair-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const persistedExecution = [...persistedExecutions.values()][0];
+    const originalInterrupt = [...persistedInterrupts.values()][0];
+    expect(persistedExecution).toBeDefined();
+    expect(originalInterrupt).toBeDefined();
+    if (!persistedExecution || !originalInterrupt) {
+      return;
+    }
+
+    persistedExecutions.set(persistedExecution.executionId, {
+      ...persistedExecution,
+      status: 'working',
+      currentInterruptId: 'interrupt-stale',
+      updatedAt: new Date('2026-03-20T17:00:00.000Z'),
+    });
+    persistedInterrupts.set(originalInterrupt.interruptId, {
+      ...originalInterrupt,
+      status: 'resolved',
+      resolvedAt: new Date('2026-03-20T17:00:00.000Z'),
+    });
+    persistedInterrupts.set('interrupt-stale', {
+      interruptId: 'interrupt-stale',
+      threadId: originalInterrupt.threadId,
+      executionId: originalInterrupt.executionId,
+      status: 'pending',
+      surfacedInThread: true,
+      createdAt: new Date('2026-03-20T17:00:00.000Z'),
+      resolvedAt: null,
+    });
+
+    const runtimeB = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused after reconnect.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    const reconnectSnapshot = await readFirstMatchingEvent(
+      await runtimeB.service.connect({
+        threadId: 'thread-hydrate-repair',
+        runId: 'run-hydrate-repair-reconnect',
+      }),
+      isStateSnapshotEvent,
+    );
+
+    expect(reconnectSnapshot).toBeDefined();
+    expect([...persistedExecutions.values()][0]).toMatchObject({
+      status: 'interrupted',
+      currentInterruptId: originalInterrupt.interruptId,
+      completedAt: null,
+    });
+    expect(persistedInterrupts.get(originalInterrupt.interruptId)).toMatchObject({
+      status: 'pending',
+      resolvedAt: null,
+    });
+    expect(persistedInterrupts.get('interrupt-stale')).toMatchObject({
+      status: 'resolved',
+      resolvedAt: expect.any(Date),
+    });
+  });
+
+  it('persists failed execution state when a run stream crashes after start', async () => {
+    const { persistedThreads, persistedExecutions, hooks: internalPostgres } =
+      createPersistingInternalPostgres();
+    const executeStatements = internalPostgres.executeStatements;
+    const baseExecuteStatements = executeStatements.getMockImplementation();
+    let failNextCheckpoint = true;
+    executeStatements.mockImplementation(
+      async (databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
+        if (failNextCheckpoint) {
+          failNextCheckpoint = false;
+          throw new Error('Synthetic persistence failure.');
+        }
+        if (!baseExecuteStatements) {
+          throw new Error('Missing base executeStatements implementation.');
+        }
+        await baseExecuteStatements(databaseUrl, statements);
+      },
+    );
+
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a failing persistence agent.',
+      agentOptions: {
+        streamFn: () => createTextStream('This run should fail before inference completes.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    const failedRun = await collectEventSourceUntilFailure(
+      await runtime.service.run({
+        threadId: 'thread-failed-persistence-checkpoint',
+        runId: 'run-failed-persistence-checkpoint',
+        messages: [
+          {
+            id: 'message-failed-persistence-checkpoint',
+            role: 'user',
+            content: 'Trigger the failing checkpoint.',
+          },
+        ],
+      }),
+    );
+
+    expect(failedRun.error?.message).toBe('Synthetic persistence failure.');
+    expect([...persistedExecutions.values()][0]).toMatchObject({
+      status: 'failed',
+      currentInterruptId: null,
+      completedAt: expect.any(Date),
+    });
+    expect(
+      persistedThreads.get('thread-failed-persistence-checkpoint')?.threadState,
+    ).toMatchObject({
+      execution: {
+        status: 'failed',
+        statusMessage: 'Synthetic persistence failure.',
+      },
+    });
+  });
+
+  it('does not replay a stale attached run after a failed run stream', async () => {
+    const persistenceFailure = new Error('Synthetic persistence failure.');
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a failing persistence agent.',
+      __internalPostgres: createInternalPostgresHooks({
+        executeStatements: vi.fn(async () => {
+          throw persistenceFailure;
+        }),
+      }),
+    } as any);
+
+    const failedRun = await collectEventSourceUntilFailure(
+      await runtime.service.run({
+        threadId: 'thread-failed-run-reconnect',
+        runId: 'run-failed-run-reconnect',
+        messages: [
+          {
+            id: 'message-failed-run-reconnect',
+            role: 'user',
+            content: 'Trigger the failing run.',
+          },
+        ],
+      }),
+    );
+
+    expect(failedRun.error?.message).toBe('Synthetic persistence failure.');
+    expect(
+      failedRun.events.some(
+        (event) =>
+          isRunStartedEvent(event) &&
+          'runId' in event &&
+          event.runId === 'run-failed-run-reconnect',
+      ),
+    ).toBe(true);
+
+    const reconnectEvents = await collectQueuedEvents(
+      await runtime.service.connect({
+        threadId: 'thread-failed-run-reconnect',
+        runId: 'run-reconnect-after-failure',
+      }),
+    );
+
+    expect(reconnectEvents.filter(isRunStartedEvent)).toEqual([
+      expect.objectContaining({
+        runId: 'run-reconnect-after-failure',
+      }),
+    ]);
   });
 });

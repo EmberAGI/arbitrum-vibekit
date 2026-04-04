@@ -30,9 +30,11 @@ export {
   buildCompleteAutomationExecutionStatements,
   buildPersistAutomationDispatchStatements,
   buildPersistDirectExecutionStatements,
+  buildPersistExecutionCheckpointStatements,
   buildPersistInterruptCheckpointStatements,
   buildPersistOutboxIntentStatements,
   buildPersistThreadStateStatements,
+  type PiExecutionCheckpointStatus,
   type PostgresStatement,
 } from './transactions.js';
 export {
