@@ -1204,6 +1204,7 @@ describe('useAgentConnection integration', () => {
     expect(mocks.agent.addMessage).not.toHaveBeenCalled();
     expect(mocks.runAgent).toHaveBeenCalledWith({
       agent: mocks.agent,
+      threadId: 'thread-1',
       forwardedProps: {
         command: {
           name: 'hire',

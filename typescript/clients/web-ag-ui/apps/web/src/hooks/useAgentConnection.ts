@@ -415,6 +415,21 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [],
   );
 
+  const runAgentOnCurrentThread = useCallback(
+    (
+      currentAgent: HookAgent,
+      options?: {
+        forwardedProps?: Record<string, unknown>;
+      },
+    ) =>
+      copilotkit.runAgent({
+        agent: currentAgent,
+        ...(threadIdRef.current ? { threadId: threadIdRef.current } : {}),
+        ...(options?.forwardedProps ? { forwardedProps: options.forwardedProps } : {}),
+      } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+    [copilotkit],
+  );
+
   const runDirectCommand = useCallback(
     (command: string) => {
       const scheduler = commandSchedulerRef.current;
@@ -425,17 +440,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       return scheduler.dispatchCustom({
         command,
         run: async (currentAgent) =>
-          copilotkit.runAgent({
-            agent: currentAgent,
+          runAgentOnCurrentThread(currentAgent, {
             forwardedProps: {
               command: {
                 name: command,
               },
             },
-          } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+          }),
       });
     },
-    [copilotkit],
+    [runAgentOnCurrentThread],
   );
 
   const runCommand = useCallback(
@@ -800,7 +814,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       getThreadId: () => threadIdRef.current,
       getRunInFlight: () => runInFlightRef.current,
       setRunInFlight,
-      runAgent: async (currentAgent) => copilotkit.runAgent({ agent: currentAgent }),
+      runAgent: async (currentAgent) => runAgentOnCurrentThread(currentAgent),
       createId: v7,
       isBusyRunError,
       isAbortLikeError,
@@ -1227,19 +1241,15 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         });
         const ok = await fireAgentRun({
           agent: value,
-          runAgent: async (current) =>
-            copilotkit.runAgent({
-              agent: current,
-            } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+          runAgent: async (current) => runAgentOnCurrentThread(current),
           runDirectCommand: async (current, commandName) =>
-            copilotkit.runAgent({
-              agent: current,
+            runAgentOnCurrentThread(current, {
               forwardedProps: {
                 command: {
                   name: commandName,
                 },
               },
-            } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+            }),
           preemptActiveRun: async (current) => copilotkit.stopAgent({ agent: current }),
           threadId,
           runInFlightRef,
@@ -1302,7 +1312,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             role: 'user',
             content: trimmed,
           });
-          await copilotkit.runAgent({ agent: currentAgent });
+          await runAgentOnCurrentThread(currentAgent);
         },
       });
 
@@ -1314,7 +1324,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         setUiError('Unable to send a message while another run is active.');
       }
     },
-    [copilotkit],
+    [runAgentOnCurrentThread],
   );
 
   const clearUiError = useCallback(() => setUiError(null), []);
