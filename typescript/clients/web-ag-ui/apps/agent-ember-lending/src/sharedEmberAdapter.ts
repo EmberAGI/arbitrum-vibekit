@@ -974,39 +974,52 @@ function readExecutionStatusMessage(executionResult: unknown): {
   const phase = isRecord(executionResult) ? readString(executionResult['phase']) : null;
   const execution = readRecordKey(executionResult, 'execution');
   const status = readString(execution?.['status']);
+  const executionMessage = readString(execution?.['message']);
+  const withExecutionDetail = (prefix: string): string =>
+    executionMessage
+      ? `${prefix.replace(/[.!?]$/, '')}: ${ensureSentence(executionMessage)}`
+      : prefix;
 
   if (phase === 'completed' && status === 'confirmed') {
     return {
       executionStatus: 'completed',
-      statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+      statusMessage: withExecutionDetail(
+        'Lending transaction execution confirmed through Shared Ember.',
+      ),
     };
   }
 
   if (phase === 'completed' && status === 'submitted') {
     return {
       executionStatus: 'completed',
-      statusMessage: 'Lending transaction submitted through Shared Ember.',
+      statusMessage: withExecutionDetail('Lending transaction submitted through Shared Ember.'),
     };
   }
 
   if (phase === 'completed' && status === 'failed_before_submission') {
     return {
       executionStatus: 'failed',
-      statusMessage: 'Lending transaction failed before submission through Shared Ember.',
+      statusMessage: withExecutionDetail(
+        'Lending transaction failed before submission through Shared Ember.',
+      ),
     };
   }
 
   if (phase === 'completed' && status === 'failed_after_submission') {
     return {
       executionStatus: 'failed',
-      statusMessage: 'Lending transaction failed after submission through Shared Ember.',
+      statusMessage: withExecutionDetail(
+        'Lending transaction failed after submission through Shared Ember.',
+      ),
     };
   }
 
   if (phase === 'completed' && status === 'partial_settlement') {
     return {
       executionStatus: 'failed',
-      statusMessage: 'Lending transaction reached partial settlement through Shared Ember.',
+      statusMessage: withExecutionDetail(
+        'Lending transaction reached partial settlement through Shared Ember.',
+      ),
     };
   }
 
@@ -1170,6 +1183,26 @@ function readExecutionSigningPackageCanonicalUnsignedPayloadRef(
   executionResult: unknown,
 ): string | null {
   return readString(readExecutionSigningPackage(executionResult)?.['canonical_unsigned_payload_ref']);
+}
+
+function readExecutionSigningPackageDelegationArtifactRef(
+  executionResult: unknown,
+): string | null {
+  const executionSigningPackage = readExecutionSigningPackage(executionResult);
+  return (
+    readString(executionSigningPackage?.['delegation_artifact_ref']) ??
+    readString(executionSigningPackage?.['delegationArtifactRef'])
+  );
+}
+
+function readExecutionSigningPackageRootDelegationArtifactRef(
+  executionResult: unknown,
+): string | null {
+  const executionSigningPackage = readExecutionSigningPackage(executionResult);
+  return (
+    readString(executionSigningPackage?.['root_delegation_artifact_ref']) ??
+    readString(executionSigningPackage?.['rootDelegationArtifactRef'])
+  );
 }
 
 function readPreparedExecutionWalletAddress(
@@ -1941,6 +1974,10 @@ async function runPreparedExecutionFlow(input: {
   const executionPreparationId = readPreparedExecutionId(executionResult);
   const canonicalUnsignedPayloadRef =
     readExecutionSigningPackageCanonicalUnsignedPayloadRef(executionResult);
+  const delegationArtifactRef =
+    readExecutionSigningPackageDelegationArtifactRef(executionResult);
+  const rootDelegationArtifactRef =
+    readExecutionSigningPackageRootDelegationArtifactRef(executionResult);
   const plannedTransactionPayloadRef = readPreparedExecutionPlannedTransactionPayloadRef(
     executionResult,
   );
@@ -1956,6 +1993,8 @@ async function runPreparedExecutionFlow(input: {
           transactionPlanId: input.transactionPlanId,
           requestId: requestId!,
           canonicalUnsignedPayloadRef,
+          delegationArtifactRef,
+          rootDelegationArtifactRef,
           plannedTransactionPayloadRef,
           walletAddress: input.currentState.walletAddress,
           network,

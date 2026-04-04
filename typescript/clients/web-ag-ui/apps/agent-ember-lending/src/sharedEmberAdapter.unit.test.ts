@@ -452,6 +452,8 @@ function createReadyForExecutionSigningPreparationResult(input?: {
       transaction_plan_id: 'txplan-ember-lending-001',
       request_id: 'req-ember-lending-execution-001',
       active_delegation_id: 'del-ember-lending-001',
+      delegation_artifact_ref: 'metamask-delegation:delegation-ember-lending-001',
+      root_delegation_artifact_ref: 'metamask-delegation:root-ember-lending-001',
       canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
       ...(input?.inlineUnsignedTransactionHex === undefined
         ? {
@@ -561,6 +563,7 @@ function createTerminalExecutionResult(input: {
     | 'failed_after_submission'
     | 'partial_settlement';
   transactionHash?: `0x${string}`;
+  message?: string;
 }) {
   return {
     phase: 'completed',
@@ -569,6 +572,7 @@ function createTerminalExecutionResult(input: {
     execution: {
       execution_id: 'exec-ember-lending-001',
       status: input.status,
+      ...(input.message ? { message: input.message } : {}),
       transaction_hash: input.transactionHash ?? null,
       successor_unit_ids:
         input.status === 'failed_before_submission' ? [] : ['unit-ember-lending-successor-001'],
@@ -1781,11 +1785,13 @@ describe('createEmberLendingDomain', () => {
     expect(anchoredPayloadResolver.resolvePreparedUnsignedTransaction).toHaveBeenCalledWith({
       agentId: 'ember-lending',
       canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-001',
+      delegationArtifactRef: 'metamask-delegation:delegation-ember-lending-001',
       executionPreparationId: 'execprep-ember-lending-001',
       network: 'arbitrum',
       plannedTransactionPayloadRef: 'txpayload-ember-lending-001',
       walletAddress: '0x00000000000000000000000000000000000000b1',
       requestId: 'req-ember-lending-execution-001',
+      rootDelegationArtifactRef: 'metamask-delegation:root-ember-lending-001',
       requiredControlPath: 'lending.supply',
       transactionPlanId: 'txplan-ember-lending-001',
       anchoredPayloadRecords: [createAnchoredPayloadRecord()],
@@ -1839,7 +1845,7 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
-  it('surfaces rooted-capital execution mismatches from the anchored payload resolver as local execution failures', async () => {
+  it('surfaces anchored payload resolution failures as local execution failures', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async () => ({
         jsonrpc: '2.0',
@@ -1877,7 +1883,7 @@ describe('createEmberLendingDomain', () => {
     const anchoredPayloadResolver = createAnchoredPayloadResolverStub();
     anchoredPayloadResolver.resolvePreparedUnsignedTransaction.mockRejectedValueOnce(
       new Error(
-        'Managed rooted-capital lending execution requires redelegated payload resolution because the capital-owning wallet and subagent signer differ.',
+        'Anchored payload ref "txpayload-ember-lending-001" does not contain transaction step 3.',
       ),
     );
     const domain = createEmberLendingDomain({
@@ -1915,7 +1921,7 @@ describe('createEmberLendingDomain', () => {
         status: {
           executionStatus: 'failed',
           statusMessage:
-            'Managed rooted-capital lending execution requires redelegated payload resolution because the capital-owning wallet and subagent signer differ.',
+            'Anchored payload ref "txpayload-ember-lending-001" does not contain transaction step 3.',
         },
       },
     });
@@ -2008,11 +2014,13 @@ describe('createEmberLendingDomain', () => {
     expect(anchoredPayloadResolver.resolvePreparedUnsignedTransaction).toHaveBeenCalledWith({
       agentId: 'ember-lending',
       canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-001',
+      delegationArtifactRef: 'metamask-delegation:delegation-ember-lending-001',
       executionPreparationId: 'execprep-ember-lending-001',
       network: 'arbitrum',
       plannedTransactionPayloadRef: 'txpayload-ember-lending-001',
       walletAddress: '0x00000000000000000000000000000000000000b1',
       requestId: 'req-ember-lending-execution-001',
+      rootDelegationArtifactRef: 'metamask-delegation:root-ember-lending-001',
       requiredControlPath: 'lending.supply',
       transactionPlanId: 'txplan-ember-lending-001',
       anchoredPayloadRecords: [createAnchoredPayloadRecord()],
@@ -2670,28 +2678,37 @@ describe('createEmberLendingDomain', () => {
         status: 'submitted' as const,
         transactionHash:
           '0x1111111111111111111111111111111111111111111111111111111111111111' as const,
+        message: 'confirmation_timeout: awaiting later receipt',
         expectedStatus: 'completed' as const,
-        expectedMessage: 'Lending transaction submitted through Shared Ember.',
+        expectedMessage:
+          'Lending transaction submitted through Shared Ember: confirmation_timeout: awaiting later receipt.',
       },
       {
         status: 'failed_before_submission' as const,
         transactionHash: undefined,
+        message:
+          'send_insufficient_funds: rpc_32000: insufficient funds for gas * price + value',
         expectedStatus: 'failed' as const,
-        expectedMessage: 'Lending transaction failed before submission through Shared Ember.',
+        expectedMessage:
+          'Lending transaction failed before submission through Shared Ember: send_insufficient_funds: rpc_32000: insufficient funds for gas * price + value.',
       },
       {
         status: 'failed_after_submission' as const,
         transactionHash:
           '0x2222222222222222222222222222222222222222222222222222222222222222' as const,
+        message: 'receipt_rpc_error: rpc_32000: header not found',
         expectedStatus: 'failed' as const,
-        expectedMessage: 'Lending transaction failed after submission through Shared Ember.',
+        expectedMessage:
+          'Lending transaction failed after submission through Shared Ember: receipt_rpc_error: rpc_32000: header not found.',
       },
       {
         status: 'partial_settlement' as const,
         transactionHash:
           '0x3333333333333333333333333333333333333333333333333333333333333333' as const,
+        message: 'transaction_reverted: partial fill observed',
         expectedStatus: 'failed' as const,
-        expectedMessage: 'Lending transaction reached partial settlement through Shared Ember.',
+        expectedMessage:
+          'Lending transaction reached partial settlement through Shared Ember: transaction_reverted: partial fill observed.',
       },
     ];
 
@@ -2719,6 +2736,7 @@ describe('createEmberLendingDomain', () => {
               execution_result: createTerminalExecutionResult({
                 status: scenario.status,
                 transactionHash: scenario.transactionHash,
+                message: scenario.message,
               }),
             },
           }),

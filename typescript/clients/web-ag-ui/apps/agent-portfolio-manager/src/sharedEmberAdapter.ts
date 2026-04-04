@@ -1,5 +1,6 @@
 import type { AgentRuntimeDomainConfig } from 'agent-runtime';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
+import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
 import { keccak256, toHex } from 'viem';
 import {
   buildPortfolioManagerWalletAccountingDetails,
@@ -86,7 +87,7 @@ const RUNTIME_REDELEGATION_DOMAIN_NAME = 'DelegationManager';
 const RUNTIME_REDELEGATION_DOMAIN_VERSION = '1';
 const RUNTIME_REDELEGATION_VERIFIER =
   '0x00000000000000000000000000000000000000d1' as const;
-const RUNTIME_REDELEGATION_ARTIFACT_PREFIX = 'metamask-delegation:';
+const METAMASK_DELEGATION_ARTIFACT_PREFIX = 'metamask-delegation:';
 
 function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
   return {
@@ -153,6 +154,88 @@ function readHexAddress(value: unknown): `0x${string}` | null {
 function readHexValue(value: unknown): `0x${string}` | null {
   const normalized = readString(value);
   return normalized?.startsWith('0x') ? (normalized as `0x${string}`) : null;
+}
+
+function readDelegationCaveats(
+  value: unknown,
+): PortfolioManagerSignedDelegation['caveats'] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const parsed = value
+    .map((entry) => {
+      if (!isRecord(entry)) {
+        return null;
+      }
+
+      const enforcer = readHexAddress(entry['enforcer']);
+      const terms = readHexValue(entry['terms']);
+      const args = readHexValue(entry['args']);
+
+      if (enforcer === null || terms === null || args === null) {
+        return null;
+      }
+
+      return {
+        enforcer,
+        terms,
+        args,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  return parsed.length === value.length ? parsed : null;
+}
+
+function encodeDelegationArtifactRef(delegation: PortfolioManagerSignedDelegation): string {
+  return `${METAMASK_DELEGATION_ARTIFACT_PREFIX}${Buffer.from(
+    JSON.stringify(delegation),
+    'utf8',
+  ).toString('base64url')}`;
+}
+
+function decodeDelegationArtifactRef(artifactRef: string): PortfolioManagerSignedDelegation {
+  if (!artifactRef.startsWith(METAMASK_DELEGATION_ARTIFACT_PREFIX)) {
+    throw new Error(`Unsupported delegation artifact ref "${artifactRef}".`);
+  }
+
+  const decoded = JSON.parse(
+    Buffer.from(
+      artifactRef.slice(METAMASK_DELEGATION_ARTIFACT_PREFIX.length),
+      'base64url',
+    ).toString('utf8'),
+  ) as unknown;
+  if (!isRecord(decoded)) {
+    throw new Error('Delegation artifact must decode to an object.');
+  }
+
+  const delegate = readHexAddress(decoded['delegate']);
+  const delegator = readHexAddress(decoded['delegator']);
+  const authority = readHexValue(decoded['authority']);
+  const caveats = readDelegationCaveats(decoded['caveats']);
+  const salt = readHexValue(decoded['salt']);
+  const signature = readHexValue(decoded['signature']);
+
+  if (
+    delegate === null ||
+    delegator === null ||
+    authority === null ||
+    caveats === null ||
+    salt === null ||
+    signature === null
+  ) {
+    throw new Error('Delegation artifact payload is missing required signed delegation fields.');
+  }
+
+  return {
+    delegate,
+    delegator,
+    authority,
+    caveats,
+    salt,
+    signature,
+  };
 }
 
 function readInt(value: unknown): number | null {
@@ -303,7 +386,9 @@ function resolveRuntimeRedelegationChainId(network: string): number {
 }
 
 function buildRuntimeRedelegationAuthority(rootDelegationArtifactRef: string): `0x${string}` {
-  return keccak256(toHex(rootDelegationArtifactRef));
+  return getDelegationHashOffchain(
+    decodeDelegationArtifactRef(rootDelegationArtifactRef),
+  ) as `0x${string}`;
 }
 
 function buildRuntimeRedelegationSalt(requestId: string): `0x${string}` {
@@ -390,7 +475,7 @@ function buildRuntimeSignedRedelegationRecord(input: {
 
   return {
     ...input.redelegationSigningPackage,
-    artifact_ref: `${RUNTIME_REDELEGATION_ARTIFACT_PREFIX}${Buffer.from(
+    artifact_ref: `${METAMASK_DELEGATION_ARTIFACT_PREFIX}${Buffer.from(
       JSON.stringify(artifact),
       'utf8',
     ).toString('base64url')}`,
@@ -970,7 +1055,7 @@ function buildPortfolioManagerRootDelegationHandoff(params: {
     user_wallet: params.walletAddress,
     orchestrator_wallet: params.signedDelegation.delegate,
     network: PORTFOLIO_MANAGER_NETWORK,
-    artifact_ref: `artifact-root-${identity}`,
+    artifact_ref: encodeDelegationArtifactRef(params.signedDelegation),
     issued_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
     activated_at: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
     signer_kind: 'delegation_toolkit',

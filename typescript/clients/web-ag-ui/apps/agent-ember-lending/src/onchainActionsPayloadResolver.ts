@@ -1,3 +1,10 @@
+import {
+  createExecution,
+  type Delegation,
+  ExecutionMode,
+  getDeleGatorEnvironment,
+} from '@metamask/delegation-toolkit';
+import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
 import { createPublicClient, http, parseUnits, serializeTransaction } from 'viem';
 import { arbitrum, base, mainnet } from 'viem/chains';
 import { z } from 'zod';
@@ -58,6 +65,8 @@ export type EmberLendingPreparedUnsignedTransactionResolutionInput = {
   transactionPlanId: string;
   requestId: string;
   canonicalUnsignedPayloadRef: string;
+  delegationArtifactRef?: string | null;
+  rootDelegationArtifactRef?: string | null;
   plannedTransactionPayloadRef: string | null;
   walletAddress: `0x${string}`;
   network: string | null;
@@ -334,6 +343,30 @@ function resolveAmountBaseUnits(input: {
   return parseUnits(input.amount, input.decimals).toString();
 }
 
+function decodeDelegationArtifactRef(artifactRef: string): Delegation {
+  const prefix = 'metamask-delegation:';
+  if (!artifactRef.startsWith(prefix)) {
+    throw new Error(`Unsupported delegation artifact ref "${artifactRef}".`);
+  }
+
+  return JSON.parse(
+    Buffer.from(artifactRef.slice(prefix.length), 'base64url').toString('utf8'),
+  ) as Delegation;
+}
+
+function requireDelegationArtifactRef(input: {
+  label: string;
+  value?: string | null;
+}): string {
+  if (typeof input.value === 'string' && input.value.trim().length > 0) {
+    return input.value;
+  }
+
+  throw new Error(
+    `Prepared execution signing requires ${input.label} to build the delegated transaction wrapper.`,
+  );
+}
+
 function buildLendingRequestBody(input: {
   operation: LendingOperation;
   walletAddress: `0x${string}`;
@@ -372,6 +405,8 @@ async function resolvePreparedUnsignedTransactionHex(input: {
   publicClient: EmberLendingExecutionPublicClient;
   transaction: z.infer<typeof OnchainActionsTransactionPlanSchema>;
   walletAddress: `0x${string}`;
+  delegationArtifactRef: string;
+  rootDelegationArtifactRef: string;
 }): Promise<`0x${string}`> {
   const chainId = Number(input.transaction.chainId);
   if (!Number.isFinite(chainId) || chainId <= 0) {
@@ -381,6 +416,26 @@ async function resolvePreparedUnsignedTransactionHex(input: {
   const to = input.transaction.to.toLowerCase() as `0x${string}`;
   const value = BigInt(input.transaction.value);
   const data = input.transaction.data.toLowerCase() as `0x${string}`;
+  const delegationManager =
+    getDeleGatorEnvironment(chainId).DelegationManager.toLowerCase() as `0x${string}`;
+  const delegatedTransactionData = DelegationManager.encode.redeemDelegations({
+    delegations: [
+      [
+        decodeDelegationArtifactRef(input.delegationArtifactRef),
+        decodeDelegationArtifactRef(input.rootDelegationArtifactRef),
+      ],
+    ],
+    modes: [ExecutionMode.SingleDefault],
+    executions: [
+      [
+        createExecution({
+          target: to,
+          value,
+          callData: data,
+        }),
+      ],
+    ],
+  });
   const [nonce, feeEstimate, gas] = await Promise.all([
     input.publicClient.getTransactionCount({
       address: input.walletAddress,
@@ -389,9 +444,9 @@ async function resolvePreparedUnsignedTransactionHex(input: {
     input.publicClient.estimateFeesPerGas(),
     input.publicClient.estimateGas({
       account: input.walletAddress,
-      to,
-      value,
-      data,
+      to: delegationManager,
+      value: 0n,
+      data: delegatedTransactionData,
     }),
   ]);
 
@@ -406,9 +461,9 @@ async function resolvePreparedUnsignedTransactionHex(input: {
       gas,
       maxFeePerGas: feeEstimate.maxFeePerGas,
       maxPriorityFeePerGas: feeEstimate.maxPriorityFeePerGas,
-      to,
-      value,
-      data,
+      to: delegationManager,
+      value: 0n,
+      data: delegatedTransactionData,
     });
   }
 
@@ -418,9 +473,9 @@ async function resolvePreparedUnsignedTransactionHex(input: {
       nonce,
       gas,
       gasPrice: feeEstimate.gasPrice,
-      to,
-      value,
-      data,
+      to: delegationManager,
+      value: 0n,
+      data: delegatedTransactionData,
     });
   }
 
@@ -531,22 +586,6 @@ function resolveAnchoredTransactionRequest(input: {
   return transaction;
 }
 
-function assertDirectExecutionWalletMatchesCapitalOwner(input: {
-  anchoredPayload: EmberLendingAnchoredPayloadRecord;
-  walletAddress: `0x${string}`;
-}): void {
-  if (
-    input.anchoredPayload.capitalOwnerWalletAddress.toLowerCase() ===
-    input.walletAddress.toLowerCase()
-  ) {
-    return;
-  }
-
-  throw new Error(
-    'Managed rooted-capital lending execution requires redelegated payload resolution because the capital-owning wallet and subagent signer differ.',
-  );
-}
-
 export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: {
   baseUrl?: string;
   fetch?: typeof fetch;
@@ -621,11 +660,6 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
         return null;
       }
 
-      assertDirectExecutionWalletMatchesCapitalOwner({
-        anchoredPayload,
-        walletAddress: request.walletAddress,
-      });
-
       return resolvePreparedUnsignedTransactionHex({
         publicClient: resolvePublicClient(
           resolveSupportedExecutionNetwork(anchoredPayload.network),
@@ -636,6 +670,14 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
           canonicalUnsignedPayloadRef: request.canonicalUnsignedPayloadRef,
         }),
         walletAddress: request.walletAddress,
+        delegationArtifactRef: requireDelegationArtifactRef({
+          label: 'delegation_artifact_ref',
+          value: request.delegationArtifactRef,
+        }),
+        rootDelegationArtifactRef: requireDelegationArtifactRef({
+          label: 'root_delegation_artifact_ref',
+          value: request.rootDelegationArtifactRef,
+        }),
       });
     },
   };

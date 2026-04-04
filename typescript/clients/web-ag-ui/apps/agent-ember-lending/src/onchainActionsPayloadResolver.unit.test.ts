@@ -1,10 +1,93 @@
 import { describe, expect, it, vi } from 'vitest';
+import {
+  createExecution,
+  type Delegation,
+  ExecutionMode,
+  getDeleGatorEnvironment,
+} from '@metamask/delegation-toolkit';
+import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
 import { parseUnits, serializeTransaction } from 'viem';
 
 import {
   createEmberLendingOnchainActionsAnchoredPayloadResolver,
   resolveEmberLendingOnchainActionsApiUrl,
 } from './onchainActionsPayloadResolver.js';
+
+function createSignedDelegation(input: {
+  delegate: `0x${string}`;
+  delegator: `0x${string}`;
+  authority?: `0x${string}`;
+}): Delegation {
+  return {
+    delegate: input.delegate,
+    delegator: input.delegator,
+    authority:
+      input.authority ??
+      '0x0000000000000000000000000000000000000000000000000000000000000000',
+    caveats: [],
+    salt: '0x0000000000000000000000000000000000000000000000000000000000000000',
+    signature: '0x1234',
+  };
+}
+
+function encodeDelegationArtifactRef(delegation: Delegation): string {
+  return `metamask-delegation:${Buffer.from(
+    JSON.stringify(delegation),
+    'utf8',
+  ).toString('base64url')}`;
+}
+
+function buildExpectedDelegatedUnsignedTransactionHex(input: {
+  transaction: {
+    to: `0x${string}`;
+    value: string;
+    data: `0x${string}`;
+    chainId: string;
+  };
+  nonce: number;
+  gas: bigint;
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+}): `0x${string}` {
+  const chainId = Number(input.transaction.chainId);
+  const { DelegationManager: delegationManager } = getDeleGatorEnvironment(chainId);
+  const data = DelegationManager.encode.redeemDelegations({
+    delegations: [[TEST_ACTIVE_DELEGATION, TEST_ROOT_DELEGATION]],
+    modes: [ExecutionMode.SingleDefault],
+    executions: [
+      [
+        createExecution({
+          target: input.transaction.to,
+          value: BigInt(input.transaction.value),
+          callData: input.transaction.data,
+        }),
+      ],
+    ],
+  });
+
+  return serializeTransaction({
+    chainId,
+    type: 'eip1559',
+    nonce: input.nonce,
+    gas: input.gas,
+    maxFeePerGas: input.maxFeePerGas,
+    maxPriorityFeePerGas: input.maxPriorityFeePerGas,
+    to: delegationManager as `0x${string}`,
+    value: 0n,
+    data,
+  });
+}
+
+const TEST_ROOT_DELEGATION = createSignedDelegation({
+  delegate: '0x00000000000000000000000000000000000000c1',
+  delegator: '0x00000000000000000000000000000000000000a1',
+});
+const TEST_ACTIVE_DELEGATION = createSignedDelegation({
+  delegate: '0x00000000000000000000000000000000000000b1',
+  delegator: '0x00000000000000000000000000000000000000c1',
+});
+const TEST_ROOT_DELEGATION_ARTIFACT_REF = encodeDelegationArtifactRef(TEST_ROOT_DELEGATION);
+const TEST_ACTIVE_DELEGATION_ARTIFACT_REF = encodeDelegationArtifactRef(TEST_ACTIVE_DELEGATION);
 
 describe('resolveEmberLendingOnchainActionsApiUrl', () => {
   it('normalizes an explicit OpenAPI document URL down to the API origin', () => {
@@ -17,7 +100,7 @@ describe('resolveEmberLendingOnchainActionsApiUrl', () => {
 });
 
 describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
-  it('resolves exact unsigned transaction bytes from the anchored request using wallet-aware chain state', async () => {
+  it('wraps the anchored request in a delegated redeemDelegations transaction using the canonical signing package', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -105,6 +188,19 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       },
     });
 
+    const expectedUnsignedTransactionHex = buildExpectedDelegatedUnsignedTransactionHex({
+      transaction: {
+        to: '0x00000000000000000000000000000000000000d2',
+        value: '0',
+        data: '0x617ba037',
+        chainId: '42161',
+      },
+      nonce: 7,
+      gas: 55_000n,
+      maxFeePerGas: 200n,
+      maxPriorityFeePerGas: 3n,
+    });
+
     await expect(
       resolver.resolvePreparedUnsignedTransaction({
         agentId: 'ember-lending',
@@ -112,24 +208,14 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         transactionPlanId: 'txplan-ember-lending-003',
         requestId: 'req-ember-lending-execution-003',
         canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-003',
+        delegationArtifactRef: TEST_ACTIVE_DELEGATION_ARTIFACT_REF,
+        rootDelegationArtifactRef: TEST_ROOT_DELEGATION_ARTIFACT_REF,
         plannedTransactionPayloadRef: 'txpayload-ember-lending-003',
         walletAddress: '0x00000000000000000000000000000000000000b1',
         network: 'arbitrum',
         requiredControlPath: 'lending.supply',
       }),
-    ).resolves.toBe(
-      serializeTransaction({
-        chainId: 42161,
-        type: 'eip1559',
-        nonce: 7,
-        gas: 55_000n,
-        maxFeePerGas: 200n,
-        maxPriorityFeePerGas: 3n,
-        to: '0x00000000000000000000000000000000000000d2',
-        value: 0n,
-        data: '0x617ba037',
-      }),
-    );
+    ).resolves.toBe(expectedUnsignedTransactionHex);
 
     expect(resolvePublicClient).toHaveBeenCalledWith('arbitrum');
     expect(rpcClient.getTransactionCount).toHaveBeenCalledWith({
@@ -139,9 +225,9 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
     expect(rpcClient.estimateFeesPerGas).toHaveBeenCalledWith();
     expect(rpcClient.estimateGas).toHaveBeenCalledWith({
       account: '0x00000000000000000000000000000000000000b1',
-      to: '0x00000000000000000000000000000000000000d2',
+      to: getDeleGatorEnvironment(42161).DelegationManager.toLowerCase(),
       value: 0n,
-      data: '0x617ba037',
+      data: expect.any(String),
     });
   });
 
@@ -484,7 +570,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
     );
   });
 
-  it('fails closed when managed rooted-capital execution would require redelegated payload resolution', async () => {
+  it('resolves prepared unsigned transactions for managed rooted-capital execution using the signer wallet chain state', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -571,21 +657,44 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       },
     });
 
-    await expect(
-      resolver.resolvePreparedUnsignedTransaction({
-        agentId: 'ember-lending',
-        executionPreparationId: 'execprep-ember-lending-rooted-capital-fail-001',
-        transactionPlanId: 'txplan-ember-lending-rooted-capital-fail-001',
-        requestId: 'req-ember-lending-rooted-capital-fail-001',
-        canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-rooted-capital-fail-001',
-        plannedTransactionPayloadRef: 'txpayload-ember-lending-rooted-capital-fail-001',
-        walletAddress: '0x00000000000000000000000000000000000000b1',
-        network: 'arbitrum',
-        requiredControlPath: 'lending.supply',
+    const unsignedTransactionHex = await resolver.resolvePreparedUnsignedTransaction({
+      agentId: 'ember-lending',
+      executionPreparationId: 'execprep-ember-lending-rooted-capital-fail-001',
+      transactionPlanId: 'txplan-ember-lending-rooted-capital-fail-001',
+      requestId: 'req-ember-lending-rooted-capital-fail-001',
+      canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-rooted-capital-fail-001',
+      delegationArtifactRef: TEST_ACTIVE_DELEGATION_ARTIFACT_REF,
+      rootDelegationArtifactRef: TEST_ROOT_DELEGATION_ARTIFACT_REF,
+      plannedTransactionPayloadRef: 'txpayload-ember-lending-rooted-capital-fail-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      network: 'arbitrum',
+      requiredControlPath: 'lending.supply',
+    });
+
+    expect(unsignedTransactionHex).toBe(
+      buildExpectedDelegatedUnsignedTransactionHex({
+        transaction: {
+          to: '0x00000000000000000000000000000000000000d2',
+          value: '0',
+          data: '0x617ba037',
+          chainId: '42161',
+        },
+        nonce: 7,
+        gas: 55_000n,
+        maxFeePerGas: 200n,
+        maxPriorityFeePerGas: 3n,
       }),
-    ).rejects.toThrow(
-      'Managed rooted-capital lending execution requires redelegated payload resolution because the capital-owning wallet and subagent signer differ.',
     );
+    expect(rpcClient.getTransactionCount).toHaveBeenCalledWith({
+      address: '0x00000000000000000000000000000000000000b1',
+      blockTag: 'pending',
+    });
+    expect(rpcClient.estimateGas).toHaveBeenCalledWith({
+      account: '0x00000000000000000000000000000000000000b1',
+      to: getDeleGatorEnvironment(42161).DelegationManager.toLowerCase(),
+      value: 0n,
+      data: expect.any(String),
+    });
   });
 
   it('anchors a planned lending payload and resolves the prepared unsigned transaction by either payload ref', async () => {
@@ -724,27 +833,29 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         },
       ],
     });
-    const expectedApprovalUnsignedTransactionHex = serializeTransaction({
-      chainId: 42161,
-      type: 'eip1559',
+    const expectedApprovalUnsignedTransactionHex = buildExpectedDelegatedUnsignedTransactionHex({
+      transaction: {
+        to: '0x00000000000000000000000000000000000000d1',
+        value: '0',
+        data: '0x095ea7b3',
+        chainId: '42161',
+      },
       nonce: 9,
       gas: 55_000n,
       maxFeePerGas: 200n,
       maxPriorityFeePerGas: 3n,
-      to: '0x00000000000000000000000000000000000000d1',
-      value: 0n,
-      data: '0x095ea7b3',
     });
-    const expectedTerminalUnsignedTransactionHex = serializeTransaction({
-      chainId: 42161,
-      type: 'eip1559',
+    const expectedTerminalUnsignedTransactionHex = buildExpectedDelegatedUnsignedTransactionHex({
+      transaction: {
+        to: '0x00000000000000000000000000000000000000d2',
+        value: '0',
+        data: '0x617ba037',
+        chainId: '42161',
+      },
       nonce: 9,
       gas: 55_000n,
       maxFeePerGas: 200n,
       maxPriorityFeePerGas: 3n,
-      to: '0x00000000000000000000000000000000000000d2',
-      value: 0n,
-      data: '0x617ba037',
     });
 
     await expect(
@@ -754,6 +865,8 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         transactionPlanId: 'txplan-ember-lending-001',
         requestId: 'req-ember-lending-execution-001',
         canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-001',
+        delegationArtifactRef: TEST_ACTIVE_DELEGATION_ARTIFACT_REF,
+        rootDelegationArtifactRef: TEST_ROOT_DELEGATION_ARTIFACT_REF,
         plannedTransactionPayloadRef: 'txpayload-ember-lending-001',
         walletAddress: '0x00000000000000000000000000000000000000b1',
         network: 'arbitrum',
@@ -768,6 +881,8 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         transactionPlanId: 'txplan-ember-lending-001',
         requestId: 'req-ember-lending-execution-001',
         canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-001:1',
+        delegationArtifactRef: TEST_ACTIVE_DELEGATION_ARTIFACT_REF,
+        rootDelegationArtifactRef: TEST_ROOT_DELEGATION_ARTIFACT_REF,
         plannedTransactionPayloadRef: null,
         walletAddress: '0x00000000000000000000000000000000000000b1',
         network: 'arbitrum',
@@ -883,6 +998,8 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         transactionPlanId: 'txplan-ember-lending-004',
         requestId: 'req-ember-lending-execution-004',
         canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-004:1',
+        delegationArtifactRef: TEST_ACTIVE_DELEGATION_ARTIFACT_REF,
+        rootDelegationArtifactRef: TEST_ROOT_DELEGATION_ARTIFACT_REF,
         plannedTransactionPayloadRef: null,
         walletAddress: '0x00000000000000000000000000000000000000b1',
         network: 'arbitrum',
@@ -890,16 +1007,17 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         anchoredPayloadRecords: [anchoredPayload!],
       }),
     ).resolves.toBe(
-      serializeTransaction({
-        chainId: 42161,
-        type: 'eip1559',
+      buildExpectedDelegatedUnsignedTransactionHex({
+        transaction: {
+          to: '0x00000000000000000000000000000000000000d2',
+          value: '0',
+          data: '0x617ba037',
+          chainId: '42161',
+        },
         nonce: 11,
         gas: 65_000n,
         maxFeePerGas: 300n,
         maxPriorityFeePerGas: 5n,
-        to: '0x00000000000000000000000000000000000000d2',
-        value: 0n,
-        data: '0x617ba037',
       }),
     );
   });

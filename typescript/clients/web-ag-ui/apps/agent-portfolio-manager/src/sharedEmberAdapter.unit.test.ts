@@ -1,3 +1,4 @@
+import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createPortfolioManagerDomain } from './sharedEmberAdapter.js';
@@ -24,6 +25,25 @@ function decodeDelegationArtifactRef(
     string,
     unknown
   >;
+}
+
+function encodeDelegationArtifactRef(delegation: Record<string, unknown>): string {
+  return `metamask-delegation:${Buffer.from(
+    JSON.stringify(delegation),
+    'utf8',
+  ).toString('base64url')}`;
+}
+
+function createSignedRootDelegation(delegate: `0x${string}`) {
+  return {
+    delegate,
+    delegator: '0x00000000000000000000000000000000000000a1' as const,
+    authority:
+      '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
+    caveats: [],
+    salt: '0x1111111111111111111111111111111111111111111111111111111111111111' as const,
+    signature: '0x1234' as const,
+  };
 }
 
 const TEST_REDELEGATION_SIGNATURE =
@@ -255,14 +275,9 @@ describe('createPortfolioManagerDomain', () => {
   });
 
   it('completes onboarding after signed delegations are supplied through the signing interrupt', async () => {
-    const signedDelegation = {
-      delegate: '0x2222222222222222222222222222222222222222',
-      delegator: '0x00000000000000000000000000000000000000a1',
-      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
-      caveats: [],
-      salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
-      signature: '0x1234',
-    };
+    const signedDelegation = createSignedRootDelegation(
+      '0x2222222222222222222222222222222222222222',
+    );
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
@@ -514,6 +529,14 @@ describe('createPortfolioManagerDomain', () => {
     )?.mandate_ref;
     expect(managedMandateRef).toEqual(expect.any(String));
     expect(rootedBootstrapRequest.params?.onboarding?.activation?.mandateRef).toBe(managedMandateRef);
+    expect(rootedBootstrapRequest.params?.handoff).toMatchObject({
+      artifact_ref: expect.stringMatching(/^metamask-delegation:/),
+    });
+    expect(
+      decodeDelegationArtifactRef(
+        rootedBootstrapRequest.params?.handoff?.artifact_ref as string,
+      ),
+    ).toEqual(signedDelegation);
 
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('capitalObservation');
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('ownedUnits');
@@ -2096,6 +2119,10 @@ describe('createPortfolioManagerDomain', () => {
   });
 
   it('signs, registers, and acknowledges redelegation work from the committed outbox', async () => {
+    const rootSignedDelegation = createSignedRootDelegation(
+      '0x00000000000000000000000000000000000000c1',
+    );
+    const rootDelegationArtifactRef = encodeDelegationArtifactRef(rootSignedDelegation);
     const protocolHost = {
       handleJsonRpc: vi.fn(async () => ({
         jsonrpc: '2.0',
@@ -2154,7 +2181,7 @@ describe('createPortfolioManagerDomain', () => {
                 delegation_plan_id:
                   'plan-req-ember-lending-execution-001-del-req-ember-lending-execution-001',
                 root_delegation_id: 'root-user-protocol-001',
-                root_delegation_artifact_ref: 'artifact-root-protocol-001',
+                root_delegation_artifact_ref: rootDelegationArtifactRef,
                 delegator_address: '0x00000000000000000000000000000000000000a1',
                 agent_id: 'ember-lending',
                 agent_wallet: '0x00000000000000000000000000000000000000b1',
@@ -2295,7 +2322,7 @@ describe('createPortfolioManagerDomain', () => {
           delegation_plan_id:
             'plan-req-ember-lending-execution-001-del-req-ember-lending-execution-001',
           root_delegation_id: 'root-user-protocol-001',
-          root_delegation_artifact_ref: 'artifact-root-protocol-001',
+          root_delegation_artifact_ref: rootDelegationArtifactRef,
           delegator_address: '0x00000000000000000000000000000000000000a1',
           agent_id: 'ember-lending',
           agent_wallet: '0x00000000000000000000000000000000000000b1',
@@ -2322,7 +2349,7 @@ describe('createPortfolioManagerDomain', () => {
     expect(decodedArtifact).toMatchObject({
       delegate: '0x00000000000000000000000000000000000000b1',
       delegator: '0x00000000000000000000000000000000000000c1',
-      authority: expect.stringMatching(/^0x[0-9a-f]{64}$/),
+      authority: getDelegationHashOffchain(rootSignedDelegation),
       caveats: [],
       salt: expect.stringMatching(/^0x[0-9a-f]+$/),
       signature: TEST_REDELEGATION_SIGNATURE,

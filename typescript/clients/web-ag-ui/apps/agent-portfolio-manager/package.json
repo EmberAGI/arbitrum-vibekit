@@ -34,6 +34,7 @@
     "test:ci": "pnpm test:unit && pnpm test:int"
   },
   "dependencies": {
+    "@metamask/delegation-toolkit": "^0.13.0",
     "agent-runtime": "workspace:^",
     "viem": "catalog:"
   },

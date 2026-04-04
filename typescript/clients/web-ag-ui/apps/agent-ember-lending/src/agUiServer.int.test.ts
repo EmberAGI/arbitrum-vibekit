@@ -432,6 +432,8 @@ function createReadyForExecutionSigningPreparationResult() {
       transaction_plan_id: 'txplan-ember-lending-001',
       request_id: 'req-ember-lending-execution-001',
       active_delegation_id: 'del-ember-lending-001',
+      delegation_artifact_ref: 'metamask-delegation:delegation-ember-lending-001',
+      root_delegation_artifact_ref: 'metamask-delegation:root-ember-lending-001',
       canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
     },
   };
@@ -1385,11 +1387,13 @@ describe('agent-ember-lending AG-UI integration', () => {
     expect(anchoredPayloadResolver.resolvePreparedUnsignedTransaction).toHaveBeenCalledWith({
       agentId: 'ember-lending',
       canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-001',
+      delegationArtifactRef: 'metamask-delegation:delegation-ember-lending-001',
       executionPreparationId: 'execprep-ember-lending-001',
       network: 'arbitrum',
       plannedTransactionPayloadRef: 'txpayload-ember-lending-001',
       walletAddress: '0x00000000000000000000000000000000000000b1',
       requestId: 'req-ember-lending-execution-001',
+      rootDelegationArtifactRef: 'metamask-delegation:root-ember-lending-001',
       requiredControlPath: 'lending.supply',
       transactionPlanId: 'txplan-ember-lending-001',
       anchoredPayloadRecords: [
