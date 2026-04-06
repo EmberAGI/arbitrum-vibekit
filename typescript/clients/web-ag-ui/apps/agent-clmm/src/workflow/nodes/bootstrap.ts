@@ -23,7 +23,7 @@ export const bootstrapNode = async (
   // Note: We don't store client instances in state because LangGraph's checkpointer
   // serializes state to JSON, which strips away prototype methods from class instances.
   // Instead, clients are created on-demand in each node via clientFactory.ts.
-  const mode = process.env['CLMM_MODE'] === 'production' ? 'production' : 'debug';
+  const mode = process.env['CLMM_MODE'] === 'debug' ? 'debug' : 'production';
   const pollIntervalMs = resolvePollIntervalMs();
   const streamLimit = resolveStreamLimit();
   const delegationsBypassActive = process.env['DELEGATIONS_BYPASS'] === 'true';

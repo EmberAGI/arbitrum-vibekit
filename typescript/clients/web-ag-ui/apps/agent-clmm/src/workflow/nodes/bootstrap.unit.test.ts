@@ -20,6 +20,8 @@ describe('bootstrapNode', () => {
   });
 
   it('does not emit regressive lifecycle or task clears for already-hired threads', async () => {
+    delete process.env['CLMM_MODE'];
+
     const state = {
       private: {
         bootstrapped: false,
@@ -38,7 +40,9 @@ describe('bootstrapNode', () => {
     } as never);
 
     const threadUpdate = (result as { thread?: Record<string, unknown> }).thread ?? {};
+    const privateUpdate = (result as { private?: Record<string, unknown> }).private ?? {};
     expect(threadUpdate['lifecycle']).toBeUndefined();
     expect(Object.hasOwn(threadUpdate, 'task')).toBe(false);
+    expect(privateUpdate['mode']).toBe('production');
   });
 });

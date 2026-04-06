@@ -25,7 +25,7 @@ export const bootstrapNode = async (
     return {};
   }
 
-  const mode = process.env['PENDLE_MODE'] === 'production' ? 'production' : 'debug';
+  const mode = process.env['PENDLE_MODE'] === 'debug' ? 'debug' : 'production';
   const pollIntervalMs = resolvePollIntervalMs();
   const streamLimit = resolveStreamLimit();
   const delegationsBypassActive = resolveDelegationsBypass();
