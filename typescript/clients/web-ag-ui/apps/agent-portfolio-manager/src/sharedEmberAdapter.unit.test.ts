@@ -1,3 +1,4 @@
+import { ROOT_AUTHORITY } from '@metamask/delegation-toolkit';
 import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -38,8 +39,7 @@ function createSignedRootDelegation(delegate: `0x${string}`) {
   return {
     delegate,
     delegator: '0x00000000000000000000000000000000000000a1' as const,
-    authority:
-      '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
+    authority: ROOT_AUTHORITY,
     caveats: [],
     salt: '0x1111111111111111111111111111111111111111111111111111111111111111' as const,
     signature: '0x1234' as const,
@@ -270,7 +270,7 @@ describe('createPortfolioManagerDomain', () => {
               expect.objectContaining({
                 delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
                 delegator: '0x00000000000000000000000000000000000000a1',
-                authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+                authority: ROOT_AUTHORITY,
                 salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
               }),
             ],
@@ -593,7 +593,7 @@ describe('createPortfolioManagerDomain', () => {
     const signedDelegation = {
       delegate: '0x00000000000000000000000000000000000000c1',
       delegator: '0x00000000000000000000000000000000000000a1',
-      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      authority: ROOT_AUTHORITY,
       caveats: [],
       salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
       signature: '0x1234',
@@ -742,7 +742,7 @@ describe('createPortfolioManagerDomain', () => {
     const signedDelegation = {
       delegate: '0x00000000000000000000000000000000000000c1',
       delegator: '0x00000000000000000000000000000000000000a1',
-      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      authority: ROOT_AUTHORITY,
       caveats: [],
       salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
       signature: '0x1234',
@@ -861,7 +861,7 @@ describe('createPortfolioManagerDomain', () => {
     const signedDelegation = {
       delegate: '0x00000000000000000000000000000000000000c1',
       delegator: '0x00000000000000000000000000000000000000a1',
-      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      authority: ROOT_AUTHORITY,
       caveats: [],
       salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
       signature: '0x1234',
@@ -980,7 +980,7 @@ describe('createPortfolioManagerDomain', () => {
     const signedDelegation = {
       delegate: '0x00000000000000000000000000000000000000c1',
       delegator: '0x00000000000000000000000000000000000000a1',
-      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      authority: ROOT_AUTHORITY,
       caveats: [],
       salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
       signature: '0x1234',
@@ -1096,7 +1096,7 @@ describe('createPortfolioManagerDomain', () => {
     const signedDelegation = {
       delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
       delegator: '0x00000000000000000000000000000000000000a1',
-      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      authority: ROOT_AUTHORITY,
       caveats: [],
       salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
       signature: '0x1234',
@@ -1247,7 +1247,7 @@ describe('createPortfolioManagerDomain', () => {
     const signedDelegation = {
       delegate: '0x00000000000000000000000000000000000000c1',
       delegator: '0x00000000000000000000000000000000000000a1',
-      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      authority: ROOT_AUTHORITY,
       caveats: [],
       salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
       signature: '0x1234',
@@ -1401,7 +1401,7 @@ describe('createPortfolioManagerDomain', () => {
     const signedDelegation = {
       delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
       delegator: '0x00000000000000000000000000000000000000a1',
-      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      authority: ROOT_AUTHORITY,
       caveats: [],
       salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
       signature: '0x1234',

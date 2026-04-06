@@ -48,6 +48,7 @@
     "@mariozechner/pi-agent-core": "0.64.0",
     "@mariozechner/pi-ai": "0.64.0",
     "@open-wallet-standard/core": "^1.2.0",
-    "agent-runtime-pi": "workspace:^"
+    "agent-runtime-pi": "workspace:^",
+    "viem": "catalog:"
   }
 }

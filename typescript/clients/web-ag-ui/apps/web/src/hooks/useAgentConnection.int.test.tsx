@@ -2067,6 +2067,7 @@ describe('useAgentConnection integration', () => {
 
     expect(mocks.runAgent).toHaveBeenCalledWith({
       agent: mocks.agent,
+      threadId: 'thread-1',
       forwardedProps: {
         command: {
           resume: JSON.stringify({

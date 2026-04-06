@@ -201,18 +201,27 @@ Current concrete managed-path specialization:
   - keeps planning on the bounded Shared Ember planner contract, sending only a bounded planning handoff while receiving planner-generated payload output back in the candidate plan
   - treats candidate-plan creation as complete only after the lending service has privately anchored that planner-returned payload; missing planner metadata, missing managed wallet context, or missing anchored-resolver wiring must fail closed instead of leaving an apparently executable local plan
   - keeps `request_transaction_execution` as one model-visible tool while
-    internally composing Shared Ember execution preparation, runtime-owned OWS
-    redelegation typed-data signing, service-owned anchored Onchain Actions
-    ordered transaction-request persistence and step resolution in runtime-owned
-    domain state, chain-aware unsigned-transaction preparation with the managed
-    wallet plus RPC state, runtime-owned execution signing, and Ember-owned
-    submission/finalization
+    internally composing Shared Ember execution preparation, service-owned
+    anchored Onchain Actions ordered transaction-request persistence and step
+    resolution in runtime-owned domain state, local OWS signing custody, shared
+    runtime / adapter support for redelegation and delegated-execution
+    preparation, and Ember-owned submission/finalization
   - treats `authority_preparation_needed` as an internal wait state and re-polls the Shared Ember execution request with a stage-scoped retry idempotency key instead of exposing a second tool or reusing the original acknowledged request key
   - reconciles dropped signed-transaction submit responses through the Shared Ember committed-event outbox before replaying an idempotent submit
   - fails closed when the direct OWS identity/signing path cannot prove it matches the prepared dedicated subagent signing package
   - expects the first healthy post-onboarding `subagent.readExecutionContext.v1` read to expose a non-null `subagent_wallet_address` without any manual reseed step
   - projects lifecycle, wallet, mandate, reservation, planning, execution, and escalation state into the shared AG-UI thread contract
   - treats `owned_units` and `reservations` as lending-lane truth while treating `wallet_contents` as rooted-wallet-wide context for prompt visibility
+
+Managed-path direction note:
+
+- signing custody remains local to each agent runtime
+- the leaf account topology remains open so current direct-OWS / EOA-style
+  leaves and future smart-account leaves can both fit behind the same shared
+  execution contract
+- agent apps should not be the steady-state owners of low-level redelegation
+  wrapper assembly, signature normalization, or submission-artifact
+  serialization
 
 Validation note:
 

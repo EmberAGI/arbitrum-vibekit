@@ -62,6 +62,18 @@ For `agent-ember-lending`:
   paths and must exercise the same `anchoredPayloadResolver` boundary rather
   than a separate production-facing optional resolver seam
 
+Follow-on note (2026-04-05):
+
+- This ADR still ratifies private Onchain Actions payload anchoring and
+  resolution in the lending service plus local signing custody in
+  `agent-runtime`.
+- It should not be read as a long-term commitment that each managed agent owns
+  delegated-execution wrapper assembly, signature normalization, or signed
+  submission-artifact serialization itself.
+- A follow-on shared runtime / adapter path may centralize those mechanics while
+  keeping signing local and leaving leaf account topology open between current
+  EOA-style leaves and future smart-account leaves.
+
 ## Rationale
 
 - prevents invalid signing by removing fabricated nonce and fee defaults from

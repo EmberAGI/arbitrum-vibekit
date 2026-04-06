@@ -11,13 +11,18 @@ import {
   type PortfolioManagerGatewayEnv,
   resolvePortfolioManagerGatewayDependencies,
 } from './portfolioManagerFoundation.js';
-import { derivePortfolioManagerControllerSmartAccountAddress } from './controllerIdentity.js';
+import {
+  derivePortfolioManagerControllerSmartAccountAddress,
+  ensurePortfolioManagerControllerSmartAccountDeployed,
+} from './controllerIdentity.js';
 import { ensurePortfolioManagerServiceIdentity } from './serviceIdentityPreflight.js';
 
 export const PORTFOLIO_MANAGER_AGENT_ID = 'agent-portfolio-manager';
 export const PORTFOLIO_MANAGER_AG_UI_BASE_PATH = '/ag-ui';
 export const PORTFOLIO_MANAGER_RUNTIME_SIGNER_REF = 'controller-wallet';
 export type PortfolioManagerGatewayService = AgentRuntimeService;
+const CONTROLLER_DEPLOYMENT_INSUFFICIENT_FUNDS_PATTERN =
+  /insufficient funds for gas \* price \+ value/i;
 
 type PortfolioManagerAgUiHandlerOptions = {
   agentId: string;
@@ -35,6 +40,7 @@ type PortfolioManagerGatewayInternalOptions = PortfolioManagerGatewayServiceOpti
   __internalCreateAgentRuntimeKernel?: typeof createAgentRuntimeKernel;
   __internalEnsureServiceIdentity?: typeof ensurePortfolioManagerServiceIdentity;
   __internalDeriveControllerSmartAccountAddress?: typeof derivePortfolioManagerControllerSmartAccountAddress;
+  __internalEnsureControllerSmartAccountDeployed?: typeof ensurePortfolioManagerControllerSmartAccountDeployed;
   __internalPostgres?: AgentRuntimeInternalPostgresHooks;
 };
 
@@ -108,6 +114,27 @@ export async function createPortfolioManagerGatewayService(
         )({
           signerAddress: controllerSignerAddress,
         });
+        try {
+          await (
+            options.__internalEnsureControllerSmartAccountDeployed ??
+            ensurePortfolioManagerControllerSmartAccountDeployed
+          )({
+            signing,
+            signerRef: PORTFOLIO_MANAGER_RUNTIME_SIGNER_REF,
+            signerAddress: controllerSignerAddress,
+          });
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            CONTROLLER_DEPLOYMENT_INSUFFICIENT_FUNDS_PATTERN.test(error.message)
+          ) {
+            console.warn(
+              'Portfolio-manager startup skipped controller smart-account deployment because the configured controller signer has no ETH to pay deployment gas.',
+            );
+          } else {
+            throw error;
+          }
+        }
         const ensuredIdentity = await (
           options.__internalEnsureServiceIdentity ?? ensurePortfolioManagerServiceIdentity
         )({

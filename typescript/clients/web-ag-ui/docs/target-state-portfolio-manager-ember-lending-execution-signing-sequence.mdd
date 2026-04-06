@@ -7,6 +7,15 @@ runtime-owned OWS-core signing, and Shared Ember submission behind
 
 ## Contract summary
 
+Direction note:
+
+- signing custody remains local to the portfolio-manager and subagent runtimes
+- the leaf account topology remains open; current EOA-style leaves and future
+  smart-account leaves should fit behind the same shared execution contract
+- agent apps should not be the long-term owners of low-level delegated
+  execution wrapper assembly, signature normalization, or submission-artifact
+  serialization
+
 - Portfolio Manager remains the owner of onboarding approval, rooted-signing collection, and control-plane interventions.
 - Ember Lending keeps exactly three model-visible tools:
   - `create_transaction_plan`
@@ -20,9 +29,9 @@ runtime-owned OWS-core signing, and Shared Ember submission behind
   - stage-scoped idempotency for authority-preparation re-polls
   - orchestrator-side redelegation signing coordinated by Shared Ember through
     the public protocol boundary
-  - concrete-service prepared unsigned-transaction resolution when Shared Ember
-    returns canonical payload refs instead of inline unsigned transaction hex
-  - runtime-owned execution signing
+  - concrete-service private payload resolution and any leaf-topology-specific
+    execution preparation behind shared runtime / adapter support
+  - runtime-owned local signing through a shared execution-signing boundary
   - signed-artifact submission back to Shared Ember
   - committed-event outbox recovery after dropped submit responses
   - Ember-owned submission/final-outcome waiting
@@ -33,7 +42,7 @@ runtime-owned OWS-core signing, and Shared Ember submission behind
   - canonical redelegation packages
   - redelegation coordination with the orchestrator over the public
     JSON-RPC/outbox boundary
-  - canonical unsigned signing packages
+  - canonical execution-signing packages and protocol invariants
   - transaction submission
   - settlement tracking
   - accounting reconciliation
@@ -45,9 +54,9 @@ runtime-owned OWS-core signing, and Shared Ember submission behind
     redelegation work without going through the lending agent
 - Ember Lending owns:
   - runtime-owned OWS-core-backed wallet identity resolution
-  - concrete-service prepared unsigned-transaction resolution from persisted
-    anchored transaction-request sequences
-  - runtime-owned OWS execution signing
+  - concrete-service private Onchain Actions transaction-request persistence and
+    step resolution from anchored records
+  - local signing custody through shared runtime signing support
   - translation of upstream execution outcomes into the minimal runtime-facing result
 - Fail-closed signing rule:
   - if the runtime cannot prove that the prepared signing package matches the dedicated subagent wallet resolved through direct OWS identity state, it must stop and fail
@@ -114,17 +123,17 @@ sequenceDiagram
     SE-->>PM: execution readiness advanced
     EL->>SE: subagent.requestTransactionExecution.v1(transaction_plan_id)
     SE-->>EL: execution_result.phase=ready_for_execution_signing + execution_signing_package + ids
-    Note over EL,SE: Resolve the canonical unsigned payload ref through the concrete service integration layer from the persisted anchored transaction-request sequence when Shared Ember omits inline unsigned transaction hex.
-    EL->>OWSS: sign execution package
-    OWSS-->>EL: signer_address + raw_transaction
+    Note over EL,SE: Resolve the canonical execution package through the concrete service integration layer, then hand it to the shared local-signing boundary. The concrete leaf type remains an implementation detail.
+    EL->>OWSS: sign execution package through shared runtime boundary
+    OWSS-->>EL: signer_address + signed execution artifact
     EL->>SE: subagent.submitSignedTransaction.v1(signed_transaction + ids)
     SE-->>EL: execution_result.phase=completed + execution.status
     EL-->>Runtime: minimal status + tx hash when available
   else ready for execution signing
     SE-->>EL: execution_result.phase=ready_for_execution_signing + execution_signing_package + ids
-    Note over EL,SE: Resolve the canonical unsigned payload ref through the concrete service integration layer from the persisted anchored transaction-request sequence when Shared Ember omits inline unsigned transaction hex.
-    EL->>OWSS: sign execution package
-    OWSS-->>EL: signer_address + raw_transaction
+    Note over EL,SE: Resolve the canonical execution package through the concrete service integration layer, then hand it to the shared local-signing boundary. The concrete leaf type remains an implementation detail.
+    EL->>OWSS: sign execution package through shared runtime boundary
+    OWSS-->>EL: signer_address + signed execution artifact
     EL->>SE: subagent.submitSignedTransaction.v1(signed_transaction + ids)
     SE-->>EL: execution_result.phase=completed + execution.status
     EL-->>Runtime: minimal status + tx hash when available
@@ -144,6 +153,9 @@ sequenceDiagram
 - `ready_for_redelegation` is not an escalation and must not be routed through a
   lending-originated escalation or service-to-service command lane.
 - Direct OWS identity, signing, or transport failures should remain local execution failures rather than escalations.
+- The current `subagent.submitSignedTransaction.v1` name and raw-transaction
+  payload shape are implementation details of the current live path, not a
+  long-term commitment that excludes future smart-account leaves.
 - Multi-call retries must be idempotent and must not create a second signing or submission side effect when the runtime retries after a conflict or transport interruption.
 - Approval-required lending plans may resolve more than one anchored Onchain
   Actions transaction step over time; the lending service must preserve the full

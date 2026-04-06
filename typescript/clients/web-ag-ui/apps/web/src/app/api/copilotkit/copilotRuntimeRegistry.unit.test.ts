@@ -16,14 +16,9 @@ const mockAgentRuntimeHttpAgent = (config: Record<string, unknown>) => {
   };
 };
 
-vi.mock('agent-runtime', async () => {
-  const actual = await vi.importActual<typeof import('agent-runtime')>('agent-runtime');
-  return {
-    ...actual,
-    createAgentRuntimeHttpAgent: mockAgentRuntimeHttpAgent,
-  };
-}
-);
+vi.mock('./piRuntimeHttpAgent', () => ({
+  createAgentRuntimeHttpAgent: mockAgentRuntimeHttpAgent,
+}));
 
 vi.mock('./langGraphInterruptSnapshotAgent', () => ({
   LangGraphInterruptSnapshotAgent: MockLangGraphInterruptSnapshotAgent,
@@ -31,6 +26,7 @@ vi.mock('./langGraphInterruptSnapshotAgent', () => ({
 
 describe('buildCopilotRuntimeAgents', () => {
   beforeEach(() => {
+    vi.resetModules();
     langGraphInterruptSnapshotAgentConfigs.length = 0;
     agentRuntimeHttpAgentConfigs.length = 0;
   });

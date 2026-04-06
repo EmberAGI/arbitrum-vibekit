@@ -1395,8 +1395,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             agent: currentAgent,
             resumePayload: serializedInput,
             runResume: ({ agent: resumeAgent, payload }) =>
-              copilotkit.runAgent({
-                agent: resumeAgent,
+              runAgentOnCurrentThread(resumeAgent, {
                 forwardedProps: payload.forwardedProps,
               }),
           });

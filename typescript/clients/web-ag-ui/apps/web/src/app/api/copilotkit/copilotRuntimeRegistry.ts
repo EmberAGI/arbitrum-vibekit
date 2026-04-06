@@ -1,6 +1,6 @@
 import { CopilotRuntime } from '@copilotkit/runtime';
-import { createAgentRuntimeHttpAgent } from 'agent-runtime';
 import { LangGraphInterruptSnapshotAgent } from './langGraphInterruptSnapshotAgent';
+import { createAgentRuntimeHttpAgent } from './piRuntimeHttpAgent';
 
 export const CLMM_AGENT_NAME = 'agent-clmm';
 export const PENDLE_AGENT_NAME = 'agent-pendle';

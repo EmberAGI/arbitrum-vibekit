@@ -63,20 +63,33 @@ async function writeNodeResponse(response: Response, target: http.ServerResponse
 }
 
 const server = http.createServer(async (request, response) => {
-  const origin = `http://${request.headers.host ?? `127.0.0.1:${port}`}`;
-  const url = new URL(request.url ?? '/', origin);
-  const body = await readRequestBody(request);
+  try {
+    const origin = `http://${request.headers.host ?? `127.0.0.1:${port}`}`;
+    const url = new URL(request.url ?? '/', origin);
+    const body = await readRequestBody(request);
 
-  const webRequest = new Request(url, {
-    method: request.method,
-    headers: toHeaders(request.headers),
-    body:
-      request.method === 'GET' || request.method === 'HEAD' || body.length === 0
-        ? undefined
-        : new Uint8Array(body),
-  });
-  const webResponse = await handler(webRequest);
-  await writeNodeResponse(webResponse, response);
+    const webRequest = new Request(url, {
+      method: request.method,
+      headers: toHeaders(request.headers),
+      body:
+        request.method === 'GET' || request.method === 'HEAD' || body.length === 0
+          ? undefined
+          : new Uint8Array(body),
+    });
+    const webResponse = await handler(webRequest);
+    await writeNodeResponse(webResponse, response);
+  } catch (error) {
+    console.error('agent-portfolio-manager request failed', error);
+    response.writeHead(502, {
+      'content-type': 'application/json; charset=utf-8',
+    });
+    response.end(
+      JSON.stringify({
+        error: 'agent-portfolio-manager request failed',
+        message: error instanceof Error ? error.message : 'Unknown error.',
+      }),
+    );
+  }
 });
 
 server.listen(port, () => {

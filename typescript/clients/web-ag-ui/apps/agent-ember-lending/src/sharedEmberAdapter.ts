@@ -1,9 +1,9 @@
 import type { AgentRuntimeDomainConfig } from 'agent-runtime';
 import {
   AgentRuntimeSigningError,
+  signPreparedEvmTransaction,
   type AgentRuntimeSigningService,
 } from 'agent-runtime/internal';
-import { parseSignature, parseTransaction, serializeTransaction } from 'viem';
 import type {
   EmberLendingAnchoredPayloadResolver,
   EmberLendingAnchoredPayloadRecord,
@@ -78,6 +78,7 @@ type SharedEmberExecutionContext = {
   mandate_context?: Record<string, unknown> | null;
   subagent_wallet_address?: string;
   root_user_wallet_address?: string;
+  rooted_wallet_context_id?: string;
   owned_units?: Array<{
     unit_id?: string;
     root_asset?: string;
@@ -182,6 +183,18 @@ function buildDefaultLifecycleState(): EmberLendingLifecycleState {
     pendingExecutionSubmission: null,
     lastEscalationRequest: null,
     lastEscalationSummary: null,
+  };
+}
+
+function normalizeLifecycleState(
+  state: Partial<EmberLendingLifecycleState> | null | undefined,
+): EmberLendingLifecycleState {
+  return {
+    ...buildDefaultLifecycleState(),
+    ...(state ?? {}),
+    anchoredPayloadRecords: Array.isArray(state?.anchoredPayloadRecords)
+      ? state.anchoredPayloadRecords
+      : [],
   };
 }
 
@@ -487,7 +500,7 @@ function readExecutionContextProjection(
     mandateContext,
     walletAddress: readHexAddress(executionContext.subagent_wallet_address),
     rootUserWalletAddress: readHexAddress(executionContext.root_user_wallet_address),
-    rootedWalletContextId: null,
+    rootedWalletContextId: readString(executionContext.rooted_wallet_context_id),
     lastReservationSummary: null,
   };
 }
@@ -527,6 +540,73 @@ function mergeExecutionContextProjection(
     rootUserWalletAddress: projection.rootUserWalletAddress ?? state.rootUserWalletAddress,
     rootedWalletContextId: projection.rootedWalletContextId ?? state.rootedWalletContextId,
     lastReservationSummary: projection.lastReservationSummary ?? state.lastReservationSummary,
+  };
+}
+
+async function hydrateManagedProjectionFromSharedEmber(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  state: EmberLendingLifecycleState;
+  threadId: string;
+  agentId: string;
+}): Promise<EmberLendingLifecycleState> {
+  const response = (await input.protocolHost.handleJsonRpc({
+    jsonrpc: '2.0',
+    id: `shared-ember-${input.threadId}-hydrate-runtime-projection`,
+    method: 'subagent.readPortfolioState.v1',
+    params: {
+      agent_id: input.agentId,
+    },
+  })) as {
+    result?: {
+      revision?: number;
+      portfolio_state?: unknown;
+    };
+  };
+
+  const portfolioState = response.result?.portfolio_state ?? null;
+  let executionContextEnvelope: SharedEmberExecutionContextEnvelope | null = null;
+  try {
+    executionContextEnvelope = await readSharedEmberExecutionContext({
+      protocolHost: input.protocolHost,
+      threadId: input.threadId,
+      agentId: input.agentId,
+    });
+  } catch {
+    executionContextEnvelope = null;
+  }
+
+  const portfolioProjection = mergePortfolioProjection(input.state, portfolioState);
+  const stateWithPortfolioProjection: EmberLendingLifecycleState = {
+    ...input.state,
+    mandateRef: portfolioProjection.mandateRef ?? input.state.mandateRef,
+    mandateSummary: portfolioProjection.mandateSummary ?? input.state.mandateSummary,
+    mandateContext: portfolioProjection.mandateContext ?? input.state.mandateContext,
+    walletAddress: portfolioProjection.walletAddress ?? input.state.walletAddress,
+    rootUserWalletAddress:
+      portfolioProjection.rootUserWalletAddress ?? input.state.rootUserWalletAddress,
+    rootedWalletContextId:
+      portfolioProjection.rootedWalletContextId ?? input.state.rootedWalletContextId,
+    lastReservationSummary:
+      portfolioProjection.lastReservationSummary ?? input.state.lastReservationSummary,
+  };
+  const projection = mergeExecutionContextProjection(
+    stateWithPortfolioProjection,
+    executionContextEnvelope?.executionContext ?? null,
+  );
+
+  return {
+    ...stateWithPortfolioProjection,
+    ...projection,
+    phase:
+      hasManagedPortfolioProjection(portfolioState) ||
+      hasManagedExecutionContextProjection(executionContextEnvelope?.executionContext ?? null)
+        ? 'active'
+        : input.state.phase,
+    lastPortfolioState: portfolioState,
+    lastSharedEmberRevision: mergeKnownRevision(
+      response.result?.revision ?? null,
+      executionContextEnvelope?.revision ?? null,
+    ),
   };
 }
 
@@ -577,7 +657,8 @@ export function hasConnectReadyEmberLendingRuntimeProjection(state: unknown): bo
   return (
     readString(state['mandateRef']) !== null &&
     readHexAddress(state['walletAddress']) !== null &&
-    readHexAddress(state['rootUserWalletAddress']) !== null
+    readHexAddress(state['rootUserWalletAddress']) !== null &&
+    readString(state['rootedWalletContextId']) !== null
   );
 }
 
@@ -1225,16 +1306,6 @@ function hasExecutionSigningPreparation(
   );
 }
 
-function buildSignedExecutionTransactionHex(input: {
-  unsignedTransactionHex: `0x${string}`;
-  signature: `0x${string}`;
-}): `0x${string}` {
-  const parsedTransaction = parseTransaction(input.unsignedTransactionHex);
-  const parsedSignature = parseSignature(input.signature);
-
-  return serializeTransaction(parsedTransaction, parsedSignature);
-}
-
 async function submitSignedTransaction(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
   threadId: string;
@@ -1762,30 +1833,35 @@ function buildExecutionPreparationContinuationIdempotencyKey(input: {
   return `${input.baseIdempotencyKey}:await-execution-progress:${input.priorRevision ?? input.attempt - 1}`;
 }
 
-async function signPayloadWithRuntimeService(input: {
+async function signPreparedExecutionTransactionWithRuntimeService(input: {
   runtimeSigning?: AgentRuntimeSigningService;
   runtimeSignerRef?: string;
   revision: number | null;
   expectedAddress: `0x${string}`;
-  payloadKind: string;
-  payload: Record<string, unknown>;
+  unsignedTransactionHex: `0x${string}`;
   notConfiguredMessage: string;
   addressMismatchMessage: string;
 }): Promise<{
   confirmedAddress: `0x${string}`;
-  signedPayload: Record<string, unknown>;
+  rawTransaction: `0x${string}`;
 }> {
   if (!input.runtimeSigning) {
     throw new LocalExecutionFailureError(input.notConfiguredMessage, input.revision);
   }
 
   try {
-    return await input.runtimeSigning.signPayload({
+    const signedTransaction = await signPreparedEvmTransaction({
+      signing: input.runtimeSigning,
       signerRef: input.runtimeSignerRef ?? DEFAULT_RUNTIME_SIGNER_REF,
       expectedAddress: input.expectedAddress,
-      payloadKind: input.payloadKind,
-      payload: input.payload,
+      chain: OWS_SIGNING_CHAIN,
+      unsignedTransactionHex: input.unsignedTransactionHex,
     });
+
+    return {
+      confirmedAddress: signedTransaction.confirmedAddress,
+      rawTransaction: signedTransaction.rawTransaction,
+    };
   } catch (error) {
     if (
       error instanceof AgentRuntimeSigningError &&
@@ -1799,6 +1875,13 @@ async function signPayloadWithRuntimeService(input: {
       (error.code === 'address_mismatch' || error.code === 'confirmed_address_missing')
     ) {
       throw new LocalExecutionFailureError(input.addressMismatchMessage, input.revision);
+    }
+
+    if (error instanceof AgentRuntimeSigningError && error.code === 'invalid_signed_artifact') {
+      throw new LocalExecutionFailureError(
+        'Lending execution signing could not continue because the prepared unsigned transaction could not be serialized with the returned signature.',
+        input.revision,
+      );
     }
 
     throw error;
@@ -2018,42 +2101,17 @@ async function runPreparedExecutionFlow(input: {
     );
   }
 
-  const signedExecution = await signPayloadWithRuntimeService({
+  const signedExecution = await signPreparedExecutionTransactionWithRuntimeService({
     runtimeSigning: input.runtimeSigning,
     runtimeSignerRef: input.runtimeSignerRef,
     revision: requestResponse.result?.revision ?? null,
     expectedAddress: input.currentState.walletAddress,
-    payloadKind: 'transaction',
-    payload: {
-      chain: OWS_SIGNING_CHAIN,
-      unsignedTransactionHex,
-    },
+    unsignedTransactionHex,
     notConfiguredMessage:
       'Runtime-owned signing service is not configured for lending transaction execution.',
     addressMismatchMessage:
       'Lending execution signing could not continue because the runtime signer did not confirm the dedicated subagent wallet identity.',
   });
-
-  const transactionSignature = readHexValue(signedExecution.signedPayload.signature);
-  if (!transactionSignature) {
-    throw new LocalExecutionFailureError(
-      'Lending execution signing could not continue because the runtime signer did not return a transaction signature.',
-      requestResponse.result?.revision ?? null,
-    );
-  }
-
-  let rawTransaction: string;
-  try {
-    rawTransaction = buildSignedExecutionTransactionHex({
-      unsignedTransactionHex,
-      signature: transactionSignature,
-    });
-  } catch {
-    throw new LocalExecutionFailureError(
-      'Lending execution signing could not continue because the prepared unsigned transaction could not be serialized with the returned signature.',
-      requestResponse.result?.revision ?? null,
-    );
-  }
 
   const signedTransaction = {
     execution_preparation_id: executionPreparationId,
@@ -2062,7 +2120,7 @@ async function runPreparedExecutionFlow(input: {
     active_delegation_id: readString(executionSigningPackage['active_delegation_id']),
     canonical_unsigned_payload_ref: canonicalUnsignedPayloadRef,
     signer_address: signedExecution.confirmedAddress,
-    raw_transaction: rawTransaction,
+    raw_transaction: signedExecution.rawTransaction,
   };
 
   const submitResponse = await submitSignedTransaction({
@@ -2197,7 +2255,7 @@ export function createEmberLendingDomain(
       interrupts: [],
     },
     systemContext: async ({ state, threadId }) => {
-      const currentState = state ?? buildDefaultLifecycleState();
+      const currentState = normalizeLifecycleState(state);
       if (!options.protocolHost || !shouldReadSharedEmberExecutionContext(currentState)) {
         return buildFallbackExecutionContextXml(currentState);
       }
@@ -2221,7 +2279,7 @@ export function createEmberLendingDomain(
       }
     },
     handleOperation: async ({ operation, state, threadId }) => {
-      const currentState = state ?? buildDefaultLifecycleState();
+      const currentState = normalizeLifecycleState(state);
 
       switch (operation.name) {
         case EMBER_LENDING_INTERNAL_HYDRATE_COMMAND: {
@@ -2232,55 +2290,12 @@ export function createEmberLendingDomain(
             };
           }
 
-          const response = (await options.protocolHost.handleJsonRpc({
-            jsonrpc: '2.0',
-            id: `shared-ember-${threadId}-hydrate-runtime-projection`,
-            method: 'subagent.readPortfolioState.v1',
-            params: {
-              agent_id: agentId,
-            },
-          })) as {
-            result?: {
-              revision?: number;
-              portfolio_state?: unknown;
-            };
-          };
-
-          const portfolioState = response.result?.portfolio_state ?? null;
-          let executionContextEnvelope: SharedEmberExecutionContextEnvelope | null = null;
-          try {
-            executionContextEnvelope = await readSharedEmberExecutionContext({
-              protocolHost: options.protocolHost,
-              threadId,
-              agentId,
-            });
-          } catch {
-            executionContextEnvelope = null;
-          }
-
-          const portfolioProjection = mergePortfolioProjection(currentState, portfolioState);
-          const stateWithPortfolioProjection: EmberLendingLifecycleState = {
-            ...currentState,
-            ...portfolioProjection,
-          };
-          const projection = mergeExecutionContextProjection(
-            stateWithPortfolioProjection,
-            executionContextEnvelope?.executionContext ?? null,
-          );
-          const nextState: EmberLendingLifecycleState = {
-            ...currentState,
-            ...projection,
-            phase:
-              hasManagedPortfolioProjection(portfolioState) ||
-              hasManagedExecutionContextProjection(executionContextEnvelope?.executionContext ?? null)
-                ? 'active'
-                : currentState.phase,
-            lastPortfolioState: portfolioState,
-            lastSharedEmberRevision: mergeKnownRevision(
-              response.result?.revision ?? null,
-              executionContextEnvelope?.revision ?? null,
-            ),
-          };
+          const nextState = await hydrateManagedProjectionFromSharedEmber({
+            protocolHost: options.protocolHost,
+            state: currentState,
+            threadId,
+            agentId,
+          });
 
           return {
             state: nextState,
@@ -2294,7 +2309,7 @@ export function createEmberLendingDomain(
                   data: {
                     type: 'shared-ember-portfolio-state',
                     revision: nextState.lastSharedEmberRevision,
-                    portfolioState,
+                    portfolioState: nextState.lastPortfolioState,
                   },
                 },
               ],
@@ -2334,15 +2349,30 @@ export function createEmberLendingDomain(
             };
           }
 
-          const handoff = buildTransactionPlanningHandoff({
-            state: currentState,
+          let planningState = currentState;
+          let handoff = buildTransactionPlanningHandoff({
+            state: planningState,
             threadId,
             agentId,
             operationInput: operation.input,
           });
           if (!handoff) {
-            return {
+            planningState = await hydrateManagedProjectionFromSharedEmber({
+              protocolHost: options.protocolHost,
               state: currentState,
+              threadId,
+              agentId,
+            });
+            handoff = buildTransactionPlanningHandoff({
+              state: planningState,
+              threadId,
+              agentId,
+              operationInput: operation.input,
+            });
+          }
+          if (!handoff) {
+            return {
+              state: planningState,
               outputs: {
                 status: {
                   executionStatus: 'failed',
@@ -2366,7 +2396,7 @@ export function createEmberLendingDomain(
             protocolHost: options.protocolHost,
             threadId,
             agentId,
-            currentRevision: currentState.lastSharedEmberRevision,
+            currentRevision: planningState.lastSharedEmberRevision,
             buildRequest: (expectedRevision) => ({
               jsonrpc: '2.0',
               id: `shared-ember-${threadId}-create-transaction-plan`,
@@ -2386,8 +2416,8 @@ export function createEmberLendingDomain(
           const anchoringFailureMessage = resolveCandidatePlanAnchoringFailureMessage({
             candidatePlan,
             anchoredPayloadResolver: options.anchoredPayloadResolver,
-            walletAddress: currentState.walletAddress,
-            rootUserWalletAddress: currentState.rootUserWalletAddress,
+            walletAddress: planningState.walletAddress,
+            rootUserWalletAddress: planningState.rootUserWalletAddress,
             transactionPlanId: candidatePlanTransactionPlanId,
             payloadBuilderOutput,
             compactPlanSummary,
@@ -2395,7 +2425,7 @@ export function createEmberLendingDomain(
           if (anchoringFailureMessage) {
             return {
               state: {
-                ...currentState,
+                ...planningState,
                 phase: 'active',
                 lastSharedEmberRevision: response.result?.revision ?? null,
               },
@@ -2412,15 +2442,15 @@ export function createEmberLendingDomain(
             agentId,
             threadId,
             transactionPlanId: candidatePlanTransactionPlanId!,
-            walletAddress: currentState.walletAddress!,
-            rootUserWalletAddress: currentState.rootUserWalletAddress!,
+            walletAddress: planningState.walletAddress!,
+            rootUserWalletAddress: planningState.rootUserWalletAddress!,
             payloadBuilderOutput: payloadBuilderOutput!,
             compactPlanSummary: compactPlanSummary!,
           });
           if (!anchoredPayloadRecord) {
             return {
               state: {
-                ...currentState,
+                ...planningState,
                 phase: 'active',
                 lastSharedEmberRevision: response.result?.revision ?? null,
               },
@@ -2435,13 +2465,13 @@ export function createEmberLendingDomain(
           }
 
           const nextState: EmberLendingLifecycleState = {
-            ...currentState,
+            ...planningState,
             phase: 'active',
             lastSharedEmberRevision: response.result?.revision ?? null,
             lastCandidatePlan: candidatePlan,
             lastCandidatePlanSummary: readCandidatePlanSummary(candidatePlan),
             anchoredPayloadRecords: upsertAnchoredPayloadRecord(
-              currentState.anchoredPayloadRecords,
+              planningState.anchoredPayloadRecords,
               anchoredPayloadRecord,
             ),
           };
@@ -2599,15 +2629,30 @@ export function createEmberLendingDomain(
             };
           }
 
-          const handoff = buildEscalationHandoff({
-            state: currentState,
+          let escalationState = currentState;
+          let handoff = buildEscalationHandoff({
+            state: escalationState,
             threadId,
             agentId,
             operationInput: operation.input,
           });
           if (!handoff) {
-            return {
+            escalationState = await hydrateManagedProjectionFromSharedEmber({
+              protocolHost: options.protocolHost,
               state: currentState,
+              threadId,
+              agentId,
+            });
+            handoff = buildEscalationHandoff({
+              state: escalationState,
+              threadId,
+              agentId,
+              operationInput: operation.input,
+            });
+          }
+          if (!handoff) {
+            return {
+              state: escalationState,
               outputs: {
                 status: {
                   executionStatus: 'failed',
@@ -2636,9 +2681,10 @@ export function createEmberLendingDomain(
 
           const escalationRequest = response.result?.escalation_request ?? null;
           const nextState: EmberLendingLifecycleState = {
-            ...currentState,
+            ...escalationState,
             phase: 'active',
-            lastSharedEmberRevision: response.result?.revision ?? currentState.lastSharedEmberRevision,
+            lastSharedEmberRevision:
+              response.result?.revision ?? escalationState.lastSharedEmberRevision,
             lastEscalationRequest: escalationRequest,
             lastEscalationSummary: readEscalationSummary(escalationRequest),
           };

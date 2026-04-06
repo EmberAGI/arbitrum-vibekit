@@ -4,10 +4,6 @@ import type { AddressInfo } from 'node:net';
 import { type RunAgentInput, verifyEvents } from '@ag-ui/client';
 import { EventType, type BaseEvent } from '@ag-ui/core';
 import {
-  createAgentRuntimeHttpAgent,
-  type AgentRuntimeService,
-} from 'agent-runtime';
-import {
   createPiExampleGatewayService,
   PI_EXAMPLE_AGENT_ID,
   PI_EXAMPLE_AG_UI_BASE_PATH,
@@ -16,12 +12,17 @@ import { lastValueFrom, toArray, type Observable } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { assertSharedThreadSnapshotContract } from './sharedThreadSnapshotContract.test-support';
+import { createAgentRuntimeHttpAgent } from './piRuntimeHttpAgent';
 
 type RecordedRequest = {
   method: string;
   pathname: string;
   body: string;
 };
+
+type AgentRuntimeService = Awaited<
+  ReturnType<typeof createPiExampleGatewayService>
+>;
 
 function createInput(overrides: Partial<RunAgentInput> = {}): RunAgentInput {
   return {

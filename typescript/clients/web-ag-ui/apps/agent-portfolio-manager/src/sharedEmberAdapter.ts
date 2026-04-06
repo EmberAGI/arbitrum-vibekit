@@ -1,6 +1,7 @@
 import type { AgentRuntimeDomainConfig } from 'agent-runtime';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
-import { getDeleGatorEnvironment } from '@metamask/delegation-toolkit';
+import { signPreparedDelegation } from 'agent-runtime/internal';
+import { getDeleGatorEnvironment, ROOT_AUTHORITY } from '@metamask/delegation-toolkit';
 import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
 import { keccak256, toHex } from 'viem';
 import {
@@ -92,9 +93,6 @@ const PORTFOLIO_MANAGER_SMART_ACCOUNT_ENVIRONMENT = getDeleGatorEnvironment(
 );
 const PORTFOLIO_MANAGER_DELEGATION_MANAGER =
   PORTFOLIO_MANAGER_SMART_ACCOUNT_ENVIRONMENT.DelegationManager as `0x${string}`;
-const RUNTIME_REDELEGATION_DOMAIN_NAME = 'DelegationManager';
-const RUNTIME_REDELEGATION_DOMAIN_VERSION = '1';
-const RUNTIME_REDELEGATION_VERIFIER = PORTFOLIO_MANAGER_DELEGATION_MANAGER;
 const METAMASK_DELEGATION_ARTIFACT_PREFIX = 'metamask-delegation:';
 
 function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
@@ -403,62 +401,32 @@ function buildRuntimeRedelegationSalt(requestId: string): `0x${string}` {
   return keccak256(toHex(requestId));
 }
 
-function buildRuntimeRedelegationTypedData(input: {
+function buildRuntimeRedelegationUnsignedDelegation(input: {
   redelegationSigningPackage: Record<string, unknown>;
-  signerAddress: `0x${string}`;
-}): Record<string, unknown> {
-  const network = readString(input.redelegationSigningPackage['network']);
+  delegatorAddress: `0x${string}`;
+}): PortfolioManagerUnsignedDelegation {
   const requestId = readString(input.redelegationSigningPackage['request_id']);
   const rootDelegationArtifactRef = readString(
     input.redelegationSigningPackage['root_delegation_artifact_ref'],
   );
   const agentWallet = readHexAddress(input.redelegationSigningPackage['agent_wallet']);
 
-  if (!network || !requestId || !rootDelegationArtifactRef || !agentWallet) {
+  if (!requestId || !rootDelegationArtifactRef || !agentWallet) {
     throw new Error('missing redelegation package metadata');
   }
 
   return {
-    domain: {
-      chainId: resolveRuntimeRedelegationChainId(network),
-      name: RUNTIME_REDELEGATION_DOMAIN_NAME,
-      version: RUNTIME_REDELEGATION_DOMAIN_VERSION,
-      verifyingContract: RUNTIME_REDELEGATION_VERIFIER,
-    },
-    types: {
-      EIP712Domain: [
-        { name: 'name', type: 'string' },
-        { name: 'version', type: 'string' },
-        { name: 'chainId', type: 'uint256' },
-        { name: 'verifyingContract', type: 'address' },
-      ],
-      Caveat: [
-        { name: 'enforcer', type: 'address' },
-        { name: 'terms', type: 'bytes' },
-      ],
-      Delegation: [
-        { name: 'delegate', type: 'address' },
-        { name: 'delegator', type: 'address' },
-        { name: 'authority', type: 'bytes32' },
-        { name: 'caveats', type: 'Caveat[]' },
-        { name: 'salt', type: 'uint256' },
-      ],
-    },
-    primaryType: 'Delegation',
-    message: {
-      delegate: agentWallet,
-      delegator: input.signerAddress,
-      authority: buildRuntimeRedelegationAuthority(rootDelegationArtifactRef),
-      caveats: [],
-      salt: BigInt(buildRuntimeRedelegationSalt(requestId)),
-    },
+    delegate: agentWallet,
+    delegator: input.delegatorAddress,
+    authority: buildRuntimeRedelegationAuthority(rootDelegationArtifactRef),
+    caveats: [],
+    salt: buildRuntimeRedelegationSalt(requestId),
   };
 }
 
 function buildRuntimeSignedRedelegationRecord(input: {
   redelegationSigningPackage: Record<string, unknown>;
-  signerAddress: `0x${string}`;
-  signature: `0x${string}`;
+  artifactRef: string;
 }): Record<string, unknown> {
   const requestId = readString(input.redelegationSigningPackage['request_id']);
   const rootDelegationArtifactRef = readString(
@@ -470,23 +438,11 @@ function buildRuntimeSignedRedelegationRecord(input: {
   if (!requestId || !rootDelegationArtifactRef || !agentWallet || !policySnapshotRef) {
     throw new Error('missing signed redelegation metadata');
   }
-
-  const artifact = {
-    delegate: agentWallet,
-    delegator: input.signerAddress,
-    authority: buildRuntimeRedelegationAuthority(rootDelegationArtifactRef),
-    caveats: [],
-    salt: buildRuntimeRedelegationSalt(requestId),
-    signature: input.signature,
-  };
   const issuedAt = new Date().toISOString();
 
   return {
     ...input.redelegationSigningPackage,
-    artifact_ref: `${METAMASK_DELEGATION_ARTIFACT_PREFIX}${Buffer.from(
-      JSON.stringify(artifact),
-      'utf8',
-    ).toString('base64url')}`,
+    artifact_ref: input.artifactRef,
     issued_at: issuedAt,
     activated_at: issuedAt,
     policy_hash: `policy-${policySnapshotRef}`,
@@ -604,8 +560,7 @@ const PORTFOLIO_MANAGER_SETUP_MESSAGE =
 const PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE = 'portfolio-manager-delegation-signing-request';
 const PORTFOLIO_MANAGER_SIGNING_MESSAGE =
   'Review and sign the delegation needed to activate your portfolio manager.';
-const PORTFOLIO_MANAGER_ROOT_AUTHORITY =
-  '0x0000000000000000000000000000000000000000000000000000000000000000';
+const PORTFOLIO_MANAGER_ROOT_AUTHORITY = ROOT_AUTHORITY;
 const PORTFOLIO_MANAGER_DELEGATION_SALT =
   '0x1111111111111111111111111111111111111111111111111111111111111111';
 const PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP = '2026-03-30T00:00:00.000Z';
@@ -1823,11 +1778,11 @@ export function createPortfolioManagerDomain(
             };
           }
 
-          let redelegationTypedData: Record<string, unknown>;
+          let unsignedRedelegation: PortfolioManagerUnsignedDelegation;
           try {
-            redelegationTypedData = buildRuntimeRedelegationTypedData({
+            unsignedRedelegation = buildRuntimeRedelegationUnsignedDelegation({
               redelegationSigningPackage: redelegationWork.redelegationSigningPackage,
-              signerAddress: controllerWalletAddress,
+              delegatorAddress: controllerWalletAddress,
             });
           } catch {
             return {
@@ -1842,36 +1797,38 @@ export function createPortfolioManagerDomain(
             };
           }
 
-          const signedRedelegation = await options.runtimeSigning.signPayload({
-            signerRef: options.runtimeSignerRef ?? DEFAULT_RUNTIME_SIGNER_REF,
-            expectedAddress: controllerSignerAddress,
-            payloadKind: 'typed-data',
-            payload: {
-              chain: OWS_SIGNING_CHAIN,
-              typedData: redelegationTypedData,
-            },
-          });
-          const redelegationSignature = readHexValue(signedRedelegation.signedPayload.signature);
+          const redelegationNetwork = readString(
+            redelegationWork.redelegationSigningPackage['network'],
+          );
 
-          if (!redelegationSignature) {
+          if (!redelegationNetwork) {
             return {
               state: nextState,
               outputs: {
                 status: {
                   executionStatus: 'failed',
                   statusMessage:
-                    'Portfolio-manager redelegation signing could not continue because the runtime signer did not return a redelegation signature.',
+                    'Portfolio-manager redelegation signing could not continue because the canonical signing package was incomplete.',
                 },
               },
             };
           }
 
+          const signedRedelegation = await signPreparedDelegation({
+            signing: options.runtimeSigning,
+            signerRef: options.runtimeSignerRef ?? DEFAULT_RUNTIME_SIGNER_REF,
+            expectedAddress: controllerSignerAddress,
+            chain: OWS_SIGNING_CHAIN,
+            chainId: resolveRuntimeRedelegationChainId(redelegationNetwork),
+            delegationManager: PORTFOLIO_MANAGER_DELEGATION_MANAGER,
+            delegation: unsignedRedelegation,
+          });
+
           let signedRedelegationRecord: Record<string, unknown>;
           try {
             signedRedelegationRecord = buildRuntimeSignedRedelegationRecord({
               redelegationSigningPackage: redelegationWork.redelegationSigningPackage,
-              signerAddress: controllerWalletAddress,
-              signature: redelegationSignature,
+              artifactRef: signedRedelegation.artifactRef,
             });
           } catch {
             return {

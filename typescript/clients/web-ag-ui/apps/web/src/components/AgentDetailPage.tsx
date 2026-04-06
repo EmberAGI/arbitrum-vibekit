@@ -57,7 +57,10 @@ import { LoadingValue } from './ui/LoadingValue';
 import { CreatorIdentity } from './ui/CreatorIdentity';
 import { CursorListTooltip } from './ui/CursorListTooltip';
 import { CTA_SIZE_MD, CTA_SIZE_MD_FULL } from './ui/cta';
-import { signDelegationWithFallback } from '../utils/delegationSigning';
+import {
+  formatDelegationSigningError,
+  signDelegationWithFallback,
+} from '../utils/delegationSigning';
 import { GmxAlloraMetricsTab, MetricsTab, PendleMetricsTab } from './AgentMetricsTabs';
 import {
   resolveDelegationContextLabel,
@@ -2869,8 +2872,40 @@ function AgentBlockersTab({
       });
       onInterruptSubmit?.(response);
     } catch (signError: unknown) {
-      const message =
-        signError instanceof Error ? signError.message : typeof signError === 'string' ? signError : 'Unknown error';
+      const message = formatDelegationSigningError({
+        error: signError,
+        context: {
+          chainId: chainId ?? -1,
+          expectedChainId: interrupt.chainId,
+          requiredDelegatorAddress: interrupt.delegatorAddress,
+          currentSignerAddress: walletClient.account?.address ?? null,
+        },
+      });
+      emitAgentConnectDebug({
+        event: 'gmx-delegation-sign-failed',
+        payload: {
+          interruptType: activeInterrupt?.type ?? null,
+          message,
+          chainId,
+          requiredChainId: interrupt.chainId,
+          signerAddress: walletClient.account?.address ?? null,
+          requiredDelegatorAddress: interrupt.delegatorAddress,
+          rawError:
+            signError instanceof Error
+              ? {
+                  name: signError.name,
+                  message: signError.message,
+                  cause:
+                    signError.cause instanceof Error
+                      ? {
+                          name: signError.cause.name,
+                          message: signError.cause.message,
+                        }
+                      : signError.cause ?? null,
+                }
+              : signError,
+        },
+      });
       setError(`Failed to sign delegations: ${message}`);
     } finally {
       setIsSigningDelegations(false);

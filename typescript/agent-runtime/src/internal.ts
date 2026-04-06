@@ -4,6 +4,7 @@ import {
   signTransaction as signTransactionWithOwsCore,
   signTypedData as signTypedDataWithOwsCore,
 } from '@open-wallet-standard/core';
+import { parseSignature, parseTransaction, serializeTransaction } from 'viem';
 
 import {
   createAgentRuntime,
@@ -34,6 +35,38 @@ export interface AgentRuntimeSigningService {
   readAddress(input: { signerRef: AgentRuntimeSignerRef }): Promise<`0x${string}`>;
   signPayload(input: AgentRuntimeSigningRequest): Promise<AgentRuntimeSigningResult>;
 }
+
+export type AgentRuntimeSignedEvmTransactionArtifact = {
+  kind: 'evm-raw-transaction';
+  confirmedAddress: `0x${string}`;
+  signature: `0x${string}`;
+  rawTransaction: `0x${string}`;
+  recoveryId?: number;
+};
+
+export type AgentRuntimeDelegationCaveat = {
+  enforcer: `0x${string}`;
+  terms: `0x${string}`;
+  args?: `0x${string}`;
+};
+
+export type AgentRuntimeUnsignedDelegation = {
+  delegate: `0x${string}`;
+  delegator: `0x${string}`;
+  authority: `0x${string}`;
+  caveats: readonly AgentRuntimeDelegationCaveat[];
+  salt: `0x${string}`;
+};
+
+export type AgentRuntimeSignedDelegationArtifact = {
+  kind: 'metamask-delegation';
+  confirmedAddress: `0x${string}`;
+  signature: `0x${string}`;
+  artifactRef: string;
+  delegation: AgentRuntimeUnsignedDelegation & {
+    signature: `0x${string}`;
+  };
+};
 
 export type AgentRuntimeKernel = {
   service: AgentRuntimeService;
@@ -79,6 +112,7 @@ type AgentRuntimeSigningErrorCode =
   | 'signer_not_configured'
   | 'unsupported_payload_kind'
   | 'invalid_payload'
+  | 'invalid_signed_artifact'
   | 'wallet_lookup_failed'
   | 'signing_failed'
   | 'identity_address_missing'
@@ -120,6 +154,26 @@ type TypedDataSigningPayload = {
 
 const DEFAULT_ADDRESS_CHAIN_ID_PREFIX = 'eip155:';
 const MAX_DECIMAL_TYPED_DATA_BIGINT = 1n << 128n;
+const METAMASK_DELEGATION_ARTIFACT_PREFIX = 'metamask-delegation:';
+const SIGNABLE_DELEGATION_TYPED_DATA = {
+  EIP712Domain: [
+    { name: 'name', type: 'string' },
+    { name: 'version', type: 'string' },
+    { name: 'chainId', type: 'uint256' },
+    { name: 'verifyingContract', type: 'address' },
+  ],
+  Caveat: [
+    { name: 'enforcer', type: 'address' },
+    { name: 'terms', type: 'bytes' },
+  ],
+  Delegation: [
+    { name: 'delegate', type: 'address' },
+    { name: 'delegator', type: 'address' },
+    { name: 'authority', type: 'bytes32' },
+    { name: 'caveats', type: 'Caveat[]' },
+    { name: 'salt', type: 'uint256' },
+  ],
+} as const;
 
 export class AgentRuntimeSigningError extends Error {
   code: AgentRuntimeSigningErrorCode;
@@ -396,6 +450,168 @@ function normalizeSignedPayload(input: {
   return {
     signature,
     ...(typeof input.recoveryId === 'number' ? { recoveryId: input.recoveryId } : {}),
+  };
+}
+
+export async function signPreparedEvmTransaction(input: {
+  signing: AgentRuntimeSigningService;
+  signerRef: AgentRuntimeSignerRef;
+  expectedAddress?: `0x${string}`;
+  chain: string;
+  unsignedTransactionHex: `0x${string}`;
+}): Promise<AgentRuntimeSignedEvmTransactionArtifact> {
+  const signed = await input.signing.signPayload({
+    signerRef: input.signerRef,
+    expectedAddress: input.expectedAddress,
+    payloadKind: 'transaction',
+    payload: {
+      chain: input.chain,
+      unsignedTransactionHex: input.unsignedTransactionHex,
+    },
+  });
+  const signature = readNormalizedSignature(signed.signedPayload.signature);
+
+  if (!signature) {
+    throw new AgentRuntimeSigningError({
+      code: 'invalid_signed_artifact',
+      signerRef: input.signerRef,
+      expectedAddress: input.expectedAddress,
+      confirmedAddress: signed.confirmedAddress,
+      message: `Agent runtime signer "${input.signerRef}" did not return a usable transaction signature.`,
+    });
+  }
+
+  const recoveryId =
+    typeof signed.signedPayload.recoveryId === 'number' ? signed.signedPayload.recoveryId : undefined;
+
+  try {
+    const parsedTransaction = parseTransaction(input.unsignedTransactionHex);
+    const parsedSignature = parseSignature(signature);
+
+    return {
+      kind: 'evm-raw-transaction',
+      confirmedAddress: signed.confirmedAddress,
+      signature,
+      rawTransaction: serializeTransaction(parsedTransaction, parsedSignature),
+      ...(typeof recoveryId === 'number' ? { recoveryId } : {}),
+    };
+  } catch (error) {
+    throw new AgentRuntimeSigningError({
+      code: 'invalid_signed_artifact',
+      signerRef: input.signerRef,
+      expectedAddress: input.expectedAddress,
+      confirmedAddress: signed.confirmedAddress,
+      message:
+        `Agent runtime signer "${input.signerRef}" returned a signature that could not be serialized ` +
+        'with the prepared transaction.',
+      cause: error,
+    });
+  }
+}
+
+function encodeDelegationArtifactRef(
+  delegation: AgentRuntimeSignedDelegationArtifact['delegation'],
+): string {
+  return `${METAMASK_DELEGATION_ARTIFACT_PREFIX}${Buffer.from(
+    JSON.stringify(delegation),
+    'utf8',
+  ).toString('base64url')}`;
+}
+
+function buildDelegationTypedData(input: {
+  signerRef: AgentRuntimeSignerRef;
+  chainId: number;
+  delegationManager: `0x${string}`;
+  delegation: AgentRuntimeUnsignedDelegation;
+  name?: string;
+  version?: string;
+}): Record<string, unknown> {
+  let salt: bigint;
+
+  try {
+    salt = BigInt(input.delegation.salt);
+  } catch (error) {
+    throw new AgentRuntimeSigningError({
+      code: 'invalid_payload',
+      signerRef: input.signerRef,
+      message: 'Prepared delegation payload included an invalid salt value.',
+      cause: error,
+    });
+  }
+
+  return {
+    domain: {
+      chainId: input.chainId,
+      name: input.name ?? 'DelegationManager',
+      version: input.version ?? '1',
+      verifyingContract: input.delegationManager,
+    },
+    types: SIGNABLE_DELEGATION_TYPED_DATA,
+    primaryType: 'Delegation',
+    message: {
+      delegate: input.delegation.delegate,
+      delegator: input.delegation.delegator,
+      authority: input.delegation.authority,
+      caveats: input.delegation.caveats.map((caveat) => ({
+        enforcer: caveat.enforcer,
+        terms: caveat.terms,
+      })),
+      salt,
+    },
+  };
+}
+
+export async function signPreparedDelegation(input: {
+  signing: AgentRuntimeSigningService;
+  signerRef: AgentRuntimeSignerRef;
+  expectedAddress?: `0x${string}`;
+  chain: string;
+  chainId: number;
+  delegationManager: `0x${string}`;
+  delegation: AgentRuntimeUnsignedDelegation;
+  name?: string;
+  version?: string;
+}): Promise<AgentRuntimeSignedDelegationArtifact> {
+  const typedData = buildDelegationTypedData({
+    signerRef: input.signerRef,
+    chainId: input.chainId,
+    delegationManager: input.delegationManager,
+    delegation: input.delegation,
+    name: input.name,
+    version: input.version,
+  });
+  const signed = await input.signing.signPayload({
+    signerRef: input.signerRef,
+    expectedAddress: input.expectedAddress,
+    payloadKind: 'typed-data',
+    payload: {
+      chain: input.chain,
+      typedData,
+    },
+  });
+  const signature = readNormalizedSignature(signed.signedPayload.signature);
+
+  if (!signature) {
+    throw new AgentRuntimeSigningError({
+      code: 'invalid_signed_artifact',
+      signerRef: input.signerRef,
+      expectedAddress: input.expectedAddress,
+      confirmedAddress: signed.confirmedAddress,
+      message: `Agent runtime signer "${input.signerRef}" did not return a usable delegation signature.`,
+    });
+  }
+
+  const delegation = {
+    ...input.delegation,
+    signature,
+  };
+
+  return {
+    kind: 'metamask-delegation',
+    confirmedAddress: signed.confirmedAddress,
+    signature,
+    artifactRef: encodeDelegationArtifactRef(delegation),
+    delegation,
   };
 }
 

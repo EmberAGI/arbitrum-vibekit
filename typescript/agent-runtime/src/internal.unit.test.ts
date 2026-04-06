@@ -7,10 +7,14 @@ import { importWalletPrivateKey } from '@open-wallet-standard/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
-  AgentRuntimeSigningError} from './internal.js';
+  AgentRuntimeSigningError,
+  AgentRuntimeSigningService,
+} from './internal.js';
 import {
   createAgentRuntimeKernel,
   createAgentRuntimeSigningService,
+  signPreparedDelegation,
+  signPreparedEvmTransaction,
 } from './internal.js';
 
 const TEST_PRIVATE_KEY =
@@ -18,6 +22,18 @@ const TEST_PRIVATE_KEY =
 const TEST_WALLET_NAME = 'service-wallet';
 const TEST_SIGNER_REF = 'service-wallet';
 const TEST_EVM_ADDRESS = '0xfcad0b19bb29d4674531d6f115237e16afce377c' as const;
+const TEST_UNSIGNED_TRANSACTION_HEX =
+  '0x02e982a4b1018405f5e100843b9aca008252089400000000000000000000000000000000000000c18080c0' as const;
+const TEST_UNSIGNED_DELEGATION = {
+  delegate: '0x00000000000000000000000000000000000000b1' as const,
+  delegator: '0x00000000000000000000000000000000000000c2' as const,
+  authority:
+    '0x1111111111111111111111111111111111111111111111111111111111111111' as const,
+  caveats: [],
+  salt: '0x1111111111111111111111111111111111111111111111111111111111111111' as const,
+};
+const TEST_DELEGATION_SIGNATURE =
+  '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 
 function createModel(id: string): Model<'openai-responses'> {
   return {
@@ -132,6 +148,206 @@ describe('agent-runtime internal signing surface', () => {
         signature: expect.stringMatching(/^0x[0-9a-f]+$/),
         recoveryId: expect.any(Number),
       },
+    });
+  });
+
+  it('builds a signed raw transaction artifact through the shared helper', async () => {
+    const fixture = createOwsTestSignerEnv();
+    cleanupFns.add(fixture.cleanup);
+
+    const signing = createSigningService(fixture.env);
+
+    await expect(
+      signPreparedEvmTransaction({
+        signing,
+        signerRef: TEST_SIGNER_REF,
+        expectedAddress: TEST_EVM_ADDRESS,
+        chain: 'evm',
+        unsignedTransactionHex: TEST_UNSIGNED_TRANSACTION_HEX,
+      }),
+    ).resolves.toMatchObject({
+      kind: 'evm-raw-transaction',
+      confirmedAddress: TEST_EVM_ADDRESS,
+      signature: expect.stringMatching(/^0x[0-9a-f]+$/),
+      rawTransaction: expect.stringMatching(/^0x[0-9a-f]+$/),
+      recoveryId: expect.any(Number),
+    });
+  });
+
+  it('builds a signed delegation artifact through the shared helper', async () => {
+    const signing: AgentRuntimeSigningService = {
+      readAddress: vi.fn(async () => TEST_EVM_ADDRESS),
+      signPayload: vi.fn(async () => ({
+        confirmedAddress: TEST_EVM_ADDRESS,
+        signedPayload: {
+          signature: TEST_DELEGATION_SIGNATURE,
+        },
+      })),
+    };
+
+    await expect(
+      signPreparedDelegation({
+        signing,
+        signerRef: TEST_SIGNER_REF,
+        expectedAddress: TEST_EVM_ADDRESS,
+        chain: 'evm',
+        chainId: 42161,
+        delegationManager: '0x00000000000000000000000000000000000000d1',
+        delegation: TEST_UNSIGNED_DELEGATION,
+      }),
+    ).resolves.toMatchObject({
+      kind: 'metamask-delegation',
+      confirmedAddress: TEST_EVM_ADDRESS,
+      signature: TEST_DELEGATION_SIGNATURE,
+      artifactRef: expect.stringMatching(/^metamask-delegation:/),
+      delegation: {
+        ...TEST_UNSIGNED_DELEGATION,
+        signature: TEST_DELEGATION_SIGNATURE,
+      },
+    });
+
+    expect(signing.signPayload).toHaveBeenCalledWith({
+      signerRef: TEST_SIGNER_REF,
+      expectedAddress: TEST_EVM_ADDRESS,
+      payloadKind: 'typed-data',
+      payload: {
+        chain: 'evm',
+        typedData: expect.objectContaining({
+          domain: expect.objectContaining({
+            chainId: 42161,
+            name: 'DelegationManager',
+            version: '1',
+            verifyingContract: '0x00000000000000000000000000000000000000d1',
+          }),
+          message: expect.objectContaining({
+            delegate: TEST_UNSIGNED_DELEGATION.delegate,
+            delegator: TEST_UNSIGNED_DELEGATION.delegator,
+            authority: TEST_UNSIGNED_DELEGATION.authority,
+            caveats: [],
+            salt: BigInt(TEST_UNSIGNED_DELEGATION.salt),
+          }),
+        }),
+      },
+    });
+  });
+
+  it('accepts a non-prefixed signature from a custom signing service and normalizes it', async () => {
+    const signatureWithoutPrefix =
+      '464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
+    const signing: AgentRuntimeSigningService = {
+      readAddress: vi.fn(async () => TEST_EVM_ADDRESS),
+      signPayload: vi.fn(async () => ({
+        confirmedAddress: TEST_EVM_ADDRESS,
+        signedPayload: {
+          signature: signatureWithoutPrefix,
+          recoveryId: 1,
+        },
+      })),
+    };
+
+    await expect(
+      signPreparedEvmTransaction({
+        signing,
+        signerRef: TEST_SIGNER_REF,
+        expectedAddress: TEST_EVM_ADDRESS,
+        chain: 'evm',
+        unsignedTransactionHex: TEST_UNSIGNED_TRANSACTION_HEX,
+      }),
+    ).resolves.toMatchObject({
+      kind: 'evm-raw-transaction',
+      confirmedAddress: TEST_EVM_ADDRESS,
+      signature: `0x${signatureWithoutPrefix}`,
+      rawTransaction: expect.stringMatching(/^0x[0-9a-f]+$/),
+    });
+  });
+
+  it('accepts a non-prefixed delegation signature and normalizes it', async () => {
+    const signatureWithoutPrefix = TEST_DELEGATION_SIGNATURE.slice(2);
+    const signing: AgentRuntimeSigningService = {
+      readAddress: vi.fn(async () => TEST_EVM_ADDRESS),
+      signPayload: vi.fn(async () => ({
+        confirmedAddress: TEST_EVM_ADDRESS,
+        signedPayload: {
+          signature: signatureWithoutPrefix,
+        },
+      })),
+    };
+
+    await expect(
+      signPreparedDelegation({
+        signing,
+        signerRef: TEST_SIGNER_REF,
+        expectedAddress: TEST_EVM_ADDRESS,
+        chain: 'evm',
+        chainId: 42161,
+        delegationManager: '0x00000000000000000000000000000000000000d1',
+        delegation: TEST_UNSIGNED_DELEGATION,
+      }),
+    ).resolves.toMatchObject({
+      kind: 'metamask-delegation',
+      confirmedAddress: TEST_EVM_ADDRESS,
+      signature: TEST_DELEGATION_SIGNATURE,
+      delegation: {
+        ...TEST_UNSIGNED_DELEGATION,
+        signature: TEST_DELEGATION_SIGNATURE,
+      },
+    });
+  });
+
+  it('fails closed when the returned signature cannot be serialized with the prepared transaction', async () => {
+    const signing: AgentRuntimeSigningService = {
+      readAddress: vi.fn(async () => TEST_EVM_ADDRESS),
+      signPayload: vi.fn(async () => ({
+        confirmedAddress: TEST_EVM_ADDRESS,
+        signedPayload: {
+          signature: '0x1234',
+          recoveryId: 1,
+        },
+      })),
+    };
+
+    await expect(
+      signPreparedEvmTransaction({
+        signing,
+        signerRef: TEST_SIGNER_REF,
+        expectedAddress: TEST_EVM_ADDRESS,
+        chain: 'evm',
+        unsignedTransactionHex: TEST_UNSIGNED_TRANSACTION_HEX,
+      }),
+    ).rejects.toMatchObject<Partial<AgentRuntimeSigningError>>({
+      code: 'invalid_signed_artifact',
+      signerRef: TEST_SIGNER_REF,
+      expectedAddress: TEST_EVM_ADDRESS,
+      confirmedAddress: TEST_EVM_ADDRESS,
+    });
+  });
+
+  it('fails closed when the returned delegation signature is unusable', async () => {
+    const signing: AgentRuntimeSigningService = {
+      readAddress: vi.fn(async () => TEST_EVM_ADDRESS),
+      signPayload: vi.fn(async () => ({
+        confirmedAddress: TEST_EVM_ADDRESS,
+        signedPayload: {
+          signature: 'not-a-signature',
+        },
+      })),
+    };
+
+    await expect(
+      signPreparedDelegation({
+        signing,
+        signerRef: TEST_SIGNER_REF,
+        expectedAddress: TEST_EVM_ADDRESS,
+        chain: 'evm',
+        chainId: 42161,
+        delegationManager: '0x00000000000000000000000000000000000000d1',
+        delegation: TEST_UNSIGNED_DELEGATION,
+      }),
+    ).rejects.toMatchObject<Partial<AgentRuntimeSigningError>>({
+      code: 'invalid_signed_artifact',
+      signerRef: TEST_SIGNER_REF,
+      expectedAddress: TEST_EVM_ADDRESS,
+      confirmedAddress: TEST_EVM_ADDRESS,
     });
   });
 

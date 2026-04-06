@@ -336,11 +336,16 @@ async function resolveToken(input: {
   );
 }
 
-function resolveAmountBaseUnits(input: {
+function resolveAmountForOnchainActions(input: {
   amount: string;
   decimals: number;
 }): string {
-  return parseUnits(input.amount, input.decimals).toString();
+  const normalizedAmount = input.amount.trim();
+  if (/^\d+$/u.test(normalizedAmount)) {
+    return normalizedAmount;
+  }
+
+  return parseUnits(normalizedAmount, input.decimals).toString();
 }
 
 function decodeDelegationArtifactRef(artifactRef: string): Delegation {
@@ -349,9 +354,17 @@ function decodeDelegationArtifactRef(artifactRef: string): Delegation {
     throw new Error(`Unsupported delegation artifact ref "${artifactRef}".`);
   }
 
-  return JSON.parse(
+  const decoded = JSON.parse(
     Buffer.from(artifactRef.slice(prefix.length), 'base64url').toString('utf8'),
   ) as Delegation;
+  const signature = decoded.signature.trim();
+  if (!signature.startsWith('0x')) {
+    decoded.signature = `0x${signature.toLowerCase()}` as `0x${string}`;
+  } else {
+    decoded.signature = signature.toLowerCase() as `0x${string}`;
+  }
+
+  return decoded;
 }
 
 function requireDelegationArtifactRef(input: {
@@ -403,21 +416,38 @@ function buildLendingRequestBody(input: {
 
 async function resolvePreparedUnsignedTransactionHex(input: {
   publicClient: EmberLendingExecutionPublicClient;
-  transaction: z.infer<typeof OnchainActionsTransactionPlanSchema>;
+  transactions: z.infer<typeof OnchainActionsTransactionPlanSchema>[];
   walletAddress: `0x${string}`;
   delegationArtifactRef: string;
   rootDelegationArtifactRef: string;
 }): Promise<`0x${string}`> {
-  const chainId = Number(input.transaction.chainId);
-  if (!Number.isFinite(chainId) || chainId <= 0) {
-    throw new Error(`Invalid transaction chain id "${input.transaction.chainId}".`);
+  const [firstTransaction, ...remainingTransactions] = input.transactions;
+  if (!firstTransaction) {
+    throw new Error('Prepared execution signing requires at least one transaction request.');
   }
 
-  const to = input.transaction.to.toLowerCase() as `0x${string}`;
-  const value = BigInt(input.transaction.value);
-  const data = input.transaction.data.toLowerCase() as `0x${string}`;
+  const chainId = Number(firstTransaction.chainId);
+  if (!Number.isFinite(chainId) || chainId <= 0) {
+    throw new Error(`Invalid transaction chain id "${firstTransaction.chainId}".`);
+  }
+
+  for (const transaction of remainingTransactions) {
+    if (Number(transaction.chainId) !== chainId) {
+      throw new Error(
+        'Prepared execution signing requires all anchored transaction requests to use the same chain id.',
+      );
+    }
+  }
+
   const delegationManager =
     getDeleGatorEnvironment(chainId).DelegationManager.toLowerCase() as `0x${string}`;
+  const executions = input.transactions.map((transaction) =>
+    createExecution({
+      target: transaction.to.toLowerCase() as `0x${string}`,
+      value: BigInt(transaction.value),
+      callData: transaction.data.toLowerCase() as `0x${string}`,
+    }),
+  );
   const delegatedTransactionData = DelegationManager.encode.redeemDelegations({
     delegations: [
       [
@@ -425,16 +455,8 @@ async function resolvePreparedUnsignedTransactionHex(input: {
         decodeDelegationArtifactRef(input.rootDelegationArtifactRef),
       ],
     ],
-    modes: [ExecutionMode.SingleDefault],
-    executions: [
-      [
-        createExecution({
-          target: to,
-          value,
-          callData: data,
-        }),
-      ],
-    ],
+    modes: [executions.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault],
+    executions: [executions],
   });
   const [nonce, feeEstimate, gas] = await Promise.all([
     input.publicClient.getTransactionCount({
@@ -564,26 +586,34 @@ function resolveAnchoredPayloadRecord(input: {
   return matchedRecord;
 }
 
-function resolveAnchoredTransactionRequest(input: {
+function resolveAnchoredTransactionRequests(input: {
   anchoredPayload: EmberLendingAnchoredPayloadRecord;
   plannedTransactionPayloadRef: string | null;
   canonicalUnsignedPayloadRef: string;
-}): EmberLendingAnchoredTransactionRequest {
-  const transactionIndex =
-    readExplicitTransactionIndex({
-      anchoredPayloadRef: input.anchoredPayload.anchoredPayloadRef,
-      plannedTransactionPayloadRef: input.plannedTransactionPayloadRef,
-      canonicalUnsignedPayloadRef: input.canonicalUnsignedPayloadRef,
-    }) ?? 0;
-  const transaction = input.anchoredPayload.transactionRequests[transactionIndex];
+}): EmberLendingAnchoredTransactionRequest[] {
+  const explicitTransactionIndex = readExplicitTransactionIndex({
+    anchoredPayloadRef: input.anchoredPayload.anchoredPayloadRef,
+    plannedTransactionPayloadRef: input.plannedTransactionPayloadRef,
+    canonicalUnsignedPayloadRef: input.canonicalUnsignedPayloadRef,
+  });
 
+  if (explicitTransactionIndex === null) {
+    if (input.anchoredPayload.transactionRequests.length === 0) {
+      throw new Error(
+        `Anchored payload ref "${input.anchoredPayload.anchoredPayloadRef}" does not contain any transaction steps.`,
+      );
+    }
+    return input.anchoredPayload.transactionRequests;
+  }
+
+  const transaction = input.anchoredPayload.transactionRequests[explicitTransactionIndex];
   if (!transaction) {
     throw new Error(
-      `Anchored payload ref "${input.anchoredPayload.anchoredPayloadRef}" does not contain transaction step ${transactionIndex}.`,
+      `Anchored payload ref "${input.anchoredPayload.anchoredPayloadRef}" does not contain transaction step ${explicitTransactionIndex}.`,
     );
   }
 
-  return transaction;
+  return [transaction];
 }
 
 export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: {
@@ -624,7 +654,7 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
               operation,
               walletAddress: request.rootUserWalletAddress,
               tokenUid: token.tokenUid,
-              amount: resolveAmountBaseUnits({
+              amount: resolveAmountForOnchainActions({
                 amount: request.compactPlanSummary.amount,
                 decimals: token.decimals,
               }),
@@ -664,7 +694,7 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
         publicClient: resolvePublicClient(
           resolveSupportedExecutionNetwork(anchoredPayload.network),
         ),
-        transaction: resolveAnchoredTransactionRequest({
+        transactions: resolveAnchoredTransactionRequests({
           anchoredPayload,
           plannedTransactionPayloadRef: request.plannedTransactionPayloadRef,
           canonicalUnsignedPayloadRef: request.canonicalUnsignedPayloadRef,

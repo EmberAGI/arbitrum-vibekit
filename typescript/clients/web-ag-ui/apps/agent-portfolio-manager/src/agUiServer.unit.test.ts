@@ -29,6 +29,9 @@ describe('createPortfolioManagerGatewayService', () => {
     const deriveControllerSmartAccountAddress = vi.fn(
       async () => '0x00000000000000000000000000000000000000c2' as const,
     );
+    const ensureControllerSmartAccountDeployed = vi.fn(
+      async () => '0x00000000000000000000000000000000000000c2' as const,
+    );
     const ensureServiceIdentity = vi.fn(async () => ({
       revision: 2,
       wroteIdentity: false,
@@ -62,6 +65,7 @@ describe('createPortfolioManagerGatewayService', () => {
         },
         __internalEnsureServiceIdentity: ensureServiceIdentity,
         __internalDeriveControllerSmartAccountAddress: deriveControllerSmartAccountAddress,
+        __internalEnsureControllerSmartAccountDeployed: ensureControllerSmartAccountDeployed,
         __internalCreateAgentRuntimeKernel: createAgentRuntimeKernel,
       } as never),
     ).resolves.toBe(service);
@@ -69,16 +73,32 @@ describe('createPortfolioManagerGatewayService', () => {
     expect(deriveControllerSmartAccountAddress).toHaveBeenCalledWith({
       signerAddress: '0x00000000000000000000000000000000000000c1',
     });
+    expect(ensureControllerSmartAccountDeployed).toHaveBeenCalledWith({
+      signing: expect.objectContaining({
+        readAddress: expect.any(Function),
+        signPayload: expect.any(Function),
+      }),
+      signerRef: 'controller-wallet',
+      signerAddress: '0x00000000000000000000000000000000000000c1',
+    });
     expect(ensureServiceIdentity).toHaveBeenCalledOnce();
     expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
+    const deployCallOrder = ensureControllerSmartAccountDeployed.mock.invocationCallOrder.at(0);
     const ensureCallOrder = ensureServiceIdentity.mock.invocationCallOrder.at(0);
     const runtimeCallOrder = runtimeCreated.mock.invocationCallOrder.at(0);
+    expect(deployCallOrder).toBeDefined();
     expect(ensureCallOrder).toBeDefined();
     expect(runtimeCallOrder).toBeDefined();
+    expect(deployCallOrder!).toBeLessThan(ensureCallOrder!);
     expect(ensureCallOrder!).toBeLessThan(runtimeCallOrder!);
   });
 
   it('fails closed before runtime creation when the controller wallet identity cannot be established', async () => {
+    const ensureControllerSmartAccountDeployed = vi.fn(async () => {
+      throw new Error(
+        'Portfolio-manager startup identity preflight failed because the configured OWS wallet did not resolve an EVM address.',
+      );
+    });
     const ensureServiceIdentity = vi.fn(async () => {
       throw new Error(
         'Portfolio-manager startup identity preflight failed because the configured OWS wallet did not resolve an EVM address.',
@@ -103,6 +123,7 @@ describe('createPortfolioManagerGatewayService', () => {
           PORTFOLIO_MANAGER_OWS_WALLET_NAME: 'portfolio-manager-controller-wallet',
           PORTFOLIO_MANAGER_OWS_VAULT_PATH: '/tmp/portfolio-manager-ows-vault',
         },
+        __internalEnsureControllerSmartAccountDeployed: ensureControllerSmartAccountDeployed,
         __internalEnsureServiceIdentity: ensureServiceIdentity,
         __internalCreateAgentRuntimeKernel: createAgentRuntimeKernel,
       } as never),
@@ -110,6 +131,7 @@ describe('createPortfolioManagerGatewayService', () => {
       'Portfolio-manager startup identity preflight failed because the configured OWS wallet did not resolve an EVM address.',
     );
 
+    expect(ensureServiceIdentity).not.toHaveBeenCalled();
     expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
   });
 });

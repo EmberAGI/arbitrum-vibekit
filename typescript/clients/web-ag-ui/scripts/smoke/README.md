@@ -33,6 +33,28 @@ the managed pair.
     direct OWS wallet path rather than `/identity` sidecars or injected
     wallet-address callback seams.
 
+- `pnpm smoke:redelegation-browser-signing`
+  - Bypasses the web UI and speaks only to the AG-UI agent surfaces.
+  - Self-boots a repo-local Shared Ember HTTP harness plus fresh
+    `agent-portfolio-manager` and `agent-ember-lending` processes on ephemeral
+    ports as part of prep.
+  - Starts the agents through their real `src/server.ts` entrypoints, so
+    service identity registration happens through the same startup preflight
+    path used in QA and production.
+  - Uses the browser-style root delegation signing path:
+    `signDelegationWithFallback(...)` plus an `eth_signTypedData_v4` wallet-provider shim.
+  - Uses a same-address `Stateless7702` root account, then proves the full
+    OWS child-redelegation and OWS execution-signing path through
+    `portfolio-manager` and `ember-lending`.
+  - Extracts the root-delegation signing request from the portfolio-manager
+    interrupt payload and waits for lending hydration via lending snapshots,
+    instead of reading Shared Ember JSON-RPC directly.
+  - Does not require pre-running `3420`, `3430`, or `4010`, but it still
+    requires Arbitrum funding for the rooted wallet and OWS-controlled
+    execution wallets.
+  - Best run on fresh `pi_runtime` state. It now fails early if lending
+    hydrates a stale mandate context for the same rooted wallet.
+
 ## Typical Local Flow
 
 ```bash
@@ -50,4 +72,7 @@ bash scripts/smoke/pendle-cron-ui-updates.sh
 
 # managed Shared Ember identity proof
 pnpm smoke:managed-identities
+
+# browser-signing redelegation proof without the web app
+pnpm smoke:redelegation-browser-signing
 ```

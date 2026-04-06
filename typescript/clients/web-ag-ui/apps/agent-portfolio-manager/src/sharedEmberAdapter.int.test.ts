@@ -1,3 +1,4 @@
+import { ROOT_AUTHORITY } from '@metamask/delegation-toolkit';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createPortfolioManagerDomain } from './sharedEmberAdapter.js';
@@ -62,7 +63,7 @@ function createSignedDelegation(walletAddress: `0x${string}`) {
   return {
     delegate: '0x2222222222222222222222222222222222222222' as const,
     delegator: walletAddress,
-    authority: '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
+    authority: ROOT_AUTHORITY,
     caveats: [],
     salt: '0x1111111111111111111111111111111111111111111111111111111111111111' as const,
     signature: '0x1234' as const,
