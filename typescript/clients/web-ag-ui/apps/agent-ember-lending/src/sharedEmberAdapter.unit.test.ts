@@ -701,6 +701,8 @@ describe('createEmberLendingDomain', () => {
     expect(createTransactionPlan?.description).toContain('requested_quantities');
     expect(createTransactionPlan?.description).toContain('partial increases or decreases');
     expect(createTransactionPlan?.description).toContain('base-unit');
+    expect(createTransactionPlan?.description).toContain('quantity strings');
+    expect(createTransactionPlan?.description).toContain('object map');
     expect(createTransactionPlan?.description).toContain('full or max-possible amount');
   });
 
@@ -2186,6 +2188,234 @@ describe('createEmberLendingDomain', () => {
           executionStatus: 'failed',
           statusMessage:
             'Lending can only plan with Portfolio Manager-admitted units for this thread.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+      }),
+    );
+  });
+
+  it('preserves the unit-scope blocker when onboarding-state reads succeed', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+
+        switch (request.method) {
+          case 'subagent.readPortfolioState.v1':
+            return createPortfolioStateResponse();
+          case 'subagent.readExecutionContext.v1':
+            return createExecutionContextResponse();
+          case 'orchestrator.readOnboardingState.v1':
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-read-onboarding-state',
+              result: {
+                protocol_version: 'v1',
+                revision: 11,
+                onboarding_state: {
+                  phase: 'active',
+                  proofs: {
+                    capital_reserved_for_agent: true,
+                    policy_snapshot_recorded: true,
+                    initial_subagent_delegation_issued: true,
+                    agent_active: true,
+                  },
+                  owned_units: [
+                    {
+                      root_asset: 'USDC',
+                    },
+                  ],
+                },
+              },
+            };
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          ...createCandidatePlanInput(),
+          candidate_unit_ids: ['unit-not-admitted'],
+          requested_quantities: [
+            {
+              unit_id: 'unit-not-admitted',
+              quantity: '10',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending can only plan with Portfolio Manager-admitted units for this thread.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.readOnboardingState.v1',
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+      }),
+    );
+  });
+
+  it('fails closed when requested_quantities object-map values are not base-unit strings', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+
+        switch (request.method) {
+          case 'subagent.readPortfolioState.v1':
+            return createPortfolioStateResponse();
+          case 'subagent.readExecutionContext.v1':
+            return createExecutionContextResponse();
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          ...createCandidatePlanInput(),
+          requested_quantities: {
+            'unit-ember-lending-001': 5,
+          },
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending requested_quantities must be JSON using Portfolio Manager-admitted unit ids and base-unit quantity strings.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+      }),
+    );
+  });
+
+  it('fails closed when requested_quantities arrays contain malformed entries', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+
+        switch (request.method) {
+          case 'subagent.readPortfolioState.v1':
+            return createPortfolioStateResponse();
+          case 'subagent.readExecutionContext.v1':
+            return createExecutionContextResponse();
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          ...createCandidatePlanInput(),
+          requested_quantities: [
+            {
+              unit_id: 'unit-ember-lending-001',
+              quantity: '5',
+            },
+            {
+              unit_id: 'unit-ember-lending-002',
+              quantity: 5,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending requested_quantities must be JSON using Portfolio Manager-admitted unit ids and base-unit quantity strings.',
         },
       },
     });

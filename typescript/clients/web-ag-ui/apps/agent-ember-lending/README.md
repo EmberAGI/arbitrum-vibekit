@@ -53,6 +53,18 @@ Current execution-context semantics:
   wallet context, or missing anchored-resolver wiring must stop plan creation
   before a locally executable candidate plan is recorded
 
+Planner input contract:
+
+- `create_transaction_plan` accepts `requested_quantities` either as an array
+  of `{ unit_id, quantity }` objects or as an object map of `unit_id` to
+  `quantity`
+- every `requested_quantities` value must be a base-unit decimal string such as
+  `"5000000"`, not a number literal
+- omit `requested_quantities` only when the caller clearly wants the full or
+  max-possible managed amount already projected by Portfolio Manager
+- explicit malformed or mixed-validity `requested_quantities` input now fails
+  closed locally before the handoff reaches Shared Ember
+
 Runtime wiring:
 
 - `SHARED_EMBER_BASE_URL` points the app at the bounded Shared Ember HTTP

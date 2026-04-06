@@ -35,6 +35,8 @@ const PLANNING_PM_ADMISSION_BLOCKED_MESSAGE =
   'Portfolio Manager must admit a lending unit before lending can plan transactions for this thread.';
 const PLANNING_PM_UNIT_SCOPE_BLOCKED_MESSAGE =
   'Lending can only plan with Portfolio Manager-admitted units for this thread.';
+const PLANNING_PM_REQUESTED_QUANTITIES_BLOCKED_MESSAGE =
+  'Lending requested_quantities must be JSON using Portfolio Manager-admitted unit ids and base-unit quantity strings.';
 
 export type EmberLendingLifecycleState = {
   phase: 'prehire' | 'onboarding' | 'active' | 'firing' | 'inactive';
@@ -135,15 +137,32 @@ type PendingExecutionSubmission = {
   revision: number | null;
 };
 
+type RequestedQuantity = {
+  unit_id: string;
+  quantity: string;
+};
+
 type ManagedPlanningReadiness =
   | {
       status: 'ready';
       candidateUnitIds: string[];
-      requestedQuantities: Array<{ unit_id: string; quantity: string }>;
+      requestedQuantities: RequestedQuantity[];
     }
   | {
       status: 'blocked';
       statusMessage: string;
+    };
+
+type ParsedRequestedQuantitiesInput =
+  | {
+      status: 'absent';
+    }
+  | {
+      status: 'valid';
+      requestedQuantities: RequestedQuantity[];
+    }
+  | {
+      status: 'invalid';
     };
 
 type SharedEmberCommittedEvent = {
@@ -1882,6 +1901,13 @@ async function resolveManagedPlanningBlockedMessage(input: {
   fallbackStatusMessage: string;
 }): Promise<string> {
   if (
+    input.fallbackStatusMessage !== PLANNING_PM_ONBOARDING_BLOCKED_MESSAGE &&
+    input.fallbackStatusMessage !== PLANNING_PM_ADMISSION_BLOCKED_MESSAGE
+  ) {
+    return input.fallbackStatusMessage;
+  }
+
+  if (
     !input.state.walletAddress ||
     !input.state.rootUserWalletAddress ||
     input.state.walletAddress === input.state.rootUserWalletAddress
@@ -1926,12 +1952,22 @@ function resolveManagedPlanningReadiness(input: {
   const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
   const candidateUnitIds =
     readStringArray(commandInput['candidate_unit_ids']) ?? managedCandidateUnitIds;
-  const requestedQuantitiesSource =
-    readRequestedQuantitiesInput(commandInput['requested_quantities']) ?? managedRequestedQuantities;
-  const requestedQuantities = requestedQuantitiesSource.filter(
-    (candidate): candidate is { unit_id: string; quantity: string } =>
-      Boolean(candidate.unit_id && candidate.quantity),
-  );
+  const requestedQuantitiesInput = Object.prototype.hasOwnProperty.call(
+    commandInput,
+    'requested_quantities',
+  )
+    ? readRequestedQuantitiesInput(commandInput['requested_quantities'])
+    : { status: 'absent' as const };
+  if (requestedQuantitiesInput.status === 'invalid') {
+    return {
+      status: 'blocked',
+      statusMessage: PLANNING_PM_REQUESTED_QUANTITIES_BLOCKED_MESSAGE,
+    };
+  }
+  const requestedQuantities =
+    requestedQuantitiesInput.status === 'valid'
+      ? requestedQuantitiesInput.requestedQuantities
+      : managedRequestedQuantities;
 
   if (candidateUnitIds.some((unitId) => !managedUnitIds.has(unitId))) {
     return {
@@ -1942,7 +1978,6 @@ function resolveManagedPlanningReadiness(input: {
 
   const requestedQuantityUnitIds = requestedQuantities.map((candidate) => candidate.unit_id);
   if (
-    requestedQuantities.length !== requestedQuantitiesSource.length ||
     requestedQuantityUnitIds.some((unitId) => !managedUnitIds.has(unitId))
   ) {
     return {
@@ -1960,31 +1995,65 @@ function resolveManagedPlanningReadiness(input: {
 
 function readRequestedQuantitiesInput(
   value: unknown,
-): Array<{ unit_id: string; quantity: string }> | null {
-  if (Array.isArray(value)) {
-    return value
-      .map((candidate) => {
-        if (!isRecord(candidate)) {
-          return null;
-        }
+): ParsedRequestedQuantitiesInput {
+  if (value === null || typeof value === 'undefined') {
+    return { status: 'absent' };
+  }
 
-        const unitId = readString(candidate['unit_id']);
-        const quantity = readString(candidate['quantity']);
-        return unitId && quantity ? { unit_id: unitId, quantity } : null;
-      })
-      .filter((candidate): candidate is { unit_id: string; quantity: string } => candidate !== null);
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return { status: 'invalid' };
+    }
+
+    const requestedQuantities: RequestedQuantity[] = [];
+    for (const candidate of value) {
+      if (!isRecord(candidate)) {
+        return { status: 'invalid' };
+      }
+
+      const requestedQuantity = readRequestedQuantityEntry(candidate['unit_id'], candidate['quantity']);
+      if (!requestedQuantity) {
+        return { status: 'invalid' };
+      }
+      requestedQuantities.push(requestedQuantity);
+    }
+
+    return {
+      status: 'valid',
+      requestedQuantities,
+    };
   }
 
   if (isRecord(value)) {
-    return Object.entries(value)
-      .map(([unitId, quantity]) => {
-        const parsedQuantity = readString(quantity);
-        return parsedQuantity ? { unit_id: unitId, quantity: parsedQuantity } : null;
-      })
-      .filter((candidate): candidate is { unit_id: string; quantity: string } => candidate !== null);
+    const entries = Object.entries(value);
+    if (entries.length === 0) {
+      return { status: 'invalid' };
+    }
+
+    const requestedQuantities: RequestedQuantity[] = [];
+    for (const [unitId, quantity] of entries) {
+      const requestedQuantity = readRequestedQuantityEntry(unitId, quantity);
+      if (!requestedQuantity) {
+        return { status: 'invalid' };
+      }
+      requestedQuantities.push(requestedQuantity);
+    }
+
+    return {
+      status: 'valid',
+      requestedQuantities,
+    };
   }
 
-  return null;
+  return { status: 'invalid' };
+}
+
+function readRequestedQuantityEntry(unitId: unknown, quantity: unknown): RequestedQuantity | null {
+  const parsedUnitId = readString(unitId);
+  const parsedQuantity = readString(quantity);
+  return parsedUnitId && parsedQuantity
+    ? { unit_id: parsedUnitId, quantity: parsedQuantity }
+    : null;
 }
 
 function readManagedActionVerb(controlPath: string | null, intent: string): string {
@@ -2669,7 +2738,7 @@ export function createEmberLendingDomain(
         {
           name: 'create_transaction_plan',
           description:
-            'Create or refresh a candidate transaction plan for the managed lending lane. Pass JSON with action_summary, optional intent, optional candidate_unit_ids, and requested_quantities. For partial increases or decreases such as half, compute the concrete base-unit requested_quantities from the current owned-unit or reservation quantities in context. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
+            'Create or refresh a candidate transaction plan for the managed lending lane. Pass JSON with action_summary, optional intent, optional candidate_unit_ids, and optional requested_quantities as either an array of { unit_id, quantity } objects or an object map of unit_id to quantity. Every requested_quantities quantity must use base-unit quantity strings. For partial increases or decreases such as half, compute the concrete base-unit requested_quantities from the current owned-unit or reservation quantities in context. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
         },
         {
           name: 'request_transaction_execution',
