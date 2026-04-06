@@ -689,6 +689,21 @@ describe('createEmberLendingDomain', () => {
     ]);
   });
 
+  it('tells the model to compute concrete requested quantities for partial managed actions', () => {
+    const domain = createEmberLendingDomain({
+      agentId: 'ember-lending',
+    });
+
+    const createTransactionPlan = domain.lifecycle.commands.find(
+      (command) => command.name === 'create_transaction_plan',
+    );
+
+    expect(createTransactionPlan?.description).toContain('requested_quantities');
+    expect(createTransactionPlan?.description).toContain('partial increases or decreases');
+    expect(createTransactionPlan?.description).toContain('base-unit');
+    expect(createTransactionPlan?.description).toContain('full or max-possible amount');
+  });
+
   it('does not allow direct hire onboarding from the lending agent runtime', async () => {
     const domain = createEmberLendingDomain({
       agentId: 'ember-lending',
@@ -1529,6 +1544,97 @@ describe('createEmberLendingDomain', () => {
     expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'orchestrator.readOnboardingState.v1',
+      }),
+    );
+  });
+
+  it('preserves partial requested quantities when the model passes the object-map command shape', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+
+        if (request.method === 'subagent.createTransactionPlan.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-materialize-candidate-plan',
+            result: {
+              protocol_version: 'v1',
+              revision: 12,
+              committed_event_ids: ['evt-candidate-plan-1'],
+              candidate_plan: {
+                planning_kind: 'subagent_handoff',
+                transaction_plan_id: 'txplan-ember-lending-001',
+                handoff: {
+                  handoff_id: 'handoff-thread-1',
+                  payload_builder_output: {
+                    transaction_payload_ref: 'txpayload-ember-lending-001',
+                    required_control_path: 'lending.withdraw',
+                    network: 'arbitrum',
+                  },
+                },
+                compact_plan_summary: {
+                  control_path: 'lending.withdraw',
+                  asset: 'USDC',
+                  amount: '5',
+                  summary: 'withdraw half of the current USDC collateral from Aave',
+                },
+              },
+            },
+          };
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 12,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 12,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const anchoredPayloadResolver = createAnchoredPayloadResolverStub();
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver,
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          action_summary: 'withdraw half of the current USDC collateral from Aave',
+          intent: 'withdraw',
+          candidate_unit_ids: ['unit-ember-lending-001'],
+          requested_quantities: {
+            'unit-ember-lending-001': '5',
+          },
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+        params: expect.objectContaining({
+          handoff: expect.objectContaining({
+            candidate_unit_ids: ['unit-ember-lending-001'],
+            requested_quantities: [
+              {
+                unit_id: 'unit-ember-lending-001',
+                quantity: '5',
+              },
+            ],
+          }),
+        }),
       }),
     );
   });

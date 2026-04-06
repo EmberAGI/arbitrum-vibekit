@@ -1927,20 +1927,11 @@ function resolveManagedPlanningReadiness(input: {
   const candidateUnitIds =
     readStringArray(commandInput['candidate_unit_ids']) ?? managedCandidateUnitIds;
   const requestedQuantitiesSource =
-    Array.isArray(commandInput['requested_quantities']) && commandInput['requested_quantities'].length > 0
-      ? commandInput['requested_quantities']
-      : managedRequestedQuantities;
-  const requestedQuantities = requestedQuantitiesSource
-    .map((candidate) => {
-      if (!isRecord(candidate)) {
-        return null;
-      }
-
-      const unitId = readString(candidate['unit_id']);
-      const quantity = readString(candidate['quantity']);
-      return unitId && quantity ? { unit_id: unitId, quantity } : null;
-    })
-    .filter((candidate): candidate is { unit_id: string; quantity: string } => candidate !== null);
+    readRequestedQuantitiesInput(commandInput['requested_quantities']) ?? managedRequestedQuantities;
+  const requestedQuantities = requestedQuantitiesSource.filter(
+    (candidate): candidate is { unit_id: string; quantity: string } =>
+      Boolean(candidate.unit_id && candidate.quantity),
+  );
 
   if (candidateUnitIds.some((unitId) => !managedUnitIds.has(unitId))) {
     return {
@@ -1965,6 +1956,35 @@ function resolveManagedPlanningReadiness(input: {
     candidateUnitIds,
     requestedQuantities,
   };
+}
+
+function readRequestedQuantitiesInput(
+  value: unknown,
+): Array<{ unit_id: string; quantity: string }> | null {
+  if (Array.isArray(value)) {
+    return value
+      .map((candidate) => {
+        if (!isRecord(candidate)) {
+          return null;
+        }
+
+        const unitId = readString(candidate['unit_id']);
+        const quantity = readString(candidate['quantity']);
+        return unitId && quantity ? { unit_id: unitId, quantity } : null;
+      })
+      .filter((candidate): candidate is { unit_id: string; quantity: string } => candidate !== null);
+  }
+
+  if (isRecord(value)) {
+    return Object.entries(value)
+      .map(([unitId, quantity]) => {
+        const parsedQuantity = readString(quantity);
+        return parsedQuantity ? { unit_id: unitId, quantity: parsedQuantity } : null;
+      })
+      .filter((candidate): candidate is { unit_id: string; quantity: string } => candidate !== null);
+  }
+
+  return null;
 }
 
 function readManagedActionVerb(controlPath: string | null, intent: string): string {
@@ -2648,7 +2668,8 @@ export function createEmberLendingDomain(
         },
         {
           name: 'create_transaction_plan',
-          description: 'Create or refresh a candidate transaction plan for the managed lending lane.',
+          description:
+            'Create or refresh a candidate transaction plan for the managed lending lane. Pass JSON with action_summary, optional intent, optional candidate_unit_ids, and requested_quantities. For partial increases or decreases such as half, compute the concrete base-unit requested_quantities from the current owned-unit or reservation quantities in context. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
         },
         {
           name: 'request_transaction_execution',
