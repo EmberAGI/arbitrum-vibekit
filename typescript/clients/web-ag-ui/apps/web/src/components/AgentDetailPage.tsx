@@ -242,20 +242,75 @@ function asFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function parseCommandMessage(content: string): string | null {
+function parseJsonMessageContent(content: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(content) as unknown;
     if (typeof parsed !== 'object' || parsed === null) return null;
-    if (!('command' in parsed)) return null;
-    const command = (parsed as { command?: unknown }).command;
-    if (command === 'hire') return 'Submitted hire request.';
-    if (command === 'fire') return 'Submitted fire request.';
-    if (command === 'sync') return 'Requested a runtime sync.';
-    if (command === 'resume') return 'Submitted onboarding response.';
-    return typeof command === 'string' ? `Submitted ${command} request.` : null;
+    return parsed as Record<string, unknown>;
   } catch {
     return null;
   }
+}
+
+function parseCommandMessage(content: string): string | null {
+  const parsed = parseJsonMessageContent(content);
+  if (!parsed || !('command' in parsed)) {
+    return null;
+  }
+
+  const command = parsed.command;
+  if (command === 'hire') return 'Submitted hire request.';
+  if (command === 'fire') return 'Submitted fire request.';
+  if (command === 'sync') return 'Requested a runtime sync.';
+  if (command === 'resume') return 'Submitted onboarding response.';
+  return typeof command === 'string' ? `Submitted ${command} request.` : null;
+}
+
+function isSyncCommandMessage(message: Message): boolean {
+  if (message.role !== 'user' || typeof message.content !== 'string') {
+    return false;
+  }
+
+  return parseJsonMessageContent(message.content)?.command === 'sync';
+}
+
+function isSyncedAckMessage(message: Message): boolean {
+  if (message.role !== 'assistant' || typeof message.content !== 'string') {
+    return false;
+  }
+
+  const parsed = parseJsonMessageContent(message.content);
+  const clientMutationId = parsed?.clientMutationId;
+  return parsed?.status === 'synced' && typeof clientMutationId === 'string' && clientMutationId.trim().length > 0;
+}
+
+function getReasoningLinkedAssistantId(message: Message): string | null {
+  if (message.role !== 'reasoning') {
+    return null;
+  }
+
+  const parentMessageId = getParentMessageId(message);
+  if (parentMessageId) {
+    return parentMessageId;
+  }
+
+  const idMatch = message.id.match(/:reasoning:(.+):\d+$/);
+  return idMatch?.[1] ?? null;
+}
+
+function filterVisibleTranscriptMessages(messages: Message[]): Message[] {
+  const hiddenSyncAckMessageIds = new Set(
+    messages.filter((message) => isSyncedAckMessage(message)).map((message) => message.id),
+  );
+
+  return messages.filter((message) => {
+    if (isSyncCommandMessage(message) || hiddenSyncAckMessageIds.has(message.id)) {
+      return false;
+    }
+
+    const linkedAssistantId = getReasoningLinkedAssistantId(message);
+    return !(linkedAssistantId && hiddenSyncAckMessageIds.has(linkedAssistantId));
+  });
 }
 
 function getMessageText(message: Message): string {
@@ -1973,14 +2028,16 @@ function AgentChatTab(props: {
 
   const visibleMessages = useMemo(() => {
     const visibleMessageOrderEntry = getVisibleMessageOrderEntry(visibleMessageOrderCacheKey);
-    const allMessageIds = new Set(props.messages.map((message) => message.id));
+    // TODO(i574): Remove this temporary sync-noise filter during the agent-state/thread-state refactor.
+    const filteredMessages = filterVisibleTranscriptMessages(props.messages);
+    const allMessageIds = new Set(filteredMessages.map((message) => message.id));
     for (const messageId of [...visibleMessageOrderEntry.orderById.keys()]) {
       if (!allMessageIds.has(messageId)) {
         visibleMessageOrderEntry.orderById.delete(messageId);
       }
     }
 
-    const nextVisibleMessages = props.messages
+    const nextVisibleMessages = filteredMessages
       .map((message) => ({
         id: message.id,
         role: message.role,
@@ -1988,7 +2045,7 @@ function AgentChatTab(props: {
       }))
       .filter((message) => message.text.length > 0);
 
-    if (props.messages.length === 0) {
+    if (filteredMessages.length === 0) {
       visibleMessageOrderEntry.orderById.clear();
       visibleMessageOrderEntry.nextOrder = 0;
       visibleMessageOrderEntry.previousVisibleMessages = [];
@@ -2044,7 +2101,7 @@ function AgentChatTab(props: {
       visibleMessageOrderEntry.orderById.set(message.id, visibleMessageOrderEntry.nextOrder);
       visibleMessageOrderEntry.nextOrder += 1;
     }
-    const orderedMessages = orderVisibleChatMessages(props.messages, visibleMessageOrderEntry.orderById);
+    const orderedMessages = orderVisibleChatMessages(filteredMessages, visibleMessageOrderEntry.orderById);
     visibleMessageOrderEntry.previousVisibleMessages = orderedMessages.map((message) => ({
       id: message.id,
       role: message.role,
