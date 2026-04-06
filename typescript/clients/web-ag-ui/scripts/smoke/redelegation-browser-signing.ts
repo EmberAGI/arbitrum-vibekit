@@ -16,6 +16,7 @@ const WEB_PACKAGE_JSON_PATH = path.resolve(
 );
 const requireFromWeb = createRequire(WEB_PACKAGE_JSON_PATH);
 const {
+  getDeleGatorEnvironment,
   Implementation,
   toMetaMaskSmartAccount,
 } = requireFromWeb('@metamask/delegation-toolkit') as typeof import('@metamask/delegation-toolkit');

@@ -63,6 +63,17 @@ the managed pair.
   - Best run on fresh `pi_runtime` state. It now fails early if lending
     hydrates a stale mandate context for the same rooted wallet.
 
+- `pnpm smoke:managed-idle-reconciliation`
+  - Self-boots the repo-local Shared Ember harness plus fresh
+    `agent-portfolio-manager` and `agent-ember-lending` processes by default.
+  - Drives real managed onboarding, initial `lending.supply`, and a full
+    `lending.withdraw` back to the rooted wallet.
+  - Verifies post-withdraw `lending.supply` re-admission plus onboarding
+    `phase: active` through ordinary Shared Ember read RPCs.
+  - Transfers live WETH into and out of the rooted wallet from an external
+    wallet and verifies ordinary portfolio reads ingest the resulting
+    ingress/egress changes without repeated phantom deltas on follow-up reads.
+
 ## Typical Local Flow
 
 ```bash
@@ -83,4 +94,7 @@ pnpm smoke:managed-identities
 
 # browser-signing redelegation proof without the web app
 pnpm smoke:redelegation-browser-signing
+
+# managed idle-capital reconciliation proof without the web app
+pnpm smoke:managed-idle-reconciliation
 ```
