@@ -49,8 +49,6 @@ function createSignedRootDelegation(delegate: `0x${string}`) {
 const TEST_REDELEGATION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 const TEST_DELEGATION_MANAGER = '0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3';
-const TEST_CONTROLLER_SIGNER_ADDRESS =
-  '0x00000000000000000000000000000000000000c1' as const;
 const TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS =
   '0x00000000000000000000000000000000000000c2' as const;
 
@@ -532,6 +530,7 @@ describe('createPortfolioManagerDomain', () => {
         jsonrpc: '2.0',
         method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
         params: expect.objectContaining({
+          idempotency_key: expect.stringMatching(/^idem-portfolio-manager-rooted-bootstrap-/),
           expected_revision: 0,
           onboarding: expect.objectContaining({
             rootedWalletContext: expect.objectContaining({
@@ -641,6 +640,9 @@ describe('createPortfolioManagerDomain', () => {
             mandateRef?: string;
           };
         } & Record<string, unknown>;
+        handoff?: {
+          artifact_ref?: string;
+        };
       };
     };
 
@@ -820,9 +822,9 @@ describe('createPortfolioManagerDomain', () => {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
             managedAgentMandates: [
               {
-                ...createPortfolioManagerSetupInput().managedAgentMandates[0],
+                ...createPortfolioManagerSetupInput().managedAgentMandates[0]!,
                 settings: {
-                  ...createPortfolioManagerSetupInput().managedAgentMandates[0].settings,
+                  ...createPortfolioManagerSetupInput().managedAgentMandates[0]!.settings,
                   allowedCollateralAssets: ['WETH'],
                   allowedBorrowAssets: ['WETH'],
                 },
@@ -1004,6 +1006,187 @@ describe('createPortfolioManagerDomain', () => {
         method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
       }),
     );
+  });
+
+  it('uses a distinct rooted-bootstrap idempotency key when signing input changes on the same thread', async () => {
+    const firstSignedDelegation = createSignedRootDelegation(TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS);
+    const secondSignedDelegation = {
+      ...createSignedRootDelegation(TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS),
+      signature:
+        '0x5678' as const,
+    };
+    const rootedBootstrapKeys: string[] = [];
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+        const params =
+          typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
+            ? (jsonRpcRequest['params'] as Record<string, unknown>)
+            : null;
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1') {
+          if (params?.['agent_id'] === 'portfolio-manager' && params['role'] === 'orchestrator') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'portfolio-manager',
+              role: 'orchestrator',
+              walletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
+            });
+          }
+
+          if (params?.['agent_id'] === 'ember-lending' && params['role'] === 'subagent') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'ember-lending',
+              role: 'subagent',
+              walletAddress: '0x00000000000000000000000000000000000000e1',
+            });
+          }
+        }
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.completeRootedBootstrapFromUserSigning.v1') {
+          const idempotencyKey = params?.['idempotency_key'];
+          if (typeof idempotencyKey !== 'string') {
+            throw new Error('expected rooted-bootstrap idempotency key');
+          }
+          rootedBootstrapKeys.push(idempotencyKey);
+        }
+
+        if (jsonRpcRequest?.['method'] === 'subagent.readExecutionContext.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: 4,
+              execution_context: {
+                generated_at: '2026-04-02T15:00:00.000Z',
+                network: 'arbitrum',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary: 'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                mandate_context: null,
+                subagent_wallet_address: '0x00000000000000000000000000000000000000e1',
+                root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                owned_units: [],
+                wallet_contents: [],
+              },
+            },
+          };
+        }
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.readOnboardingState.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-wallet-accounting-ember-lending-0x00000000000000000000000000000000000000a1',
+            result: {
+              revision: 4,
+              onboarding_state: {
+                wallet_address: '0x00000000000000000000000000000000000000a1',
+                network: 'arbitrum',
+                phase: 'active',
+                proofs: {
+                  rooted_wallet_context_registered: true,
+                  root_delegation_registered: true,
+                  root_authority_active: true,
+                  wallet_baseline_observed: true,
+                  accounting_units_seeded: true,
+                  mandate_inputs_configured: true,
+                  reserve_policy_configured: false,
+                  capital_reserved_for_agent: true,
+                  policy_snapshot_recorded: true,
+                  initial_subagent_delegation_issued: true,
+                  agent_active: true,
+                },
+                rooted_wallet_context: {
+                  rooted_wallet_context_id: 'rwc-user-protocol-001',
+                },
+                root_delegation: {
+                  root_delegation_id: 'root-user-protocol-001',
+                },
+                owned_units: [],
+                reservations: [],
+              },
+            },
+          };
+        }
+
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-complete-rooted-bootstrap',
+          result: {
+            protocol_version: 'v1',
+            revision: 3,
+            committed_event_ids: ['evt-rooted-bootstrap-1', 'evt-rooted-bootstrap-2'],
+            rooted_wallet_context_id: 'rwc-user-protocol-001',
+            root_delegation: {
+              root_delegation_id: 'root-user-protocol-001',
+              user_wallet: '0x00000000000000000000000000000000000000a1',
+              status: 'active',
+            },
+          },
+        };
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+      controllerWalletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
+    });
+
+    const baseState = {
+      phase: 'onboarding' as const,
+      lastPortfolioState: null,
+      lastSharedEmberRevision: 0,
+      lastRootDelegation: null,
+      lastOnboardingBootstrap: null,
+      lastRootedWalletContextId: null,
+      activeWalletAddress: '0x00000000000000000000000000000000000000a1' as const,
+      pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1' as const,
+      pendingApprovedMandateEnvelope: {
+        portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+        managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+      },
+    };
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: baseState,
+      operation: {
+        source: 'interrupt',
+        name: 'portfolio-manager-delegation-signing-request',
+        input: {
+          outcome: 'signed',
+          signedDelegations: [firstSignedDelegation],
+        },
+      },
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: baseState,
+      operation: {
+        source: 'interrupt',
+        name: 'portfolio-manager-delegation-signing-request',
+        input: {
+          outcome: 'signed',
+          signedDelegations: [secondSignedDelegation],
+        },
+      },
+    });
+
+    expect(rootedBootstrapKeys).toHaveLength(2);
+    expect(rootedBootstrapKeys[0]).not.toBe(rootedBootstrapKeys[1]);
   });
 
   it('fails fast before rooted bootstrap when the managed ember-lending identity echo is misaddressed', async () => {
@@ -2296,6 +2479,130 @@ describe('createPortfolioManagerDomain', () => {
         handoff,
       },
     });
+  });
+
+  it('derives a distinct fallback rooted-bootstrap idempotency key when command payload changes', async () => {
+    const firstOnboarding = createOnboardingBootstrap();
+    const secondOnboarding = {
+      ...createOnboardingBootstrap(),
+      activation: {
+        mandateRef: 'mandate-ember-lending-protocol-002',
+      },
+    };
+    const handoff = {
+      handoff_id: 'handoff-root-protocol-001',
+      root_delegation_id: 'root-user-protocol-001',
+      user_id: 'user_idle',
+      user_wallet: '0xUSERPROTO1',
+      orchestrator_wallet: '0xORCHPROTO1',
+      network: 'base',
+      artifact_ref: 'artifact-root-protocol-001',
+      issued_at: '2026-03-29T00:00:00Z',
+      activated_at: '2026-03-29T00:00:05Z',
+      signer_kind: 'delegation_toolkit',
+      metadata: {
+        delegation_manager: '0xDELEGATIONMANAGERPROTO1',
+      },
+    } as const;
+    const observedIdempotencyKeys: string[] = [];
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+        const params =
+          typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
+            ? (jsonRpcRequest['params'] as Record<string, unknown>)
+            : null;
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.completeRootedBootstrapFromUserSigning.v1') {
+          const idempotencyKey = params?.['idempotency_key'];
+          if (typeof idempotencyKey !== 'string') {
+            throw new Error('expected rooted-bootstrap idempotency key');
+          }
+          observedIdempotencyKeys.push(idempotencyKey);
+        }
+
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-complete-rooted-bootstrap',
+          result: {
+            protocol_version: 'v1',
+            revision: 3,
+            committed_event_ids: ['evt-rooted-bootstrap-1', 'evt-rooted-bootstrap-2'],
+            rooted_wallet_context_id: 'rwc-user-protocol-001',
+            root_delegation: {
+              root_delegation_id: 'root-user-protocol-001',
+              user_wallet: '0xUSERPROTO1',
+              status: 'active',
+            },
+          },
+        };
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        phase: 'onboarding',
+        lastPortfolioState: null,
+        lastSharedEmberRevision: 0,
+        lastRootDelegation: null,
+        lastOnboardingBootstrap: null,
+        lastRootedWalletContextId: null,
+        activeWalletAddress: null,
+        pendingOnboardingWalletAddress: null,
+      },
+      operation: {
+        source: 'tool',
+        name: 'complete_rooted_bootstrap_from_user_signing',
+        input: {
+          onboarding: firstOnboarding,
+          handoff,
+        },
+      },
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        phase: 'onboarding',
+        lastPortfolioState: null,
+        lastSharedEmberRevision: 0,
+        lastRootDelegation: null,
+        lastOnboardingBootstrap: null,
+        lastRootedWalletContextId: null,
+        activeWalletAddress: null,
+        pendingOnboardingWalletAddress: null,
+      },
+      operation: {
+        source: 'tool',
+        name: 'complete_rooted_bootstrap_from_user_signing',
+        input: {
+          onboarding: secondOnboarding,
+          handoff,
+        },
+      },
+    });
+
+    expect(observedIdempotencyKeys).toHaveLength(2);
+    expect(observedIdempotencyKeys[0]).toMatch(/^idem-portfolio-manager-rooted-bootstrap-/);
+    expect(observedIdempotencyKeys[0]).not.toBe(observedIdempotencyKeys[1]);
   });
 
   it('retries rooted bootstrap once after a Shared Ember expected_revision conflict', async () => {

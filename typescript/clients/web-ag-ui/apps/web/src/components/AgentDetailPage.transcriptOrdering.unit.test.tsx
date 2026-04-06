@@ -339,4 +339,114 @@ describe('AgentDetailPage transcript ordering', () => {
       root.unmount();
     });
   });
+
+  it('hides sync-noise transcript rows while preserving non-sync reasoning', () => {
+    const root = createRoot(container);
+    const syncAckContent = JSON.stringify({ status: 'synced', clientMutationId: 'sync-1' });
+    const messages: Message[] = [
+      {
+        id: 'user-sync-1',
+        role: 'user',
+        content: JSON.stringify({ command: 'sync', clientMutationId: 'sync-1' }),
+      },
+      {
+        id: 'assistant-sync-1',
+        role: 'assistant',
+        content: syncAckContent,
+      },
+      {
+        id: 'reasoning-sync-1',
+        role: 'reasoning',
+        parentMessageId: 'assistant-sync-1',
+        content: 'Thinking about how to acknowledge the sync request.',
+      },
+      {
+        id: 'reasoning-visible-1',
+        role: 'reasoning',
+        parentMessageId: 'assistant-visible-1',
+        content: 'Thinking about the actual portfolio update.',
+      },
+      {
+        id: 'assistant-visible-1',
+        role: 'assistant',
+        content: 'Here is the portfolio update you asked for.',
+      },
+    ];
+
+    act(() => {
+      root.render(renderPage(messages));
+    });
+
+    const transcriptText = container.textContent ?? '';
+    expect(transcriptText).not.toContain('Requested a runtime sync.');
+    expect(transcriptText).not.toContain(syncAckContent);
+    expect(transcriptText).not.toContain('Thinking about how to acknowledge the sync request.');
+    expect(transcriptText).toContain('Thinking about the actual portfolio update.');
+    expect(transcriptText).toContain('Here is the portfolio update you asked for.');
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('keeps unlinked reasoning visible even when a sync acknowledgment is filtered', () => {
+    const root = createRoot(container);
+    const messages: Message[] = [
+      {
+        id: 'assistant-sync-1',
+        role: 'assistant',
+        content: JSON.stringify({ status: 'synced', clientMutationId: 'sync-1' }),
+      },
+      {
+        id: 'reasoning-unlinked-1',
+        role: 'reasoning',
+        content: 'Thinking about whether the sync completed cleanly.',
+      },
+    ];
+
+    act(() => {
+      root.render(renderPage(messages));
+    });
+
+    const transcriptText = container.textContent ?? '';
+    expect(transcriptText).toContain('Thinking about whether the sync completed cleanly.');
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('hides sync reasoning when the runtime encodes the linked assistant id inside the reasoning message id', () => {
+    const root = createRoot(container);
+    const linkedAssistantId = 'pi:agent-runtime:thread-1:assistant:1775509885583';
+    const messages: Message[] = [
+      {
+        id: linkedAssistantId,
+        role: 'assistant',
+        content: JSON.stringify({ status: 'synced', clientMutationId: 'sync-1' }),
+      },
+      {
+        id: `pi:agent-runtime:thread-1:reasoning:${linkedAssistantId}:0`,
+        role: 'reasoning',
+        content: '**Considering sync response**\n\nLet me acknowledge the sync.',
+      },
+      {
+        id: 'assistant-visible-1',
+        role: 'assistant',
+        content: 'Visible assistant reply.',
+      },
+    ];
+
+    act(() => {
+      root.render(renderPage(messages));
+    });
+
+    const transcriptText = container.textContent ?? '';
+    expect(transcriptText).not.toContain('Considering sync response');
+    expect(transcriptText).toContain('Visible assistant reply.');
+
+    act(() => {
+      root.unmount();
+    });
+  });
 });
