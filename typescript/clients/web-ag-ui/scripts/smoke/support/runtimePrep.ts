@@ -82,7 +82,10 @@ function serializeTypedDataJson(typedData: unknown): string {
   return JSON.stringify(typedData, (_key, value: unknown) =>
     typeof value === 'bigint'
       ? value >= MAX_DECIMAL_TYPED_DATA_BIGINT
-        ? `0x${value.toString(16)}`
+        ? (() => {
+            const hex = value.toString(16);
+            return `0x${hex.length % 2 === 0 ? hex : `0${hex}`}`;
+          })()
         : value.toString()
       : value,
   );
@@ -320,6 +323,22 @@ async function maybeCreateSubagentRuntimes(input: {
   vibekitRoot: string;
   managedAgentId: string;
 }) {
+  const portfolioManagerEnv = parseDotEnvFile(
+    path.join(
+      input.vibekitRoot,
+      'typescript/clients/web-ag-ui/apps/agent-portfolio-manager/.env',
+    ),
+  );
+  const controllerWalletName =
+    readString(process.env.PORTFOLIO_MANAGER_OWS_WALLET_NAME) ??
+    readString(portfolioManagerEnv.PORTFOLIO_MANAGER_OWS_WALLET_NAME);
+  const controllerVaultPath =
+    readString(process.env.PORTFOLIO_MANAGER_OWS_VAULT_PATH) ??
+    readString(portfolioManagerEnv.PORTFOLIO_MANAGER_OWS_VAULT_PATH);
+  const controllerPassphrase =
+    readString(process.env.PORTFOLIO_MANAGER_OWS_PASSPHRASE) ??
+    readString(portfolioManagerEnv.PORTFOLIO_MANAGER_OWS_PASSPHRASE) ??
+    undefined;
   const lendingEnv = parseDotEnvFile(
     path.join(input.vibekitRoot, 'typescript/clients/web-ag-ui/apps/agent-ember-lending/.env'),
   );
@@ -356,6 +375,172 @@ async function maybeCreateSubagentRuntimes(input: {
     );
   }
 
+  let refreshIssuer: unknown = {
+    async issueDelegation() {
+      throw new Error(
+        'Repo-local Shared Ember runtime binding could not resolve a controller-backed refresh issuer.',
+      );
+    },
+  };
+  if (controllerWalletName) {
+    const portfolioManagerAppRoot = path.join(
+      input.vibekitRoot,
+      'typescript/clients/web-ag-ui/apps/agent-portfolio-manager',
+    );
+    const requireFromPortfolioManager = createRequire(
+      path.join(portfolioManagerAppRoot, 'package.json'),
+    );
+    const { getWallet, signTypedData: signTypedDataWithOwsCore } = requireFromPortfolioManager(
+      '@open-wallet-standard/core',
+    ) as {
+      getWallet: (walletName: string, vaultPath?: string) => {
+        accounts: Array<{ address?: string; chainId?: string }>;
+      };
+      signTypedData: (
+        walletName: string,
+        chain: string,
+        typedDataJson: string,
+        passphrase?: string,
+        _unused?: unknown,
+        vaultPath?: string,
+      ) => { signature: string };
+    };
+    const {
+      getDeleGatorEnvironment,
+      Implementation,
+      toMetaMaskSmartAccount,
+    } = requireFromPortfolioManager('@metamask/delegation-toolkit') as {
+      getDeleGatorEnvironment: (chainId: number) => unknown;
+      Implementation: { Hybrid: unknown };
+      toMetaMaskSmartAccount: (input: Record<string, unknown>) => Promise<{
+        address: `0x${string}`;
+        signDelegation(input: {
+          delegation: Record<string, unknown>;
+          chainId: number;
+        }): Promise<`0x${string}`>;
+      }>;
+    };
+    const { createPublicClient, defineChain, http } = requireFromPortfolioManager('viem') as {
+      createPublicClient: (input: Record<string, unknown>) => unknown;
+      defineChain: (input: Record<string, unknown>) => unknown;
+      http: (url: string, options?: Record<string, unknown>) => unknown;
+    };
+    const controllerWallet = getWallet(controllerWalletName, controllerVaultPath ?? undefined);
+    const controllerSignerAddress =
+      controllerWallet.accounts
+        .map((account) => readHexAddress(account.address))
+        .find((address) => address !== null) ?? null;
+
+    if (!controllerSignerAddress) {
+      throw new Error(
+        `Controller OWS wallet "${controllerWalletName}" did not resolve an EVM address for runtime refresh issuer bootstrap.`,
+      );
+    }
+
+    const smartAccountByChainId = new Map<
+      number,
+      Promise<{
+        address: `0x${string}`;
+        signDelegation(input: {
+          delegation: Record<string, unknown>;
+          chainId: number;
+        }): Promise<`0x${string}`>;
+      }>
+    >();
+
+    const resolveSmartAccount = (chainId: number) => {
+      const existing = smartAccountByChainId.get(chainId);
+      if (existing) {
+        return existing;
+      }
+
+      const chain = defineChain({
+        id: chainId,
+        name: `chain-${chainId}`,
+        nativeCurrency: {
+          name: 'Native',
+          symbol: 'ETH',
+          decimals: 18,
+        },
+        rpcUrls: {
+          default: {
+            http: [resolveRpcUrl(chainId)],
+          },
+        },
+      });
+      const publicClient = createPublicClient({
+        chain,
+        transport: http(resolveRpcUrl(chainId), {
+          retryCount: 0,
+        }),
+      });
+      const smartAccount = toMetaMaskSmartAccount({
+        client: publicClient,
+        implementation: Implementation.Hybrid,
+        deployParams: [controllerSignerAddress, [], [], []],
+        deploySalt: '0x',
+        signer: {
+          account: {
+            address: controllerSignerAddress,
+            async signMessage() {
+              throw new Error('runtime refresh issuer signer does not sign messages');
+            },
+            async signTypedData(typedData: unknown) {
+              return normalizeHexSignature(
+                signTypedDataWithOwsCore(
+                  controllerWalletName,
+                  DEFAULT_OWS_CHAIN,
+                  serializeTypedDataJson(normalizeOwsTypedData(typedData)),
+                  controllerPassphrase,
+                  undefined,
+                  controllerVaultPath ?? undefined,
+                ).signature,
+              );
+            },
+          },
+        },
+        environment: getDeleGatorEnvironment(chainId),
+      });
+
+      smartAccountByChainId.set(chainId, smartAccount);
+      return smartAccount;
+    };
+
+    const owsAdaptersModule = (await import(
+      pathToFileURL(path.join(input.specRoot, 'packages/orchestration-ows-adapters/src/index.ts'))
+        .href
+    )) as {
+      createMetaMaskManagedOnboardingIssuer: (input: {
+        controllerWallet: string;
+        resolveSigner(input: { controllerWallet: string }): Promise<{
+          getControllerAddress(): Promise<string> | string;
+          signDelegation(input: {
+            delegation: Record<string, unknown>;
+            chainId: number;
+          }): Promise<`0x${string}`>;
+        }>;
+      }) => Promise<unknown>;
+    };
+
+    const initialSmartAccount = await resolveSmartAccount(42161);
+    refreshIssuer = await owsAdaptersModule.createMetaMaskManagedOnboardingIssuer({
+      controllerWallet: initialSmartAccount.address,
+      resolveSigner: async () => ({
+        async getControllerAddress() {
+          return (await resolveSmartAccount(42161)).address;
+        },
+        async signDelegation({ delegation, chainId }) {
+          return normalizeHexSignature(
+            await (await resolveSmartAccount(chainId)).signDelegation({
+              delegation,
+              chainId,
+            }),
+          );
+        },
+      }),
+    });
+  }
+
   const domainModules = (await import(
     pathToFileURL(path.join(input.specRoot, 'packages/orchestration-domain-modules/src/index.ts'))
       .href
@@ -373,6 +558,9 @@ async function maybeCreateSubagentRuntimes(input: {
       rpcClient: unknown;
       settlementProjector: {
         projectConfirmedExecution(input: {
+          request: unknown;
+          reservation?: unknown;
+          sourceUnits?: unknown[];
           requestId: string;
           executionId: string;
           transactionHash: string;
@@ -383,14 +571,26 @@ async function maybeCreateSubagentRuntimes(input: {
       waitForNextReceiptPoll?: (attempt: number) => Promise<void>;
     }) => {
       submitSignedTransaction(input: {
-        request: {
-          request_id: string;
-          root_user_wallet: string;
-          network: string;
-        };
+        request: unknown;
+        payload: unknown;
+        delegation: unknown;
+        reservation?: unknown;
+        sourceUnits?: unknown[];
+        signerAddress: string;
         rawTransaction: string;
       }): Promise<unknown>;
     };
+  };
+  const accountingModule = (await import(
+    pathToFileURL(path.join(input.specRoot, 'packages/orchestration-accounting/src/index.ts'))
+      .href
+  )) as {
+    projectLendingExecutionSuccessorPlans: (input: {
+      request: unknown;
+      sourceUnits: unknown[];
+      executionId: string;
+      transactionHash: string;
+    }) => unknown[];
   };
 
   const rpcClient = domainModules.createHttpJsonRpcClient({
@@ -399,73 +599,29 @@ async function maybeCreateSubagentRuntimes(input: {
   const payloadStore = domainModules.createInMemoryPayloadArtifactStore({
     executionPayloads: [],
   });
-  const projectionContextByRequestId = new Map<
-    string,
-    {
-      rootUserWallet: string;
-      network: string;
-    }
-  >();
-  const baseSubmissionBackend = domainModules.createJsonRpcSignedTransactionSubmissionBackend({
+  const submissionBackend = domainModules.createJsonRpcSignedTransactionSubmissionBackend({
     rpcClient,
     maxReceiptPollAttempts: 8,
     waitForNextReceiptPoll: async () => {
       await new Promise((resolve) => setTimeout(resolve, 2_000));
     },
     settlementProjector: {
-      async projectConfirmedExecution({ requestId, executionId, transactionHash }) {
-        const context = projectionContextByRequestId.get(requestId);
-        const walletAddress = context?.rootUserWallet ?? agentWallet;
-        const network = context?.network ?? 'arbitrum';
-
-        return [
-          {
-            unit_id: `unit-successor-${executionId}`,
-            root_asset: 'WETH',
-            network,
-            wallet_address: walletAddress,
-            quantity: '1',
-            position_kind: 'loan',
-            control_path: 'lending.supply',
-            benchmark_value: '0',
-            valuation_ref: `val-${requestId}-post`,
-            metadata: {
-              protocol_name: 'repo-local-shared-ember-runtime-binding',
-              transaction_hash: transactionHash,
-            },
-          },
-        ];
+      async projectConfirmedExecution({ request, sourceUnits, executionId, transactionHash }) {
+        return accountingModule.projectLendingExecutionSuccessorPlans({
+          request,
+          sourceUnits: sourceUnits ?? [],
+          executionId,
+          transactionHash,
+        });
       },
     },
   });
-  const submissionBackend = {
-    async submitSignedTransaction(input: {
-      request: {
-        request_id: string;
-        root_user_wallet: string;
-        network: string;
-      };
-      rawTransaction: string;
-    }) {
-      projectionContextByRequestId.set(input.request.request_id, {
-        rootUserWallet: input.request.root_user_wallet,
-        network: input.request.network,
-      });
-      return baseSubmissionBackend.submitSignedTransaction(input);
-    },
-  };
 
   return {
     [input.managedAgentId]: {
       agentWallet,
       payloadStore,
-      issuer: {
-        async issueDelegation() {
-          throw new Error(
-            'Repo-local Shared Ember runtime binding does not issue delegations directly.',
-          );
-        },
-      },
+      issuer: refreshIssuer,
       delegationClient: {
         async redeemActiveDelegation() {
           throw new Error(
@@ -731,6 +887,19 @@ export async function startWorkspaceAgentServer(input: {
   child.stdout.on('data', (chunk) => appendLog('', chunk));
   child.stderr.on('data', (chunk) => appendLog('ERR: ', chunk));
 
+  let closedByHarness = false;
+  child.once('exit', (code, signal) => {
+    if (closedByHarness) {
+      return;
+    }
+
+    const recentLogs = logs.slice(-40).join('\n');
+    const summary =
+      `${input.label} exited after startup (code=${String(code)}, signal=${String(signal)}).` +
+      (recentLogs.length > 0 ? `\n${recentLogs}` : '');
+    console.error(summary);
+  });
+
   const probeUrl = `http://127.0.0.1:${port}${input.startupProbePath ?? '/'}`;
   const ready = await new Promise<void>((resolve, reject) => {
     let settled = false;
@@ -793,6 +962,7 @@ export async function startWorkspaceAgentServer(input: {
   return {
     baseUrl: `http://127.0.0.1:${port}${input.basePath ?? ''}`,
     close: async () => {
+      closedByHarness = true;
       if (child.exitCode !== null || child.signalCode !== null) {
         return;
       }

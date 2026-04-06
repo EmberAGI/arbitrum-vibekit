@@ -947,6 +947,54 @@ function buildManagedOnboardingMandate(
   };
 }
 
+function readPrimaryManagedCollateralAsset(
+  approvedMandateEnvelope: PortfolioManagerApprovedMandateEnvelope,
+): string | null {
+  return approvedMandateEnvelope.managedAgentMandates[0]?.settings.allowedCollateralAssets[0] ?? null;
+}
+
+function buildPortfolioManagerOnboardingBlockedMessage(input: {
+  approvedMandateEnvelope: PortfolioManagerApprovedMandateEnvelope;
+  onboardingDetails: ReturnType<typeof buildPortfolioManagerWalletAccountingDetails>;
+}): string {
+  const targetAsset = readPrimaryManagedCollateralAsset(input.approvedMandateEnvelope);
+  const accountedAssets = [
+    ...new Set(input.onboardingDetails.assets.map((asset) => asset.asset)),
+  ];
+  const proofs = input.onboardingDetails.onboarding.proofs;
+  const initialSubagentDelegationIssued =
+    proofs.initial_subagent_delegation_issued ?? proofs.agent_active;
+
+  if (!proofs.capital_reserved_for_agent) {
+    if (targetAsset && !accountedAssets.includes(targetAsset)) {
+      const walletAssetSummary =
+        accountedAssets.length > 0
+          ? ` Wallet accounting currently shows ${accountedAssets.join(', ')}.`
+          : ' Wallet accounting does not yet show any admitted idle assets.';
+
+      return `Portfolio manager onboarding is not complete because Shared Ember could not admit any ${targetAsset} for lending.${walletAssetSummary} Deposit or wrap ${targetAsset} in the wallet, then retry onboarding.`;
+    }
+
+    return 'Portfolio manager onboarding is not complete because Shared Ember has not reserved capital for the lending lane yet.';
+  }
+
+  if (!proofs.policy_snapshot_recorded) {
+    return 'Portfolio manager onboarding is not complete because Shared Ember has not recorded a lending policy snapshot yet.';
+  }
+
+  if (!initialSubagentDelegationIssued) {
+    return 'Portfolio manager onboarding is not complete because Shared Ember has not issued the initial lending delegation yet.';
+  }
+
+  const missingProofs = [
+    proofs.capital_reserved_for_agent ? null : 'capital_reserved_for_agent',
+    proofs.policy_snapshot_recorded ? null : 'policy_snapshot_recorded',
+    initialSubagentDelegationIssued ? null : 'initial_subagent_delegation_issued',
+  ].filter((proof): proof is string => proof !== null);
+
+  return `Portfolio manager onboarding is not complete. Shared Ember onboarding phase is ${input.onboardingDetails.onboarding.phase}.${missingProofs.length > 0 ? ` Missing proofs: ${missingProofs.join(', ')}.` : ''}`;
+}
+
 function buildPortfolioManagerOnboardingBootstrap(params: {
   agentId: string;
   threadId: string;
@@ -1492,8 +1540,21 @@ export function createPortfolioManagerDomain(
             protocolHost: options.protocolHost,
             agentId: FIRST_MANAGED_AGENT_TYPE,
           });
+          const { revision: onboardingRevision, onboardingState } =
+            await readPortfolioManagerOnboardingState({
+              protocolHost: options.protocolHost,
+              agentId: resolvePortfolioManagerAccountingAgentId(onboarding),
+              walletAddress,
+            });
+          const onboardingDetails = buildPortfolioManagerWalletAccountingDetails({
+            revision: onboardingRevision,
+            onboardingState,
+          });
           const nextRevision =
-            managedSubagentExecutionContext.revision ?? response.result?.revision ?? null;
+            onboardingRevision ??
+            managedSubagentExecutionContext.revision ??
+            response.result?.revision ??
+            null;
 
           if (!managedSubagentExecutionContext.walletAddress) {
             const nextState: PortfolioManagerLifecycleState = {
@@ -1531,6 +1592,45 @@ export function createPortfolioManagerDomain(
             };
           }
 
+          if (!onboardingState.proofs.agent_active) {
+            const nextState: PortfolioManagerLifecycleState = {
+              phase: 'onboarding',
+              lastPortfolioState: currentState.lastPortfolioState,
+              lastSharedEmberRevision: nextRevision,
+              lastRootDelegation:
+                response.result?.root_delegation ?? currentState.lastRootDelegation,
+              lastOnboardingBootstrap: onboarding,
+              lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
+              activeWalletAddress: walletAddress,
+              pendingOnboardingWalletAddress: walletAddress,
+              pendingApprovedMandateEnvelope: approvedMandateEnvelope,
+            };
+
+            return {
+              state: nextState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage: buildPortfolioManagerOnboardingBlockedMessage({
+                    approvedMandateEnvelope,
+                    onboardingDetails,
+                  }),
+                },
+                artifacts: [
+                  {
+                    data: {
+                      type: 'shared-ember-rooted-bootstrap',
+                      revision: nextState.lastSharedEmberRevision,
+                      committedEventIds: response.result?.committed_event_ids ?? [],
+                      rootedWalletContextId: nextState.lastRootedWalletContextId,
+                      rootDelegation: nextState.lastRootDelegation,
+                    },
+                  },
+                ],
+              },
+            };
+          }
+
           const nextState: PortfolioManagerLifecycleState = {
             phase: 'active',
             lastPortfolioState: currentState.lastPortfolioState,
@@ -1547,7 +1647,7 @@ export function createPortfolioManagerDomain(
             state: nextState,
             outputs: {
               status: {
-                executionStatus: 'working',
+                executionStatus: 'completed',
                 statusMessage: 'Portfolio manager onboarding complete. Agent is active.',
               },
               artifacts: [

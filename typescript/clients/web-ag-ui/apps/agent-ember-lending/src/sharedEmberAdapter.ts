@@ -27,6 +27,13 @@ export type EmberLendingSharedEmberProtocolHost = {
 export const EMBER_LENDING_INTERNAL_HYDRATE_COMMAND = 'hydrate_runtime_projection';
 export const EMBER_LENDING_SHARED_EMBER_AGENT_ID = 'ember-lending';
 
+const PLANNING_PM_ONBOARDING_BLOCKED_MESSAGE =
+  'Portfolio Manager onboarding must complete before lending can plan transactions for this thread.';
+const PLANNING_PM_ADMISSION_BLOCKED_MESSAGE =
+  'Portfolio Manager must admit a lending unit before lending can plan transactions for this thread.';
+const PLANNING_PM_UNIT_SCOPE_BLOCKED_MESSAGE =
+  'Lending can only plan with Portfolio Manager-admitted units for this thread.';
+
 export type EmberLendingLifecycleState = {
   phase: 'prehire' | 'onboarding' | 'active' | 'firing' | 'inactive';
   mandateRef: string | null;
@@ -111,6 +118,17 @@ type PendingExecutionSubmission = {
   signedTransaction: Record<string, unknown>;
   revision: number | null;
 };
+
+type ManagedPlanningReadiness =
+  | {
+      status: 'ready';
+      candidateUnitIds: string[];
+      requestedQuantities: Array<{ unit_id: string; quantity: string }>;
+    }
+  | {
+      status: 'blocked';
+      statusMessage: string;
+    };
 
 type SharedEmberCommittedEvent = {
   sequence?: number;
@@ -1509,6 +1527,10 @@ function readStringArray(value: unknown): string[] | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function readBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
 function readPortfolioReservation(portfolioState: unknown): Record<string, unknown> | null {
   return isRecord(portfolioState) ? readFirstRecordFromArray(portfolioState['reservations']) : null;
 }
@@ -1572,6 +1594,197 @@ function readManagedRequestedQuantities(
 function readManagedCandidateUnitIds(portfolioState: unknown): string[] | null {
   const requestedQuantities = readManagedRequestedQuantities(portfolioState);
   return requestedQuantities?.map((candidate) => candidate.unit_id) ?? null;
+}
+
+function hasPortfolioManagerPlanningIdentity(state: EmberLendingLifecycleState): boolean {
+  return Boolean(
+    state.mandateRef &&
+      state.walletAddress &&
+      state.rootUserWalletAddress &&
+      state.walletAddress !== state.rootUserWalletAddress,
+  );
+}
+
+function readManagedMandateCollateralAsset(state: EmberLendingLifecycleState): string | null {
+  if (!isRecord(state.mandateContext)) {
+    return null;
+  }
+
+  return readStringArray(state.mandateContext['allowedCollateralAssets'])?.[0] ?? null;
+}
+
+async function readManagedOnboardingState(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  threadId: string;
+  agentId: string;
+  state: EmberLendingLifecycleState;
+}): Promise<Record<string, unknown> | null> {
+  const walletAddress = input.state.rootUserWalletAddress;
+  const network = readStateNetwork(input.state);
+  if (!walletAddress || !network) {
+    return null;
+  }
+
+  const response = await input.protocolHost.handleJsonRpc({
+    jsonrpc: '2.0',
+    id: `shared-ember-${input.threadId}-read-onboarding-state`,
+    method: 'orchestrator.readOnboardingState.v1',
+    params: {
+      agent_id: input.agentId,
+      wallet_address: walletAddress,
+      network,
+    },
+  });
+
+  return readRecordKey(readRecordKey(response, 'result'), 'onboarding_state');
+}
+
+function buildManagedPlanningBlockedMessageFromOnboardingState(input: {
+  state: EmberLendingLifecycleState;
+  onboardingState: Record<string, unknown>;
+  fallbackStatusMessage: string;
+}): string {
+  const proofs = readRecordKey(input.onboardingState, 'proofs');
+  if (!proofs) {
+    return input.fallbackStatusMessage;
+  }
+
+  const targetAsset = readManagedMandateCollateralAsset(input.state);
+  const accountedAssets = [
+    ...new Set(
+      (Array.isArray(input.onboardingState['owned_units']) ? input.onboardingState['owned_units'] : [])
+        .map((candidate) => (isRecord(candidate) ? readString(candidate['root_asset']) : null))
+        .filter((asset): asset is string => asset !== null),
+    ),
+  ];
+  const capitalReservedForAgent = readBoolean(proofs['capital_reserved_for_agent']);
+  const policySnapshotRecorded = readBoolean(proofs['policy_snapshot_recorded']);
+  const initialSubagentDelegationIssued = readBoolean(
+    proofs['initial_subagent_delegation_issued'],
+  );
+  const phase = readString(input.onboardingState['phase']) ?? 'unknown';
+
+  if (capitalReservedForAgent === false) {
+    if (targetAsset && !accountedAssets.includes(targetAsset)) {
+      const assetSummary =
+        accountedAssets.length > 0
+          ? ` Wallet accounting currently shows ${accountedAssets.join(', ')}.`
+          : ' Wallet accounting does not yet show any admitted idle assets.';
+
+      return `Portfolio Manager onboarding is not complete for this thread because Shared Ember could not admit any ${targetAsset} for lending.${assetSummary}`;
+    }
+
+    return 'Portfolio Manager onboarding is not complete for this thread because Shared Ember has not reserved capital for the lending lane yet.';
+  }
+
+  if (policySnapshotRecorded === false) {
+    return 'Portfolio Manager onboarding is not complete for this thread because Shared Ember has not recorded a lending policy snapshot yet.';
+  }
+
+  if (initialSubagentDelegationIssued === false) {
+    return 'Portfolio Manager onboarding is not complete for this thread because Shared Ember has not issued the initial lending delegation yet.';
+  }
+
+  const missingProofs = [
+    capitalReservedForAgent === true ? null : 'capital_reserved_for_agent',
+    policySnapshotRecorded === true ? null : 'policy_snapshot_recorded',
+    initialSubagentDelegationIssued === true ? null : 'initial_subagent_delegation_issued',
+  ].filter((proof): proof is string => proof !== null);
+
+  return `Portfolio Manager onboarding is not complete for this thread. Shared Ember onboarding phase is ${phase}.${missingProofs.length > 0 ? ` Missing proofs: ${missingProofs.join(', ')}.` : ''}`;
+}
+
+async function resolveManagedPlanningBlockedMessage(input: {
+  protocolHost: EmberLendingSharedEmberProtocolHost;
+  threadId: string;
+  agentId: string;
+  state: EmberLendingLifecycleState;
+  fallbackStatusMessage: string;
+}): Promise<string> {
+  if (
+    !input.state.walletAddress ||
+    !input.state.rootUserWalletAddress ||
+    input.state.walletAddress === input.state.rootUserWalletAddress
+  ) {
+    return input.fallbackStatusMessage;
+  }
+
+  const onboardingState = await readManagedOnboardingState(input).catch(() => null);
+
+  if (onboardingState === null) {
+    return input.fallbackStatusMessage;
+  }
+
+  return buildManagedPlanningBlockedMessageFromOnboardingState({
+    state: input.state,
+    onboardingState,
+    fallbackStatusMessage: input.fallbackStatusMessage,
+  });
+}
+
+function resolveManagedPlanningReadiness(input: {
+  state: EmberLendingLifecycleState;
+  operationInput: unknown;
+}): ManagedPlanningReadiness {
+  if (!hasPortfolioManagerPlanningIdentity(input.state)) {
+    return {
+      status: 'blocked',
+      statusMessage: PLANNING_PM_ONBOARDING_BLOCKED_MESSAGE,
+    };
+  }
+
+  const managedRequestedQuantities = readManagedRequestedQuantities(input.state.lastPortfolioState);
+  const managedCandidateUnitIds = readManagedCandidateUnitIds(input.state.lastPortfolioState);
+  if (!managedRequestedQuantities || !managedCandidateUnitIds) {
+    return {
+      status: 'blocked',
+      statusMessage: PLANNING_PM_ADMISSION_BLOCKED_MESSAGE,
+    };
+  }
+
+  const managedUnitIds = new Set(managedCandidateUnitIds);
+  const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
+  const candidateUnitIds =
+    readStringArray(commandInput['candidate_unit_ids']) ?? managedCandidateUnitIds;
+  const requestedQuantitiesSource =
+    Array.isArray(commandInput['requested_quantities']) && commandInput['requested_quantities'].length > 0
+      ? commandInput['requested_quantities']
+      : managedRequestedQuantities;
+  const requestedQuantities = requestedQuantitiesSource
+    .map((candidate) => {
+      if (!isRecord(candidate)) {
+        return null;
+      }
+
+      const unitId = readString(candidate['unit_id']);
+      const quantity = readString(candidate['quantity']);
+      return unitId && quantity ? { unit_id: unitId, quantity } : null;
+    })
+    .filter((candidate): candidate is { unit_id: string; quantity: string } => candidate !== null);
+
+  if (candidateUnitIds.some((unitId) => !managedUnitIds.has(unitId))) {
+    return {
+      status: 'blocked',
+      statusMessage: PLANNING_PM_UNIT_SCOPE_BLOCKED_MESSAGE,
+    };
+  }
+
+  const requestedQuantityUnitIds = requestedQuantities.map((candidate) => candidate.unit_id);
+  if (
+    requestedQuantities.length !== requestedQuantitiesSource.length ||
+    requestedQuantityUnitIds.some((unitId) => !managedUnitIds.has(unitId))
+  ) {
+    return {
+      status: 'blocked',
+      statusMessage: PLANNING_PM_UNIT_SCOPE_BLOCKED_MESSAGE,
+    };
+  }
+
+  return {
+    status: 'ready',
+    candidateUnitIds,
+    requestedQuantities,
+  };
 }
 
 function readManagedActionVerb(controlPath: string | null, intent: string): string {
@@ -1682,17 +1895,17 @@ function buildTransactionPlanningHandoff(input: {
   }
 
   const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
+  const planningReadiness = resolveManagedPlanningReadiness({
+    state: input.state,
+    operationInput: input.operationInput,
+  });
+  if (planningReadiness.status === 'blocked') {
+    return null;
+  }
   const intent =
     readIntent(commandInput['intent']) ??
     readIntent(readPortfolioReservation(input.state.lastPortfolioState)?.['purpose']) ??
     'deploy';
-  const candidateUnitIds =
-    readStringArray(commandInput['candidate_unit_ids']) ??
-    readManagedCandidateUnitIds(input.state.lastPortfolioState);
-  const requestedQuantities =
-    Array.isArray(commandInput['requested_quantities']) && commandInput['requested_quantities'].length > 0
-      ? commandInput['requested_quantities']
-      : readManagedRequestedQuantities(input.state.lastPortfolioState);
   const actionSummary =
     readString(commandInput['action_summary']) ??
     buildFallbackActionSummary({
@@ -1701,17 +1914,13 @@ function buildTransactionPlanningHandoff(input: {
       intent,
     });
 
-  if (!candidateUnitIds || !requestedQuantities) {
-    return null;
-  }
-
   const handoff: Record<string, unknown> = {
     handoff_id: readString(commandInput['handoff_id']) ?? `handoff-${input.threadId}`,
     ...base,
     intent,
     action_summary: actionSummary,
-    candidate_unit_ids: candidateUnitIds,
-    requested_quantities: requestedQuantities,
+    candidate_unit_ids: planningReadiness.candidateUnitIds,
+    requested_quantities: planningReadiness.requestedQuantities,
     decision_context: buildManagedSubagentDecisionContext({
       source: commandInput,
       state: input.state,
@@ -2350,18 +2559,26 @@ export function createEmberLendingDomain(
           }
 
           let planningState = currentState;
+          let planningReadiness = resolveManagedPlanningReadiness({
+            state: planningState,
+            operationInput: operation.input,
+          });
           let handoff = buildTransactionPlanningHandoff({
             state: planningState,
             threadId,
             agentId,
             operationInput: operation.input,
           });
-          if (!handoff) {
+          if (planningReadiness.status === 'blocked' || !handoff) {
             planningState = await hydrateManagedProjectionFromSharedEmber({
               protocolHost: options.protocolHost,
               state: currentState,
               threadId,
               agentId,
+            });
+            planningReadiness = resolveManagedPlanningReadiness({
+              state: planningState,
+              operationInput: operation.input,
             });
             handoff = buildTransactionPlanningHandoff({
               state: planningState,
@@ -2370,6 +2587,25 @@ export function createEmberLendingDomain(
               operationInput: operation.input,
             });
           }
+          if (planningReadiness.status === 'blocked') {
+            const statusMessage = await resolveManagedPlanningBlockedMessage({
+              protocolHost: options.protocolHost,
+              threadId,
+              agentId,
+              state: planningState,
+              fallbackStatusMessage: planningReadiness.statusMessage,
+            });
+
+            return {
+              state: planningState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage,
+                },
+              },
+            };
+          }
           if (!handoff) {
             return {
               state: planningState,
@@ -2377,7 +2613,7 @@ export function createEmberLendingDomain(
                 status: {
                   executionStatus: 'failed',
                   statusMessage:
-                    'Lending runtime context is incomplete. Wait for execution-context hydration before planning.',
+                    'Lending runtime context could not be hydrated from Shared Ember for planning.',
                 },
               },
             };
@@ -2386,28 +2622,54 @@ export function createEmberLendingDomain(
           const idempotencyKey =
             readStringKey(operation.input, 'idempotencyKey') ??
             `idem-create-transaction-plan-${threadId}`;
-          const response = await runSharedEmberCommandWithResolvedRevision<{
+          let response: {
             result?: {
               revision?: number;
               committed_event_ids?: string[];
               candidate_plan?: unknown;
             };
-          }>({
-            protocolHost: options.protocolHost,
-            threadId,
-            agentId,
-            currentRevision: planningState.lastSharedEmberRevision,
-            buildRequest: (expectedRevision) => ({
-              jsonrpc: '2.0',
-              id: `shared-ember-${threadId}-create-transaction-plan`,
-              method: 'subagent.createTransactionPlan.v1',
-              params: {
-                idempotency_key: idempotencyKey,
-                expected_revision: expectedRevision,
-                handoff,
+          };
+          try {
+            response = await runSharedEmberCommandWithResolvedRevision<{
+              result?: {
+                revision?: number;
+                committed_event_ids?: string[];
+                candidate_plan?: unknown;
+              };
+            }>({
+              protocolHost: options.protocolHost,
+              threadId,
+              agentId,
+              currentRevision: planningState.lastSharedEmberRevision,
+              buildRequest: (expectedRevision) => ({
+                jsonrpc: '2.0',
+                id: `shared-ember-${threadId}-create-transaction-plan`,
+                method: 'subagent.createTransactionPlan.v1',
+                params: {
+                  idempotency_key: idempotencyKey,
+                  expected_revision: expectedRevision,
+                  handoff,
+                },
+              }),
+            });
+          } catch (error) {
+            if (!(error instanceof Error)) {
+              throw error;
+            }
+
+            return {
+              state: {
+                ...planningState,
+                phase: 'active',
               },
-            }),
-          });
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage: error.message,
+                },
+              },
+            };
+          }
 
           const candidatePlan = response.result?.candidate_plan ?? null;
           const candidatePlanTransactionPlanId = readCandidatePlanTransactionPlanId(candidatePlan);

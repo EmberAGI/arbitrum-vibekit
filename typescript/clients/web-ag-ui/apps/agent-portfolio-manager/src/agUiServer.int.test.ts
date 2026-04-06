@@ -208,6 +208,63 @@ async function handleDefaultSharedEmberJsonRpc(input: unknown): Promise<unknown>
           },
         },
       };
+    case 'orchestrator.readOnboardingState.v1':
+      return {
+        jsonrpc: '2.0',
+        id: 'shared-ember-wallet-accounting-ember-lending-0x00000000000000000000000000000000000000a1',
+        result: {
+          revision: 4,
+          onboarding_state: {
+            wallet_address: '0x00000000000000000000000000000000000000a1',
+            network: 'arbitrum',
+            phase: 'active',
+            proofs: {
+              rooted_wallet_context_registered: true,
+              root_delegation_registered: true,
+              root_authority_active: true,
+              wallet_baseline_observed: true,
+              accounting_units_seeded: true,
+              mandate_inputs_configured: true,
+              reserve_policy_configured: false,
+              capital_reserved_for_agent: true,
+              policy_snapshot_recorded: true,
+              initial_subagent_delegation_issued: true,
+              agent_active: true,
+            },
+            rooted_wallet_context: {
+              rooted_wallet_context_id: 'rwc-thread10x00000000000000000000000000000000000000a1',
+            },
+            root_delegation: {
+              root_delegation_id: 'root-thread10x00000000000000000000000000000000000000a1',
+            },
+            owned_units: [
+              {
+                unit_id: 'unit-thread1-usdc-001',
+                root_asset: 'USDC',
+                quantity: '10',
+                status: 'reserved',
+                control_path: 'lending.supply',
+                reservation_id: 'reservation-thread1-usdc-001',
+              },
+            ],
+            reservations: [
+              {
+                reservation_id: 'reservation-thread1-usdc-001',
+                agent_id: 'ember-lending',
+                purpose: 'deploy',
+                status: 'active',
+                control_path: 'lending.supply',
+                unit_allocations: [
+                  {
+                    unit_id: 'unit-thread1-usdc-001',
+                    quantity: '10',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      };
     default:
       throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
   }
@@ -500,7 +557,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
           },
           task: {
             taskStatus: {
-              state: 'working',
+              state: 'completed',
               message: {
                 content: 'Portfolio manager onboarding complete. Agent is active.',
               },

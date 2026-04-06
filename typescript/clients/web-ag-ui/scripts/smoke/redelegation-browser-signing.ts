@@ -65,12 +65,24 @@ type AgUiSnapshot = {
   } | null;
 };
 
+type PortfolioReservation = {
+  reservationId: string;
+  purpose: string | null;
+  status: string | null;
+  controlPath: string | null;
+  unitAllocations: Array<{
+    unitId: string;
+    quantity: string;
+  }>;
+};
+
 const ARBITRUM_RPC_URL = process.env['ARBITRUM_RPC_URL']?.trim() || 'https://arb1.arbitrum.io/rpc';
 const CHAIN_ID = 42161;
 const ROOT_SIGNING_MODE = (process.env['REDELEGATION_ROOT_SIGNING_MODE']?.trim() || 'app').toLowerCase();
 const STACK_MODE = (process.env['REDELEGATION_STACK_MODE']?.trim() || 'selfboot').toLowerCase();
 const PORTFOLIO_MANAGER_AGENT_ID = 'agent-portfolio-manager';
 const EMBER_LENDING_AGENT_ID = 'agent-ember-lending';
+const EMBER_LENDING_INTERNAL_HYDRATE_COMMAND = 'hydrate_runtime_projection';
 const EXTERNAL_SHARED_EMBER_BASE_URL =
   process.env['REDELEGATION_SHARED_EMBER_BASE_URL']?.trim() || 'http://127.0.0.1:4010';
 const EXTERNAL_PORTFOLIO_MANAGER_BASE_URL =
@@ -316,19 +328,40 @@ async function runAgentCommand(input: {
   runId: string;
   command: Record<string, unknown>;
 }) {
-  const response = await fetch(`${input.baseUrl}/agent/${input.agentId}/run`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      threadId: input.threadId,
-      runId: input.runId,
-      forwardedProps: {
-        command: input.command,
-      },
-    }),
-  });
+  let response: Response | null = null;
+  let lastFetchError: unknown = null;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      response = await fetch(`${input.baseUrl}/agent/${input.agentId}/run`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          threadId: input.threadId,
+          runId: input.runId,
+          forwardedProps: {
+            command: input.command,
+          },
+        }),
+      });
+      break;
+    } catch (error) {
+      lastFetchError = error;
+      if (attempt >= 5) {
+        break;
+      }
+      await sleep(400 * attempt);
+    }
+  }
+
+  if (!response) {
+    const cause =
+      lastFetchError instanceof Error
+        ? `${lastFetchError.message}${lastFetchError.cause ? ` | cause: ${String(lastFetchError.cause)}` : ''}`
+        : String(lastFetchError);
+    throw new Error(`${input.agentId} run transport failed after retries: ${cause}`);
+  }
 
   if (!response.ok) {
     throw new Error(
@@ -380,8 +413,29 @@ function readSnapshotLifecycle(snapshot: AgUiSnapshot | null) {
   return snapshot?.snapshot?.thread?.lifecycle ?? null;
 }
 
+function readLifecyclePortfolioState(snapshot: AgUiSnapshot | null): Record<string, unknown> | null {
+  const lifecycle = readSnapshotLifecycle(snapshot) as Record<string, unknown> | null;
+  return lifecycle && typeof lifecycle['lastPortfolioState'] === 'object' && lifecycle['lastPortfolioState'] !== null
+    ? (lifecycle['lastPortfolioState'] as Record<string, unknown>)
+    : null;
+}
+
 function readSnapshotArtifact(snapshot: AgUiSnapshot | null) {
   return snapshot?.snapshot?.thread?.artifacts?.current?.data ?? null;
+}
+
+function readArtifactRecord(
+  snapshot: AgUiSnapshot | null,
+  expectedType: string,
+): Record<string, unknown> | null {
+  const artifact = readSnapshotArtifact(snapshot);
+  if (typeof artifact !== 'object' || artifact === null) {
+    return null;
+  }
+
+  return readString((artifact as { type?: unknown }).type) === expectedType
+    ? (artifact as Record<string, unknown>)
+    : null;
 }
 
 function readSnapshotActivityEvents(snapshot: AgUiSnapshot | null): unknown[] {
@@ -708,6 +762,263 @@ function readExpectedMandateRef(snapshot: AgUiSnapshot | null) {
   return readString(activation?.['mandateRef']);
 }
 
+function readCandidatePlanControlPath(snapshot: AgUiSnapshot | null): string | null {
+  const artifact = readArtifactRecord(snapshot, 'shared-ember-candidate-plan');
+  const candidatePlan =
+    artifact && typeof artifact['candidatePlan'] === 'object' && artifact['candidatePlan'] !== null
+      ? (artifact['candidatePlan'] as Record<string, unknown>)
+      : null;
+  const compactPlanSummary =
+    candidatePlan &&
+    typeof candidatePlan['compact_plan_summary'] === 'object' &&
+    candidatePlan['compact_plan_summary'] !== null
+      ? (candidatePlan['compact_plan_summary'] as Record<string, unknown>)
+      : null;
+
+  return readString(compactPlanSummary?.['control_path']);
+}
+
+function readPortfolioStateFromArtifact(snapshot: AgUiSnapshot | null): Record<string, unknown> | null {
+  const artifact = readArtifactRecord(snapshot, 'shared-ember-portfolio-state');
+  const portfolioState =
+    artifact && typeof artifact['portfolioState'] === 'object' && artifact['portfolioState'] !== null
+      ? (artifact['portfolioState'] as Record<string, unknown>)
+      : null;
+  return portfolioState;
+}
+
+function readPortfolioReservations(portfolioState: Record<string, unknown> | null): PortfolioReservation[] {
+  const reservations = portfolioState?.['reservations'];
+  if (!Array.isArray(reservations)) {
+    return [];
+  }
+
+  return reservations
+    .map((candidate) => {
+      if (typeof candidate !== 'object' || candidate === null) {
+        return null;
+      }
+
+      const reservation = candidate as Record<string, unknown>;
+      const unitAllocations = Array.isArray(reservation['unit_allocations'])
+        ? reservation['unit_allocations']
+            .map((allocation) => {
+              if (typeof allocation !== 'object' || allocation === null) {
+                return null;
+              }
+              const record = allocation as Record<string, unknown>;
+              const unitId = readString(record['unit_id']);
+              const quantity = readString(record['quantity']);
+              return unitId && quantity ? { unitId, quantity } : null;
+            })
+            .filter(
+              (
+                allocation,
+              ): allocation is {
+                unitId: string;
+                quantity: string;
+              } => allocation !== null,
+            )
+        : [];
+
+      const reservationId = readString(reservation['reservation_id']);
+      if (!reservationId) {
+        return null;
+      }
+
+      return {
+        reservationId,
+        purpose: readString(reservation['purpose']),
+        status: readString(reservation['status']),
+        controlPath: readString(reservation['control_path']),
+        unitAllocations,
+      } satisfies PortfolioReservation;
+    })
+    .filter((reservation): reservation is PortfolioReservation => reservation !== null);
+}
+
+function readActiveReservationByControlPath(
+  portfolioState: Record<string, unknown> | null,
+  controlPath: string,
+): PortfolioReservation | null {
+  return (
+    readPortfolioReservations(portfolioState).find(
+      (reservation) =>
+        reservation.status === 'active' && reservation.controlPath === controlPath,
+    ) ?? null
+  );
+}
+
+async function refreshPortfolioState(input: {
+  baseUrl: string;
+  threadId: string;
+  runId: string;
+}) {
+  return await runAgentCommand({
+    baseUrl: input.baseUrl,
+    agentId: PORTFOLIO_MANAGER_AGENT_ID,
+    threadId: input.threadId,
+    runId: input.runId,
+    command: {
+      name: 'refresh_portfolio_state',
+    },
+  });
+}
+
+async function hydrateLendingProjection(input: {
+  baseUrl: string;
+  threadId: string;
+  runId: string;
+}) {
+  return await runAgentCommand({
+    baseUrl: input.baseUrl,
+    agentId: EMBER_LENDING_AGENT_ID,
+    threadId: input.threadId,
+    runId: input.runId,
+    command: {
+      name: EMBER_LENDING_INTERNAL_HYDRATE_COMMAND,
+    },
+  });
+}
+
+async function runExecutionAttemptWithRedelegationRefresh(input: {
+  lendingBaseUrl: string;
+  lendingThreadId: string;
+  portfolioManagerBaseUrl: string;
+  portfolioThreadId: string;
+  stage: string;
+  executionIdempotencyKey?: string;
+}) {
+  let finalExecution: { snapshot: AgUiSnapshot | null } | null = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const executionPromise = runAgentCommand({
+      baseUrl: input.lendingBaseUrl,
+      agentId: EMBER_LENDING_AGENT_ID,
+      threadId: input.lendingThreadId,
+      runId: `${input.lendingThreadId}-${input.stage}-execute-${attempt}`,
+      command: {
+        name: 'request_transaction_execution',
+        ...(input.executionIdempotencyKey
+          ? {
+              input: {
+                idempotencyKey: input.executionIdempotencyKey,
+              },
+            }
+          : {}),
+      },
+    });
+
+    await sleep(100);
+    const refreshResult = await runAgentCommand({
+      baseUrl: input.portfolioManagerBaseUrl,
+      agentId: PORTFOLIO_MANAGER_AGENT_ID,
+      threadId: input.portfolioThreadId,
+      runId: `${input.portfolioThreadId}-${input.stage}-refresh-${attempt}`,
+      command: {
+        name: 'refresh_redelegation_work',
+      },
+    });
+    const executionResult = await executionPromise;
+
+    console.log(
+      JSON.stringify(
+        {
+          phase: `${input.stage}-attempt`,
+          attempt,
+          portfolioRefresh: {
+            lifecycle: readSnapshotLifecycle(refreshResult.snapshot),
+            artifact: readSnapshotArtifact(refreshResult.snapshot),
+          },
+          lendingExecution: {
+            lifecycle: readSnapshotLifecycle(executionResult.snapshot),
+            artifact: readSnapshotArtifact(executionResult.snapshot),
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    if (readTransactionHash(executionResult.snapshot)) {
+      return executionResult;
+    }
+
+    finalExecution = executionResult;
+    await sleep(250);
+  }
+
+  throw new Error(
+    `${input.stage} execution did not confirm after retries. Final snapshot: ${JSON.stringify(finalExecution?.snapshot, null, 2)}`,
+  );
+}
+
+async function waitForActiveReservationCoverage(input: {
+  portfolioManagerBaseUrl: string;
+  portfolioThreadId: string;
+  requiredControlPaths: string[];
+  stage: string;
+}) {
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    await runAgentCommand({
+      baseUrl: input.portfolioManagerBaseUrl,
+      agentId: PORTFOLIO_MANAGER_AGENT_ID,
+      threadId: input.portfolioThreadId,
+      runId: `${input.portfolioThreadId}-${input.stage}-redelegation-${attempt}`,
+      command: {
+        name: 'refresh_redelegation_work',
+      },
+    });
+
+    const portfolioStateResult = await refreshPortfolioState({
+      baseUrl: input.portfolioManagerBaseUrl,
+      threadId: input.portfolioThreadId,
+      runId: `${input.portfolioThreadId}-${input.stage}-portfolio-${attempt}`,
+    });
+    const portfolioState = readPortfolioStateFromArtifact(portfolioStateResult.snapshot);
+    const reservations = readPortfolioReservations(portfolioState);
+
+    const activeByControlPath = Object.fromEntries(
+      reservations
+        .filter((reservation) => reservation.status === 'active' && reservation.controlPath)
+        .map((reservation) => [reservation.controlPath!, reservation]),
+    ) as Record<string, PortfolioReservation>;
+
+    if (input.requiredControlPaths.every((controlPath) => controlPath in activeByControlPath)) {
+      return {
+        snapshot: portfolioStateResult.snapshot,
+        portfolioState,
+        activeByControlPath,
+      };
+    }
+
+    await sleep(500);
+  }
+
+  throw new Error(
+    `Timed out waiting for active reservation coverage ${input.requiredControlPaths.join(', ')} on ${input.stage}.`,
+  );
+}
+
+function buildFollowUpPlanningInput(input: {
+  reservation: PortfolioReservation;
+  intent: 'increase' | 'decrease' | 'unwind';
+  actionSummary: string;
+  handoffId: string;
+  idempotencyKey: string;
+}) {
+  return {
+    handoff_id: input.handoffId,
+    idempotencyKey: input.idempotencyKey,
+    intent: input.intent,
+    action_summary: input.actionSummary,
+    candidate_unit_ids: input.reservation.unitAllocations.map((allocation) => allocation.unitId),
+    requested_quantities: input.reservation.unitAllocations.map((allocation) => ({
+      unit_id: allocation.unitId,
+      quantity: allocation.quantity,
+    })),
+  };
+}
+
 async function waitForLendingHydration(input: {
   baseUrl: string;
   threadId: string;
@@ -1018,6 +1329,7 @@ async function main() {
     JSON.stringify(
       {
         phase: 'planned',
+        requiredControlPath: readCandidatePlanControlPath(planResult.snapshot),
         candidatePlanArtifact: readSnapshotArtifact(planResult.snapshot),
       },
       null,
@@ -1025,71 +1337,223 @@ async function main() {
     ),
   );
 
-  let finalExecution: { snapshot: AgUiSnapshot | null } | null = null;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const executionPromise = runAgentCommand({
-      baseUrl: lendingBaseUrl,
-      agentId: EMBER_LENDING_AGENT_ID,
-      threadId: lendingThreadId,
-      runId: `${lendingThreadId}-execute-${attempt}`,
-      command: {
-        name: 'request_transaction_execution',
-      },
-    });
-
-    await sleep(100);
-    const refreshResult = await runAgentCommand({
-      baseUrl: portfolioManagerBaseUrl,
-      agentId: PORTFOLIO_MANAGER_AGENT_ID,
-      threadId: portfolioThreadId,
-      runId: `${portfolioThreadId}-refresh-${attempt}`,
-      command: {
-        name: 'refresh_redelegation_work',
-      },
-    });
-    const executionResult = await executionPromise;
-
-    console.log(
-      JSON.stringify(
-        {
-          phase: 'attempt',
-          attempt,
-          portfolioRefresh: {
-            lifecycle: readSnapshotLifecycle(refreshResult.snapshot),
-            artifact: readSnapshotArtifact(refreshResult.snapshot),
-          },
-          lendingExecution: {
-            lifecycle: readSnapshotLifecycle(executionResult.snapshot),
-            artifact: readSnapshotArtifact(executionResult.snapshot),
-          },
-        },
-        null,
-        2,
-      ),
-    );
-
-    if (readTransactionHash(executionResult.snapshot)) {
-      finalExecution = executionResult;
-      break;
-    }
-
-    finalExecution = executionResult;
-    await sleep(250);
+  const initialExecution = await runExecutionAttemptWithRedelegationRefresh({
+    lendingBaseUrl,
+    lendingThreadId,
+    portfolioManagerBaseUrl,
+    portfolioThreadId,
+    stage: 'initial',
+  });
+  const transactionHash = readTransactionHash(initialExecution.snapshot);
+  if (!transactionHash) {
+    throw new Error('Initial execution completed without a transaction hash.');
   }
 
-  const transactionHash = readTransactionHash(finalExecution?.snapshot ?? null);
-  if (!transactionHash) {
+  console.log(
+    JSON.stringify(
+      {
+        phase: 'initial-completed',
+        transactionHash,
+        artifact: readSnapshotArtifact(initialExecution.snapshot),
+      },
+      null,
+      2,
+    ),
+  );
+
+  const postSupplyCoverage = await waitForActiveReservationCoverage({
+    portfolioManagerBaseUrl,
+    portfolioThreadId,
+    requiredControlPaths: ['lending.withdraw', 'lending.borrow'],
+    stage: 'post-supply',
+  }).catch((error) => {
+    const executionPortfolioState = readLifecyclePortfolioState(initialExecution.snapshot);
+    const withdrawReservation = readActiveReservationByControlPath(
+      executionPortfolioState,
+      'lending.withdraw',
+    );
+    if (!withdrawReservation) {
+      throw error;
+    }
+
+    const activeByControlPath: Record<string, PortfolioReservation> = {
+      'lending.withdraw': withdrawReservation,
+    };
+    const borrowReservation = readActiveReservationByControlPath(
+      executionPortfolioState,
+      'lending.borrow',
+    );
+    if (!borrowReservation) {
+      throw error;
+    }
+    activeByControlPath['lending.borrow'] = borrowReservation;
+
+    return {
+      snapshot: initialExecution.snapshot,
+      portfolioState: executionPortfolioState,
+      activeByControlPath,
+    };
+  });
+
+  console.log(
+    JSON.stringify(
+      {
+        phase: 'post-supply-coverage',
+        activeControlPaths: Object.keys(postSupplyCoverage.activeByControlPath),
+      },
+      null,
+      2,
+    ),
+  );
+
+  const withdrawReservation = postSupplyCoverage.activeByControlPath['lending.withdraw'];
+  if (!withdrawReservation) {
     throw new Error(
-      `Execution did not confirm after retries. Final snapshot: ${JSON.stringify(finalExecution?.snapshot, null, 2)}`,
+      `Expected active lending.withdraw reservation after supply: ${JSON.stringify(postSupplyCoverage.portfolioState, null, 2)}`,
+    );
+  }
+
+  const unwindPlanResult = await runAgentCommand({
+    baseUrl: lendingBaseUrl,
+    agentId: EMBER_LENDING_AGENT_ID,
+    threadId: lendingThreadId,
+    runId: `${lendingThreadId}-unwind-plan`,
+    command: {
+      name: 'create_transaction_plan',
+      input: buildFollowUpPlanningInput({
+        reservation: withdrawReservation,
+        intent: 'unwind',
+        handoffId: `handoff-${lendingThreadId}-unwind`,
+        idempotencyKey: `idem-create-transaction-plan-${lendingThreadId}-unwind`,
+        actionSummary:
+          'withdraw the supplied WETH collateral after market conditions turned defensive and the lending lane should de-risk',
+      }),
+    },
+  });
+
+  const unwindControlPath = readCandidatePlanControlPath(unwindPlanResult.snapshot);
+  if (unwindControlPath !== 'lending.withdraw') {
+    throw new Error(
+      `Expected follow-up unwind plan to require lending.withdraw, got ${unwindControlPath ?? 'null'}: ${JSON.stringify(readSnapshotArtifact(unwindPlanResult.snapshot), null, 2)}`,
     );
   }
 
   console.log(
     JSON.stringify(
       {
+        phase: 'unwind-planned',
+        requiredControlPath: unwindControlPath,
+        candidatePlanArtifact: readSnapshotArtifact(unwindPlanResult.snapshot),
+      },
+      null,
+      2,
+    ),
+  );
+
+  const unwindExecution = await runExecutionAttemptWithRedelegationRefresh({
+    lendingBaseUrl,
+    lendingThreadId,
+    portfolioManagerBaseUrl,
+    portfolioThreadId,
+    stage: 'unwind',
+    executionIdempotencyKey: `idem-execute-transaction-plan-${lendingThreadId}-unwind`,
+  });
+  const unwindTransactionHash = readTransactionHash(unwindExecution.snapshot);
+  if (!unwindTransactionHash) {
+    throw new Error('Unwind execution completed without a transaction hash.');
+  }
+
+  console.log(
+    JSON.stringify(
+      {
         phase: 'completed',
-        transactionHash,
-        artifact: readSnapshotArtifact(finalExecution?.snapshot ?? null),
+        initialTransactionHash: transactionHash,
+        unwindTransactionHash,
+        artifact: readSnapshotArtifact(unwindExecution.snapshot),
+      },
+      null,
+      2,
+    ),
+  );
+
+  const postUnwindCoverage = await waitForActiveReservationCoverage({
+    portfolioManagerBaseUrl,
+    portfolioThreadId,
+    requiredControlPaths: ['lending.withdraw', 'lending.borrow'],
+    stage: 'post-unwind',
+  }).catch((error) => {
+    const executionPortfolioState = readLifecyclePortfolioState(unwindExecution.snapshot);
+    const withdrawReservation = readActiveReservationByControlPath(
+      executionPortfolioState,
+      'lending.withdraw',
+    );
+    const borrowReservation = readActiveReservationByControlPath(
+      executionPortfolioState,
+      'lending.borrow',
+    );
+    if (!withdrawReservation || !borrowReservation) {
+      throw error;
+    }
+
+    return {
+      snapshot: unwindExecution.snapshot,
+      portfolioState: executionPortfolioState,
+      activeByControlPath: {
+        'lending.withdraw': withdrawReservation,
+        'lending.borrow': borrowReservation,
+      },
+    };
+  });
+
+  console.log(
+    JSON.stringify(
+      {
+        phase: 'post-unwind-coverage',
+        activeControlPaths: Object.keys(postUnwindCoverage.activeByControlPath),
+      },
+      null,
+      2,
+    ),
+  );
+
+  const thirdWithdrawReservation = postUnwindCoverage.activeByControlPath['lending.withdraw'];
+  if (!thirdWithdrawReservation) {
+    throw new Error(
+      `Expected active lending.withdraw reservation after unwind: ${JSON.stringify(postUnwindCoverage.portfolioState, null, 2)}`,
+    );
+  }
+
+  const thirdPlanResult = await runAgentCommand({
+    baseUrl: lendingBaseUrl,
+    agentId: EMBER_LENDING_AGENT_ID,
+    threadId: lendingThreadId,
+    runId: `${lendingThreadId}-third-plan`,
+    command: {
+      name: 'create_transaction_plan',
+      input: buildFollowUpPlanningInput({
+        reservation: thirdWithdrawReservation,
+        intent: 'unwind',
+        handoffId: `handoff-${lendingThreadId}-third`,
+        idempotencyKey: `idem-create-transaction-plan-${lendingThreadId}-third`,
+        actionSummary:
+          'continue de-risking the refreshed lending successor position after the prior unwind completed',
+      }),
+    },
+  });
+
+  const thirdControlPath = readCandidatePlanControlPath(thirdPlanResult.snapshot);
+  if (thirdControlPath !== 'lending.withdraw') {
+    throw new Error(
+      `Expected third plan to require lending.withdraw, got ${thirdControlPath ?? 'null'}: ${JSON.stringify(readSnapshotArtifact(thirdPlanResult.snapshot), null, 2)}`,
+    );
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        phase: 'third-planned',
+        requiredControlPath: thirdControlPath,
+        candidatePlanArtifact: readSnapshotArtifact(thirdPlanResult.snapshot),
       },
       null,
       2,

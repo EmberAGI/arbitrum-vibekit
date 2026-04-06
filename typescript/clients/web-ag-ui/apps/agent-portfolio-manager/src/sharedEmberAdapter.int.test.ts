@@ -460,7 +460,7 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
       },
       outputs: {
         status: {
-          executionStatus: 'working',
+          executionStatus: 'completed',
           statusMessage: 'Portfolio manager onboarding complete. Agent is active.',
         },
         artifacts: [

@@ -49,6 +49,14 @@ the managed pair.
   - Extracts the root-delegation signing request from the portfolio-manager
     interrupt payload and waits for lending hydration via lending snapshots,
     instead of reading Shared Ember JSON-RPC directly.
+  - Proves the managed lending lifecycle through the agents themselves:
+    onboarding, mandate activation, root delegation signing, child
+    redelegation, an initial `lending.supply`, accounting/delegation refresh
+    onto successor units, active `lending.withdraw` plus `lending.borrow`
+    coverage after supply, then a follow-up unwind planned against
+    `lending.withdraw` and executed through that refreshed delegation, then a
+    third agent-driven plan proves fresh successor coverage exists again after
+    the second execution.
   - Does not require pre-running `3420`, `3430`, or `4010`, but it still
     requires Arbitrum funding for the rooted wallet and OWS-controlled
     execution wallets.

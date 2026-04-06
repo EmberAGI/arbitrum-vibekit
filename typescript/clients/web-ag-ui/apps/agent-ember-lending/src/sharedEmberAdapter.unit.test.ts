@@ -197,6 +197,57 @@ function createLeanPortfolioStateResponse() {
   };
 }
 
+function createPortfolioStateResponseWithoutRootedWalletContext() {
+  return {
+    jsonrpc: '2.0',
+    id: 'shared-ember-thread-1-read-portfolio-state',
+    result: {
+      protocol_version: 'v1',
+      revision: 7,
+      portfolio_state: {
+        agent_id: 'ember-lending',
+        root_user_wallet: '0x00000000000000000000000000000000000000a1',
+        agent_wallet: '0x00000000000000000000000000000000000000b1',
+        mandate: {
+          mandate_ref: 'mandate-ember-lending-001',
+          summary:
+            'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+          context: {
+            network: 'arbitrum',
+            protocol: 'aave',
+            allowedCollateralAssets: ['USDC'],
+            allowedBorrowAssets: ['USDC'],
+            maxAllocationPct: 35,
+            maxLtvBps: 7000,
+            minHealthFactor: '1.25',
+          },
+        },
+        owned_units: [
+          {
+            unit_id: 'unit-ember-lending-001',
+            root_asset: 'USDC',
+            quantity: '10',
+            reservation_id: 'reservation-ember-lending-001',
+          },
+        ],
+        reservations: [
+          {
+            reservation_id: 'reservation-ember-lending-001',
+            purpose: 'deploy',
+            control_path: 'lending.supply',
+            unit_allocations: [
+              {
+                unit_id: 'unit-ember-lending-001',
+                quantity: '10',
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+}
+
 function createExecutionContextResponse() {
   return {
     jsonrpc: '2.0',
@@ -1171,7 +1222,7 @@ describe('createEmberLendingDomain', () => {
         status: {
           executionStatus: 'failed',
           statusMessage:
-            'Lending runtime context is incomplete. Wait for execution-context hydration before planning.',
+            'Portfolio Manager onboarding must complete before lending can plan transactions for this thread.',
         },
       },
     });
@@ -1286,27 +1337,456 @@ describe('createEmberLendingDomain', () => {
       },
     });
 
-    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
-      jsonrpc: '2.0',
-      id: 'shared-ember-thread-1-create-transaction-plan',
-      method: 'subagent.createTransactionPlan.v1',
-      params: {
-        idempotency_key: 'idem-create-transaction-plan-thread-1',
-        expected_revision: 11,
-        handoff: expect.objectContaining({
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-create-transaction-plan',
+        method: 'subagent.createTransactionPlan.v1',
+        params: expect.objectContaining({
+          idempotency_key: 'idem-create-transaction-plan-thread-1',
+          expected_revision: 11,
+          handoff: expect.objectContaining({
+            agent_id: 'ember-lending',
+            root_user_wallet: '0x00000000000000000000000000000000000000a1',
+            mandate_ref: 'mandate-ember-lending-001',
+            candidate_unit_ids: ['unit-ember-lending-001'],
+            requested_quantities: [
+              {
+                unit_id: 'unit-ember-lending-001',
+                quantity: '10',
+              },
+            ],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('creates a candidate plan when PM has admitted reserved units but rooted wallet context has not projected yet', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+
+        if (request.method === 'subagent.readPortfolioState.v1') {
+          return createPortfolioStateResponseWithoutRootedWalletContext();
+        }
+
+        if (request.method === 'subagent.readExecutionContext.v1') {
+          return createExecutionContextResponse();
+        }
+
+        if (request.method === 'subagent.createTransactionPlan.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-materialize-candidate-plan',
+            result: {
+              protocol_version: 'v1',
+              revision: 12,
+              committed_event_ids: ['evt-candidate-plan-1'],
+              candidate_plan: {
+                planning_kind: 'subagent_handoff',
+                transaction_plan_id: 'txplan-ember-lending-001',
+                handoff: {
+                  handoff_id: 'handoff-thread-1',
+                  payload_builder_output: {
+                    transaction_payload_ref: 'txpayload-ember-lending-001',
+                    required_control_path: 'lending.supply',
+                    network: 'arbitrum',
+                  },
+                },
+                compact_plan_summary: {
+                  control_path: 'lending.supply',
+                  asset: 'USDC',
+                  amount: '10',
+                  summary: 'supply reserved USDC on Aave',
+                },
+              },
+            },
+          };
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 12,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 12,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const anchoredPayloadResolver = createAnchoredPayloadResolverStub();
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver,
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        rootedWalletContextId: null,
+      },
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: createThinCandidatePlanInput(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        rootedWalletContextId: null,
+        lastSharedEmberRevision: 12,
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Candidate lending plan created through the Shared Ember planner.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-create-transaction-plan',
+        method: 'subagent.createTransactionPlan.v1',
+        params: expect.objectContaining({
+          idempotency_key: 'idem-create-transaction-plan-thread-1',
+          expected_revision: 7,
+          handoff: expect.objectContaining({
+            agent_id: 'ember-lending',
+            root_user_wallet: '0x00000000000000000000000000000000000000a1',
+            mandate_ref: 'mandate-ember-lending-001',
+            candidate_unit_ids: ['unit-ember-lending-001'],
+            requested_quantities: [
+              {
+                unit_id: 'unit-ember-lending-001',
+                quantity: '10',
+              },
+            ],
+          }),
+        }),
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.readOnboardingState.v1',
+      }),
+    );
+  });
+
+  it('fails closed when Shared Ember rejects candidate plan creation', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+
+        if (request.method === 'subagent.createTransactionPlan.v1') {
+          throw new Error(
+            'Shared Ember Domain Service JSON-RPC error: protocol_internal_error: missing owned unit unit-ember-lending-001 for runtime handoff plan',
+          );
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 12,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 12,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver: createAnchoredPayloadResolverStub(),
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: createThinCandidatePlanInput(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastCandidatePlan: null,
+        lastCandidatePlanSummary: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Shared Ember Domain Service JSON-RPC error: protocol_internal_error: missing owned unit unit-ember-lending-001 for runtime handoff plan',
+        },
+      },
+    });
+  });
+
+  it('explains when PM onboarding is still ingested because the mandate asset was not admitted', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: string };
+
+        if (request.method === 'subagent.readPortfolioState.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: 8,
+              portfolio_state: {
+                agent_id: 'ember-lending',
+                owned_units: [],
+                reservations: [],
+              },
+            },
+          };
+        }
+
+        if (request.method === 'subagent.readExecutionContext.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: 11,
+              execution_context: {
+                generated_at: '2026-04-01T06:00:00.000Z',
+                network: 'arbitrum',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary:
+                  'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+                mandate_context: {
+                  network: 'arbitrum',
+                  protocol: 'aave',
+                  allowedCollateralAssets: ['WETH'],
+                  allowedBorrowAssets: ['WETH'],
+                  maxAllocationPct: 35,
+                  maxLtvBps: 7000,
+                  minHealthFactor: '1.25',
+                },
+                subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
+                root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                owned_units: [],
+                wallet_contents: [
+                  {
+                    asset: 'ETH',
+                    amount: '1.5',
+                    benchmark_value_usd: '3000',
+                  },
+                  {
+                    asset: 'USDC',
+                    amount: '10',
+                    benchmark_value_usd: '10',
+                  },
+                ],
+              },
+            },
+          };
+        }
+
+        if (request.method === 'orchestrator.readOnboardingState.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-onboarding-state',
+            result: {
+              protocol_version: 'v1',
+              revision: 11,
+              onboarding_state: {
+                wallet_address: '0x00000000000000000000000000000000000000a1',
+                network: 'arbitrum',
+                phase: 'ingested',
+                proofs: {
+                  rooted_wallet_context_registered: true,
+                  root_delegation_registered: true,
+                  root_authority_active: true,
+                  wallet_baseline_observed: true,
+                  accounting_units_seeded: true,
+                  mandate_inputs_configured: true,
+                  reserve_policy_configured: false,
+                  capital_reserved_for_agent: false,
+                  policy_snapshot_recorded: false,
+                  initial_subagent_delegation_issued: false,
+                  agent_active: false,
+                },
+                owned_units: [
+                  {
+                    unit_id: 'unit-eth-thread-001',
+                    root_asset: 'ETH',
+                  },
+                  {
+                    unit_id: 'unit-usdc-thread-001',
+                    root_asset: 'USDC',
+                  },
+                ],
+                reservations: [],
+              },
+            },
+          };
+        }
+
+        throw new Error(`unexpected method ${request.method}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 0,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 0,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        mandateSummary: 'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+        mandateContext: {
+          network: 'arbitrum',
+          protocol: 'aave',
+          allowedCollateralAssets: ['WETH'],
+          allowedBorrowAssets: ['WETH'],
+          maxAllocationPct: 35,
+          maxLtvBps: 7000,
+          minHealthFactor: '1.25',
+        },
+        rootedWalletContextId: null,
+        lastPortfolioState: {
           agent_id: 'ember-lending',
-          root_user_wallet: '0x00000000000000000000000000000000000000a1',
-          mandate_ref: 'mandate-ember-lending-001',
-          candidate_unit_ids: ['unit-ember-lending-001'],
+          owned_units: [],
+          reservations: [],
+        },
+      },
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: createCandidatePlanInput(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        rootedWalletContextId: null,
+        lastCandidatePlanSummary: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Portfolio Manager onboarding is not complete for this thread because Shared Ember could not admit any WETH for lending. Wallet accounting currently shows ETH, USDC.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.readOnboardingState.v1',
+        params: {
+          agent_id: 'ember-lending',
+          wallet_address: '0x00000000000000000000000000000000000000a1',
+          network: 'arbitrum',
+        },
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+      }),
+    );
+  });
+
+  it('fails closed when planning references units that Portfolio Manager has not admitted', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+
+        switch (request.method) {
+          case 'subagent.readPortfolioState.v1':
+            return createPortfolioStateResponse();
+          case 'subagent.readExecutionContext.v1':
+            return createExecutionContextResponse();
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          ...createCandidatePlanInput(),
+          candidate_unit_ids: ['unit-not-admitted'],
           requested_quantities: [
             {
-              unit_id: 'unit-ember-lending-001',
+              unit_id: 'unit-not-admitted',
               quantity: '10',
             },
           ],
-        }),
+        },
       },
     });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending can only plan with Portfolio Manager-admitted units for this thread.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+      }),
+    );
   });
 
   it('fails candidate-plan creation when Shared Ember omits planner metadata required for service-owned anchoring', async () => {
@@ -4091,7 +4571,7 @@ describe('createEmberLendingDomain', () => {
         status: {
           executionStatus: 'failed',
           statusMessage:
-            'Lending runtime context is incomplete. Wait for execution-context hydration before planning.',
+            'Portfolio Manager onboarding must complete before lending can plan transactions for this thread.',
         },
       },
     });

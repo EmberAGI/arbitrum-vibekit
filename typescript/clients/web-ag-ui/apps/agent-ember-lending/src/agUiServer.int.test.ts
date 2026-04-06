@@ -1314,6 +1314,45 @@ describe('agent-ember-lending AG-UI integration', () => {
     );
   });
 
+  it('serves lending candidate-plan materialization over real AG-UI HTTP endpoints without a separate lending connect step', async () => {
+    const { snapshot: planSnapshot } = await runAgUiCommand({
+      baseUrl,
+      threadId: 'thread-plan-no-connect-1',
+      runId: 'run-plan-no-connect',
+      command: {
+        name: 'create_transaction_plan',
+        input: createCandidatePlanInput(),
+      },
+    });
+
+    expect(planSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            mandateRef: 'mandate-ember-lending-001',
+            walletAddress: '0x00000000000000000000000000000000000000b1',
+            rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+            rootedWalletContextId: 'rwc-ember-lending-thread-001',
+            lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+          },
+          artifacts: {
+            current: {
+              data: {
+                type: 'shared-ember-candidate-plan',
+                revision: 8,
+                candidatePlan: {
+                  transaction_plan_id: 'txplan-ember-lending-001',
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
   it('serves lending execution over real AG-UI HTTP endpoints', async () => {
     await runAgUiConnect({
       baseUrl,

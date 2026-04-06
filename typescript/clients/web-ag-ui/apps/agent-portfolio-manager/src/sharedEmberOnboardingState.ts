@@ -13,6 +13,7 @@ export type OnboardingProofs = {
   reserve_policy_configured: boolean;
   capital_reserved_for_agent: boolean;
   policy_snapshot_recorded: boolean;
+  initial_subagent_delegation_issued?: boolean;
   agent_active: boolean;
 };
 
