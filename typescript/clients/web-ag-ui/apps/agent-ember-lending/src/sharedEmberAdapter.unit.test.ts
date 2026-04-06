@@ -47,6 +47,11 @@ const TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX =
   '0x02e982a4b1018405f5e100843b9aca008252089400000000000000000000000000000000000000c18080c0';
 const TEST_TRANSACTION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
+const DEFAULT_THIN_PLAN_HANDOFF_ID = 'handoff-thread-1-98aa3116f63d';
+const DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY = 'idem-create-transaction-plan-thread-1-7417b3f58629';
+const DEFAULT_RICH_PLAN_HANDOFF_ID = 'handoff-thread-1-05c10d6a10a6';
+const DEFAULT_EXECUTION_IDEMPOTENCY_KEY =
+  'idem-execute-transaction-plan-thread-1-07b74ae67cd9';
 
 function createAnchoredPayloadRecord() {
   return {
@@ -277,7 +282,36 @@ function createExecutionContextResponse() {
             unit_id: 'unit-unreserved-001',
             root_asset: 'USDC',
             amount: '90',
+            status: 'deployed',
+            control_path: 'lending.supply',
+            position_kind: 'loan',
+            protocol_family: 'aave',
+            protocol_position_ref: 'aave-supplied-usdc-001',
             benchmark_value_usd: '90.00',
+          },
+        ],
+        reservations: [
+          {
+            reservation_id: 'res-ember-lending-withdraw-001',
+            control_path: 'lending.withdraw',
+            purpose: 'refresh withdraw coverage',
+            unit_allocations: [
+              {
+                unit_id: 'unit-unreserved-001',
+                quantity: '90',
+              },
+            ],
+          },
+          {
+            reservation_id: 'res-ember-lending-borrow-001',
+            control_path: 'lending.borrow',
+            purpose: 'refresh borrow coverage',
+            unit_allocations: [
+              {
+                unit_id: 'unit-unreserved-001',
+                quantity: '90',
+              },
+            ],
           },
         ],
         wallet_contents: [
@@ -833,7 +867,15 @@ describe('createEmberLendingDomain', () => {
         '  <subagent_wallet_address>0x00000000000000000000000000000000000000b1</subagent_wallet_address>',
         '  <root_user_wallet_address>0x00000000000000000000000000000000000000a1</root_user_wallet_address>',
         '  <network>arbitrum</network>',
+        '      <status>deployed</status>',
+        '      <control_path>lending.supply</control_path>',
+        '      <position_kind>loan</position_kind>',
+        '      <protocol_family>aave</protocol_family>',
+        '      <protocol_position_ref>aave-supplied-usdc-001</protocol_position_ref>',
         '      <benchmark_value_usd>90.00</benchmark_value_usd>',
+        '  <active_reservations>',
+        '      <control_path>lending.withdraw</control_path>',
+        '      <control_path>lending.borrow</control_path>',
         '      <benchmark_value_usd>100.00</benchmark_value_usd>',
       ]),
     );
@@ -956,12 +998,19 @@ describe('createEmberLendingDomain', () => {
         '  <network>arbitrum</network>',
         '  <subagent_wallet_address>0x00000000000000000000000000000000000000b1</subagent_wallet_address>',
         '  <root_user_wallet_address>0x00000000000000000000000000000000000000a1</root_user_wallet_address>',
+        '      <status>deployed</status>',
+        '      <control_path>lending.supply</control_path>',
+        '      <position_kind>loan</position_kind>',
+        '      <protocol_family>aave</protocol_family>',
+        '      <protocol_position_ref>aave-supplied-usdc-001</protocol_position_ref>',
+        '  <active_reservations>',
+        '      <control_path>lending.withdraw</control_path>',
+        '      <control_path>lending.borrow</control_path>',
         '      <benchmark_value_usd>100.00</benchmark_value_usd>',
       ]),
     );
     expect(context?.join('\n')).not.toContain('shared_ember_accounting_context');
     expect(context?.join('\n')).not.toContain('<proofs>');
-    expect(context?.join('\n')).not.toContain('<reservations>');
   });
 
   it('does not promote the thread to active when Shared Ember returns no managed-lane execution context', async () => {
@@ -1343,7 +1392,7 @@ describe('createEmberLendingDomain', () => {
         id: 'shared-ember-thread-1-create-transaction-plan',
         method: 'subagent.createTransactionPlan.v1',
         params: expect.objectContaining({
-          idempotency_key: 'idem-create-transaction-plan-thread-1',
+          idempotency_key: DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY,
           expected_revision: 11,
           handoff: expect.objectContaining({
             agent_id: 'ember-lending',
@@ -1460,7 +1509,7 @@ describe('createEmberLendingDomain', () => {
         id: 'shared-ember-thread-1-create-transaction-plan',
         method: 'subagent.createTransactionPlan.v1',
         params: expect.objectContaining({
-          idempotency_key: 'idem-create-transaction-plan-thread-1',
+          idempotency_key: DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY,
           expected_revision: 7,
           handoff: expect.objectContaining({
             agent_id: 'ember-lending',
@@ -1539,6 +1588,259 @@ describe('createEmberLendingDomain', () => {
         },
       },
     });
+  });
+
+  it('uses distinct default plan identities for different plan requests on the same thread', async () => {
+    const createPlanRequests: Array<{ params?: Record<string, unknown> }> = [];
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: string; params?: Record<string, unknown> };
+
+        if (request.method === 'subagent.createTransactionPlan.v1') {
+          createPlanRequests.push(request);
+          const handoff = request.params?.['handoff'] as Record<string, unknown>;
+          const handoffId = String(handoff['handoff_id']);
+          const payloadRef = `txpayload-${handoffId}`;
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-materialize-candidate-plan',
+            result: {
+              protocol_version: 'v1',
+              revision: 12 + createPlanRequests.length,
+              committed_event_ids: [`evt-candidate-plan-${createPlanRequests.length}`],
+              candidate_plan: {
+                planning_kind: 'subagent_handoff',
+                transaction_plan_id: `txplan-${handoffId}`,
+                handoff: {
+                  handoff_id: handoffId,
+                  payload_builder_output: {
+                    transaction_payload_ref: payloadRef,
+                    required_control_path: 'lending.withdraw',
+                    network: 'arbitrum',
+                  },
+                },
+                compact_plan_summary: {
+                  control_path: 'lending.withdraw',
+                  asset: 'USDC',
+                  amount: String((handoff['requested_quantities'] as Array<{ quantity: string }>)[0]?.quantity),
+                  summary: String(handoff['action_summary']),
+                },
+              },
+            },
+          };
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 14,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 14,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const anchoredPayloadResolver = {
+      anchorCandidatePlanPayload: vi.fn(async (input: {
+        transactionPlanId: string;
+        payloadBuilderOutput: { required_control_path: string; network: string };
+      }) => ({
+        anchoredPayloadRef: `anchored-${input.transactionPlanId}`,
+        transactionRequests: [
+          {
+            type: 'EVM_TX' as const,
+            to: '0x00000000000000000000000000000000000000d1',
+            value: '0',
+            data: '0x095ea7b3',
+            chainId: '42161',
+          },
+        ],
+        controlPath: input.payloadBuilderOutput.required_control_path,
+        network: input.payloadBuilderOutput.network,
+        transactionPlanId: input.transactionPlanId,
+      })),
+      resolvePreparedUnsignedTransaction: vi.fn(async () => TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver,
+    });
+
+    const firstResult = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: createThinCandidatePlanInput(),
+      },
+    });
+
+    const secondResult = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: firstResult?.state ?? createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          intent: 'decrease',
+          action_summary: 'withdraw reserved 5 USDC on Aave',
+          requested_quantities: [
+            {
+              unit_id: 'unit-ember-lending-001',
+              quantity: '5',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(firstResult).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+        },
+      },
+    });
+    expect(secondResult).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+        },
+      },
+    });
+
+    expect(createPlanRequests).toHaveLength(2);
+    expect(createPlanRequests[0]?.params?.['idempotency_key']).not.toBe(
+      createPlanRequests[1]?.params?.['idempotency_key'],
+    );
+    expect(
+      (createPlanRequests[0]?.params?.['handoff'] as Record<string, unknown>)['handoff_id'],
+    ).not.toBe(
+      (createPlanRequests[1]?.params?.['handoff'] as Record<string, unknown>)['handoff_id'],
+    );
+    expect(firstResult?.state.lastCandidatePlan).not.toEqual(secondResult?.state.lastCandidatePlan);
+  });
+
+  it('defaults follow-up planning to decrease when withdraw coverage is active and no explicit intent is provided', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: string; params?: Record<string, unknown> };
+
+        if (request.method === 'subagent.createTransactionPlan.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-materialize-candidate-plan',
+            result: {
+              protocol_version: 'v1',
+              revision: 13,
+              committed_event_ids: ['evt-candidate-plan-2'],
+              candidate_plan: {
+                planning_kind: 'subagent_handoff',
+                transaction_plan_id: 'txplan-ember-lending-withdraw-001',
+                handoff: {
+                  handoff_id: String((request.params?.['handoff'] as Record<string, unknown>)['handoff_id']),
+                  payload_builder_output: {
+                    transaction_payload_ref: 'txpayload-ember-lending-withdraw-001',
+                    required_control_path: 'lending.withdraw',
+                    network: 'arbitrum',
+                  },
+                },
+                compact_plan_summary: {
+                  control_path: 'lending.withdraw',
+                  asset: 'USDC',
+                  amount: '10',
+                  summary: 'withdraw reserved 10 USDC on Aave',
+                },
+              },
+            },
+          };
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 13,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 13,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver: createAnchoredPayloadResolverStub(),
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          owned_units: [
+            {
+              unit_id: 'unit-ember-lending-001',
+              root_asset: 'USDC',
+              quantity: '10',
+              status: 'deployed',
+              control_path: 'lending.supply',
+              position_kind: 'loan',
+            },
+          ],
+          reservations: [
+            {
+              reservation_id: 'reservation-ember-lending-withdraw-001',
+              purpose: 'refresh withdraw coverage',
+              control_path: 'lending.withdraw',
+              unit_allocations: [
+                {
+                  unit_id: 'unit-ember-lending-001',
+                  quantity: '10',
+                },
+              ],
+            },
+            {
+              reservation_id: 'reservation-ember-lending-borrow-001',
+              purpose: 'refresh borrow coverage',
+              control_path: 'lending.borrow',
+              unit_allocations: [
+                {
+                  unit_id: 'unit-ember-lending-001',
+                  quantity: '10',
+                },
+              ],
+            },
+          ],
+        },
+      },
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {},
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+        params: expect.objectContaining({
+          handoff: expect.objectContaining({
+            intent: 'decrease',
+          }),
+        }),
+      }),
+    );
   });
 
   it('explains when PM onboarding is still ingested because the mandate asset was not admitted', async () => {
@@ -1864,7 +2166,7 @@ describe('createEmberLendingDomain', () => {
         idempotency_key: 'idem-candidate-plan-001',
         expected_revision: 7,
         handoff: {
-          handoff_id: 'handoff-thread-1',
+          handoff_id: DEFAULT_RICH_PLAN_HANDOFF_ID,
           agent_id: 'ember-lending',
           root_user_wallet: '0x00000000000000000000000000000000000000a1',
           mandate_ref: 'mandate-ember-lending-001',
@@ -2047,10 +2349,10 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-create-transaction-plan',
       method: 'subagent.createTransactionPlan.v1',
       params: {
-        idempotency_key: 'idem-create-transaction-plan-thread-1',
+        idempotency_key: DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY,
         expected_revision: 7,
         handoff: {
-          handoff_id: 'handoff-thread-1',
+          handoff_id: DEFAULT_THIN_PLAN_HANDOFF_ID,
           agent_id: 'ember-lending',
           root_user_wallet: '0x00000000000000000000000000000000000000a1',
           mandate_ref: 'mandate-ember-lending-001',
@@ -2318,7 +2620,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-request-transaction-execution',
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        idempotency_key: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
         expected_revision: 7,
         transaction_plan_id: 'txplan-ember-lending-001',
       },
@@ -2507,7 +2809,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-request-transaction-execution',
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        idempotency_key: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
         expected_revision: 7,
         transaction_plan_id: 'txplan-ember-lending-001',
       },
@@ -2517,7 +2819,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-submit-signed-transaction',
       method: 'subagent.submitSignedTransaction.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1:submit-transaction:req-ember-lending-execution-001',
+        idempotency_key: `${DEFAULT_EXECUTION_IDEMPOTENCY_KEY}:submit-transaction:req-ember-lending-execution-001`,
         expected_revision: 9,
         transaction_plan_id: 'txplan-ember-lending-001',
         signed_transaction: expect.objectContaining({
@@ -3095,7 +3397,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-request-transaction-execution',
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        idempotency_key: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
         expected_revision: 7,
         transaction_plan_id: 'txplan-ember-lending-001',
       },
@@ -3105,7 +3407,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-request-transaction-execution',
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-      idempotency_key: 'idem-execute-transaction-plan-thread-1:await-execution-progress:8',
+      idempotency_key: `${DEFAULT_EXECUTION_IDEMPOTENCY_KEY}:await-execution-progress:8`,
         expected_revision: 8,
         transaction_plan_id: 'txplan-ember-lending-001',
       },
@@ -3124,7 +3426,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-submit-signed-transaction',
       method: 'subagent.submitSignedTransaction.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1:submit-transaction:req-ember-lending-execution-001',
+        idempotency_key: `${DEFAULT_EXECUTION_IDEMPOTENCY_KEY}:submit-transaction:req-ember-lending-execution-001`,
         expected_revision: 9,
         transaction_plan_id: 'txplan-ember-lending-001',
         signed_transaction: expect.objectContaining({
@@ -3260,7 +3562,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-request-transaction-execution',
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        idempotency_key: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
         expected_revision: 7,
         transaction_plan_id: 'txplan-ember-lending-001',
       },
@@ -3403,7 +3705,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-request-transaction-execution',
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        idempotency_key: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
         expected_revision: 7,
         transaction_plan_id: 'txplan-ember-lending-001',
       },
@@ -3424,7 +3726,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-request-transaction-execution',
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1:await-execution-progress:10',
+        idempotency_key: `${DEFAULT_EXECUTION_IDEMPOTENCY_KEY}:await-execution-progress:10`,
         expected_revision: 10,
         transaction_plan_id: 'txplan-ember-lending-001',
       },
@@ -3443,7 +3745,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-submit-signed-transaction',
       method: 'subagent.submitSignedTransaction.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1:submit-transaction:req-ember-lending-execution-001',
+        idempotency_key: `${DEFAULT_EXECUTION_IDEMPOTENCY_KEY}:submit-transaction:req-ember-lending-execution-001`,
         expected_revision: 10,
         transaction_plan_id: 'txplan-ember-lending-001',
         signed_transaction: expect.objectContaining({
@@ -3710,7 +4012,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-request-transaction-execution',
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        idempotency_key: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
         expected_revision: 7,
         transaction_plan_id: 'txplan-ember-lending-001',
       },
@@ -3728,7 +4030,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-request-transaction-execution',
       method: 'subagent.requestTransactionExecution.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1',
+        idempotency_key: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
         expected_revision: 8,
         transaction_plan_id: 'txplan-ember-lending-001',
       },
@@ -3738,7 +4040,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-submit-signed-transaction',
       method: 'subagent.submitSignedTransaction.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1:submit-transaction:req-ember-lending-execution-001',
+        idempotency_key: `${DEFAULT_EXECUTION_IDEMPOTENCY_KEY}:submit-transaction:req-ember-lending-execution-001`,
         expected_revision: 9,
         transaction_plan_id: 'txplan-ember-lending-001',
         signed_transaction: expect.objectContaining({
@@ -3765,7 +4067,7 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-submit-signed-transaction',
       method: 'subagent.submitSignedTransaction.v1',
       params: {
-        idempotency_key: 'idem-execute-transaction-plan-thread-1:submit-transaction:req-ember-lending-execution-001',
+        idempotency_key: `${DEFAULT_EXECUTION_IDEMPOTENCY_KEY}:submit-transaction:req-ember-lending-execution-001`,
         expected_revision: 10,
         transaction_plan_id: 'txplan-ember-lending-001',
         signed_transaction: expect.objectContaining({
@@ -3863,7 +4165,7 @@ describe('createEmberLendingDomain', () => {
         pendingExecutionSubmission: {
           transactionPlanId: 'txplan-ember-lending-001',
           requestId: 'req-ember-lending-execution-001',
-          idempotencyKey: 'idem-execute-transaction-plan-thread-1',
+          idempotencyKey: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
         },
       },
       outputs: {

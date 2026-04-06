@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import type { AgentRuntimeDomainConfig } from 'agent-runtime';
 import {
   AgentRuntimeSigningError,
@@ -90,7 +92,21 @@ type SharedEmberExecutionContext = {
     unit_id?: string;
     root_asset?: string;
     amount?: string;
+    status?: string;
+    control_path?: string;
+    position_kind?: string;
+    protocol_family?: string | null;
+    protocol_position_ref?: string | null;
     benchmark_value_usd?: string;
+  }>;
+  reservations?: Array<{
+    reservation_id?: string;
+    control_path?: string;
+    purpose?: string;
+    unit_allocations?: Array<{
+      unit_id?: string;
+      quantity?: string;
+    }>;
   }>;
   wallet_contents?: Array<{
     asset?: string;
@@ -794,6 +810,33 @@ function buildSharedEmberExecutionContextXml(
         lines.push(`      <root_asset>${escapeXml(rootAsset)}</root_asset>`);
       }
 
+      const status = readString(ownedUnit.status);
+      if (status) {
+        lines.push(`      <status>${escapeXml(status)}</status>`);
+      }
+
+      const controlPath = readString(ownedUnit.control_path);
+      if (controlPath) {
+        lines.push(`      <control_path>${escapeXml(controlPath)}</control_path>`);
+      }
+
+      const positionKind = readString(ownedUnit.position_kind);
+      if (positionKind) {
+        lines.push(`      <position_kind>${escapeXml(positionKind)}</position_kind>`);
+      }
+
+      const protocolFamily = readString(ownedUnit.protocol_family);
+      if (protocolFamily) {
+        lines.push(`      <protocol_family>${escapeXml(protocolFamily)}</protocol_family>`);
+      }
+
+      const protocolPositionRef = readString(ownedUnit.protocol_position_ref);
+      if (protocolPositionRef) {
+        lines.push(
+          `      <protocol_position_ref>${escapeXml(protocolPositionRef)}</protocol_position_ref>`,
+        );
+      }
+
       const amount = readString(ownedUnit.amount);
       if (amount) {
         lines.push(`      <amount>${escapeXml(amount)}</amount>`);
@@ -807,6 +850,45 @@ function buildSharedEmberExecutionContextXml(
       lines.push('    </owned_unit>');
     }
     lines.push('  </owned_units>');
+  }
+
+  if (Array.isArray(input.executionContext.reservations) && input.executionContext.reservations.length > 0) {
+    lines.push('  <active_reservations>');
+    for (const reservation of input.executionContext.reservations) {
+      const reservationId = readString(reservation.reservation_id);
+      lines.push(
+        `    <reservation${reservationId ? ` reservation_id="${escapeXml(reservationId)}"` : ''}>`,
+      );
+
+      const controlPath = readString(reservation.control_path);
+      if (controlPath) {
+        lines.push(`      <control_path>${escapeXml(controlPath)}</control_path>`);
+      }
+
+      const purpose = readString(reservation.purpose);
+      if (purpose) {
+        lines.push(`      <purpose>${escapeXml(purpose)}</purpose>`);
+      }
+
+      if (Array.isArray(reservation.unit_allocations) && reservation.unit_allocations.length > 0) {
+        lines.push('      <unit_allocations>');
+        for (const allocation of reservation.unit_allocations) {
+          const unitId = readString(allocation.unit_id);
+          lines.push(
+            `        <unit_allocation${unitId ? ` unit_id="${escapeXml(unitId)}"` : ''}>`,
+          );
+          const quantity = readString(allocation.quantity);
+          if (quantity) {
+            lines.push(`          <quantity>${escapeXml(quantity)}</quantity>`);
+          }
+          lines.push('        </unit_allocation>');
+        }
+        lines.push('      </unit_allocations>');
+      }
+
+      lines.push('    </reservation>');
+    }
+    lines.push('  </active_reservations>');
   }
 
   if (
@@ -1510,9 +1592,19 @@ const REQUEST_INTENTS = new Set([
   'transfer',
 ]);
 
+function normalizeRequestIntent(intent: string | null): string | null {
+  if (intent === 'unwind') {
+    return 'decrease';
+  }
+
+  return intent;
+}
+
 function readIntent(value: unknown): string | null {
   const normalized = readString(value)?.toLowerCase();
-  return normalized && REQUEST_INTENTS.has(normalized) ? normalized : null;
+  return normalized && REQUEST_INTENTS.has(normalized)
+    ? normalizeRequestIntent(normalized)
+    : null;
 }
 
 function readStringArray(value: unknown): string[] | null {
@@ -1533,6 +1625,94 @@ function readBoolean(value: unknown): boolean | null {
 
 function readPortfolioReservation(portfolioState: unknown): Record<string, unknown> | null {
   return isRecord(portfolioState) ? readFirstRecordFromArray(portfolioState['reservations']) : null;
+}
+
+function readPortfolioReservations(portfolioState: unknown): Record<string, unknown>[] {
+  if (!isRecord(portfolioState) || !Array.isArray(portfolioState['reservations'])) {
+    return [];
+  }
+
+  return portfolioState['reservations'].filter(
+    (candidate): candidate is Record<string, unknown> => isRecord(candidate),
+  );
+}
+
+function inferIntentFromActionSummary(value: unknown): string | null {
+  const normalized = readString(value)?.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    normalized.includes('withdraw') ||
+    normalized.includes('repay') ||
+    normalized.includes('decrease') ||
+    normalized.includes('reduce') ||
+    normalized.includes('unwind')
+  ) {
+    return 'decrease';
+  }
+
+  if (normalized.includes('borrow') || normalized.includes('increase')) {
+    return 'increase';
+  }
+
+  if (normalized.includes('rebalance')) {
+    return 'rebalance';
+  }
+
+  if (normalized.includes('transfer')) {
+    return 'transfer';
+  }
+
+  if (
+    normalized.includes('supply') ||
+    normalized.includes('deposit') ||
+    normalized.includes('deploy')
+  ) {
+    return 'deploy';
+  }
+
+  return null;
+}
+
+function inferIntentFromControlPath(controlPath: string | null): string | null {
+  switch (controlPath) {
+    case 'lending.withdraw':
+    case 'vault.withdraw':
+    case 'lending.repay':
+      return 'decrease';
+    case 'lending.borrow':
+      return 'increase';
+    case 'lending.supply':
+    case 'vault.deposit':
+      return 'deploy';
+    default:
+      return null;
+  }
+}
+
+function resolveManagedPlanningIntent(source: Record<string, unknown>, portfolioState: unknown): string {
+  const explicitIntent = readIntent(source['intent']);
+  if (explicitIntent) {
+    return explicitIntent;
+  }
+
+  const summarizedIntent = inferIntentFromActionSummary(source['action_summary']);
+  if (summarizedIntent) {
+    return summarizedIntent;
+  }
+
+  for (const reservation of readPortfolioReservations(portfolioState)) {
+    const reservationIntent =
+      readIntent(reservation['purpose']) ??
+      inferIntentFromControlPath(readString(reservation['control_path']));
+    if (reservationIntent) {
+      return reservationIntent;
+    }
+  }
+
+  return 'deploy';
 }
 
 function readManagedRequestedQuantities(
@@ -1840,8 +2020,6 @@ function buildFallbackObjectiveSummary(intent: string): string {
       return 'increase the current lending position within the approved lane';
     case 'decrease':
       return 'decrease the current lending position within the approved lane';
-    case 'unwind':
-      return 'unwind the current lending position within the approved lane';
     case 'transfer':
       return 'transfer reserved capital within the approved managed flow';
     default:
@@ -1883,6 +2061,29 @@ function buildManagedSubagentDecisionContext(input: {
   };
 }
 
+function stableSerializeCommandInput(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableSerializeCommandInput(entry)).join(',')}]`;
+  }
+
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort((left, right) => left.localeCompare(right))
+      .map((key) => `${JSON.stringify(key)}:${stableSerializeCommandInput(value[key])}`)
+      .join(',')}}`;
+  }
+
+  return JSON.stringify(value);
+}
+
+function buildStableCommandSuffix(value: unknown): string {
+  return crypto
+    .createHash('sha256')
+    .update(stableSerializeCommandInput(value))
+    .digest('hex')
+    .slice(0, 12);
+}
+
 function buildTransactionPlanningHandoff(input: {
   state: EmberLendingLifecycleState;
   threadId: string;
@@ -1902,10 +2103,7 @@ function buildTransactionPlanningHandoff(input: {
   if (planningReadiness.status === 'blocked') {
     return null;
   }
-  const intent =
-    readIntent(commandInput['intent']) ??
-    readIntent(readPortfolioReservation(input.state.lastPortfolioState)?.['purpose']) ??
-    'deploy';
+  const intent = resolveManagedPlanningIntent(commandInput, input.state.lastPortfolioState);
   const actionSummary =
     readString(commandInput['action_summary']) ??
     buildFallbackActionSummary({
@@ -1914,8 +2112,7 @@ function buildTransactionPlanningHandoff(input: {
       intent,
     });
 
-  const handoff: Record<string, unknown> = {
-    handoff_id: readString(commandInput['handoff_id']) ?? `handoff-${input.threadId}`,
+  const handoffPayload: Record<string, unknown> = {
     ...base,
     intent,
     action_summary: actionSummary,
@@ -1927,6 +2124,12 @@ function buildTransactionPlanningHandoff(input: {
       mandateSummary: input.state.mandateSummary,
       intent,
     }),
+  };
+  const handoff: Record<string, unknown> = {
+    handoff_id:
+      readString(commandInput['handoff_id']) ??
+      `handoff-${input.threadId}-${buildStableCommandSuffix(handoffPayload)}`,
+    ...handoffPayload,
   };
 
   return handoff;
@@ -1946,10 +2149,7 @@ function buildEscalationHandoff(input: {
   const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
   const source =
     'handoff' in commandInput && isRecord(commandInput['handoff']) ? commandInput['handoff'] : commandInput;
-  const intent =
-    readIntent(source['intent']) ??
-    readIntent(readPortfolioReservation(input.state.lastPortfolioState)?.['purpose']) ??
-    'deploy';
+  const intent = resolveManagedPlanningIntent(source, input.state.lastPortfolioState);
   const actionSummary =
     readString(source['action_summary']) ??
     buildFallbackActionSummary({
@@ -2621,7 +2821,7 @@ export function createEmberLendingDomain(
 
           const idempotencyKey =
             readStringKey(operation.input, 'idempotencyKey') ??
-            `idem-create-transaction-plan-${threadId}`;
+            `idem-create-transaction-plan-${threadId}-${buildStableCommandSuffix(handoff)}`;
           let response: {
             result?: {
               revision?: number;
@@ -2787,7 +2987,9 @@ export function createEmberLendingDomain(
 
           const idempotencyKey =
             readStringKey(operation.input, 'idempotencyKey') ??
-            `idem-execute-transaction-plan-${threadId}`;
+            `idem-execute-transaction-plan-${threadId}-${buildStableCommandSuffix({
+              transactionPlanId,
+            })}`;
           let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>>;
           try {
             preparedExecutionResult =
