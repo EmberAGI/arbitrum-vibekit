@@ -97,6 +97,56 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).toContain('Send message');
   });
 
+  it('keeps lending chat visible while the thread is input-required', () => {
+    const html = renderManagedAgentDetail({
+      isHired: true,
+      initialTab: 'chat',
+      taskStatus: 'input-required',
+      activeInterrupt: {
+        type: 'operator-config-request',
+        message:
+          'Please confirm safe withdrawal scope for collateral. I need the exact asset and/or maximum amount to withdraw.',
+      } as never,
+      lifecycleState: {
+        phase: 'active',
+        mandateRef: 'mandate-ember-lending-001',
+        mandateSummary:
+          'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+        mandateContext: {
+          network: 'arbitrum',
+          protocol: 'aave',
+          allowedCollateralAssets: ['WETH'],
+          allowedBorrowAssets: ['WETH'],
+          maxAllocationPct: 35,
+          maxLtvBps: 7000,
+          minHealthFactor: '1.25',
+        },
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+        rootedWalletContextId: 'rwc-ember-lending-thread-001',
+        lastReservationSummary:
+          'Reservation reservation-ember-lending-001 deploys 10 WETH via lending.supply.',
+      } as never,
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: 'Withdraw all supplied WETH back to my wallet on Arbitrum.',
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'Please confirm the safe withdrawal scope for collateral.',
+        },
+      ],
+    });
+
+    expect(html).toContain('Withdraw all supplied WETH back to my wallet on Arbitrum.');
+    expect(html).toContain('Please confirm the safe withdrawal scope for collateral.');
+    expect(html).toContain('Send message');
+    expect(html).not.toContain('Agent Preferences');
+  });
+
   it('does not invent a subagent wallet from sparse lending portfolio state and keeps chat enabled', () => {
     const html = renderManagedAgentDetail({
       isHired: true,

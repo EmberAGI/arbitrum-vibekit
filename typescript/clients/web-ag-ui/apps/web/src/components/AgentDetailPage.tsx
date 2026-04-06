@@ -893,7 +893,8 @@ export function AgentDetailPage({
     agentId === 'agent-pi-example' ||
     agentId === 'agent-portfolio-manager' ||
     emberLendingChatEnabled;
-  const inlineOnboardingChatEnabled = agentId === 'agent-pi-example';
+  const inlineOnboardingChatEnabled =
+    agentId === 'agent-pi-example' || agentId === 'agent-ember-lending';
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (showPostHireLayout ? 'blockers' : 'metrics'),
   );
