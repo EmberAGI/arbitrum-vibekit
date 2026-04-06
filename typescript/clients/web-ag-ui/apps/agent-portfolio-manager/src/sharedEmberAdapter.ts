@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { AgentRuntimeDomainConfig } from 'agent-runtime';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 import { signPreparedDelegation } from 'agent-runtime/internal';
@@ -634,6 +636,39 @@ function sanitizeIdentitySegment(value: string): string {
   return normalized.length > 0 ? normalized : 'portfolio-manager';
 }
 
+function stableStringifyForIdempotency(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableStringifyForIdempotency(entry)).join(',')}]`;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+
+  return `{${entries
+    .map(
+      ([key, entryValue]) =>
+        `${JSON.stringify(key)}:${stableStringifyForIdempotency(entryValue)}`,
+    )
+    .join(',')}}`;
+}
+
+function buildPayloadDerivedIdempotencyKey(params: {
+  prefix: string;
+  payload: unknown;
+}): string {
+  const digest = createHash('sha256')
+    .update(stableStringifyForIdempotency(params.payload))
+    .digest('hex')
+    .slice(0, 24);
+
+  return `${params.prefix}-${digest}`;
+}
+
 function isNonEmptyStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
@@ -1071,6 +1106,34 @@ function buildPortfolioManagerRootDelegationHandoff(params: {
       signed_delegation_count: 1,
     },
   };
+}
+
+function buildRootDelegationIdempotencyKey(params: {
+  threadId: string;
+  handoff: unknown;
+}): string {
+  return buildPayloadDerivedIdempotencyKey({
+    prefix: 'idem-root-delegation',
+    payload: {
+      threadId: params.threadId,
+      handoff: params.handoff,
+    },
+  });
+}
+
+function buildRootedBootstrapIdempotencyKey(params: {
+  threadId: string;
+  onboarding: unknown;
+  handoff: unknown;
+}): string {
+  return buildPayloadDerivedIdempotencyKey({
+    prefix: 'idem-portfolio-manager-rooted-bootstrap',
+    payload: {
+      threadId: params.threadId,
+      onboarding: params.onboarding,
+      handoff: params.handoff,
+    },
+  });
 }
 
 export function createPortfolioManagerDomain(
@@ -1529,7 +1592,11 @@ export function createPortfolioManagerDomain(
               id: `shared-ember-${threadId}-complete-rooted-bootstrap`,
               method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
               params: {
-                idempotency_key: `idem-portfolio-manager-rooted-bootstrap-${threadId}`,
+                idempotency_key: buildRootedBootstrapIdempotencyKey({
+                  threadId,
+                  onboarding,
+                  handoff,
+                }),
                 expected_revision: expectedRevision,
                 onboarding,
                 handoff,
@@ -1678,11 +1745,14 @@ export function createPortfolioManagerDomain(
           }
           const commandInput =
             typeof operation.input === 'object' && operation.input !== null ? operation.input : {};
+          const handoff = 'handoff' in commandInput ? commandInput.handoff : undefined;
           const idempotencyKey =
             'idempotencyKey' in commandInput && typeof commandInput.idempotencyKey === 'string'
               ? commandInput.idempotencyKey
-              : `idem-root-delegation-${threadId}`;
-          const handoff = 'handoff' in commandInput ? commandInput.handoff : undefined;
+              : buildRootDelegationIdempotencyKey({
+                  threadId,
+                  handoff,
+                });
           const response = await runSharedEmberCommandWithResolvedRevision<{
             result?: {
               revision?: number;
@@ -2037,12 +2107,16 @@ export function createPortfolioManagerDomain(
           }
           const commandInput =
             typeof operation.input === 'object' && operation.input !== null ? operation.input : {};
+          const onboarding = 'onboarding' in commandInput ? commandInput.onboarding : undefined;
+          const handoff = 'handoff' in commandInput ? commandInput.handoff : undefined;
           const idempotencyKey =
             'idempotencyKey' in commandInput && typeof commandInput.idempotencyKey === 'string'
               ? commandInput.idempotencyKey
-              : `idem-rooted-bootstrap-${threadId}`;
-          const onboarding = 'onboarding' in commandInput ? commandInput.onboarding : undefined;
-          const handoff = 'handoff' in commandInput ? commandInput.handoff : undefined;
+              : buildRootedBootstrapIdempotencyKey({
+                  threadId,
+                  onboarding,
+                  handoff,
+                });
           const response = await runSharedEmberCommandWithResolvedRevision<{
             result?: {
               revision?: number;
