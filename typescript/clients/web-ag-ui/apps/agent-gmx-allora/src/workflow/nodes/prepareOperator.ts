@@ -97,6 +97,10 @@ export const prepareOperatorNode = async (
     fundingTokenInput.fundingTokenAddress,
     'funding token address',
   );
+  const collateralTokenAddress = normalizeHexAddress(
+    fundingTokenInput.collateralTokenAddress,
+    'collateral token address',
+  );
 
   const delegationsBypassActive = state.thread.delegationsBypassActive === true;
   const agentWalletAddress = resolveAgentWalletAddress();
@@ -175,6 +179,7 @@ export const prepareOperatorNode = async (
     delegateeWalletAddress,
     baseContributionUsd: operatorInput.usdcAllocation,
     fundingTokenAddress,
+    collateralTokenAddress,
     targetMarket,
     maxLeverage: targetMarket.maxLeverage,
   };
@@ -185,6 +190,7 @@ export const prepareOperatorNode = async (
     delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
     usdcAllocation: operatorConfig.baseContributionUsd,
     fundingToken: fundingTokenAddress,
+    collateralToken: collateralTokenAddress,
     market: `${targetMarket.baseSymbol}/${targetMarket.quoteSymbol}`,
     maxLeverage: targetMarket.maxLeverage,
   });

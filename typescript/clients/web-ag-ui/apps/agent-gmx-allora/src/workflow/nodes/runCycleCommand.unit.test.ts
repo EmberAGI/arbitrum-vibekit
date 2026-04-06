@@ -33,6 +33,7 @@ describe('runCycleCommandNode', () => {
         },
         fundingTokenInput: {
           fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
         },
       },
     } as unknown as ClmmState;
@@ -56,6 +57,7 @@ describe('runCycleCommandNode', () => {
         },
         fundingTokenInput: {
           fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
         },
         delegationBundle: {
           delegations: [],

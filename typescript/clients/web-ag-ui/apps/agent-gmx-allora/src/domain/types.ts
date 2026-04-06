@@ -64,6 +64,7 @@ export const FundingTokenInputSchema = z.object({
 type FundingTokenInputBase = z.infer<typeof FundingTokenInputSchema>;
 export interface FundingTokenInput extends FundingTokenInputBase {
   fundingTokenAddress: `0x${string}`;
+  collateralTokenAddress: `0x${string}`;
 }
 
 export type ResolvedGmxConfig = {
@@ -75,6 +76,7 @@ export type ResolvedGmxConfig = {
   delegateeWalletAddress: `0x${string}`;
   baseContributionUsd: number;
   fundingTokenAddress: `0x${string}`;
+  collateralTokenAddress: `0x${string}`;
   targetMarket: GmxMarket;
   maxLeverage: number;
 };

@@ -106,6 +106,7 @@ describe('GMX thread lifecycle invariants', () => {
         },
         fundingTokenInput: {
           fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
         },
         selectedPool: {
           address: '0x3333333333333333333333333333333333333333',

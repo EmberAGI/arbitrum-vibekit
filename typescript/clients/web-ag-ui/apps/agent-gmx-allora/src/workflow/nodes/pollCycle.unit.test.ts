@@ -33,6 +33,7 @@ describe('pollCycleNode', () => {
         },
         fundingTokenInput: {
           fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
         },
         task: { id: 'task-1', taskStatus: { state: 'working' } },
         activity: { telemetry: [], events: [] },

@@ -7,10 +7,12 @@ import type { DelegationBundle } from './context.js';
 import { executePerpetualPlan } from './execution.js';
 
 const {
+  createSwapMock,
   executeTransactionMock,
   redeemDelegationsAndExecuteTransactionsMock,
 } =
   vi.hoisted(() => ({
+    createSwapMock: vi.fn(),
     executeTransactionMock: vi.fn(),
     redeemDelegationsAndExecuteTransactionsMock: vi.fn(),
   }));
@@ -41,6 +43,7 @@ const createPerpetualClose = vi.fn(() => Promise.resolve({ transactions: [] }));
 const createPerpetualReduce = vi.fn(() => Promise.resolve({ transactions: [] }));
 
 const client = {
+  createSwap: createSwapMock,
   createPerpetualLong,
   createPerpetualShort,
   createPerpetualClose,
@@ -49,6 +52,11 @@ const client = {
 
 describe('executePerpetualPlan', () => {
   beforeEach(() => {
+    createPerpetualLong.mockClear();
+    createPerpetualShort.mockClear();
+    createPerpetualClose.mockClear();
+    createPerpetualReduce.mockClear();
+    createSwapMock.mockReset();
     executeTransactionMock.mockReset();
     redeemDelegationsAndExecuteTransactionsMock.mockReset();
   });
@@ -94,6 +102,70 @@ describe('executePerpetualPlan', () => {
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions?.[0]?.to).toBe('0xrouter');
     expect(executeTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it('prepends a swap into collateral before opening when pay and collateral tokens differ', async () => {
+    createSwapMock.mockResolvedValueOnce({
+      exactFromAmount: '123',
+      exactToAmount: '100',
+      transactions: [
+        {
+          type: 'evm',
+          to: '0xswap',
+          data: '0xswap01',
+          chainId: '42161',
+          value: '0',
+        },
+      ],
+    });
+    const plan: ExecutionPlan = {
+      action: 'long',
+      request: {
+        amount: '100',
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xweth',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
+    };
+
+    const result = await executePerpetualPlan({
+      client,
+      plan,
+      txExecutionMode: 'plan',
+      delegationsBypassActive: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(createSwapMock).toHaveBeenCalledWith({
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      amount: '100',
+      amountType: 'exactOut',
+      fromTokenUid: { chainId: '42161', address: '0xweth' },
+      toTokenUid: { chainId: '42161', address: '0xusdc' },
+    });
+    expect(createPerpetualLong).toHaveBeenCalledWith({
+      ...plan.request,
+      payTokenAddress: '0xusdc',
+    });
+    expect(result.transactions).toEqual([
+      {
+        type: 'evm',
+        to: '0xswap',
+        data: '0xswap01',
+        chainId: '42161',
+        value: '0',
+      },
+      {
+        type: 'evm',
+        to: '0xrouter',
+        data: '0xdeadbeef',
+        chainId: '42161',
+        value: '0',
+      },
+    ]);
   });
 
   it('executes reduce plans', async () => {
@@ -199,6 +271,100 @@ describe('executePerpetualPlan', () => {
         type: 'evm',
         to: '0xclose',
         data: '0xclose01',
+        chainId: '42161',
+        value: '0',
+      },
+      {
+        type: 'evm',
+        to: '0xopen',
+        data: '0xopen01',
+        chainId: '42161',
+        value: '0',
+      },
+    ]);
+  });
+
+  it('inserts a swap between close and reopen transactions for flip plans with non-USDC funding', async () => {
+    createPerpetualClose.mockResolvedValueOnce({
+      transactions: [
+        {
+          type: 'evm',
+          to: '0xclose',
+          data: '0xclose01',
+          chainId: '42161',
+          value: '0',
+        },
+      ],
+    });
+    createSwapMock.mockResolvedValueOnce({
+      exactFromAmount: '150',
+      exactToAmount: '100',
+      transactions: [
+        {
+          type: 'evm',
+          to: '0xswap',
+          data: '0xswap02',
+          chainId: '42161',
+          value: '0',
+        },
+      ],
+    });
+    createPerpetualShort.mockResolvedValueOnce({
+      transactions: [
+        {
+          type: 'evm',
+          to: '0xopen',
+          data: '0xopen01',
+          chainId: '42161',
+          value: '0',
+        },
+      ],
+    });
+    const plan: ExecutionPlan = {
+      action: 'flip',
+      closeRequest: {
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        marketAddress: '0xmarket',
+        positionSide: 'long',
+        isLimit: false,
+      },
+      openRequest: {
+        amount: '100',
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xweth',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
+    };
+
+    const result = await executePerpetualPlan({
+      client,
+      plan,
+      txExecutionMode: 'plan',
+      delegationsBypassActive: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(createPerpetualClose).toHaveBeenCalledBefore(createSwapMock);
+    expect(createSwapMock).toHaveBeenCalledBefore(createPerpetualShort);
+    expect(createPerpetualShort).toHaveBeenCalledWith({
+      ...plan.openRequest,
+      payTokenAddress: '0xusdc',
+    });
+    expect(result.transactions).toEqual([
+      {
+        type: 'evm',
+        to: '0xclose',
+        data: '0xclose01',
+        chainId: '42161',
+        value: '0',
+      },
+      {
+        type: 'evm',
+        to: '0xswap',
+        data: '0xswap02',
         chainId: '42161',
         value: '0',
       },

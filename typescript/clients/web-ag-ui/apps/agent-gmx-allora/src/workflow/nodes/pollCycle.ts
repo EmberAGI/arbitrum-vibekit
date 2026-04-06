@@ -1627,7 +1627,7 @@ export const pollCycleNode = async (
     marketAddress: gmxMarketAddress as `0x${string}`,
     walletAddress: planBuilderWalletAddress,
     payTokenAddress: operatorConfig.fundingTokenAddress,
-    collateralTokenAddress: operatorConfig.fundingTokenAddress,
+    collateralTokenAddress: operatorConfig.collateralTokenAddress,
     actualPositionSide: currentPositionSide,
     assumedPositionSide: reconciledAssumedPositionSide ?? activePositionSyncGuard?.expectedSide,
     positionContractKey: positionForReduce?.contractKey,

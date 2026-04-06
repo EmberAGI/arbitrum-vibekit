@@ -2,7 +2,7 @@ import type { OnchainClients } from '../clients/clients.js';
 import {
   OnchainActionsRequestError,
   type OnchainActionsClient,
-  type PerpetualShortRequest,
+  type PerpetualLongRequest,
   type TransactionPlan,
 } from '../clients/onchainActions.js';
 import { redeemDelegationsAndExecuteTransactions } from '../core/delegatedExecution.js';
@@ -269,10 +269,63 @@ function summarizeOnchainActionsError(error: unknown): Record<string, unknown> {
   };
 }
 
+type PerpetualOpenRequest = PerpetualLongRequest | PerpetualShortRequest;
+
+function requiresCollateralSwap(request: PerpetualOpenRequest): boolean {
+  return request.payTokenAddress.toLowerCase() !== request.collateralTokenAddress.toLowerCase();
+}
+
+function normalizeOpenRequestForExecution(request: PerpetualOpenRequest): PerpetualOpenRequest {
+  if (!requiresCollateralSwap(request)) {
+    return request;
+  }
+  return {
+    ...request,
+    payTokenAddress: request.collateralTokenAddress,
+  };
+}
+
+async function createOpenPlan(params: {
+  client: Pick<OnchainActionsClient, 'createSwap' | 'createPerpetualLong' | 'createPerpetualShort'>;
+  action: 'long' | 'short';
+  request: PerpetualOpenRequest;
+}): Promise<TransactionPlan[]> {
+  const transactions: TransactionPlan[] = [];
+
+  if (requiresCollateralSwap(params.request)) {
+    const swapResponse = await params.client.createSwap({
+      walletAddress: params.request.walletAddress,
+      amount: params.request.amount,
+      amountType: 'exactOut',
+      fromTokenUid: {
+        chainId: params.request.chainId,
+        address: params.request.payTokenAddress,
+      },
+      toTokenUid: {
+        chainId: params.request.chainId,
+        address: params.request.collateralTokenAddress,
+      },
+    });
+    transactions.push(...swapResponse.transactions);
+  }
+
+  const normalizedRequest = normalizeOpenRequestForExecution(params.request);
+  const openResponse =
+    params.action === 'long'
+      ? await params.client.createPerpetualLong(normalizedRequest)
+      : await params.client.createPerpetualShort(normalizedRequest);
+  transactions.push(...openResponse.transactions);
+  return transactions;
+}
+
 export async function executePerpetualPlan(params: {
   client: Pick<
     OnchainActionsClient,
-    'createPerpetualLong' | 'createPerpetualShort' | 'createPerpetualClose' | 'createPerpetualReduce'
+    | 'createSwap'
+    | 'createPerpetualLong'
+    | 'createPerpetualShort'
+    | 'createPerpetualClose'
+    | 'createPerpetualReduce'
   >;
   plan: ExecutionPlan;
   txExecutionMode: 'plan' | 'execute';
@@ -307,41 +360,49 @@ export async function executePerpetualPlan(params: {
 
   try {
     if (plan.action === 'long') {
-      const response = await params.client.createPerpetualLong(plan.request);
+      const transactions = await createOpenPlan({
+        client: params.client,
+        action: 'long',
+        request: plan.request,
+      });
       logInfo('executePerpetualPlan: onchain-actions plan received', {
         action: plan.action,
-        ...summarizePlannedTransactions(response.transactions),
+        ...summarizePlannedTransactions(transactions),
       });
       const execution = await planOrExecuteTransactions({
         txExecutionMode: params.txExecutionMode,
         clients: params.clients,
-        transactions: response.transactions,
+        transactions,
         delegationBundle: delegation,
       });
       return {
         action: plan.action,
         ok: true,
-        transactions: response.transactions,
+        transactions,
         txHashes: execution.txHashes,
         lastTxHash: execution.lastTxHash,
       };
     }
     if (plan.action === 'short') {
-      const response = await params.client.createPerpetualShort(plan.request);
+      const transactions = await createOpenPlan({
+        client: params.client,
+        action: 'short',
+        request: plan.request,
+      });
       logInfo('executePerpetualPlan: onchain-actions plan received', {
         action: plan.action,
-        ...summarizePlannedTransactions(response.transactions),
+        ...summarizePlannedTransactions(transactions),
       });
       const execution = await planOrExecuteTransactions({
         txExecutionMode: params.txExecutionMode,
         clients: params.clients,
-        transactions: response.transactions,
+        transactions,
         delegationBundle: delegation,
       });
       return {
         action: plan.action,
         ok: true,
-        transactions: response.transactions,
+        transactions,
         txHashes: execution.txHashes,
         lastTxHash: execution.lastTxHash,
       };
@@ -373,17 +434,17 @@ export async function executePerpetualPlan(params: {
         ...summarizePlannedTransactions(closeResponse.transactions),
       });
       const nextPositionSide = resolveFlipSide(plan.closeRequest.positionSide);
-      const shortOpenRequest: PerpetualShortRequest = plan.openRequest;
-      const openResponse =
-        nextPositionSide === 'long'
-          ? await params.client.createPerpetualLong(plan.openRequest)
-          : await params.client.createPerpetualShort(shortOpenRequest);
+      const openTransactions = await createOpenPlan({
+        client: params.client,
+        action: nextPositionSide,
+        request: plan.openRequest,
+      });
       logInfo('executePerpetualPlan: onchain-actions reopen plan received', {
         action: plan.action,
         nextPositionSide,
-        ...summarizePlannedTransactions(openResponse.transactions),
+        ...summarizePlannedTransactions(openTransactions),
       });
-      const transactions = [...closeResponse.transactions, ...openResponse.transactions];
+      const transactions = [...closeResponse.transactions, ...openTransactions];
       const execution = await planOrExecuteTransactions({
         txExecutionMode: params.txExecutionMode,
         clients: params.clients,
