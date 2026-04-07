@@ -40,6 +40,15 @@ It includes:
   - `shared-ember`
   - `agent-portfolio-manager`
   - `agent-ember-lending`
+- the base `compose.yaml` now mounts named Docker volumes for each existing
+  LangGraph agent's `.langgraph_api` state:
+  - `agent_langgraph_api`
+  - `agent_clmm_langgraph_api`
+  - `agent_pendle_langgraph_api`
+  - `agent_gmx_allora_langgraph_api`
+- this makes the LangGraph runtime state durable across container recreation;
+  live migration can restore the existing `.langgraph_api` tar backups into
+  those named volumes during deploy
 - The managed compose overlay expects `SHARED_EMBER_REPO_ROOT` to point at an
   `ember-orchestration-v1-spec` checkout because the `shared-ember` image boots
   the Shared Ember HTTP service through Vibekit's managed harness while loading
