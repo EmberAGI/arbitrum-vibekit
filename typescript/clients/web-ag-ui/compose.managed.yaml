@@ -7,6 +7,24 @@ services:
       - agent-portfolio-manager
       - agent-ember-lending
 
+  pi-runtime-postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pi_runtime
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres -d pi_runtime
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "55432:5432"
+    restart: unless-stopped
+    volumes:
+      - pi_runtime_postgres_data:/var/lib/postgresql/data
+
   shared-ember:
     build:
       context: ../..
@@ -34,9 +52,13 @@ services:
       - apps/agent-portfolio-manager/.env
     environment:
       NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@pi-runtime-postgres:5432/pi_runtime
       SHARED_EMBER_BASE_URL: http://shared-ember:4010
     depends_on:
-      - shared-ember
+      pi-runtime-postgres:
+        condition: service_healthy
+      shared-ember:
+        condition: service_started
     ports:
       - "3420:3420"
     restart: unless-stopped
@@ -51,9 +73,16 @@ services:
       - apps/agent-ember-lending/.env
     environment:
       NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@pi-runtime-postgres:5432/pi_runtime
       SHARED_EMBER_BASE_URL: http://shared-ember:4010
     depends_on:
-      - shared-ember
+      pi-runtime-postgres:
+        condition: service_healthy
+      shared-ember:
+        condition: service_started
     ports:
       - "3430:3430"
     restart: unless-stopped
+
+volumes:
+  pi_runtime_postgres_data:
