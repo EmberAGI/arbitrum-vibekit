@@ -14,6 +14,7 @@ export interface AgentConfig {
   marketplaceCardHoverBg?: string;
   marketplaceRowBg?: string;
   marketplaceRowHoverBg?: string;
+  surfaceTag?: 'Swarm' | 'Workflow';
   visibleInUserLists?: boolean;
   onboardingOwnerAgentId?: string;
   imperativeCommandTransport?: 'message' | 'forwarded-props';
@@ -36,6 +37,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '🏰',
     avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+    surfaceTag: 'Workflow',
     chains: ['Arbitrum'],
     protocols: ['Camelot'],
     tokens: ['USDC', 'WETH', 'WBTC'],
@@ -51,6 +53,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '🪙',
     avatarBg: 'linear-gradient(135deg, #f97316 0%, #facc15 100%)',
+    surfaceTag: 'Workflow',
     chains: ['Arbitrum'],
     protocols: ['Pendle'],
     tokens: [
@@ -81,6 +84,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '📈',
     avatarBg: 'linear-gradient(135deg, #10b981 0%, #22c55e 100%)',
+    surfaceTag: 'Workflow',
     chains: ['Arbitrum'],
     protocols: ['GMX', 'Allora'],
     tokens: ['USDC', 'WETH'],
@@ -116,6 +120,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     marketplaceCardHoverBg: 'rgba(124,58,237,0.14)',
     marketplaceRowBg: 'rgba(124,58,237,0.08)',
     marketplaceRowHoverBg: 'rgba(124,58,237,0.12)',
+    surfaceTag: 'Swarm',
     imperativeCommandTransport: 'forwarded-props',
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
@@ -133,6 +138,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     avatar: '🏦',
     avatarBg: '#9896FF',
     imageUrl: '/ember-lending-avatar.svg',
+    surfaceTag: 'Swarm',
     onboardingOwnerAgentId: 'agent-portfolio-manager',
     imperativeCommandTransport: 'forwarded-props',
     chains: ['Arbitrum'],

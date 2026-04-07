@@ -25,10 +25,13 @@ describe('agents config', () => {
     expect(portfolioManager.marketplaceCardHoverBg).toBe('rgba(124,58,237,0.14)');
     expect(portfolioManager.marketplaceRowBg).toBe('rgba(124,58,237,0.08)');
     expect(portfolioManager.marketplaceRowHoverBg).toBe('rgba(124,58,237,0.12)');
+    expect(portfolioManager.surfaceTag).toBe('Swarm');
     expect(emberLending.name).toBe('Ember Lending');
     expect(emberLending.imageUrl).toBe('/ember-lending-avatar.svg');
     expect(emberLending.avatarBg).toBe('#9896FF');
     expect(emberLending.onboardingOwnerAgentId).toBe('agent-portfolio-manager');
+    expect(emberLending.surfaceTag).toBe('Swarm');
+    expect(clmm.surfaceTag).toBe('Workflow');
     expect(isRegisteredAgentId('agent-clmm')).toBe(true);
     expect(isRegisteredAgentId('agent-pi-example')).toBe(true);
     expect(isRegisteredAgentId('agent-portfolio-manager')).toBe(true);

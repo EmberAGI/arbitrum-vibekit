@@ -52,6 +52,12 @@ describe('AgentDetailPage managed-agent affordances', () => {
 
     expect(html).toContain('Open Ember Portfolio Manager');
     expect(html).toContain('Managed onboarding happens through Ember Portfolio Manager.');
+    expect(html).toContain('Swarm');
+    expect(html).not.toContain('Workflow');
+    expect(html).not.toContain('Managed workflow');
+    expect(html).not.toContain('Shared state');
+    expect(html).not.toContain('Pi Runtime');
+    expect(html).not.toContain('Shared Ember Domain Service');
     expect(html).not.toContain('>Hire<');
     expect(html).toMatch(new RegExp('<button[^>]*disabled[^>]*>\\s*Chat\\s*</button>'));
     expect(html).not.toContain('Send message');

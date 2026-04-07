@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react';
 import { Skeleton } from '../ui/Skeleton';
 import { iconMonogram, proxyIconUri } from '../../utils/iconResolution';
 import { CreatorIdentity } from '../ui/CreatorIdentity';
+import { AgentSurfaceTag } from '../ui/AgentSurfaceTag';
 
 export interface AgentTableItem {
   id: string;
@@ -23,6 +24,7 @@ export interface AgentTableItem {
   avatarBg?: string;
   rowBg?: string;
   rowHoverBg?: string;
+  surfaceTag?: 'Swarm' | 'Workflow';
   usesBrandedImage?: boolean;
   isActive?: boolean;
   isLoaded: boolean;
@@ -133,6 +135,7 @@ function AgentRow({ agent, onClick, onAction }: AgentRowProps) {
                 nameClassName="text-[12px] text-gray-200"
               />
             </div>
+            {agent.surfaceTag ? <AgentSurfaceTag tag={agent.surfaceTag} className="mt-1.5" /> : null}
           </div>
           <div className="star-rating ml-2">
             {[...Array(5)].map((_, i) => (

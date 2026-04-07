@@ -13,6 +13,7 @@ type HireAgentsRoutePropsCapture = {
     tokens: string[];
     avatarBg?: string;
     imageUrl?: string;
+    surfaceTag?: 'Swarm' | 'Workflow';
     marketplaceCardBg?: string;
     marketplaceCardHoverBg?: string;
     marketplaceRowBg?: string;
@@ -29,6 +30,7 @@ type HireAgentsRoutePropsCapture = {
     tokens: string[];
     avatarBg?: string;
     imageUrl?: string;
+    surfaceTag?: 'Swarm' | 'Workflow';
     marketplaceCardBg?: string;
     marketplaceCardHoverBg?: string;
     marketplaceRowBg?: string;
@@ -164,6 +166,7 @@ describe('HireAgentsRoute integration', () => {
     expect(portfolioManager?.marketplaceCardHoverBg).toBe('rgba(124,58,237,0.14)');
     expect(portfolioManager?.marketplaceRowBg).toBe('rgba(124,58,237,0.08)');
     expect(portfolioManager?.marketplaceRowHoverBg).toBe('rgba(124,58,237,0.12)');
+    expect(portfolioManager?.surfaceTag).toBe('Swarm');
     expect(portfolioManager?.pointsTrend).toBeUndefined();
     expect(portfolioManager?.trendMultiplier).toBeUndefined();
 
@@ -173,8 +176,10 @@ describe('HireAgentsRoute integration', () => {
     expect(emberLending?.tokens).toEqual(['USDC']);
     expect(emberLending?.imageUrl).toBe('/ember-lending-avatar.svg');
     expect(emberLending?.avatarBg).toBe('#9896FF');
+    expect(emberLending?.surfaceTag).toBe('Swarm');
     expect(emberLending?.pointsTrend).toBeUndefined();
     expect(emberLending?.trendMultiplier).toBeUndefined();
+    expect(clmm?.surfaceTag).toBe('Workflow');
 
     expect(props.featuredAgents.map((agent) => agent.id).slice(0, 3)).toEqual([
       'agent-portfolio-manager',

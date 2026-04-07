@@ -158,6 +158,34 @@ describe('HireAgentsPage (top cards)', () => {
     expect(html).toContain('style="background:#9896FF"');
   });
 
+  it('renders the exact agent tag under the creator byline for featured cards', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-portfolio-manager',
+            name: 'Ember Portfolio Manager',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            surfaceTag: 'Swarm',
+            protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('Ember AI Team');
+    expect(html).toContain('Swarm');
+    expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('Swarm'));
+    expect(html).not.toContain('Workflow');
+    expect(html).not.toContain('Managed workflow');
+    expect(html).not.toContain('Shared state');
+    expect(html).not.toContain('Pi Runtime');
+    expect(html).not.toContain('Shared Ember Domain Service');
+  });
+
   it('applies the portfolio-specific marketplace background to the whole featured card', () => {
     const html = renderToStaticMarkup(
       React.createElement(HireAgentsPage, {
@@ -309,6 +337,30 @@ describe('HireAgentsPage (top cards)', () => {
 
     expect(html).toContain('src="/ember-lending-avatar.svg"');
     expect(html).toContain('style="background:#9896FF"');
+  });
+
+  it('renders workflow tags under the creator byline for table rows', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [
+          {
+            id: 'agent-clmm',
+            rank: 3,
+            name: 'Camelot CLMM',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            surfaceTag: 'Workflow',
+            protocols: ['Camelot'],
+          },
+        ],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html).toContain('Ember AI Team');
+    expect(html).toContain('Workflow');
+    expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('Workflow'));
   });
 
   it('applies the portfolio-specific marketplace background to the whole table row', () => {

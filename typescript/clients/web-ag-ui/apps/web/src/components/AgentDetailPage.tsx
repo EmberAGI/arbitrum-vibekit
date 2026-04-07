@@ -51,9 +51,11 @@ import {
   resolveTokenIconUri,
   iconMonogram,
 } from '../utils/iconResolution';
+import { getVisibleSurfaceProtocols } from '../utils/agentSurfaceMetadata';
 import { formatPoolPair } from '../utils/poolFormat';
 import { Skeleton } from './ui/Skeleton';
 import { LoadingValue } from './ui/LoadingValue';
+import { AgentSurfaceTag } from './ui/AgentSurfaceTag';
 import { CreatorIdentity } from './ui/CreatorIdentity';
 import { CursorListTooltip } from './ui/CursorListTooltip';
 import { CTA_SIZE_MD, CTA_SIZE_MD_FULL } from './ui/cta';
@@ -1064,10 +1066,11 @@ export function AgentDetailPage({
       out.push(trimmed);
     };
 
-    for (const protocol of profile.protocols ?? []) push(protocol);
-    for (const protocol of agentConfig.protocols ?? []) push(protocol);
+    for (const protocol of getVisibleSurfaceProtocols(profile.protocols ?? [])) push(protocol);
+    for (const protocol of getVisibleSurfaceProtocols(agentConfig.protocols ?? [])) push(protocol);
     return out;
   }, [agentConfig.protocols, profile.protocols]);
+  const primaryProtocol = displayProtocols.length > 0 ? displayProtocols[0] : null;
 
   const displayTokens = useMemo(() => {
     const out: string[] = [];
@@ -1283,13 +1286,11 @@ export function AgentDetailPage({
             telemetry={telemetry}
             events={events}
             chainIconUri={displayChains.length > 0 ? chainIconByName[normalizeNameKey(displayChains[0])] ?? null : null}
-            protocolLabel={
-              profile.protocols && profile.protocols.length > 0 ? profile.protocols[0] : null
-            }
+            protocolLabel={primaryProtocol}
             protocolIconUri={
-              profile.protocols && profile.protocols.length > 0
+              primaryProtocol
                 ? (() => {
-                    const protocol = profile.protocols[0];
+                    const protocol = primaryProtocol;
                     const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
                     return fallback ? tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null : null;
                   })()
@@ -1590,6 +1591,9 @@ export function AgentDetailPage({
                           </div>
                         )}
                       </div>
+                      {agentConfig.surfaceTag ? (
+                        <AgentSurfaceTag tag={agentConfig.surfaceTag} className="mt-3" />
+                      ) : null}
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
@@ -1816,6 +1820,9 @@ export function AgentDetailPage({
                       </div>
                     )}
                   </div>
+                  {agentConfig.surfaceTag ? (
+                    <AgentSurfaceTag tag={agentConfig.surfaceTag} className="mt-3" />
+                  ) : null}
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
