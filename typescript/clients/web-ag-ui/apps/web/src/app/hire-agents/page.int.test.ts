@@ -7,18 +7,32 @@ import HireAgentsRoute from './page';
 type HireAgentsRoutePropsCapture = {
   agents: Array<{
     id: string;
+    name: string;
     chains: string[];
     protocols: string[];
     tokens: string[];
+    avatarBg?: string;
+    imageUrl?: string;
+    marketplaceCardBg?: string;
+    marketplaceCardHoverBg?: string;
+    marketplaceRowBg?: string;
+    marketplaceRowHoverBg?: string;
     pointsTrend?: 'up';
     trendMultiplier?: string;
   }>;
   featuredAgents: Array<{
     id: string;
+    name: string;
     description?: string;
     chains: string[];
     protocols: string[];
     tokens: string[];
+    avatarBg?: string;
+    imageUrl?: string;
+    marketplaceCardBg?: string;
+    marketplaceCardHoverBg?: string;
+    marketplaceRowBg?: string;
+    marketplaceRowHoverBg?: string;
     pointsTrend?: 'up';
     trendMultiplier?: string;
   }>;
@@ -140,14 +154,25 @@ describe('HireAgentsRoute integration', () => {
     expect(piExample).toBeUndefined();
 
     expect(portfolioManager?.chains).toEqual(['Arbitrum']);
+    expect(portfolioManager?.name).toBe('Ember Portfolio Manager');
     expect(portfolioManager?.protocols).toEqual(['Pi Runtime', 'Shared Ember Domain Service']);
     expect(portfolioManager?.tokens).toEqual(['USDC']);
+    expect(portfolioManager?.imageUrl).toBe(
+      'https://www.emberai.xyz/Logo.svg?dpl=dpl_J6BA6gqb9V9kgyUjTjKdpkPToAd7',
+    );
+    expect(portfolioManager?.marketplaceCardBg).toBe('rgba(124,58,237,0.10)');
+    expect(portfolioManager?.marketplaceCardHoverBg).toBe('rgba(124,58,237,0.14)');
+    expect(portfolioManager?.marketplaceRowBg).toBe('rgba(124,58,237,0.08)');
+    expect(portfolioManager?.marketplaceRowHoverBg).toBe('rgba(124,58,237,0.12)');
     expect(portfolioManager?.pointsTrend).toBeUndefined();
     expect(portfolioManager?.trendMultiplier).toBeUndefined();
 
     expect(emberLending?.chains).toEqual(['Arbitrum']);
+    expect(emberLending?.name).toBe('Ember Lending');
     expect(emberLending?.protocols).toEqual(['Pi Runtime', 'Shared Ember Domain Service']);
     expect(emberLending?.tokens).toEqual(['USDC']);
+    expect(emberLending?.imageUrl).toBe('/ember-lending-avatar.svg');
+    expect(emberLending?.avatarBg).toBe('#9896FF');
     expect(emberLending?.pointsTrend).toBeUndefined();
     expect(emberLending?.trendMultiplier).toBeUndefined();
 

@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { Star, MoreHorizontal, ChevronDown } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import { Skeleton } from '../ui/Skeleton';
 import { iconMonogram, proxyIconUri } from '../../utils/iconResolution';
 import { CreatorIdentity } from '../ui/CreatorIdentity';
@@ -19,6 +20,10 @@ export interface AgentTableItem {
   points?: number;
   pointsTrend?: 'up' | 'down' | 'neutral';
   iconUri: string | null;
+  avatarBg?: string;
+  rowBg?: string;
+  rowHoverBg?: string;
+  usesBrandedImage?: boolean;
   isActive?: boolean;
   isLoaded: boolean;
 }
@@ -72,27 +77,47 @@ interface AgentRowProps {
 }
 
 function AgentRow({ agent, onClick, onAction }: AgentRowProps) {
+  const rowStyle = agent.rowBg
+    ? ({
+        '--agent-row-bg': agent.rowBg,
+        '--agent-row-hover-bg': agent.rowHoverBg ?? agent.rowBg,
+      } as CSSProperties)
+    : undefined;
+
   return (
-    <tr className="hover:bg-white/5 transition-colors cursor-pointer" onClick={onClick}>
+    <tr
+      className="bg-[color:var(--agent-row-bg,transparent)] hover:bg-[color:var(--agent-row-hover-bg,rgba(255,255,255,0.05))] transition-colors cursor-pointer"
+      onClick={onClick}
+      style={rowStyle}
+    >
       <td className="text-center">
         <span className="text-xs text-gray-500">#{agent.rank}</span>
       </td>
       <td>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden bg-black/30 ring-1 ring-white/10">
-            {agent.iconUri ? (
-              <img
-                src={proxyIconUri(agent.iconUri)}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="h-full w-full object-contain p-[2px]"
-              />
-            ) : (
-              <span className="text-xs font-semibold text-white/80" aria-hidden="true">
-                {iconMonogram(agent.name)}
-              </span>
-            )}
+          <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/10">
+            <div
+              className="h-full w-full flex items-center justify-center bg-black/30"
+              style={
+                agent.usesBrandedImage && agent.avatarBg
+                  ? { background: agent.avatarBg }
+                  : undefined
+              }
+            >
+              {agent.iconUri ? (
+                <img
+                  src={proxyIconUri(agent.iconUri)}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-contain p-[2px]"
+                />
+              ) : (
+                <span className="text-xs font-semibold text-white/80" aria-hidden="true">
+                  {iconMonogram(agent.name)}
+                </span>
+              )}
+            </div>
           </div>
           <div>
             <div className="flex items-center gap-2">

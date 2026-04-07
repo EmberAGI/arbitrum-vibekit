@@ -4,6 +4,7 @@
 
 import { SlidersHorizontal, Star, MoreHorizontal, ChevronDown, Flame } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { SearchBar } from './ui/SearchBar';
 import { FilterTabs } from './ui/FilterTabs';
 import { Pagination } from './ui/Pagination';
@@ -45,6 +46,10 @@ export interface Agent {
   avatar?: string;
   avatarBg?: string;
   imageUrl?: string;
+  marketplaceCardBg?: string;
+  marketplaceCardHoverBg?: string;
+  marketplaceRowBg?: string;
+  marketplaceRowHoverBg?: string;
   chains?: string[];
   protocols?: string[];
   tokens?: string[];
@@ -73,6 +78,10 @@ export interface FeaturedAgent {
   avatar?: string;
   avatarBg?: string;
   imageUrl?: string;
+  marketplaceCardBg?: string;
+  marketplaceCardHoverBg?: string;
+  marketplaceRowBg?: string;
+  marketplaceRowHoverBg?: string;
   pointsTrend?: 'up' | 'down';
   trendMultiplier?: string;
   status: 'for_hire' | 'hired' | 'unavailable';
@@ -273,6 +282,7 @@ export function HireAgentsPage({
                   }));
                   const avatarUri =
                     resolveAgentAvatarUri({
+                      imageUrl: agent.imageUrl,
                       protocols: agent.protocols ?? [],
                       tokenIconBySymbol,
                     }) ??
@@ -373,8 +383,13 @@ export function HireAgentsPage({
               aum: agent.aum,
               points: agent.points,
               pointsTrend: agent.pointsTrend,
+              avatarBg: agent.avatarBg,
+              usesBrandedImage: Boolean(agent.imageUrl),
+              rowBg: agent.marketplaceRowBg,
+              rowHoverBg: agent.marketplaceRowHoverBg,
               iconUri:
                 resolveAgentAvatarUri({
+                  imageUrl: agent.imageUrl,
                   protocols: agent.protocols ?? [],
                   tokenIconBySymbol,
                 }) ??
@@ -426,17 +441,28 @@ function FeaturedAgentCard({
   const hasRating = agent.rating !== undefined && agent.rating > 0;
   const hasCreator = agent.creator !== undefined && agent.creator !== '';
   const hasTrend = agent.trendMultiplier !== undefined && agent.trendMultiplier !== '';
+  const cardStyle = agent.marketplaceCardBg
+    ? ({
+        '--agent-card-bg': agent.marketplaceCardBg,
+        '--agent-card-hover-bg': agent.marketplaceCardHoverBg ?? agent.marketplaceCardBg,
+      } as CSSProperties)
+    : undefined;
 
   return (
     <div
       onClick={onClick}
-      className="min-w-[340px] w-[340px] h-[230px] flex-shrink-0 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15 transition-colors cursor-pointer overflow-hidden flex flex-col"
+      className="min-w-[340px] w-[340px] h-[230px] flex-shrink-0 rounded-2xl border border-white/10 bg-[color:var(--agent-card-bg,rgba(255,255,255,0.05))] hover:bg-[color:var(--agent-card-hover-bg,rgba(255,255,255,0.07))] hover:border-white/15 transition-colors cursor-pointer overflow-hidden flex flex-col"
+      style={cardStyle}
     >
       {/* Header: avatar + title/subtitle on left, rank/menu on right */}
       <div className="px-4 pt-4 pb-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex items-start gap-3">
             <div className="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 bg-black/30 flex items-center justify-center">
+              <div
+                className="h-full w-full flex items-center justify-center bg-black/30"
+                style={agent.imageUrl && agent.avatarBg ? { background: agent.avatarBg } : undefined}
+              >
               {avatarUri ? (
                 <img
                   src={proxyIconUri(avatarUri)}
@@ -449,6 +475,7 @@ function FeaturedAgentCard({
                   {iconMonogram(agent.name)}
                 </span>
               )}
+              </div>
             </div>
 
             <div className="min-w-0">

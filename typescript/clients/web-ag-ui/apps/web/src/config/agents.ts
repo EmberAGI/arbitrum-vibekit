@@ -9,6 +9,11 @@ export interface AgentConfig {
   creatorVerified: boolean;
   avatar: string;
   avatarBg: string;
+  imageUrl?: string;
+  marketplaceCardBg?: string;
+  marketplaceCardHoverBg?: string;
+  marketplaceRowBg?: string;
+  marketplaceRowHoverBg?: string;
   visibleInUserLists?: boolean;
   onboardingOwnerAgentId?: string;
   imperativeCommandTransport?: 'message' | 'forwarded-props';
@@ -99,13 +104,18 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
   },
   'agent-portfolio-manager': {
     id: 'agent-portfolio-manager',
-    name: 'Portfolio Manager',
+    name: 'Ember Portfolio Manager',
     description:
       'Concrete PI-runtime orchestrator path for wallet-backed onboarding, signing handoffs, and Shared Ember Domain Service integration.',
     creator: 'Ember AI Team',
     creatorVerified: true,
     avatar: '🧭',
-    avatarBg: 'linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%)',
+    avatarBg: 'linear-gradient(135deg, #2d1710 0%, #120a07 100%)',
+    imageUrl: 'https://www.emberai.xyz/Logo.svg?dpl=dpl_J6BA6gqb9V9kgyUjTjKdpkPToAd7',
+    marketplaceCardBg: 'rgba(124,58,237,0.10)',
+    marketplaceCardHoverBg: 'rgba(124,58,237,0.14)',
+    marketplaceRowBg: 'rgba(124,58,237,0.08)',
+    marketplaceRowHoverBg: 'rgba(124,58,237,0.12)',
     imperativeCommandTransport: 'forwarded-props',
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
@@ -121,7 +131,8 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creator: 'Ember AI Team',
     creatorVerified: true,
     avatar: '🏦',
-    avatarBg: 'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
+    avatarBg: '#9896FF',
+    imageUrl: '/ember-lending-avatar.svg',
     onboardingOwnerAgentId: 'agent-portfolio-manager',
     imperativeCommandTransport: 'forwarded-props',
     chains: ['Arbitrum'],

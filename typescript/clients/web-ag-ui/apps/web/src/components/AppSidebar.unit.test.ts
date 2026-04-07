@@ -162,11 +162,23 @@ describe('AppSidebar wallet actions', () => {
 
   it('shows only user-facing agents in activity sections', () => {
     getAllAgentsMock.mockReturnValue([
-      { id: 'agent-portfolio-manager', name: 'Portfolio Manager', chains: [], protocols: [], tokens: [] },
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Manager',
+        chains: [],
+        protocols: [],
+        tokens: [],
+      },
       { id: 'agent-pi-example', name: 'Pi Example Agent', chains: [], protocols: [], tokens: [] },
     ]);
     getVisibleAgentsMock.mockReturnValue([
-      { id: 'agent-portfolio-manager', name: 'Portfolio Manager', chains: [], protocols: [], tokens: [] },
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Manager',
+        chains: [],
+        protocols: [],
+        tokens: [],
+      },
     ]);
     useAgentListMock.mockReturnValue({
       agents: {
@@ -177,7 +189,7 @@ describe('AppSidebar wallet actions', () => {
 
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('Portfolio Manager');
+    expect(html).toContain('Ember Portfolio Manager');
     expect(html).not.toContain('Pi Example Agent');
   });
 });

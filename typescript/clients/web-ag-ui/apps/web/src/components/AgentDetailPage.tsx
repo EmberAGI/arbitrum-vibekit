@@ -1114,13 +1114,14 @@ export function AgentDetailPage({
   const agentAvatarUri = useMemo(
     () =>
       resolveAgentAvatarUri({
+        imageUrl: agentConfig.imageUrl,
         protocols: profile.protocols ?? [],
         tokenIconBySymbol,
       }) ??
       (profile.chains && profile.chains.length > 0
         ? chainIconByName[normalizeNameKey(profile.chains[0])] ?? null
         : null),
-    [chainIconByName, profile.chains, profile.protocols, tokenIconBySymbol],
+    [agentConfig.imageUrl, chainIconByName, profile.chains, profile.protocols, tokenIconBySymbol],
   );
 
   const formatAddress = (address: string) => {
@@ -1329,13 +1330,22 @@ export function AgentDetailPage({
             <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-stretch">
                 {/* Left summary card (Figma onboarding) */}
                 <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
-                  <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
+                  <div
+                    className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto"
+                    style={
+                      agentConfig.imageUrl && agentConfig.avatarBg
+                        ? { background: agentConfig.avatarBg }
+                        : undefined
+                    }
+                  >
                     {agentAvatarUri ? (
                       <img
                         src={proxyIconUri(agentAvatarUri)}
                         alt=""
                         decoding="async"
-                        className="h-full w-full object-cover"
+                        className={`h-full w-full ${
+                          agentConfig.imageUrl ? 'object-contain p-8' : 'object-cover'
+                        }`}
                       />
                     ) : (
                       <span className="text-4xl font-semibold text-white/75" aria-hidden="true">
@@ -1675,13 +1685,22 @@ export function AgentDetailPage({
           {/* Left Column - Agent Card */}
           <div className="h-full">
             <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
-              <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
+              <div
+                className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto"
+                style={
+                  agentConfig.imageUrl && agentConfig.avatarBg
+                    ? { background: agentConfig.avatarBg }
+                    : undefined
+                }
+              >
                 {agentAvatarUri ? (
                   <img
                     src={proxyIconUri(agentAvatarUri)}
                     alt=""
                     decoding="async"
-                    className="h-full w-full object-cover"
+                    className={`h-full w-full ${
+                      agentConfig.imageUrl ? 'object-contain p-8' : 'object-cover'
+                    }`}
                   />
                 ) : (
                   <span className="text-4xl font-semibold text-white/75" aria-hidden="true">
@@ -3067,7 +3086,7 @@ function AgentBlockersTab({
               </form>
             ) : showPortfolioManagerSetupForm ? (
               <form onSubmit={handlePortfolioManagerSetupSubmit}>
-                <h3 className="text-lg font-semibold text-white mb-4">Portfolio Manager Setup</h3>
+                <h3 className="text-lg font-semibold text-white mb-4">Ember Portfolio Manager Setup</h3>
                 {activeInterrupt?.message && (
                   <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
                 )}

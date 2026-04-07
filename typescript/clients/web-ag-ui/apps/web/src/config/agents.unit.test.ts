@@ -17,8 +17,17 @@ describe('agents config', () => {
     const emberLending = getAgentConfig('agent-ember-lending');
     expect(clmm.name).toBe('Camelot CLMM');
     expect(piExample.name).toBe('Pi Example Agent');
-    expect(portfolioManager.name).toBe('Portfolio Manager');
+    expect(portfolioManager.name).toBe('Ember Portfolio Manager');
+    expect(portfolioManager.imageUrl).toBe(
+      'https://www.emberai.xyz/Logo.svg?dpl=dpl_J6BA6gqb9V9kgyUjTjKdpkPToAd7',
+    );
+    expect(portfolioManager.marketplaceCardBg).toBe('rgba(124,58,237,0.10)');
+    expect(portfolioManager.marketplaceCardHoverBg).toBe('rgba(124,58,237,0.14)');
+    expect(portfolioManager.marketplaceRowBg).toBe('rgba(124,58,237,0.08)');
+    expect(portfolioManager.marketplaceRowHoverBg).toBe('rgba(124,58,237,0.12)');
     expect(emberLending.name).toBe('Ember Lending');
+    expect(emberLending.imageUrl).toBe('/ember-lending-avatar.svg');
+    expect(emberLending.avatarBg).toBe('#9896FF');
     expect(emberLending.onboardingOwnerAgentId).toBe('agent-portfolio-manager');
     expect(isRegisteredAgentId('agent-clmm')).toBe(true);
     expect(isRegisteredAgentId('agent-pi-example')).toBe(true);

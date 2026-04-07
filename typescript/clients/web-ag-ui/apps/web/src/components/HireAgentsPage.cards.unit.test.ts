@@ -135,6 +135,55 @@ describe('HireAgentsPage (top cards)', () => {
     );
   });
 
+  it('prefers an explicit branded image and avatar background for featured cards', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-ember-lending',
+            name: 'Ember Lending',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            imageUrl: '/ember-lending-avatar.svg',
+            avatarBg: '#9896FF',
+            protocols: ['GMX'],
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('src="/ember-lending-avatar.svg"');
+    expect(html).toContain('style="background:#9896FF"');
+  });
+
+  it('applies the portfolio-specific marketplace background to the whole featured card', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-portfolio-manager',
+            name: 'Ember Portfolio Manager',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            marketplaceCardBg: 'rgba(124,58,237,0.10)',
+            marketplaceCardHoverBg: 'rgba(124,58,237,0.14)',
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain(
+      'style="--agent-card-bg:rgba(124,58,237,0.10);--agent-card-hover-bg:rgba(124,58,237,0.14)"',
+    );
+    expect(html).toContain(
+      'bg-[color:var(--agent-card-bg,rgba(255,255,255,0.05))] hover:bg-[color:var(--agent-card-hover-bg,rgba(255,255,255,0.07))]',
+    );
+  });
+
   it('clamps featured descriptions to two lines in compact cards', () => {
     const html = renderToStaticMarkup(
       React.createElement(HireAgentsPage, {
@@ -201,7 +250,7 @@ describe('HireAgentsPage (top cards)', () => {
           {
             id: 'agent-portfolio-manager',
             rank: 1,
-            name: 'Portfolio Manager',
+            name: 'Ember Portfolio Manager',
             creator: 'Ember AI Team',
             status: 'for_hire',
             isLoaded: true,
@@ -233,8 +282,56 @@ describe('HireAgentsPage (top cards)', () => {
       }),
     );
 
-    expect(html.indexOf('Portfolio Manager')).toBeLessThan(html.indexOf('Ember Lending'));
+    expect(html.indexOf('Ember Portfolio Manager')).toBeLessThan(html.indexOf('Ember Lending'));
     expect(html.indexOf('Ember Lending')).toBeLessThan(html.indexOf('Camelot CLMM'));
     expect(html.indexOf('Camelot CLMM')).toBeLessThan(html.indexOf('GMX Allora Trader'));
+  });
+
+  it('prefers an explicit branded image and avatar background for table rows', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [
+          {
+            id: 'agent-ember-lending',
+            rank: 2,
+            name: 'Ember Lending',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            imageUrl: '/ember-lending-avatar.svg',
+            avatarBg: '#9896FF',
+            protocols: ['GMX'],
+          },
+        ],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html).toContain('src="/ember-lending-avatar.svg"');
+    expect(html).toContain('style="background:#9896FF"');
+  });
+
+  it('applies the portfolio-specific marketplace background to the whole table row', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [
+          {
+            id: 'agent-portfolio-manager',
+            rank: 1,
+            name: 'Ember Portfolio Manager',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            marketplaceRowBg: 'rgba(124,58,237,0.08)',
+            marketplaceRowHoverBg: 'rgba(124,58,237,0.12)',
+          },
+        ],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html).toContain(
+      '<tr class="bg-[color:var(--agent-row-bg,transparent)] hover:bg-[color:var(--agent-row-hover-bg,rgba(255,255,255,0.05))] transition-colors cursor-pointer" style="--agent-row-bg:rgba(124,58,237,0.08);--agent-row-hover-bg:rgba(124,58,237,0.12)">',
+    );
   });
 });

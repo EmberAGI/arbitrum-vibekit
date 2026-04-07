@@ -221,6 +221,14 @@ export function AppSidebar() {
     tokenSymbols: sidebarTokenSymbols,
   });
 
+  const agentAvatarBgById = useMemo(
+    () =>
+      Object.fromEntries(
+        agentConfigs.map((config) => [config.id, config.imageUrl ? config.avatarBg : undefined]),
+      ),
+    [agentConfigs],
+  );
+
   const agentIconById = useMemo(() => {
     const out: Record<string, string | null> = {};
     for (const config of agentConfigs) {
@@ -229,6 +237,7 @@ export function AppSidebar() {
       const chains = profile?.chains?.length ? profile.chains : (config.chains ?? []);
       const avatar =
         resolveAgentAvatarUri({
+          imageUrl: config.imageUrl,
           protocols,
           tokenIconBySymbol,
         }) ??
@@ -446,6 +455,7 @@ export function AppSidebar() {
             badgeColor="bg-red-500/20 text-red-400"
             icon={<AlertCircle className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
+            agentAvatarBgById={agentAvatarBgById}
             onAgentClick={handleAgentClick}
           />
 
@@ -459,6 +469,7 @@ export function AppSidebar() {
             badgeColor="bg-teal-500/20 text-teal-400"
             icon={<Terminal className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
+            agentAvatarBgById={agentAvatarBgById}
             onAgentClick={handleAgentClick}
           />
 
@@ -472,6 +483,7 @@ export function AppSidebar() {
             badgeColor="bg-blue-500/20 text-blue-400"
             icon={<CheckCircle className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
+            agentAvatarBgById={agentAvatarBgById}
             onAgentClick={handleAgentClick}
           />
         </div>
@@ -672,6 +684,7 @@ interface ActivitySectionProps {
   badgeColor: string;
   icon: React.ReactNode;
   agentIconById?: Record<string, string | null>;
+  agentAvatarBgById?: Record<string, string | undefined>;
   onAgentClick?: (agentId: string) => void;
 }
 
@@ -684,6 +697,7 @@ function ActivitySection({
   badgeColor,
   icon,
   agentIconById = {},
+  agentAvatarBgById = {},
   onAgentClick,
 }: ActivitySectionProps) {
   const hasAgents = agents.length > 0;
@@ -734,7 +748,12 @@ function ActivitySection({
                   width={32}
                   height={32}
                   unoptimized
-                  className="w-8 h-8 rounded-full bg-black/30 ring-1 ring-[#2D3140] object-cover"
+                  className="w-8 h-8 rounded-full ring-1 ring-[#2D3140] object-contain"
+                  style={
+                    agentAvatarBgById[agentItem.id]
+                      ? { background: agentAvatarBgById[agentItem.id] }
+                      : { background: 'rgba(0,0,0,0.3)' }
+                  }
                 />
               ) : (
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#5f6bff] to-[#8f47ff] flex items-center justify-center text-xs font-semibold text-white">
