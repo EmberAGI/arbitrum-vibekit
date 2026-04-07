@@ -311,5 +311,10 @@ describe('AgentDetailPage managed-agent affordances', () => {
       'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
     );
     expect(html).toContain('/hire-agents/agent-ember-lending');
+    expect(html).toContain('Send message');
+    expect(html).not.toContain('Settings and policies');
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Activity\\s*</button>'));
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
   });
 });

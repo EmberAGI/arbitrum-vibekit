@@ -13,6 +13,7 @@ const AGENTS: Array<{ id: AgentId; name: string }> = [
   { id: 'agent-gmx-allora', name: 'GMX Allora Trader' },
   { id: 'agent-portfolio-manager', name: 'Ember Portfolio Agent' },
 ];
+const NON_PORTFOLIO_AGENTS = AGENTS.filter(({ id }) => id !== 'agent-portfolio-manager');
 
 vi.mock('../hooks/usePrivyWalletClient', () => {
   return {
@@ -130,7 +131,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).not.toContain('>Fire<');
   });
 
-  it.each(AGENTS)('renders shared pre-hire summary cards for $name', ({ id, name }) => {
+  it.each(NON_PORTFOLIO_AGENTS)('renders shared pre-hire summary cards for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,
       agentName: name,
@@ -141,6 +142,20 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('APY Change');
     expect(html).toContain('Total Users');
     expect(html).not.toContain('Agent is hired');
+  });
+
+  it('embeds chat instead of rendering pre-hire tabs for Ember Portfolio Agent', () => {
+    const html = renderAgentDetail({
+      agentId: 'agent-portfolio-manager',
+      agentName: 'Ember Portfolio Agent',
+      isHired: false,
+    });
+
+    expect(html).toContain('>Hire<');
+    expect(html).toContain('Send message');
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
+    expect(html).not.toContain('APY Change');
   });
 
   it.each(AGENTS)('renders hired split-pill contract for $name', ({ id, name }) => {
@@ -156,37 +171,57 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Your PnL');
   });
 
-  it.each(AGENTS)('uses Activity + Settings and policies tabs for $name', ({ id, name }) => {
+  it.each(NON_PORTFOLIO_AGENTS)(
+    'uses Activity + Settings and policies tabs for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+      });
+
+      expect(html).toContain('Settings and policies');
+      expect(html).toContain('Activity');
+      expect(html).not.toContain('Agent Blockers');
+      expect(html).not.toContain('Transaction history');
+    },
+  );
+
+  it('embeds chat instead of rendering post-hire tabs for Ember Portfolio Agent', () => {
     const html = renderAgentDetail({
-      agentId: id,
-      agentName: name,
+      agentId: 'agent-portfolio-manager',
+      agentName: 'Ember Portfolio Agent',
       isHired: true,
     });
 
-    expect(html).toContain('Settings and policies');
-    expect(html).toContain('Activity');
-    expect(html).not.toContain('Agent Blockers');
-    expect(html).not.toContain('Transaction history');
+    expect(html).toContain('Send message');
+    expect(html).not.toContain('Settings and policies');
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Activity\\s*</button>'));
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
   });
 
-  it.each(AGENTS)('renders Activity Stream panel in Activity tab for $name', ({ id, name }) => {
-    const html = renderAgentDetail({
-      agentId: id,
-      agentName: name,
-      isHired: true,
-      initialTab: 'transactions',
-      events: [
-        {
-          type: 'status',
-          message: 'Delegation approvals received. Continuing onboarding.',
-          task: { id: 'task-1', taskStatus: { state: 'working' } },
-        },
-      ],
-    });
+  it.each(NON_PORTFOLIO_AGENTS)(
+    'renders Activity Stream panel in Activity tab for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+        initialTab: 'transactions',
+        events: [
+          {
+            type: 'status',
+            message: 'Delegation approvals received. Continuing onboarding.',
+            task: { id: 'task-1', taskStatus: { state: 'working' } },
+          },
+        ],
+      });
 
-    expect(html).toContain('Activity Stream');
-    expect(html).toContain('Delegation approvals received. Continuing onboarding.');
-  });
+      expect(html).toContain('Activity Stream');
+      expect(html).toContain('Delegation approvals received. Continuing onboarding.');
+    },
+  );
 
   it.each(AGENTS)('does not render Activity Stream panel in Metrics tab for $name', ({ id, name }) => {
     const html = renderAgentDetail({

@@ -931,12 +931,11 @@ export function AgentDetailPage({
     () => (agentId === 'agent-ember-lending' ? buildEmberLendingRuntimeView(lifecycleState) : null),
     [agentId, lifecycleState],
   );
+  const isPortfolioAgent = agentId === 'agent-portfolio-manager';
   const portfolioManagerManagedAgentView = useMemo(
     () =>
-      agentId === 'agent-portfolio-manager'
-        ? buildPortfolioManagerManagedAgentView(lifecycleState)
-        : null,
-    [agentId, lifecycleState],
+      isPortfolioAgent ? buildPortfolioManagerManagedAgentView(lifecycleState) : null,
+    [isPortfolioAgent, lifecycleState],
   );
   const emberLendingChatEnabled =
     agentId === 'agent-ember-lending' &&
@@ -948,7 +947,7 @@ export function AgentDetailPage({
     );
   const chatEnabled =
     agentId === 'agent-pi-example' ||
-    agentId === 'agent-portfolio-manager' ||
+    isPortfolioAgent ||
     emberLendingChatEnabled;
   const inlineOnboardingChatEnabled =
     agentId === 'agent-pi-example' || agentId === 'agent-ember-lending';
@@ -1006,6 +1005,7 @@ export function AgentDetailPage({
     : !hasUserSelectedTab && showPostHireLayout
       ? defaultPostHireTab
       : activeTab;
+  const useEmbeddedPortfolioChat = isPortfolioAgent && !forceBlockersTab && !isFiring;
 
   const blockingErrorMessage = (haltReason || executionError || null) as string | null;
   const showBlockingErrorPopup =
@@ -1302,6 +1302,7 @@ export function AgentDetailPage({
         {resolvedTab === 'chat' && chatTab}
       </>
     );
+    const postHireContent = useEmbeddedPortfolioChat ? chatTab : tabContent;
 
     return (
       <div className="flex-1 overflow-y-auto p-8">
@@ -1658,12 +1659,12 @@ export function AgentDetailPage({
                     />
                     <PointsColumn metrics={metrics} />
                   </div>
-                </div>
               </div>
+            </div>
 
             {/* Tabs + content span full available width (no empty left column) */}
-            <div className="mt-8">{tabs}</div>
-            <div>{tabContent}</div>
+            {useEmbeddedPortfolioChat ? null : <div className="mt-8">{tabs}</div>}
+            <div>{postHireContent}</div>
           </>
         </div>
       </div>
@@ -1891,38 +1892,41 @@ export function AgentDetailPage({
           </div>
         </div>
 
-        <div className="mt-10 border-b border-white/10 flex items-center gap-6">
-          <button
-            type="button"
-            onClick={() => selectTab('metrics')}
-            className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
-              resolvedTab === 'metrics'
-                ? 'text-[#fd6731] border-[#fd6731]'
-                : 'text-gray-500 border-transparent hover:text-white'
-            }`}
-            aria-current={resolvedTab === 'metrics' ? 'page' : undefined}
-          >
-            Metrics
-          </button>
-          <button
-            type="button"
-            onClick={() => selectTab('chat')}
-            disabled={!chatEnabled}
-            className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
-              !chatEnabled
-                ? 'text-gray-600 border-transparent'
-                : resolvedTab === 'chat'
+        {useEmbeddedPortfolioChat ? null : (
+          <div className="mt-10 border-b border-white/10 flex items-center gap-6">
+            <button
+              type="button"
+              onClick={() => selectTab('metrics')}
+              className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
+                resolvedTab === 'metrics'
                   ? 'text-[#fd6731] border-[#fd6731]'
-                  : 'text-gray-400 border-transparent hover:text-white'
-            }`}
-          >
-            Chat
-          </button>
-        </div>
+                  : 'text-gray-500 border-transparent hover:text-white'
+              }`}
+              aria-current={resolvedTab === 'metrics' ? 'page' : undefined}
+            >
+              Metrics
+            </button>
+            <button
+              type="button"
+              onClick={() => selectTab('chat')}
+              disabled={!chatEnabled}
+              className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
+                !chatEnabled
+                  ? 'text-gray-600 border-transparent'
+                  : resolvedTab === 'chat'
+                    ? 'text-[#fd6731] border-[#fd6731]'
+                    : 'text-gray-400 border-transparent hover:text-white'
+              }`}
+            >
+              Chat
+            </button>
+          </div>
+        )}
 
         <div className="mt-6">
-          {resolvedTab === 'chat' ? chatTab : null}
-          {resolvedTab === 'metrics' ? (
+          {useEmbeddedPortfolioChat ? chatTab : null}
+          {!useEmbeddedPortfolioChat && resolvedTab === 'chat' ? chatTab : null}
+          {!useEmbeddedPortfolioChat && resolvedTab === 'metrics' ? (
             <>
               {/* Pre-hire should still show the same chart cards across agents (CLMM/Pendle/GMX)
                  so the page doesn't feel "empty" before hire. */}
