@@ -63,6 +63,36 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).not.toContain('Send message');
   });
 
+  it('defaults hired ember-lending to the chat tab and renders chat first in the tab strip', () => {
+    const html = renderManagedAgentDetail({
+      isHired: true,
+      taskStatus: 'working',
+      lifecycleState: {
+        phase: 'active',
+        mandateRef: 'mandate-ember-lending-001',
+        mandateSummary:
+          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+        mandateContext: {
+          network: 'arbitrum',
+          protocol: 'aave',
+        },
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+        rootedWalletContextId: 'rwc-ember-lending-thread-001',
+        lastReservationSummary:
+          'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+      } as never,
+    });
+
+    expect(html).toContain('Send message');
+    expect(html.indexOf('>Chat<')).toBeLessThan(html.indexOf('>Settings and policies<'));
+    expect(html.indexOf('>Chat<')).toBeLessThan(html.indexOf('>Metrics<'));
+    expect(html.indexOf('>Chat<')).toBeLessThan(html.indexOf('>Activity<'));
+    expect(html).toMatch(
+      new RegExp('<button[^>]*text-white border-white[^>]*>\\s*Chat\\s*</button>'),
+    );
+  });
+
   it('renders lending runtime context and enables chat only when the managed lane is active', () => {
     const html = renderManagedAgentDetail({
       isHired: true,
@@ -85,12 +115,14 @@ describe('AgentDetailPage managed-agent affordances', () => {
       } as never,
     });
 
-    expect(html).toContain('Managed lending runtime');
     expect(html).toContain('Subagent wallet');
-    expect(html).toContain('0x00000000000000000000000000000000000000b1');
+    expect(html).toContain('0x0000...00b1');
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).toContain('Mandate');
     expect(html).toContain(
       'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
     );
+    expect(html).toContain('Reservation');
     expect(html).toContain(
       'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
     );
@@ -99,9 +131,20 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).not.toContain('Lifecycle state');
     expect(html).not.toContain('Task status');
     expect(html).not.toContain('Lane');
-    expect(html.indexOf('Ember Lending')).toBeLessThan(html.indexOf('desc'));
-    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Managed lending runtime'));
-    expect(html.indexOf('Managed lending runtime')).toBeLessThan(html.indexOf('Chains'));
+    expect(html).not.toContain('Agent Income');
+    expect(html).not.toContain('AUM');
+    expect(html).not.toContain('Total Users');
+    expect(html).not.toContain('APY');
+    expect(html).not.toContain('Your Assets');
+    expect(html).not.toContain('Your PnL');
+    expect(html).not.toContain('Managed lending runtime');
+    expect(html.indexOf('0x0000...00b1')).toBeLessThan(
+      html.indexOf('desc'),
+    );
+    expect(html.indexOf('Ember Lending')).toBeLessThan(html.indexOf('Ember AI Team'));
+    expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('desc'));
+    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Mandate'));
+    expect(html.indexOf('Reservation')).toBeLessThan(html.indexOf('Chains'));
   });
 
   it('keeps lending chat visible while the thread is input-required', () => {
@@ -191,7 +234,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
       } as never,
     });
 
-    expect(html).toContain('Managed lending runtime');
+    expect(html).toContain('Reservation');
     expect(html).not.toContain('Subagent wallet');
     expect(html).not.toContain('0x00000000000000000000000000000000000000b1');
     expect(html).toContain(
@@ -201,6 +244,13 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).not.toContain('Lifecycle state');
     expect(html).not.toContain('Task status');
     expect(html).not.toContain('Lane');
+    expect(html).not.toContain('Agent Income');
+    expect(html).not.toContain('AUM');
+    expect(html).not.toContain('Total Users');
+    expect(html).not.toContain('APY');
+    expect(html).not.toContain('Your Assets');
+    expect(html).not.toContain('Your PnL');
+    expect(html).not.toContain('Managed lending runtime');
   });
 
   it('renders artifact labels from nested artifact payload types in the activity stream', () => {
@@ -305,19 +355,20 @@ describe('AgentDetailPage managed-agent affordances', () => {
 
     expect(html).toContain('Managed lending lane');
     expect(html).toContain('Ember Lending');
-    expect(html).toContain('Arbitrum / Aave');
-    expect(html).toContain('35% allocation cap');
-    expect(html).toContain(
-      'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
-    );
     expect(html).toContain('/hire-agents/agent-ember-lending');
+    expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('Send message');
     expect(html).not.toContain('Settings and policies');
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Activity\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
-    expect(html.indexOf('Ember Portfolio Agent')).toBeLessThan(html.indexOf('desc'));
+    expect(html).not.toContain('35% allocation cap');
+    expect(html).not.toContain(
+      'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+    );
+    expect(html.indexOf('Ember Portfolio Agent')).toBeLessThan(html.indexOf('Ember AI Team'));
+    expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('desc'));
     expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Managed lending lane'));
-    expect(html.indexOf('Managed lending lane')).toBeLessThan(html.indexOf('Chains'));
+    expect(html.indexOf('Managed lending lane')).toBeLessThan(html.indexOf('Send message'));
   });
 });

@@ -31,6 +31,7 @@ describe('agents config', () => {
     expect(emberLending.avatarBg).toBe('#9896FF');
     expect(emberLending.onboardingOwnerAgentId).toBe('agent-portfolio-manager');
     expect(emberLending.surfaceTag).toBe('Swarm');
+    expect(emberLending.protocols).toEqual(['Aave']);
     expect(clmm.surfaceTag).toBe('Workflow');
     expect(isRegisteredAgentId('agent-clmm')).toBe(true);
     expect(isRegisteredAgentId('agent-pi-example')).toBe(true);

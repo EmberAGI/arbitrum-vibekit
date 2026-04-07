@@ -202,9 +202,9 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
           aum: 742_510,
           totalUsers: 5_321,
           apy: 22,
-          chains: ['Arbitrum'],
-          protocols: ['Camelot'],
-          tokens: ['USDC', 'ARB', 'WETH'],
+          chains: config.chains ?? ['Arbitrum'],
+          protocols: config.protocols ?? [],
+          tokens: config.tokens ?? ['USDC'],
         }}
         metrics={{
           iteration: 0,

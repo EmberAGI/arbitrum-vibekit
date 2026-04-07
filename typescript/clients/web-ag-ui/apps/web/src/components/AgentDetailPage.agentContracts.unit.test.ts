@@ -156,9 +156,13 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
     expect(html).not.toContain('APY Change');
+    expect(html).not.toContain('Chains');
+    expect(html).not.toContain('Protocols');
+    expect(html).not.toContain('Tokens');
+    expect(html).not.toContain('Points');
   });
 
-  it.each(AGENTS)('renders hired split-pill contract for $name', ({ id, name }) => {
+  it.each(NON_PORTFOLIO_AGENTS)('renders hired split-pill contract for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,
       agentName: name,
@@ -169,6 +173,72 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('>Fire<');
     expect(html).toContain('Your Assets');
     expect(html).toContain('Your PnL');
+  });
+
+  it('hides the left-rail stats grid for Ember Portfolio Agent', () => {
+    const html = renderAgentDetail({
+      agentId: 'agent-portfolio-manager',
+      agentName: 'Ember Portfolio Agent',
+      isHired: true,
+    });
+
+    expect(html).toContain('Agent is hired');
+    expect(html).toContain('>Fire<');
+    expect(html).not.toContain('Agent Income');
+    expect(html).not.toContain('AUM');
+    expect(html).not.toContain('Total Users');
+    expect(html).not.toContain('APY');
+    expect(html).not.toContain('Your Assets');
+    expect(html).not.toContain('Your PnL');
+    expect(html).not.toContain('Chains');
+    expect(html).not.toContain('Protocols');
+    expect(html).not.toContain('Tokens');
+    expect(html).not.toContain('Points');
+  });
+
+  it('renders the lending subagent wallet with 4-by-4 address truncation', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-ember-lending',
+        agentName: 'Ember Lending',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: ['Arbitrum'],
+          protocols: ['Aave'],
+          tokens: ['USDC'],
+        },
+        metrics: {},
+        isHired: true,
+        isHiring: false,
+        hasLoadedView: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+        lifecycleState: {
+          phase: 'active',
+          walletAddress: '0x00000000000000000000000000000000000000b1',
+          mandateSummary: null,
+          lastReservationSummary: null,
+        } as never,
+      }),
+    );
+
+    expect(html).toContain('0x0000...00b1');
+  });
+
+  it.each(AGENTS)('renders the header order as title then metadata then description for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
+    });
+
+    expect(html.indexOf(name)).toBeLessThan(html.indexOf('Ember AI Team'));
+    expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('desc'));
   });
 
   it.each(NON_PORTFOLIO_AGENTS)(
@@ -270,7 +340,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     },
   );
 
-  it.each(AGENTS)('deduplicates arbitrum chain label for $name', ({ id, name }) => {
+  it.each(NON_PORTFOLIO_AGENTS)('deduplicates arbitrum chain label for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,
       agentName: name,

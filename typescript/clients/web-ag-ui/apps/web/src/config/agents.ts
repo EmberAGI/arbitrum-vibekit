@@ -110,7 +110,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     id: 'agent-portfolio-manager',
     name: 'Ember Portfolio Agent',
     description:
-      'Concrete PI-runtime orchestrator path for wallet-backed onboarding, signing handoffs, and Shared Ember Domain Service integration.',
+      'Orchestrates a swarm of hired agents, enforces your mandate policies autonomously, and works in the background to keep your portfolio aligned with the goals and constraints you set.',
     creator: 'Ember AI Team',
     creatorVerified: true,
     avatar: '🧭',
@@ -142,7 +142,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     onboardingOwnerAgentId: 'agent-portfolio-manager',
     imperativeCommandTransport: 'forwarded-props',
     chains: ['Arbitrum'],
-    protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+    protocols: ['Aave'],
     tokens: ['USDC'],
     isFeatured: true,
     featuredRank: 2,
