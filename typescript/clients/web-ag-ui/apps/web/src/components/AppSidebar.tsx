@@ -22,7 +22,7 @@ import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
 import { useOnchainActionsIconMaps } from '@/hooks/useOnchainActionsIconMaps';
 import { useAgent } from '@/contexts/AgentContext';
 import { useAgentList } from '@/contexts/AgentListContext';
-import { getAllAgents } from '@/config/agents';
+import { getVisibleAgents } from '@/config/agents';
 import type { TaskState } from '@/types/agent';
 import { resolveSidebarTaskState } from '@/utils/resolveSidebarTaskState';
 import { selectRuntimeTaskState } from '@/utils/selectRuntimeTaskState';
@@ -87,7 +87,7 @@ export function AppSidebar() {
   const agent = useAgent();
   const { agents: listAgents } = useAgentList();
 
-  const agentConfigs = useMemo(() => getAllAgents(), []);
+  const agentConfigs = useMemo(() => getVisibleAgents(), []);
   const isInactiveRuntime = agent.config.id === 'inactive-agent';
   const runtimeAgentId = isInactiveRuntime ? null : agent.config.id;
   const runtimeTaskId = agent.uiState.task?.id;

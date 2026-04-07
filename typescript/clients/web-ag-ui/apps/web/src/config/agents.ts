@@ -9,6 +9,7 @@ export interface AgentConfig {
   creatorVerified: boolean;
   avatar: string;
   avatarBg: string;
+  visibleInUserLists?: boolean;
   onboardingOwnerAgentId?: string;
   imperativeCommandTransport?: 'message' | 'forwarded-props';
   // Static metadata used for pre-auth and degraded modes before runtime stream data arrives.
@@ -90,6 +91,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '🧪',
     avatarBg: 'linear-gradient(135deg, #0891b2 0%, #2563eb 100%)',
+    visibleInUserLists: false,
     imperativeCommandTransport: 'forwarded-props',
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'OpenRouter'],
@@ -153,12 +155,16 @@ export function getAllAgents(): AgentConfig[] {
   return Object.values(AGENT_REGISTRY);
 }
 
+export function getVisibleAgents(): AgentConfig[] {
+  return getAllAgents().filter((agent) => agent.visibleInUserLists !== false);
+}
+
 export function isRegisteredAgentId(agentId: string): boolean {
   return Boolean(AGENT_REGISTRY[agentId]);
 }
 
 export function getFeaturedAgents(): AgentConfig[] {
-  return Object.values(AGENT_REGISTRY)
+  return getVisibleAgents()
     .filter((agent) => agent.isFeatured)
     .sort((a, b) => (a.featuredRank ?? 999) - (b.featuredRank ?? 999));
 }

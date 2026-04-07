@@ -1,14 +1,19 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { arbitrum, mainnet, polygon } from 'viem/chains';
 
 import { AppSidebar, getWalletSelectorChains } from './AppSidebar';
 
+const pushMock = vi.fn();
+const useAgentListMock = vi.fn();
+const getAllAgentsMock = vi.fn();
+const getVisibleAgentsMock = vi.fn();
+
 vi.mock('next/navigation', () => {
   return {
     usePathname: () => '/hire-agents',
-    useRouter: () => ({ push: vi.fn() }),
+    useRouter: () => ({ push: pushMock }),
   };
 });
 
@@ -86,17 +91,29 @@ vi.mock('@/contexts/AgentContext', () => {
 
 vi.mock('@/contexts/AgentListContext', () => {
   return {
-    useAgentList: () => ({ agents: {} }),
+    useAgentList: () => useAgentListMock(),
   };
 });
 
 vi.mock('@/config/agents', () => {
   return {
-    getAllAgents: () => [],
+    getAllAgents: () => getAllAgentsMock(),
+    getVisibleAgents: () => getVisibleAgentsMock(),
   };
 });
 
 describe('AppSidebar wallet actions', () => {
+  beforeEach(() => {
+    pushMock.mockReset();
+    useAgentListMock.mockReset();
+    getAllAgentsMock.mockReset();
+    getVisibleAgentsMock.mockReset();
+
+    useAgentListMock.mockReturnValue({ agents: {} });
+    getAllAgentsMock.mockReturnValue([]);
+    getVisibleAgentsMock.mockReturnValue([]);
+  });
+
   it('limits wallet selector chain options to Arbitrum and Ethereum', () => {
     const result = getWalletSelectorChains([arbitrum, mainnet, polygon]);
     expect(result.map((chain) => chain.id)).toEqual([arbitrum.id, mainnet.id]);
@@ -141,5 +158,26 @@ describe('AppSidebar wallet actions', () => {
 
     expect(html).toContain('text-[10px] font-mono font-medium text-[#A7A7B2]');
     expect(html).toContain('text-[11px] font-mono font-medium text-[#6F7280] tracking-[0.12em]');
+  });
+
+  it('shows only user-facing agents in activity sections', () => {
+    getAllAgentsMock.mockReturnValue([
+      { id: 'agent-portfolio-manager', name: 'Portfolio Manager', chains: [], protocols: [], tokens: [] },
+      { id: 'agent-pi-example', name: 'Pi Example Agent', chains: [], protocols: [], tokens: [] },
+    ]);
+    getVisibleAgentsMock.mockReturnValue([
+      { id: 'agent-portfolio-manager', name: 'Portfolio Manager', chains: [], protocols: [], tokens: [] },
+    ]);
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-portfolio-manager': { taskState: 'running' },
+        'agent-pi-example': { taskState: 'running' },
+      },
+    });
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('Portfolio Manager');
+    expect(html).not.toContain('Pi Example Agent');
   });
 });

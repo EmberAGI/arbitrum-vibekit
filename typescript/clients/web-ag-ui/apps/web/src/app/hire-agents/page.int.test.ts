@@ -112,13 +112,13 @@ describe('HireAgentsRoute integration', () => {
     });
   });
 
-  it('merges route data from config + state and preserves canonicalized chains', () => {
+  it('merges route data from config + state while hiding internal-only agents from visible lists', () => {
     renderToStaticMarkup(React.createElement(HireAgentsRoute));
 
     expect(capturedProps).not.toBeNull();
     const props = capturedProps as HireAgentsRoutePropsCapture;
 
-    expect(props.agents).toHaveLength(6);
+    expect(props.agents).toHaveLength(5);
     expect(props.featuredAgents).toHaveLength(3);
 
     const clmm = props.agents.find((agent) => agent.id === 'agent-clmm');
@@ -137,11 +137,7 @@ describe('HireAgentsRoute integration', () => {
     expect(pendle?.tokens).toContain('USDe');
     expect(pendle?.pointsTrend).toBeUndefined();
 
-    expect(piExample?.chains).toEqual(['Arbitrum']);
-    expect(piExample?.protocols).toEqual(['Pi Runtime', 'OpenRouter']);
-    expect(piExample?.tokens).toEqual(['USDC']);
-    expect(piExample?.pointsTrend).toBe('up');
-    expect(piExample?.trendMultiplier).toBe('1x');
+    expect(piExample).toBeUndefined();
 
     expect(portfolioManager?.chains).toEqual(['Arbitrum']);
     expect(portfolioManager?.protocols).toEqual(['Pi Runtime', 'Shared Ember Domain Service']);

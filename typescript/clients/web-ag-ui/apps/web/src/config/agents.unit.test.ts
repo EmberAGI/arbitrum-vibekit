@@ -5,6 +5,7 @@ import {
   getAgentConfig,
   getAllAgents,
   getFeaturedAgents,
+  getVisibleAgents,
   isRegisteredAgentId,
 } from './agents';
 
@@ -40,5 +41,15 @@ describe('agents config', () => {
   it('returns every static registry entry through getAllAgents', () => {
     const ids = getAllAgents().map((agent) => agent.id).sort();
     expect(ids).toEqual(Object.keys(AGENT_REGISTRY).sort());
+  });
+
+  it('excludes internal-only agents from visible user-facing lists', () => {
+    const allAgentIds = getAllAgents().map((agent) => agent.id);
+    const visibleAgentIds = getVisibleAgents().map((agent) => agent.id);
+
+    expect(allAgentIds).toContain('agent-pi-example');
+    expect(visibleAgentIds).not.toContain('agent-pi-example');
+    expect(visibleAgentIds).toContain('agent-portfolio-manager');
+    expect(visibleAgentIds).toContain('agent-ember-lending');
   });
 });

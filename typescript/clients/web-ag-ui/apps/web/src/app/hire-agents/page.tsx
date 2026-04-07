@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { HireAgentsPage, type Agent, type FeaturedAgent } from '@/components/HireAgentsPage';
 import { useAgentList } from '@/contexts/AgentListContext';
-import { getAllAgents, getFeaturedAgents } from '@/config/agents';
+import { getFeaturedAgents, getVisibleAgents } from '@/config/agents';
 import { canonicalizeChainLabel } from '@/utils/iconResolution';
 import { mergeUniqueStrings, normalizeStringList } from '@/utils/agentCollections';
 
@@ -14,7 +14,7 @@ const PAGINATION_QA_MOCKS_ENABLED =
 export default function HireAgentsRoute() {
   const router = useRouter();
   const { agents: agentStates } = useAgentList();
-  const registeredAgents = getAllAgents();
+  const registeredAgents = getVisibleAgents();
   const featuredAgentConfigs = getFeaturedAgents();
 
   const agentList: Agent[] = registeredAgents.map((agentConfig) => {
