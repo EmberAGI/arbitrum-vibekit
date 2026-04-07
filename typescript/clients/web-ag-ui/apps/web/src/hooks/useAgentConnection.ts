@@ -430,6 +430,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [copilotkit],
   );
 
+  const stopAgentOnCurrentThread = useCallback(
+    (currentAgent: HookAgent) => copilotkit.stopAgent({ agent: currentAgent }),
+    [copilotkit],
+  );
+
   const runDirectCommand = useCallback(
     (command: string) => {
       const scheduler = commandSchedulerRef.current;
@@ -1250,7 +1255,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
                 },
               },
             }),
-          preemptActiveRun: async (current) => copilotkit.stopAgent({ agent: current }),
+          preemptActiveRun: stopAgentOnCurrentThread,
           threadId,
           runInFlightRef,
           createId: v7,
@@ -1287,7 +1292,13 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     }
 
     setTimeout(() => setIsFiring(false), 3000);
-  }, [config.imperativeCommandTransport, copilotkit, isFiring, threadId]);
+  }, [
+    config.imperativeCommandTransport,
+    isFiring,
+    runAgentOnCurrentThread,
+    stopAgentOnCurrentThread,
+    threadId,
+  ]);
 
   const sendChatMessage = useCallback(
     (content: string) => {
@@ -1429,7 +1440,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         runInFlight: runInFlightRef.current,
       });
     },
-    [copilotkit, effectiveActiveInterrupt?.type, emitConnectTrace, runCommand],
+    [effectiveActiveInterrupt?.type, emitConnectTrace, runAgentOnCurrentThread, runCommand],
   );
 
   // Local settings mutation helper; caller decides whether to enqueue a sync run.
