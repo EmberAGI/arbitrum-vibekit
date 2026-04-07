@@ -1795,6 +1795,67 @@ function readManagedCandidateUnitIds(portfolioState: unknown): string[] | null {
   return requestedQuantities?.map((candidate) => candidate.unit_id) ?? null;
 }
 
+function buildManagedPlanningUnitAliasMap(input: {
+  portfolioState: unknown;
+  managedCandidateUnitIds: string[];
+}): Map<string, string | null> {
+  const aliasMap = new Map<string, string | null>();
+  const managedUnitIds = new Set(input.managedCandidateUnitIds);
+
+  const registerAlias = (alias: string, managedUnitId: string) => {
+    const existing = aliasMap.get(alias);
+    if (typeof existing === 'undefined') {
+      aliasMap.set(alias, managedUnitId);
+      return;
+    }
+
+    if (existing !== managedUnitId) {
+      aliasMap.set(alias, null);
+    }
+  };
+
+  for (const managedUnitId of input.managedCandidateUnitIds) {
+    registerAlias(managedUnitId, managedUnitId);
+  }
+
+  if (!isRecord(input.portfolioState) || !Array.isArray(input.portfolioState['owned_units'])) {
+    return aliasMap;
+  }
+
+  for (const candidate of input.portfolioState['owned_units']) {
+    if (!isRecord(candidate)) {
+      continue;
+    }
+
+    const unitId = readString(candidate['unit_id']);
+    if (!unitId || !managedUnitIds.has(unitId)) {
+      continue;
+    }
+
+    registerAlias(unitId, unitId);
+
+    const metadata = isRecord(candidate['metadata']) ? candidate['metadata'] : null;
+    const sourceUnitId = readString(metadata?.['source_unit_id']);
+    if (sourceUnitId) {
+      registerAlias(sourceUnitId, unitId);
+    }
+
+    for (const parentUnitId of readStringArray(candidate['parent_unit_ids']) ?? []) {
+      registerAlias(parentUnitId, unitId);
+    }
+  }
+
+  return aliasMap;
+}
+
+function normalizeManagedPlanningUnitId(
+  unitId: string,
+  aliasMap: Map<string, string | null>,
+): string | null {
+  const normalizedUnitId = aliasMap.get(unitId);
+  return typeof normalizedUnitId === 'string' ? normalizedUnitId : null;
+}
+
 function hasPortfolioManagerPlanningIdentity(state: EmberLendingLifecycleState): boolean {
   return Boolean(
     state.mandateRef &&
@@ -1948,9 +2009,12 @@ function resolveManagedPlanningReadiness(input: {
     };
   }
 
-  const managedUnitIds = new Set(managedCandidateUnitIds);
+  const managedUnitAliases = buildManagedPlanningUnitAliasMap({
+    portfolioState: input.state.lastPortfolioState,
+    managedCandidateUnitIds,
+  });
   const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
-  const candidateUnitIds =
+  const candidateUnitIdsInput =
     readStringArray(commandInput['candidate_unit_ids']) ?? managedCandidateUnitIds;
   const requestedQuantitiesInput = Object.prototype.hasOwnProperty.call(
     commandInput,
@@ -1964,32 +2028,42 @@ function resolveManagedPlanningReadiness(input: {
       statusMessage: PLANNING_PM_REQUESTED_QUANTITIES_BLOCKED_MESSAGE,
     };
   }
-  const requestedQuantities =
-    requestedQuantitiesInput.status === 'valid'
-      ? requestedQuantitiesInput.requestedQuantities
-      : managedRequestedQuantities;
-
-  if (candidateUnitIds.some((unitId) => !managedUnitIds.has(unitId))) {
+  const candidateUnitIds = [...new Set(candidateUnitIdsInput.map((unitId) =>
+    normalizeManagedPlanningUnitId(unitId, managedUnitAliases),
+  ))];
+  if (candidateUnitIds.some((unitId) => unitId === null)) {
     return {
       status: 'blocked',
       statusMessage: PLANNING_PM_UNIT_SCOPE_BLOCKED_MESSAGE,
     };
   }
 
-  const requestedQuantityUnitIds = requestedQuantities.map((candidate) => candidate.unit_id);
-  if (
-    requestedQuantityUnitIds.some((unitId) => !managedUnitIds.has(unitId))
-  ) {
-    return {
-      status: 'blocked',
-      statusMessage: PLANNING_PM_UNIT_SCOPE_BLOCKED_MESSAGE,
-    };
+  const requestedQuantitiesByUnitId = new Map<string, string>();
+  for (const requestedQuantity of
+    requestedQuantitiesInput.status === 'valid'
+      ? requestedQuantitiesInput.requestedQuantities
+      : managedRequestedQuantities) {
+    const normalizedUnitId = normalizeManagedPlanningUnitId(
+      requestedQuantity.unit_id,
+      managedUnitAliases,
+    );
+    if (!normalizedUnitId) {
+      return {
+        status: 'blocked',
+        statusMessage: PLANNING_PM_UNIT_SCOPE_BLOCKED_MESSAGE,
+      };
+    }
+
+    requestedQuantitiesByUnitId.set(normalizedUnitId, requestedQuantity.quantity);
   }
 
   return {
     status: 'ready',
-    candidateUnitIds,
-    requestedQuantities,
+    candidateUnitIds: candidateUnitIds.filter((unitId): unitId is string => unitId !== null),
+    requestedQuantities: [...requestedQuantitiesByUnitId].map(([unit_id, quantity]) => ({
+      unit_id,
+      quantity,
+    })),
   };
 }
 

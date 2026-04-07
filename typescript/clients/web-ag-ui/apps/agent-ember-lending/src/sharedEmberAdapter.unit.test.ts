@@ -2294,6 +2294,160 @@ describe('createEmberLendingDomain', () => {
     );
   });
 
+  it('normalizes predecessor unit ids to the admitted deployed successor before planning', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+
+        switch (request.method) {
+          case 'subagent.createTransactionPlan.v1':
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-materialize-candidate-plan',
+              result: {
+                protocol_version: 'v1',
+                revision: 8,
+                committed_event_ids: ['evt-candidate-plan-1'],
+                candidate_plan: {
+                  planning_kind: 'subagent_handoff',
+                  transaction_plan_id: 'txplan-ember-lending-001',
+                  handoff: {
+                    handoff_id: 'handoff-thread-1',
+                  },
+                  compact_plan_summary: {
+                    control_path: 'lending.borrow',
+                    asset: 'USDC',
+                    amount: '10',
+                    summary: 'borrow against the admitted deployed position on Aave',
+                  },
+                },
+              },
+            };
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          owned_units: [
+            {
+              unit_id: 'unit-ember-lending-successor-001',
+              root_asset: 'USDC',
+              quantity: '10',
+              status: 'deployed',
+              control_path: 'lending.supply',
+              position_kind: 'loan',
+              metadata: {
+                source_unit_id: 'unit-ember-lending-001',
+              },
+              parent_unit_ids: ['unit-ember-lending-001'],
+            },
+          ],
+          reservations: [
+            {
+              reservation_id: 'reservation-ember-lending-borrow-001',
+              purpose: 'refresh borrow coverage',
+              control_path: 'lending.borrow',
+              unit_allocations: [
+                {
+                  unit_id: 'unit-ember-lending-successor-001',
+                  quantity: '10',
+                },
+              ],
+            },
+          ],
+        },
+      },
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          ...createCandidatePlanInput(),
+          intent: 'increase',
+          action_summary: 'borrow against the admitted deployed position on Aave',
+          candidate_unit_ids: ['unit-ember-lending-001'],
+          requested_quantities: [
+            {
+              unit_id: 'unit-ember-lending-001',
+              quantity: '10',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 8,
+        lastCandidatePlan: null,
+        anchoredPayloadRecords: [],
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Candidate lending plan could not be anchored behind the lending service boundary because Shared Ember omitted the planner payload metadata required for anchoring.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith({
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-create-transaction-plan',
+      method: 'subagent.createTransactionPlan.v1',
+      params: {
+        idempotency_key: 'idem-candidate-plan-001',
+        expected_revision: 7,
+        handoff: {
+          handoff_id: 'handoff-thread-1-ca8874db0236',
+          agent_id: 'ember-lending',
+          root_user_wallet: '0x00000000000000000000000000000000000000a1',
+          mandate_ref: 'mandate-ember-lending-001',
+          intent: 'increase',
+          action_summary: 'borrow against the admitted deployed position on Aave',
+          candidate_unit_ids: ['unit-ember-lending-successor-001'],
+          requested_quantities: [
+            {
+              unit_id: 'unit-ember-lending-successor-001',
+              quantity: '10',
+            },
+          ],
+          decision_context: {
+            mandate_summary:
+              'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+            objective_summary: 'deploy reserved capital into the approved lending lane',
+            accounting_state_summary: 'one reserved USDC unit is available for the lending agent',
+            why_this_path_is_best: 'lending.supply is the admitted path for this reservation',
+            consequence_if_delayed: 'reserved capital remains idle',
+            alternatives_considered: ['leave the unit idle'],
+          },
+        },
+      },
+    });
+  });
+
   it('fails closed when requested_quantities object-map values are not base-unit strings', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (input: unknown) => {
