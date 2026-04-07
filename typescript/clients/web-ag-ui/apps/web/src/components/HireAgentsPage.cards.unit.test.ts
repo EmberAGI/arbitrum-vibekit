@@ -165,7 +165,7 @@ describe('HireAgentsPage (top cards)', () => {
         featuredAgents: [
           {
             id: 'agent-portfolio-manager',
-            name: 'Ember Portfolio Manager',
+            name: 'Ember Portfolio Agent',
             creator: 'Ember AI Team',
             status: 'for_hire',
             isLoaded: true,
@@ -193,7 +193,7 @@ describe('HireAgentsPage (top cards)', () => {
         featuredAgents: [
           {
             id: 'agent-portfolio-manager',
-            name: 'Ember Portfolio Manager',
+            name: 'Ember Portfolio Agent',
             creator: 'Ember AI Team',
             status: 'for_hire',
             isLoaded: true,
@@ -278,7 +278,7 @@ describe('HireAgentsPage (top cards)', () => {
           {
             id: 'agent-portfolio-manager',
             rank: 1,
-            name: 'Ember Portfolio Manager',
+            name: 'Ember Portfolio Agent',
             creator: 'Ember AI Team',
             status: 'for_hire',
             isLoaded: true,
@@ -310,7 +310,7 @@ describe('HireAgentsPage (top cards)', () => {
       }),
     );
 
-    expect(html.indexOf('Ember Portfolio Manager')).toBeLessThan(html.indexOf('Ember Lending'));
+    expect(html.indexOf('Ember Portfolio Agent')).toBeLessThan(html.indexOf('Ember Lending'));
     expect(html.indexOf('Ember Lending')).toBeLessThan(html.indexOf('Camelot CLMM'));
     expect(html.indexOf('Camelot CLMM')).toBeLessThan(html.indexOf('GMX Allora Trader'));
   });
@@ -370,7 +370,7 @@ describe('HireAgentsPage (top cards)', () => {
           {
             id: 'agent-portfolio-manager',
             rank: 1,
-            name: 'Ember Portfolio Manager',
+            name: 'Ember Portfolio Agent',
             creator: 'Ember AI Team',
             status: 'for_hire',
             isLoaded: true,

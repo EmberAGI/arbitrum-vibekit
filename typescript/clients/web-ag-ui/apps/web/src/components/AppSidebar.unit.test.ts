@@ -3,16 +3,17 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { arbitrum, mainnet, polygon } from 'viem/chains';
 
-import { AppSidebar, getWalletSelectorChains } from './AppSidebar';
+import { AppSidebar, getSidebarAgentHref, getWalletSelectorChains } from './AppSidebar';
 
 const pushMock = vi.fn();
 const useAgentListMock = vi.fn();
 const getAllAgentsMock = vi.fn();
 const getVisibleAgentsMock = vi.fn();
+let pathnameMock = '/hire-agents';
 
 vi.mock('next/navigation', () => {
   return {
-    usePathname: () => '/hire-agents',
+    usePathname: () => pathnameMock,
     useRouter: () => ({ push: pushMock }),
   };
 });
@@ -108,6 +109,7 @@ describe('AppSidebar wallet actions', () => {
     useAgentListMock.mockReset();
     getAllAgentsMock.mockReset();
     getVisibleAgentsMock.mockReset();
+    pathnameMock = '/hire-agents';
 
     useAgentListMock.mockReturnValue({ agents: {} });
     getAllAgentsMock.mockReturnValue([]);
@@ -131,6 +133,22 @@ describe('AppSidebar wallet actions', () => {
 
     expect(html).toContain('w-[312px]');
     expect(html).toContain('src="/ember-sidebar-logo.png"');
+  });
+
+  it('links the platform chat entry to the portfolio agent conversation', () => {
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('Ember Portfolio Agent');
+    expect(html).toContain('href="/hire-agents/agent-portfolio-manager?tab=chat"');
+  });
+
+  it('does not keep the hire nav item highlighted on the portfolio agent route', () => {
+    pathnameMock = '/hire-agents/agent-portfolio-manager';
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+    const activeMarkers = html.match(/w-px h-6 bg-\[#fd6731\]/g) ?? [];
+
+    expect(activeMarkers).toHaveLength(1);
   });
 
   it('uses simplified sidebar icons for agents and activity state', () => {
@@ -164,7 +182,7 @@ describe('AppSidebar wallet actions', () => {
     getAllAgentsMock.mockReturnValue([
       {
         id: 'agent-portfolio-manager',
-        name: 'Ember Portfolio Manager',
+        name: 'Ember Portfolio Agent',
         chains: [],
         protocols: [],
         tokens: [],
@@ -174,7 +192,7 @@ describe('AppSidebar wallet actions', () => {
     getVisibleAgentsMock.mockReturnValue([
       {
         id: 'agent-portfolio-manager',
-        name: 'Ember Portfolio Manager',
+        name: 'Ember Portfolio Agent',
         chains: [],
         protocols: [],
         tokens: [],
@@ -189,7 +207,14 @@ describe('AppSidebar wallet actions', () => {
 
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('Ember Portfolio Manager');
+    expect(html).toContain('Ember Portfolio Agent');
     expect(html).not.toContain('Pi Example Agent');
+  });
+
+  it('routes portfolio agent sidebar clicks to the chat tab deep link', () => {
+    expect(getSidebarAgentHref('agent-portfolio-manager')).toBe(
+      '/hire-agents/agent-portfolio-manager?tab=chat',
+    );
+    expect(getSidebarAgentHref('agent-ember-lending')).toBe('/hire-agents/agent-ember-lending');
   });
 });

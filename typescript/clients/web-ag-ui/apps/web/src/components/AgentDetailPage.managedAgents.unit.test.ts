@@ -50,8 +50,8 @@ describe('AgentDetailPage managed-agent affordances', () => {
   it('routes ember-lending onboarding through the portfolio manager in prehire state', () => {
     const html = renderManagedAgentDetail({});
 
-    expect(html).toContain('Open Ember Portfolio Manager');
-    expect(html).toContain('Managed onboarding happens through Ember Portfolio Manager.');
+    expect(html).toContain('Open Ember Portfolio Agent');
+    expect(html).toContain('Managed onboarding happens through Ember Portfolio Agent.');
     expect(html).toContain('Swarm');
     expect(html).not.toContain('Workflow');
     expect(html).not.toContain('Managed workflow');
@@ -228,7 +228,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-portfolio-manager',
-        agentName: 'Ember Portfolio Manager',
+        agentName: 'Ember Portfolio Agent',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,

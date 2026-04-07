@@ -17,7 +17,7 @@ describe('agents config', () => {
     const emberLending = getAgentConfig('agent-ember-lending');
     expect(clmm.name).toBe('Camelot CLMM');
     expect(piExample.name).toBe('Pi Example Agent');
-    expect(portfolioManager.name).toBe('Ember Portfolio Manager');
+    expect(portfolioManager.name).toBe('Ember Portfolio Agent');
     expect(portfolioManager.imageUrl).toBe(
       'https://www.emberai.xyz/Logo.svg?dpl=dpl_J6BA6gqb9V9kgyUjTjKdpkPToAd7',
     );

@@ -8,7 +8,7 @@ import { getAgentConfig, isRegisteredAgentId } from '@/config/agents';
 import { useAgent } from '@/contexts/AgentContext';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
-type UiPreviewTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
+type AgentRouteTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
 
 const EMPTY_MESSAGES: Message[] = [];
 
@@ -17,7 +17,7 @@ function parseUiPreviewState(value: string | null): UiPreviewState | null {
   return null;
 }
 
-function parseUiPreviewTab(value: string | null): UiPreviewTab | null {
+function parseAgentRouteTab(value: string | null): AgentRouteTab | null {
   if (
     value === 'blockers' ||
     value === 'metrics' ||
@@ -76,7 +76,9 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
     process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_UI_PREVIEW === 'true';
   const uiPreviewState =
     uiPreviewEnabled ? parseUiPreviewState(searchParams.get('__uiState')) : null;
-  const uiPreviewTab = uiPreviewEnabled ? parseUiPreviewTab(searchParams.get('__tab')) : null;
+  const requestedTab = parseAgentRouteTab(searchParams.get('tab'));
+  const uiPreviewTab = uiPreviewEnabled ? parseAgentRouteTab(searchParams.get('__tab')) : null;
+  const selectedTab = requestedTab ?? uiPreviewTab;
 
   if (uiPreviewState) {
     const previewAgentId = routeHasRegisteredAgent ? routeAgentId : selectedAgentId;
@@ -113,7 +115,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
           lifetimePnlUsd: 0,
         }}
         fullMetrics={agent.metrics}
-        initialTab={isHired ? (uiPreviewTab ?? undefined) : undefined}
+        initialTab={isHired ? (selectedTab ?? undefined) : undefined}
         isHired={isHired}
         isHiring={false}
         hasLoadedView
@@ -184,7 +186,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         lifetimePnlUsd: agent.metrics.lifetimePnlUsd,
       }}
       fullMetrics={agent.metrics}
-      initialTab={agent.isHired ? (uiPreviewTab ?? undefined) : undefined}
+      initialTab={agent.isHired ? (selectedTab ?? undefined) : undefined}
       isHired={agent.isHired}
       isHiring={agent.isHiring}
       hasLoadedView={agent.hasLoadedView}

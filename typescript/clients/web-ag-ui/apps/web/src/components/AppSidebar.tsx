@@ -44,11 +44,17 @@ export interface AgentActivity {
 }
 
 const ETHEREUM_MAINNET_CHAIN_ID = 1;
+const PORTFOLIO_AGENT_ID = 'agent-portfolio-manager';
+const PORTFOLIO_AGENT_CHAT_HREF = `/hire-agents/${PORTFOLIO_AGENT_ID}?tab=chat`;
 
 export function getWalletSelectorChains(chains: readonly Chain[]): Chain[] {
   return chains.filter(
     (chain) => chain.id === defaultEvmChain.id || chain.id === ETHEREUM_MAINNET_CHAIN_ID,
   );
+}
+
+export function getSidebarAgentHref(agentId: string): string {
+  return agentId === PORTFOLIO_AGENT_ID ? PORTFOLIO_AGENT_CHAT_HREF : `/hire-agents/${agentId}`;
 }
 
 export function AppSidebar() {
@@ -325,12 +331,14 @@ export function AppSidebar() {
 
   // Navigate to agent detail page when clicking on an agent in the sidebar
   const handleAgentClick = (agentId: string) => {
-    router.push(`/hire-agents/${agentId}`);
+    router.push(getSidebarAgentHref(agentId));
   };
 
   const canSelectChain = ready && authenticated && Boolean(privyWallet) && !isWalletLoading;
 
-  const isHireAgentsActive = pathname === '/hire-agents' || pathname?.startsWith('/hire-agents/');
+  const isPortfolioAgentActive = pathname?.startsWith(`/hire-agents/${PORTFOLIO_AGENT_ID}`);
+  const isHireAgentsActive =
+    pathname === '/hire-agents' || (pathname?.startsWith('/hire-agents/') && !isPortfolioAgentActive);
   const isAcquireActive = pathname === '/acquire';
   const isLeaderboardActive = pathname === '/leaderboard';
 
@@ -363,14 +371,20 @@ export function AppSidebar() {
             Platform
           </div>
           <div className="space-y-1">
-            {/* Chat - Disabled */}
-            <button
-              disabled
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left opacity-40 cursor-not-allowed"
+            <Link
+              href={PORTFOLIO_AGENT_CHAT_HREF}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
+                isPortfolioAgentActive
+                  ? 'text-white'
+                  : 'text-[#9A9CAA] hover:text-white hover:bg-[#1B1C21]'
+              }`}
             >
+              {isPortfolioAgentActive && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
+              )}
               <MessageSquare className="w-4 h-4 text-gray-500" />
-              <span className="text-sm text-gray-500">Chat</span>
-            </button>
+              <span className="text-sm font-medium text-[#D7D8DE]">Ember Portfolio Agent</span>
+            </Link>
 
             {/* Agents */}
             <div>

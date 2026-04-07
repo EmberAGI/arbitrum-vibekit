@@ -11,7 +11,7 @@ const AGENTS: Array<{ id: AgentId; name: string }> = [
   { id: 'agent-clmm', name: 'Camelot CLMM' },
   { id: 'agent-pendle', name: 'Pendle Yield' },
   { id: 'agent-gmx-allora', name: 'GMX Allora Trader' },
-  { id: 'agent-portfolio-manager', name: 'Ember Portfolio Manager' },
+  { id: 'agent-portfolio-manager', name: 'Ember Portfolio Agent' },
 ];
 
 vi.mock('../hooks/usePrivyWalletClient', () => {
@@ -298,10 +298,10 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Allora Signal Source');
   });
 
-  it('routes portfolio-manager setup interrupt to Ember Portfolio Manager Setup form', () => {
+  it('routes portfolio-manager setup interrupt to Ember Portfolio Agent Setup form', () => {
     const html = renderAgentDetail({
       agentId: 'agent-portfolio-manager',
-      agentName: 'Ember Portfolio Manager',
+      agentName: 'Ember Portfolio Agent',
       isHired: true,
       activeInterrupt: {
         type: 'portfolio-manager-setup-request',
@@ -309,7 +309,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
       },
     });
 
-    expect(html).toContain('Ember Portfolio Manager Setup');
+    expect(html).toContain('Ember Portfolio Agent Setup');
     expect(html).toContain('Root delegation setup');
     expect(html).toContain('live wallet observation');
     expect(html).not.toContain('USDC Allocation');

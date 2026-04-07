@@ -156,7 +156,7 @@ describe('HireAgentsRoute integration', () => {
     expect(piExample).toBeUndefined();
 
     expect(portfolioManager?.chains).toEqual(['Arbitrum']);
-    expect(portfolioManager?.name).toBe('Ember Portfolio Manager');
+    expect(portfolioManager?.name).toBe('Ember Portfolio Agent');
     expect(portfolioManager?.protocols).toEqual(['Pi Runtime', 'Shared Ember Domain Service']);
     expect(portfolioManager?.tokens).toEqual(['USDC']);
     expect(portfolioManager?.imageUrl).toBe(

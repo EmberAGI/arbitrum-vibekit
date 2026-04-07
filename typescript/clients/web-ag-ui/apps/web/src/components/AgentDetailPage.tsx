@@ -3093,7 +3093,7 @@ function AgentBlockersTab({
               </form>
             ) : showPortfolioManagerSetupForm ? (
               <form onSubmit={handlePortfolioManagerSetupSubmit}>
-                <h3 className="text-lg font-semibold text-white mb-4">Ember Portfolio Manager Setup</h3>
+                <h3 className="text-lg font-semibold text-white mb-4">Ember Portfolio Agent Setup</h3>
                 {activeInterrupt?.message && (
                   <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
                 )}

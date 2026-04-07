@@ -108,7 +108,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
   },
   'agent-portfolio-manager': {
     id: 'agent-portfolio-manager',
-    name: 'Ember Portfolio Manager',
+    name: 'Ember Portfolio Agent',
     description:
       'Concrete PI-runtime orchestrator path for wallet-backed onboarding, signing handoffs, and Shared Ember Domain Service integration.',
     creator: 'Ember AI Team',
