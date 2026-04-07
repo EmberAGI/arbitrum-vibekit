@@ -54,6 +54,7 @@ function makeResolvedConfig(params: {
   delegatorWalletAddress: `0x${string}`;
   delegateeWalletAddress: `0x${string}`;
   fundingTokenAddress: `0x${string}`;
+  collateralTokenAddress?: `0x${string}`;
   marketAddress: `0x${string}`;
 }): ResolvedGmxConfig {
   return {
@@ -61,6 +62,7 @@ function makeResolvedConfig(params: {
     delegateeWalletAddress: params.delegateeWalletAddress,
     baseContributionUsd: 10,
     fundingTokenAddress: params.fundingTokenAddress,
+    collateralTokenAddress: params.collateralTokenAddress ?? params.fundingTokenAddress,
     targetMarket: {
       address: params.marketAddress,
       baseSymbol: 'BTC',

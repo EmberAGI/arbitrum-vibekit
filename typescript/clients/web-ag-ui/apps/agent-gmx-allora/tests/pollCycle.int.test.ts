@@ -124,6 +124,7 @@ function buildBaseState(): ClmmState {
         delegateeWalletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         baseContributionUsd: 200,
         fundingTokenAddress: '0x1111111111111111111111111111111111111111',
+        collateralTokenAddress: '0x1111111111111111111111111111111111111111',
         targetMarket: {
           address: '0xmarket',
           baseSymbol: 'BTC',

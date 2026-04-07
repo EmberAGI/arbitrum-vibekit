@@ -9,6 +9,8 @@ export type OnboardingNodeTarget =
   | 'prepareOperator'
   | 'syncState';
 
+export type PostFundingTokenNodeTarget = Exclude<OnboardingNodeTarget, 'syncState'>;
+
 export function resolveNextOnboardingNode(state: ClmmState): OnboardingNodeTarget {
   const phase = resolveOnboardingPhase({
     hasSetupInput: Boolean(state.thread.operatorInput),
@@ -28,4 +30,9 @@ export function resolveNextOnboardingNode(state: ClmmState): OnboardingNodeTarge
       ready: 'syncState',
     },
   });
+}
+
+export function resolvePostFundingTokenNode(state: ClmmState): PostFundingTokenNodeTarget {
+  const nextOnboardingNode = resolveNextOnboardingNode(state);
+  return nextOnboardingNode === 'syncState' ? 'prepareOperator' : nextOnboardingNode;
 }

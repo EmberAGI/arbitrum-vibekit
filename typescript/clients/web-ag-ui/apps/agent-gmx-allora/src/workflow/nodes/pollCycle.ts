@@ -1,5 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import type { TaskState } from 'agent-workflow-core';
+import { formatUnits, parseUnits } from 'viem';
 
 import { fetchAlloraInference, type AlloraInference } from '../../clients/allora.js';
 import {
@@ -311,6 +312,60 @@ type ExecutionFeeTopUpLogContext = {
   iteration: number;
 };
 
+export function estimateFundingTokenUsdPrice(params: {
+  amountBaseUnits?: string;
+  decimals?: number;
+  valueUsd?: number;
+  fallbackUsdPrice?: number;
+}): number | undefined {
+  if (
+    typeof params.amountBaseUnits !== 'string' ||
+    typeof params.decimals !== 'number' ||
+    typeof params.valueUsd !== 'number' ||
+    !Number.isFinite(params.valueUsd) ||
+    params.valueUsd <= 0
+  ) {
+    return params.fallbackUsdPrice;
+  }
+
+  let amount: number;
+  try {
+    amount = Number(formatUnits(BigInt(params.amountBaseUnits), params.decimals));
+  } catch {
+    return params.fallbackUsdPrice;
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return params.fallbackUsdPrice;
+  }
+
+  const usdPrice = params.valueUsd / amount;
+  return Number.isFinite(usdPrice) && usdPrice > 0 ? usdPrice : params.fallbackUsdPrice;
+}
+
+export function estimateExecutionFeeTopUpExactInAmountBaseUnits(params: {
+  targetFeeUsd: number;
+  fundingTokenDecimals: number;
+  fundingTokenUsdPrice: number;
+}): string {
+  if (!Number.isFinite(params.targetFeeUsd) || params.targetFeeUsd <= 0) {
+    throw new Error('Execution-fee top-up target must be positive.');
+  }
+  if (!Number.isFinite(params.fundingTokenUsdPrice) || params.fundingTokenUsdPrice <= 0) {
+    throw new Error('Funding token USD price is required to price the execution-fee top-up.');
+  }
+
+  const amountIn = params.targetFeeUsd / params.fundingTokenUsdPrice;
+  let amountInBaseUnits = parseUnits(
+    amountIn.toFixed(params.fundingTokenDecimals),
+    params.fundingTokenDecimals,
+  );
+  if (amountInBaseUnits <= 0n) {
+    amountInBaseUnits = 1n;
+  }
+  return amountInBaseUnits.toString();
+}
+
 function isExecutionFeeFundingShortfall(errorMessage: string | undefined): boolean {
   if (!errorMessage) {
     return false;
@@ -370,6 +425,7 @@ async function executeConfirmedFlipPlan(params: {
     OnchainActionsClient,
     | 'listPerpetualPositions'
     | 'getPerpetualLifecycle'
+    | 'createSwap'
     | 'createPerpetualLong'
     | 'createPerpetualShort'
     | 'createPerpetualClose'
@@ -382,6 +438,13 @@ async function executeConfirmedFlipPlan(params: {
   delegationBundle: ClmmState['thread']['delegationBundle'];
   delegatorWalletAddress: `0x${string}`;
   delegateeWalletAddress: `0x${string}`;
+  swapFundingEstimate?: {
+    fromTokenDecimals?: number;
+    fromTokenBalanceBaseUnits?: string;
+    fromTokenUsdPrice?: number;
+    toTokenDecimals?: number;
+    toTokenUsdPrice?: number;
+  };
   runtimeThreadId: string | undefined;
   runtimeCheckpointId: string | undefined;
   runtimeCheckpointNamespace: string | undefined;
@@ -397,6 +460,7 @@ async function executeConfirmedFlipPlan(params: {
       delegationBundle: params.delegationBundle,
       delegatorWalletAddress: params.delegatorWalletAddress,
       delegateeWalletAddress: params.delegateeWalletAddress,
+      swapFundingEstimate: params.swapFundingEstimate,
     });
   }
 
@@ -413,6 +477,7 @@ async function executeConfirmedFlipPlan(params: {
     delegationBundle: params.delegationBundle,
     delegatorWalletAddress: params.delegatorWalletAddress,
     delegateeWalletAddress: params.delegateeWalletAddress,
+    swapFundingEstimate: params.swapFundingEstimate,
   });
 
   if (!closeExecution.ok) {
@@ -535,6 +600,7 @@ async function executeConfirmedFlipPlan(params: {
     delegationBundle: params.delegationBundle,
     delegatorWalletAddress: params.delegatorWalletAddress,
     delegateeWalletAddress: params.delegateeWalletAddress,
+    swapFundingEstimate: params.swapFundingEstimate,
   });
 
   return {
@@ -627,6 +693,7 @@ async function maybeAutoFundExecutionFee(params: {
   delegatorWalletAddress: `0x${string}`;
   delegateeWalletAddress: `0x${string}`;
   fundingTokenAddress: `0x${string}`;
+  fundingTokenUsdPrice?: number;
   executionPlan: ExecutionPlan;
   logContext: ExecutionFeeTopUpLogContext;
 }): Promise<ExecutionFeeTopUpAttempt> {
@@ -710,8 +777,6 @@ async function maybeAutoFundExecutionFee(params: {
       EXECUTION_FEE_TOP_UP_MIN_USD,
       Math.min(EXECUTION_FEE_TOP_UP_MAX_USD, bufferedFeeUsd),
     );
-    const scale = 10 ** fundingToken.decimals;
-    const exactInAmountBaseUnits = Math.max(1, Math.ceil(targetFeeUsd * scale)).toString();
     const balances = await params.onchainActionsClient.listWalletBalances({
       walletAddress: params.planBuilderWalletAddress,
     });
@@ -730,11 +795,38 @@ async function maybeAutoFundExecutionFee(params: {
       nativeBalance.valueUsd >= 0
         ? nativeBalance.valueUsd
         : undefined;
+    const fundingBalance = balances.find(
+      (balance) =>
+        balance.tokenUid.chainId === chainId &&
+        balance.tokenUid.address.toLowerCase() === fundingToken.tokenUid.address.toLowerCase(),
+    );
+    const fundingTokenDecimals = fundingBalance?.decimals ?? fundingToken.decimals;
+    const fundingTokenUsdPrice = estimateFundingTokenUsdPrice({
+      amountBaseUnits: fundingBalance?.amount,
+      decimals: fundingTokenDecimals,
+      valueUsd: fundingBalance?.valueUsd,
+      fallbackUsdPrice:
+        fundingToken.symbol.toUpperCase() === 'USDC' ? 1 : params.fundingTokenUsdPrice,
+    });
+    if (fundingTokenUsdPrice === undefined) {
+      return {
+        attempted: true,
+        funded: false,
+        error: 'Unable to price the funding token for automatic execution-fee top-up.',
+      };
+    }
+    const exactInAmountBaseUnits = estimateExecutionFeeTopUpExactInAmountBaseUnits({
+      targetFeeUsd,
+      fundingTokenDecimals,
+      fundingTokenUsdPrice,
+    });
     logWarn('pollCycle: execution-fee top-up preflight computed', {
       ...params.logContext,
       estimatedFeeUsdRaw,
       perExecutionFeeUsd,
       targetFeeUsd,
+      fundingTokenDecimals,
+      fundingTokenUsdPrice,
       exactInAmountBaseUnits,
       nativeBalanceAmount: nativeBalance?.amount,
       nativeBalanceUsd,
@@ -750,12 +842,6 @@ async function maybeAutoFundExecutionFee(params: {
       });
       return { attempted: false, funded: false };
     }
-
-    const fundingBalance = balances.find(
-      (balance) =>
-        balance.tokenUid.chainId === chainId &&
-        balance.tokenUid.address.toLowerCase() === fundingToken.tokenUid.address.toLowerCase(),
-    );
     if (fundingBalance && BigInt(fundingBalance.amount) < BigInt(exactInAmountBaseUnits)) {
       return {
         attempted: true,
@@ -1627,12 +1713,26 @@ export const pollCycleNode = async (
     marketAddress: gmxMarketAddress as `0x${string}`,
     walletAddress: planBuilderWalletAddress,
     payTokenAddress: operatorConfig.fundingTokenAddress,
-    collateralTokenAddress: operatorConfig.fundingTokenAddress,
+    collateralTokenAddress: operatorConfig.collateralTokenAddress,
     actualPositionSide: currentPositionSide,
     assumedPositionSide: reconciledAssumedPositionSide ?? activePositionSyncGuard?.expectedSide,
     positionContractKey: positionForReduce?.contractKey,
     positionSizeInUsd: positionForReduce?.sizeInUsd,
   });
+  const fundingTokenAddress = operatorConfig.fundingTokenAddress;
+  const collateralTokenAddress = operatorConfig.collateralTokenAddress;
+  const collateralSwapFundingEstimate =
+    typeof fundingTokenAddress !== 'string' ||
+    typeof collateralTokenAddress !== 'string' ||
+    fundingTokenAddress.toLowerCase() === collateralTokenAddress.toLowerCase()
+      ? undefined
+      : {
+          fromTokenDecimals: operatorConfig.fundingTokenDecimals,
+          fromTokenBalanceBaseUnits: operatorConfig.fundingTokenBalanceBaseUnits,
+          fromTokenUsdPrice: operatorConfig.fundingTokenUsdPrice,
+          toTokenDecimals: operatorConfig.collateralTokenDecimals,
+          toTokenUsdPrice: 1,
+        };
 
   const skipTradeForUnchangedInference =
     isTradePlanAction(plannedExecutionPlan.action) &&
@@ -1768,6 +1868,7 @@ export const pollCycleNode = async (
           delegationBundle: state.thread.delegationBundle,
           delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
           delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+          swapFundingEstimate: collateralSwapFundingEstimate,
           runtimeThreadId,
           runtimeCheckpointId,
           runtimeCheckpointNamespace,
@@ -1782,6 +1883,7 @@ export const pollCycleNode = async (
           delegationBundle: state.thread.delegationBundle,
           delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
           delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+          swapFundingEstimate: collateralSwapFundingEstimate,
         });
   logWarn('pollCycle: executePerpetualPlan resolved', {
     threadId: runtimeThreadId,
@@ -1825,6 +1927,7 @@ export const pollCycleNode = async (
       delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
       delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
       fundingTokenAddress: operatorConfig.fundingTokenAddress,
+      fundingTokenUsdPrice: operatorConfig.fundingTokenUsdPrice,
       executionPlan,
       logContext: {
         threadId: runtimeThreadId,
@@ -1869,6 +1972,7 @@ export const pollCycleNode = async (
               delegationBundle: state.thread.delegationBundle,
               delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
               delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+              swapFundingEstimate: collateralSwapFundingEstimate,
               runtimeThreadId,
               runtimeCheckpointId,
               runtimeCheckpointNamespace,
@@ -1883,6 +1987,7 @@ export const pollCycleNode = async (
               delegationBundle: state.thread.delegationBundle,
               delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
               delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+              swapFundingEstimate: collateralSwapFundingEstimate,
             });
       logWarn('pollCycle: retry after execution-fee top-up resolved', {
         threadId: runtimeThreadId,

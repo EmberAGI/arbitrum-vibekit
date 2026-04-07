@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ClmmState } from '../context.js';
 
-import { pollCycleNode } from './pollCycle.js';
+import {
+  estimateExecutionFeeTopUpExactInAmountBaseUnits,
+  estimateFundingTokenUsdPrice,
+  pollCycleNode,
+} from './pollCycle.js';
 
 const { copilotkitEmitStateMock } = vi.hoisted(() => ({
   copilotkitEmitStateMock: vi.fn(),
@@ -15,6 +19,26 @@ vi.mock('@copilotkit/sdk-js/langgraph', () => ({
 }));
 
 describe('pollCycleNode', () => {
+  it('derives the funding token USD price from the live wallet balance snapshot', () => {
+    expect(
+      estimateFundingTokenUsdPrice({
+        amountBaseUnits: '1000000000000000000',
+        decimals: 18,
+        valueUsd: 1600,
+      }),
+    ).toBe(1600);
+  });
+
+  it('prices execution-fee top-up exact-in amounts using the funding token USD price', () => {
+    expect(
+      estimateExecutionFeeTopUpExactInAmountBaseUnits({
+        targetFeeUsd: 5,
+        fundingTokenDecimals: 18,
+        fundingTokenUsdPrice: 1600,
+      }),
+    ).toBe('3125000000000000');
+  });
+
   it('uses state-driven routing and avoids direct Command construction', async () => {
     const source = await readFile(new URL('./pollCycle.ts', import.meta.url), 'utf8');
     expect(source.includes('new Command(')).toBe(false);
@@ -33,6 +57,7 @@ describe('pollCycleNode', () => {
         },
         fundingTokenInput: {
           fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
         },
         task: { id: 'task-1', taskStatus: { state: 'working' } },
         activity: { telemetry: [], events: [] },

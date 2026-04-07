@@ -51,6 +51,7 @@ describe('prepareOperatorNode', () => {
         },
         fundingTokenInput: {
           fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
         },
         delegationsBypassActive: false,
         delegationBundle: undefined,
@@ -99,6 +100,7 @@ describe('prepareOperatorNode', () => {
         },
         fundingTokenInput: {
           fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
         },
         delegationsBypassActive: false,
         delegationBundle: undefined,
@@ -135,6 +137,7 @@ describe('prepareOperatorNode', () => {
         },
         fundingTokenInput: {
           fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
         },
         delegationsBypassActive: false,
         delegationBundle: undefined,
@@ -163,6 +166,56 @@ describe('prepareOperatorNode', () => {
     expect(copilotkitEmitStateMock).not.toHaveBeenCalled();
   });
 
+  it('preserves a distinct collateral token when funding input selected a swap source', async () => {
+    process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = '0x3333333333333333333333333333333333333333';
+    copilotkitEmitStateMock.mockResolvedValue(undefined);
+    ensureCronForThreadMock.mockReturnValue({ stop: vi.fn() });
+
+    const state = {
+      private: {
+        pollIntervalMs: 60000,
+        cronScheduled: false,
+      },
+      thread: {
+        operatorInput: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+          usdcAllocation: 100,
+          targetMarket: 'BTC',
+        },
+        fundingTokenInput: {
+          fundingTokenAddress: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
+          collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          fundingTokenDecimals: 18,
+          fundingTokenBalanceBaseUnits: '1000000000000000000',
+          fundingTokenUsdPrice: 1800,
+          collateralTokenDecimals: 6,
+        },
+        delegationsBypassActive: true,
+        delegationBundle: undefined,
+        task: { id: 'task-1', taskStatus: { state: 'working' } },
+        activity: { telemetry: [], events: [] },
+        profile: {},
+        metrics: {},
+        transactionHistory: [],
+      },
+    } as unknown as ClmmState;
+
+    const result = await prepareOperatorNode(state, { configurable: { thread_id: 'thread-1' } });
+
+    expect(result).toMatchObject({
+      thread: {
+        operatorConfig: {
+          fundingTokenAddress: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
+          collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          fundingTokenDecimals: 18,
+          fundingTokenBalanceBaseUnits: '1000000000000000000',
+          fundingTokenUsdPrice: 1800,
+          collateralTokenDecimals: 6,
+        },
+      },
+    });
+  });
+
   it('arms cron scheduling when onboarding completes on an active thread', async () => {
     process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'] = '0x3333333333333333333333333333333333333333';
     copilotkitEmitStateMock.mockResolvedValue(undefined);
@@ -181,6 +234,7 @@ describe('prepareOperatorNode', () => {
         },
         fundingTokenInput: {
           fundingTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
         },
         delegationsBypassActive: false,
         delegationBundle: {
