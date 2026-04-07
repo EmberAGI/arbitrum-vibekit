@@ -1972,6 +1972,139 @@ describe('useAgentConnection integration', () => {
     });
   });
 
+  it('prefers the synced funding-token interrupt over a stale streamed setup interrupt', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.interruptState.activeInterrupt = {
+      type: 'gmx-setup-request',
+      message: 'Select the GMX market and enter the USDC allocation for low-leverage trades.',
+    };
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-gmx-allora"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onRunInitialized?.({
+      input: { threadId: 'thread-1' },
+      state: {
+        thread: {
+          lifecycle: {
+            phase: 'onboarding',
+          },
+          task: {
+            id: 'exec-2',
+            taskStatus: {
+              state: 'input-required',
+            },
+          },
+        },
+        tasks: [
+          {
+            interrupts: [
+              {
+                value: {
+                  type: 'gmx-funding-token-request',
+                  message: 'Choose the wallet token to swap into USDC before opening.',
+                  options: [],
+                },
+              },
+            ],
+          },
+        ],
+      } as ReturnType<AgentSubscriber['onRunInitialized']> extends ((event: infer T) => unknown)
+        ? T['state']
+        : never,
+    });
+    await flushEffects();
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-gmx-allora"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.activeInterrupt).toEqual({
+      type: 'gmx-funding-token-request',
+      message: 'Choose the wallet token to swap into USDC before opening.',
+      options: [],
+    });
+  });
+
+  it('clears stale streamed interrupts after a prehire snapshot is applied', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.interruptState.activeInterrupt = {
+      type: 'gmx-setup-request',
+      message: 'Select the GMX market and enter the USDC allocation for low-leverage trades.',
+    };
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-gmx-allora"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onRunInitialized?.({
+      input: { threadId: 'thread-1' },
+      state: {
+        thread: {
+          lifecycle: {
+            phase: 'prehire',
+          },
+        },
+      } as ReturnType<AgentSubscriber['onRunInitialized']> extends ((event: infer T) => unknown)
+        ? T['state']
+        : never,
+    });
+    await flushEffects();
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-gmx-allora"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.activeInterrupt).toBeNull();
+  });
+
   it('routes Pi operator-note interrupt resolution through CopilotKit run orchestration with explicit resume payloads', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
@@ -2087,6 +2220,67 @@ describe('useAgentConnection integration', () => {
       },
     });
     expect(mocks.interruptState.resolve).not.toHaveBeenCalled();
+    expect(latestValue?.uiError).toBeNull();
+  });
+
+  it('allows interrupt resume while the current thread is still marked as locally in flight', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.interruptState.activeInterrupt = {
+      type: 'gmx-funding-token-request',
+      message: 'Select a token to swap into USDC',
+      options: [
+        {
+          address: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
+          symbol: 'WETH',
+        },
+      ],
+    };
+    mocks.interruptState.canResolve = false;
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-gmx-allora"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onRunStartedEvent?.({
+      input: {
+        threadId: 'thread-1',
+        runId: 'run-1',
+      },
+    });
+    await flushEffects();
+
+    latestValue?.resolveInterrupt({
+      fundingTokenAddress: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
+    });
+    await flushEffects();
+
+    expect(mocks.runAgent).toHaveBeenCalledWith({
+      agent: mocks.agent,
+      threadId: 'thread-1',
+      forwardedProps: {
+        command: {
+          resume: JSON.stringify({
+            fundingTokenAddress: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
+          }),
+        },
+      },
+    });
     expect(latestValue?.uiError).toBeNull();
   });
 

@@ -39,7 +39,10 @@ import {
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
-import { resolveNextOnboardingNode } from './workflow/onboardingRouting.js';
+import {
+  resolveNextOnboardingNode,
+  resolvePostFundingTokenNode,
+} from './workflow/onboardingRouting.js';
 
 await setupAgentLocalE2EMocksIfNeeded();
 await configureLangGraphApiCheckpointer();
@@ -98,8 +101,10 @@ function resolvePostRunCycle(
   return target;
 }
 
-function resolvePostFundingTokenInput(state: ClmmState): 'collectSetupInput' | 'collectDelegations' {
-  const target = state.thread.operatorInput ? 'collectDelegations' : 'collectSetupInput';
+function resolvePostFundingTokenInput(
+  state: ClmmState,
+): 'collectSetupInput' | 'collectFundingTokenInput' | 'collectDelegations' | 'prepareOperator' {
+  const target = resolvePostFundingTokenNode(state);
   logRouteDecision('collectFundingTokenInput', target, {
     hasOperatorInput: Boolean(state.thread.operatorInput),
     hasFundingTokenInput: Boolean(state.thread.fundingTokenInput),

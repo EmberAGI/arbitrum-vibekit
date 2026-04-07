@@ -41,4 +41,22 @@ export const normalizeAgentInterrupt = (value: unknown): AgentInterrupt | null =
 export const selectActiveInterrupt = (params: {
   streamInterrupt: AgentInterrupt | null;
   syncPendingInterrupt: AgentInterrupt | null;
-}): AgentInterrupt | null => params.streamInterrupt ?? params.syncPendingInterrupt;
+  lifecyclePhase?: string | null;
+  hasLoadedSnapshot?: boolean;
+}): AgentInterrupt | null => {
+  if (params.syncPendingInterrupt) {
+    if (!params.streamInterrupt) {
+      return params.syncPendingInterrupt;
+    }
+
+    return params.streamInterrupt.type === params.syncPendingInterrupt.type
+      ? params.streamInterrupt
+      : params.syncPendingInterrupt;
+  }
+
+  if (params.hasLoadedSnapshot && params.lifecyclePhase === 'prehire') {
+    return null;
+  }
+
+  return params.streamInterrupt;
+};

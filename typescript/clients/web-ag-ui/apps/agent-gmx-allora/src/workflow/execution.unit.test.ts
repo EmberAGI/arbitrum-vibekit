@@ -50,6 +50,14 @@ const client = {
   createPerpetualReduce,
 };
 
+const swapFundingEstimate = {
+  fromTokenDecimals: 18,
+  fromTokenBalanceBaseUnits: '1000000000000000000',
+  fromTokenUsdPrice: 1600,
+  toTokenDecimals: 6,
+  toTokenUsdPrice: 1,
+};
+
 describe('executePerpetualPlan', () => {
   beforeEach(() => {
     createPerpetualLong.mockClear();
@@ -106,8 +114,8 @@ describe('executePerpetualPlan', () => {
 
   it('prepends a swap into collateral before opening when pay and collateral tokens differ', async () => {
     createSwapMock.mockResolvedValueOnce({
-      exactFromAmount: '123',
-      exactToAmount: '100',
+      exactFromAmount: '5250000000000000',
+      exactToAmount: '8000000',
       transactions: [
         {
           type: 'evm',
@@ -121,7 +129,7 @@ describe('executePerpetualPlan', () => {
     const plan: ExecutionPlan = {
       action: 'long',
       request: {
-        amount: '100',
+        amount: '8000000',
         walletAddress: '0x0000000000000000000000000000000000000001',
         chainId: '42161',
         marketAddress: '0xmarket',
@@ -136,13 +144,14 @@ describe('executePerpetualPlan', () => {
       plan,
       txExecutionMode: 'plan',
       delegationsBypassActive: true,
+      swapFundingEstimate,
     });
 
     expect(result.ok).toBe(true);
     expect(createSwapMock).toHaveBeenCalledWith({
       walletAddress: '0x0000000000000000000000000000000000000001',
-      amount: '100',
-      amountType: 'exactOut',
+      amount: '5250000000000000',
+      amountType: 'exactIn',
       fromTokenUid: { chainId: '42161', address: '0xweth' },
       toTokenUid: { chainId: '42161', address: '0xusdc' },
     });
@@ -166,6 +175,33 @@ describe('executePerpetualPlan', () => {
         value: '0',
       },
     ]);
+  });
+
+  it('fails safely when a collateral swap is required but no exact-in estimate is available', async () => {
+    const plan: ExecutionPlan = {
+      action: 'long',
+      request: {
+        amount: '8000000',
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xweth',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
+    };
+
+    const result = await executePerpetualPlan({
+      client,
+      plan,
+      txExecutionMode: 'plan',
+      delegationsBypassActive: true,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Unable to estimate exact-in swap amount');
+    expect(createSwapMock).not.toHaveBeenCalled();
+    expect(createPerpetualLong).not.toHaveBeenCalled();
   });
 
   it('executes reduce plans', async () => {
@@ -297,8 +333,8 @@ describe('executePerpetualPlan', () => {
       ],
     });
     createSwapMock.mockResolvedValueOnce({
-      exactFromAmount: '150',
-      exactToAmount: '100',
+      exactFromAmount: '5250000000000000',
+      exactToAmount: '8000000',
       transactions: [
         {
           type: 'evm',
@@ -329,7 +365,7 @@ describe('executePerpetualPlan', () => {
         isLimit: false,
       },
       openRequest: {
-        amount: '100',
+        amount: '8000000',
         walletAddress: '0x0000000000000000000000000000000000000001',
         chainId: '42161',
         marketAddress: '0xmarket',
@@ -344,11 +380,19 @@ describe('executePerpetualPlan', () => {
       plan,
       txExecutionMode: 'plan',
       delegationsBypassActive: true,
+      swapFundingEstimate,
     });
 
     expect(result.ok).toBe(true);
     expect(createPerpetualClose).toHaveBeenCalledBefore(createSwapMock);
     expect(createSwapMock).toHaveBeenCalledBefore(createPerpetualShort);
+    expect(createSwapMock).toHaveBeenCalledWith({
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      amount: '5250000000000000',
+      amountType: 'exactIn',
+      fromTokenUid: { chainId: '42161', address: '0xweth' },
+      toTokenUid: { chainId: '42161', address: '0xusdc' },
+    });
     expect(createPerpetualShort).toHaveBeenCalledWith({
       ...plan.openRequest,
       payTokenAddress: '0xusdc',
@@ -479,5 +523,122 @@ describe('executePerpetualPlan', () => {
     });
     expect(result.txHashes).toEqual(['0xhash2']);
     expect(result.lastTxHash).toBe('0xhash2');
+  });
+
+  it('settles the collateral swap before creating the delegated GMX open plan', async () => {
+    createSwapMock.mockResolvedValueOnce({
+      exactFromAmount: '5250000000000000',
+      exactToAmount: '8000000',
+      transactions: [
+        {
+          type: 'evm',
+          to: '0xswap',
+          data: '0xswap01',
+          chainId: '42161',
+          value: '0',
+        },
+      ],
+    });
+    createPerpetualLong.mockResolvedValueOnce({
+      transactions: [
+        {
+          type: 'evm',
+          to: '0xrouter',
+          data: '0xopen01',
+          chainId: '42161',
+          value: '0',
+        },
+      ],
+    });
+    redeemDelegationsAndExecuteTransactionsMock
+      .mockResolvedValueOnce({
+        txHashes: ['0xswap-hash'],
+        lastTxHash: '0xswap-hash',
+      })
+      .mockResolvedValueOnce({
+        txHashes: ['0xopen-hash'],
+        lastTxHash: '0xopen-hash',
+      });
+    const clients = {} as OnchainClients;
+
+    const delegationBundle: DelegationBundle = {
+      chainId: 42161,
+      delegationManager: '0x00000000000000000000000000000000000000aa',
+      delegatorAddress: '0x00000000000000000000000000000000000000bb',
+      delegateeAddress: '0x00000000000000000000000000000000000000cc',
+      delegations: [
+        {
+          delegate: '0x00000000000000000000000000000000000000cc',
+          delegator: '0x00000000000000000000000000000000000000bb',
+          authority: `0x${'0'.repeat(64)}`,
+          caveats: [],
+          salt: `0x${'1'.repeat(64)}`,
+          signature: `0x${'2'.repeat(130)}`,
+        },
+      ],
+      intents: [],
+      descriptions: [],
+      warnings: [],
+    };
+
+    const plan: ExecutionPlan = {
+      action: 'long',
+      request: {
+        amount: '8000000',
+        walletAddress: delegationBundle.delegatorAddress,
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xweth',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
+    };
+
+    const result = await executePerpetualPlan({
+      client,
+      clients,
+      plan,
+      txExecutionMode: 'execute',
+      delegationsBypassActive: false,
+      delegationBundle,
+      delegatorWalletAddress: delegationBundle.delegatorAddress,
+      delegateeWalletAddress: delegationBundle.delegateeAddress,
+      swapFundingEstimate,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(redeemDelegationsAndExecuteTransactionsMock).toHaveBeenCalledTimes(2);
+    expect(redeemDelegationsAndExecuteTransactionsMock).toHaveBeenNthCalledWith(1, {
+      clients,
+      delegationBundle,
+      transactions: [
+        {
+          type: 'evm',
+          to: '0xswap',
+          data: '0xswap01',
+          chainId: '42161',
+          value: '0',
+        },
+      ],
+    });
+    expect(redeemDelegationsAndExecuteTransactionsMock).toHaveBeenNthCalledWith(2, {
+      clients,
+      delegationBundle,
+      transactions: [
+        {
+          type: 'evm',
+          to: '0xrouter',
+          data: '0xopen01',
+          chainId: '42161',
+          value: '0',
+        },
+      ],
+    });
+    expect(createSwapMock).toHaveBeenCalledBefore(createPerpetualLong);
+    expect(
+      redeemDelegationsAndExecuteTransactionsMock.mock.invocationCallOrder[0],
+    ).toBeLessThan(createPerpetualLong.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY);
+    expect(result.txHashes).toEqual(['0xswap-hash', '0xopen-hash']);
+    expect(result.lastTxHash).toBe('0xopen-hash');
   });
 });

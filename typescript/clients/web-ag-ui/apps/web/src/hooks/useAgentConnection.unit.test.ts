@@ -22,7 +22,7 @@ describe('interruptSelection', () => {
     expect(normalizeAgentInterrupt('{not-json')).toBeNull();
   });
 
-  it('prefers stream interrupt over sync fallback', () => {
+  it('prefers the synced interrupt when the stream interrupt type is stale', () => {
     const streamInterrupt: AgentInterrupt = {
       type: 'operator-config-request',
       message: 'From stream',
@@ -32,7 +32,12 @@ describe('interruptSelection', () => {
       message: 'From sync',
     };
 
-    expect(selectActiveInterrupt({ streamInterrupt, syncPendingInterrupt })).toEqual(streamInterrupt);
+    expect(
+      selectActiveInterrupt({
+        streamInterrupt,
+        syncPendingInterrupt,
+      }),
+    ).toEqual(syncPendingInterrupt);
   });
 
   it('uses sync fallback when stream interrupt is absent', () => {
@@ -51,5 +56,41 @@ describe('interruptSelection', () => {
     expect(selectActiveInterrupt({ streamInterrupt: null, syncPendingInterrupt })).toEqual(
       syncPendingInterrupt,
     );
+  });
+
+  it('keeps the stream interrupt when the synced interrupt matches the same type', () => {
+    const streamInterrupt: AgentInterrupt = {
+      type: 'gmx-funding-token-request',
+      message: 'From stream',
+      options: [],
+    };
+    const syncPendingInterrupt: AgentInterrupt = {
+      type: 'gmx-funding-token-request',
+      message: 'From sync',
+      options: [],
+    };
+
+    expect(
+      selectActiveInterrupt({
+        streamInterrupt,
+        syncPendingInterrupt,
+      }),
+    ).toEqual(streamInterrupt);
+  });
+
+  it('clears stream-only interrupts after a prehire snapshot has loaded', () => {
+    const streamInterrupt: AgentInterrupt = {
+      type: 'gmx-setup-request',
+      message: 'Stale setup interrupt',
+    };
+
+    expect(
+      selectActiveInterrupt({
+        streamInterrupt,
+        syncPendingInterrupt: null,
+        lifecyclePhase: 'prehire',
+        hasLoadedSnapshot: true,
+      }),
+    ).toBeNull();
   });
 });

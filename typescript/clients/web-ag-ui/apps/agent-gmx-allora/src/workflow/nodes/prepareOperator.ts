@@ -180,6 +180,10 @@ export const prepareOperatorNode = async (
     baseContributionUsd: operatorInput.usdcAllocation,
     fundingTokenAddress,
     collateralTokenAddress,
+    fundingTokenDecimals: fundingTokenInput.fundingTokenDecimals,
+    fundingTokenBalanceBaseUnits: fundingTokenInput.fundingTokenBalanceBaseUnits,
+    fundingTokenUsdPrice: fundingTokenInput.fundingTokenUsdPrice,
+    collateralTokenDecimals: fundingTokenInput.collateralTokenDecimals,
     targetMarket,
     maxLeverage: targetMarket.maxLeverage,
   };

@@ -185,6 +185,10 @@ describe('prepareOperatorNode', () => {
         fundingTokenInput: {
           fundingTokenAddress: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
           collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          fundingTokenDecimals: 18,
+          fundingTokenBalanceBaseUnits: '1000000000000000000',
+          fundingTokenUsdPrice: 1800,
+          collateralTokenDecimals: 6,
         },
         delegationsBypassActive: true,
         delegationBundle: undefined,
@@ -203,6 +207,10 @@ describe('prepareOperatorNode', () => {
         operatorConfig: {
           fundingTokenAddress: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
           collateralTokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          fundingTokenDecimals: 18,
+          fundingTokenBalanceBaseUnits: '1000000000000000000',
+          fundingTokenUsdPrice: 1800,
+          collateralTokenDecimals: 6,
         },
       },
     });

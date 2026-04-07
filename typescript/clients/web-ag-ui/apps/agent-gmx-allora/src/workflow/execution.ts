@@ -1,8 +1,9 @@
+import { formatUnits, parseUnits } from 'viem';
+
 import type { OnchainClients } from '../clients/clients.js';
 import {
   OnchainActionsRequestError,
   type OnchainActionsClient,
-  type PerpetualLongRequest,
   type TransactionPlan,
 } from '../clients/onchainActions.js';
 import { redeemDelegationsAndExecuteTransactions } from '../core/delegatedExecution.js';
@@ -269,7 +270,16 @@ function summarizeOnchainActionsError(error: unknown): Record<string, unknown> {
   };
 }
 
-type PerpetualOpenRequest = PerpetualLongRequest | PerpetualShortRequest;
+type PerpetualOpenRequest = Extract<ExecutionPlan, { action: 'long' | 'short' }>['request'];
+export type CollateralSwapFundingEstimate = {
+  fromTokenDecimals?: number;
+  fromTokenBalanceBaseUnits?: string;
+  fromTokenUsdPrice?: number;
+  toTokenDecimals?: number;
+  toTokenUsdPrice?: number;
+};
+
+const COLLATERAL_SWAP_SLIPPAGE_MULTIPLIER = 1.05;
 
 function requiresCollateralSwap(request: PerpetualOpenRequest): boolean {
   return request.payTokenAddress.toLowerCase() !== request.collateralTokenAddress.toLowerCase();
@@ -285,37 +295,134 @@ function normalizeOpenRequestForExecution(request: PerpetualOpenRequest): Perpet
   };
 }
 
+function estimateCollateralSwapExactInAmount(params: {
+  amountOutBaseUnits: string;
+  estimate?: CollateralSwapFundingEstimate;
+}): string {
+  const estimate = params.estimate;
+  if (
+    estimate?.fromTokenDecimals === undefined ||
+    estimate.toTokenDecimals === undefined ||
+    estimate.fromTokenUsdPrice === undefined ||
+    estimate.fromTokenUsdPrice <= 0
+  ) {
+    throw new Error(
+      'Unable to estimate exact-in swap amount for the selected funding token. Retry onboarding and reselect a funding token with priced balance data.',
+    );
+  }
+
+  let amountOutBaseUnits: bigint;
+  try {
+    amountOutBaseUnits = BigInt(params.amountOutBaseUnits);
+  } catch {
+    throw new Error(`Unable to parse collateral amount "${params.amountOutBaseUnits}" for swap planning.`);
+  }
+  if (amountOutBaseUnits <= 0n) {
+    throw new Error('Collateral amount must be positive to plan a funding-token swap.');
+  }
+
+  const toTokenUsdPrice = estimate.toTokenUsdPrice ?? 1;
+  if (!Number.isFinite(toTokenUsdPrice) || toTokenUsdPrice <= 0) {
+    throw new Error('Unable to estimate exact-in swap amount because the collateral token price is unavailable.');
+  }
+
+  const amountOut = Number(formatUnits(amountOutBaseUnits, estimate.toTokenDecimals));
+  if (!Number.isFinite(amountOut) || amountOut <= 0) {
+    throw new Error('Unable to estimate exact-in swap amount because the collateral output amount is invalid.');
+  }
+
+  const usdOut = amountOut * toTokenUsdPrice;
+  const fromAmount = (usdOut * COLLATERAL_SWAP_SLIPPAGE_MULTIPLIER) / estimate.fromTokenUsdPrice;
+  if (!Number.isFinite(fromAmount) || fromAmount <= 0) {
+    throw new Error('Unable to estimate exact-in swap amount because the funding token price is invalid.');
+  }
+
+  let amountInBaseUnits = parseUnits(fromAmount.toFixed(estimate.fromTokenDecimals), estimate.fromTokenDecimals);
+  if (amountInBaseUnits <= 0n) {
+    amountInBaseUnits = 1n;
+  }
+
+  if (estimate.fromTokenBalanceBaseUnits) {
+    let maxAmountInBaseUnits: bigint;
+    try {
+      maxAmountInBaseUnits = BigInt(estimate.fromTokenBalanceBaseUnits);
+    } catch {
+      throw new Error('Unable to estimate exact-in swap amount because the funding token balance is invalid.');
+    }
+    if (amountInBaseUnits > maxAmountInBaseUnits) {
+      throw new Error(
+        'Selected funding token balance no longer covers the USDC collateral swap. Retry onboarding and reselect a token.',
+      );
+    }
+  }
+
+  return amountInBaseUnits.toString();
+}
+
 async function createOpenPlan(params: {
   client: Pick<OnchainActionsClient, 'createSwap' | 'createPerpetualLong' | 'createPerpetualShort'>;
   action: 'long' | 'short';
   request: PerpetualOpenRequest;
+  swapFundingEstimate?: CollateralSwapFundingEstimate;
 }): Promise<TransactionPlan[]> {
   const transactions: TransactionPlan[] = [];
 
   if (requiresCollateralSwap(params.request)) {
-    const swapResponse = await params.client.createSwap({
-      walletAddress: params.request.walletAddress,
-      amount: params.request.amount,
-      amountType: 'exactOut',
-      fromTokenUid: {
-        chainId: params.request.chainId,
-        address: params.request.payTokenAddress,
-      },
-      toTokenUid: {
-        chainId: params.request.chainId,
-        address: params.request.collateralTokenAddress,
-      },
-    });
-    transactions.push(...swapResponse.transactions);
+    transactions.push(
+      ...(await createCollateralSwapTransactions({
+        client: params.client,
+        request: params.request,
+        swapFundingEstimate: params.swapFundingEstimate,
+      })),
+    );
   }
 
+  transactions.push(
+    ...(await createPerpetualOpenTransactions({
+      client: params.client,
+      action: params.action,
+      request: params.request,
+    })),
+  );
+  return transactions;
+}
+
+async function createCollateralSwapTransactions(params: {
+  client: Pick<OnchainActionsClient, 'createSwap'>;
+  request: PerpetualOpenRequest;
+  swapFundingEstimate?: CollateralSwapFundingEstimate;
+}): Promise<TransactionPlan[]> {
+  const swapAmount = estimateCollateralSwapExactInAmount({
+    amountOutBaseUnits: params.request.amount,
+    estimate: params.swapFundingEstimate,
+  });
+  const swapResponse = await params.client.createSwap({
+    walletAddress: params.request.walletAddress,
+    amount: swapAmount,
+    amountType: 'exactIn',
+    fromTokenUid: {
+      chainId: params.request.chainId,
+      address: params.request.payTokenAddress,
+    },
+    toTokenUid: {
+      chainId: params.request.chainId,
+      address: params.request.collateralTokenAddress,
+    },
+  });
+  return swapResponse.transactions;
+}
+
+async function createPerpetualOpenTransactions(params: {
+  client: Pick<OnchainActionsClient, 'createPerpetualLong' | 'createPerpetualShort'>;
+  action: 'long' | 'short';
+  request: PerpetualOpenRequest;
+}): Promise<TransactionPlan[]> {
   const normalizedRequest = normalizeOpenRequestForExecution(params.request);
   const openResponse =
     params.action === 'long'
       ? await params.client.createPerpetualLong(normalizedRequest)
       : await params.client.createPerpetualShort(normalizedRequest);
-  transactions.push(...openResponse.transactions);
-  return transactions;
+  return openResponse.transactions;
 }
 
 export async function executePerpetualPlan(params: {
@@ -334,6 +441,7 @@ export async function executePerpetualPlan(params: {
   delegationBundle?: DelegationBundle;
   delegatorWalletAddress?: `0x${string}`;
   delegateeWalletAddress?: `0x${string}`;
+  swapFundingEstimate?: CollateralSwapFundingEstimate;
 }): Promise<ExecutionResult> {
   const { plan } = params;
 
@@ -360,10 +468,53 @@ export async function executePerpetualPlan(params: {
 
   try {
     if (plan.action === 'long') {
+      if (params.txExecutionMode === 'execute' && requiresCollateralSwap(plan.request)) {
+        const swapTransactions = await createCollateralSwapTransactions({
+          client: params.client,
+          request: plan.request,
+          swapFundingEstimate: params.swapFundingEstimate,
+        });
+        logInfo('executePerpetualPlan: collateral swap plan received', {
+          action: plan.action,
+          phase: 'swap',
+          ...summarizePlannedTransactions(swapTransactions),
+        });
+        const swapExecution = await planOrExecuteTransactions({
+          txExecutionMode: params.txExecutionMode,
+          clients: params.clients,
+          transactions: swapTransactions,
+          delegationBundle: delegation,
+        });
+
+        const openTransactions = await createPerpetualOpenTransactions({
+          client: params.client,
+          action: 'long',
+          request: plan.request,
+        });
+        logInfo('executePerpetualPlan: onchain-actions plan received', {
+          action: plan.action,
+          phase: 'open',
+          ...summarizePlannedTransactions(openTransactions),
+        });
+        const openExecution = await planOrExecuteTransactions({
+          txExecutionMode: params.txExecutionMode,
+          clients: params.clients,
+          transactions: openTransactions,
+          delegationBundle: delegation,
+        });
+        return {
+          action: plan.action,
+          ok: true,
+          transactions: [...swapTransactions, ...openTransactions],
+          txHashes: [...swapExecution.txHashes, ...openExecution.txHashes],
+          lastTxHash: openExecution.lastTxHash ?? swapExecution.lastTxHash,
+        };
+      }
       const transactions = await createOpenPlan({
         client: params.client,
         action: 'long',
         request: plan.request,
+        swapFundingEstimate: params.swapFundingEstimate,
       });
       logInfo('executePerpetualPlan: onchain-actions plan received', {
         action: plan.action,
@@ -384,10 +535,53 @@ export async function executePerpetualPlan(params: {
       };
     }
     if (plan.action === 'short') {
+      if (params.txExecutionMode === 'execute' && requiresCollateralSwap(plan.request)) {
+        const swapTransactions = await createCollateralSwapTransactions({
+          client: params.client,
+          request: plan.request,
+          swapFundingEstimate: params.swapFundingEstimate,
+        });
+        logInfo('executePerpetualPlan: collateral swap plan received', {
+          action: plan.action,
+          phase: 'swap',
+          ...summarizePlannedTransactions(swapTransactions),
+        });
+        const swapExecution = await planOrExecuteTransactions({
+          txExecutionMode: params.txExecutionMode,
+          clients: params.clients,
+          transactions: swapTransactions,
+          delegationBundle: delegation,
+        });
+
+        const openTransactions = await createPerpetualOpenTransactions({
+          client: params.client,
+          action: 'short',
+          request: plan.request,
+        });
+        logInfo('executePerpetualPlan: onchain-actions plan received', {
+          action: plan.action,
+          phase: 'open',
+          ...summarizePlannedTransactions(openTransactions),
+        });
+        const openExecution = await planOrExecuteTransactions({
+          txExecutionMode: params.txExecutionMode,
+          clients: params.clients,
+          transactions: openTransactions,
+          delegationBundle: delegation,
+        });
+        return {
+          action: plan.action,
+          ok: true,
+          transactions: [...swapTransactions, ...openTransactions],
+          txHashes: [...swapExecution.txHashes, ...openExecution.txHashes],
+          lastTxHash: openExecution.lastTxHash ?? swapExecution.lastTxHash,
+        };
+      }
       const transactions = await createOpenPlan({
         client: params.client,
         action: 'short',
         request: plan.request,
+        swapFundingEstimate: params.swapFundingEstimate,
       });
       logInfo('executePerpetualPlan: onchain-actions plan received', {
         action: plan.action,
@@ -434,10 +628,65 @@ export async function executePerpetualPlan(params: {
         ...summarizePlannedTransactions(closeResponse.transactions),
       });
       const nextPositionSide = resolveFlipSide(plan.closeRequest.positionSide);
+      if (params.txExecutionMode === 'execute' && requiresCollateralSwap(plan.openRequest)) {
+        const closeExecution = await planOrExecuteTransactions({
+          txExecutionMode: params.txExecutionMode,
+          clients: params.clients,
+          transactions: closeResponse.transactions,
+          delegationBundle: delegation,
+        });
+        const swapTransactions = await createCollateralSwapTransactions({
+          client: params.client,
+          request: plan.openRequest,
+          swapFundingEstimate: params.swapFundingEstimate,
+        });
+        logInfo('executePerpetualPlan: collateral swap plan received', {
+          action: plan.action,
+          phase: 'swap',
+          nextPositionSide,
+          ...summarizePlannedTransactions(swapTransactions),
+        });
+        const swapExecution = await planOrExecuteTransactions({
+          txExecutionMode: params.txExecutionMode,
+          clients: params.clients,
+          transactions: swapTransactions,
+          delegationBundle: delegation,
+        });
+        const openTransactions = await createPerpetualOpenTransactions({
+          client: params.client,
+          action: nextPositionSide,
+          request: plan.openRequest,
+        });
+        logInfo('executePerpetualPlan: onchain-actions reopen plan received', {
+          action: plan.action,
+          nextPositionSide,
+          phase: 'open',
+          ...summarizePlannedTransactions(openTransactions),
+        });
+        const openExecution = await planOrExecuteTransactions({
+          txExecutionMode: params.txExecutionMode,
+          clients: params.clients,
+          transactions: openTransactions,
+          delegationBundle: delegation,
+        });
+        return {
+          action: plan.action,
+          ok: true,
+          transactions: [...closeResponse.transactions, ...swapTransactions, ...openTransactions],
+          txHashes: [
+            ...closeExecution.txHashes,
+            ...swapExecution.txHashes,
+            ...openExecution.txHashes,
+          ],
+          lastTxHash:
+            openExecution.lastTxHash ?? swapExecution.lastTxHash ?? closeExecution.lastTxHash,
+        };
+      }
       const openTransactions = await createOpenPlan({
         client: params.client,
         action: nextPositionSide,
         request: plan.openRequest,
+        swapFundingEstimate: params.swapFundingEstimate,
       });
       logInfo('executePerpetualPlan: onchain-actions reopen plan received', {
         action: plan.action,

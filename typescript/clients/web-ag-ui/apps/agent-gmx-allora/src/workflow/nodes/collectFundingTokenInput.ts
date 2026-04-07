@@ -1,7 +1,11 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { interrupt } from '@langchain/langgraph';
-import { requestInterruptPayload } from 'agent-workflow-core';
-import { parseUnits } from 'viem';
+import { interrupt, type Command } from '@langchain/langgraph';
+import {
+  buildInterruptPauseTransition,
+  requestInterruptPayload,
+  shouldPersistInputRequiredCheckpoint,
+} from 'agent-workflow-core';
+import { formatUnits, parseUnits } from 'viem';
 import { z } from 'zod';
 
 import type { PerpetualMarket } from '../../clients/onchainActions.js';
@@ -13,12 +17,14 @@ import {
   applyThreadPatch,
   buildTaskStatus,
   logInfo,
+  logPauseSnapshot,
   logWarn,
   normalizeHexAddress,
   type ClmmState,
   type ClmmUpdate,
   type OnboardingState,
 } from '../context.js';
+import { createLangGraphCommand } from '../langGraphCommandFactory.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -104,6 +110,54 @@ function hasSufficientUsdcBalance(params: {
   return availableAmount >= requiredAmount;
 }
 
+function findWalletBalance(params: {
+  walletBalances:
+    | Array<{
+        tokenUid: { address: string };
+        amount: string;
+        symbol?: string;
+        decimals?: number;
+        valueUsd?: number;
+      }>
+    | undefined;
+  tokenAddress: `0x${string}`;
+}):
+  | {
+      tokenUid: { address: string };
+      amount: string;
+      symbol?: string;
+      decimals?: number;
+      valueUsd?: number;
+    }
+  | undefined {
+  return params.walletBalances?.find(
+    (balance) => balance.tokenUid.address.toLowerCase() === params.tokenAddress.toLowerCase(),
+  );
+}
+
+function estimateUsdPriceFromBalance(params: {
+  amountBaseUnits: string;
+  decimals: number;
+  valueUsd: number | undefined;
+}): number | undefined {
+  if (typeof params.valueUsd !== 'number' || !Number.isFinite(params.valueUsd) || params.valueUsd <= 0) {
+    return undefined;
+  }
+
+  let amount: number;
+  try {
+    amount = Number(formatUnits(BigInt(params.amountBaseUnits), params.decimals));
+  } catch {
+    return undefined;
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return undefined;
+  }
+
+  const usdPrice = params.valueUsd / amount;
+  return Number.isFinite(usdPrice) && usdPrice > 0 ? usdPrice : undefined;
+}
+
 function buildSwapSourceOptions(params: {
   walletBalances:
     | Array<{
@@ -120,6 +174,7 @@ function buildSwapSourceOptions(params: {
   symbol: string;
   decimals: number;
   balance: string;
+  valueUsd?: number;
 }> {
   return (params.walletBalances ?? [])
     .filter((balance) => balance.tokenUid.chainId === ARBITRUM_CHAIN_ID.toString())
@@ -151,13 +206,14 @@ function buildSwapSourceOptions(params: {
       symbol: balance.symbol?.trim() ?? 'UNKNOWN',
       decimals: balance.decimals ?? 0,
       balance: balance.amount,
+      valueUsd: balance.valueUsd,
     }));
 }
 
 export const collectFundingTokenInputNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
-): Promise<ClmmUpdate> => {
+): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   logInfo('collectFundingTokenInput: entering node', {
     hasOperatorInput: Boolean(state.thread.operatorInput),
     onboardingStep: state.thread.onboarding?.step,
@@ -198,6 +254,7 @@ export const collectFundingTokenInputNode = async (
   }
 
   let normalizedFundingToken: `0x${string}`;
+  let usdcDecimals = 6;
   let walletBalances:
     | Array<{
         tokenUid: { chainId: string; address: string };
@@ -222,7 +279,7 @@ export const collectFundingTokenInputNode = async (
     }
 
     normalizedFundingToken = resolveUsdcTokenAddressFromMarket(selectedMarket);
-    const usdcDecimals = resolveUsdcDecimalsFromMarket(selectedMarket);
+    usdcDecimals = resolveUsdcDecimalsFromMarket(selectedMarket);
     walletBalances =
       'listWalletBalances' in onchainActionsClient &&
       typeof onchainActionsClient.listWalletBalances === 'function'
@@ -238,9 +295,17 @@ export const collectFundingTokenInputNode = async (
         usdcDecimals,
       })
     ) {
+      const usdcBalance = findWalletBalance({
+        walletBalances,
+        tokenAddress: normalizedFundingToken,
+      });
       const input: FundingTokenInput = {
         fundingTokenAddress: normalizedFundingToken,
         collateralTokenAddress: normalizedFundingToken,
+        fundingTokenDecimals: usdcDecimals,
+        fundingTokenBalanceBaseUnits: usdcBalance?.amount,
+        fundingTokenUsdPrice: 1,
+        collateralTokenDecimals: usdcDecimals,
       };
       const completedView = applyThreadPatch(state, {
         fundingTokenInput: input,
@@ -284,13 +349,49 @@ export const collectFundingTokenInputNode = async (
       'input-required',
       'Select a wallet token to swap into USDC collateral before opening the GMX position.',
     );
-    const pendingView = applyThreadPatch(state, {
+    const pendingView = {
       onboarding: { step: 2, key: FUNDING_STEP_KEY },
       task: awaitingInput.task,
       activity: { events: [awaitingInput.statusEvent], telemetry: state.thread.activity.telemetry },
+    };
+    const awaitingMessage = awaitingInput.task.taskStatus.message?.content;
+    const shouldPersistPendingState = shouldPersistInputRequiredCheckpoint({
+      currentTaskState: state.thread.task?.taskStatus?.state,
+      currentTaskMessage: state.thread.task?.taskStatus?.message?.content,
+      currentOnboardingKey: state.thread.onboarding?.key,
+      nextOnboardingKey: pendingView.onboarding.key,
+      nextTaskMessage: awaitingMessage,
     });
-    await copilotkitEmitState(config, {
-      thread: pendingView,
+    const hasRunnableConfig = Boolean((config as { configurable?: unknown }).configurable);
+    const pauseSnapshotView = applyThreadPatch(state, pendingView);
+    if (hasRunnableConfig && shouldPersistPendingState) {
+      logPauseSnapshot({
+        node: 'collectFundingTokenInput',
+        reason: 'awaiting funding token input',
+        thread: pauseSnapshotView,
+        metadata: {
+          pauseMechanism: 'checkpoint-and-interrupt',
+        },
+      });
+      await copilotkitEmitState(config, {
+        thread: pauseSnapshotView,
+      });
+      return buildInterruptPauseTransition({
+        node: 'collectFundingTokenInput',
+        update: {
+          thread: pendingView,
+        },
+        createCommand: createLangGraphCommand,
+      });
+    }
+    logPauseSnapshot({
+      node: 'collectFundingTokenInput',
+      reason: 'awaiting funding token input',
+      thread: pauseSnapshotView,
+      metadata: {
+        pauseMechanism: 'interrupt',
+        checkpointPersisted: false,
+      },
     });
 
     const interruptResult = await requestInterruptPayload({
@@ -328,10 +429,10 @@ export const collectFundingTokenInputNode = async (
       parsed.data.fundingTokenAddress,
       'funding token address',
     );
-    const isEligible = swapSourceOptions.some(
+    const selectedFundingTokenOption = swapSourceOptions.find(
       (option) => option.address.toLowerCase() === selectedFundingToken.toLowerCase(),
     );
-    if (!isEligible) {
+    if (!selectedFundingTokenOption) {
       const failureMessage = 'Selected funding token is not eligible for swap-to-USDC collateral.';
       const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
       const failedView = applyThreadPatch(state, {
@@ -354,6 +455,14 @@ export const collectFundingTokenInputNode = async (
     const input: FundingTokenInput = {
       fundingTokenAddress: selectedFundingToken,
       collateralTokenAddress: normalizedFundingToken,
+      fundingTokenDecimals: selectedFundingTokenOption.decimals,
+      fundingTokenBalanceBaseUnits: selectedFundingTokenOption.balance,
+      fundingTokenUsdPrice: estimateUsdPriceFromBalance({
+        amountBaseUnits: selectedFundingTokenOption.balance,
+        decimals: selectedFundingTokenOption.decimals,
+        valueUsd: selectedFundingTokenOption.valueUsd,
+      }),
+      collateralTokenDecimals: usdcDecimals,
     };
     const { task, statusEvent } = buildTaskStatus(
       awaitingInput.task,
@@ -404,6 +513,9 @@ export const collectFundingTokenInputNode = async (
   const input: FundingTokenInput = {
     fundingTokenAddress: normalizedFundingToken,
     collateralTokenAddress: normalizedFundingToken,
+    fundingTokenDecimals: usdcDecimals,
+    fundingTokenUsdPrice: 1,
+    collateralTokenDecimals: usdcDecimals,
   };
 
   const completedView = applyThreadPatch(state, {

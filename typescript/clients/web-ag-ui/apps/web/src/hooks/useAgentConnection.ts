@@ -869,7 +869,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         commandSchedulerRef.current = null;
       }
     };
-  }, [agentId, copilotkit, setRunInFlight]);
+  }, [agentId, copilotkit, runAgentOnCurrentThread, setRunInFlight]);
 
   useEffect(() => {
     const ownerId = streamOwnerIdRef.current;
@@ -1287,7 +1287,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     }
 
     setTimeout(() => setIsFiring(false), 3000);
-  }, [config.imperativeCommandTransport, copilotkit, isFiring, threadId]);
+  }, [config.imperativeCommandTransport, copilotkit, isFiring, runAgentOnCurrentThread, threadId]);
 
   const sendChatMessage = useCallback(
     (content: string) => {
@@ -1331,6 +1331,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const effectiveActiveInterrupt = selectActiveInterrupt({
     streamInterrupt: activeInterrupt ?? null,
     syncPendingInterrupt: syncedPendingInterrupt,
+    lifecyclePhase: threadState.lifecycle?.phase ?? null,
+    hasLoadedSnapshot: hasLoadedView,
   });
 
   useEffect(() => {
@@ -1386,6 +1388,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
       const accepted = scheduler.dispatchCustom({
         command: 'resume',
+        allowPreemptive: true,
         run: async (currentAgent) => {
           emitConnectTrace('interrupt-submit-run-start', {
             interruptType: interruptType ?? null,
@@ -1429,7 +1432,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         runInFlight: runInFlightRef.current,
       });
     },
-    [copilotkit, effectiveActiveInterrupt?.type, emitConnectTrace, runCommand],
+    [effectiveActiveInterrupt?.type, emitConnectTrace, runAgentOnCurrentThread, runCommand],
   );
 
   // Local settings mutation helper; caller decides whether to enqueue a sync run.

@@ -62,6 +62,24 @@ function mergeStatePayload(projected: ThreadSnapshot, incoming: Partial<ThreadSn
   const incomingMetrics = isRecord(incomingThread.metrics)
     ? incomingThread.metrics
     : ({} as Partial<ThreadState['metrics']>);
+  const incomingLifecyclePhase = incomingThread.lifecycle?.phase;
+  const baseThread =
+    incomingLifecyclePhase === 'prehire'
+      ? {
+          ...projected.thread,
+          task: defaultThreadState.task,
+          onboardingFlow: defaultThreadState.onboardingFlow,
+          poolArtifact: defaultThreadState.poolArtifact,
+          operatorInput: defaultThreadState.operatorInput,
+          fundingTokenInput: defaultThreadState.fundingTokenInput,
+          selectedPool: defaultThreadState.selectedPool,
+          operatorConfig: defaultThreadState.operatorConfig,
+          delegationBundle: defaultThreadState.delegationBundle,
+          haltReason: defaultThreadState.haltReason,
+          executionError: defaultThreadState.executionError,
+          delegationsBypassActive: defaultThreadState.delegationsBypassActive,
+        }
+      : projected.thread;
 
   projected.messages = Array.isArray(incoming.messages) ? incoming.messages : projected.messages;
 
@@ -84,44 +102,44 @@ function mergeStatePayload(projected: ThreadSnapshot, incoming: Partial<ThreadSn
   }
 
   projected.thread = {
-    ...projected.thread,
+    ...baseThread,
     ...incomingThread,
     profile: {
-      ...projected.thread.profile,
+      ...baseThread.profile,
       ...incomingProfile,
       chains: Array.isArray(incomingProfile.chains)
         ? incomingProfile.chains
-        : projected.thread.profile.chains,
+        : baseThread.profile.chains,
       protocols: Array.isArray(incomingProfile.protocols)
         ? incomingProfile.protocols
-        : projected.thread.profile.protocols,
+        : baseThread.profile.protocols,
       tokens: Array.isArray(incomingProfile.tokens)
         ? incomingProfile.tokens
-        : projected.thread.profile.tokens,
+        : baseThread.profile.tokens,
       pools: Array.isArray(incomingProfile.pools)
         ? incomingProfile.pools
-        : projected.thread.profile.pools,
+        : baseThread.profile.pools,
       allowedPools: Array.isArray(incomingProfile.allowedPools)
         ? incomingProfile.allowedPools
-        : projected.thread.profile.allowedPools,
+        : baseThread.profile.allowedPools,
     },
     activity: {
-      ...projected.thread.activity,
+      ...baseThread.activity,
       ...incomingActivity,
       telemetry: Array.isArray(incomingActivity.telemetry)
         ? incomingActivity.telemetry
-        : projected.thread.activity.telemetry,
+        : baseThread.activity.telemetry,
       events: Array.isArray(incomingActivity.events)
         ? incomingActivity.events
-        : projected.thread.activity.events,
+        : baseThread.activity.events,
     },
     metrics: {
-      ...projected.thread.metrics,
+      ...baseThread.metrics,
       ...incomingMetrics,
     },
     transactionHistory: Array.isArray(incomingThread.transactionHistory)
       ? incomingThread.transactionHistory
-      : projected.thread.transactionHistory,
+      : baseThread.transactionHistory,
   };
   return projected;
 }

@@ -65,6 +65,10 @@ type FundingTokenInputBase = z.infer<typeof FundingTokenInputSchema>;
 export interface FundingTokenInput extends FundingTokenInputBase {
   fundingTokenAddress: `0x${string}`;
   collateralTokenAddress: `0x${string}`;
+  fundingTokenDecimals?: number;
+  fundingTokenBalanceBaseUnits?: string;
+  fundingTokenUsdPrice?: number;
+  collateralTokenDecimals?: number;
 }
 
 export type ResolvedGmxConfig = {
@@ -77,6 +81,10 @@ export type ResolvedGmxConfig = {
   baseContributionUsd: number;
   fundingTokenAddress: `0x${string}`;
   collateralTokenAddress: `0x${string}`;
+  fundingTokenDecimals?: number;
+  fundingTokenBalanceBaseUnits?: string;
+  fundingTokenUsdPrice?: number;
+  collateralTokenDecimals?: number;
   targetMarket: GmxMarket;
   maxLeverage: number;
 };

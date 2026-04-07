@@ -165,4 +165,54 @@ describe('agentProjection', () => {
     expect(projected?.thread.metrics.apy).toBe(8.46);
     expect(projected?.thread.task?.id).toBe('task-2');
   });
+
+  it('clears onboarding-specific fields when a fresh prehire snapshot arrives', () => {
+    const previous = projectDetailStateFromPayload({
+      thread: {
+        lifecycle: {
+          phase: 'onboarding',
+        },
+        task: {
+          id: 'task-setup',
+          taskStatus: {
+            state: 'input-required',
+          },
+        },
+        onboardingFlow: {
+          status: 'in_progress',
+          revision: 2,
+          activeStepId: 'funding-token',
+          steps: [],
+        },
+        operatorInput: {
+          walletAddress: '0x0000000000000000000000000000000000000001',
+          baseContributionUsd: 500,
+        },
+        fundingTokenInput: {
+          tokenAddress: '0x0000000000000000000000000000000000000002',
+        },
+        profile: {
+          chains: ['Arbitrum'],
+        },
+      },
+    });
+
+    const projected = projectDetailStateFromPayload(
+      {
+        thread: {
+          lifecycle: {
+            phase: 'prehire',
+          },
+        },
+      },
+      previous,
+    );
+
+    expect(projected?.thread.lifecycle?.phase).toBe('prehire');
+    expect(projected?.thread.task).toBeUndefined();
+    expect(projected?.thread.onboardingFlow).toBeUndefined();
+    expect(projected?.thread.operatorInput).toBeUndefined();
+    expect(projected?.thread.fundingTokenInput).toBeUndefined();
+    expect(projected?.thread.profile.chains).toEqual(['Arbitrum']);
+  });
 });
