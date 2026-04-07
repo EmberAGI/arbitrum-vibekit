@@ -158,6 +158,10 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
@@ -337,6 +341,57 @@ function findStateSnapshot(events: unknown[]): AgUiSnapshot | null {
   return (snapshot as AgUiSnapshot | undefined) ?? null;
 }
 
+function findMessagesSnapshotEvent(events: unknown[]) {
+  const snapshot = [...events].reverse().find(
+    (event) => isRecord(event) && event['type'] === 'MESSAGES_SNAPSHOT' && Array.isArray(event['messages']),
+  );
+  return isRecord(snapshot) ? snapshot : null;
+}
+
+function readMessageContentText(content: unknown): string | null {
+  if (typeof content === 'string' && content.trim().length > 0) {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  const text = content
+    .map((part) => {
+      if (!isRecord(part)) {
+        return null;
+      }
+
+      return part['type'] === 'text' ? readString(part['text']) : null;
+    })
+    .filter((part): part is string => part !== null)
+    .join('');
+
+  return text.trim().length > 0 ? text : null;
+}
+
+function readLatestAssistantText(events: unknown[]): string | null {
+  const messagesSnapshot = findMessagesSnapshotEvent(events);
+  const messages = messagesSnapshot?.['messages'];
+  if (!Array.isArray(messages)) {
+    return null;
+  }
+
+  for (const message of [...messages].reverse()) {
+    if (!isRecord(message) || readString(message['role']) !== 'assistant') {
+      continue;
+    }
+
+    const text = readMessageContentText(message['content']);
+    if (text) {
+      return text;
+    }
+  }
+
+  return null;
+}
+
 async function readEventStreamUntilStateSnapshot(response: Response) {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -451,12 +506,90 @@ async function connectAgent(input: {
   };
 }
 
+async function runAgentMessage(input: {
+  baseUrl: string;
+  agentId: string;
+  threadId: string;
+  runId: string;
+  prompt: string;
+}) {
+  const response = await fetch(`${input.baseUrl}/agent/${input.agentId}/run`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      threadId: input.threadId,
+      runId: input.runId,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: input.prompt,
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `${input.agentId} message run failed with HTTP ${response.status}: ${await response.text()}`,
+    );
+  }
+
+  const events = parseEventStreamBody(await response.text());
+  return {
+    events,
+    snapshot: findStateSnapshot(events),
+    assistantText: readLatestAssistantText(events),
+  };
+}
+
 function readSnapshotLifecycle(snapshot: AgUiSnapshot | null) {
   return snapshot?.snapshot?.thread?.lifecycle ?? null;
 }
 
 function readSnapshotArtifact(snapshot: AgUiSnapshot | null) {
   return snapshot?.snapshot?.thread?.artifacts?.current?.data ?? null;
+}
+
+function readLifecycleExecutionTxHash(snapshot: AgUiSnapshot | null) {
+  const lifecycle = readSnapshotLifecycle(snapshot);
+  return isRecord(lifecycle) ? readString(lifecycle['lastExecutionTxHash']) : null;
+}
+
+function readLifecycleCandidateUnitIds(snapshot: AgUiSnapshot | null): string[] {
+  const lifecycle = readSnapshotLifecycle(snapshot);
+  if (!isRecord(lifecycle) || !isRecord(lifecycle['lastCandidatePlan'])) {
+    return [];
+  }
+
+  const handoff = lifecycle['lastCandidatePlan'];
+  const candidateUnitIds = isRecord(handoff) && Array.isArray(handoff['candidate_unit_ids'])
+    ? handoff['candidate_unit_ids']
+    : isRecord(handoff) && isRecord(handoff['handoff']) && Array.isArray(handoff['handoff']['candidate_unit_ids'])
+      ? handoff['handoff']['candidate_unit_ids']
+      : [];
+
+  return candidateUnitIds
+    .map((candidate) => readString(candidate))
+    .filter((candidate): candidate is string => candidate !== null);
+}
+
+function requireAssistantText(text: string | null, stage: string) {
+  if (text) {
+    return text;
+  }
+
+  throw new Error(`${stage} did not produce a readable assistant message.`);
+}
+
+function truncateForLog(text: string, maxLength = 280) {
+  return text.length <= maxLength ? text : `${text.slice(0, maxLength)}...`;
 }
 
 function readSnapshotActivityEvents(snapshot: AgUiSnapshot | null): unknown[] {
@@ -770,7 +903,7 @@ function buildPortfolioManagerSetupInput(walletAddress: `0x${string}`) {
           network: 'arbitrum',
           protocol: 'aave',
           allowedCollateralAssets: ['WETH'],
-          allowedBorrowAssets: ['USDC'],
+          allowedBorrowAssets: ['WETH'],
           maxAllocationPct: 35,
           maxLtvBps: 7000,
           minHealthFactor: '1.25',
@@ -996,6 +1129,16 @@ function readWethCoverageFingerprint(portfolioState: Record<string, unknown> | n
             ),
           },
   });
+}
+
+function readOwnedUnitIdByControlPath(
+  portfolioState: Record<string, unknown> | null,
+  controlPath: string,
+) {
+  return (
+    readPortfolioOwnedUnits(portfolioState).find((unit) => unit.controlPath === controlPath)?.unitId ??
+    null
+  );
 }
 
 function buildFollowUpPlanningInput(input: {
@@ -1279,29 +1422,67 @@ async function main() {
       expectedMandateRef,
     });
 
-    await runAgentCommand({
+    const preSupplyInventory = await runAgentMessage({
       baseUrl: lendingBaseUrl,
       agentId: EMBER_LENDING_AGENT_ID,
       threadId: lendingThreadId,
-      runId: `${lendingThreadId}-initial-plan`,
+      runId: `${lendingThreadId}-inventory-before-supply`,
+      prompt: 'Report your current mandate, owned units, reservations, and wallet contents from the live runtime context.',
+    });
+    const preSupplyAssistantText = requireAssistantText(
+      preSupplyInventory.assistantText,
+      'pre-supply inventory',
+    );
+    if (!/mandate/i.test(preSupplyAssistantText) || !/wallet/i.test(preSupplyAssistantText)) {
+      throw new Error(
+        `Pre-supply inventory did not summarize mandate and wallet context: ${preSupplyAssistantText}`,
+      );
+    }
+    console.log(
+      JSON.stringify(
+        {
+          phase: 'pre-supply-inventory',
+          assistantText: truncateForLog(preSupplyAssistantText),
+        },
+        null,
+        2,
+      ),
+    );
+
+    const initialExecutionPromise = runAgentMessage({
+      baseUrl: lendingBaseUrl,
+      agentId: EMBER_LENDING_AGENT_ID,
+      threadId: lendingThreadId,
+      runId: `${lendingThreadId}-initial-supply-via-agent`,
+      prompt:
+        'Create and execute whatever transaction is required to meet your current lending mandate right now.',
+    });
+    await sleep(100);
+    await runAgentCommand({
+      baseUrl: portfolioManagerBaseUrl,
+      agentId: PORTFOLIO_MANAGER_AGENT_ID,
+      threadId: portfolioThreadId,
+      runId: `${portfolioThreadId}-initial-agent-refresh`,
       command: {
-        name: 'create_transaction_plan',
+        name: 'refresh_redelegation_work',
       },
     });
-
-    const initialExecution = await runExecutionAttemptWithRedelegationRefresh({
-      lendingBaseUrl,
-      lendingThreadId,
-      portfolioManagerBaseUrl,
-      portfolioThreadId,
-      stage: 'initial',
-    });
+    const initialExecution = await initialExecutionPromise;
+    const initialExecutionTxHash = readLifecycleExecutionTxHash(initialExecution.snapshot);
+    if (!initialExecutionTxHash) {
+      throw new Error(
+        `Supply-through-agent did not confirm an execution tx hash: ${JSON.stringify(initialExecution.snapshot, null, 2)}`,
+      );
+    }
 
     console.log(
       JSON.stringify(
         {
           phase: 'initial-supply-completed',
-          transactionHash: initialExecution.transactionHash,
+          transactionHash: initialExecutionTxHash,
+          assistantText: truncateForLog(
+            requireAssistantText(initialExecution.assistantText, 'initial supply execution'),
+          ),
         },
         null,
         2,
@@ -1324,6 +1505,79 @@ async function main() {
         `Expected active lending.withdraw reservation after supply: ${JSON.stringify(postSupply.portfolioState, null, 2)}`,
       );
     }
+
+    const suppliedUnitId = readOwnedUnitIdByControlPath(postSupply.portfolioState, 'lending.supply');
+    if (!suppliedUnitId) {
+      throw new Error(
+        `Expected a deployed lending.supply owned unit after supply: ${JSON.stringify(postSupply.portfolioState, null, 2)}`,
+      );
+    }
+
+    const postSupplyInventory = await runAgentMessage({
+      baseUrl: lendingBaseUrl,
+      agentId: EMBER_LENDING_AGENT_ID,
+      threadId: lendingThreadId,
+      runId: `${lendingThreadId}-inventory-after-supply`,
+      prompt: 'Report your current mandate, owned units, reservations, and wallet contents from the live runtime context.',
+    });
+    const postSupplyAssistantText = requireAssistantText(
+      postSupplyInventory.assistantText,
+      'post-supply inventory',
+    );
+    if (!postSupplyAssistantText.includes(suppliedUnitId)) {
+      throw new Error(
+        `Post-supply inventory did not mention the live successor unit ${suppliedUnitId}: ${postSupplyAssistantText}`,
+      );
+    }
+    console.log(
+      JSON.stringify(
+        {
+          phase: 'post-supply-inventory',
+          suppliedUnitId,
+          assistantText: truncateForLog(postSupplyAssistantText),
+        },
+        null,
+        2,
+      ),
+    );
+
+    const borrowPlan = await runAgentMessage({
+      baseUrl: lendingBaseUrl,
+      agentId: EMBER_LENDING_AGENT_ID,
+      threadId: lendingThreadId,
+      runId: `${lendingThreadId}-borrow-plan-via-agent`,
+      prompt: 'Create a borrow transaction plan for the maximum WETH currently allowed under the active mandate.',
+    });
+    const borrowAssistantText = requireAssistantText(
+      borrowPlan.assistantText,
+      'borrow planning',
+    );
+    if (/Portfolio Manager-admitted units|not admitted|can only plan with/i.test(borrowAssistantText)) {
+      throw new Error(`Borrow plan hit the admitted-unit blocker: ${borrowAssistantText}`);
+    }
+    const borrowArtifact = readSnapshotArtifact(borrowPlan.snapshot);
+    if (!isRecord(borrowArtifact) || readString(borrowArtifact['type']) !== 'shared-ember-candidate-plan') {
+      throw new Error(
+        `Borrow plan did not surface a candidate plan artifact: ${JSON.stringify(borrowPlan.snapshot, null, 2)}`,
+      );
+    }
+    const borrowCandidateUnitIds = readLifecycleCandidateUnitIds(borrowPlan.snapshot);
+    if (!borrowCandidateUnitIds.includes(suppliedUnitId)) {
+      throw new Error(
+        `Borrow plan did not normalize onto the live supplied unit ${suppliedUnitId}: ${JSON.stringify(borrowCandidateUnitIds)}`,
+      );
+    }
+    console.log(
+      JSON.stringify(
+        {
+          phase: 'borrow-planned',
+          candidateUnitIds: borrowCandidateUnitIds,
+          assistantText: truncateForLog(borrowAssistantText),
+        },
+        null,
+        2,
+      ),
+    );
 
     await runAgentCommand({
       baseUrl: lendingBaseUrl,
@@ -1517,7 +1771,7 @@ async function main() {
       JSON.stringify(
         {
           phase: 'done',
-          initialExecution: initialExecution.transactionHash,
+          initialExecution: initialExecutionTxHash,
           unwindExecution: unwindExecution.transactionHash,
           finalSupplyQuantity: postIngressSupplyQuantity.toString(),
         },

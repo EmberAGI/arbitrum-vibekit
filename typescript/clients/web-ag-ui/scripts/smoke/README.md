@@ -66,8 +66,14 @@ the managed pair.
 - `pnpm smoke:managed-idle-reconciliation`
   - Self-boots the repo-local Shared Ember harness plus fresh
     `agent-portfolio-manager` and `agent-ember-lending` processes by default.
-  - Drives real managed onboarding, initial `lending.supply`, and a full
-    `lending.withdraw` back to the rooted wallet.
+  - Drives real managed onboarding, then uses the lending AG-UI chat surface to
+    read inventory, execute the initial supply, read inventory again, and plan a
+    follow-up borrow on the same thread.
+  - Verifies the post-supply inventory turn mentions the live deployed
+    successor unit instead of a stale predecessor id.
+  - Verifies the follow-up borrow plan stays admitted on the same thread after
+    that post-supply inventory turn.
+  - Continues through a full `lending.withdraw` back to the rooted wallet.
   - Verifies post-withdraw `lending.supply` re-admission plus onboarding
     `phase: active` through ordinary Shared Ember read RPCs.
   - Transfers live WETH into and out of the rooted wallet from an external
