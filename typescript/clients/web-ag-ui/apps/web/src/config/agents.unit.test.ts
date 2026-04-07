@@ -26,7 +26,13 @@ describe('agents config', () => {
     expect(isRegisteredAgentId('agent-ember-lending')).toBe(true);
 
     const featured = getFeaturedAgents();
-    expect(featured.map((agent) => agent.id)).toEqual(['agent-clmm', 'agent-pendle', 'agent-gmx-allora']);
+    expect(featured.map((agent) => agent.id)).toEqual([
+      'agent-portfolio-manager',
+      'agent-ember-lending',
+      'agent-clmm',
+      'agent-pendle',
+      'agent-gmx-allora',
+    ]);
   });
 
   it('returns a formatted fallback config for unknown agents', () => {

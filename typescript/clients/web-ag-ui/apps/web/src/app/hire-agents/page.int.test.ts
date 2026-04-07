@@ -119,7 +119,7 @@ describe('HireAgentsRoute integration', () => {
     const props = capturedProps as HireAgentsRoutePropsCapture;
 
     expect(props.agents).toHaveLength(5);
-    expect(props.featuredAgents).toHaveLength(3);
+    expect(props.featuredAgents).toHaveLength(5);
 
     const clmm = props.agents.find((agent) => agent.id === 'agent-clmm');
     const pendle = props.agents.find((agent) => agent.id === 'agent-pendle');
@@ -150,6 +150,12 @@ describe('HireAgentsRoute integration', () => {
     expect(emberLending?.tokens).toEqual(['USDC']);
     expect(emberLending?.pointsTrend).toBeUndefined();
     expect(emberLending?.trendMultiplier).toBeUndefined();
+
+    expect(props.featuredAgents.map((agent) => agent.id).slice(0, 3)).toEqual([
+      'agent-portfolio-manager',
+      'agent-ember-lending',
+      'agent-clmm',
+    ]);
   });
 
   it('routes hire/view handlers to the correct detail URL', () => {
@@ -167,8 +173,10 @@ describe('HireAgentsRoute integration', () => {
     renderToStaticMarkup(React.createElement(HireAgentsRoute));
 
     const props = capturedProps as HireAgentsRoutePropsCapture;
+    const portfolioManager = props.featuredAgents.find((agent) => agent.id === 'agent-portfolio-manager');
     const pendle = props.featuredAgents.find((agent) => agent.id === 'agent-pendle');
 
+    expect(portfolioManager).toBeDefined();
     expect(pendle?.description).toContain('highest-yielding Pendle YT markets');
   });
 });

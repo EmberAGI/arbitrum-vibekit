@@ -130,11 +130,19 @@ export function HireAgentsPage({
       return matchesSearch && matchesFilter;
     })
     .sort((a, b) => {
-      if (a.id === 'agent-clmm' && b.id !== 'agent-clmm') {
+      const aFeaturedRank = a.featuredRank ?? Number.POSITIVE_INFINITY;
+      const bFeaturedRank = b.featuredRank ?? Number.POSITIVE_INFINITY;
+      const aIsFeatured = a.featuredRank !== undefined;
+      const bIsFeatured = b.featuredRank !== undefined;
+
+      if (aIsFeatured && !bIsFeatured) {
         return -1;
       }
-      if (b.id === 'agent-clmm' && a.id !== 'agent-clmm') {
+      if (bIsFeatured && !aIsFeatured) {
         return 1;
+      }
+      if (aFeaturedRank !== bFeaturedRank) {
+        return aFeaturedRank - bFeaturedRank;
       }
       switch (sortBy) {
         case 'income':

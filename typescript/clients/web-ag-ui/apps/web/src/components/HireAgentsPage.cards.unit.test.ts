@@ -183,4 +183,58 @@ describe('HireAgentsPage (top cards)', () => {
     expect(html).not.toContain('30d Income');
     expect(html).not.toContain('grid grid-cols-4 gap-3 px-4 py-3 bg-black/20 border-t border-white/10');
   });
+
+  it('orders the bottom agents table by featured rank before metric sort', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [
+          {
+            id: 'agent-clmm',
+            rank: 3,
+            name: 'Camelot CLMM',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            featuredRank: 3,
+            weeklyIncome: 900,
+          },
+          {
+            id: 'agent-portfolio-manager',
+            rank: 1,
+            name: 'Portfolio Manager',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            featuredRank: 1,
+            weeklyIncome: 100,
+          },
+          {
+            id: 'agent-ember-lending',
+            rank: 2,
+            name: 'Ember Lending',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            featuredRank: 2,
+            weeklyIncome: 200,
+          },
+          {
+            id: 'agent-gmx-allora',
+            rank: 5,
+            name: 'GMX Allora Trader',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            featuredRank: 5,
+            weeklyIncome: 5_000,
+          },
+        ],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html.indexOf('Portfolio Manager')).toBeLessThan(html.indexOf('Ember Lending'));
+    expect(html.indexOf('Ember Lending')).toBeLessThan(html.indexOf('Camelot CLMM'));
+    expect(html.indexOf('Camelot CLMM')).toBeLessThan(html.indexOf('GMX Allora Trader'));
+  });
 });

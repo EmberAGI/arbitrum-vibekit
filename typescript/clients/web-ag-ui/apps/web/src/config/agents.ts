@@ -35,7 +35,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     protocols: ['Camelot'],
     tokens: ['USDC', 'WETH', 'WBTC'],
     isFeatured: true,
-    featuredRank: 1,
+    featuredRank: 3,
   },
   'agent-pendle': {
     id: 'agent-pendle',
@@ -65,7 +65,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
       'USDe',
     ],
     isFeatured: true,
-    featuredRank: 2,
+    featuredRank: 4,
   },
   'agent-gmx-allora': {
     id: 'agent-gmx-allora',
@@ -80,7 +80,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     protocols: ['GMX', 'Allora'],
     tokens: ['USDC', 'WETH'],
     isFeatured: true,
-    featuredRank: 3,
+    featuredRank: 5,
   },
   'agent-pi-example': {
     id: 'agent-pi-example',
@@ -110,6 +110,8 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
     tokens: ['USDC'],
+    isFeatured: true,
+    featuredRank: 1,
   },
   'agent-ember-lending': {
     id: 'agent-ember-lending',
@@ -125,6 +127,8 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
     tokens: ['USDC'],
+    isFeatured: true,
+    featuredRank: 2,
   },
 };
 
