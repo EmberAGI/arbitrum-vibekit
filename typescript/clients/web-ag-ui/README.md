@@ -58,6 +58,12 @@ It includes:
   `pi-runtime-postgres` service and injects `DATABASE_URL` into the managed
   agent containers so they do not rely on the runtime's host-process Docker
   bootstrap path from inside Docker.
+- The managed compose overlay also mounts the OWS vault directories read-only
+  into the managed containers. By default it expects host paths:
+  - `/opt/web-ag-ui/runtime/ows/portfolio-manager`
+  - `/opt/web-ag-ui/runtime/ows/ember-lending`
+  and the managed agent env files should point `*_OWS_VAULT_PATH` at the
+  mounted in-container paths under `/runtime/ows/...`.
 - Example:
   - `SHARED_EMBER_REPO_ROOT=/abs/path/to/ember-orchestration-v1-spec docker compose -f compose.yaml -f compose.managed.yaml config`
 

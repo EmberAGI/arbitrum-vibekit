@@ -41,6 +41,9 @@ services:
     ports:
       - "4010:4010"
     restart: unless-stopped
+    volumes:
+      - ${PORTFOLIO_MANAGER_OWS_HOST_PATH:-/opt/web-ag-ui/runtime/ows/portfolio-manager}:/runtime/ows/portfolio-manager:ro
+      - ${EMBER_LENDING_OWS_HOST_PATH:-/opt/web-ag-ui/runtime/ows/ember-lending}:/runtime/ows/ember-lending:ro
 
   agent-portfolio-manager:
     build:
@@ -62,6 +65,8 @@ services:
     ports:
       - "3420:3420"
     restart: unless-stopped
+    volumes:
+      - ${PORTFOLIO_MANAGER_OWS_HOST_PATH:-/opt/web-ag-ui/runtime/ows/portfolio-manager}:/runtime/ows/portfolio-manager:ro
 
   agent-ember-lending:
     build:
@@ -83,6 +88,8 @@ services:
     ports:
       - "3430:3430"
     restart: unless-stopped
+    volumes:
+      - ${EMBER_LENDING_OWS_HOST_PATH:-/opt/web-ag-ui/runtime/ows/ember-lending}:/runtime/ows/ember-lending:ro
 
 volumes:
   pi_runtime_postgres_data:
