@@ -444,7 +444,12 @@ describe('useAgentConnection integration', () => {
     expect(syncMessage?.role).toBe('user');
     expect(parsedMessage?.command).toBe('sync');
     expect(typeof parsedMessage?.clientMutationId).toBe('string');
-    expect(mocks.runAgent).toHaveBeenCalledWith({ agent: mocks.agent });
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+      }),
+    );
   });
 
   it('sendChatMessage dispatches a plain user message and runs the agent', async () => {
@@ -508,7 +513,12 @@ describe('useAgentConnection integration', () => {
         content: 'Hello from the chat tab',
       }),
     ]);
-    expect(mocks.runAgent).toHaveBeenCalledWith({ agent: mocks.agent });
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+      }),
+    );
   });
 
   it('keeps sync pending until AG-UI state confirms the applied mutation id', async () => {
@@ -1354,14 +1364,17 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(mocks.agent.addMessage).not.toHaveBeenCalled();
-    expect(mocks.runAgent).toHaveBeenCalledWith({
-      agent: mocks.agent,
-      forwardedProps: {
-        command: {
-          name: 'fire',
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            name: 'fire',
+          },
         },
-      },
-    });
+      }),
+    );
   });
 
   it('marks agent as not hired once fire reaches a terminal task state', async () => {
@@ -1791,18 +1804,21 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
 
-    expect(mocks.runAgent).toHaveBeenCalledWith({
-      agent: mocks.agent,
-      forwardedProps: {
-        command: {
-          resume: JSON.stringify({
-            poolAddress: '0x0000000000000000000000000000000000000001',
-            walletAddress: '0x0000000000000000000000000000000000000002',
-            baseContributionUsd: 100,
-          }),
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify({
+              poolAddress: '0x0000000000000000000000000000000000000001',
+              walletAddress: '0x0000000000000000000000000000000000000002',
+              baseContributionUsd: 100,
+            }),
+          },
         },
-      },
-    });
+      }),
+    );
     expect(rawAgentRun).not.toHaveBeenCalled();
     expect(latestValue?.uiError).toBeNull();
   });
@@ -2000,16 +2016,19 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
 
-    expect(mocks.runAgent).toHaveBeenCalledWith({
-      agent: mocks.agent,
-      forwardedProps: {
-        command: {
-          resume: JSON.stringify({
-            operatorNote: 'Use the safe automation window',
-          }),
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify({
+              operatorNote: 'Use the safe automation window',
+            }),
+          },
         },
-      },
-    });
+      }),
+    );
     expect(rawAgentRun).not.toHaveBeenCalled();
     expect(latestValue?.uiError).toBeNull();
   });

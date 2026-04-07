@@ -172,7 +172,7 @@ describe('HireAgentsRoute integration', () => {
 
     expect(emberLending?.chains).toEqual(['Arbitrum']);
     expect(emberLending?.name).toBe('Ember Lending');
-    expect(emberLending?.protocols).toEqual(['Pi Runtime', 'Shared Ember Domain Service']);
+    expect(emberLending?.protocols).toEqual(['Aave']);
     expect(emberLending?.tokens).toEqual(['USDC']);
     expect(emberLending?.imageUrl).toBe('/ember-lending-avatar.svg');
     expect(emberLending?.avatarBg).toBe('#9896FF');
