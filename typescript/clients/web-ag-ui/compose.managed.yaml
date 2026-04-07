@@ -1,0 +1,59 @@
+services:
+  web:
+    environment:
+      PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL: http://agent-portfolio-manager:3420/ag-ui
+      EMBER_LENDING_AGENT_DEPLOYMENT_URL: http://agent-ember-lending:3430/ag-ui
+    depends_on:
+      - agent-portfolio-manager
+      - agent-ember-lending
+
+  shared-ember:
+    build:
+      context: ../..
+      dockerfile: clients/web-ag-ui/Dockerfile.shared-ember
+      additional_contexts:
+        shared_ember_spec: ${SHARED_EMBER_REPO_ROOT:?Set SHARED_EMBER_REPO_ROOT to the ember-orchestration-v1-spec checkout root}
+    env_file:
+      - apps/web/.env
+      - apps/agent-portfolio-manager/.env
+      - apps/agent-ember-lending/.env
+    environment:
+      SHARED_EMBER_HOST: 0.0.0.0
+      SHARED_EMBER_PORT: 4010
+    ports:
+      - "4010:4010"
+    restart: unless-stopped
+
+  agent-portfolio-manager:
+    build:
+      context: ../..
+      dockerfile: clients/web-ag-ui/Dockerfile.pi-runtime-app
+      args:
+        APP_NAME: agent-portfolio-manager
+    env_file:
+      - apps/agent-portfolio-manager/.env
+    environment:
+      NODE_ENV: production
+      SHARED_EMBER_BASE_URL: http://shared-ember:4010
+    depends_on:
+      - shared-ember
+    ports:
+      - "3420:3420"
+    restart: unless-stopped
+
+  agent-ember-lending:
+    build:
+      context: ../..
+      dockerfile: clients/web-ag-ui/Dockerfile.pi-runtime-app
+      args:
+        APP_NAME: agent-ember-lending
+    env_file:
+      - apps/agent-ember-lending/.env
+    environment:
+      NODE_ENV: production
+      SHARED_EMBER_BASE_URL: http://shared-ember:4010
+    depends_on:
+      - shared-ember
+    ports:
+      - "3430:3430"
+    restart: unless-stopped

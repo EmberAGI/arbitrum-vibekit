@@ -36,6 +36,16 @@ It includes:
 - Use `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`
   to prove the real runtime-owned redelegation typed-data signing seam against
   the repo-backed Shared Ember harness.
+- `compose.managed.yaml` layers in:
+  - `shared-ember`
+  - `agent-portfolio-manager`
+  - `agent-ember-lending`
+- The managed compose overlay expects `SHARED_EMBER_REPO_ROOT` to point at an
+  `ember-orchestration-v1-spec` checkout because the `shared-ember` image boots
+  the Shared Ember HTTP service through Vibekit's managed harness while loading
+  the domain-service implementation from that external repo.
+- Example:
+  - `SHARED_EMBER_REPO_ROOT=/abs/path/to/ember-orchestration-v1-spec docker compose -f compose.yaml -f compose.managed.yaml config`
 
 ## Key Docs
 
