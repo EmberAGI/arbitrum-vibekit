@@ -182,9 +182,6 @@ describe('portfolio-manager controller identity', () => {
       expectedAddress: '0x00000000000000000000000000000000000000c1',
       chain: 'evm',
       unsignedTransactionHex: expect.stringMatching(/^0x/),
-      context: {
-        threadId: 'portfolio-manager-startup',
-      },
     });
     expect(request).toHaveBeenCalledWith({
       method: 'eth_sendRawTransaction',

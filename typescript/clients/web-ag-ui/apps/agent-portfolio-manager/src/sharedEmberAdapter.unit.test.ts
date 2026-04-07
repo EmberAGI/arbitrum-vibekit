@@ -1,14 +1,13 @@
 import { ROOT_AUTHORITY } from '@metamask/delegation-toolkit';
 import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
 import { describe, expect, it, vi } from 'vitest';
+import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 
 import { createPortfolioManagerDomain } from './sharedEmberAdapter.js';
 
-function createRuntimeSigningStub(
-  signPayload: ReturnType<typeof vi.fn>,
-) {
+function createRuntimeSigningStub(signPayload: AgentRuntimeSigningService['signPayload']) {
   return {
-    readAddress: vi.fn(),
+    readAddress: vi.fn<AgentRuntimeSigningService['readAddress']>(),
     signPayload,
   };
 }
@@ -39,7 +38,7 @@ function createSignedRootDelegation(delegate: `0x${string}`) {
   return {
     delegate,
     delegator: '0x00000000000000000000000000000000000000a1' as const,
-    authority: ROOT_AUTHORITY,
+    authority: ROOT_AUTHORITY as `0x${string}`,
     caveats: [],
     salt: '0x1111111111111111111111111111111111111111111111111111111111111111' as const,
     signature: '0x1234' as const,
@@ -3031,7 +3030,14 @@ describe('createPortfolioManagerDomain', () => {
       },
     });
 
-    const registerSignedRedelegationRequest = protocolHost.handleJsonRpc.mock.calls[0]?.[0] as {
+    const registerSignedRedelegationCall = protocolHost.handleJsonRpc.mock.calls[0] as
+      | [unknown]
+      | undefined;
+    if (!registerSignedRedelegationCall) {
+      throw new Error('expected register signed redelegation JSON-RPC call');
+    }
+
+    const registerSignedRedelegationRequest = registerSignedRedelegationCall[0] as {
       params: {
         signed_redelegation: Record<string, unknown>;
       };
@@ -3082,7 +3088,7 @@ describe('createPortfolioManagerDomain', () => {
     expect(decodedArtifact).toMatchObject({
       delegate: '0x00000000000000000000000000000000000000b1',
       delegator: '0x00000000000000000000000000000000000000c2',
-      authority: getDelegationHashOffchain(rootSignedDelegation),
+      authority: getDelegationHashOffchain(rootSignedDelegation) as `0x${string}`,
       caveats: [],
       salt: expect.stringMatching(/^0x[0-9a-f]+$/),
       signature: TEST_REDELEGATION_SIGNATURE,

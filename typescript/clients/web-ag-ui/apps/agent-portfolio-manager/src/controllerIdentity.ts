@@ -146,9 +146,6 @@ export async function ensurePortfolioManagerControllerSmartAccountDeployed(input
     expectedAddress: input.signerAddress,
     chain: 'evm',
     unsignedTransactionHex,
-    context: {
-      threadId: 'portfolio-manager-startup',
-    },
   });
   const hash = await publicClient.request({
     method: 'eth_sendRawTransaction',
