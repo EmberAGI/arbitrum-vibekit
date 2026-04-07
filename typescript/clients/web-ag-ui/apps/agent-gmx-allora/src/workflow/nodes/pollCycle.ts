@@ -1719,8 +1719,12 @@ export const pollCycleNode = async (
     positionContractKey: positionForReduce?.contractKey,
     positionSizeInUsd: positionForReduce?.sizeInUsd,
   });
+  const fundingTokenAddress = operatorConfig.fundingTokenAddress;
+  const collateralTokenAddress = operatorConfig.collateralTokenAddress;
   const collateralSwapFundingEstimate =
-    operatorConfig.fundingTokenAddress.toLowerCase() === operatorConfig.collateralTokenAddress.toLowerCase()
+    typeof fundingTokenAddress !== 'string' ||
+    typeof collateralTokenAddress !== 'string' ||
+    fundingTokenAddress.toLowerCase() === collateralTokenAddress.toLowerCase()
       ? undefined
       : {
           fromTokenDecimals: operatorConfig.fundingTokenDecimals,
