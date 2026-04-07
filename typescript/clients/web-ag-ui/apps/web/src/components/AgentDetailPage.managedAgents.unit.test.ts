@@ -126,6 +126,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).toContain(
       'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
     );
+    expect(html).toContain('class="grid gap-3 lg:grid-cols-2"');
     expect(html).toContain('>Manage<');
     expect(html).toContain('Send message');
     expect(html).not.toContain('Lifecycle state');
@@ -251,6 +252,53 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).not.toContain('Your Assets');
     expect(html).not.toContain('Your PnL');
     expect(html).not.toContain('Managed lending runtime');
+  });
+
+  it('truncates long lending reservation identifiers in the visible summary', () => {
+    const longReservationId =
+      'res-ember-lending-rwc-3bdae87fc824589696d2525dee4ca7ae0xad53ec51a70e9a17df6752fda80cd465457c258d';
+    const html = renderManagedAgentDetail({
+      isHired: true,
+      initialTab: 'chat',
+      taskStatus: 'working',
+      lifecycleState: {
+        phase: 'active',
+        mandateRef: 'mandate-ember-lending-001',
+        mandateSummary:
+          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+        mandateContext: {
+          network: 'arbitrum',
+          protocol: 'aave',
+        },
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+        rootedWalletContextId: 'rwc-ember-lending-thread-001',
+        lastReservationSummary: null,
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          owned_units: [
+            {
+              unit_id: 'unit-ember-lending-001',
+              network: 'arbitrum',
+              wallet_address: '0x00000000000000000000000000000000000000b1',
+              root_asset: 'USDC',
+              quantity: '10',
+              reservation_id: longReservationId,
+            },
+          ],
+          reservations: [
+            {
+              reservation_id: longReservationId,
+              purpose: 'deploy',
+              control_path: 'lending.supply',
+            },
+          ],
+        },
+      } as never,
+    });
+
+    expect(html).toContain('Reservation res...lending...57c258d deploys 10 USDC via lending.supply.');
+    expect(html).not.toContain(longReservationId);
   });
 
   it('renders artifact labels from nested artifact payload types in the activity stream', () => {

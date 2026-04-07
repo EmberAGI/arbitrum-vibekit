@@ -132,7 +132,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     id: 'agent-ember-lending',
     name: 'Ember Lending',
     description:
-      'Managed lending subagent on the public PI runtime path for bounded Shared Ember portfolio-state reads, plan materialization, execution, and escalation.',
+      'Executes lending strategies within the mandates you approve, monitors positions in the background, and keeps capital deployed within your policy and risk limits.',
     creator: 'Ember AI Team',
     creatorVerified: true,
     avatar: '🏦',

@@ -518,6 +518,36 @@ function formatManagedLaneLabel(network: string | null, protocol: string | null)
     .join(' / ');
 }
 
+function formatReservationIdForDisplay(value: string): string {
+  const reservationId = value.trim();
+  if (reservationId.length <= 40) {
+    return reservationId;
+  }
+
+  const parts = reservationId.split(/[-_]+/).filter((part) => part.length > 0);
+  const prefixSource = parts[0] ?? reservationId;
+  const prefix = prefixSource.slice(0, Math.min(3, prefixSource.length));
+  const context =
+    parts.find((part) => part.toLowerCase().includes('lending')) ??
+    parts[Math.floor(parts.length / 2)] ??
+    reservationId.slice(0, 7);
+  const tail = reservationId.slice(-7);
+
+  return `${prefix}...${context}...${tail}`;
+}
+
+function normalizeReservationSummaryForDisplay(summary: string | null): string | null {
+  if (!summary) {
+    return null;
+  }
+
+  return summary.replace(
+    /^(Reservation\s+)(\S+)(\s.*)$/u,
+    (_match, prefix: string, reservationId: string, suffix: string) =>
+      `${prefix}${formatReservationIdForDisplay(reservationId)}${suffix}`,
+  );
+}
+
 function buildReservationSummaryFromBootstrap(value: Record<string, unknown> | null): string | null {
   if (!value || !Array.isArray(value['reservations'])) {
     return null;
@@ -554,7 +584,9 @@ function buildReservationSummaryFromBootstrap(value: Record<string, unknown> | n
   const quantitySummary = quantity && rootAsset ? ` ${quantity} ${rootAsset}` : ' capital';
   const controlPathSummary = controlPath ? ` via ${controlPath}` : '';
 
-  return `Reservation ${reservationId} ${reservationAction}${quantitySummary}${controlPathSummary}.`;
+  return normalizeReservationSummaryForDisplay(
+    `Reservation ${reservationId} ${reservationAction}${quantitySummary}${controlPathSummary}.`,
+  );
 }
 
 function readFirstRecordFromArray(value: unknown): Record<string, unknown> | null {
@@ -667,7 +699,9 @@ function buildPortfolioManagerManagedAgentView(
     laneLabel,
     mandateSummary,
     allocationSummary,
-    reservationSummary: buildReservationSummaryFromBootstrap(onboardingBootstrap),
+    reservationSummary: normalizeReservationSummaryForDisplay(
+      buildReservationSummaryFromBootstrap(onboardingBootstrap),
+    ),
   };
 }
 
@@ -707,9 +741,10 @@ function buildEmberLendingRuntimeView(
       readString(lifecycleRecord['mandateSummary']) ??
       readString(lastPortfolioState?.['mandate_summary']) ??
       readString(asRecord(lastPortfolioState?.['mandate'])?.['summary']),
-    reservationSummary:
+    reservationSummary: normalizeReservationSummaryForDisplay(
       readString(lifecycleRecord['lastReservationSummary']) ??
-      buildReservationSummaryFromBootstrap(lastPortfolioState),
+        buildReservationSummaryFromBootstrap(lastPortfolioState),
+    ),
   };
 
   return runtimeView.phase ||
@@ -1390,29 +1425,27 @@ export function AgentDetailPage({
         ) : null}
 
         {emberLendingRuntimeView ? (
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.95fr)]">
-              {emberLendingRuntimeView.mandateSummary ? (
-                <div className="rounded-xl border border-white/10 bg-[#151515] p-4">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                    Mandate
-                  </div>
-                  <div className="mt-2 text-sm leading-relaxed text-gray-300">
-                    {emberLendingRuntimeView.mandateSummary}
-                  </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {emberLendingRuntimeView.mandateSummary ? (
+              <div className="min-w-0 rounded-xl border border-white/10 bg-[#151515] p-4">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                  Mandate
                 </div>
-              ) : null}
-              <div className="space-y-3">
-                {emberLendingRuntimeView.reservationSummary ? (
-                  <div className="rounded-xl border border-white/10 bg-[#151515] p-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                      Reservation
-                    </div>
-                    <div className="mt-2 text-sm leading-relaxed text-gray-300">
-                      {emberLendingRuntimeView.reservationSummary}
-                    </div>
-                  </div>
-                ) : null}
+                <div className="mt-2 text-sm leading-relaxed text-gray-300">
+                  {emberLendingRuntimeView.mandateSummary}
+                </div>
               </div>
+            ) : null}
+            {emberLendingRuntimeView.reservationSummary ? (
+              <div className="min-w-0 rounded-xl border border-white/10 bg-[#151515] p-4">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                  Reservation
+                </div>
+                <div className="mt-2 text-sm leading-relaxed text-gray-300">
+                  {emberLendingRuntimeView.reservationSummary}
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

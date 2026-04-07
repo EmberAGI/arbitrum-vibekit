@@ -27,6 +27,9 @@ describe('agents config', () => {
     expect(portfolioManager.marketplaceRowHoverBg).toBe('rgba(124,58,237,0.12)');
     expect(portfolioManager.surfaceTag).toBe('Swarm');
     expect(emberLending.name).toBe('Ember Lending');
+    expect(emberLending.description).toBe(
+      'Executes lending strategies within the mandates you approve, monitors positions in the background, and keeps capital deployed within your policy and risk limits.',
+    );
     expect(emberLending.imageUrl).toBe('/ember-lending-avatar.svg');
     expect(emberLending.avatarBg).toBe('#9896FF');
     expect(emberLending.onboardingOwnerAgentId).toBe('agent-portfolio-manager');
