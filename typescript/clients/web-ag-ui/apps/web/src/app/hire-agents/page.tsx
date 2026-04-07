@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { HireAgentsPage, type Agent, type FeaturedAgent } from '@/components/HireAgentsPage';
 import { useAgentList } from '@/contexts/AgentListContext';
-import { getAllAgents, getFeaturedAgents } from '@/config/agents';
+import { getFeaturedAgents, getVisibleAgents } from '@/config/agents';
 import { canonicalizeChainLabel } from '@/utils/iconResolution';
 import { mergeUniqueStrings, normalizeStringList } from '@/utils/agentCollections';
 
@@ -14,7 +14,7 @@ const PAGINATION_QA_MOCKS_ENABLED =
 export default function HireAgentsRoute() {
   const router = useRouter();
   const { agents: agentStates } = useAgentList();
-  const registeredAgents = getAllAgents();
+  const registeredAgents = getVisibleAgents();
   const featuredAgentConfigs = getFeaturedAgents();
 
   const agentList: Agent[] = registeredAgents.map((agentConfig) => {
@@ -59,6 +59,12 @@ export default function HireAgentsRoute() {
       trendMultiplier: isLoaded && metrics?.iteration ? `${metrics.iteration}x` : undefined,
       avatar: agentConfig.avatar,
       avatarBg: agentConfig.avatarBg,
+      imageUrl: agentConfig.imageUrl,
+      surfaceTag: agentConfig.surfaceTag,
+      marketplaceCardBg: agentConfig.marketplaceCardBg,
+      marketplaceCardHoverBg: agentConfig.marketplaceCardHoverBg,
+      marketplaceRowBg: agentConfig.marketplaceRowBg,
+      marketplaceRowHoverBg: agentConfig.marketplaceRowHoverBg,
       status: 'for_hire' as const,
       isActive: false,
       isFeatured: agentConfig.isFeatured,
@@ -142,6 +148,12 @@ export default function HireAgentsRoute() {
       tokens,
       avatar: config.avatar,
       avatarBg: config.avatarBg,
+      imageUrl: config.imageUrl,
+      surfaceTag: config.surfaceTag,
+      marketplaceCardBg: config.marketplaceCardBg,
+      marketplaceCardHoverBg: config.marketplaceCardHoverBg,
+      marketplaceRowBg: config.marketplaceRowBg,
+      marketplaceRowHoverBg: config.marketplaceRowHoverBg,
       pointsTrend: isLoaded && metrics?.iteration && metrics.iteration > 0 ? 'up' : undefined,
       trendMultiplier: isLoaded && metrics?.iteration ? `${metrics.iteration}x` : undefined,
       status: 'for_hire' as const,

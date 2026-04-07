@@ -135,6 +135,83 @@ describe('HireAgentsPage (top cards)', () => {
     );
   });
 
+  it('prefers an explicit branded image and avatar background for featured cards', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-ember-lending',
+            name: 'Ember Lending',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            imageUrl: '/ember-lending-avatar.svg',
+            avatarBg: '#9896FF',
+            protocols: ['GMX'],
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('src="/ember-lending-avatar.svg"');
+    expect(html).toContain('style="background:#9896FF"');
+  });
+
+  it('renders the exact agent tag under the creator byline for featured cards', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-portfolio-manager',
+            name: 'Ember Portfolio Agent',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            surfaceTag: 'Swarm',
+            protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('Ember AI Team');
+    expect(html).toContain('Swarm');
+    expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('Swarm'));
+    expect(html).not.toContain('Workflow');
+    expect(html).not.toContain('Managed workflow');
+    expect(html).not.toContain('Shared state');
+    expect(html).not.toContain('Pi Runtime');
+    expect(html).not.toContain('Shared Ember Domain Service');
+  });
+
+  it('applies the portfolio-specific marketplace background to the whole featured card', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [],
+        featuredAgents: [
+          {
+            id: 'agent-portfolio-manager',
+            name: 'Ember Portfolio Agent',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            marketplaceCardBg: 'rgba(124,58,237,0.10)',
+            marketplaceCardHoverBg: 'rgba(124,58,237,0.14)',
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain(
+      'style="--agent-card-bg:rgba(124,58,237,0.10);--agent-card-hover-bg:rgba(124,58,237,0.14)"',
+    );
+    expect(html).toContain(
+      'bg-[color:var(--agent-card-bg,rgba(255,255,255,0.05))] hover:bg-[color:var(--agent-card-hover-bg,rgba(255,255,255,0.07))]',
+    );
+  });
+
   it('clamps featured descriptions to two lines in compact cards', () => {
     const html = renderToStaticMarkup(
       React.createElement(HireAgentsPage, {
@@ -182,5 +259,131 @@ describe('HireAgentsPage (top cards)', () => {
     expect(html).toContain('aria-label="Expand metrics"');
     expect(html).not.toContain('30d Income');
     expect(html).not.toContain('grid grid-cols-4 gap-3 px-4 py-3 bg-black/20 border-t border-white/10');
+  });
+
+  it('orders the bottom agents table by featured rank before metric sort', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [
+          {
+            id: 'agent-clmm',
+            rank: 3,
+            name: 'Camelot CLMM',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            featuredRank: 3,
+            weeklyIncome: 900,
+          },
+          {
+            id: 'agent-portfolio-manager',
+            rank: 1,
+            name: 'Ember Portfolio Agent',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            featuredRank: 1,
+            weeklyIncome: 100,
+          },
+          {
+            id: 'agent-ember-lending',
+            rank: 2,
+            name: 'Ember Lending',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            featuredRank: 2,
+            weeklyIncome: 200,
+          },
+          {
+            id: 'agent-gmx-allora',
+            rank: 5,
+            name: 'GMX Allora Trader',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            featuredRank: 5,
+            weeklyIncome: 5_000,
+          },
+        ],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html.indexOf('Ember Portfolio Agent')).toBeLessThan(html.indexOf('Ember Lending'));
+    expect(html.indexOf('Ember Lending')).toBeLessThan(html.indexOf('Camelot CLMM'));
+    expect(html.indexOf('Camelot CLMM')).toBeLessThan(html.indexOf('GMX Allora Trader'));
+  });
+
+  it('prefers an explicit branded image and avatar background for table rows', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [
+          {
+            id: 'agent-ember-lending',
+            rank: 2,
+            name: 'Ember Lending',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            imageUrl: '/ember-lending-avatar.svg',
+            avatarBg: '#9896FF',
+            protocols: ['GMX'],
+          },
+        ],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html).toContain('src="/ember-lending-avatar.svg"');
+    expect(html).toContain('style="background:#9896FF"');
+  });
+
+  it('renders workflow tags under the creator byline for table rows', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [
+          {
+            id: 'agent-clmm',
+            rank: 3,
+            name: 'Camelot CLMM',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            surfaceTag: 'Workflow',
+            protocols: ['Camelot'],
+          },
+        ],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html).toContain('Ember AI Team');
+    expect(html).toContain('Workflow');
+    expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('Workflow'));
+  });
+
+  it('applies the portfolio-specific marketplace background to the whole table row', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(HireAgentsPage, {
+        agents: [
+          {
+            id: 'agent-portfolio-manager',
+            rank: 1,
+            name: 'Ember Portfolio Agent',
+            creator: 'Ember AI Team',
+            status: 'for_hire',
+            isLoaded: true,
+            marketplaceRowBg: 'rgba(124,58,237,0.08)',
+            marketplaceRowHoverBg: 'rgba(124,58,237,0.12)',
+          },
+        ],
+        featuredAgents: [],
+      }),
+    );
+
+    expect(html).toContain(
+      '<tr class="bg-[color:var(--agent-row-bg,transparent)] hover:bg-[color:var(--agent-row-hover-bg,rgba(255,255,255,0.05))] transition-colors cursor-pointer" style="--agent-row-bg:rgba(124,58,237,0.08);--agent-row-hover-bg:rgba(124,58,237,0.12)">',
+    );
   });
 });

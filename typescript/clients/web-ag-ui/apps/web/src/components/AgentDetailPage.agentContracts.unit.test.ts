@@ -11,8 +11,9 @@ const AGENTS: Array<{ id: AgentId; name: string }> = [
   { id: 'agent-clmm', name: 'Camelot CLMM' },
   { id: 'agent-pendle', name: 'Pendle Yield' },
   { id: 'agent-gmx-allora', name: 'GMX Allora Trader' },
-  { id: 'agent-portfolio-manager', name: 'Portfolio Manager' },
+  { id: 'agent-portfolio-manager', name: 'Ember Portfolio Agent' },
 ];
+const NON_PORTFOLIO_AGENTS = AGENTS.filter(({ id }) => id !== 'agent-portfolio-manager');
 
 vi.mock('../hooks/usePrivyWalletClient', () => {
   return {
@@ -130,7 +131,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).not.toContain('>Fire<');
   });
 
-  it.each(AGENTS)('renders shared pre-hire summary cards for $name', ({ id, name }) => {
+  it.each(NON_PORTFOLIO_AGENTS)('renders shared pre-hire summary cards for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,
       agentName: name,
@@ -143,7 +144,25 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).not.toContain('Agent is hired');
   });
 
-  it.each(AGENTS)('renders hired split-pill contract for $name', ({ id, name }) => {
+  it('embeds chat instead of rendering pre-hire tabs for Ember Portfolio Agent', () => {
+    const html = renderAgentDetail({
+      agentId: 'agent-portfolio-manager',
+      agentName: 'Ember Portfolio Agent',
+      isHired: false,
+    });
+
+    expect(html).toContain('>Hire<');
+    expect(html).toContain('Send message');
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
+    expect(html).not.toContain('APY Change');
+    expect(html).not.toContain('Chains');
+    expect(html).not.toContain('Protocols');
+    expect(html).not.toContain('Tokens');
+    expect(html).not.toContain('Points');
+  });
+
+  it.each(NON_PORTFOLIO_AGENTS)('renders hired split-pill contract for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,
       agentName: name,
@@ -156,37 +175,123 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Your PnL');
   });
 
-  it.each(AGENTS)('uses Activity + Settings and policies tabs for $name', ({ id, name }) => {
+  it('hides the left-rail stats grid for Ember Portfolio Agent', () => {
     const html = renderAgentDetail({
-      agentId: id,
-      agentName: name,
+      agentId: 'agent-portfolio-manager',
+      agentName: 'Ember Portfolio Agent',
       isHired: true,
     });
 
-    expect(html).toContain('Settings and policies');
-    expect(html).toContain('Activity');
-    expect(html).not.toContain('Agent Blockers');
-    expect(html).not.toContain('Transaction history');
+    expect(html).toContain('Agent is hired');
+    expect(html).toContain('>Fire<');
+    expect(html).not.toContain('Agent Income');
+    expect(html).not.toContain('AUM');
+    expect(html).not.toContain('Total Users');
+    expect(html).not.toContain('APY');
+    expect(html).not.toContain('Your Assets');
+    expect(html).not.toContain('Your PnL');
+    expect(html).not.toContain('Chains');
+    expect(html).not.toContain('Protocols');
+    expect(html).not.toContain('Tokens');
+    expect(html).not.toContain('Points');
   });
 
-  it.each(AGENTS)('renders Activity Stream panel in Activity tab for $name', ({ id, name }) => {
-    const html = renderAgentDetail({
-      agentId: id,
-      agentName: name,
-      isHired: true,
-      initialTab: 'transactions',
-      events: [
-        {
-          type: 'status',
-          message: 'Delegation approvals received. Continuing onboarding.',
-          task: { id: 'task-1', taskStatus: { state: 'working' } },
+  it('renders the lending subagent wallet with 4-by-4 address truncation', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-ember-lending',
+        agentName: 'Ember Lending',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: ['Arbitrum'],
+          protocols: ['Aave'],
+          tokens: ['USDC'],
         },
-      ],
+        metrics: {},
+        isHired: true,
+        isHiring: false,
+        hasLoadedView: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+        lifecycleState: {
+          phase: 'active',
+          walletAddress: '0x00000000000000000000000000000000000000b1',
+          mandateSummary: null,
+          lastReservationSummary: null,
+        } as never,
+      }),
+    );
+
+    expect(html).toContain('0x0000...00b1');
+  });
+
+  it.each(AGENTS)('renders the header order as title then metadata then description for $name', ({ id, name }) => {
+    const html = renderAgentDetail({
+      agentId: id,
+      agentName: name,
+      isHired: true,
     });
 
-    expect(html).toContain('Activity Stream');
-    expect(html).toContain('Delegation approvals received. Continuing onboarding.');
+    expect(html.indexOf(name)).toBeLessThan(html.indexOf('Ember AI Team'));
+    expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('desc'));
   });
+
+  it.each(NON_PORTFOLIO_AGENTS)(
+    'uses Activity + Settings and policies tabs for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+      });
+
+      expect(html).toContain('Settings and policies');
+      expect(html).toContain('Activity');
+      expect(html).not.toContain('Agent Blockers');
+      expect(html).not.toContain('Transaction history');
+    },
+  );
+
+  it('embeds chat instead of rendering post-hire tabs for Ember Portfolio Agent', () => {
+    const html = renderAgentDetail({
+      agentId: 'agent-portfolio-manager',
+      agentName: 'Ember Portfolio Agent',
+      isHired: true,
+    });
+
+    expect(html).toContain('Send message');
+    expect(html).not.toContain('Settings and policies');
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Activity\\s*</button>'));
+    expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
+  });
+
+  it.each(NON_PORTFOLIO_AGENTS)(
+    'renders Activity Stream panel in Activity tab for $name',
+    ({ id, name }) => {
+      const html = renderAgentDetail({
+        agentId: id,
+        agentName: name,
+        isHired: true,
+        initialTab: 'transactions',
+        events: [
+          {
+            type: 'status',
+            message: 'Delegation approvals received. Continuing onboarding.',
+            task: { id: 'task-1', taskStatus: { state: 'working' } },
+          },
+        ],
+      });
+
+      expect(html).toContain('Activity Stream');
+      expect(html).toContain('Delegation approvals received. Continuing onboarding.');
+    },
+  );
 
   it.each(AGENTS)('does not render Activity Stream panel in Metrics tab for $name', ({ id, name }) => {
     const html = renderAgentDetail({
@@ -235,7 +340,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     },
   );
 
-  it.each(AGENTS)('deduplicates arbitrum chain label for $name', ({ id, name }) => {
+  it.each(NON_PORTFOLIO_AGENTS)('deduplicates arbitrum chain label for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,
       agentName: name,
@@ -298,10 +403,10 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Allora Signal Source');
   });
 
-  it('routes portfolio-manager setup interrupt to Portfolio Manager Setup form', () => {
+  it('routes portfolio-manager setup interrupt to Ember Portfolio Agent Setup form', () => {
     const html = renderAgentDetail({
       agentId: 'agent-portfolio-manager',
-      agentName: 'Portfolio Manager',
+      agentName: 'Ember Portfolio Agent',
       isHired: true,
       activeInterrupt: {
         type: 'portfolio-manager-setup-request',
@@ -309,7 +414,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
       },
     });
 
-    expect(html).toContain('Portfolio Manager Setup');
+    expect(html).toContain('Ember Portfolio Agent Setup');
     expect(html).toContain('Root delegation setup');
     expect(html).toContain('live wallet observation');
     expect(html).not.toContain('USDC Allocation');

@@ -82,6 +82,23 @@ describe('iconResolution', () => {
     expect(uri).toBe('https://example.test/grail.png');
   });
 
+  it('prefers an explicit agent image url over protocol fallback icons', () => {
+    const uri = resolveAgentAvatarUri({
+      imageUrl: '/ember-lending-avatar.svg',
+      protocols: ['Camelot', 'GMX'],
+      tokenIconBySymbol: {
+        GMX: 'https://example.test/gmx.png',
+        GRAIL: 'https://example.test/grail.png',
+      },
+      protocolTokenFallback: {
+        Camelot: 'GRAIL',
+        GMX: 'GMX',
+      },
+    });
+
+    expect(uri).toBe('/ember-lending-avatar.svg');
+  });
+
   it('proxies known icon hosts through the icon proxy endpoint', () => {
     expect(proxyIconUri('https://coin-images.coingecko.com/coins/images/279/large/ethereum.png')).toBe(
       '/api/icon-proxy?url=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F279%2Flarge%2Fethereum.png',

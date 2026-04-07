@@ -9,6 +9,13 @@ export interface AgentConfig {
   creatorVerified: boolean;
   avatar: string;
   avatarBg: string;
+  imageUrl?: string;
+  marketplaceCardBg?: string;
+  marketplaceCardHoverBg?: string;
+  marketplaceRowBg?: string;
+  marketplaceRowHoverBg?: string;
+  surfaceTag?: 'Swarm' | 'Workflow';
+  visibleInUserLists?: boolean;
   onboardingOwnerAgentId?: string;
   imperativeCommandTransport?: 'message' | 'forwarded-props';
   // Static metadata used for pre-auth and degraded modes before runtime stream data arrives.
@@ -30,11 +37,12 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '🏰',
     avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+    surfaceTag: 'Workflow',
     chains: ['Arbitrum'],
     protocols: ['Camelot'],
     tokens: ['USDC', 'WETH', 'WBTC'],
     isFeatured: true,
-    featuredRank: 1,
+    featuredRank: 3,
   },
   'agent-pendle': {
     id: 'agent-pendle',
@@ -45,6 +53,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '🪙',
     avatarBg: 'linear-gradient(135deg, #f97316 0%, #facc15 100%)',
+    surfaceTag: 'Workflow',
     chains: ['Arbitrum'],
     protocols: ['Pendle'],
     tokens: [
@@ -64,7 +73,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
       'USDe',
     ],
     isFeatured: true,
-    featuredRank: 2,
+    featuredRank: 4,
   },
   'agent-gmx-allora': {
     id: 'agent-gmx-allora',
@@ -75,11 +84,12 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '📈',
     avatarBg: 'linear-gradient(135deg, #10b981 0%, #22c55e 100%)',
+    surfaceTag: 'Workflow',
     chains: ['Arbitrum'],
     protocols: ['GMX', 'Allora'],
     tokens: ['USDC', 'WETH'],
     isFeatured: true,
-    featuredRank: 3,
+    featuredRank: 5,
   },
   'agent-pi-example': {
     id: 'agent-pi-example',
@@ -90,6 +100,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '🧪',
     avatarBg: 'linear-gradient(135deg, #0891b2 0%, #2563eb 100%)',
+    visibleInUserLists: false,
     imperativeCommandTransport: 'forwarded-props',
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'OpenRouter'],
@@ -97,32 +108,44 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
   },
   'agent-portfolio-manager': {
     id: 'agent-portfolio-manager',
-    name: 'Portfolio Manager',
+    name: 'Ember Portfolio Agent',
     description:
-      'Concrete PI-runtime orchestrator path for wallet-backed onboarding, signing handoffs, and Shared Ember Domain Service integration.',
+      'Orchestrates a swarm of hired agents, enforces your mandate policies autonomously, and works in the background to keep your portfolio aligned with the goals and constraints you set.',
     creator: 'Ember AI Team',
     creatorVerified: true,
     avatar: '🧭',
-    avatarBg: 'linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%)',
+    avatarBg: 'linear-gradient(135deg, #2d1710 0%, #120a07 100%)',
+    imageUrl: 'https://www.emberai.xyz/Logo.svg?dpl=dpl_J6BA6gqb9V9kgyUjTjKdpkPToAd7',
+    marketplaceCardBg: 'rgba(124,58,237,0.10)',
+    marketplaceCardHoverBg: 'rgba(124,58,237,0.14)',
+    marketplaceRowBg: 'rgba(124,58,237,0.08)',
+    marketplaceRowHoverBg: 'rgba(124,58,237,0.12)',
+    surfaceTag: 'Swarm',
     imperativeCommandTransport: 'forwarded-props',
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
     tokens: ['USDC'],
+    isFeatured: true,
+    featuredRank: 1,
   },
   'agent-ember-lending': {
     id: 'agent-ember-lending',
     name: 'Ember Lending',
     description:
-      'Managed lending subagent on the public PI runtime path for bounded Shared Ember portfolio-state reads, plan materialization, execution, and escalation.',
+      'Executes lending strategies within the mandates you approve, monitors positions in the background, and keeps capital deployed within your policy and risk limits.',
     creator: 'Ember AI Team',
     creatorVerified: true,
     avatar: '🏦',
-    avatarBg: 'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
+    avatarBg: '#9896FF',
+    imageUrl: '/ember-lending-avatar.svg',
+    surfaceTag: 'Swarm',
     onboardingOwnerAgentId: 'agent-portfolio-manager',
     imperativeCommandTransport: 'forwarded-props',
     chains: ['Arbitrum'],
-    protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+    protocols: ['Aave'],
     tokens: ['USDC'],
+    isFeatured: true,
+    featuredRank: 2,
   },
 };
 
@@ -153,12 +176,16 @@ export function getAllAgents(): AgentConfig[] {
   return Object.values(AGENT_REGISTRY);
 }
 
+export function getVisibleAgents(): AgentConfig[] {
+  return getAllAgents().filter((agent) => agent.visibleInUserLists !== false);
+}
+
 export function isRegisteredAgentId(agentId: string): boolean {
   return Boolean(AGENT_REGISTRY[agentId]);
 }
 
 export function getFeaturedAgents(): AgentConfig[] {
-  return Object.values(AGENT_REGISTRY)
+  return getVisibleAgents()
     .filter((agent) => agent.isFeatured)
     .sort((a, b) => (a.featuredRank ?? 999) - (b.featuredRank ?? 999));
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { use, type ComponentProps } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Message } from '@ag-ui/core';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
@@ -8,7 +8,8 @@ import { getAgentConfig, isRegisteredAgentId } from '@/config/agents';
 import { useAgent } from '@/contexts/AgentContext';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
-type UiPreviewTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
+type UiPreviewFixture = 'managed';
+type AgentRouteTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
 
 const EMPTY_MESSAGES: Message[] = [];
 
@@ -17,7 +18,12 @@ function parseUiPreviewState(value: string | null): UiPreviewState | null {
   return null;
 }
 
-function parseUiPreviewTab(value: string | null): UiPreviewTab | null {
+function parseUiPreviewFixture(value: string | null): UiPreviewFixture | null {
+  if (value === 'managed') return value;
+  return null;
+}
+
+function parseAgentRouteTab(value: string | null): AgentRouteTab | null {
   if (
     value === 'blockers' ||
     value === 'metrics' ||
@@ -27,6 +33,93 @@ function parseUiPreviewTab(value: string | null): UiPreviewTab | null {
     return value;
   }
   return null;
+}
+
+function buildUiPreviewLifecycleState(args: {
+  agentId: string;
+  fixture: UiPreviewFixture | null;
+  uiState: UiPreviewState | null;
+}): ComponentProps<typeof AgentDetailPage>['lifecycleState'] {
+  if (args.uiState !== 'active' || args.fixture !== 'managed') {
+    return undefined;
+  }
+
+  if (args.agentId === 'agent-portfolio-manager') {
+    return {
+      phase: 'active',
+      lastOnboardingBootstrap: {
+        rootedWalletContext: {
+          metadata: {
+            approvedMandateEnvelope: {
+              portfolioMandate: {
+                approved: true,
+                riskLevel: 'medium',
+              },
+              managedAgentMandates: [
+                {
+                  agentKey: 'ember-lending-primary',
+                  agentType: 'ember-lending',
+                  approved: true,
+                  settings: {
+                    network: 'arbitrum',
+                    protocol: 'aave',
+                    allowedCollateralAssets: ['USDC'],
+                    allowedBorrowAssets: ['USDC'],
+                    maxAllocationPct: 35,
+                    maxLtvBps: 7000,
+                    minHealthFactor: '1.25',
+                  },
+                },
+              ],
+            },
+          },
+        },
+        mandates: [
+          {
+            mandate_ref: 'mandate-ember-lending-001',
+            agent_id: 'ember-lending',
+            mandate_summary:
+              'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+          },
+        ],
+        reservations: [
+          {
+            reservation_id: 'reservation-ember-lending-001',
+            purpose: 'deploy',
+            control_path: 'lending.supply',
+          },
+        ],
+        ownedUnits: [
+          {
+            unit_id: 'unit-ember-lending-001',
+            root_asset: 'USDC',
+            quantity: '10',
+            reservation_id: 'reservation-ember-lending-001',
+          },
+        ],
+      },
+    } as never;
+  }
+
+  if (args.agentId === 'agent-ember-lending') {
+    return {
+      phase: 'active',
+      mandateRef: 'mandate-ember-lending-001',
+      mandateSummary:
+        'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+      mandateContext: {
+        network: 'arbitrum',
+        protocol: 'aave',
+      },
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      rootedWalletContextId: 'rwc-ember-lending-thread-001',
+      lastReservationSummary:
+        'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+    } as never;
+  }
+
+  return undefined;
 }
 
 export default function AgentDetailRoute({ params }: { params: Promise<{ id: string }> }) {
@@ -76,7 +169,10 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
     process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_UI_PREVIEW === 'true';
   const uiPreviewState =
     uiPreviewEnabled ? parseUiPreviewState(searchParams.get('__uiState')) : null;
-  const uiPreviewTab = uiPreviewEnabled ? parseUiPreviewTab(searchParams.get('__tab')) : null;
+  const requestedTab = parseAgentRouteTab(searchParams.get('tab'));
+  const uiPreviewTab = uiPreviewEnabled ? parseAgentRouteTab(searchParams.get('__tab')) : null;
+  const uiPreviewFixture = uiPreviewEnabled ? parseUiPreviewFixture(searchParams.get('__fixture')) : null;
+  const selectedTab = requestedTab ?? uiPreviewTab;
 
   if (uiPreviewState) {
     const previewAgentId = routeHasRegisteredAgent ? routeAgentId : selectedAgentId;
@@ -84,6 +180,13 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
     const previewOnboardingOwnerAgentId = config.onboardingOwnerAgentId;
 
     const isHired = uiPreviewState !== 'prehire';
+    const previewLifecycleState = buildUiPreviewLifecycleState({
+      agentId: previewAgentId,
+      fixture: uiPreviewFixture,
+      uiState: uiPreviewState,
+    });
+    const previewTaskStatus =
+      uiPreviewState === 'active' && uiPreviewFixture === 'managed' ? 'working' : undefined;
 
     return (
       <AgentDetailPage
@@ -99,9 +202,9 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
           aum: 742_510,
           totalUsers: 5_321,
           apy: 22,
-          chains: ['Arbitrum'],
-          protocols: ['Camelot'],
-          tokens: ['USDC', 'ARB', 'WETH'],
+          chains: config.chains ?? ['Arbitrum'],
+          protocols: config.protocols ?? [],
+          tokens: config.tokens ?? ['USDC'],
         }}
         metrics={{
           iteration: 0,
@@ -113,7 +216,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
           lifetimePnlUsd: 0,
         }}
         fullMetrics={agent.metrics}
-        initialTab={isHired ? (uiPreviewTab ?? undefined) : undefined}
+        initialTab={isHired ? (selectedTab ?? undefined) : undefined}
         isHired={isHired}
         isHiring={false}
         hasLoadedView
@@ -137,7 +240,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         allowedPools={[]}
         onInterruptSubmit={() => undefined}
         taskId={undefined}
-        taskStatus={undefined}
+        taskStatus={previewTaskStatus}
         haltReason={undefined}
         executionError={undefined}
         delegationsBypassActive={false}
@@ -147,7 +250,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         events={[]}
         messages={EMPTY_MESSAGES}
         messageSnapshotEpoch={0}
-        lifecycleState={undefined}
+        lifecycleState={previewLifecycleState}
         settings={agent.settings}
         onSendChatMessage={() => undefined}
         onSettingsChange={() => undefined}
@@ -184,7 +287,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         lifetimePnlUsd: agent.metrics.lifetimePnlUsd,
       }}
       fullMetrics={agent.metrics}
-      initialTab={agent.isHired ? (uiPreviewTab ?? undefined) : undefined}
+      initialTab={agent.isHired ? (selectedTab ?? undefined) : undefined}
       isHired={agent.isHired}
       isHiring={agent.isHiring}
       hasLoadedView={agent.hasLoadedView}
