@@ -1199,6 +1199,77 @@ export function AgentDetailPage({
       onInterruptSubmit={onInterruptSubmit}
     />
   ) : null;
+  const managedAgentContextCards =
+    portfolioManagerManagedAgentView || emberLendingRuntimeView ? (
+      <div className="mt-6 space-y-4">
+        {portfolioManagerManagedAgentView ? (
+          <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-gray-300 text-sm font-medium">Managed lending lane</div>
+              <a
+                href={portfolioManagerManagedAgentView.detailHref}
+                className="text-xs font-medium text-[#fd6731] hover:text-[#ff8a5c] transition-colors"
+              >
+                View lending agent
+              </a>
+            </div>
+            <div className="mt-3 text-white text-sm font-medium">
+              {portfolioManagerManagedAgentView.title}
+            </div>
+            {portfolioManagerManagedAgentView.laneLabel ? (
+              <div className="mt-1 text-xs text-gray-400">
+                {portfolioManagerManagedAgentView.laneLabel}
+              </div>
+            ) : null}
+            {portfolioManagerManagedAgentView.mandateSummary ? (
+              <p className="mt-3 text-xs leading-relaxed text-gray-400">
+                {portfolioManagerManagedAgentView.mandateSummary}
+              </p>
+            ) : null}
+            {portfolioManagerManagedAgentView.allocationSummary ? (
+              <div className="mt-3 text-xs text-gray-300">
+                {portfolioManagerManagedAgentView.allocationSummary}
+              </div>
+            ) : null}
+            {portfolioManagerManagedAgentView.reservationSummary ? (
+              <div className="mt-3 text-xs text-gray-400">
+                {portfolioManagerManagedAgentView.reservationSummary}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {emberLendingRuntimeView ? (
+          <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+            <div className="text-gray-300 text-sm font-medium mb-3">Managed lending runtime</div>
+            <div className="space-y-2 text-xs">
+              {emberLendingRuntimeView.walletAddress ? (
+                <div>
+                  <div className="text-gray-500 uppercase tracking-wide">Subagent wallet</div>
+                  <div className="mt-1 break-all text-white">
+                    {emberLendingRuntimeView.walletAddress}
+                  </div>
+                </div>
+              ) : null}
+              {emberLendingRuntimeView.mandateSummary ? (
+                <div>
+                  <div className="text-gray-500 uppercase tracking-wide">Mandate</div>
+                  <div className="mt-1 text-gray-300">{emberLendingRuntimeView.mandateSummary}</div>
+                </div>
+              ) : null}
+              {emberLendingRuntimeView.reservationSummary ? (
+                <div>
+                  <div className="text-gray-500 uppercase tracking-wide">Reservation</div>
+                  <div className="mt-1 text-gray-300">
+                    {emberLendingRuntimeView.reservationSummary}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    ) : null;
 
   // Use the upgraded layout only for hired agents. Pre-hire must remain stable even
   // while detail sync is still loading, otherwise the Hire CTA can disappear.
@@ -1478,92 +1549,6 @@ export function AgentDetailPage({
                     </div>
                   </div>
 
-                  {portfolioManagerManagedAgentView ? (
-                    <div className="mt-6 rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-gray-300 text-sm font-medium">Managed lending lane</div>
-                        <a
-                          href={portfolioManagerManagedAgentView.detailHref}
-                          className="text-xs font-medium text-[#fd6731] hover:text-[#ff8a5c] transition-colors"
-                        >
-                          View lending agent
-                        </a>
-                      </div>
-                      <div className="mt-3 text-white text-sm font-medium">
-                        {portfolioManagerManagedAgentView.title}
-                      </div>
-                      {portfolioManagerManagedAgentView.laneLabel ? (
-                        <div className="mt-1 text-xs text-gray-400">
-                          {portfolioManagerManagedAgentView.laneLabel}
-                        </div>
-                      ) : null}
-                      {portfolioManagerManagedAgentView.mandateSummary ? (
-                        <p className="mt-3 text-xs leading-relaxed text-gray-400">
-                          {portfolioManagerManagedAgentView.mandateSummary}
-                        </p>
-                      ) : null}
-                      {portfolioManagerManagedAgentView.allocationSummary ? (
-                        <div className="mt-3 text-xs text-gray-300">
-                          {portfolioManagerManagedAgentView.allocationSummary}
-                        </div>
-                      ) : null}
-                      {portfolioManagerManagedAgentView.reservationSummary ? (
-                        <div className="mt-3 text-xs text-gray-400">
-                          {portfolioManagerManagedAgentView.reservationSummary}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {emberLendingRuntimeView ? (
-                    <div className="mt-6 rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                      <div className="text-gray-300 text-sm font-medium mb-3">
-                        Managed lending runtime
-                      </div>
-                      <div className="space-y-2 text-xs">
-                        {emberLendingRuntimeView.phase ? (
-                          <div>
-                            <div className="text-gray-500 uppercase tracking-wide">Lifecycle state</div>
-                            <div className="mt-1 text-white">{emberLendingRuntimeView.phase}</div>
-                          </div>
-                        ) : null}
-                        <div>
-                          <div className="text-gray-500 uppercase tracking-wide">Task status</div>
-                          <div className="mt-1 text-white">{taskStatus ?? 'idle'}</div>
-                        </div>
-                        {emberLendingRuntimeView.laneLabel ? (
-                          <div>
-                            <div className="text-gray-500 uppercase tracking-wide">Lane</div>
-                            <div className="mt-1 text-white">{emberLendingRuntimeView.laneLabel}</div>
-                          </div>
-                        ) : null}
-                        {emberLendingRuntimeView.walletAddress ? (
-                          <div>
-                            <div className="text-gray-500 uppercase tracking-wide">Subagent wallet</div>
-                            <div className="mt-1 break-all text-white">
-                              {emberLendingRuntimeView.walletAddress}
-                            </div>
-                          </div>
-                        ) : null}
-                        {emberLendingRuntimeView.mandateSummary ? (
-                          <div>
-                            <div className="text-gray-500 uppercase tracking-wide">Mandate</div>
-                            <div className="mt-1 text-gray-300">
-                              {emberLendingRuntimeView.mandateSummary}
-                            </div>
-                          </div>
-                        ) : null}
-                        {emberLendingRuntimeView.reservationSummary ? (
-                          <div>
-                            <div className="text-gray-500 uppercase tracking-wide">Reservation</div>
-                            <div className="mt-1 text-gray-300">
-                              {emberLendingRuntimeView.reservationSummary}
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
 
                 {/* Right header (no surrounding card) */}
@@ -1636,8 +1621,9 @@ export function AgentDetailPage({
                   ) : (
                     <p className="text-gray-500 text-sm italic">No description available</p>
                   )}
+                  {managedAgentContextCards}
 
-                  <div className="grid grid-cols-4 gap-4 mt-auto pt-6 border-t border-white/10">
+                  <div className="grid grid-cols-4 gap-4 mt-8 pt-6 border-t border-white/10">
                     <TagColumn
                       title="Chains"
                       items={displayChains}
@@ -1664,7 +1650,7 @@ export function AgentDetailPage({
 
             {/* Tabs + content span full available width (no empty left column) */}
             {useEmbeddedPortfolioChat ? null : <div className="mt-8">{tabs}</div>}
-            <div>{postHireContent}</div>
+            <div className={useEmbeddedPortfolioChat ? 'mt-8' : undefined}>{postHireContent}</div>
           </>
         </div>
       </div>

@@ -86,13 +86,8 @@ describe('AgentDetailPage managed-agent affordances', () => {
     });
 
     expect(html).toContain('Managed lending runtime');
-    expect(html).toContain('Lifecycle state');
-    expect(html).toContain('active');
     expect(html).toContain('Subagent wallet');
     expect(html).toContain('0x00000000000000000000000000000000000000b1');
-    expect(html).toContain('Task status');
-    expect(html).toContain('working');
-    expect(html).toContain('Arbitrum / Aave');
     expect(html).toContain(
       'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
     );
@@ -101,6 +96,12 @@ describe('AgentDetailPage managed-agent affordances', () => {
     );
     expect(html).toContain('>Manage<');
     expect(html).toContain('Send message');
+    expect(html).not.toContain('Lifecycle state');
+    expect(html).not.toContain('Task status');
+    expect(html).not.toContain('Lane');
+    expect(html.indexOf('Ember Lending')).toBeLessThan(html.indexOf('desc'));
+    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Managed lending runtime'));
+    expect(html.indexOf('Managed lending runtime')).toBeLessThan(html.indexOf('Chains'));
   });
 
   it('keeps lending chat visible while the thread is input-required', () => {
@@ -191,16 +192,15 @@ describe('AgentDetailPage managed-agent affordances', () => {
     });
 
     expect(html).toContain('Managed lending runtime');
-    expect(html).toContain('Lifecycle state');
-    expect(html).toContain('active');
-    expect(html).toContain('Lane');
-    expect(html).toContain('Arbitrum / Lending');
     expect(html).not.toContain('Subagent wallet');
     expect(html).not.toContain('0x00000000000000000000000000000000000000b1');
     expect(html).toContain(
       'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
     );
     expect(html).toContain('Send message');
+    expect(html).not.toContain('Lifecycle state');
+    expect(html).not.toContain('Task status');
+    expect(html).not.toContain('Lane');
   });
 
   it('renders artifact labels from nested artifact payload types in the activity stream', () => {
@@ -316,5 +316,8 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Activity\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
+    expect(html.indexOf('Ember Portfolio Agent')).toBeLessThan(html.indexOf('desc'));
+    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Managed lending lane'));
+    expect(html.indexOf('Managed lending lane')).toBeLessThan(html.indexOf('Chains'));
   });
 });
