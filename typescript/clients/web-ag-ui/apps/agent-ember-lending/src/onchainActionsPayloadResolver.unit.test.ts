@@ -119,6 +119,99 @@ describe('resolveEmberLendingOnchainActionsApiUrl', () => {
 });
 
 describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
+  it('accepts live borrow planner metadata fields when anchoring a candidate plan payload', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000c1',
+                },
+                name: 'USD Coin',
+                symbol: 'USDC',
+                isNative: false,
+                decimals: 6,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            liquidationThreshold: '8400',
+            currentBorrowApy: '22344120386296899578933987',
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d2',
+                value: '0',
+                data: '0xa415bcad',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+    });
+
+    await expect(
+      resolver.anchorCandidatePlanPayload({
+        agentId: 'ember-lending',
+        threadId: 'thread-1',
+        transactionPlanId: 'txplan-ember-lending-borrow-001',
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        rootUserWalletAddress: '0x00000000000000000000000000000000000000b1',
+        payloadBuilderOutput: {
+          transaction_payload_ref: 'txpayload-ember-lending-borrow-001',
+          required_control_path: 'lending.borrow',
+          network: 'arbitrum',
+        },
+        compactPlanSummary: {
+          control_path: 'lending.borrow',
+          asset: 'USDC',
+          amount: '1',
+          summary: 'borrow reserved USDC on Aave',
+        },
+      }),
+    ).resolves.toMatchObject({
+      transactionRequests: [
+        {
+          type: 'EVM_TX',
+          to: '0x00000000000000000000000000000000000000d2',
+          value: '0',
+          data: '0xa415bcad',
+          chainId: '42161',
+        },
+      ],
+    });
+  });
+
   it('wraps the anchored request in a delegated redeemDelegations transaction using the canonical signing package', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -248,6 +341,138 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       value: 0n,
       data: expect.any(String),
     });
+  });
+
+  it('retries delegated gas estimation when a follow-up step briefly sees stale allowance state', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000c1',
+                },
+                name: 'Wrapped Ether',
+                symbol: 'WETH',
+                isNative: false,
+                decimals: 18,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d2',
+                value: '0',
+                data: '0x095ea7b3',
+                chainId: '42161',
+              },
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d3',
+                value: '0',
+                data: '0x617ba037',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const rpcClient = {
+      getTransactionCount: vi.fn(async () => 9),
+      estimateFeesPerGas: vi.fn(async () => ({
+        maxFeePerGas: 200n,
+        maxPriorityFeePerGas: 3n,
+      })),
+      estimateGas: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('execution reverted: ERC20: transfer amount exceeds allowance'))
+        .mockResolvedValueOnce(65_000n),
+    };
+    const resolvePublicClient = vi.fn(() => rpcClient);
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+      resolvePublicClient,
+    });
+
+    await resolver.anchorCandidatePlanPayload({
+      agentId: 'ember-lending',
+      threadId: 'thread-1',
+      transactionPlanId: 'txplan-ember-lending-step-retry-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      payloadBuilderOutput: {
+        transaction_payload_ref: 'txpayload-ember-lending-step-retry-001',
+        required_control_path: 'lending.supply',
+        network: 'arbitrum',
+      },
+      compactPlanSummary: {
+        control_path: 'lending.supply',
+        asset: 'WETH',
+        amount: '0.000003',
+        summary: 'supply reserved WETH on Aave',
+      },
+    });
+
+    const expectedUnsignedTransactionHex = buildExpectedDelegatedUnsignedTransactionHex({
+      transaction: {
+        to: '0x00000000000000000000000000000000000000d3',
+        value: '0',
+        data: '0x617ba037',
+        chainId: '42161',
+      },
+      nonce: 9,
+      gas: 65_000n,
+      maxFeePerGas: 200n,
+      maxPriorityFeePerGas: 3n,
+    });
+
+    await expect(
+      resolver.resolvePreparedUnsignedTransaction({
+        agentId: 'ember-lending',
+        executionPreparationId: 'execprep-ember-lending-step-retry-001',
+        transactionPlanId: 'txplan-ember-lending-step-retry-001',
+        requestId: 'req-ember-lending-step-retry-001',
+        canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-step-retry-001:1',
+        delegationArtifactRef: TEST_ACTIVE_DELEGATION_ARTIFACT_REF,
+        rootDelegationArtifactRef: TEST_ROOT_DELEGATION_ARTIFACT_REF,
+        plannedTransactionPayloadRef: 'txpayload-ember-lending-step-retry-001:1',
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        network: 'arbitrum',
+        requiredControlPath: 'lending.supply',
+      }),
+    ).resolves.toBe(expectedUnsignedTransactionHex);
+
+    expect(rpcClient.estimateGas).toHaveBeenCalledTimes(2);
+    expect(rpcClient.getTransactionCount).toHaveBeenCalledTimes(2);
+    expect(rpcClient.estimateFeesPerGas).toHaveBeenCalledTimes(2);
   });
 
   it('walks paginated token responses until it finds the requested asset', async () => {

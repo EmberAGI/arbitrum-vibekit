@@ -20,7 +20,7 @@ import {
 const DEFAULT_EMBER_LENDING_MODEL = 'openai/gpt-5.4-mini';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const EMBER_LENDING_SYSTEM_PROMPT =
-  'You are the Ember lending managed subagent running on agent-runtime. Stay concise, operate only within the current mandate, and escalate whenever the bounded Shared Ember surface cannot safely complete the request.';
+  'You are the Ember lending managed subagent running on agent-runtime. Stay concise, operate only within the current mandate, and escalate whenever the bounded Shared Ember surface cannot safely complete the request. Treat the live Shared Ember execution context as authoritative for what is currently admitted: if active reservations or owned units expose control paths such as lending.supply, lending.borrow, lending.withdraw, or lending.repay, those follow-up actions are in scope for this thread even when the top-line mandate summary only says lend or supply. After a transaction lands, keep working from the refreshed execution context instead of routing back through the portfolio manager for delegation refresh.';
 
 export type EmberLendingGatewayEnv = NodeJS.ProcessEnv & {
   OPENROUTER_API_KEY?: string;

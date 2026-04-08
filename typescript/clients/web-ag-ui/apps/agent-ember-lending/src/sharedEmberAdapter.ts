@@ -191,6 +191,7 @@ const DIRECT_FIRE_MESSAGE =
 const SHARED_EMBER_NETWORK = 'arbitrum';
 const OWS_SIGNING_CHAIN = 'evm';
 const MAX_PREPARE_TRANSACTION_ATTEMPTS = 3;
+const MAX_SIGNED_TRANSACTION_SUBMISSIONS = 8;
 const DEFAULT_RUNTIME_SIGNER_REF = 'service-wallet';
 const REDELEGATION_WAIT_TIMEOUT_MS = 1_000;
 
@@ -1231,6 +1232,14 @@ function readExecutionStatusMessage(executionResult: unknown): {
     };
   }
 
+  if (phase === 'ready_for_execution_signing') {
+    return {
+      executionStatus: 'failed',
+      statusMessage:
+        'Lending transaction execution did not finish because Shared Ember still requires an additional signing step.',
+    };
+  }
+
   if (phase !== 'blocked') {
     return {
       executionStatus: 'completed',
@@ -1439,6 +1448,10 @@ async function submitSignedTransaction(input: {
   committedEventIds: string[];
   executionResult: unknown;
 }> {
+  const executionPreparationId =
+    readString(input.signedTransaction['execution_preparation_id']) ??
+    readString(input.signedTransaction['executionPreparationId']) ??
+    input.transactionPlanId;
   const response = await runSharedEmberCommandWithResolvedRevision<{
     result?: {
       revision?: number;
@@ -1455,7 +1468,7 @@ async function submitSignedTransaction(input: {
       id: `shared-ember-${input.threadId}-submit-signed-transaction`,
       method: 'subagent.submitSignedTransaction.v1',
       params: {
-        idempotency_key: `${input.idempotencyKey}:submit-transaction:${input.requestId}`,
+        idempotency_key: `${input.idempotencyKey}:submit-transaction:${input.requestId}:${executionPreparationId}`,
         expected_revision: expectedRevision,
         transaction_plan_id: input.transactionPlanId,
         signed_transaction: input.signedTransaction,
@@ -1833,6 +1846,12 @@ function buildManagedPlanningUnitAliasMap(input: {
     }
 
     registerAlias(unitId, unitId);
+
+    const rootAsset = readString(candidate['root_asset']);
+    if (rootAsset) {
+      registerAlias(rootAsset, unitId);
+      registerAlias(rootAsset.toLowerCase(), unitId);
+    }
 
     const metadata = isRecord(candidate['metadata']) ? candidate['metadata'] : null;
     const sourceUnitId = readString(metadata?.['source_unit_id']);
@@ -2247,6 +2266,27 @@ function buildStableCommandSuffix(value: unknown): string {
     .slice(0, 12);
 }
 
+function resolveOperationIdempotencyKey(input: {
+  provided: string | null;
+  fallback: string;
+  expectedPrefix: string;
+}): string {
+  if (!input.provided) {
+    return input.fallback;
+  }
+
+  const normalized = input.provided.trim();
+  if (normalized.length === 0) {
+    return input.fallback;
+  }
+
+  if (normalized.startsWith(input.expectedPrefix)) {
+    return normalized;
+  }
+
+  return `${input.fallback}:caller:${normalized}`;
+}
+
 function buildTransactionPlanningHandoff(input: {
   state: EmberLendingLifecycleState;
   threadId: string;
@@ -2595,136 +2635,149 @@ async function runPreparedExecutionFlow(input: {
     }
   }
 
+  let currentRevision = requestResponse.result?.revision ?? null;
   if (!hasExecutionSigningPreparation(executionResult)) {
     return {
-      revision: requestResponse.result?.revision ?? null,
+      revision: currentRevision,
       committedEventIds,
       executionResult,
     };
   }
 
-  const preparedWalletAddress = readPreparedExecutionWalletAddress(executionResult);
-  if (!input.currentState.walletAddress || !preparedWalletAddress) {
-    throw new LocalExecutionFailureError(
-      'Lending execution signing could not continue because the dedicated subagent wallet identity is incomplete.',
-      requestResponse.result?.revision ?? null,
-    );
-  }
-  if (preparedWalletAddress !== input.currentState.walletAddress) {
-    throw new LocalExecutionFailureError(
-      'Lending execution signing could not continue because the prepared signing package does not match the dedicated subagent wallet.',
-      requestResponse.result?.revision ?? null,
-    );
-  }
+  let submissionAttempts = 0;
+  while (hasExecutionSigningPreparation(executionResult)) {
+    if (submissionAttempts >= MAX_SIGNED_TRANSACTION_SUBMISSIONS) {
+      throw new LocalExecutionFailureError(
+        'Lending transaction execution could not continue because Shared Ember kept requesting additional signing steps.',
+        currentRevision,
+      );
+    }
+    submissionAttempts += 1;
 
-  const requestId = readString(executionResult['request_id']);
-  const executionSigningPackage = readExecutionSigningPackage(executionResult)!;
-  if (!input.runtimeSigning) {
-    throw new LocalExecutionFailureError(
-      'Runtime-owned signing service is not configured for lending transaction execution.',
-      requestResponse.result?.revision ?? null,
-    );
-  }
+    const preparedWalletAddress = readPreparedExecutionWalletAddress(executionResult);
+    if (!input.currentState.walletAddress || !preparedWalletAddress) {
+      throw new LocalExecutionFailureError(
+        'Lending execution signing could not continue because the dedicated subagent wallet identity is incomplete.',
+        currentRevision,
+      );
+    }
+    if (preparedWalletAddress !== input.currentState.walletAddress) {
+      throw new LocalExecutionFailureError(
+        'Lending execution signing could not continue because the prepared signing package does not match the dedicated subagent wallet.',
+        currentRevision,
+      );
+    }
 
-  const executionPreparationId = readPreparedExecutionId(executionResult);
-  const canonicalUnsignedPayloadRef =
-    readExecutionSigningPackageCanonicalUnsignedPayloadRef(executionResult);
-  const delegationArtifactRef =
-    readExecutionSigningPackageDelegationArtifactRef(executionResult);
-  const rootDelegationArtifactRef =
-    readExecutionSigningPackageRootDelegationArtifactRef(executionResult);
-  const plannedTransactionPayloadRef = readPreparedExecutionPlannedTransactionPayloadRef(
-    executionResult,
-  );
-  const network = readPreparedExecutionNetwork(executionResult);
-  const requiredControlPath = readPreparedExecutionRequiredControlPath(executionResult);
-  let resolvedUnsignedTransactionHex: `0x${string}` | null = null;
-  if (executionPreparationId && canonicalUnsignedPayloadRef) {
-    try {
-      resolvedUnsignedTransactionHex =
-        (await input.anchoredPayloadResolver?.resolvePreparedUnsignedTransaction({
-          agentId: input.agentId,
-          executionPreparationId,
-          transactionPlanId: input.transactionPlanId,
-          requestId: requestId!,
-          canonicalUnsignedPayloadRef,
-          delegationArtifactRef,
-          rootDelegationArtifactRef,
-          plannedTransactionPayloadRef,
-          walletAddress: input.currentState.walletAddress,
-          network,
-          requiredControlPath,
-          anchoredPayloadRecords: input.currentState.anchoredPayloadRecords,
-        })) ?? null;
-    } catch (error) {
-      if (!(error instanceof Error)) {
-        throw error;
+    const requestId = readString(executionResult['request_id']);
+    const executionSigningPackage = readExecutionSigningPackage(executionResult)!;
+    if (!input.runtimeSigning) {
+      throw new LocalExecutionFailureError(
+        'Runtime-owned signing service is not configured for lending transaction execution.',
+        currentRevision,
+      );
+    }
+
+    const executionPreparationId = readPreparedExecutionId(executionResult);
+    const canonicalUnsignedPayloadRef =
+      readExecutionSigningPackageCanonicalUnsignedPayloadRef(executionResult);
+    const delegationArtifactRef =
+      readExecutionSigningPackageDelegationArtifactRef(executionResult);
+    const rootDelegationArtifactRef =
+      readExecutionSigningPackageRootDelegationArtifactRef(executionResult);
+    const plannedTransactionPayloadRef = readPreparedExecutionPlannedTransactionPayloadRef(
+      executionResult,
+    );
+    const network = readPreparedExecutionNetwork(executionResult);
+    const requiredControlPath = readPreparedExecutionRequiredControlPath(executionResult);
+    let resolvedUnsignedTransactionHex: `0x${string}` | null = null;
+    if (executionPreparationId && canonicalUnsignedPayloadRef) {
+      try {
+        resolvedUnsignedTransactionHex =
+          (await input.anchoredPayloadResolver?.resolvePreparedUnsignedTransaction({
+            agentId: input.agentId,
+            executionPreparationId,
+            transactionPlanId: input.transactionPlanId,
+            requestId: requestId!,
+            canonicalUnsignedPayloadRef,
+            delegationArtifactRef,
+            rootDelegationArtifactRef,
+            plannedTransactionPayloadRef,
+            walletAddress: input.currentState.walletAddress,
+            network,
+            requiredControlPath,
+            anchoredPayloadRecords: input.currentState.anchoredPayloadRecords,
+          })) ?? null;
+      } catch (error) {
+        if (!(error instanceof Error)) {
+          throw error;
+        }
+
+        throw new LocalExecutionFailureError(error.message, currentRevision);
       }
-
-      throw new LocalExecutionFailureError(error.message, requestResponse.result?.revision ?? null);
     }
-  }
-  const unsignedTransactionHex =
-    readExecutionUnsignedTransactionHex(executionResult) ?? resolvedUnsignedTransactionHex;
-  if (!unsignedTransactionHex) {
-    throw new LocalExecutionFailureError(
-      'Lending execution signing could not continue because the concrete service integration layer did not resolve the prepared unsigned transaction.',
-      requestResponse.result?.revision ?? null,
-    );
-  }
-
-  const signedExecution = await signPreparedExecutionTransactionWithRuntimeService({
-    runtimeSigning: input.runtimeSigning,
-    runtimeSignerRef: input.runtimeSignerRef,
-    revision: requestResponse.result?.revision ?? null,
-    expectedAddress: input.currentState.walletAddress,
-    unsignedTransactionHex,
-    notConfiguredMessage:
-      'Runtime-owned signing service is not configured for lending transaction execution.',
-    addressMismatchMessage:
-      'Lending execution signing could not continue because the runtime signer did not confirm the dedicated subagent wallet identity.',
-  });
-
-  const signedTransaction = {
-    execution_preparation_id: executionPreparationId,
-    transaction_plan_id: input.transactionPlanId,
-    request_id: requestId,
-    active_delegation_id: readString(executionSigningPackage['active_delegation_id']),
-    canonical_unsigned_payload_ref: canonicalUnsignedPayloadRef,
-    signer_address: signedExecution.confirmedAddress,
-    raw_transaction: signedExecution.rawTransaction,
-  };
-
-  const submitResponse = await submitSignedTransaction({
-    protocolHost: input.protocolHost,
-    threadId: input.threadId,
-    agentId: input.agentId,
-    currentRevision: requestResponse.result?.revision ?? null,
-    transactionPlanId: input.transactionPlanId,
-    requestId: requestId!,
-    idempotencyKey: input.idempotencyKey,
-    signedTransaction,
-  }).catch((error: unknown) => {
-    if (!(error instanceof Error)) {
-      throw error;
+    const unsignedTransactionHex =
+      readExecutionUnsignedTransactionHex(executionResult) ?? resolvedUnsignedTransactionHex;
+    if (!unsignedTransactionHex) {
+      throw new LocalExecutionFailureError(
+        'Lending execution signing could not continue because the concrete service integration layer did not resolve the prepared unsigned transaction.',
+        currentRevision,
+      );
     }
 
-    throw new PendingExecutionSubmissionError(error.message, requestResponse.result?.revision ?? null, {
+    const signedExecution = await signPreparedExecutionTransactionWithRuntimeService({
+      runtimeSigning: input.runtimeSigning,
+      runtimeSignerRef: input.runtimeSignerRef,
+      revision: currentRevision,
+      expectedAddress: input.currentState.walletAddress,
+      unsignedTransactionHex,
+      notConfiguredMessage:
+        'Runtime-owned signing service is not configured for lending transaction execution.',
+      addressMismatchMessage:
+        'Lending execution signing could not continue because the runtime signer did not confirm the dedicated subagent wallet identity.',
+    });
+
+    const signedTransaction = {
+      execution_preparation_id: executionPreparationId,
+      transaction_plan_id: input.transactionPlanId,
+      request_id: requestId,
+      active_delegation_id: readString(executionSigningPackage['active_delegation_id']),
+      canonical_unsigned_payload_ref: canonicalUnsignedPayloadRef,
+      signer_address: signedExecution.confirmedAddress,
+      raw_transaction: signedExecution.rawTransaction,
+    };
+
+    const submitResponse = await submitSignedTransaction({
+      protocolHost: input.protocolHost,
+      threadId: input.threadId,
+      agentId: input.agentId,
+      currentRevision,
       transactionPlanId: input.transactionPlanId,
       requestId: requestId!,
       idempotencyKey: input.idempotencyKey,
       signedTransaction,
-      revision: requestResponse.result?.revision ?? null,
+    }).catch((error: unknown) => {
+      if (!(error instanceof Error)) {
+        throw error;
+      }
+
+      throw new PendingExecutionSubmissionError(error.message, currentRevision, {
+        transactionPlanId: input.transactionPlanId,
+        requestId: requestId!,
+        idempotencyKey: input.idempotencyKey,
+        signedTransaction,
+        revision: currentRevision,
+      });
     });
-  });
+
+    currentRevision = submitResponse.revision;
+    committedEventIds.push(...submitResponse.committedEventIds);
+    executionResult = submitResponse.executionResult ?? null;
+  }
 
   return {
-    revision: submitResponse.revision,
-    committedEventIds: [
-      ...committedEventIds,
-      ...submitResponse.committedEventIds,
-    ],
-    executionResult: submitResponse.executionResult,
+    revision: currentRevision,
+    committedEventIds,
+    executionResult,
   };
 }
 
@@ -2812,7 +2865,7 @@ export function createEmberLendingDomain(
         {
           name: 'create_transaction_plan',
           description:
-            'Create or refresh a candidate transaction plan for the managed lending lane. Pass JSON with action_summary, optional intent, optional candidate_unit_ids, and optional requested_quantities as either an array of { unit_id, quantity } objects or an object map of unit_id to quantity. Every requested_quantities quantity must use base-unit quantity strings. For partial increases or decreases such as half, compute the concrete base-unit requested_quantities from the current owned-unit or reservation quantities in context. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
+            'Create or refresh a candidate transaction plan for the managed lending lane. Treat the current live Shared Ember execution context as authoritative: if active reservations or owned units expose lending.borrow, lending.withdraw, or lending.repay after an earlier transaction, those follow-up actions are in scope for the current mandate and should be planned directly from this thread without involving the portfolio manager. Pass JSON with action_summary, optional intent, optional candidate_unit_ids, and optional requested_quantities as either an array of { unit_id, quantity } objects or an object map of unit_id to quantity. Every requested_quantities quantity must use base-unit quantity strings. For partial increases or decreases such as half, compute the concrete base-unit requested_quantities from the current owned-unit or reservation quantities in context. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
         },
         {
           name: 'request_transaction_execution',
@@ -2983,9 +3036,13 @@ export function createEmberLendingDomain(
             };
           }
 
-          const idempotencyKey =
-            readStringKey(operation.input, 'idempotencyKey') ??
+          const fallbackIdempotencyKey =
             `idem-create-transaction-plan-${threadId}-${buildStableCommandSuffix(handoff)}`;
+          const idempotencyKey = resolveOperationIdempotencyKey({
+            provided: readStringKey(operation.input, 'idempotencyKey'),
+            fallback: fallbackIdempotencyKey,
+            expectedPrefix: 'idem-create-transaction-plan-',
+          });
           let response: {
             result?: {
               revision?: number;
@@ -3149,11 +3206,15 @@ export function createEmberLendingDomain(
             };
           }
 
-          const idempotencyKey =
-            readStringKey(operation.input, 'idempotencyKey') ??
+          const fallbackIdempotencyKey =
             `idem-execute-transaction-plan-${threadId}-${buildStableCommandSuffix({
               transactionPlanId,
             })}`;
+          const idempotencyKey = resolveOperationIdempotencyKey({
+            provided: readStringKey(operation.input, 'idempotencyKey'),
+            fallback: fallbackIdempotencyKey,
+            expectedPrefix: 'idem-execute-transaction-plan-',
+          });
           let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>>;
           try {
             preparedExecutionResult =

@@ -15,6 +15,8 @@ const DEFAULT_BASE_RPC_URL = 'https://mainnet.base.org';
 const DEFAULT_ETHEREUM_RPC_URL = 'https://eth.merkle.io';
 const RPC_RETRY_COUNT = 2;
 const RPC_TIMEOUT_MS = 8_000;
+const SIGNING_RESOLUTION_ATTEMPTS = 2;
+const SIGNING_RESOLUTION_RETRY_DELAY_MS = 500;
 
 const HexStringSchema = z.string().regex(/^0x[0-9a-fA-F]+$/u);
 const AddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/u);
@@ -55,6 +57,8 @@ const OnchainActionsTransactionPlanSchema = z
   .strict();
 const OnchainActionsPlanResponseSchema = z
   .object({
+    liquidationThreshold: z.union([z.string(), z.number(), z.null()]).optional(),
+    currentBorrowApy: z.union([z.string(), z.number(), z.null()]).optional(),
     transactions: z.array(OnchainActionsTransactionPlanSchema).min(1),
   })
   .strict();
@@ -154,6 +158,12 @@ type ResolveExecutionPublicClient = (
 
 function trimTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
 
 function createRpcTransport(url: string): ReturnType<typeof http> {
@@ -458,19 +468,34 @@ async function resolvePreparedUnsignedTransactionHex(input: {
     modes: [executions.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault],
     executions: [executions],
   });
-  const [nonce, feeEstimate, gas] = await Promise.all([
-    input.publicClient.getTransactionCount({
-      address: input.walletAddress,
-      blockTag: 'pending',
-    }),
-    input.publicClient.estimateFeesPerGas(),
-    input.publicClient.estimateGas({
-      account: input.walletAddress,
-      to: delegationManager,
-      value: 0n,
-      data: delegatedTransactionData,
-    }),
-  ]);
+  let nonce: number;
+  let feeEstimate: Awaited<ReturnType<EmberLendingExecutionPublicClient['estimateFeesPerGas']>>;
+  let gas: bigint;
+
+  for (let attempt = 1; attempt <= SIGNING_RESOLUTION_ATTEMPTS; attempt += 1) {
+    try {
+      [nonce, feeEstimate, gas] = await Promise.all([
+        input.publicClient.getTransactionCount({
+          address: input.walletAddress,
+          blockTag: 'pending',
+        }),
+        input.publicClient.estimateFeesPerGas(),
+        input.publicClient.estimateGas({
+          account: input.walletAddress,
+          to: delegationManager,
+          value: 0n,
+          data: delegatedTransactionData,
+        }),
+      ]);
+      break;
+    } catch (error) {
+      if (attempt === SIGNING_RESOLUTION_ATTEMPTS) {
+        throw error;
+      }
+
+      await sleep(SIGNING_RESOLUTION_RETRY_DELAY_MS);
+    }
+  }
 
   if (
     typeof feeEstimate.maxFeePerGas === 'bigint' &&
