@@ -49,8 +49,8 @@ const TEST_SECOND_UNSIGNED_EXECUTION_TRANSACTION_HEX =
   '0x02e982a4b1018405f5e100843b9aca008252089400000000000000000000000000000000000000c28080c0';
 const TEST_TRANSACTION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
-const DEFAULT_THIN_PLAN_HANDOFF_ID = 'handoff-thread-1-98aa3116f63d';
-const DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY = 'idem-create-transaction-plan-thread-1-7417b3f58629';
+const DEFAULT_THIN_PLAN_HANDOFF_ID = 'handoff-thread-1-725367bc459d';
+const DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY = 'idem-create-transaction-plan-thread-1-9490180973b4';
 const DEFAULT_RICH_PLAN_HANDOFF_ID = 'handoff-thread-1-05c10d6a10a6';
 const DEFAULT_EXECUTION_IDEMPOTENCY_KEY =
   'idem-execute-transaction-plan-thread-1-07b74ae67cd9';
@@ -720,7 +720,15 @@ describe('createEmberLendingDomain', () => {
       'do not answer a withdraw request with a repay or supply plan',
     );
     expect(createTransactionPlan?.description).toContain('call this tool in the current turn');
-    expect(createTransactionPlan?.description).toContain('partial increases or decreases');
+    expect(createTransactionPlan?.description).toContain(
+      'When the user asks for an exact amount or any partial amount such as half',
+    );
+    expect(createTransactionPlan?.description).toContain(
+      'you must include requested_quantities with the exact base-unit quantity strings',
+    );
+    expect(createTransactionPlan?.description).toContain(
+      'a partial or exact plan without requested_quantities is invalid',
+    );
     expect(createTransactionPlan?.description).toContain('base-unit');
     expect(createTransactionPlan?.description).toContain('quantity strings');
     expect(createTransactionPlan?.description).toContain('object map');
@@ -1441,6 +1449,7 @@ describe('createEmberLendingDomain', () => {
             agent_id: 'ember-lending',
             root_user_wallet: '0x00000000000000000000000000000000000000a1',
             mandate_ref: 'mandate-ember-lending-001',
+            control_path: 'lending.supply',
             candidate_unit_ids: ['unit-ember-lending-001'],
             requested_quantities: [
               {
@@ -1558,6 +1567,7 @@ describe('createEmberLendingDomain', () => {
             agent_id: 'ember-lending',
             root_user_wallet: '0x00000000000000000000000000000000000000a1',
             mandate_ref: 'mandate-ember-lending-001',
+            control_path: 'lending.supply',
             candidate_unit_ids: ['unit-ember-lending-001'],
             requested_quantities: [
               {
@@ -1971,6 +1981,164 @@ describe('createEmberLendingDomain', () => {
         params: expect.objectContaining({
           handoff: expect.objectContaining({
             intent: 'decrease',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('binds follow-up planning to the reservation selected by candidate unit ids when multiple actions are active', async () => {
+    const multiActionPortfolioState = {
+      agent_id: 'ember-lending',
+      owned_units: [
+        {
+          unit_id: 'unit-ember-lending-collateral-001',
+          root_asset: 'aArbWETH',
+          quantity: '10',
+          status: 'deployed',
+          control_path: 'lending.supply',
+          position_kind: 'loan',
+        },
+        {
+          unit_id: 'unit-ember-lending-repay-001',
+          root_asset: 'WETH',
+          quantity: '3',
+          status: 'free',
+          control_path: 'unassigned',
+          position_kind: 'unassigned',
+        },
+      ],
+      reservations: [
+        {
+          reservation_id: 'reservation-ember-lending-withdraw-001',
+          purpose: 'refresh withdraw coverage',
+          control_path: 'lending.withdraw',
+          unit_allocations: [
+            {
+              unit_id: 'unit-ember-lending-collateral-001',
+              quantity: '10',
+            },
+          ],
+        },
+        {
+          reservation_id: 'reservation-ember-lending-repay-001',
+          purpose: 'refresh repay coverage',
+          control_path: 'lending.repay',
+          unit_allocations: [
+            {
+              unit_id: 'unit-ember-lending-repay-001',
+              quantity: '3',
+            },
+          ],
+        },
+      ],
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: string; params?: Record<string, unknown> };
+
+        if (request.method === 'subagent.readPortfolioState.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: 8,
+              portfolio_state: multiActionPortfolioState,
+            },
+          };
+        }
+
+        if (request.method === 'subagent.readExecutionContext.v1') {
+          return createExecutionContextResponse();
+        }
+
+        if (request.method === 'subagent.createTransactionPlan.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-create-transaction-plan',
+            result: {
+              protocol_version: 'v1',
+              revision: 12,
+              committed_event_ids: ['evt-candidate-plan-1'],
+              candidate_plan: {
+                planning_kind: 'subagent_handoff',
+                transaction_plan_id: 'txplan-ember-lending-001',
+                handoff: {
+                  handoff_id: 'handoff-thread-1',
+                  payload_builder_output: {
+                    transaction_payload_ref: 'txpayload-ember-lending-001',
+                    required_control_path: 'lending.repay',
+                    network: 'arbitrum',
+                  },
+                },
+                compact_plan_summary: {
+                  control_path: 'lending.repay',
+                  asset: 'WETH',
+                  amount: '3',
+                  summary: 'repay the current WETH debt on Aave',
+                },
+              },
+            },
+          };
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 12,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 12,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const anchoredPayloadResolver = createAnchoredPayloadResolverStub();
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver,
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastPortfolioState: multiActionPortfolioState,
+      },
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          candidate_unit_ids: ['unit-ember-lending-repay-001'],
+          requested_quantities: [
+            {
+              unit_id: 'unit-ember-lending-repay-001',
+              quantity: '3',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+        params: expect.objectContaining({
+          handoff: expect.objectContaining({
+            intent: 'decrease',
+            control_path: 'lending.repay',
+            candidate_unit_ids: ['unit-ember-lending-repay-001'],
+            requested_quantities: [
+              {
+                unit_id: 'unit-ember-lending-repay-001',
+                quantity: '3',
+              },
+            ],
           }),
         }),
       }),
@@ -2686,6 +2854,424 @@ describe('createEmberLendingDomain', () => {
     );
   });
 
+  it('normalizes underlying-asset aliases to the admitted deployed unit id when planning a withdraw', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown; params?: { handoff?: unknown } };
+
+        switch (request.method) {
+          case 'subagent.readPortfolioState.v1':
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-read-portfolio-state',
+              result: {
+                protocol_version: 'v1',
+                revision: 7,
+                portfolio_state: {
+                  agent_id: 'ember-lending',
+                  rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
+                  root_user_wallet: '0x00000000000000000000000000000000000000a1',
+                  agent_wallet: '0x00000000000000000000000000000000000000b1',
+                  mandate: {
+                    mandate_ref: 'mandate-ember-lending-001',
+                    summary:
+                      'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+                    context: {
+                      network: 'arbitrum',
+                      protocol: 'aave',
+                      allowedCollateralAssets: ['WETH'],
+                      allowedBorrowAssets: ['WETH'],
+                      maxAllocationPct: 35,
+                      maxLtvBps: 7000,
+                      minHealthFactor: '1.25',
+                    },
+                  },
+                  owned_units: [
+                    {
+                      unit_id: 'unit-ember-lending-aave-collateral-001',
+                      root_asset: 'aArbWETH',
+                      quantity: '10',
+                      reservation_id: 'reservation-ember-lending-withdraw-001',
+                      metadata: {
+                        underlying_asset_symbol: 'WETH',
+                      },
+                    },
+                  ],
+                  reservations: [
+                    {
+                      reservation_id: 'reservation-ember-lending-withdraw-001',
+                      purpose: 'decrease',
+                      control_path: 'lending.withdraw',
+                      unit_allocations: [
+                        {
+                          unit_id: 'unit-ember-lending-aave-collateral-001',
+                          quantity: '10',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            };
+          case 'subagent.readExecutionContext.v1':
+            return createExecutionContextResponse();
+          case 'subagent.createTransactionPlan.v1':
+            expect(request.params?.handoff).toMatchObject({
+              candidate_unit_ids: ['unit-ember-lending-aave-collateral-001'],
+              requested_quantities: [
+                {
+                  unit_id: 'unit-ember-lending-aave-collateral-001',
+                  quantity: '10',
+                },
+              ],
+              control_path: 'lending.withdraw',
+            });
+
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-create-transaction-plan',
+              result: {
+                protocol_version: 'v1',
+                revision: 8,
+                committed_event_ids: ['event-ember-lending-plan-created-001'],
+                candidate_plan: {
+                  planning_kind: 'subagent_handoff',
+                  transaction_plan_id: 'txplan-ember-lending-withdraw-001',
+                  handoff: {
+                    handoff_id: 'handoff-thread-1',
+                    payload_builder_output: {
+                      transaction_payload_ref: 'txpayload-ember-lending-withdraw-001',
+                      required_control_path: 'lending.withdraw',
+                      network: 'arbitrum',
+                    },
+                  },
+                  compact_plan_summary: {
+                    control_path: 'lending.withdraw',
+                    asset: 'WETH',
+                    amount: '10',
+                    summary: 'withdraw supplied WETH collateral from Aave',
+                  },
+                },
+              },
+            };
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver: createAnchoredPayloadResolverStub(),
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        mandateSummary: 'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+        mandateContext: {
+          network: 'arbitrum',
+          protocol: 'aave',
+          allowedCollateralAssets: ['WETH'],
+          allowedBorrowAssets: ['WETH'],
+          maxAllocationPct: 35,
+          maxLtvBps: 7000,
+          minHealthFactor: '1.25',
+        },
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          owned_units: [
+            {
+              unit_id: 'unit-ember-lending-aave-collateral-001',
+              root_asset: 'aArbWETH',
+              quantity: '10',
+              reservation_id: 'reservation-ember-lending-withdraw-001',
+              metadata: {
+                underlying_asset_symbol: 'WETH',
+              },
+            },
+          ],
+          reservations: [
+            {
+              reservation_id: 'reservation-ember-lending-withdraw-001',
+              purpose: 'decrease',
+              control_path: 'lending.withdraw',
+              unit_allocations: [
+                {
+                  unit_id: 'unit-ember-lending-aave-collateral-001',
+                  quantity: '10',
+                },
+              ],
+            },
+          ],
+        },
+        lastReservationSummary:
+          'Reservation reservation-ember-lending-withdraw-001 withdraws 10 WETH via lending.withdraw.',
+      },
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          ...createCandidatePlanInput(),
+          control_path: 'lending.withdraw',
+          candidate_unit_ids: ['WETH'],
+          requested_quantities: {
+            WETH: '10',
+          },
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Candidate lending plan created through the Shared Ember planner.',
+        },
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+      }),
+    );
+  });
+
+  it('splits an exact repay request across fragmented admitted WETH units on the matched repay reservation', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown; params?: { handoff?: unknown } };
+
+        switch (request.method) {
+          case 'subagent.readPortfolioState.v1':
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-read-portfolio-state',
+              result: {
+                protocol_version: 'v1',
+                revision: 7,
+                portfolio_state: {
+                  agent_id: 'ember-lending',
+                  rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
+                  root_user_wallet: '0x00000000000000000000000000000000000000a1',
+                  agent_wallet: '0x00000000000000000000000000000000000000b1',
+                  mandate: {
+                    mandate_ref: 'mandate-ember-lending-001',
+                    summary:
+                      'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+                    context: {
+                      network: 'arbitrum',
+                      protocol: 'aave',
+                      allowedCollateralAssets: ['WETH'],
+                      allowedBorrowAssets: ['WETH'],
+                      maxAllocationPct: 35,
+                      maxLtvBps: 7000,
+                      minHealthFactor: '1.25',
+                    },
+                  },
+                  owned_units: [
+                    {
+                      unit_id: 'unit-ember-lending-repay-001',
+                      root_asset: 'WETH',
+                      quantity: '150',
+                      reservation_id: 'reservation-ember-lending-repay-001',
+                      metadata: {
+                        underlying_asset_symbol: 'WETH',
+                      },
+                    },
+                    {
+                      unit_id: 'unit-ember-lending-repay-002',
+                      root_asset: 'WETH',
+                      quantity: '50',
+                      reservation_id: 'reservation-ember-lending-repay-001',
+                      metadata: {
+                        underlying_asset_symbol: 'WETH',
+                      },
+                    },
+                  ],
+                  reservations: [
+                    {
+                      reservation_id: 'reservation-ember-lending-repay-001',
+                      purpose: 'decrease',
+                      control_path: 'lending.repay',
+                      unit_allocations: [
+                        {
+                          unit_id: 'unit-ember-lending-repay-001',
+                          quantity: '150',
+                        },
+                        {
+                          unit_id: 'unit-ember-lending-repay-002',
+                          quantity: '50',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            };
+          case 'subagent.readExecutionContext.v1':
+            return createExecutionContextResponse();
+          case 'subagent.createTransactionPlan.v1':
+            expect(request.params?.handoff).toMatchObject({
+              control_path: 'lending.repay',
+              candidate_unit_ids: [
+                'unit-ember-lending-repay-001',
+                'unit-ember-lending-repay-002',
+              ],
+              requested_quantities: [
+                {
+                  unit_id: 'unit-ember-lending-repay-001',
+                  quantity: '150',
+                },
+                {
+                  unit_id: 'unit-ember-lending-repay-002',
+                  quantity: '25',
+                },
+              ],
+            });
+
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-create-transaction-plan',
+              result: {
+                protocol_version: 'v1',
+                revision: 8,
+                committed_event_ids: ['event-ember-lending-plan-created-001'],
+                candidate_plan: {
+                  planning_kind: 'subagent_handoff',
+                  transaction_plan_id: 'txplan-ember-lending-repay-001',
+                  handoff: {
+                    handoff_id: 'handoff-thread-1',
+                    payload_builder_output: {
+                      transaction_payload_ref: 'txpayload-ember-lending-repay-001',
+                      required_control_path: 'lending.repay',
+                      network: 'arbitrum',
+                    },
+                  },
+                  compact_plan_summary: {
+                    control_path: 'lending.repay',
+                    asset: 'WETH',
+                    amount: '175',
+                    summary: 'repay borrowed WETH debt on Aave',
+                  },
+                },
+              },
+            };
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver: createAnchoredPayloadResolverStub(),
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        mandateSummary: 'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+        mandateContext: {
+          network: 'arbitrum',
+          protocol: 'aave',
+          allowedCollateralAssets: ['WETH'],
+          allowedBorrowAssets: ['WETH'],
+          maxAllocationPct: 35,
+          maxLtvBps: 7000,
+          minHealthFactor: '1.25',
+        },
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          owned_units: [
+            {
+              unit_id: 'unit-ember-lending-repay-001',
+              root_asset: 'WETH',
+              quantity: '150',
+              reservation_id: 'reservation-ember-lending-repay-001',
+              metadata: {
+                underlying_asset_symbol: 'WETH',
+              },
+            },
+            {
+              unit_id: 'unit-ember-lending-repay-002',
+              root_asset: 'WETH',
+              quantity: '50',
+              reservation_id: 'reservation-ember-lending-repay-001',
+              metadata: {
+                underlying_asset_symbol: 'WETH',
+              },
+            },
+          ],
+          reservations: [
+            {
+              reservation_id: 'reservation-ember-lending-repay-001',
+              purpose: 'decrease',
+              control_path: 'lending.repay',
+              unit_allocations: [
+                {
+                  unit_id: 'unit-ember-lending-repay-001',
+                  quantity: '150',
+                },
+                {
+                  unit_id: 'unit-ember-lending-repay-002',
+                  quantity: '50',
+                },
+              ],
+            },
+          ],
+        },
+        lastReservationSummary:
+          'Reservation reservation-ember-lending-repay-001 repays 200 WETH via lending.repay.',
+      },
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          ...createCandidatePlanInput(),
+          control_path: 'lending.repay',
+          candidate_unit_ids: ['WETH'],
+          requested_quantities: {
+            WETH: '175',
+          },
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Candidate lending plan created through the Shared Ember planner.',
+        },
+      },
+    });
+  });
+
   it('normalizes predecessor unit ids to the admitted deployed successor before planning', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (input: unknown) => {
@@ -3354,6 +3940,7 @@ describe('createEmberLendingDomain', () => {
           mandate_ref: 'mandate-ember-lending-001',
           intent: 'deploy',
           action_summary: 'supply reserved 10 USDC on Aave',
+          control_path: 'lending.supply',
           candidate_unit_ids: ['unit-ember-lending-001'],
           requested_quantities: [
             {
@@ -4475,7 +5062,8 @@ describe('createEmberLendingDomain', () => {
           revision: 9,
           events: [],
         },
-      }),
+      })
+      .mockRejectedValueOnce(new Error('projection refresh unavailable')),
       readCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
         revision: 9,
@@ -4552,7 +5140,7 @@ describe('createEmberLendingDomain', () => {
     });
 
     expect(runtimeSigning.signPayload).not.toHaveBeenCalled();
-    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(2);
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(3);
     expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
       jsonrpc: '2.0',
       id: 'shared-ember-thread-1-request-transaction-execution',
@@ -4578,6 +5166,14 @@ describe('createEmberLendingDomain', () => {
         after_sequence: 5,
         limit: 100,
         timeout_ms: 1000,
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(3, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-hydrate-runtime-projection',
+      method: 'subagent.readPortfolioState.v1',
+      params: {
+        agent_id: 'ember-lending',
       },
     });
   });
@@ -5052,6 +5648,128 @@ describe('createEmberLendingDomain', () => {
     }
   });
 
+  it('hydrates the managed portfolio projection after a confirmed execution when Shared Ember omits portfolio_state from the execution result', async () => {
+    const hydratedPortfolioResponse = createPortfolioStateResponse();
+    const hydratedExecutionContextResponse = createExecutionContextResponse();
+    const hydratedPortfolioState = hydratedPortfolioResponse.result.portfolio_state;
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-signed-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-submit-execution-1'],
+            execution_result: {
+              phase: 'completed',
+              transaction_plan_id: 'txplan-ember-lending-001',
+              request_id: 'req-ember-lending-execution-001',
+              execution: {
+                execution_id: 'exec-ember-lending-001',
+                status: 'confirmed',
+                transaction_hash:
+                  '0x4444444444444444444444444444444444444444444444444444444444444444',
+                successor_unit_ids: ['unit-ember-lending-successor-001'],
+              },
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-hydrate-runtime-projection',
+          result: hydratedPortfolioResponse.result,
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-read-execution-context',
+          result: hydratedExecutionContextResponse.result,
+        }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      runtimeSigning,
+      runtimeSignerRef: 'service-wallet',
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'borrow admitted WETH on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        mandateRef: 'mandate-ember-lending-001',
+        lastPortfolioState: hydratedPortfolioState,
+        lastSharedEmberRevision: 11,
+        lastExecutionTxHash:
+          '0x4444444444444444444444444444444444444444444444444444444444444444',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        method: 'subagent.readPortfolioState.v1',
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        method: 'subagent.readExecutionContext.v1',
+      }),
+    );
+  });
+
   it('retries prepare and submit with refreshed revisions while keeping deterministic idempotency keys', async () => {
     const protocolHost = {
       handleJsonRpc: vi
@@ -5255,7 +5973,8 @@ describe('createEmberLendingDomain', () => {
             execution_result: createReadyForExecutionSigningPreparationResult(),
           },
         })
-        .mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:4010')),
+        .mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:4010'))
+        .mockRejectedValueOnce(new Error('projection refresh unavailable')),
       readCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
         revision: 9,
@@ -5334,7 +6053,8 @@ describe('createEmberLendingDomain', () => {
             execution_result: createReadyForExecutionSigningPreparationResult(),
           },
         })
-        .mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:4010')),
+        .mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:4010'))
+        .mockRejectedValueOnce(new Error('projection refresh unavailable')),
       readCommittedEventOutbox: vi
         .fn()
         .mockResolvedValueOnce({
@@ -5408,12 +6128,20 @@ describe('createEmberLendingDomain', () => {
     });
 
     expect(runtimeSigning.signPayload).toHaveBeenCalledTimes(1);
-    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(2);
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(3);
     expect(protocolHost.readCommittedEventOutbox).toHaveBeenNthCalledWith(1, {
       protocol_version: 'v1',
       consumer_id: 'ember-lending-req-ember-lending-execution-001',
       after_sequence: 0,
       limit: 100,
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(3, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-hydrate-runtime-projection',
+      method: 'subagent.readPortfolioState.v1',
+      params: {
+        agent_id: 'ember-lending',
+      },
     });
     expect(resumedAttempt).toMatchObject({
       state: {

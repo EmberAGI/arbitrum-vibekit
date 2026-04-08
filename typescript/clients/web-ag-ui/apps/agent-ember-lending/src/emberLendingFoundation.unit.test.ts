@@ -37,6 +37,12 @@ describe('createEmberLendingAgentConfig', () => {
     expect(config.systemPrompt).toContain('call the planning tool in that turn');
     expect(config.systemPrompt).toContain('call the execution tool instead of only describing');
     expect(config.systemPrompt).toContain(
+      'When the user asks for an exact amount or any partial amount such as half',
+    );
+    expect(config.systemPrompt).toContain(
+      'omitting requested_quantities is invalid for that request',
+    );
+    expect(config.systemPrompt).toContain(
       'instead of routing back through the portfolio manager for delegation refresh',
     );
   });

@@ -1730,7 +1730,61 @@ function readPortfolioReservationForSource(
     }
   }
 
-  return reservations[0] ?? null;
+  const sourceUnitIds = readManagedPlanningSourceUnitIds(source);
+  if (sourceUnitIds.length > 0) {
+    const exactMatchingReservation = reservations.find((reservation) => {
+      const reservationUnitIds = new Set(readReservationUnitIds(reservation));
+      return sourceUnitIds.every((unitId) => reservationUnitIds.has(unitId));
+    });
+    if (exactMatchingReservation) {
+      return exactMatchingReservation;
+    }
+
+    const overlappingReservation = reservations.find((reservation) =>
+      readReservationUnitIds(reservation).some((unitId) => sourceUnitIds.includes(unitId)),
+    );
+    if (overlappingReservation) {
+      return overlappingReservation;
+    }
+  }
+
+  return reservations.length === 1 ? reservations[0] ?? null : null;
+}
+
+function readReservationUnitIds(reservation: Record<string, unknown>): string[] {
+  if (!Array.isArray(reservation['unit_allocations'])) {
+    return [];
+  }
+
+  return reservation['unit_allocations']
+    .map((candidate) => (isRecord(candidate) ? readString(candidate['unit_id']) : null))
+    .filter((unitId): unitId is string => unitId !== null);
+}
+
+function readManagedPlanningSourceUnitIds(source: unknown): string[] {
+  if (!isRecord(source)) {
+    return [];
+  }
+
+  const unitIds = new Set<string>(readStringArray(source['candidate_unit_ids']) ?? []);
+  const requestedQuantities = readRequestedQuantitiesInput(source['requested_quantities']);
+  if (requestedQuantities.status === 'valid') {
+    for (const requestedQuantity of requestedQuantities.requestedQuantities) {
+      unitIds.add(requestedQuantity.unit_id);
+    }
+  }
+
+  return [...unitIds];
+}
+
+function resolveManagedPlanningControlPath(
+  source: Record<string, unknown>,
+  portfolioState: unknown,
+): string | null {
+  return (
+    readPreferredControlPath(source) ??
+    readString(readPortfolioReservationForSource(portfolioState, source)?.['control_path'])
+  );
 }
 
 function inferIntentFromActionSummary(value: unknown): string | null {
@@ -1789,7 +1843,7 @@ function inferIntentFromControlPath(controlPath: string | null): string | null {
 }
 
 function resolveManagedPlanningIntent(source: Record<string, unknown>, portfolioState: unknown): string {
-  const preferredControlPath = readPreferredControlPath(source);
+  const preferredControlPath = resolveManagedPlanningControlPath(source, portfolioState);
   if (preferredControlPath) {
     const controlPathIntent = inferIntentFromControlPath(preferredControlPath);
     if (controlPathIntent) {
@@ -1884,22 +1938,22 @@ function readManagedCandidateUnitIds(portfolioState: unknown, source?: unknown):
   return requestedQuantities?.map((candidate) => candidate.unit_id) ?? null;
 }
 
-function buildManagedPlanningUnitAliasMap(input: {
+function buildManagedPlanningUnitAliasIndex(input: {
   portfolioState: unknown;
   managedCandidateUnitIds: string[];
-}): Map<string, string | null> {
-  const aliasMap = new Map<string, string | null>();
+}): Map<string, string[]> {
+  const aliasIndex = new Map<string, string[]>();
   const managedUnitIds = new Set(input.managedCandidateUnitIds);
 
   const registerAlias = (alias: string, managedUnitId: string) => {
-    const existing = aliasMap.get(alias);
-    if (typeof existing === 'undefined') {
-      aliasMap.set(alias, managedUnitId);
+    const existing = aliasIndex.get(alias);
+    if (!existing) {
+      aliasIndex.set(alias, [managedUnitId]);
       return;
     }
 
-    if (existing !== managedUnitId) {
-      aliasMap.set(alias, null);
+    if (!existing.includes(managedUnitId)) {
+      existing.push(managedUnitId);
     }
   };
 
@@ -1908,7 +1962,7 @@ function buildManagedPlanningUnitAliasMap(input: {
   }
 
   if (!isRecord(input.portfolioState) || !Array.isArray(input.portfolioState['owned_units'])) {
-    return aliasMap;
+    return aliasIndex;
   }
 
   for (const candidate of input.portfolioState['owned_units']) {
@@ -1930,6 +1984,18 @@ function buildManagedPlanningUnitAliasMap(input: {
     }
 
     const metadata = isRecord(candidate['metadata']) ? candidate['metadata'] : null;
+    const underlyingAsset = readString(metadata?.['underlying_asset']);
+    if (underlyingAsset) {
+      registerAlias(underlyingAsset, unitId);
+      registerAlias(underlyingAsset.toLowerCase(), unitId);
+    }
+
+    const underlyingAssetSymbol = readString(metadata?.['underlying_asset_symbol']);
+    if (underlyingAssetSymbol) {
+      registerAlias(underlyingAssetSymbol, unitId);
+      registerAlias(underlyingAssetSymbol.toLowerCase(), unitId);
+    }
+
     const sourceUnitId = readString(metadata?.['source_unit_id']);
     if (sourceUnitId) {
       registerAlias(sourceUnitId, unitId);
@@ -1940,15 +2006,88 @@ function buildManagedPlanningUnitAliasMap(input: {
     }
   }
 
-  return aliasMap;
+  return aliasIndex;
 }
 
-function normalizeManagedPlanningUnitId(
+function readManagedPlanningAliasUnitIds(
   unitId: string,
-  aliasMap: Map<string, string | null>,
-): string | null {
-  const normalizedUnitId = aliasMap.get(unitId);
-  return typeof normalizedUnitId === 'string' ? normalizedUnitId : null;
+  aliasIndex: Map<string, string[]>,
+): string[] {
+  return [...(aliasIndex.get(unitId) ?? [])];
+}
+
+function parseBaseUnitQuantity(quantity: string): bigint | null {
+  if (!/^\d+$/.test(quantity)) {
+    return null;
+  }
+
+  try {
+    return BigInt(quantity);
+  } catch {
+    return null;
+  }
+}
+
+function expandManagedRequestedQuantityAcrossAliases(input: {
+  requestedQuantity: RequestedQuantity;
+  aliasIndex: Map<string, string[]>;
+  managedRequestedQuantities: RequestedQuantity[];
+}): RequestedQuantity[] | null {
+  const matchingUnitIds = readManagedPlanningAliasUnitIds(
+    input.requestedQuantity.unit_id,
+    input.aliasIndex,
+  );
+  if (matchingUnitIds.length === 0) {
+    return null;
+  }
+
+  if (matchingUnitIds.length === 1) {
+    return [
+      {
+        unit_id: matchingUnitIds[0]!,
+        quantity: input.requestedQuantity.quantity,
+      },
+    ];
+  }
+
+  const remainingQuantity = parseBaseUnitQuantity(input.requestedQuantity.quantity);
+  if (remainingQuantity === null) {
+    return null;
+  }
+
+  let remaining = remainingQuantity;
+  const matchingUnitIdsSet = new Set(matchingUnitIds);
+  const distributedRequestedQuantities: RequestedQuantity[] = [];
+
+  for (const managedRequestedQuantity of input.managedRequestedQuantities) {
+    if (!matchingUnitIdsSet.has(managedRequestedQuantity.unit_id)) {
+      continue;
+    }
+
+    const availableQuantity = parseBaseUnitQuantity(managedRequestedQuantity.quantity);
+    if (availableQuantity === null) {
+      return null;
+    }
+
+    if (availableQuantity <= 0n) {
+      continue;
+    }
+
+    const allocatedQuantity = remaining < availableQuantity ? remaining : availableQuantity;
+    if (allocatedQuantity > 0n) {
+      distributedRequestedQuantities.push({
+        unit_id: managedRequestedQuantity.unit_id,
+        quantity: allocatedQuantity.toString(),
+      });
+      remaining -= allocatedQuantity;
+    }
+
+    if (remaining === 0n) {
+      return distributedRequestedQuantities;
+    }
+  }
+
+  return null;
 }
 
 function hasPortfolioManagerPlanningIdentity(state: EmberLendingLifecycleState): boolean {
@@ -2110,7 +2249,7 @@ function resolveManagedPlanningReadiness(input: {
     };
   }
 
-  const managedUnitAliases = buildManagedPlanningUnitAliasMap({
+  const managedUnitAliases = buildManagedPlanningUnitAliasIndex({
     portfolioState: input.state.lastPortfolioState,
     managedCandidateUnitIds,
   });
@@ -2129,9 +2268,10 @@ function resolveManagedPlanningReadiness(input: {
       statusMessage: PLANNING_PM_REQUESTED_QUANTITIES_BLOCKED_MESSAGE,
     };
   }
-  const candidateUnitIds = [...new Set(candidateUnitIdsInput.map((unitId) =>
-    normalizeManagedPlanningUnitId(unitId, managedUnitAliases),
-  ))];
+  const candidateUnitIds = [...new Set(candidateUnitIdsInput.flatMap((unitId) => {
+    const normalizedUnitIds = readManagedPlanningAliasUnitIds(unitId, managedUnitAliases);
+    return normalizedUnitIds.length > 0 ? normalizedUnitIds : [null];
+  }))];
   if (candidateUnitIds.some((unitId) => unitId === null)) {
     return {
       status: 'blocked',
@@ -2144,18 +2284,32 @@ function resolveManagedPlanningReadiness(input: {
     requestedQuantitiesInput.status === 'valid'
       ? requestedQuantitiesInput.requestedQuantities
       : managedRequestedQuantities) {
-    const normalizedUnitId = normalizeManagedPlanningUnitId(
-      requestedQuantity.unit_id,
-      managedUnitAliases,
-    );
-    if (!normalizedUnitId) {
+    const normalizedRequestedQuantities =
+      requestedQuantitiesInput.status === 'valid'
+        ? expandManagedRequestedQuantityAcrossAliases({
+            requestedQuantity,
+            aliasIndex: managedUnitAliases,
+            managedRequestedQuantities,
+          })
+        : [
+            {
+              unit_id: requestedQuantity.unit_id,
+              quantity: requestedQuantity.quantity,
+            },
+          ];
+    if (!normalizedRequestedQuantities) {
       return {
         status: 'blocked',
         statusMessage: PLANNING_PM_UNIT_SCOPE_BLOCKED_MESSAGE,
       };
     }
 
-    requestedQuantitiesByUnitId.set(normalizedUnitId, requestedQuantity.quantity);
+    for (const normalizedRequestedQuantity of normalizedRequestedQuantities) {
+      requestedQuantitiesByUnitId.set(
+        normalizedRequestedQuantity.unit_id,
+        normalizedRequestedQuantity.quantity,
+      );
+    }
   }
 
   return {
@@ -2396,6 +2550,10 @@ function buildTransactionPlanningHandoff(input: {
       state: input.state,
       intent,
     });
+  const controlPath = resolveManagedPlanningControlPath(
+    commandInput,
+    input.state.lastPortfolioState,
+  );
 
   const handoffPayload: Record<string, unknown> = {
     ...base,
@@ -2403,9 +2561,7 @@ function buildTransactionPlanningHandoff(input: {
     action_summary: actionSummary,
     candidate_unit_ids: planningReadiness.candidateUnitIds,
     requested_quantities: planningReadiness.requestedQuantities,
-    ...(readPreferredControlPath(commandInput) === null
-      ? {}
-      : { control_path: readPreferredControlPath(commandInput) }),
+    ...(controlPath === null ? {} : { control_path: controlPath }),
     decision_context: buildManagedSubagentDecisionContext({
       source: commandInput,
       state: input.state,
@@ -2950,7 +3106,7 @@ export function createEmberLendingDomain(
         {
           name: 'create_transaction_plan',
           description:
-            'Create or refresh a candidate transaction plan for the managed lending lane. Treat the current live Shared Ember execution context as authoritative: if active reservations or owned units expose lending.borrow, lending.withdraw, or lending.repay after an earlier transaction, those follow-up actions are in scope for the current mandate and should be planned directly from this thread without involving the portfolio manager. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with action_summary, optional control_path, optional intent, optional candidate_unit_ids, and optional requested_quantities as either an array of { unit_id, quantity } objects or an object map of unit_id to quantity. When a specific follow-up reservation is active, prefer setting control_path to the exact admitted path such as lending.repay or lending.withdraw so planning binds to the right reservation. If you provide intent, use one of deploy, increase, decrease, rebalance, or transfer. Every requested_quantities quantity must use base-unit quantity strings. For partial increases or decreases such as half, compute the concrete base-unit requested_quantities from the current owned-unit or reservation quantities in context. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
+            'Create or refresh a candidate transaction plan for the managed lending lane. Treat the current live Shared Ember execution context as authoritative: if active reservations or owned units expose lending.borrow, lending.withdraw, or lending.repay after an earlier transaction, those follow-up actions are in scope for the current mandate and should be planned directly from this thread without involving the portfolio manager. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with action_summary, optional control_path, optional intent, optional candidate_unit_ids, and optional requested_quantities as either an array of { unit_id, quantity } objects or an object map of unit_id to quantity. When a specific follow-up reservation is active, prefer setting control_path to the exact admitted path such as lending.repay or lending.withdraw so planning binds to the right reservation. If you provide intent, use one of deploy, increase, decrease, rebalance, or transfer. Every requested_quantities quantity must use base-unit quantity strings. When the user asks for an exact amount or any partial amount such as half, you must include requested_quantities with the exact base-unit quantity strings; a partial or exact plan without requested_quantities is invalid. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
         },
         {
           name: 'request_transaction_execution',
@@ -3353,13 +3509,14 @@ export function createEmberLendingDomain(
           }
 
           const executionResult = preparedExecutionResult.executionResult ?? null;
-          const executionPortfolioState = readExecutionPortfolioState(executionResult);
+          const executionPortfolioState =
+            readExecutionPortfolioState(executionResult) ?? null;
           const projection = mergePortfolioProjectionPreservingKnownContext(
             currentState,
             executionPortfolioState,
           );
           const executionStatus = readExecutionStatusMessage(executionResult);
-          const nextState: EmberLendingLifecycleState = {
+          let nextState: EmberLendingLifecycleState = {
             ...currentState,
             ...projection,
             phase: 'active',
@@ -3369,6 +3526,21 @@ export function createEmberLendingDomain(
             lastExecutionTxHash: readExecutionTxHash(executionResult),
             pendingExecutionSubmission: null,
           };
+
+          if (executionPortfolioState === null && options.protocolHost) {
+            try {
+              nextState = await hydrateManagedProjectionFromSharedEmber({
+                protocolHost: options.protocolHost,
+                state: nextState,
+                threadId,
+                agentId,
+              });
+            } catch {
+              nextState = {
+                ...nextState,
+              };
+            }
+          }
 
           return {
             state: nextState,
