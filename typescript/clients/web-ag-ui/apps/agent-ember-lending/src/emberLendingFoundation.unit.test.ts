@@ -27,6 +27,15 @@ describe('createEmberLendingAgentConfig', () => {
       'Treat the live Shared Ember execution context as authoritative for what is currently admitted',
     );
     expect(config.systemPrompt).toContain('lending.borrow');
+    expect(config.systemPrompt).toContain('lending.supply adds collateral');
+    expect(config.systemPrompt).toContain('lending.withdraw removes collateral');
+    expect(config.systemPrompt).toContain('lending.repay pays back debt');
+    expect(config.systemPrompt).toContain('Never satisfy a repay request by creating another supply plan');
+    expect(config.systemPrompt).toContain(
+      'never satisfy a withdraw request by creating another repay or supply plan',
+    );
+    expect(config.systemPrompt).toContain('call the planning tool in that turn');
+    expect(config.systemPrompt).toContain('call the execution tool instead of only describing');
     expect(config.systemPrompt).toContain(
       'instead of routing back through the portfolio manager for delegation refresh',
     );

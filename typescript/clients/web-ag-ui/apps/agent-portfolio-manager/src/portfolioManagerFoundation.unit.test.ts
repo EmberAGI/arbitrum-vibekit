@@ -6,13 +6,13 @@ describe('createPortfolioManagerAgentConfig', () => {
   it('builds an OpenRouter-backed agent-runtime config for portfolio-manager startup', async () => {
     const config = createPortfolioManagerAgentConfig({
       OPENROUTER_API_KEY: 'test-openrouter-key',
-      PORTFOLIO_MANAGER_MODEL: 'openai/gpt-5.4-mini',
+      PORTFOLIO_MANAGER_MODEL: 'openai/gpt-5.4',
       DATABASE_URL: 'postgresql://portfolio:secret@db.internal:5432/pi_runtime',
     });
 
     expect(config.model).toMatchObject({
-      id: 'openai/gpt-5.4-mini',
-      name: 'openai/gpt-5.4-mini',
+      id: 'openai/gpt-5.4',
+      name: 'openai/gpt-5.4',
       api: 'openai-responses',
       provider: 'openrouter',
       baseUrl: 'https://openrouter.ai/api/v1',

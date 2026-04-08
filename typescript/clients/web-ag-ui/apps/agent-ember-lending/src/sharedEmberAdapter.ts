@@ -1665,8 +1665,72 @@ function readPortfolioReservations(portfolioState: unknown): Record<string, unkn
   }
 
   return portfolioState['reservations'].filter(
-    (candidate): candidate is Record<string, unknown> => isRecord(candidate),
+    (candidate): candidate is Record<string, unknown> =>
+      isRecord(candidate) &&
+      (() => {
+        const status = readString(candidate['status']);
+        return status === null || status === 'active';
+      })(),
   );
+}
+
+function inferPreferredControlPathFromActionSummary(value: unknown): string | null {
+  const normalized = readString(value)?.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.includes('repay')) {
+    return 'lending.repay';
+  }
+
+  if (normalized.includes('withdraw') || normalized.includes('unwind')) {
+    return 'lending.withdraw';
+  }
+
+  if (normalized.includes('borrow') || normalized.includes('increase')) {
+    return 'lending.borrow';
+  }
+
+  if (
+    normalized.includes('supply') ||
+    normalized.includes('deposit') ||
+    normalized.includes('deploy')
+  ) {
+    return 'lending.supply';
+  }
+
+  return null;
+}
+
+function readPreferredControlPath(value: unknown): string | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return (
+    readString(value['required_control_path']) ??
+    readString(value['control_path']) ??
+    inferPreferredControlPathFromActionSummary(value['action_summary'])
+  );
+}
+
+function readPortfolioReservationForSource(
+  portfolioState: unknown,
+  source: unknown,
+): Record<string, unknown> | null {
+  const reservations = readPortfolioReservations(portfolioState);
+  const preferredControlPath = readPreferredControlPath(source);
+  if (preferredControlPath) {
+    const matchingReservation = reservations.find(
+      (reservation) => readString(reservation['control_path']) === preferredControlPath,
+    );
+    if (matchingReservation) {
+      return matchingReservation;
+    }
+  }
+
+  return reservations[0] ?? null;
 }
 
 function inferIntentFromActionSummary(value: unknown): string | null {
@@ -1725,6 +1789,14 @@ function inferIntentFromControlPath(controlPath: string | null): string | null {
 }
 
 function resolveManagedPlanningIntent(source: Record<string, unknown>, portfolioState: unknown): string {
+  const preferredControlPath = readPreferredControlPath(source);
+  if (preferredControlPath) {
+    const controlPathIntent = inferIntentFromControlPath(preferredControlPath);
+    if (controlPathIntent) {
+      return controlPathIntent;
+    }
+  }
+
   const explicitIntent = readIntent(source['intent']);
   if (explicitIntent) {
     return explicitIntent;
@@ -1749,12 +1821,16 @@ function resolveManagedPlanningIntent(source: Record<string, unknown>, portfolio
 
 function readManagedRequestedQuantities(
   portfolioState: unknown,
+  source?: unknown,
 ): Array<{ unit_id: string; quantity: string }> | null {
   if (!isRecord(portfolioState)) {
     return null;
   }
 
-  const reservation = readPortfolioReservation(portfolioState);
+  const reservation =
+    typeof source === 'undefined'
+      ? readPortfolioReservation(portfolioState)
+      : readPortfolioReservationForSource(portfolioState, source);
   if (reservation && Array.isArray(reservation['unit_allocations'])) {
     const allocations = reservation['unit_allocations']
       .map((candidate) => {
@@ -1803,8 +1879,8 @@ function readManagedRequestedQuantities(
   return unitId && quantity ? [{ unit_id: unitId, quantity }] : null;
 }
 
-function readManagedCandidateUnitIds(portfolioState: unknown): string[] | null {
-  const requestedQuantities = readManagedRequestedQuantities(portfolioState);
+function readManagedCandidateUnitIds(portfolioState: unknown, source?: unknown): string[] | null {
+  const requestedQuantities = readManagedRequestedQuantities(portfolioState, source);
   return requestedQuantities?.map((candidate) => candidate.unit_id) ?? null;
 }
 
@@ -2019,8 +2095,14 @@ function resolveManagedPlanningReadiness(input: {
     };
   }
 
-  const managedRequestedQuantities = readManagedRequestedQuantities(input.state.lastPortfolioState);
-  const managedCandidateUnitIds = readManagedCandidateUnitIds(input.state.lastPortfolioState);
+  const managedRequestedQuantities = readManagedRequestedQuantities(
+    input.state.lastPortfolioState,
+    input.operationInput,
+  );
+  const managedCandidateUnitIds = readManagedCandidateUnitIds(
+    input.state.lastPortfolioState,
+    input.operationInput,
+  );
   if (!managedRequestedQuantities || !managedCandidateUnitIds) {
     return {
       status: 'blocked',
@@ -2168,9 +2250,9 @@ function buildFallbackActionSummary(input: {
   intent: string;
 }): string {
   const portfolioState = isRecord(input.state.lastPortfolioState) ? input.state.lastPortfolioState : null;
-  const reservation = readPortfolioReservation(portfolioState);
+  const reservation = readPortfolioReservationForSource(portfolioState, input.source);
   const ownedUnit = portfolioState ? readPortfolioOwnedUnit(portfolioState) : null;
-  const requestedQuantities = readManagedRequestedQuantities(portfolioState);
+  const requestedQuantities = readManagedRequestedQuantities(portfolioState, input.source);
   const quantity = readString(input.source['amount']) ?? requestedQuantities?.[0]?.quantity ?? null;
   const asset = readString(input.source['asset']) ?? readString(ownedUnit?.['root_asset']) ?? 'capital';
   const protocol =
@@ -2321,6 +2403,9 @@ function buildTransactionPlanningHandoff(input: {
     action_summary: actionSummary,
     candidate_unit_ids: planningReadiness.candidateUnitIds,
     requested_quantities: planningReadiness.requestedQuantities,
+    ...(readPreferredControlPath(commandInput) === null
+      ? {}
+      : { control_path: readPreferredControlPath(commandInput) }),
     decision_context: buildManagedSubagentDecisionContext({
       source: commandInput,
       state: input.state,
@@ -2865,12 +2950,12 @@ export function createEmberLendingDomain(
         {
           name: 'create_transaction_plan',
           description:
-            'Create or refresh a candidate transaction plan for the managed lending lane. Treat the current live Shared Ember execution context as authoritative: if active reservations or owned units expose lending.borrow, lending.withdraw, or lending.repay after an earlier transaction, those follow-up actions are in scope for the current mandate and should be planned directly from this thread without involving the portfolio manager. Pass JSON with action_summary, optional intent, optional candidate_unit_ids, and optional requested_quantities as either an array of { unit_id, quantity } objects or an object map of unit_id to quantity. Every requested_quantities quantity must use base-unit quantity strings. For partial increases or decreases such as half, compute the concrete base-unit requested_quantities from the current owned-unit or reservation quantities in context. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
+            'Create or refresh a candidate transaction plan for the managed lending lane. Treat the current live Shared Ember execution context as authoritative: if active reservations or owned units expose lending.borrow, lending.withdraw, or lending.repay after an earlier transaction, those follow-up actions are in scope for the current mandate and should be planned directly from this thread without involving the portfolio manager. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with action_summary, optional control_path, optional intent, optional candidate_unit_ids, and optional requested_quantities as either an array of { unit_id, quantity } objects or an object map of unit_id to quantity. When a specific follow-up reservation is active, prefer setting control_path to the exact admitted path such as lending.repay or lending.withdraw so planning binds to the right reservation. If you provide intent, use one of deploy, increase, decrease, rebalance, or transfer. Every requested_quantities quantity must use base-unit quantity strings. For partial increases or decreases such as half, compute the concrete base-unit requested_quantities from the current owned-unit or reservation quantities in context. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
         },
         {
           name: 'request_transaction_execution',
           description:
-            'Request admission and execution for the current lending transaction plan through the bounded Shared Ember surface.',
+            'Request admission and execution for the current lending transaction plan through the bounded Shared Ember surface. When the user asks to execute the current plan, call this tool in the current turn instead of only describing the plan or speculating about the outcome.',
         },
         {
           name: 'create_escalation_request',

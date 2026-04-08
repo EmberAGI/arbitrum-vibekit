@@ -740,8 +740,8 @@ describe('agent-ember-lending AG-UI integration', () => {
     service = await createEmberLendingGatewayService({
       runtimeConfig: {
         model: {
-          id: 'openai/gpt-5.4-mini',
-          name: 'openai/gpt-5.4-mini',
+          id: 'openai/gpt-5.4',
+          name: 'openai/gpt-5.4',
           api: 'openai-responses',
           provider: 'openrouter',
           baseUrl: 'https://openrouter.ai/api/v1',
