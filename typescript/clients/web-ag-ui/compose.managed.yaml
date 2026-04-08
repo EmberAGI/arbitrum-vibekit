@@ -31,19 +31,14 @@ services:
       dockerfile: clients/web-ag-ui/Dockerfile.shared-ember
       additional_contexts:
         shared_ember_spec: ${SHARED_EMBER_REPO_ROOT:?Set SHARED_EMBER_REPO_ROOT to the ember-orchestration-v1-spec checkout root}
-    env_file:
-      - apps/web/.env
-      - apps/agent-portfolio-manager/.env
-      - apps/agent-ember-lending/.env
     environment:
+      ONCHAIN_ACTIONS_API_URL: ${ONCHAIN_ACTIONS_API_URL:-https://api.emberai.xyz}
+      SHARED_EMBER_PROTOCOL_REFERENCE_BOOTSTRAP_JSON: ${SHARED_EMBER_PROTOCOL_REFERENCE_BOOTSTRAP_JSON:-{}}
       SHARED_EMBER_HOST: 0.0.0.0
       SHARED_EMBER_PORT: 4010
     ports:
       - "4010:4010"
     restart: unless-stopped
-    volumes:
-      - ${PORTFOLIO_MANAGER_OWS_HOST_PATH:-/opt/web-ag-ui/runtime/ows/portfolio-manager}:/runtime/ows/portfolio-manager:ro
-      - ${EMBER_LENDING_OWS_HOST_PATH:-/opt/web-ag-ui/runtime/ows/ember-lending}:/runtime/ows/ember-lending:ro
 
   agent-portfolio-manager:
     build:

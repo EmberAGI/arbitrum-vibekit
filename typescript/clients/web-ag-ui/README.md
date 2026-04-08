@@ -51,19 +51,22 @@ It includes:
   live migration can restore the existing `.langgraph_api` tar backups into
   those named volumes during deploy
 - The managed compose overlay expects `SHARED_EMBER_REPO_ROOT` to point at an
-  `ember-orchestration-v1-spec` checkout because the `shared-ember` image boots
-  the Shared Ember HTTP service through Vibekit's managed harness while loading
-  the domain-service implementation from that external repo.
+  `ember-orchestration-v1-spec` checkout because the `shared-ember` image builds
+  and runs the shared repo's own HTTP reference server directly from that
+  external repo.
 - The managed compose overlay also provisions an explicit
   `pi-runtime-postgres` service and injects `DATABASE_URL` into the managed
   agent containers so they do not rely on the runtime's host-process Docker
   bootstrap path from inside Docker.
 - The managed compose overlay also mounts the OWS vault directories read-only
-  into the managed containers. By default it expects host paths:
+  into the managed agent containers. By default it expects host paths:
   - `/opt/web-ag-ui/runtime/ows/portfolio-manager`
   - `/opt/web-ag-ui/runtime/ows/ember-lending`
   and the managed agent env files should point `*_OWS_VAULT_PATH` at the
   mounted in-container paths under `/runtime/ows/...`.
+- The `shared-ember` container no longer relies on Vibekit's repo-local OWS
+  harness. Any durable reference bootstrap it needs should be supplied through
+  `SHARED_EMBER_PROTOCOL_REFERENCE_BOOTSTRAP_JSON`.
 - Example:
   - `SHARED_EMBER_REPO_ROOT=/abs/path/to/ember-orchestration-v1-spec docker compose -f compose.yaml -f compose.managed.yaml config`
 
