@@ -37,9 +37,9 @@ const TokenSchema = z
     isVetted: z.boolean(),
   })
   .strict();
-const TokensResponseSchema = z
+const RawTokensResponseSchema = z
   .object({
-    tokens: z.array(TokenSchema),
+    tokens: z.array(z.unknown()),
     cursor: z.string().nullable().optional(),
     currentPage: z.number().int().optional(),
     totalPages: z.number().int().optional(),
@@ -221,6 +221,26 @@ function resolveSupportedExecutionNetwork(network: string): SupportedExecutionNe
   }
 }
 
+function resolvePlannerAssetAlias(input: {
+  network: string;
+  asset: string;
+}): string | null {
+  const normalizedAsset = input.asset.trim().toLowerCase();
+
+  switch (input.network.trim().toLowerCase()) {
+    case 'arbitrum':
+      if (normalizedAsset.startsWith('variabledebtarb')) {
+        return normalizedAsset.slice('variabledebtarb'.length) || null;
+      }
+      if (normalizedAsset.startsWith('aarb')) {
+        return normalizedAsset.slice('aarb'.length) || null;
+      }
+      return null;
+    default:
+      return null;
+  }
+}
+
 function resolveRpcUrl(
   network: SupportedExecutionNetwork,
   env: OnchainActionsApiEnv,
@@ -302,31 +322,51 @@ async function resolveToken(input: {
 }): Promise<z.infer<typeof TokenSchema>> {
   const chainId = resolveChainId(input.network);
   const normalizedAsset = input.asset.trim().toLowerCase();
+  const candidateAssets = Array.from(
+    new Set([
+      normalizedAsset,
+      resolvePlannerAssetAlias({
+        network: input.network,
+        asset: input.asset,
+      }),
+    ].filter((asset): asset is string => asset !== null && asset.length > 0)),
+  );
   let page = 1;
 
   while (true) {
-    const response = await fetchJson({
+    const rawResponse = await fetchJson({
       fetchImpl: input.fetchImpl,
       url: `${input.baseUrl}/tokens?${new URLSearchParams({
         chainIds: chainId,
         page: String(page),
       }).toString()}`,
-      schema: TokensResponseSchema,
+      schema: RawTokensResponseSchema,
     });
-    const match =
-      response.tokens.find(
-        (token) =>
-          token.symbol.trim().toLowerCase() === normalizedAsset && token.isVetted,
-      ) ??
-      response.tokens.find(
-        (token) => token.symbol.trim().toLowerCase() === normalizedAsset,
-      ) ??
-      response.tokens.find(
-        (token) => token.name.trim().toLowerCase() === normalizedAsset && token.isVetted,
-      ) ??
-      response.tokens.find(
-        (token) => token.name.trim().toLowerCase() === normalizedAsset,
-    );
+    const response = {
+      ...rawResponse,
+      tokens: rawResponse.tokens.flatMap((token) => {
+        const parsedToken = TokenSchema.safeParse(token);
+        return parsedToken.success ? [parsedToken.data] : [];
+      }),
+    };
+    const match = candidateAssets
+      .flatMap((candidateAsset) => [
+        response.tokens.find(
+          (token) =>
+            token.symbol.trim().toLowerCase() === candidateAsset && token.isVetted,
+        ),
+        response.tokens.find(
+          (token) => token.symbol.trim().toLowerCase() === candidateAsset,
+        ),
+        response.tokens.find(
+          (token) =>
+            token.name.trim().toLowerCase() === candidateAsset && token.isVetted,
+        ),
+        response.tokens.find(
+          (token) => token.name.trim().toLowerCase() === candidateAsset,
+        ),
+      ])
+      .find((token): token is z.infer<typeof TokenSchema> => token !== undefined);
 
     if (match) {
       return match;

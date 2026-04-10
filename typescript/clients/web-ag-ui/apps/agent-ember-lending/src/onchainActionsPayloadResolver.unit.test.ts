@@ -212,6 +212,216 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
     });
   });
 
+  it('ignores malformed token rows when anchoring a live candidate plan payload', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000aa',
+                },
+                name: '',
+                symbol: '',
+                isNative: false,
+                decimals: 18,
+                iconUri: null,
+                isVetted: false,
+              },
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000c1',
+                },
+                name: 'Wrapped Ether',
+                symbol: 'WETH',
+                isNative: false,
+                decimals: 18,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 2,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d2',
+                value: '0',
+                data: '0x617ba037',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+    });
+
+    await expect(
+      resolver.anchorCandidatePlanPayload({
+        agentId: 'ember-lending',
+        threadId: 'thread-1',
+        transactionPlanId: 'txplan-ember-lending-malformed-tokens-001',
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        rootUserWalletAddress: '0x00000000000000000000000000000000000000b1',
+        payloadBuilderOutput: {
+          transaction_payload_ref: 'txpayload-ember-lending-malformed-tokens-001',
+          required_control_path: 'lending.supply',
+          network: 'arbitrum',
+        },
+        compactPlanSummary: {
+          control_path: 'lending.supply',
+          asset: 'WETH',
+          amount: '1',
+          summary: 'supply reserved WETH on Aave',
+        },
+      }),
+    ).resolves.toMatchObject({
+      transactionRequests: [
+        {
+          type: 'EVM_TX',
+          to: '0x00000000000000000000000000000000000000d2',
+          value: '0',
+          data: '0x617ba037',
+          chainId: '42161',
+        },
+      ],
+    });
+  });
+
+  it('maps Arbitrum wrapper symbols back to the underlying token when anchoring payloads', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000c1',
+                },
+                name: 'Wrapped Ether',
+                symbol: 'WETH',
+                isNative: false,
+                decimals: 18,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d2',
+                value: '0',
+                data: '0xa415bcad',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+    });
+
+    await expect(
+      resolver.anchorCandidatePlanPayload({
+        agentId: 'ember-lending',
+        threadId: 'thread-1',
+        transactionPlanId: 'txplan-ember-lending-wrapper-alias-001',
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        rootUserWalletAddress: '0x00000000000000000000000000000000000000b1',
+        payloadBuilderOutput: {
+          transaction_payload_ref: 'txpayload-ember-lending-wrapper-alias-001',
+          required_control_path: 'lending.withdraw',
+          network: 'arbitrum',
+        },
+        compactPlanSummary: {
+          control_path: 'lending.withdraw',
+          asset: 'aArbWETH',
+          amount: '1500000000000',
+          summary: 'withdraw WETH collateral from Aave back to idle WETH',
+        },
+      }),
+    ).resolves.toMatchObject({
+      transactionRequests: [
+        {
+          type: 'EVM_TX',
+          to: '0x00000000000000000000000000000000000000d2',
+          value: '0',
+          data: '0xa415bcad',
+          chainId: '42161',
+        },
+      ],
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://api.emberai.xyz/lending/withdraw',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          walletAddress: '0x00000000000000000000000000000000000000b1',
+          tokenUidToWidthraw: {
+            chainId: '42161',
+            address: '0x00000000000000000000000000000000000000c1',
+          },
+          amount: '1500000000000',
+        }),
+      }),
+    );
+  });
+
   it('wraps the anchored request in a delegated redeemDelegations transaction using the canonical signing package', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

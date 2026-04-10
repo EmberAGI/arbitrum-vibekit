@@ -37,6 +37,12 @@ describe('createEmberLendingAgentConfig', () => {
     expect(config.systemPrompt).toContain('call the planning tool in that turn');
     expect(config.systemPrompt).toContain('call the execution tool instead of only describing');
     expect(config.systemPrompt).toContain(
+      'treat that as sufficient evidence to attempt execution through Shared Ember now',
+    );
+    expect(config.systemPrompt).toContain(
+      'Do not claim the reservation is inactive unless the current thread state explicitly shows that no matching active reservation exists',
+    );
+    expect(config.systemPrompt).toContain(
       'When the user asks for an exact amount or any partial amount such as half',
     );
     expect(config.systemPrompt).toContain(

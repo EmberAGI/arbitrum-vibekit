@@ -328,6 +328,44 @@ function createExecutionContextResponse() {
   };
 }
 
+function createExecutionContextResponseWithoutReservations() {
+  return {
+    jsonrpc: '2.0',
+    id: 'shared-ember-thread-1-read-execution-context',
+    result: {
+      protocol_version: 'v1',
+      revision: 11,
+      execution_context: {
+        generated_at: '2026-04-01T06:00:00.000Z',
+        network: 'arbitrum',
+        mandate_ref: 'mandate-ember-lending-001',
+        mandate_summary:
+          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+        mandate_context: {
+          network: 'arbitrum',
+          protocol: 'aave',
+          allowedCollateralAssets: ['USDC'],
+          allowedBorrowAssets: ['USDC'],
+          maxAllocationPct: 35,
+          maxLtvBps: 7000,
+          minHealthFactor: '1.25',
+        },
+        subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
+        root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+        owned_units: [],
+        reservations: [],
+        wallet_contents: [
+          {
+            asset: 'USDC',
+            amount: '100',
+            benchmark_value_usd: '100.00',
+          },
+        ],
+      },
+    },
+  };
+}
+
 function createMandatedExecutionContextResponse() {
   return {
     jsonrpc: '2.0',
@@ -738,6 +776,12 @@ describe('createEmberLendingDomain', () => {
       (command) => command.name === 'request_transaction_execution',
     );
     expect(requestExecution?.description).toContain('call this tool in the current turn');
+    expect(requestExecution?.description).toContain(
+      'treat that as enough context to attempt execution now',
+    );
+    expect(requestExecution?.description).toContain(
+      'Do not refuse execution by claiming the reservation is inactive',
+    );
   });
 
   it('does not allow direct hire onboarding from the lending agent runtime', async () => {
@@ -1062,6 +1106,52 @@ describe('createEmberLendingDomain', () => {
     );
     expect(context?.join('\n')).not.toContain('shared_ember_accounting_context');
     expect(context?.join('\n')).not.toContain('<proofs>');
+  });
+
+  it('falls back to persisted active reservations when the live execution-context payload is sparse', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+        if (request.method === 'subagent.readExecutionContext.v1') {
+          return createExecutionContextResponseWithoutReservations();
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const context = await domain.systemContext?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+    });
+
+    expect(context).toEqual(
+      expect.arrayContaining([
+        '<ember_lending_execution_context freshness="live">',
+        '  <active_reservations>',
+        '    <reservation reservation_id="reservation-ember-lending-001">',
+        '      <control_path>lending.supply</control_path>',
+        '      <purpose>deploy</purpose>',
+        '  <owned_units>',
+        '    <owned_unit unit_id="unit-ember-lending-001">',
+        '      <root_asset>USDC</root_asset>',
+      ]),
+    );
   });
 
   it('does not promote the thread to active when Shared Ember returns no managed-lane execution context', async () => {
@@ -1437,19 +1527,18 @@ describe('createEmberLendingDomain', () => {
       },
     });
 
-    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      3,
       expect.objectContaining({
         jsonrpc: '2.0',
         id: 'shared-ember-thread-1-create-transaction-plan',
         method: 'subagent.createTransactionPlan.v1',
         params: expect.objectContaining({
-          idempotency_key: DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY,
           expected_revision: 11,
           handoff: expect.objectContaining({
             agent_id: 'ember-lending',
             root_user_wallet: '0x00000000000000000000000000000000000000a1',
             mandate_ref: 'mandate-ember-lending-001',
-            control_path: 'lending.supply',
             candidate_unit_ids: ['unit-ember-lending-001'],
             requested_quantities: [
               {
@@ -3776,6 +3865,112 @@ describe('createEmberLendingDomain', () => {
     );
   });
 
+  it('binds prefixed execution idempotency keys to the active transaction plan', async () => {
+    const jsonRpcRequests: Array<Record<string, unknown>> = [];
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: Record<string, unknown>) => {
+        jsonRpcRequests.push(request);
+        switch (request['method']) {
+          case 'subagent.readPortfolioState.v1':
+            return {
+              jsonrpc: '2.0',
+              id: request['id'],
+              result: {
+                protocol_version: 'v1',
+                revision: 7,
+                portfolio_state: {
+                  agent_id: 'ember-lending',
+                  owned_units: [],
+                  reservations: [],
+                },
+              },
+            };
+          case 'subagent.requestTransactionExecution.v1':
+            return {
+              jsonrpc: '2.0',
+              id: request['id'],
+              result: {
+                protocol_version: 'v1',
+                revision: 9,
+                committed_event_ids: ['evt-prepare-execution-1'],
+                execution_result: createReadyForExecutionSigningPreparationResult({
+                  inlineUnsignedTransactionHex: null,
+                }),
+              },
+            };
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request['method'])}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      anchoredPayloadResolver: createAnchoredPayloadResolverStub(),
+      agentId: 'ember-lending',
+    });
+    const executionInput = {
+      idempotencyKey: 'idem-execute-transaction-plan-thread-1-manual',
+    };
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'repay current WETH debt on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+        input: executionInput,
+      },
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-002',
+        },
+        lastCandidatePlanSummary: 'repay refreshed WETH debt on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+        input: executionInput,
+      },
+    });
+
+    const requestExecutions = jsonRpcRequests.filter(
+      (request) => request['method'] === 'subagent.requestTransactionExecution.v1',
+    ) as Array<{ params?: Record<string, unknown> }>;
+
+    expect(requestExecutions).toHaveLength(2);
+    expect(requestExecutions[0]?.params?.['idempotency_key']).toBe(
+      'idem-execute-transaction-plan-thread-1-manual:binding:07b74ae67cd9',
+    );
+    expect(requestExecutions[1]?.params?.['idempotency_key']).toBe(
+      'idem-execute-transaction-plan-thread-1-manual:binding:272e9b650e73',
+    );
+    expect(requestExecutions[0]?.params?.['idempotency_key']).not.toBe(
+      requestExecutions[1]?.params?.['idempotency_key'],
+    );
+  });
+
   it('anchors the planner-returned payload ref behind the lending service boundary during candidate-plan creation', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async () => ({
@@ -4776,7 +4971,7 @@ describe('createEmberLendingDomain', () => {
     });
 
     expect(runtimeSigning.signPayload).not.toHaveBeenCalled();
-    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(1);
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(3);
 
     expect(result).toMatchObject({
       state: {
@@ -5743,10 +5938,193 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'active',
         mandateRef: 'mandate-ember-lending-001',
-        lastPortfolioState: hydratedPortfolioState,
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
+          root_user_wallet: '0x00000000000000000000000000000000000000a1',
+          agent_wallet: '0x00000000000000000000000000000000000000b1',
+          owned_units: expect.arrayContaining([
+            expect.objectContaining({
+              unit_id: 'unit-ember-lending-001',
+            }),
+            expect.objectContaining({
+              unit_id: 'unit-unreserved-001',
+            }),
+          ]),
+          reservations: expect.arrayContaining([
+            expect.objectContaining({
+              reservation_id: 'reservation-ember-lending-001',
+              control_path: 'lending.supply',
+            }),
+            expect.objectContaining({
+              reservation_id: 'res-ember-lending-withdraw-001',
+              control_path: 'lending.withdraw',
+            }),
+            expect.objectContaining({
+              reservation_id: 'res-ember-lending-borrow-001',
+              control_path: 'lending.borrow',
+            }),
+          ]),
+        },
         lastSharedEmberRevision: 11,
         lastExecutionTxHash:
           '0x4444444444444444444444444444444444444444444444444444444444444444',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        method: 'subagent.readPortfolioState.v1',
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        method: 'subagent.readExecutionContext.v1',
+      }),
+    );
+  });
+
+  it('hydrates the managed portfolio projection after a confirmed execution when Shared Ember returns a sparse portfolio_state', async () => {
+    const hydratedExecutionContextResponse = createExecutionContextResponse();
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-signed-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-submit-execution-1'],
+            execution_result: {
+              phase: 'completed',
+              transaction_plan_id: 'txplan-ember-lending-001',
+              request_id: 'req-ember-lending-execution-001',
+              portfolio_state: {
+                agent_id: 'ember-lending',
+                owned_units: [],
+                reservations: [],
+              },
+              execution: {
+                execution_id: 'exec-ember-lending-001',
+                status: 'confirmed',
+                transaction_hash:
+                  '0x4444444444444444444444444444444444444444444444444444444444444444',
+                successor_unit_ids: ['unit-ember-lending-successor-001'],
+              },
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-hydrate-runtime-projection',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            portfolio_state: {
+              agent_id: 'ember-lending',
+              owned_units: [],
+              reservations: [],
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-read-execution-context',
+          result: hydratedExecutionContextResponse.result,
+        }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      runtimeSigning,
+      runtimeSignerRef: 'service-wallet',
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'supply admitted WETH as collateral on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 11,
+        lastExecutionTxHash:
+          '0x4444444444444444444444444444444444444444444444444444444444444444',
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          owned_units: expect.arrayContaining([
+            expect.objectContaining({
+              unit_id: 'unit-ember-lending-001',
+            }),
+            expect.objectContaining({
+              unit_id: 'unit-unreserved-001',
+            }),
+          ]),
+          reservations: expect.arrayContaining([
+            expect.objectContaining({
+              reservation_id: 'reservation-ember-lending-001',
+              control_path: 'lending.supply',
+            }),
+            expect.objectContaining({
+              reservation_id: 'res-ember-lending-withdraw-001',
+              control_path: 'lending.withdraw',
+            }),
+            expect.objectContaining({
+              reservation_id: 'res-ember-lending-borrow-001',
+              control_path: 'lending.borrow',
+            }),
+          ]),
+        },
       },
       outputs: {
         status: {

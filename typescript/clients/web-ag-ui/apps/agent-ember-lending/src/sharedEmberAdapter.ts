@@ -445,6 +445,16 @@ function readPortfolioOwnedUnit(portfolioState: Record<string, unknown>): Record
   return null;
 }
 
+function readPortfolioOwnedUnits(portfolioState: unknown): Record<string, unknown>[] {
+  if (!isRecord(portfolioState) || !Array.isArray(portfolioState['owned_units'])) {
+    return [];
+  }
+
+  return portfolioState['owned_units'].filter(
+    (candidate): candidate is Record<string, unknown> => isRecord(candidate),
+  );
+}
+
 function readLaneContextFallback(portfolioState: Record<string, unknown>): Record<string, unknown> | null {
   const ownedUnit = readPortfolioOwnedUnit(portfolioState);
   const reservation = readFirstRecordFromArray(portfolioState['reservations']);
@@ -597,6 +607,77 @@ function mergeExecutionContextProjection(
   };
 }
 
+function mergePortfolioStateWithExecutionContext(input: {
+  portfolioState: unknown;
+  executionContext: SharedEmberExecutionContext | null;
+  fallbackPortfolioState: unknown;
+}): unknown {
+  const baseState = isRecord(input.portfolioState)
+    ? { ...input.portfolioState }
+    : isRecord(input.fallbackPortfolioState)
+      ? { ...input.fallbackPortfolioState }
+      : null;
+  const fallbackOwnedUnits = readPortfolioOwnedUnits(input.fallbackPortfolioState);
+  const portfolioOwnedUnits = readPortfolioOwnedUnits(input.portfolioState);
+  const executionContextOwnedUnits = Array.isArray(input.executionContext?.owned_units)
+    ? input.executionContext.owned_units.filter(
+        (candidate): candidate is Record<string, unknown> => isRecord(candidate),
+      )
+    : [];
+  const fallbackReservations = readPortfolioReservations(input.fallbackPortfolioState);
+  const portfolioReservations = readPortfolioReservations(input.portfolioState);
+  const executionContextReservations = Array.isArray(input.executionContext?.reservations)
+    ? input.executionContext.reservations.filter(
+        (candidate): candidate is Record<string, unknown> => isRecord(candidate),
+      )
+    : [];
+
+  const ownedUnits = mergeContextRecords({
+    primary: portfolioOwnedUnits.length > 0 ? portfolioOwnedUnits : executionContextOwnedUnits,
+    fallback:
+      portfolioOwnedUnits.length > 0
+        ? mergeContextRecords({
+            primary: executionContextOwnedUnits,
+            fallback: fallbackOwnedUnits,
+            idKey: 'unit_id',
+          })
+        : fallbackOwnedUnits,
+    idKey: 'unit_id',
+  });
+  const reservations = mergeContextRecords({
+    primary:
+      portfolioReservations.length > 0 ? portfolioReservations : executionContextReservations,
+    fallback:
+      portfolioReservations.length > 0
+        ? mergeContextRecords({
+            primary: executionContextReservations,
+            fallback: fallbackReservations,
+            idKey: 'reservation_id',
+          })
+        : fallbackReservations,
+    idKey: 'reservation_id',
+  });
+
+  if (baseState === null) {
+    return ownedUnits.length > 0 || reservations.length > 0
+      ? {
+          owned_units: ownedUnits,
+          reservations,
+        }
+      : input.portfolioState;
+  }
+
+  return {
+    ...baseState,
+    ...(ownedUnits.length > 0 || Array.isArray(baseState['owned_units'])
+      ? { owned_units: ownedUnits }
+      : {}),
+    ...(reservations.length > 0 || Array.isArray(baseState['reservations'])
+      ? { reservations }
+      : {}),
+  };
+}
+
 async function hydrateManagedProjectionFromSharedEmber(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
   state: EmberLendingLifecycleState;
@@ -628,8 +709,13 @@ async function hydrateManagedProjectionFromSharedEmber(input: {
   } catch {
     executionContextEnvelope = null;
   }
+  const mergedPortfolioState = mergePortfolioStateWithExecutionContext({
+    portfolioState,
+    executionContext: executionContextEnvelope?.executionContext ?? null,
+    fallbackPortfolioState: input.state.lastPortfolioState,
+  });
 
-  const portfolioProjection = mergePortfolioProjection(input.state, portfolioState);
+  const portfolioProjection = mergePortfolioProjection(input.state, mergedPortfolioState);
   const stateWithPortfolioProjection: EmberLendingLifecycleState = {
     ...input.state,
     mandateRef: portfolioProjection.mandateRef ?? input.state.mandateRef,
@@ -652,11 +738,11 @@ async function hydrateManagedProjectionFromSharedEmber(input: {
     ...stateWithPortfolioProjection,
     ...projection,
     phase:
-      hasManagedPortfolioProjection(portfolioState) ||
+      hasManagedPortfolioProjection(mergedPortfolioState) ||
       hasManagedExecutionContextProjection(executionContextEnvelope?.executionContext ?? null)
         ? 'active'
         : input.state.phase,
-    lastPortfolioState: portfolioState,
+    lastPortfolioState: mergedPortfolioState,
     lastSharedEmberRevision: mergeKnownRevision(
       response.result?.revision ?? null,
       executionContextEnvelope?.revision ?? null,
@@ -767,6 +853,7 @@ function buildSharedEmberExecutionContextXml(
   input:
     | {
         status: 'live';
+        state: EmberLendingLifecycleState;
         executionContext: NonNullable<SharedEmberExecutionContext>;
       }
     | {
@@ -819,9 +906,14 @@ function buildSharedEmberExecutionContextXml(
 
   lines.push(`  <network>${escapeXml(network)}</network>`);
 
-  if (Array.isArray(input.executionContext.owned_units) && input.executionContext.owned_units.length > 0) {
+  const ownedUnits = mergeContextRecords({
+    primary: input.executionContext.owned_units,
+    fallback: readPortfolioOwnedUnits(input.state.lastPortfolioState),
+    idKey: 'unit_id',
+  });
+  if (ownedUnits.length > 0) {
     lines.push('  <owned_units>');
-    for (const ownedUnit of input.executionContext.owned_units) {
+    for (const ownedUnit of ownedUnits) {
       const unitId = readString(ownedUnit.unit_id);
       lines.push(`    <owned_unit${unitId ? ` unit_id="${escapeXml(unitId)}"` : ''}>`);
 
@@ -872,9 +964,14 @@ function buildSharedEmberExecutionContextXml(
     lines.push('  </owned_units>');
   }
 
-  if (Array.isArray(input.executionContext.reservations) && input.executionContext.reservations.length > 0) {
+  const reservations = mergeContextRecords({
+    primary: input.executionContext.reservations,
+    fallback: readPortfolioReservations(input.state.lastPortfolioState),
+    idKey: 'reservation_id',
+  });
+  if (reservations.length > 0) {
     lines.push('  <active_reservations>');
-    for (const reservation of input.executionContext.reservations) {
+    for (const reservation of reservations) {
       const reservationId = readString(reservation.reservation_id);
       lines.push(
         `    <reservation${reservationId ? ` reservation_id="${escapeXml(reservationId)}"` : ''}>`,
@@ -1672,6 +1769,43 @@ function readPortfolioReservations(portfolioState: unknown): Record<string, unkn
         return status === null || status === 'active';
       })(),
   );
+}
+
+function mergeContextRecords(input: {
+  primary: unknown;
+  fallback: Record<string, unknown>[];
+  idKey: string;
+}): Record<string, unknown>[] {
+  const merged: Record<string, unknown>[] = [];
+  const seenIds = new Set<string>();
+
+  const pushRecord = (candidate: unknown) => {
+    if (!isRecord(candidate)) {
+      return;
+    }
+
+    const recordId = readString(candidate[input.idKey]);
+    if (recordId) {
+      if (seenIds.has(recordId)) {
+        return;
+      }
+      seenIds.add(recordId);
+    }
+
+    merged.push(candidate);
+  };
+
+  if (Array.isArray(input.primary)) {
+    for (const candidate of input.primary) {
+      pushRecord(candidate);
+    }
+  }
+
+  for (const candidate of input.fallback) {
+    pushRecord(candidate);
+  }
+
+  return merged;
 }
 
 function inferPreferredControlPathFromActionSummary(value: unknown): string | null {
@@ -2506,6 +2640,7 @@ function resolveOperationIdempotencyKey(input: {
   provided: string | null;
   fallback: string;
   expectedPrefix: string;
+  stableBinding?: string | null;
 }): string {
   if (!input.provided) {
     return input.fallback;
@@ -2516,11 +2651,17 @@ function resolveOperationIdempotencyKey(input: {
     return input.fallback;
   }
 
-  if (normalized.startsWith(input.expectedPrefix)) {
+  if (!normalized.startsWith(input.expectedPrefix)) {
+    return `${input.fallback}:caller:${normalized}`;
+  }
+
+  const stableBinding = input.stableBinding?.trim();
+  if (!stableBinding) {
     return normalized;
   }
 
-  return `${input.fallback}:caller:${normalized}`;
+  const bindingSuffix = `:binding:${stableBinding}`;
+  return normalized.endsWith(bindingSuffix) ? normalized : `${normalized}${bindingSuffix}`;
 }
 
 function buildTransactionPlanningHandoff(input: {
@@ -3111,7 +3252,7 @@ export function createEmberLendingDomain(
         {
           name: 'request_transaction_execution',
           description:
-            'Request admission and execution for the current lending transaction plan through the bounded Shared Ember surface. When the user asks to execute the current plan, call this tool in the current turn instead of only describing the plan or speculating about the outcome.',
+            'Request admission and execution for the current lending transaction plan through the bounded Shared Ember surface. When the user asks to execute the current plan, call this tool in the current turn instead of only describing the plan or speculating about the outcome. If the current thread already has a lastCandidatePlan plus an active reservation summary or active reservation for the same control path, treat that as enough context to attempt execution now. Do not refuse execution by claiming the reservation is inactive unless the current thread state explicitly shows no matching active reservation for the plan.',
         },
         {
           name: 'create_escalation_request',
@@ -3135,6 +3276,7 @@ export function createEmberLendingDomain(
         });
         return buildSharedEmberExecutionContextXml({
           status: 'live',
+          state: currentState,
           executionContext: executionContext.executionContext,
         });
       } catch (error) {
@@ -3283,6 +3425,7 @@ export function createEmberLendingDomain(
             provided: readStringKey(operation.input, 'idempotencyKey'),
             fallback: fallbackIdempotencyKey,
             expectedPrefix: 'idem-create-transaction-plan-',
+            stableBinding: buildStableCommandSuffix(handoff),
           });
           let response: {
             result?: {
@@ -3455,6 +3598,7 @@ export function createEmberLendingDomain(
             provided: readStringKey(operation.input, 'idempotencyKey'),
             fallback: fallbackIdempotencyKey,
             expectedPrefix: 'idem-execute-transaction-plan-',
+            stableBinding: buildStableCommandSuffix({ transactionPlanId }),
           });
           let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>>;
           try {
@@ -3511,23 +3655,30 @@ export function createEmberLendingDomain(
           const executionResult = preparedExecutionResult.executionResult ?? null;
           const executionPortfolioState =
             readExecutionPortfolioState(executionResult) ?? null;
+          const shouldHydrateManagedProjection =
+            !hasManagedPortfolioProjection(executionPortfolioState);
+          const mergedExecutionPortfolioState = mergePortfolioStateWithExecutionContext({
+            portfolioState: executionPortfolioState,
+            executionContext: null,
+            fallbackPortfolioState: currentState.lastPortfolioState,
+          });
           const projection = mergePortfolioProjectionPreservingKnownContext(
             currentState,
-            executionPortfolioState,
+            mergedExecutionPortfolioState,
           );
           const executionStatus = readExecutionStatusMessage(executionResult);
           let nextState: EmberLendingLifecycleState = {
             ...currentState,
             ...projection,
             phase: 'active',
-            lastPortfolioState: executionPortfolioState ?? currentState.lastPortfolioState,
+            lastPortfolioState: mergedExecutionPortfolioState ?? currentState.lastPortfolioState,
             lastSharedEmberRevision: preparedExecutionResult.revision,
             lastExecutionResult: executionResult,
             lastExecutionTxHash: readExecutionTxHash(executionResult),
             pendingExecutionSubmission: null,
           };
 
-          if (executionPortfolioState === null && options.protocolHost) {
+          if (shouldHydrateManagedProjection && options.protocolHost) {
             try {
               nextState = await hydrateManagedProjectionFromSharedEmber({
                 protocolHost: options.protocolHost,

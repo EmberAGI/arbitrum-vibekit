@@ -575,6 +575,16 @@ const FIRST_MANAGED_AGENT_ROOT_ASSET = 'USDC';
 const FIRST_MANAGED_AGENT_BENCHMARK_ASSET = 'USD';
 const FIRST_MANAGED_AGENT_ALLOCATION_MODE = 'allocable_idle';
 const FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH = 'lending.supply';
+const PM_SIGNING_TRACE_ENABLED = process.env['DEBUG_PM_SIGNING'] === '1';
+
+function tracePmSigning(step: string, details?: Record<string, unknown>) {
+  if (!PM_SIGNING_TRACE_ENABLED) {
+    return;
+  }
+
+  const suffix = details ? ` ${JSON.stringify(details)}` : '';
+  console.log(`[pm-signing] ${new Date().toISOString()} ${step}${suffix}`);
+}
 
 type PortfolioManagerPortfolioMandate = {
   approved: true;
@@ -1476,6 +1486,11 @@ export function createPortfolioManagerDomain(
           const approvedMandateEnvelope = currentState.pendingApprovedMandateEnvelope ?? null;
           const signedDelegations = parsePortfolioManagerSignedDelegations(operation.input);
           const signedDelegation = signedDelegations?.[0];
+          tracePmSigning('received-signing-resume', {
+            threadId,
+            walletAddress,
+            signedDelegationCount: signedDelegations?.length ?? 0,
+          });
 
           if (!walletAddress || !approvedMandateEnvelope || !signedDelegation) {
             return {
@@ -1515,10 +1530,19 @@ export function createPortfolioManagerDomain(
             };
           }
 
+          tracePmSigning('reading-orchestrator-identity', {
+            threadId,
+            agentId,
+            controllerWalletAddress,
+          });
           const orchestratorIdentity = await readSharedEmberAgentServiceIdentity({
             protocolHost: options.protocolHost,
             agentId,
             role: 'orchestrator',
+          });
+          tracePmSigning('read-orchestrator-identity', {
+            hasIdentity: orchestratorIdentity.identity !== null,
+            walletAddress: orchestratorIdentity.identity?.wallet_address ?? null,
           });
           if (!orchestratorIdentity.identity) {
             return {
@@ -1546,10 +1570,17 @@ export function createPortfolioManagerDomain(
             };
           }
 
+          tracePmSigning('reading-managed-subagent-identity', {
+            managedAgentId: FIRST_MANAGED_AGENT_TYPE,
+          });
           const managedSubagentIdentity = await readSharedEmberAgentServiceIdentity({
             protocolHost: options.protocolHost,
             agentId: FIRST_MANAGED_AGENT_TYPE,
             role: 'subagent',
+          });
+          tracePmSigning('read-managed-subagent-identity', {
+            hasIdentity: managedSubagentIdentity.identity !== null,
+            walletAddress: managedSubagentIdentity.identity?.wallet_address ?? null,
           });
           if (!managedSubagentIdentity.identity) {
             return {
@@ -1574,6 +1605,11 @@ export function createPortfolioManagerDomain(
             threadId,
             walletAddress,
             signedDelegation,
+          });
+          tracePmSigning('running-rooted-bootstrap', {
+            threadId,
+            walletAddress,
+            handoffId: handoff.handoff_id,
           });
           const response = await runSharedEmberCommandWithResolvedRevision<{
             result?: {
@@ -1603,9 +1639,23 @@ export function createPortfolioManagerDomain(
               },
             }),
           });
+          tracePmSigning('ran-rooted-bootstrap', {
+            revision: response.result?.revision ?? null,
+            rootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
+          });
+          tracePmSigning('reading-managed-subagent-wallet', {
+            managedAgentId: FIRST_MANAGED_AGENT_TYPE,
+          });
           const managedSubagentExecutionContext = await readSharedEmberSubagentWalletAddress({
             protocolHost: options.protocolHost,
             agentId: FIRST_MANAGED_AGENT_TYPE,
+          });
+          tracePmSigning('read-managed-subagent-wallet', {
+            revision: managedSubagentExecutionContext.revision ?? null,
+            walletAddress: managedSubagentExecutionContext.walletAddress,
+          });
+          tracePmSigning('reading-onboarding-state', {
+            walletAddress,
           });
           const { revision: onboardingRevision, onboardingState } =
             await readPortfolioManagerOnboardingState({
@@ -1613,6 +1663,13 @@ export function createPortfolioManagerDomain(
               agentId: resolvePortfolioManagerAccountingAgentId(onboarding),
               walletAddress,
             });
+          tracePmSigning('read-onboarding-state', {
+            revision: onboardingRevision ?? null,
+            phase:
+              isRecord(onboardingState) && typeof onboardingState['phase'] === 'string'
+                ? onboardingState['phase']
+                : null,
+          });
           const onboardingDetails = buildPortfolioManagerWalletAccountingDetails({
             revision: onboardingRevision,
             onboardingState,
