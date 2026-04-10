@@ -452,6 +452,75 @@ describe('useAgentConnection integration', () => {
     );
   });
 
+  it('applies returned domain projection to the current thread snapshot', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        task: {
+          id: 'task-1',
+          taskStatus: {
+            state: 'completed',
+            message: 'Projection hydration completed.',
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    act(() => {
+      latestValue?.applyDomainProjection({
+        managedMandateEditor: {
+          mandateRef: 'mandate-ember-lending-001',
+          targetAgentId: 'ember-lending',
+        },
+      });
+    });
+    await flushEffects();
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(mocks.agent.setState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thread: expect.objectContaining({
+          domainProjection: {
+            managedMandateEditor: {
+              mandateRef: 'mandate-ember-lending-001',
+              targetAgentId: 'ember-lending',
+            },
+          },
+        }),
+      }),
+    );
+    expect(latestValue?.domainProjection).toEqual({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-001',
+        targetAgentId: 'ember-lending',
+      },
+    });
+  });
+
   it('sendChatMessage dispatches a plain user message and runs the agent', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;

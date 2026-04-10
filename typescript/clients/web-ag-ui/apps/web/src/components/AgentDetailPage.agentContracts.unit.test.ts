@@ -220,10 +220,33 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
         allowedPools: [],
         lifecycleState: {
           phase: 'active',
-          walletAddress: '0x00000000000000000000000000000000000000b1',
-          mandateSummary: null,
-          lastReservationSummary: null,
         } as never,
+        domainProjection: {
+          managedMandateEditor: {
+            ownerAgentId: 'agent-portfolio-manager',
+            targetAgentId: 'ember-lending',
+            targetAgentRouteId: 'agent-ember-lending',
+            targetAgentKey: 'ember-lending-primary',
+            targetAgentTitle: 'Ember Lending',
+            mandateRef: 'mandate-ember-lending-001',
+            mandateSummary: 'lend USDC through the managed lending lane',
+            managedMandate: {
+              allocation_basis: 'allocable_idle',
+              allowed_assets: ['USDC'],
+              asset_intent: {
+                root_asset: 'USDC',
+                network: 'arbitrum',
+                benchmark_asset: 'USD',
+                intent: 'deploy',
+                control_path: 'lending.supply',
+              },
+            },
+            agentWallet: '0x00000000000000000000000000000000000000b1',
+            rootUserWallet: '0x00000000000000000000000000000000000000a1',
+            rootedWalletContextId: 'rwc-ember-lending-thread-001',
+            reservation: null,
+          },
+        },
       }),
     );
 

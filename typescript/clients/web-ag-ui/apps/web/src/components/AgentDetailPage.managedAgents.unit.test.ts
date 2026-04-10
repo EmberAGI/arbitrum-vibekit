@@ -17,6 +17,42 @@ vi.mock('../hooks/usePrivyWalletClient', () => {
   };
 });
 
+function createManagedMandateEditorProjection(overrides: Record<string, unknown> = {}) {
+  return {
+    managedMandateEditor: {
+      ownerAgentId: 'agent-portfolio-manager',
+      targetAgentId: 'ember-lending',
+      targetAgentRouteId: 'agent-ember-lending',
+      targetAgentKey: 'ember-lending-primary',
+      targetAgentTitle: 'Ember Lending',
+      mandateRef: 'mandate-ember-lending-001',
+      mandateSummary: 'lend USDC and WETH through the managed lending lane',
+      managedMandate: {
+        allocation_basis: 'allocable_idle',
+        allowed_assets: ['USDC', 'WETH'],
+        asset_intent: {
+          root_asset: 'USDC',
+          network: 'arbitrum',
+          benchmark_asset: 'USD',
+          intent: 'deploy',
+          control_path: 'lending.supply',
+        },
+      },
+      agentWallet: '0x00000000000000000000000000000000000000b1',
+      rootUserWallet: '0x00000000000000000000000000000000000000a1',
+      rootedWalletContextId: 'rwc-ember-lending-thread-001',
+      reservation: {
+        reservationId: 'reservation-ember-lending-001',
+        purpose: 'deploy',
+        controlPath: 'lending.supply',
+        rootAsset: 'USDC',
+        quantity: '10',
+      },
+      ...overrides,
+    },
+  };
+}
+
 function renderManagedAgentDetail(
   overrides: Partial<React.ComponentProps<typeof AgentDetailPage>>,
 ) {
@@ -69,19 +105,8 @@ describe('AgentDetailPage managed-agent affordances', () => {
       taskStatus: 'working',
       lifecycleState: {
         phase: 'active',
-        mandateRef: 'mandate-ember-lending-001',
-        mandateSummary:
-          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-        mandateContext: {
-          network: 'arbitrum',
-          protocol: 'aave',
-        },
-        walletAddress: '0x00000000000000000000000000000000000000b1',
-        rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
-        rootedWalletContextId: 'rwc-ember-lending-thread-001',
-        lastReservationSummary:
-          'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
       } as never,
+      domainProjection: createManagedMandateEditorProjection(),
     });
 
     expect(html).toContain('Send message');
@@ -100,34 +125,22 @@ describe('AgentDetailPage managed-agent affordances', () => {
       taskStatus: 'working',
       lifecycleState: {
         phase: 'active',
-        mandateRef: 'mandate-ember-lending-001',
-        mandateSummary:
-          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-        mandateContext: {
-          network: 'arbitrum',
-          protocol: 'aave',
-        },
-        walletAddress: '0x00000000000000000000000000000000000000b1',
-        rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
-        rootedWalletContextId: 'rwc-ember-lending-thread-001',
-        lastReservationSummary:
-          'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
       } as never,
+      domainProjection: createManagedMandateEditorProjection(),
     });
 
     expect(html).toContain('Subagent wallet');
     expect(html).toContain('0x0000...00b1');
     expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain('Mandate');
-    expect(html).toContain(
-      'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-    );
+    expect(html).toContain('lend USDC and WETH through the managed lending lane');
     expect(html).toContain('Reservation');
     expect(html).toContain(
       'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
     );
     expect(html).toContain('class="grid gap-3 lg:grid-cols-2"');
     expect(html).toContain('>Manage<');
+    expect(html).toContain('Save managed mandate');
     expect(html).toContain('Send message');
     expect(html).not.toContain('Lifecycle state');
     expect(html).not.toContain('Task status');
@@ -160,24 +173,28 @@ describe('AgentDetailPage managed-agent affordances', () => {
       } as never,
       lifecycleState: {
         phase: 'active',
-        mandateRef: 'mandate-ember-lending-001',
-        mandateSummary:
-          'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
-        mandateContext: {
-          network: 'arbitrum',
-          protocol: 'aave',
-          allowedCollateralAssets: ['WETH'],
-          allowedBorrowAssets: ['WETH'],
-          maxAllocationPct: 35,
-          maxLtvBps: 7000,
-          minHealthFactor: '1.25',
-        },
-        walletAddress: '0x00000000000000000000000000000000000000b1',
-        rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
-        rootedWalletContextId: 'rwc-ember-lending-thread-001',
-        lastReservationSummary:
-          'Reservation reservation-ember-lending-001 deploys 10 WETH via lending.supply.',
       } as never,
+      domainProjection: createManagedMandateEditorProjection({
+        mandateSummary: 'lend WETH through the managed lending lane',
+        managedMandate: {
+          allocation_basis: 'allocable_idle',
+          allowed_assets: ['WETH'],
+          asset_intent: {
+            root_asset: 'WETH',
+            network: 'arbitrum',
+            benchmark_asset: 'USD',
+            intent: 'deploy',
+            control_path: 'lending.supply',
+          },
+        },
+        reservation: {
+          reservationId: 'reservation-ember-lending-001',
+          purpose: 'deploy',
+          controlPath: 'lending.supply',
+          rootAsset: 'WETH',
+          quantity: '10',
+        },
+      }),
       messages: [
         {
           id: 'user-1',
@@ -205,42 +222,11 @@ describe('AgentDetailPage managed-agent affordances', () => {
       taskStatus: 'completed',
       lifecycleState: {
         phase: 'active',
-        mandateRef: null,
-        mandateSummary: null,
-        mandateContext: null,
-        walletAddress: null,
-        rootUserWalletAddress: null,
-        rootedWalletContextId: null,
-        lastReservationSummary: null,
-        lastPortfolioState: {
-          agent_id: 'ember-lending',
-          owned_units: [
-            {
-              unit_id: 'unit-ember-lending-001',
-              network: 'arbitrum',
-              wallet_address: '0x00000000000000000000000000000000000000b1',
-              root_asset: 'USDC',
-              quantity: '10',
-              reservation_id: 'reservation-ember-lending-001',
-            },
-          ],
-          reservations: [
-            {
-              reservation_id: 'reservation-ember-lending-001',
-              purpose: 'deploy',
-              control_path: 'lending.supply',
-            },
-          ],
-        },
       } as never,
     });
 
-    expect(html).toContain('Reservation');
     expect(html).not.toContain('Subagent wallet');
     expect(html).not.toContain('0x00000000000000000000000000000000000000b1');
-    expect(html).toContain(
-      'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
-    );
     expect(html).toContain('Send message');
     expect(html).not.toContain('Lifecycle state');
     expect(html).not.toContain('Task status');
@@ -263,38 +249,16 @@ describe('AgentDetailPage managed-agent affordances', () => {
       taskStatus: 'working',
       lifecycleState: {
         phase: 'active',
-        mandateRef: 'mandate-ember-lending-001',
-        mandateSummary:
-          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-        mandateContext: {
-          network: 'arbitrum',
-          protocol: 'aave',
-        },
-        walletAddress: '0x00000000000000000000000000000000000000b1',
-        rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
-        rootedWalletContextId: 'rwc-ember-lending-thread-001',
-        lastReservationSummary: null,
-        lastPortfolioState: {
-          agent_id: 'ember-lending',
-          owned_units: [
-            {
-              unit_id: 'unit-ember-lending-001',
-              network: 'arbitrum',
-              wallet_address: '0x00000000000000000000000000000000000000b1',
-              root_asset: 'USDC',
-              quantity: '10',
-              reservation_id: longReservationId,
-            },
-          ],
-          reservations: [
-            {
-              reservation_id: longReservationId,
-              purpose: 'deploy',
-              control_path: 'lending.supply',
-            },
-          ],
-        },
       } as never,
+      domainProjection: createManagedMandateEditorProjection({
+        reservation: {
+          reservationId: longReservationId,
+          purpose: 'deploy',
+          controlPath: 'lending.supply',
+          rootAsset: 'USDC',
+          quantity: '10',
+        },
+      }),
     });
 
     expect(html).toContain('Reservation res...lending...57c258d deploys 10 USDC via lending.supply.');
@@ -346,58 +310,8 @@ describe('AgentDetailPage managed-agent affordances', () => {
         allowedPools: [],
         lifecycleState: {
           phase: 'active',
-          lastOnboardingBootstrap: {
-            rootedWalletContext: {
-              metadata: {
-                approvedMandateEnvelope: {
-                  portfolioMandate: {
-                    approved: true,
-                    riskLevel: 'medium',
-                  },
-                  managedAgentMandates: [
-                    {
-                      agentKey: 'ember-lending-primary',
-                      agentType: 'ember-lending',
-                      approved: true,
-                      settings: {
-                        network: 'arbitrum',
-                        protocol: 'aave',
-                        allowedCollateralAssets: ['USDC'],
-                        allowedBorrowAssets: ['USDC'],
-                        maxAllocationPct: 35,
-                        maxLtvBps: 7000,
-                        minHealthFactor: '1.25',
-                      },
-                    },
-                  ],
-                },
-              },
-            },
-            mandates: [
-              {
-                mandate_ref: 'mandate-ember-lending-001',
-                agent_id: 'ember-lending',
-                mandate_summary:
-                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-              },
-            ],
-            reservations: [
-              {
-                reservation_id: 'reservation-ember-lending-001',
-                purpose: 'deploy',
-                control_path: 'lending.supply',
-              },
-            ],
-            ownedUnits: [
-              {
-                unit_id: 'unit-ember-lending-001',
-                root_asset: 'USDC',
-                quantity: '10',
-                reservation_id: 'reservation-ember-lending-001',
-              },
-            ],
-          },
         } as never,
+        domainProjection: createManagedMandateEditorProjection(),
       }),
     );
 
@@ -410,10 +324,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Activity\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
-    expect(html).not.toContain('35% allocation cap');
-    expect(html).not.toContain(
-      'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
-    );
+    expect(html).toContain('Save managed mandate');
     expect(html.indexOf('Ember Portfolio Agent')).toBeLessThan(html.indexOf('Ember AI Team'));
     expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('desc'));
     expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Managed lending lane'));

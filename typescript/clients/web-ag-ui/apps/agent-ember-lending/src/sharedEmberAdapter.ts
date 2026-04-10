@@ -28,6 +28,10 @@ export type EmberLendingSharedEmberProtocolHost = {
 
 export const EMBER_LENDING_INTERNAL_HYDRATE_COMMAND = 'hydrate_runtime_projection';
 export const EMBER_LENDING_SHARED_EMBER_AGENT_ID = 'ember-lending';
+const PORTFOLIO_MANAGER_ROUTE_AGENT_ID = 'agent-portfolio-manager';
+const EMBER_LENDING_ROUTE_AGENT_ID = 'agent-ember-lending';
+const EMBER_LENDING_ROUTE_AGENT_KEY = 'ember-lending-primary';
+const EMBER_LENDING_ROUTE_AGENT_TITLE = 'Ember Lending';
 
 const PLANNING_PM_ONBOARDING_BLOCKED_MESSAGE =
   'Portfolio Manager onboarding must complete before lending can plan transactions for this thread.';
@@ -183,6 +187,37 @@ type PortfolioProjection = Pick<
   | 'rootedWalletContextId'
   | 'lastReservationSummary'
 >;
+
+type ManagedMandateEditorProjection = {
+  ownerAgentId: typeof PORTFOLIO_MANAGER_ROUTE_AGENT_ID;
+  targetAgentId: typeof EMBER_LENDING_SHARED_EMBER_AGENT_ID;
+  targetAgentRouteId: typeof EMBER_LENDING_ROUTE_AGENT_ID;
+  targetAgentKey: typeof EMBER_LENDING_ROUTE_AGENT_KEY;
+  targetAgentTitle: typeof EMBER_LENDING_ROUTE_AGENT_TITLE;
+  mandateRef: string;
+  mandateSummary: string;
+  managedMandate: {
+    allocation_basis: string;
+    allowed_assets: string[];
+    asset_intent: {
+      root_asset: string;
+      network: string;
+      benchmark_asset: string;
+      intent: string;
+      control_path: string;
+    };
+  };
+  agentWallet: `0x${string}` | null;
+  rootUserWallet: `0x${string}` | null;
+  rootedWalletContextId: string | null;
+  reservation: {
+    reservationId: string;
+    purpose: string | null;
+    controlPath: string | null;
+    rootAsset: string | null;
+    quantity: string | null;
+  } | null;
+};
 
 const DIRECT_HIRE_MESSAGE =
   'Use the portfolio manager to onboard and activate the managed lending agent.';
@@ -604,6 +639,91 @@ function mergeExecutionContextProjection(
     rootUserWalletAddress: projection.rootUserWalletAddress ?? state.rootUserWalletAddress,
     rootedWalletContextId: projection.rootedWalletContextId ?? state.rootedWalletContextId,
     lastReservationSummary: projection.lastReservationSummary ?? state.lastReservationSummary,
+  };
+}
+
+function readManagedMandate(
+  mandateContext: Record<string, unknown> | null,
+): ManagedMandateEditorProjection['managedMandate'] | null {
+  if (!mandateContext) {
+    return null;
+  }
+
+  const allocationBasis = readString(mandateContext['allocation_basis']);
+  const allowedAssets = mandateContext['allowed_assets'];
+  const assetIntent = isRecord(mandateContext['asset_intent']) ? mandateContext['asset_intent'] : null;
+  const rootAsset = readString(assetIntent?.['root_asset']);
+  const network = readString(assetIntent?.['network']);
+  const benchmarkAsset = readString(assetIntent?.['benchmark_asset']);
+  const intent = readString(assetIntent?.['intent']);
+  const controlPath = readString(assetIntent?.['control_path']);
+
+  if (
+    allocationBasis === null ||
+    !Array.isArray(allowedAssets) ||
+    !allowedAssets.every((value) => typeof value === 'string' && value.trim().length > 0) ||
+    rootAsset === null ||
+    network === null ||
+    benchmarkAsset === null ||
+    intent === null ||
+    controlPath === null
+  ) {
+    return null;
+  }
+
+  return {
+    allocation_basis: allocationBasis,
+    allowed_assets: allowedAssets,
+    asset_intent: {
+      root_asset: rootAsset,
+      network,
+      benchmark_asset: benchmarkAsset,
+      intent,
+      control_path: controlPath,
+    },
+  };
+}
+
+function buildManagedMandateEditorProjection(
+  state: EmberLendingLifecycleState,
+): ManagedMandateEditorProjection | null {
+  const managedMandate = isRecord(state.mandateContext) ? readManagedMandate(state.mandateContext) : null;
+  if (!state.mandateRef || !state.mandateSummary || !managedMandate) {
+    return null;
+  }
+
+  const portfolioState = isRecord(state.lastPortfolioState) ? state.lastPortfolioState : null;
+  const firstReservation = portfolioState ? readFirstRecordFromArray(portfolioState['reservations']) : null;
+  const reservationId = readString(firstReservation?.['reservation_id']);
+  const ownedUnits = portfolioState && Array.isArray(portfolioState['owned_units']) ? portfolioState['owned_units'] : [];
+  const reservedUnit =
+    ownedUnits.find(
+      (candidate) =>
+        isRecord(candidate) && readString(candidate['reservation_id']) === reservationId,
+    ) ?? readFirstRecordFromArray(ownedUnits);
+
+  return {
+    ownerAgentId: PORTFOLIO_MANAGER_ROUTE_AGENT_ID,
+    targetAgentId: EMBER_LENDING_SHARED_EMBER_AGENT_ID,
+    targetAgentRouteId: EMBER_LENDING_ROUTE_AGENT_ID,
+    targetAgentKey: EMBER_LENDING_ROUTE_AGENT_KEY,
+    targetAgentTitle: EMBER_LENDING_ROUTE_AGENT_TITLE,
+    mandateRef: state.mandateRef,
+    mandateSummary: state.mandateSummary,
+    managedMandate,
+    agentWallet: state.walletAddress,
+    rootUserWallet: state.rootUserWalletAddress,
+    rootedWalletContextId: state.rootedWalletContextId,
+    reservation:
+      reservationId !== null
+        ? {
+            reservationId,
+            purpose: readString(firstReservation?.['purpose']),
+            controlPath: readString(firstReservation?.['control_path']),
+            rootAsset: isRecord(reservedUnit) ? readString(reservedUnit['root_asset']) : null,
+            quantity: isRecord(reservedUnit) ? readString(reservedUnit['quantity']) : null,
+          }
+        : null,
   };
 }
 
@@ -3308,9 +3428,17 @@ export function createEmberLendingDomain(
             threadId,
             agentId,
           });
+          const managedMandateProjection = buildManagedMandateEditorProjection(nextState);
 
           return {
             state: nextState,
+            ...(managedMandateProjection
+              ? {
+                  domainProjectionUpdate: {
+                    managedMandateEditor: managedMandateProjection,
+                  },
+                }
+              : {}),
             outputs: {
               status: {
                 executionStatus: 'completed',

@@ -149,11 +149,13 @@ interface AgentDetailPageProps {
   messages?: Message[];
   messageSnapshotEpoch?: number;
   lifecycleState?: ThreadLifecycle;
+  domainProjection?: Record<string, unknown>;
   // Settings
   settings?: AgentSettings;
   onSendChatMessage?: (content: string) => void;
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
   onSettingsSave?: (updates: Partial<AgentSettings>) => void;
+  onManagedMandateSave?: (input: ManagedMandateEditorSubmitInput) => Promise<void> | void;
 }
 
 type TabType = 'blockers' | 'metrics' | 'transactions' | 'chat';
@@ -548,47 +550,6 @@ function normalizeReservationSummaryForDisplay(summary: string | null): string |
   );
 }
 
-function buildReservationSummaryFromBootstrap(value: Record<string, unknown> | null): string | null {
-  if (!value || !Array.isArray(value['reservations'])) {
-    return null;
-  }
-
-  const reservation = value['reservations'].find((candidate) => asRecord(candidate));
-  const reservationRecord = asRecord(reservation);
-  if (!reservationRecord) {
-    return null;
-  }
-
-  const reservationId = readString(reservationRecord['reservation_id']);
-  const purpose = readString(reservationRecord['purpose']);
-  const controlPath = readString(reservationRecord['control_path']);
-  const ownedUnits =
-    (Array.isArray(value['ownedUnits']) ? value['ownedUnits'] : null) ??
-    (Array.isArray(value['owned_units']) ? value['owned_units'] : null) ??
-    [];
-  const matchingOwnedUnit =
-    ownedUnits.find(
-      (candidate) =>
-        asRecord(candidate) && readString(asRecord(candidate)?.['reservation_id']) === reservationId,
-    ) ?? ownedUnits.find((candidate) => asRecord(candidate));
-  const ownedUnitRecord = asRecord(matchingOwnedUnit);
-  const quantity = readString(ownedUnitRecord?.['quantity']);
-  const rootAsset = readString(ownedUnitRecord?.['root_asset']);
-
-  if (!reservationId) {
-    return null;
-  }
-
-  const reservationAction =
-    purpose === 'deploy' ? 'deploys' : purpose ? `${purpose}s` : 'moves';
-  const quantitySummary = quantity && rootAsset ? ` ${quantity} ${rootAsset}` : ' capital';
-  const controlPathSummary = controlPath ? ` via ${controlPath}` : '';
-
-  return normalizeReservationSummaryForDisplay(
-    `Reservation ${reservationId} ${reservationAction}${quantitySummary}${controlPathSummary}.`,
-  );
-}
-
 function readFirstRecordFromArray(value: unknown): Record<string, unknown> | null {
   if (!Array.isArray(value)) {
     return null;
@@ -602,14 +563,6 @@ function readFirstRecordFromArray(value: unknown): Record<string, unknown> | nul
   }
 
   return null;
-}
-
-function readPortfolioStateOwnedUnit(value: Record<string, unknown> | null): Record<string, unknown> | null {
-  if (!value) {
-    return null;
-  }
-
-  return readFirstRecordFromArray(value['owned_units']) ?? readFirstRecordFromArray(value['ownedUnits']);
 }
 
 function readLaneProtocolFromControlPath(controlPath: string | null): string | null {
@@ -633,75 +586,168 @@ function readArtifactEventType(event: ClmmEvent): string {
   );
 }
 
+type ManagedMandateEditorView = {
+  ownerAgentId: string;
+  targetAgentId: string;
+  targetAgentRouteId: string;
+  targetAgentKey: string;
+  title: string;
+  laneLabel: string | null;
+  mandateRef: string | null;
+  mandateSummary: string | null;
+  managedMandate: Record<string, unknown> | null;
+  walletAddress: string | null;
+  rootUserWallet: string | null;
+  rootedWalletContextId: string | null;
+  reservationSummary: string | null;
+};
+
+type ManagedMandateEditorSubmitInput = {
+  ownerAgentId: string;
+  targetAgentId: string;
+  targetAgentRouteId: string;
+  mandateSummary: string;
+  managedMandate: {
+    allocation_basis: string;
+    allowed_assets: string[];
+    asset_intent: {
+      root_asset: string;
+      network: string;
+      benchmark_asset: string;
+      intent: string;
+      control_path: string;
+    };
+  };
+};
+
+function buildReservationSummaryFromProjection(
+  reservation: Record<string, unknown> | null,
+): string | null {
+  if (!reservation) {
+    return null;
+  }
+
+  const reservationId = readString(reservation['reservationId']);
+  if (!reservationId) {
+    return null;
+  }
+
+  const purpose = readString(reservation['purpose']);
+  const controlPath = readString(reservation['controlPath']);
+  const rootAsset = readString(reservation['rootAsset']);
+  const quantity = readString(reservation['quantity']);
+  const reservationAction =
+    purpose === 'deploy' ? 'deploys' : purpose ? `${purpose}s` : 'moves';
+  const quantitySummary = quantity && rootAsset ? ` ${quantity} ${rootAsset}` : ' capital';
+  const controlPathSummary = controlPath ? ` via ${controlPath}` : '';
+
+  return normalizeReservationSummaryForDisplay(
+    `Reservation ${reservationId} ${reservationAction}${quantitySummary}${controlPathSummary}.`,
+  );
+}
+
+function readManagedMandateEditorView(
+  domainProjection: Record<string, unknown> | undefined,
+): ManagedMandateEditorView | null {
+  const editor = asRecord(domainProjection?.['managedMandateEditor']);
+  if (!editor) {
+    return null;
+  }
+
+  const targetAgentRouteId = readString(editor['targetAgentRouteId']);
+  if (!targetAgentRouteId) {
+    return null;
+  }
+  const ownerAgentId = readString(editor['ownerAgentId']);
+  const targetAgentId = readString(editor['targetAgentId']);
+  const targetAgentKey = readString(editor['targetAgentKey']);
+  if (!ownerAgentId || !targetAgentId || !targetAgentKey) {
+    return null;
+  }
+
+  const managedMandate = asRecord(editor['managedMandate']);
+  const assetIntent = asRecord(managedMandate?.['asset_intent']);
+
+  return {
+    ownerAgentId,
+    targetAgentId,
+    targetAgentRouteId,
+    targetAgentKey,
+    title: readString(editor['targetAgentTitle']) ?? 'Managed lending lane',
+    laneLabel: formatManagedLaneLabel(
+      readString(assetIntent?.['network']),
+      readLaneProtocolFromControlPath(readString(assetIntent?.['control_path'])),
+    ),
+    mandateRef: readString(editor['mandateRef']),
+    mandateSummary: readString(editor['mandateSummary']),
+    managedMandate,
+    walletAddress: readString(editor['agentWallet']),
+    rootUserWallet: readString(editor['rootUserWallet']),
+    rootedWalletContextId: readString(editor['rootedWalletContextId']),
+    reservationSummary: buildReservationSummaryFromProjection(asRecord(editor['reservation'])),
+  };
+}
+
+function normalizeManagedMandateAssetSymbol(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+function parseManagedMandateAssetList(value: string): string[] {
+  const normalizedAssets: string[] = [];
+  const seen = new Set<string>();
+
+  for (const rawAsset of value.split(',')) {
+    const asset = normalizeManagedMandateAssetSymbol(rawAsset);
+    if (asset.length === 0 || seen.has(asset)) {
+      continue;
+    }
+    seen.add(asset);
+    normalizedAssets.push(asset);
+  }
+
+  return normalizedAssets;
+}
+
+function buildManagedMandateSummary(allowedAssets: readonly string[]): string {
+  if (allowedAssets.length === 0) {
+    return 'lend through the managed lending lane';
+  }
+
+  if (allowedAssets.length === 1) {
+    return `lend ${allowedAssets[0]} through the managed lending lane`;
+  }
+
+  if (allowedAssets.length === 2) {
+    return `lend ${allowedAssets[0]} and ${allowedAssets[1]} through the managed lending lane`;
+  }
+
+  return `lend ${allowedAssets.slice(0, -1).join(', ')}, and ${
+    allowedAssets[allowedAssets.length - 1]
+  } through the managed lending lane`;
+}
+
 type PortfolioManagerManagedAgentView = {
   title: string;
   detailHref: string;
   laneLabel: string | null;
   mandateSummary: string | null;
-  allocationSummary: string | null;
   reservationSummary: string | null;
 };
 
 function buildPortfolioManagerManagedAgentView(
-  lifecycleState: ThreadLifecycle | undefined,
+  domainProjection: Record<string, unknown> | undefined,
 ): PortfolioManagerManagedAgentView | null {
-  const lifecycleRecord = asRecord(lifecycleState);
-  if (!lifecycleRecord) {
+  const managedMandateEditorView = readManagedMandateEditorView(domainProjection);
+  if (!managedMandateEditorView) {
     return null;
-  }
-
-  const onboardingBootstrap = asRecord(lifecycleRecord['lastOnboardingBootstrap']);
-  const pendingApprovedMandateEnvelope = asRecord(lifecycleRecord['pendingApprovedMandateEnvelope']);
-  const approvedMandateEnvelope =
-    pendingApprovedMandateEnvelope ??
-    asRecord(
-      asRecord(
-        asRecord(
-          asRecord(onboardingBootstrap?.['rootedWalletContext'])?.['metadata'],
-        )?.['approvedMandateEnvelope'],
-      ),
-    );
-  const managedAgentMandates = Array.isArray(approvedMandateEnvelope?.['managedAgentMandates'])
-    ? approvedMandateEnvelope['managedAgentMandates']
-    : [];
-  const firstManagedMandate = managedAgentMandates
-    .map((candidate) => asRecord(candidate))
-    .find(
-      (candidate) => candidate && readString(candidate['agentType']) === 'ember-lending',
-    );
-
-  if (!firstManagedMandate) {
-    return null;
-  }
-
-  const settings = asRecord(firstManagedMandate['settings']);
-  const laneLabel = formatManagedLaneLabel(
-    readString(settings?.['network']),
-    readString(settings?.['protocol']),
-  );
-  const allocationCap = readFiniteNumber(settings?.['maxAllocationPct']);
-  const allocationSummary =
-    allocationCap !== null ? `${allocationCap}% allocation cap` : null;
-
-  let mandateSummary: string | null = null;
-  if (Array.isArray(onboardingBootstrap?.['mandates'])) {
-    const managedMandateSource = onboardingBootstrap['mandates']
-      .map((candidate) => asRecord(candidate))
-      .find(
-        (candidate) => candidate && readString(candidate['agent_id']) === 'ember-lending',
-      );
-    mandateSummary = readString(managedMandateSource?.['mandate_summary']);
   }
 
   return {
-    title: 'Ember Lending',
-    detailHref: '/hire-agents/agent-ember-lending',
-    laneLabel,
-    mandateSummary,
-    allocationSummary,
-    reservationSummary: normalizeReservationSummaryForDisplay(
-      buildReservationSummaryFromBootstrap(onboardingBootstrap),
-    ),
+    title: managedMandateEditorView.title,
+    detailHref: `/hire-agents/${managedMandateEditorView.targetAgentRouteId}`,
+    laneLabel: managedMandateEditorView.laneLabel,
+    mandateSummary: managedMandateEditorView.mandateSummary,
+    reservationSummary: managedMandateEditorView.reservationSummary,
   };
 }
 
@@ -714,37 +760,19 @@ type EmberLendingRuntimeView = {
 };
 
 function buildEmberLendingRuntimeView(
-  lifecycleState: ThreadLifecycle | undefined,
+  params: {
+    lifecycleState: ThreadLifecycle | undefined;
+    domainProjection: Record<string, unknown> | undefined;
+  },
 ): EmberLendingRuntimeView | null {
-  const lifecycleRecord = asRecord(lifecycleState);
-  if (!lifecycleRecord) {
-    return null;
-  }
-
-  const mandateContext = asRecord(lifecycleRecord['mandateContext']);
-  const lastPortfolioState = asRecord(lifecycleRecord['lastPortfolioState']);
-  const portfolioReservation = readFirstRecordFromArray(lastPortfolioState?.['reservations']);
-  const portfolioOwnedUnit = readPortfolioStateOwnedUnit(lastPortfolioState);
-  const portfolioNetwork =
-    readString(portfolioOwnedUnit?.['network']) ?? readString(portfolioReservation?.['network']);
-  const portfolioProtocol = readLaneProtocolFromControlPath(
-    readString(portfolioReservation?.['control_path']),
-  );
+  const lifecycleRecord = asRecord(params.lifecycleState);
+  const managedMandateEditorView = readManagedMandateEditorView(params.domainProjection);
   const runtimeView: EmberLendingRuntimeView = {
-    phase: readString(lifecycleRecord['phase']),
-    laneLabel: formatManagedLaneLabel(
-      readString(mandateContext?.['network']) ?? portfolioNetwork,
-      readString(mandateContext?.['protocol']) ?? portfolioProtocol,
-    ),
-    walletAddress: readString(lifecycleRecord['walletAddress']),
-    mandateSummary:
-      readString(lifecycleRecord['mandateSummary']) ??
-      readString(lastPortfolioState?.['mandate_summary']) ??
-      readString(asRecord(lastPortfolioState?.['mandate'])?.['summary']),
-    reservationSummary: normalizeReservationSummaryForDisplay(
-      readString(lifecycleRecord['lastReservationSummary']) ??
-        buildReservationSummaryFromBootstrap(lastPortfolioState),
-    ),
+    phase: readString(lifecycleRecord?.['phase']),
+    laneLabel: managedMandateEditorView?.laneLabel ?? null,
+    walletAddress: managedMandateEditorView?.walletAddress ?? null,
+    mandateSummary: managedMandateEditorView?.mandateSummary ?? null,
+    reservationSummary: managedMandateEditorView?.reservationSummary ?? null,
   };
 
   return runtimeView.phase ||
@@ -754,6 +782,167 @@ function buildEmberLendingRuntimeView(
     runtimeView.reservationSummary
     ? runtimeView
     : null;
+}
+
+function ManagedMandateEditorCard(props: {
+  view: ManagedMandateEditorView;
+  onSave?: (input: ManagedMandateEditorSubmitInput) => Promise<void> | void;
+}) {
+  const initialRootAsset = normalizeManagedMandateAssetSymbol(
+    readString(asRecord(props.view.managedMandate?.['asset_intent'])?.['root_asset']) ?? '',
+  );
+  const initialAllowedAssets = Array.isArray(props.view.managedMandate?.['allowed_assets'])
+    ? props.view.managedMandate?.['allowed_assets']
+        .map((value) => (typeof value === 'string' ? normalizeManagedMandateAssetSymbol(value) : ''))
+        .filter((value) => value.length > 0)
+    : [];
+  const initialAllowedAssetsValue = initialAllowedAssets.join(', ');
+  const [rootAsset, setRootAsset] = useState(initialRootAsset);
+  const [allowedAssetsInput, setAllowedAssetsInput] = useState(initialAllowedAssetsValue);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setRootAsset(initialRootAsset);
+    setAllowedAssetsInput(initialAllowedAssetsValue);
+    setSubmitError(null);
+  }, [initialAllowedAssetsValue, initialRootAsset, props.view.mandateRef]);
+
+  const assetIntent = asRecord(props.view.managedMandate?.['asset_intent']);
+  const network = readString(assetIntent?.['network']) ?? 'arbitrum';
+  const controlPath = readString(assetIntent?.['control_path']) ?? 'lending.supply';
+  const benchmarkAsset = readString(assetIntent?.['benchmark_asset']) ?? 'USD';
+  const allocationBasis = readString(props.view.managedMandate?.['allocation_basis']) ?? 'allocable_idle';
+
+  const handleSave = async () => {
+    if (!props.onSave) {
+      return;
+    }
+
+    const normalizedRootAsset = normalizeManagedMandateAssetSymbol(rootAsset);
+    if (normalizedRootAsset.length === 0) {
+      setSubmitError('Root asset is required.');
+      return;
+    }
+
+    const allowedAssets = parseManagedMandateAssetList(allowedAssetsInput);
+    const normalizedAllowedAssets = allowedAssets.includes(normalizedRootAsset)
+      ? allowedAssets
+      : [normalizedRootAsset, ...allowedAssets];
+
+    if (normalizedAllowedAssets.length === 0) {
+      setSubmitError('At least one allowed asset is required.');
+      return;
+    }
+
+    setIsSaving(true);
+    setSubmitError(null);
+    try {
+      await props.onSave({
+        ownerAgentId: props.view.ownerAgentId,
+        targetAgentId: props.view.targetAgentId,
+        targetAgentRouteId: props.view.targetAgentRouteId,
+        mandateSummary: buildManagedMandateSummary(normalizedAllowedAssets),
+        managedMandate: {
+          allocation_basis: allocationBasis,
+          allowed_assets: normalizedAllowedAssets,
+          asset_intent: {
+            root_asset: normalizedRootAsset,
+            network,
+            benchmark_asset: benchmarkAsset,
+            intent: readString(assetIntent?.['intent']) ?? 'deploy',
+            control_path: controlPath,
+          },
+        },
+      });
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Managed mandate update failed.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#1a1a1a] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Managed mandate
+          </div>
+          <div className="mt-2 text-base font-semibold text-white">{props.view.title}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+              {network}
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+              {controlPath}
+            </span>
+          </div>
+        </div>
+        {props.view.mandateRef ? (
+          <div className="text-right text-[11px] uppercase tracking-[0.18em] text-white/35">
+            {props.view.mandateRef}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">Root asset</label>
+          <input
+            type="text"
+            value={rootAsset}
+            onChange={(event) => setRootAsset(event.target.value)}
+            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">Allowed assets</label>
+          <input
+            type="text"
+            value={allowedAssetsInput}
+            onChange={(event) => setAllowedAssetsInput(event.target.value)}
+            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+          />
+          <div className="mt-2 text-xs text-gray-500">Comma-separated asset symbols.</div>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">Summary preview</div>
+        <div className="mt-2 text-sm leading-relaxed text-gray-300">
+          {buildManagedMandateSummary(
+            (() => {
+              const normalizedRootAsset = normalizeManagedMandateAssetSymbol(rootAsset);
+              const allowedAssets = parseManagedMandateAssetList(allowedAssetsInput);
+              return normalizedRootAsset.length === 0
+                ? allowedAssets
+                : allowedAssets.includes(normalizedRootAsset)
+                  ? allowedAssets
+                  : [normalizedRootAsset, ...allowedAssets];
+            })(),
+          )}
+        </div>
+      </div>
+
+      {submitError ? (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {submitError}
+        </div>
+      ) : null}
+
+      <div className="mt-5 flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={!props.onSave || isSaving}
+          className="rounded-lg bg-[#fd6731] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#e55a28] disabled:opacity-60"
+        >
+          {isSaving ? 'Saving...' : 'Save managed mandate'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 type PiExampleChatCard = {
@@ -958,10 +1147,12 @@ export function AgentDetailPage({
   messages = [],
   messageSnapshotEpoch = 0,
   lifecycleState,
+  domainProjection,
   settings,
   onSendChatMessage,
   onSettingsChange,
   onSettingsSave,
+  onManagedMandateSave,
 }: AgentDetailPageProps) {
   const showPostHireLayout = isHired || Boolean(isFiring);
   const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
@@ -972,24 +1163,25 @@ export function AgentDetailPage({
         : null,
     [agentConfig.onboardingOwnerAgentId],
   );
+  const managedMandateEditorView = useMemo(
+    () => readManagedMandateEditorView(domainProjection),
+    [domainProjection],
+  );
   const emberLendingRuntimeView = useMemo(
-    () => (agentId === 'agent-ember-lending' ? buildEmberLendingRuntimeView(lifecycleState) : null),
-    [agentId, lifecycleState],
+    () =>
+      agentId === 'agent-ember-lending'
+        ? buildEmberLendingRuntimeView({ lifecycleState, domainProjection })
+        : null,
+    [agentId, domainProjection, lifecycleState],
   );
   const isPortfolioAgent = agentId === 'agent-portfolio-manager';
   const portfolioManagerManagedAgentView = useMemo(
-    () =>
-      isPortfolioAgent ? buildPortfolioManagerManagedAgentView(lifecycleState) : null,
-    [isPortfolioAgent, lifecycleState],
+    () => (isPortfolioAgent ? buildPortfolioManagerManagedAgentView(domainProjection) : null),
+    [domainProjection, isPortfolioAgent],
   );
   const emberLendingChatEnabled =
     agentId === 'agent-ember-lending' &&
-    emberLendingRuntimeView?.phase === 'active' &&
-    Boolean(
-      emberLendingRuntimeView.walletAddress ||
-        emberLendingRuntimeView.mandateSummary ||
-        emberLendingRuntimeView.reservationSummary,
-    );
+    emberLendingRuntimeView?.phase === 'active';
   const chatEnabled =
     agentId === 'agent-pi-example' ||
     isPortfolioAgent ||
@@ -1339,8 +1531,13 @@ export function AgentDetailPage({
       onInterruptSubmit={onInterruptSubmit}
     />
   ) : null;
+  const showManagedLendingRuntimeCards = Boolean(
+    emberLendingRuntimeView &&
+      (emberLendingRuntimeView.mandateSummary ||
+        emberLendingRuntimeView.reservationSummary),
+  );
   const managedAgentContextCards =
-    portfolioManagerManagedAgentView || emberLendingRuntimeView ? (
+    portfolioManagerManagedAgentView || showManagedLendingRuntimeCards || managedMandateEditorView ? (
       <div className="mt-6 space-y-5">
         {portfolioManagerManagedAgentView ? (
           <div className="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
@@ -1394,29 +1591,14 @@ export function AgentDetailPage({
                     </p>
                   </div>
                 ) : null}
-                {portfolioManagerManagedAgentView.allocationSummary ||
-                portfolioManagerManagedAgentView.reservationSummary ? (
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    {portfolioManagerManagedAgentView.allocationSummary ? (
-                      <div className="rounded-xl border border-white/10 bg-[#151515] p-4">
-                        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                          Allocation
-                        </div>
-                        <div className="mt-2 text-sm text-gray-200">
-                          {portfolioManagerManagedAgentView.allocationSummary}
-                        </div>
-                      </div>
-                    ) : null}
-                    {portfolioManagerManagedAgentView.reservationSummary ? (
-                      <div className="rounded-xl border border-white/10 bg-[#151515] p-4">
-                        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                          Reservation
-                        </div>
-                        <div className="mt-2 text-sm leading-relaxed text-gray-300">
-                          {portfolioManagerManagedAgentView.reservationSummary}
-                        </div>
-                      </div>
-                    ) : null}
+                {portfolioManagerManagedAgentView.reservationSummary ? (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                      Reservation
+                    </div>
+                    <div className="mt-2 text-sm leading-relaxed text-gray-300">
+                      {portfolioManagerManagedAgentView.reservationSummary}
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -1424,7 +1606,7 @@ export function AgentDetailPage({
           </div>
         ) : null}
 
-        {emberLendingRuntimeView ? (
+        {showManagedLendingRuntimeCards && emberLendingRuntimeView ? (
           <div className="grid gap-3 lg:grid-cols-2">
             {emberLendingRuntimeView.mandateSummary ? (
               <div className="min-w-0 rounded-xl border border-white/10 bg-[#151515] p-4">
@@ -1447,6 +1629,13 @@ export function AgentDetailPage({
               </div>
             ) : null}
           </div>
+        ) : null}
+
+        {managedMandateEditorView ? (
+          <ManagedMandateEditorCard
+            view={managedMandateEditorView}
+            onSave={onManagedMandateSave}
+          />
         ) : null}
       </div>
     ) : null;

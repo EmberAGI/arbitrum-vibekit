@@ -15,12 +15,26 @@ const DEFAULT_EMBER_LENDING_AGENT_DEPLOYMENT_URL = 'http://127.0.0.1:3430/ag-ui'
 
 type RuntimeEnv = Record<string, string | undefined>;
 
+export function resolveAgentRuntimeUrl(env: RuntimeEnv, agentId: string): string {
+  switch (agentId) {
+    case PI_EXAMPLE_AGENT_NAME:
+      return env.PI_AGENT_DEPLOYMENT_URL || DEFAULT_PI_AGENT_DEPLOYMENT_URL;
+    case PORTFOLIO_MANAGER_AGENT_NAME:
+      return (
+        env.PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL ||
+        DEFAULT_PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL
+      );
+    case EMBER_LENDING_AGENT_NAME:
+      return env.EMBER_LENDING_AGENT_DEPLOYMENT_URL || DEFAULT_EMBER_LENDING_AGENT_DEPLOYMENT_URL;
+    default:
+      throw new Error(`Unsupported AG-UI runtime agent "${agentId}".`);
+  }
+}
+
 export function buildCopilotRuntimeAgents(env: RuntimeEnv) {
-  const piAgentRuntimeUrl = env.PI_AGENT_DEPLOYMENT_URL || DEFAULT_PI_AGENT_DEPLOYMENT_URL;
-  const portfolioManagerRuntimeUrl =
-    env.PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL || DEFAULT_PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL;
-  const emberLendingRuntimeUrl =
-    env.EMBER_LENDING_AGENT_DEPLOYMENT_URL || DEFAULT_EMBER_LENDING_AGENT_DEPLOYMENT_URL;
+  const piAgentRuntimeUrl = resolveAgentRuntimeUrl(env, PI_EXAMPLE_AGENT_NAME);
+  const portfolioManagerRuntimeUrl = resolveAgentRuntimeUrl(env, PORTFOLIO_MANAGER_AGENT_NAME);
+  const emberLendingRuntimeUrl = resolveAgentRuntimeUrl(env, EMBER_LENDING_AGENT_NAME);
   const agents = {
     [CLMM_AGENT_NAME]: new LangGraphInterruptSnapshotAgent({
       deploymentUrl: env.LANGGRAPH_DEPLOYMENT_URL || 'http://localhost:8124',

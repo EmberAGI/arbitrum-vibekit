@@ -177,6 +177,58 @@ function createOnboardingBootstrap() {
   };
 }
 
+function createLiveManagedAgentPortfolioState() {
+  return {
+    agent_id: 'ember-lending',
+    mandate_ref: 'mandate-ember-lending-live-001',
+    mandate_summary: 'lend USDC and USDT through the managed lending lane',
+    mandate_context: {
+      allocation_basis: 'allocable_idle',
+      allowed_assets: ['USDC', 'USDT'],
+      asset_intent: {
+        root_asset: 'USDC',
+        network: 'arbitrum',
+        benchmark_asset: 'USD',
+        intent: 'deploy',
+        control_path: 'lending.supply',
+      },
+    },
+    agent_wallet: '0x00000000000000000000000000000000000000e1',
+    root_user_wallet: '0x00000000000000000000000000000000000000a1',
+    rooted_wallet_context_id: 'rwc-user-protocol-001',
+    owned_units: [
+      {
+        unit_id: 'unit-usdc-portfolio-001',
+        network: 'arbitrum',
+        root_asset: 'USDC',
+        quantity: '25',
+        reservation_id: 'reservation-ember-lending-001',
+      },
+    ],
+    reservations: [
+      {
+        reservation_id: 'reservation-ember-lending-001',
+        purpose: 'deploy',
+        control_path: 'lending.supply',
+      },
+    ],
+  };
+}
+
+function createUpdatedManagedMandate() {
+  return {
+    allocation_basis: 'allocable_idle',
+    allowed_assets: ['USDC', 'DAI'],
+    asset_intent: {
+      root_asset: 'USDC',
+      network: 'arbitrum',
+      benchmark_asset: 'USD',
+      intent: 'deploy',
+      control_path: 'lending.supply',
+    },
+  };
+}
+
 describe('createPortfolioManagerDomain', () => {
   it('starts hire by moving into onboarding and requesting portfolio-manager setup input', async () => {
     const domain = createPortfolioManagerDomain({
@@ -2857,6 +2909,268 @@ describe('createPortfolioManagerDomain', () => {
     });
   });
 
+  it('emits a live managed-mandate projection from Shared Ember reads during refresh', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as { params?: unknown }) : null;
+        const params =
+          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+            ? (jsonRpcRequest.params as { agent_id?: unknown })
+            : null;
+
+        if (params?.agent_id === 'portfolio-manager') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: 8,
+              portfolio_state: {
+                agent_id: 'portfolio-manager',
+              },
+            },
+          };
+        }
+
+        if (params?.agent_id === 'ember-lending') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-managed-agent-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: 8,
+              portfolio_state: createLiveManagedAgentPortfolioState(),
+            },
+          };
+        }
+
+        throw new Error(`unexpected refresh agent_id: ${String(params?.agent_id ?? 'missing')}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 7,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'tool',
+          name: 'refresh_portfolio_state',
+        },
+      }),
+    ).resolves.toMatchObject({
+      domainProjectionUpdate: {
+        managedMandateEditor: {
+          ownerAgentId: 'agent-portfolio-manager',
+          targetAgentId: 'ember-lending',
+          targetAgentRouteId: 'agent-ember-lending',
+          targetAgentKey: 'ember-lending-primary',
+          targetAgentTitle: 'Ember Lending',
+          mandateRef: 'mandate-ember-lending-live-001',
+          mandateSummary: 'lend USDC and USDT through the managed lending lane',
+          managedMandate: {
+            allocation_basis: 'allocable_idle',
+            allowed_assets: ['USDC', 'USDT'],
+            asset_intent: {
+              root_asset: 'USDC',
+              network: 'arbitrum',
+              benchmark_asset: 'USD',
+              intent: 'deploy',
+              control_path: 'lending.supply',
+            },
+          },
+          agentWallet: '0x00000000000000000000000000000000000000e1',
+          rootUserWallet: '0x00000000000000000000000000000000000000a1',
+          rootedWalletContextId: 'rwc-user-protocol-001',
+          reservation: {
+            reservationId: 'reservation-ember-lending-001',
+            purpose: 'deploy',
+            controlPath: 'lending.supply',
+            rootAsset: 'USDC',
+            quantity: '25',
+          },
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-read-managed-agent-portfolio-state',
+      method: 'subagent.readPortfolioState.v1',
+      params: {
+        agent_id: 'ember-lending',
+      },
+    });
+  });
+
+  it('routes post-activation managed-mandate edits through the PM-owned protocol command and rehydrates live state', async () => {
+    let managedAgentReadCount = 0;
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null
+            ? (request as { method?: unknown; params?: unknown })
+            : null;
+        const method = jsonRpcRequest?.method;
+        const params =
+          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+            ? (jsonRpcRequest.params as { agent_id?: unknown })
+            : null;
+
+        if (method === 'subagent.readPortfolioState.v1' && params?.agent_id === 'ember-lending') {
+          const currentReadCount = managedAgentReadCount;
+          managedAgentReadCount += 1;
+
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-managed-agent-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: currentReadCount === 0 ? 8 : 9,
+              portfolio_state:
+                currentReadCount === 0
+                  ? createLiveManagedAgentPortfolioState()
+                  : {
+                      ...createLiveManagedAgentPortfolioState(),
+                      mandate_summary: 'lend USDC and DAI through the managed lending lane',
+                      mandate_context: createUpdatedManagedMandate(),
+                    },
+            },
+          };
+        }
+
+        if (method === 'orchestrator.updateManagedMandate.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-update-managed-mandate',
+            result: {
+              protocol_version: 'v1',
+              revision: 9,
+              committed_event_ids: ['evt-managed-mandate-1'],
+              mandate: {
+                mandate_ref: 'mandate-ember-lending-live-001',
+                agent_id: 'ember-lending',
+                mandate_summary: 'lend USDC and DAI through the managed lending lane',
+                managed_mandate: createUpdatedManagedMandate(),
+              },
+            },
+          };
+        }
+
+        throw new Error(`unexpected method: ${String(method ?? 'missing')}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: {
+            agent_id: 'portfolio-manager',
+          },
+          lastSharedEmberRevision: 8,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'update_managed_mandate',
+          input: {
+            targetAgentId: 'ember-lending',
+            mandateSummary: 'lend USDC and DAI through the managed lending lane',
+            managedMandate: createUpdatedManagedMandate(),
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 9,
+      },
+      domainProjectionUpdate: {
+        managedMandateEditor: {
+          mandateSummary: 'lend USDC and DAI through the managed lending lane',
+          managedMandate: createUpdatedManagedMandate(),
+        },
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Managed mandate updated through Shared Ember Domain Service.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'shared-ember-managed-mandate',
+              revision: 9,
+              committedEventIds: ['evt-managed-mandate-1'],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-update-managed-mandate',
+      method: 'orchestrator.updateManagedMandate.v1',
+      params: {
+        idempotency_key: expect.stringMatching(/^idem-update-managed-mandate-/),
+        expected_revision: 8,
+        occurred_at: expect.any(String),
+        agent_id: 'ember-lending',
+        mandate_ref: 'mandate-ember-lending-live-001',
+        mandate_summary: 'lend USDC and DAI through the managed lending lane',
+        managed_mandate: createUpdatedManagedMandate(),
+      },
+    });
+  });
+
   it('signs, registers, and acknowledges redelegation work from the committed outbox', async () => {
     const rootSignedDelegation = createSignedRootDelegation(
       '0x00000000000000000000000000000000000000c1',
@@ -3208,8 +3522,38 @@ describe('createPortfolioManagerDomain', () => {
   });
 
   it('injects the portfolio mandate and managed lending mandate set into system context', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null
+            ? (request as { method?: unknown; params?: unknown })
+            : null;
+        const method = jsonRpcRequest?.method;
+        const params =
+          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+            ? (jsonRpcRequest.params as { agent_id?: unknown })
+            : null;
+
+        if (method === 'subagent.readPortfolioState.v1' && params?.agent_id === 'ember-lending') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-system-context-managed-agent-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: 4,
+              portfolio_state: createLiveManagedAgentPortfolioState(),
+            },
+          };
+        }
+
+        throw new Error(`unexpected method: ${String(method ?? 'missing')}`);
+      }),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
     const domain = createPortfolioManagerDomain({
       agentId: 'portfolio-manager',
+      protocolHost,
     });
 
     await expect(
@@ -3230,17 +3574,13 @@ describe('createPortfolioManagerDomain', () => {
       }),
     ).resolves.toEqual(
       expect.arrayContaining([
-        '  <portfolio_mandate mandate_ref="mandate-portfolio-protocol-001" risk_level="medium">preserve direct-user liquidity</portfolio_mandate>',
         '  <managed_agent_mandates>',
-        '    <managed_agent agent_key="ember-lending-primary" agent_type="ember-lending" approved="true" mandate_ref="mandate-ember-lending-protocol-001">',
-        '      <summary>lend USDC on Aave within medium-risk allocation and health-factor guardrails</summary>',
+        '    <managed_agent agent_key="ember-lending-primary" agent_type="ember-lending" approved="true" mandate_ref="mandate-ember-lending-live-001">',
+        '      <summary>lend USDC and USDT through the managed lending lane</summary>',
         '      <network>arbitrum</network>',
-        '      <protocol>aave</protocol>',
-        '      <allowed_collateral_assets>USDC</allowed_collateral_assets>',
-        '      <allowed_borrow_assets>USDC</allowed_borrow_assets>',
-        '      <max_allocation_pct>35</max_allocation_pct>',
-        '      <max_ltv_bps>7000</max_ltv_bps>',
-        '      <min_health_factor>1.25</min_health_factor>',
+        '      <control_path>lending.supply</control_path>',
+        '      <root_asset>USDC</root_asset>',
+        '      <allowed_assets>USDC,USDT</allowed_assets>',
         '    </managed_agent>',
         '  </managed_agent_mandates>',
       ]),

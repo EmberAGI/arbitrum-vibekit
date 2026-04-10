@@ -16,8 +16,11 @@ describe('Hire agents preview route wiring', () => {
     expect(source).toContain("const uiPreviewFixture = uiPreviewEnabled ? parseUiPreviewFixture(searchParams.get('__fixture')) : null;");
     expect(source).toContain('const selectedTab = requestedTab ?? uiPreviewTab;');
     expect(source).toContain('const previewLifecycleState = buildUiPreviewLifecycleState({');
+    expect(source).toContain('const previewDomainProjection = buildUiPreviewDomainProjection({');
     expect(source).toContain('fixture: uiPreviewFixture,');
     expect(source).toContain('lifecycleState={previewLifecycleState}');
+    expect(source).toContain('domainProjection={previewDomainProjection}');
+    expect(source).not.toContain('lastOnboardingBootstrap:');
     expect(source).not.toContain('onboarding={');
   });
 });

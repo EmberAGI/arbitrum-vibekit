@@ -21,6 +21,8 @@ const inactiveAgent: UseAgentConnectionResult = {
   isConnected: false,
   hasLoadedView: false,
   threadId: undefined,
+  domainProjection: {},
+  applyDomainProjection: () => undefined,
   interruptRenderer: null,
   uiError: null,
   clearUiError: () => undefined,

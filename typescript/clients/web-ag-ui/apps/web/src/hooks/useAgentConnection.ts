@@ -162,6 +162,8 @@ export interface UseAgentConnectionResult {
   isConnected: boolean;
   hasLoadedView: boolean;
   threadId: string | undefined;
+  domainProjection: Record<string, unknown>;
+  applyDomainProjection: (projection: Record<string, unknown>) => void;
   interruptRenderer: ReactNode | null;
   uiError: string | null;
   clearUiError: () => void;
@@ -1489,11 +1491,33 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [dispatchCommand, threadId, updateSettings],
   );
 
+  const applyDomainProjection = useCallback((projection: Record<string, unknown>) => {
+    const currentAgent = agentRef.current;
+    if (!currentAgent) return;
+
+    const previousState =
+      hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
+    const previousThread = previousState.thread ?? defaultThreadState;
+
+    currentAgent.setState({
+      ...previousState,
+      thread: {
+        ...previousThread,
+        domainProjection: projection,
+      },
+    });
+  }, [hasStateValues]);
+
   return {
     config,
     isConnected: !!threadId,
     hasLoadedView,
     threadId,
+    domainProjection:
+      typeof threadState.domainProjection === 'object' && threadState.domainProjection !== null
+        ? (threadState.domainProjection as Record<string, unknown>)
+        : {},
+    applyDomainProjection,
     interruptRenderer,
     uiError,
     clearUiError,

@@ -1,17 +1,30 @@
 'use client';
 
-import { use, type ComponentProps } from 'react';
+import { use, useCallback, useEffect, useRef, type ComponentProps } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Message } from '@ag-ui/core';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
 import { getAgentConfig, isRegisteredAgentId } from '@/config/agents';
 import { useAgent } from '@/contexts/AgentContext';
+import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
+import { invokeAgentCommandRoute } from '@/utils/agentCommandRoute';
+import { getAgentThreadId } from '@/utils/agentThread';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
 type UiPreviewFixture = 'managed';
 type AgentRouteTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
 
 const EMPTY_MESSAGES: Message[] = [];
+
+function hasManagedMandateEditorProjection(value: Record<string, unknown> | undefined): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'managedMandateEditor' in value &&
+    typeof value.managedMandateEditor === 'object' &&
+    value.managedMandateEditor !== null
+  );
+}
 
 function parseUiPreviewState(value: string | null): UiPreviewState | null {
   if (value === 'prehire' || value === 'onboarding' || value === 'active') return value;
@@ -47,79 +60,59 @@ function buildUiPreviewLifecycleState(args: {
   if (args.agentId === 'agent-portfolio-manager') {
     return {
       phase: 'active',
-      lastOnboardingBootstrap: {
-        rootedWalletContext: {
-          metadata: {
-            approvedMandateEnvelope: {
-              portfolioMandate: {
-                approved: true,
-                riskLevel: 'medium',
-              },
-              managedAgentMandates: [
-                {
-                  agentKey: 'ember-lending-primary',
-                  agentType: 'ember-lending',
-                  approved: true,
-                  settings: {
-                    network: 'arbitrum',
-                    protocol: 'aave',
-                    allowedCollateralAssets: ['USDC'],
-                    allowedBorrowAssets: ['USDC'],
-                    maxAllocationPct: 35,
-                    maxLtvBps: 7000,
-                    minHealthFactor: '1.25',
-                  },
-                },
-              ],
-            },
-          },
-        },
-        mandates: [
-          {
-            mandate_ref: 'mandate-ember-lending-001',
-            agent_id: 'ember-lending',
-            mandate_summary:
-              'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-          },
-        ],
-        reservations: [
-          {
-            reservation_id: 'reservation-ember-lending-001',
-            purpose: 'deploy',
-            control_path: 'lending.supply',
-          },
-        ],
-        ownedUnits: [
-          {
-            unit_id: 'unit-ember-lending-001',
-            root_asset: 'USDC',
-            quantity: '10',
-            reservation_id: 'reservation-ember-lending-001',
-          },
-        ],
-      },
     } as never;
   }
 
   if (args.agentId === 'agent-ember-lending') {
     return {
       phase: 'active',
-      mandateRef: 'mandate-ember-lending-001',
-      mandateSummary:
-        'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-      mandateContext: {
-        network: 'arbitrum',
-        protocol: 'aave',
-      },
-      walletAddress: '0x00000000000000000000000000000000000000b1',
-      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
-      rootedWalletContextId: 'rwc-ember-lending-thread-001',
-      lastReservationSummary:
-        'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
     } as never;
   }
 
   return undefined;
+}
+
+function buildUiPreviewDomainProjection(args: {
+  agentId: string;
+  fixture: UiPreviewFixture | null;
+  uiState: UiPreviewState | null;
+}): ComponentProps<typeof AgentDetailPage>['domainProjection'] {
+  if (args.uiState !== 'active' || args.fixture !== 'managed') {
+    return undefined;
+  }
+
+  return {
+    managedMandateEditor: {
+      ownerAgentId: 'agent-portfolio-manager',
+      targetAgentId: 'ember-lending',
+      targetAgentRouteId: 'agent-ember-lending',
+      targetAgentKey: 'ember-lending-primary',
+      targetAgentTitle: 'Ember Lending',
+      mandateRef: 'mandate-ember-lending-001',
+      mandateSummary: 'lend USDC on Aave through the managed lending lane',
+      managedMandate: {
+        allocation_basis: 'allocable_idle',
+        allowed_assets: ['USDC'],
+        asset_intent: {
+          root_asset: 'USDC',
+          network: 'arbitrum',
+          benchmark_asset: 'USD',
+          intent: 'deploy',
+          control_path: 'lending.supply',
+        },
+      },
+      agentWallet: '0x00000000000000000000000000000000000000b1',
+      rootUserWallet: '0x00000000000000000000000000000000000000a1',
+      rootedWalletContextId: 'rwc-ember-lending-thread-001',
+      reservation: {
+        reservationId: 'reservation-ember-lending-001',
+        purpose: 'deploy',
+        controlPath: 'lending.supply',
+        rootAsset: 'USDC',
+        quantity: '10',
+      },
+    },
+  };
 }
 
 export default function AgentDetailRoute({ params }: { params: Promise<{ id: string }> }) {
@@ -127,6 +120,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const router = useRouter();
   const searchParams = useSearchParams();
   const agent = useAgent();
+  const { privyWallet } = usePrivyWalletClient();
   const activeAgentId = agent.config.id;
   const routeAgentId = id;
   const routeHasRegisteredAgent = isRegisteredAgentId(routeAgentId);
@@ -148,6 +142,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         ? agent.profile.tokens
         : selectedConfig.tokens ?? [],
   };
+  const projectionHydrationKeyRef = useRef<string | null>(null);
 
   const handleBack = () => {
     router.push('/hire-agents');
@@ -173,6 +168,87 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const uiPreviewTab = uiPreviewEnabled ? parseAgentRouteTab(searchParams.get('__tab')) : null;
   const uiPreviewFixture = uiPreviewEnabled ? parseUiPreviewFixture(searchParams.get('__fixture')) : null;
   const selectedTab = requestedTab ?? uiPreviewTab;
+  const selectedLifecyclePhase = agent.uiState.lifecycle?.phase;
+  const hasManagedProjection = hasManagedMandateEditorProjection(agent.domainProjection);
+  const portfolioManagerThreadId =
+    selectedAgentId === 'agent-portfolio-manager' && agent.threadId
+      ? agent.threadId
+      : getAgentThreadId('agent-portfolio-manager', privyWallet?.address);
+
+  const handleManagedMandateSave = useCallback(
+    async (input: Parameters<NonNullable<ComponentProps<typeof AgentDetailPage>['onManagedMandateSave']>>[0]) => {
+      if (!portfolioManagerThreadId) {
+        throw new Error('Connect the managed wallet to update the lending mandate.');
+      }
+
+      const portfolioManagerUpdateResult = await invokeAgentCommandRoute({
+        agentId: 'agent-portfolio-manager',
+        threadId: portfolioManagerThreadId,
+        command: {
+          name: 'update_managed_mandate',
+          input: {
+            targetAgentId: input.targetAgentId,
+            mandateSummary: input.mandateSummary,
+            managedMandate: input.managedMandate,
+          },
+        },
+      });
+
+      if (selectedAgentId === 'agent-portfolio-manager' && portfolioManagerUpdateResult.domainProjection) {
+        agent.applyDomainProjection(portfolioManagerUpdateResult.domainProjection);
+      }
+
+      if (selectedAgentId === 'agent-ember-lending' && agent.threadId) {
+        const lendingHydrationResult = await invokeAgentCommandRoute({
+          agentId: 'agent-ember-lending',
+          threadId: agent.threadId,
+          command: {
+            name: 'hydrate_runtime_projection',
+          },
+        });
+        if (lendingHydrationResult.domainProjection) {
+          agent.applyDomainProjection(lendingHydrationResult.domainProjection);
+        }
+      }
+    },
+    [agent, agent.threadId, portfolioManagerThreadId, selectedAgentId],
+  );
+
+  useEffect(() => {
+    if (!agent.threadId || !agent.isHired || selectedLifecyclePhase !== 'active' || hasManagedProjection) {
+      return;
+    }
+
+    const commandName =
+      selectedAgentId === 'agent-portfolio-manager'
+        ? 'refresh_portfolio_state'
+        : selectedAgentId === 'agent-ember-lending'
+          ? 'hydrate_runtime_projection'
+          : null;
+    if (!commandName) {
+      return;
+    }
+
+    const hydrationKey = `${selectedAgentId}:${agent.threadId}:${commandName}`;
+    if (projectionHydrationKeyRef.current === hydrationKey) {
+      return;
+    }
+    projectionHydrationKeyRef.current = hydrationKey;
+
+    void invokeAgentCommandRoute({
+      agentId: selectedAgentId,
+      threadId: agent.threadId,
+      command: {
+        name: commandName,
+      },
+    })
+      .then((result) => {
+        if (result.domainProjection) {
+          agent.applyDomainProjection(result.domainProjection);
+        }
+      })
+      .catch(() => undefined);
+  }, [agent, agent.isHired, agent.threadId, hasManagedProjection, selectedAgentId, selectedLifecyclePhase]);
 
   if (uiPreviewState) {
     const previewAgentId = routeHasRegisteredAgent ? routeAgentId : selectedAgentId;
@@ -181,6 +257,11 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
 
     const isHired = uiPreviewState !== 'prehire';
     const previewLifecycleState = buildUiPreviewLifecycleState({
+      agentId: previewAgentId,
+      fixture: uiPreviewFixture,
+      uiState: uiPreviewState,
+    });
+    const previewDomainProjection = buildUiPreviewDomainProjection({
       agentId: previewAgentId,
       fixture: uiPreviewFixture,
       uiState: uiPreviewState,
@@ -251,10 +332,12 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         messages={EMPTY_MESSAGES}
         messageSnapshotEpoch={0}
         lifecycleState={previewLifecycleState}
+        domainProjection={previewDomainProjection}
         settings={agent.settings}
         onSendChatMessage={() => undefined}
         onSettingsChange={() => undefined}
         onSettingsSave={() => undefined}
+        onManagedMandateSave={undefined}
       />
     );
   }
@@ -314,10 +397,12 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       messages={agent.messages}
       messageSnapshotEpoch={agent.messageSnapshotEpoch}
       lifecycleState={agent.uiState.lifecycle}
+      domainProjection={agent.domainProjection}
       settings={agent.settings}
       onSendChatMessage={agent.sendChatMessage}
       onSettingsChange={agent.updateSettings}
       onSettingsSave={agent.saveSettings}
+      onManagedMandateSave={handleManagedMandateSave}
     />
   );
 }

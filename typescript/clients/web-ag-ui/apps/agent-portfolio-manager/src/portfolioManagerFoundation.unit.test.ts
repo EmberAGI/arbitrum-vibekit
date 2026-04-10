@@ -48,6 +48,9 @@ describe('createPortfolioManagerAgentConfig', () => {
           name: 'refresh_portfolio_state',
         },
         {
+          name: 'update_managed_mandate',
+        },
+        {
           name: 'refresh_redelegation_work',
         },
         {
@@ -142,7 +145,7 @@ describe('createPortfolioManagerAgentConfig', () => {
     });
   });
 
-  it('surfaces the rooted wallet address in system context after onboarding', () => {
+  it('surfaces the active portfolio wallet address in system context after onboarding', () => {
     const config = createPortfolioManagerAgentConfig({
       OPENROUTER_API_KEY: 'test-openrouter-key',
     });
@@ -163,12 +166,12 @@ describe('createPortfolioManagerAgentConfig', () => {
             },
           },
           lastRootedWalletContextId: 'rwc-1',
-          activeWalletAddress: null,
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: null,
         },
       }),
     ).resolves.toContain(
-      '  <user_portfolio_wallet_address source="rooted_wallet_context">0x00000000000000000000000000000000000000a1</user_portfolio_wallet_address>',
+      '  <active_portfolio_wallet_address>0x00000000000000000000000000000000000000a1</active_portfolio_wallet_address>',
     );
   });
 });
