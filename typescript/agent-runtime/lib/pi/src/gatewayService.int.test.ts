@@ -273,66 +273,11 @@ describe('pi gateway service integration', () => {
       messageId: 'pi:exec-1:assistant:1',
       delta: 'Pi is connected.',
     });
-    expect(runEvents).toContainEqual({
-      type: EventType.STATE_SNAPSHOT,
-      snapshot: {
-        thread: {
-          id: 'thread-1',
-            task: {
-              id: 'exec-1',
-              taskStatus: {
-                state: 'working',
-                message: {
-                  content: 'Pi is connected.',
-                },
-              },
-            },
-          projection: {
-            source: 'pi-runtime-gateway',
-            canonicalIds: {
-              piThreadId: 'thread-1',
-              piExecutionId: 'exec-1',
-            },
-          },
-          activity: {
-            telemetry: [],
-            events: [
-              {
-                type: 'dispatch-response',
-                parts: [
-                  {
-                    kind: 'a2ui',
-                    data: {
-                      threadId: 'thread-1',
-                      executionId: 'exec-1',
-                      payload: {
-                        kind: 'status-card',
-                        payload: { headline: 'Connected' },
-                      },
-                    },
-                  },
-                ],
-              },
-            ],
-          },
-          messages: [
-            {
-              id: 'user-msg-1',
-              role: 'user',
-              content: 'Connect now',
-            },
-            {
-              id: 'assistant-msg-1',
-              role: 'assistant',
-              content: 'Pi is connected.',
-            },
-          ],
-          artifacts: {
-            current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
-          },
-        },
-      },
-    });
+    expect(
+      runEvents.filter(
+        (event) => event.type === EventType.STATE_SNAPSHOT || event.type === EventType.STATE_DELTA,
+      ),
+    ).toEqual([]);
     expect(runEvents).toContainEqual({
       type: EventType.RUN_FINISHED,
       threadId: 'thread-1',
@@ -692,30 +637,6 @@ describe('pi gateway service integration', () => {
         runId: 'run-2',
       },
       {
-        type: EventType.STATE_SNAPSHOT,
-        snapshot: {
-          thread: {
-            id: 'thread-2',
-            task: {
-              id: 'exec-2',
-              taskStatus: {
-                state: 'working',
-                message: {
-                  content: 'Awaiting steering',
-                },
-              },
-            },
-            projection: {
-              source: 'pi-runtime-gateway',
-              canonicalIds: {
-                piThreadId: 'thread-2',
-                piExecutionId: 'exec-2',
-              },
-            },
-          },
-        },
-      },
-      {
         type: EventType.RUN_FINISHED,
         threadId: 'thread-2',
         runId: 'run-2',
@@ -776,30 +697,6 @@ describe('pi gateway service integration', () => {
         runId: 'run-3',
       },
       {
-        type: EventType.STATE_SNAPSHOT,
-        snapshot: {
-          thread: {
-            id: 'thread-3',
-            task: {
-              id: 'exec-3',
-              taskStatus: {
-                state: 'working',
-                message: {
-                  content: 'Awaiting follow-up',
-                },
-              },
-            },
-            projection: {
-              source: 'pi-runtime-gateway',
-              canonicalIds: {
-                piThreadId: 'thread-3',
-                piExecutionId: 'exec-3',
-              },
-            },
-          },
-        },
-      },
-      {
         type: EventType.RUN_FINISHED,
         threadId: 'thread-3',
         runId: 'run-3',
@@ -850,30 +747,6 @@ describe('pi gateway service integration', () => {
         type: EventType.RUN_STARTED,
         threadId: 'thread-5',
         runId: 'run-5',
-      },
-      {
-        type: EventType.STATE_SNAPSHOT,
-        snapshot: {
-          thread: {
-            id: 'thread-5',
-            task: {
-              id: 'exec-5',
-              taskStatus: {
-                state: 'input-required',
-                message: {
-                  content: 'Awaiting explicit resume',
-                },
-              },
-            },
-            projection: {
-              source: 'pi-runtime-gateway',
-              canonicalIds: {
-                piThreadId: 'thread-5',
-                piExecutionId: 'exec-5',
-              },
-            },
-          },
-        },
       },
       {
         type: EventType.RUN_FINISHED,

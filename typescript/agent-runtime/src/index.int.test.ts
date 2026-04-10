@@ -19,6 +19,7 @@ type GatewayEvent = Awaited<ReturnType<AgentRuntimeService['run']>> extends
   : never;
 type RunStartedEvent = Extract<GatewayEvent, { type: 'RUN_STARTED' }>;
 type StateSnapshotEvent = Extract<GatewayEvent, { snapshot: unknown }>;
+type StateDeltaEvent = Extract<GatewayEvent, { delta: unknown }>;
 type MessagesSnapshotEvent = Extract<GatewayEvent, { messages: unknown }>;
 type InternalPostgresStatement = {
   tableName: string;
@@ -505,6 +506,16 @@ function isStateSnapshotEvent(event: GatewayEvent): event is StateSnapshotEvent 
   return typeof event === 'object' && event !== null && 'snapshot' in event;
 }
 
+function isStateDeltaEvent(event: GatewayEvent): event is StateDeltaEvent {
+  return (
+    typeof event === 'object' &&
+    event !== null &&
+    'type' in event &&
+    event.type === 'STATE_DELTA' &&
+    'delta' in event
+  );
+}
+
 function isMessagesSnapshotEvent(event: GatewayEvent): event is MessagesSnapshotEvent {
   return typeof event === 'object' && event !== null && 'messages' in event;
 }
@@ -534,6 +545,13 @@ function createLifecycleDomain() {
       onboardingStep: null,
       operatorNote: null,
     };
+  const buildLifecycleDomainProjection = (state: LifecycleState) => ({
+    managedLifecycle: {
+      phase: state.phase,
+      ...(state.onboardingStep ? { onboardingStep: state.onboardingStep } : {}),
+      ...(state.operatorNote ? { operatorNote: state.operatorNote } : {}),
+    },
+  });
 
   return {
     lifecycle: {
@@ -595,6 +613,7 @@ function createLifecycleDomain() {
           phases.set(threadId, nextState);
           return {
             state: nextState,
+            domainProjectionUpdate: buildLifecycleDomainProjection(nextState),
             outputs: {
               status: {
                 executionStatus: 'interrupted' as const,
@@ -629,6 +648,7 @@ function createLifecycleDomain() {
           phases.set(threadId, nextState);
           return {
             state: nextState,
+            domainProjectionUpdate: buildLifecycleDomainProjection(nextState),
             outputs: {
               status: {
                 executionStatus: 'working' as const,
@@ -656,6 +676,7 @@ function createLifecycleDomain() {
           phases.set(threadId, nextState);
           return {
             state: nextState,
+            domainProjectionUpdate: buildLifecycleDomainProjection(nextState),
             outputs: {
               status: {
                 executionStatus: 'completed' as const,
@@ -682,6 +703,7 @@ function createLifecycleDomain() {
           phases.set(threadId, nextState);
           return {
             state: nextState,
+            domainProjectionUpdate: buildLifecycleDomainProjection(nextState),
             outputs: {
               status: {
                 executionStatus: 'completed' as const,
@@ -817,7 +839,7 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const hireSnapshot = hireEvents.find(isStateSnapshotEvent);
+    const hireDelta = hireEvents.find(isStateDeltaEvent);
     expect(latestUserText).toBe('Please hire the agent.');
     expect(
       hasSystemPromptFragments(observedSystemPrompts, [
@@ -844,51 +866,39 @@ describe('agent-runtime integration', () => {
         content: 'Ready for a live runtime conversation.',
       },
     });
-    expect(hireSnapshot).toBeDefined();
-    expect(hireSnapshot!.snapshot.thread.lifecycle).toMatchObject({
-      phase: 'onboarding',
-      onboardingStep: 'operator-profile',
-    });
-    expect(hireSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
-      state: 'input-required',
-      message: {
-        content: 'Please provide a short operator note to continue onboarding.',
-      },
-    });
-    expect(hireSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
-      type: 'interrupt-status',
-      interruptType: 'operator-config',
-      payload: {
-        promptKind: 'text-note',
-        inputLabel: 'Operator note',
-        submitLabel: 'Continue agent loop',
-      },
-    });
-    expect(hireSnapshot!.snapshot.thread.activity?.events).toEqual(
+    expect(hireDelta).toBeDefined();
+    expect(hireDelta!.delta).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          type: 'dispatch-response',
-          parts: expect.arrayContaining([
-            expect.objectContaining({
-              kind: 'a2ui',
-              data: expect.objectContaining({
-                payload: expect.objectContaining({
-                  kind: 'interrupt',
-                  payload: expect.objectContaining({
-                    type: 'operator-config',
-                    promptKind: 'text-note',
-                    inputLabel: 'Operator note',
-                    submitLabel: 'Continue agent loop',
-                  }),
-                }),
-              }),
-            }),
-          ]),
-        }),
+        {
+          op: 'replace',
+          path: '/thread/lifecycle/phase',
+          value: 'onboarding',
+        },
+        {
+          op: 'add',
+          path: '/thread/lifecycle/onboardingStep',
+          value: 'operator-profile',
+        },
+        {
+          op: 'replace',
+          path: '/thread/task/taskStatus/state',
+          value: 'input-required',
+        },
+        {
+          op: 'add',
+          path: '/thread/domainProjection',
+          value: {
+            managedLifecycle: {
+              phase: 'onboarding',
+              onboardingStep: 'operator-profile',
+            },
+          },
+        },
       ]),
     );
 
     expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('a2ui');
+    expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('domainProjection');
 
     const resumeEvents = await collectEventSource(
       await runtime.service.run({
@@ -902,25 +912,33 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const resumeSnapshot = resumeEvents.find(isStateSnapshotEvent);
+    const resumeDelta = resumeEvents.find(isStateDeltaEvent);
 
-    expect(resumeSnapshot).toBeDefined();
-    expect(resumeSnapshot!.snapshot.thread.lifecycle).toMatchObject({
-      phase: 'onboarding',
-      onboardingStep: 'delegation-note',
-      operatorNote: 'safe window approved',
-    });
-    expect(resumeSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
-      state: 'working',
-      message: {
-        content: 'Operator note captured. Ready to complete onboarding.',
-      },
-    });
-    expect(resumeSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
-      type: 'lifecycle-status',
-      onboardingStep: 'delegation-note',
-      operatorNote: 'safe window approved',
-    });
+    expect(resumeDelta).toBeDefined();
+    expect(resumeDelta!.delta).toEqual(
+      expect.arrayContaining([
+        {
+          op: 'replace',
+          path: '/thread/lifecycle/onboardingStep',
+          value: 'delegation-note',
+        },
+        {
+          op: 'replace',
+          path: '/thread/lifecycle/operatorNote',
+          value: 'safe window approved',
+        },
+        {
+          op: 'replace',
+          path: '/thread/task/taskStatus/state',
+          value: 'working',
+        },
+        {
+          op: 'add',
+          path: '/thread/domainProjection/managedLifecycle/operatorNote',
+          value: 'safe window approved',
+        },
+      ]),
+    );
 
     expect(persistedThreads.get('thread-1')?.threadState).not.toHaveProperty('a2ui');
 
@@ -936,24 +954,33 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const completeSnapshot = completeEvents.find(isStateSnapshotEvent);
+    const completeDelta = completeEvents.find(isStateDeltaEvent);
 
-    expect(completeSnapshot).toBeDefined();
-    expect(completeSnapshot!.snapshot.thread.lifecycle).toMatchObject({
-      phase: 'hired',
-      operatorNote: 'safe window approved',
-    });
-    expect(completeSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
-      state: 'completed',
-      message: {
-        content: 'Onboarding complete. Agent is now hired.',
-      },
-    });
-    expect(completeSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
-      type: 'lifecycle-status',
-      phase: 'hired',
-      operatorNote: 'safe window approved',
-    });
+    expect(completeDelta).toBeDefined();
+    expect(completeDelta!.delta).toEqual(
+      expect.arrayContaining([
+        {
+          op: 'replace',
+          path: '/thread/lifecycle/phase',
+          value: 'hired',
+        },
+        {
+          op: 'replace',
+          path: '/thread/lifecycle/onboardingStep',
+          value: null,
+        },
+        {
+          op: 'replace',
+          path: '/thread/domainProjection/managedLifecycle/phase',
+          value: 'hired',
+        },
+        {
+          op: 'replace',
+          path: '/thread/task/taskStatus/state',
+          value: 'completed',
+        },
+      ]),
+    );
 
     const fireEvents = await collectEventSource(
       await runtime.service.run({
@@ -967,24 +994,23 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const fireSnapshot = fireEvents.find(isStateSnapshotEvent);
+    const fireDelta = fireEvents.find(isStateDeltaEvent);
 
-    expect(fireSnapshot).toBeDefined();
-    expect(fireSnapshot!.snapshot.thread.lifecycle).toMatchObject({
-      phase: 'fired',
-      operatorNote: 'safe window approved',
-    });
-    expect(fireSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
-      state: 'completed',
-      message: {
-        content: 'Agent moved to fired. Rehire is still available in this thread.',
-      },
-    });
-    expect(fireSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
-      type: 'lifecycle-status',
-      phase: 'fired',
-      operatorNote: 'safe window approved',
-    });
+    expect(fireDelta).toBeDefined();
+    expect(fireDelta!.delta).toEqual(
+      expect.arrayContaining([
+        {
+          op: 'replace',
+          path: '/thread/lifecycle/phase',
+          value: 'fired',
+        },
+        {
+          op: 'replace',
+          path: '/thread/domainProjection/managedLifecycle/phase',
+          value: 'fired',
+        },
+      ]),
+    );
   });
 
   it('executes forwardedProps command before inference when both command and messages are present', async () => {
@@ -1022,20 +1048,24 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const snapshot = events.find(isStateSnapshotEvent);
+    const delta = events.find(isStateDeltaEvent);
 
     expect(inferenceCalls).toBe(0);
-    expect(snapshot).toBeDefined();
-    expect(snapshot!.snapshot.thread.lifecycle).toMatchObject({
-      phase: 'onboarding',
-      onboardingStep: 'operator-profile',
-    });
-    expect(snapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
-      state: 'input-required',
-      message: {
-        content: 'Please provide a short operator note to continue onboarding.',
-      },
-    });
+    expect(delta).toBeDefined();
+    expect(delta!.delta).toEqual(
+      expect.arrayContaining([
+        {
+          op: 'replace',
+          path: '/thread/lifecycle/phase',
+          value: 'onboarding',
+        },
+        {
+          op: 'add',
+          path: '/thread/lifecycle/onboardingStep',
+          value: 'operator-profile',
+        },
+      ]),
+    );
   });
 
   it('logs the final system prompt when DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT is enabled', async () => {

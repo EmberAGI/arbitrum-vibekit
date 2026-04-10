@@ -43,6 +43,7 @@
     "@ag-ui/core": "0.0.47",
     "@mariozechner/pi-agent-core": "0.64.0",
     "@mariozechner/pi-ai": "0.64.0",
-    "agent-runtime-postgres": "workspace:^"
+    "agent-runtime-postgres": "workspace:^",
+    "fast-json-patch": "3.1.1"
   }
 }

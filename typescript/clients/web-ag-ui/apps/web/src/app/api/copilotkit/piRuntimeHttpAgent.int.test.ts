@@ -23,6 +23,12 @@ type RecordedRequest = {
 type AgentRuntimeService = Awaited<
   ReturnType<typeof createPiExampleGatewayService>
 >;
+type StateDeltaEvent = Extract<BaseEvent, { type: EventType.STATE_DELTA }>;
+type JsonPatchOperation = {
+  op: string;
+  path: string;
+  value?: unknown;
+};
 
 function createInput(overrides: Partial<RunAgentInput> = {}): RunAgentInput {
   return {
@@ -142,6 +148,84 @@ async function writeNodeResponse(response: Response, target: ServerResponse): Pr
 
 function findStateSnapshot(events: BaseEvent[]) {
   return [...events].reverse().find((event) => event.type === EventType.STATE_SNAPSHOT);
+}
+
+function findStateDeltas(events: BaseEvent[]) {
+  return events.filter((event): event is StateDeltaEvent => event.type === EventType.STATE_DELTA);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function matchesArtifactData(
+  value: unknown,
+  expected: {
+    type: string;
+    status: string;
+    command?: string;
+  },
+): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (isRecord(value.current) && matchesArtifactData(value.current, expected)) {
+    return true;
+  }
+
+  if (!isRecord(value.data)) {
+    return false;
+  }
+
+  if (value.data.type !== expected.type || value.data.status !== expected.status) {
+    return false;
+  }
+
+  return expected.command === undefined || value.data.command === expected.command;
+}
+
+function matchesDispatchResponseWithA2Ui(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (Array.isArray(value.events)) {
+    return value.events.some((event) => matchesDispatchResponseWithA2Ui(event));
+  }
+
+  if (value.type !== 'dispatch-response' || !Array.isArray(value.parts)) {
+    return false;
+  }
+
+  return value.parts.some((part) => isRecord(part) && part.kind === 'a2ui');
+}
+
+function matchesArtifactActivity(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (Array.isArray(value.events)) {
+    return value.events.some((event) => matchesArtifactActivity(event));
+  }
+
+  return value.type === 'artifact';
+}
+
+function matchesTaskStatusMessage(value: unknown, content: string): boolean {
+  return value === content || (isRecord(value) && value.content === content);
+}
+
+function expectStateDeltaOperation(
+  events: BaseEvent[],
+  predicate: (operation: JsonPatchOperation) => boolean,
+): void {
+  const stateDeltas = findStateDeltas(events);
+  expect(stateDeltas).not.toHaveLength(0);
+  expect(
+    stateDeltas.some((event) => event.delta.some((operation) => predicate(operation as JsonPatchOperation))),
+  ).toBe(true);
 }
 
 function createInternalPostgresHooks() {
@@ -344,40 +428,25 @@ describe('agent-runtime HTTP agent integration', () => {
       runEvents.filter((event) => event.type === EventType.TOOL_CALL_ARGS),
     ).not.toHaveLength(0);
 
-    expect(findStateSnapshot(runEvents)).toEqual(
-      expect.objectContaining({
-        type: EventType.STATE_SNAPSHOT,
-        snapshot: expect.objectContaining({
-          thread: expect.objectContaining({
-            task: expect.objectContaining({
-              taskStatus: expect.objectContaining({
-                state: 'submitted',
-              }),
-            }),
-            artifacts: expect.objectContaining({
-              current: expect.objectContaining({
-                data: expect.objectContaining({
-                  type: 'automation-status',
-                  status: 'scheduled',
-                  command: 'sync',
-                }),
-              }),
-            }),
-            activity: expect.objectContaining({
-              events: expect.arrayContaining([
-                expect.objectContaining({
-                  type: 'dispatch-response',
-                  parts: expect.arrayContaining([
-                    expect.objectContaining({
-                      kind: 'a2ui',
-                    }),
-                  ]),
-                }),
-              ]),
-            }),
-          }),
+    expectStateDeltaOperation(
+      runEvents,
+      (operation) => operation.path === '/thread/task/taskStatus/state' && operation.value === 'submitted',
+    );
+    expectStateDeltaOperation(
+      runEvents,
+      (operation) =>
+        /^\/thread\/artifacts(?:\/|$)/.test(operation.path) &&
+        matchesArtifactData(operation.value, {
+          type: 'automation-status',
+          status: 'scheduled',
+          command: 'sync',
         }),
-      }),
+    );
+    expectStateDeltaOperation(
+      runEvents,
+      (operation) =>
+        /^\/thread\/activity(?:\/|$)/.test(operation.path) &&
+        matchesDispatchResponseWithA2Ui(operation.value),
     );
 
     const automationCancelEvents = await collectEvents(
@@ -396,40 +465,19 @@ describe('agent-runtime HTTP agent integration', () => {
         toolCallName: 'automation_cancel',
       }),
     );
-    expect(findStateSnapshot(automationCancelEvents)).toEqual(
-      expect.objectContaining({
-        type: EventType.STATE_SNAPSHOT,
-        snapshot: expect.objectContaining({
-          thread: expect.objectContaining({
-            task: expect.objectContaining({
-              taskStatus: expect.objectContaining({
-                state: 'completed',
-              }),
-            }),
-            artifacts: expect.objectContaining({
-              current: expect.objectContaining({
-                data: expect.objectContaining({
-                  type: 'automation-status',
-                  status: 'canceled',
-                  command: 'sync',
-                }),
-              }),
-            }),
-            activity: expect.objectContaining({
-              events: expect.arrayContaining([
-                expect.objectContaining({
-                  type: 'dispatch-response',
-                  parts: expect.arrayContaining([
-                    expect.objectContaining({
-                      kind: 'a2ui',
-                    }),
-                  ]),
-                }),
-              ]),
-            }),
-          }),
-        }),
-      }),
+    expectStateDeltaOperation(
+      automationCancelEvents,
+      (operation) => operation.path === '/thread/task/taskStatus/state' && operation.value === 'completed',
+    );
+    expectStateDeltaOperation(
+      automationCancelEvents,
+      (operation) => operation.path === '/thread/artifacts/current/data/status' && operation.value === 'canceled',
+    );
+    expectStateDeltaOperation(
+      automationCancelEvents,
+      (operation) =>
+        /^\/thread\/activity(?:\/|$)/.test(operation.path) &&
+        matchesDispatchResponseWithA2Ui(operation.value),
     );
   });
 
@@ -455,31 +503,15 @@ describe('agent-runtime HTTP agent integration', () => {
         toolCallName: 'request_operator_input',
       }),
     );
-    expect(findStateSnapshot(interruptEvents)).toEqual(
-      expect.objectContaining({
-        type: EventType.STATE_SNAPSHOT,
-        snapshot: expect.objectContaining({
-          thread: expect.objectContaining({
-            task: expect.objectContaining({
-              taskStatus: expect.objectContaining({
-                state: 'input-required',
-              }),
-            }),
-            activity: expect.objectContaining({
-              events: expect.arrayContaining([
-                expect.objectContaining({
-                  type: 'dispatch-response',
-                  parts: expect.arrayContaining([
-                    expect.objectContaining({
-                      kind: 'a2ui',
-                    }),
-                  ]),
-                }),
-              ]),
-            }),
-          }),
-        }),
-      }),
+    expectStateDeltaOperation(
+      interruptEvents,
+      (operation) => operation.path === '/thread/task/taskStatus/state' && operation.value === 'input-required',
+    );
+    expectStateDeltaOperation(
+      interruptEvents,
+      (operation) =>
+        /^\/thread\/activity(?:\/|$)/.test(operation.path) &&
+        matchesDispatchResponseWithA2Ui(operation.value),
     );
 
     const resumedEvents = await collectEvents(
@@ -488,45 +520,25 @@ describe('agent-runtime HTTP agent integration', () => {
         .pipe(verifyEvents()),
     );
 
-    expect(findStateSnapshot(resumedEvents)).toEqual(
-      expect.objectContaining({
-        type: EventType.STATE_SNAPSHOT,
-        snapshot: expect.objectContaining({
-          thread: expect.objectContaining({
-            task: expect.objectContaining({
-              taskStatus: expect.objectContaining({
-                state: 'working',
-                message: {
-                  content: 'Operator input received. Continuing the Pi loop.',
-                },
-              }),
-            }),
-            artifacts: expect.objectContaining({
-              current: expect.objectContaining({
-                data: expect.objectContaining({
-                  type: 'interrupt-status',
-                  status: 'resolved',
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
+    expectStateDeltaOperation(
+      resumedEvents,
+      (operation) => operation.path === '/thread/task/taskStatus/state' && operation.value === 'working',
     );
-    expect(findStateSnapshot(resumedEvents)).toEqual(
-      expect.objectContaining({
-        snapshot: expect.objectContaining({
-          thread: expect.objectContaining({
-            activity: expect.objectContaining({
-              events: expect.arrayContaining([
-                expect.objectContaining({
-                  type: 'artifact',
-                }),
-              ]),
-            }),
-          }),
-        }),
-      }),
+    expectStateDeltaOperation(
+      resumedEvents,
+      (operation) =>
+        /^\/thread\/task\/taskStatus\/message(?:\/content)?$/.test(operation.path) &&
+        matchesTaskStatusMessage(operation.value, 'Operator input received. Continuing the Pi loop.'),
+    );
+    expectStateDeltaOperation(
+      resumedEvents,
+      (operation) => operation.path === '/thread/artifacts/current/data/status' && operation.value === 'resolved',
+    );
+    expectStateDeltaOperation(
+      resumedEvents,
+      (operation) =>
+        /^\/thread\/activity(?:\/|$)/.test(operation.path) &&
+        matchesArtifactActivity(operation.value),
     );
   });
 });

@@ -165,4 +165,44 @@ describe('agentProjection', () => {
     expect(projected?.thread.metrics.apy).toBe(8.46);
     expect(projected?.thread.task?.id).toBe('task-2');
   });
+
+  it('merges partial domain projection payloads onto the previous projected state', () => {
+    const previous = projectDetailStateFromPayload({
+      thread: {
+        domainProjection: {
+          managedMandate: {
+            mandateRef: 'mandate-1',
+            summary: {
+              riskLevel: 'medium',
+            },
+          },
+        },
+      },
+    });
+
+    const projected = projectDetailStateFromPayload(
+      {
+        thread: {
+          domainProjection: {
+            managedMandate: {
+              summary: {
+                status: 'active',
+              },
+            },
+          },
+        },
+      },
+      previous,
+    );
+
+    expect(projected?.thread.domainProjection).toEqual({
+      managedMandate: {
+        mandateRef: 'mandate-1',
+        summary: {
+          riskLevel: 'medium',
+          status: 'active',
+        },
+      },
+    });
+  });
 });

@@ -431,6 +431,7 @@ export interface ThreadState {
   lifecycle?: ThreadLifecycle;
   lastAppliedClientMutationId?: string;
   task?: Task;
+  domainProjection?: Record<string, unknown>;
   onboardingFlow?: OnboardingFlow;
   poolArtifact?: Artifact;
   operatorInput?:
@@ -577,6 +578,7 @@ export const defaultThreadState: ThreadState = {
   },
   lastAppliedClientMutationId: undefined,
   task: undefined,
+  domainProjection: {},
   onboardingFlow: undefined,
   poolArtifact: undefined,
   operatorInput: undefined,

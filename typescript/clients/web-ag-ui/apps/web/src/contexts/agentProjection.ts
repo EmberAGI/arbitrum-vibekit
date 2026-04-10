@@ -15,6 +15,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function mergeProjectedDomainProjection(
+  currentValue: Record<string, unknown>,
+  incomingValue: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...currentValue };
+
+  for (const [key, nextValue] of Object.entries(incomingValue)) {
+    if (Array.isArray(nextValue)) {
+      merged[key] = nextValue;
+      continue;
+    }
+
+    const currentNestedValue = merged[key];
+    if (isRecord(currentNestedValue) && isRecord(nextValue)) {
+      merged[key] = mergeProjectedDomainProjection(currentNestedValue, nextValue);
+      continue;
+    }
+
+    merged[key] = nextValue;
+  }
+
+  return merged;
+}
+
 function cloneInitialState(): ThreadSnapshot {
   return {
     ...initialAgentState,
@@ -62,6 +86,9 @@ function mergeStatePayload(projected: ThreadSnapshot, incoming: Partial<ThreadSn
   const incomingMetrics = isRecord(incomingThread.metrics)
     ? incomingThread.metrics
     : ({} as Partial<ThreadState['metrics']>);
+  const incomingDomainProjection = isRecord(incomingThread.domainProjection)
+    ? incomingThread.domainProjection
+    : undefined;
 
   projected.messages = Array.isArray(incoming.messages) ? incoming.messages : projected.messages;
 
@@ -86,6 +113,14 @@ function mergeStatePayload(projected: ThreadSnapshot, incoming: Partial<ThreadSn
   projected.thread = {
     ...projected.thread,
     ...incomingThread,
+    ...(incomingDomainProjection
+      ? {
+          domainProjection: mergeProjectedDomainProjection(
+            isRecord(projected.thread.domainProjection) ? projected.thread.domainProjection : {},
+            incomingDomainProjection,
+          ),
+        }
+      : {}),
     profile: {
       ...projected.thread.profile,
       ...incomingProfile,

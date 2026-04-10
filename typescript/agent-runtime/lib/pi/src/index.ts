@@ -5,6 +5,7 @@ import {
   type MessagesSnapshotEvent,
   type RunFinishedEvent,
   type RunStartedEvent,
+  type StateDeltaEvent,
   type StateSnapshotEvent,
 } from '@ag-ui/core';
 import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
@@ -16,6 +17,7 @@ import {
   type Model,
   type ToolResultMessage,
 } from '@mariozechner/pi-ai';
+import * as jsonPatch from 'fast-json-patch';
 import {
   buildPiRuntimeInspectionSnapshot,
   buildPiRuntimeMaintenancePlan,
@@ -133,6 +135,7 @@ export type PiRuntimeGatewaySession = {
   };
   a2ui?: PiRuntimeGatewayA2UiPayload;
   activityEvents?: PiRuntimeGatewayActivityEvent[];
+  domainProjection?: Record<string, unknown>;
   threadPatch?: Record<string, unknown>;
 };
 
@@ -245,6 +248,16 @@ const EMPTY_USAGE = {
     total: 0,
   },
 } as const;
+
+type JsonPatchCompare = (
+  left: object,
+  right: object,
+  invertible?: boolean,
+) => Array<Record<string, unknown>>;
+
+const jsonPatchCompare =
+  (jsonPatch as unknown as { compare?: JsonPatchCompare; default?: { compare?: JsonPatchCompare } }).compare ??
+  (jsonPatch as unknown as { default?: { compare?: JsonPatchCompare } }).default?.compare;
 
 const shouldDebugPiGateway = process.env.PI_GATEWAY_DEBUG === 'true';
 const PORTABLE_PI_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -1150,6 +1163,7 @@ export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Rec
         }
       : {}),
     ...(params.messages ? { messages: params.messages } : {}),
+    ...(params.domainProjection ? { domainProjection: params.domainProjection } : {}),
   };
 
   return {
@@ -1158,6 +1172,27 @@ export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Rec
       patchThread: params.threadPatch ?? {},
     }),
   };
+};
+
+export const buildPiRuntimeGatewayStateDeltaEvent = (params: {
+  previousSession: PiRuntimeGatewaySession;
+  session: PiRuntimeGatewaySession;
+}): StateDeltaEvent | null => {
+  const previousSnapshot = buildPiThreadStateSnapshot(params.previousSession);
+  const nextSnapshot = buildPiThreadStateSnapshot(params.session);
+  if (!jsonPatchCompare) {
+    throw new TypeError('fast-json-patch compare export unavailable');
+  }
+  const delta = jsonPatchCompare(previousSnapshot, nextSnapshot, true);
+
+  if (delta.length === 0) {
+    return null;
+  }
+
+  return {
+    type: EventType.STATE_DELTA,
+    delta,
+  } satisfies StateDeltaEvent;
 };
 
 export const buildPiA2UiActivityEvent = (params: {
@@ -1542,10 +1577,6 @@ export const createPiRuntimeGatewayRuntime = (params: {
     params.agent.sessionId = threadId;
   };
 
-  const buildSnapshotEvent = (session: PiRuntimeGatewaySession): StateSnapshotEvent => ({
-    type: EventType.STATE_SNAPSHOT,
-    snapshot: buildPiThreadStateSnapshot(session),
-  });
   const buildMessagesSnapshotEvent = (session: PiRuntimeGatewaySession): MessagesSnapshotEvent | null =>
     session.messages
       ? {
@@ -1660,7 +1691,13 @@ export const createPiRuntimeGatewayRuntime = (params: {
 
           const session = await persistRunTranscript(request.threadId, requestMessages, projectedRunEvents);
           logPiGatewayDebug('run session after transcript persist', session);
-          controller.push(buildSnapshotEvent(session));
+          const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEvent({
+            previousSession: requestSession,
+            session,
+          });
+          if (stateDeltaEvent) {
+            controller.push(stateDeltaEvent);
+          }
           const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);
           if (messagesSnapshotEvent) {
             controller.push(messagesSnapshotEvent);

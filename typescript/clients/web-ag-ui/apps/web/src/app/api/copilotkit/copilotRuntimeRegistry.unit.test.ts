@@ -16,6 +16,10 @@ const mockAgentRuntimeHttpAgent = (config: Record<string, unknown>) => {
   };
 };
 
+vi.mock('@copilotkit/runtime', () => ({
+  CopilotRuntime: class MockCopilotRuntime {},
+}));
+
 vi.mock('./piRuntimeHttpAgent', () => ({
   createAgentRuntimeHttpAgent: mockAgentRuntimeHttpAgent,
 }));

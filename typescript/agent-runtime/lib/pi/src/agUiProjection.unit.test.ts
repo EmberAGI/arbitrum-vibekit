@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildPiA2UiActivityEvent,
+  buildPiRuntimeGatewayStateDeltaEvent,
   buildPiThreadStateSnapshot,
   mapPiAgentEventsToAgUiEvents,
 } from './index.js';
@@ -33,6 +34,11 @@ describe('pi AG-UI projection', () => {
         a2ui: {
           kind: 'interrupt',
           payload: { type: 'operator-config-request', artifactId: 'current-artifact' },
+        },
+        domainProjection: {
+          managedMandate: {
+            status: 'active',
+          },
         },
         threadPatch: {
           profile: { principalId: 'wallet:0xabc' },
@@ -96,8 +102,63 @@ describe('pi AG-UI projection', () => {
           current: { artifactId: 'current-artifact', data: { phase: 'setup' } },
           activity: { artifactId: 'activity-artifact', data: { entries: 3 } },
         },
+        domainProjection: {
+          managedMandate: {
+            status: 'active',
+          },
+        },
         profile: { principalId: 'wallet:0xabc' },
       },
+    });
+  });
+
+  it('builds a JSON Patch state delta from the previous public thread snapshot to the next one', () => {
+    expect(
+      buildPiRuntimeGatewayStateDeltaEvent({
+        previousSession: {
+          thread: { id: 'thread-1' },
+          execution: {
+            id: 'exec-1',
+            status: 'working',
+          },
+          domainProjection: {
+            managedMandate: {
+              summary: {
+                riskLevel: 'medium',
+              },
+            },
+          },
+        },
+        session: {
+          thread: { id: 'thread-1' },
+          execution: {
+            id: 'exec-1',
+            status: 'completed',
+          },
+          domainProjection: {
+            managedMandate: {
+              summary: {
+                riskLevel: 'medium',
+                status: 'active',
+              },
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      type: EventType.STATE_DELTA,
+      delta: expect.arrayContaining([
+        {
+          op: 'replace',
+          path: '/thread/task/taskStatus/state',
+          value: 'completed',
+        },
+        {
+          op: 'add',
+          path: '/thread/domainProjection/managedMandate/summary/status',
+          value: 'active',
+        },
+      ]),
     });
   });
 
