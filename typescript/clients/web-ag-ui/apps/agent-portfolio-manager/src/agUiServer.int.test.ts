@@ -599,16 +599,20 @@ describe('agent-portfolio-manager AG-UI integration', () => {
             mandates: expect.arrayContaining([
               expect.objectContaining({
                 agent_id: 'portfolio-manager',
-                managed_onboarding: null,
+                managed_mandate: null,
               }),
               expect.objectContaining({
                 agent_id: 'ember-lending',
-                managed_onboarding: {
-                  root_asset: 'USDC',
-                  benchmark_asset: 'USD',
-                  allocation_mode: 'allocable_idle',
-                  intent: 'deploy',
-                  control_path: 'lending.supply',
+                managed_mandate: {
+                  allocation_basis: 'allocable_idle',
+                  allowed_assets: ['USDC'],
+                  asset_intent: {
+                    root_asset: 'USDC',
+                    network: 'arbitrum',
+                    benchmark_asset: 'USD',
+                    intent: 'deploy',
+                    control_path: 'lending.supply',
+                  },
                 },
               }),
             ]),

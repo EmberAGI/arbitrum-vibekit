@@ -608,12 +608,16 @@ type PortfolioManagerManagedAgentMandate = {
   settings: EmberLendingManagedAgentSettings;
 };
 
-type ManagedOnboardingMandate = {
-  root_asset: string;
-  benchmark_asset: string;
-  allocation_mode: typeof FIRST_MANAGED_AGENT_ALLOCATION_MODE;
-  intent: typeof PORTFOLIO_MANAGER_ACTIVATION_PURPOSE;
-  control_path: typeof FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH;
+type ManagedMandate = {
+  allocation_basis: typeof FIRST_MANAGED_AGENT_ALLOCATION_MODE;
+  allowed_assets: string[];
+  asset_intent: {
+    root_asset: string;
+    network: typeof PORTFOLIO_MANAGER_NETWORK;
+    benchmark_asset: string;
+    intent: typeof PORTFOLIO_MANAGER_ACTIVATION_PURPOSE;
+    control_path: typeof FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH;
+  };
 };
 
 type PortfolioManagerApprovedMandateEnvelope = {
@@ -980,15 +984,22 @@ function buildManagedAgentMandateSummary(input: PortfolioManagerManagedAgentMand
   return `lend ${primaryAsset} on Aave within medium-risk allocation, LTV, and health-factor guardrails`;
 }
 
-function buildManagedOnboardingMandate(
+function buildManagedMandate(
   input: PortfolioManagerManagedAgentMandate,
-): ManagedOnboardingMandate {
+): ManagedMandate {
+  const rootAsset =
+    input.settings.allowedCollateralAssets[0] ?? FIRST_MANAGED_AGENT_ROOT_ASSET;
+
   return {
-    root_asset: input.settings.allowedCollateralAssets[0] ?? FIRST_MANAGED_AGENT_ROOT_ASSET,
-    benchmark_asset: FIRST_MANAGED_AGENT_BENCHMARK_ASSET,
-    allocation_mode: FIRST_MANAGED_AGENT_ALLOCATION_MODE,
-    intent: PORTFOLIO_MANAGER_ACTIVATION_PURPOSE,
-    control_path: FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH,
+    allocation_basis: FIRST_MANAGED_AGENT_ALLOCATION_MODE,
+    allowed_assets: input.settings.allowedCollateralAssets,
+    asset_intent: {
+      root_asset: rootAsset,
+      network: PORTFOLIO_MANAGER_NETWORK,
+      benchmark_asset: FIRST_MANAGED_AGENT_BENCHMARK_ASSET,
+      intent: PORTFOLIO_MANAGER_ACTIVATION_PURPOSE,
+      control_path: FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH,
+    },
   };
 }
 
@@ -1077,13 +1088,13 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
         mandate_summary: buildPortfolioManagerMandateSummary(
           params.approvedMandateEnvelope.portfolioMandate,
         ),
-        managed_onboarding: null,
+        managed_mandate: null,
       },
       {
         mandate_ref: managedAgentMandateRef,
         agent_id: FIRST_MANAGED_AGENT_TYPE,
         mandate_summary: buildManagedAgentMandateSummary(firstManagedAgentMandate),
-        managed_onboarding: buildManagedOnboardingMandate(firstManagedAgentMandate),
+        managed_mandate: buildManagedMandate(firstManagedAgentMandate),
       },
     ],
     userReservePolicies: [],

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { resolvePortfolioManagerAccountingAgentId } from './sharedEmberOnboardingState.js';
 
 describe('resolvePortfolioManagerAccountingAgentId', () => {
-  it('keeps legacy bootstrap payloads on the activated managed agent when managed_onboarding is absent', () => {
+  it('keeps bootstrap payloads on the activated managed agent when managed_mandate is absent', () => {
     expect(
       resolvePortfolioManagerAccountingAgentId({
         mandates: [

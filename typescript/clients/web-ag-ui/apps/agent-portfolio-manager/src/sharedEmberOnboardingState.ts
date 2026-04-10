@@ -63,7 +63,7 @@ type OnboardingStateResponse = {
 type OnboardingBootstrapMandate = {
   mandate_ref?: string;
   agent_id?: string;
-  managed_onboarding?: unknown;
+  managed_mandate?: unknown;
 };
 
 export type PortfolioManagerWalletAccountingDetails = {
@@ -136,8 +136,8 @@ export function resolvePortfolioManagerAccountingAgentId(onboardingBootstrap: un
   const managedMandates = mandates.filter(
     (mandate) =>
       typeof mandate.agent_id === 'string' &&
-      'managed_onboarding' in mandate &&
-      mandate.managed_onboarding !== null,
+      'managed_mandate' in mandate &&
+      mandate.managed_mandate !== null,
   );
   const activatedManagedMandate = managedMandates.find(
     (mandate) => mandate.mandate_ref === activatedMandateRef,
