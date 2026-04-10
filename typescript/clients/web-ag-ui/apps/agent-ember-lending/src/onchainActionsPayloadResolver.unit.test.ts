@@ -107,6 +107,7 @@ const TEST_ACTIVE_DELEGATION_ARTIFACT_REF_NO_PREFIX_SIG = encodeDelegationArtifa
   ...TEST_ACTIVE_DELEGATION,
   signature: TEST_ACTIVE_DELEGATION.signature.slice(2) as `0x${string}`,
 });
+const MAX_UINT256 = ((1n << 256n) - 1n).toString();
 
 describe('resolveEmberLendingOnchainActionsApiUrl', () => {
   it('normalizes an explicit OpenAPI document URL down to the API origin', () => {
@@ -921,6 +922,205 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
             address: '0x00000000000000000000000000000000000000a1',
           },
           amount: parseUnits('0.005', 18).toString(),
+        }),
+      },
+    );
+  });
+
+  it('uses the full-debt sentinel when anchoring a repay payload for the rooted user wallet', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000a1',
+                },
+                name: 'Wrapped Ether',
+                symbol: 'WETH',
+                isNative: false,
+                decimals: 18,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d2',
+                value: '0',
+                data: '0x573ade81',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+    });
+
+    await resolver.anchorCandidatePlanPayload({
+      agentId: 'ember-lending',
+      threadId: 'thread-rooted-repay-all-1',
+      transactionPlanId: 'txplan-ember-lending-rooted-repay-all-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      useMaxRepayAmount: true,
+      payloadBuilderOutput: {
+        transaction_payload_ref: 'txpayload-ember-lending-rooted-repay-all-001',
+        required_control_path: 'lending.repay',
+        network: 'arbitrum',
+      },
+      compactPlanSummary: {
+        control_path: 'lending.repay',
+        asset: 'WETH',
+        amount: '20000000000000000',
+        summary:
+          'repay the full outstanding WETH loan so the lending lane returns to a debt-free supplied state',
+      },
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://api.emberai.xyz/lending/repay',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          repayTokenUid: {
+            chainId: '42161',
+            address: '0x00000000000000000000000000000000000000a1',
+          },
+          amount: MAX_UINT256,
+        }),
+      },
+    );
+  });
+
+  it('keeps the exact requested amount for repay payloads when the plan was built from explicit requested quantities', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000a1',
+                },
+                name: 'Wrapped Ether',
+                symbol: 'WETH',
+                isNative: false,
+                decimals: 18,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d2',
+                value: '0',
+                data: '0x573ade81',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+    });
+
+    await resolver.anchorCandidatePlanPayload({
+      agentId: 'ember-lending',
+      threadId: 'thread-rooted-repay-partial-1',
+      transactionPlanId: 'txplan-ember-lending-rooted-repay-partial-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      useMaxRepayAmount: false,
+      payloadBuilderOutput: {
+        transaction_payload_ref: 'txpayload-ember-lending-rooted-repay-partial-001',
+        required_control_path: 'lending.repay',
+        network: 'arbitrum',
+      },
+      compactPlanSummary: {
+        control_path: 'lending.repay',
+        asset: 'WETH',
+        amount: '20000000000000000',
+        summary: 'repay an exact partial WETH debt amount on Aave',
+      },
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://api.emberai.xyz/lending/repay',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          repayTokenUid: {
+            chainId: '42161',
+            address: '0x00000000000000000000000000000000000000a1',
+          },
+          amount: '20000000000000000',
         }),
       },
     );

@@ -408,6 +408,7 @@ describe('createEmberLendingGatewayService', () => {
       transactionPlanId: 'txplan-ember-lending-001',
       walletAddress: '0x00000000000000000000000000000000000000b1',
       rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      useMaxRepayAmount: false,
       payloadBuilderOutput: {
         transaction_payload_ref: 'txpayload-ember-lending-001',
         required_control_path: 'lending.supply',

@@ -17,6 +17,7 @@ const RPC_RETRY_COUNT = 2;
 const RPC_TIMEOUT_MS = 8_000;
 const SIGNING_RESOLUTION_ATTEMPTS = 2;
 const SIGNING_RESOLUTION_RETRY_DELAY_MS = 500;
+const MAX_UINT256 = ((1n << 256n) - 1n).toString();
 
 const HexStringSchema = z.string().regex(/^0x[0-9a-fA-F]+$/u);
 const AddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/u);
@@ -117,6 +118,7 @@ export type EmberLendingCandidatePlanPayloadAnchorInput = {
   rootUserWalletAddress: `0x${string}`;
   payloadBuilderOutput: EmberLendingPayloadBuilderOutput;
   compactPlanSummary: EmberLendingCompactPlanSummary;
+  useMaxRepayAmount?: boolean;
 };
 
 export type EmberLendingAnchoredPayloadResolver = {
@@ -387,9 +389,15 @@ async function resolveToken(input: {
 }
 
 function resolveAmountForOnchainActions(input: {
+  operation: LendingOperation;
   amount: string;
   decimals: number;
+  useMaxRepayAmount: boolean;
 }): string {
+  if (input.operation === 'repay' && input.useMaxRepayAmount) {
+    return MAX_UINT256;
+  }
+
   const normalizedAmount = input.amount.trim();
   if (/^\d+$/u.test(normalizedAmount)) {
     return normalizedAmount;
@@ -720,8 +728,10 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
               walletAddress: request.rootUserWalletAddress,
               tokenUid: token.tokenUid,
               amount: resolveAmountForOnchainActions({
+                operation,
                 amount: request.compactPlanSummary.amount,
                 decimals: token.decimals,
+                useMaxRepayAmount: request.useMaxRepayAmount ?? false,
               }),
             }),
           ),

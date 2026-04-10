@@ -1272,7 +1272,9 @@ function readExecutionStatusMessage(executionResult: unknown): {
   const phase = isRecord(executionResult) ? readString(executionResult['phase']) : null;
   const execution = readRecordKey(executionResult, 'execution');
   const status = readString(execution?.['status']);
-  const executionMessage = readString(execution?.['message']);
+  const executionMessage =
+    readString(execution?.['message']) ??
+    (isRecord(executionResult) ? readString(executionResult['message']) : null);
   const withExecutionDetail = (prefix: string): string =>
     executionMessage
       ? `${prefix.replace(/[.!?]$/, '')}: ${ensureSentence(executionMessage)}`
@@ -1549,6 +1551,7 @@ async function submitSignedTransaction(input: {
     readString(input.signedTransaction['execution_preparation_id']) ??
     readString(input.signedTransaction['executionPreparationId']) ??
     input.transactionPlanId;
+  const signedTransactionFingerprint = buildStableCommandSuffix(input.signedTransaction);
   const response = await runSharedEmberCommandWithResolvedRevision<{
     result?: {
       revision?: number;
@@ -1565,7 +1568,7 @@ async function submitSignedTransaction(input: {
       id: `shared-ember-${input.threadId}-submit-signed-transaction`,
       method: 'subagent.submitSignedTransaction.v1',
       params: {
-        idempotency_key: `${input.idempotencyKey}:submit-transaction:${input.requestId}:${executionPreparationId}`,
+        idempotency_key: `${input.idempotencyKey}:submit-transaction:${input.requestId}:${executionPreparationId}:${signedTransactionFingerprint}`,
         expected_revision: expectedRevision,
         transaction_plan_id: input.transactionPlanId,
         signed_transaction: input.signedTransaction,
@@ -3513,6 +3516,12 @@ export function createEmberLendingDomain(
             rootUserWalletAddress: planningState.rootUserWalletAddress!,
             payloadBuilderOutput: payloadBuilderOutput!,
             compactPlanSummary: compactPlanSummary!,
+            useMaxRepayAmount:
+              payloadBuilderOutput?.required_control_path === 'lending.repay' &&
+              !Object.prototype.hasOwnProperty.call(
+                isRecord(operation.input) ? operation.input : {},
+                'requested_quantities',
+              ),
           });
           if (!anchoredPayloadRecord) {
             return {
