@@ -12,22 +12,53 @@ describe('buildPortfolioManagerSetupInput', () => {
         approved: true,
         riskLevel: 'medium',
       },
-      managedAgentMandates: [
-        {
-          agentKey: 'ember-lending-primary',
-          agentType: 'ember-lending',
-          approved: true,
-          settings: {
+      firstManagedMandate: {
+        targetAgentId: 'ember-lending',
+        targetAgentKey: 'ember-lending-primary',
+        mandateSummary: 'lend USDC through the managed lending lane',
+        managedMandate: {
+          allocation_basis: 'allocable_idle',
+          allowed_assets: ['USDC'],
+          asset_intent: {
+            root_asset: 'USDC',
             network: 'arbitrum',
-            protocol: 'aave',
-            allowedCollateralAssets: ['WETH'],
-            allowedBorrowAssets: ['WETH'],
-            maxAllocationPct: 35,
-            maxLtvBps: 7000,
-            minHealthFactor: '1.25',
+            benchmark_asset: 'USD',
+            intent: 'deploy',
+            control_path: 'lending.supply',
           },
         },
-      ],
+      },
+    });
+  });
+
+  it('canonicalizes the first managed mandate with the root asset first', () => {
+    expect(
+      buildPortfolioManagerSetupInput('0x00000000000000000000000000000000000000a1', {
+        rootAsset: 'weth',
+        allowedAssetsInput: 'usdc, weth',
+      }),
+    ).toEqual({
+      walletAddress: '0x00000000000000000000000000000000000000a1',
+      portfolioMandate: {
+        approved: true,
+        riskLevel: 'medium',
+      },
+      firstManagedMandate: {
+        targetAgentId: 'ember-lending',
+        targetAgentKey: 'ember-lending-primary',
+        mandateSummary: 'lend WETH and USDC through the managed lending lane',
+        managedMandate: {
+          allocation_basis: 'allocable_idle',
+          allowed_assets: ['WETH', 'USDC'],
+          asset_intent: {
+            root_asset: 'WETH',
+            network: 'arbitrum',
+            benchmark_asset: 'USD',
+            intent: 'deploy',
+            control_path: 'lending.supply',
+          },
+        },
+      },
     });
   });
 });

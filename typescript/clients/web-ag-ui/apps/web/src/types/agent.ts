@@ -254,27 +254,29 @@ export interface PortfolioManagerMandateApproval {
   riskLevel: 'medium';
 }
 
-export interface EmberLendingManagedAgentSettings {
-  network: 'arbitrum';
-  protocol: 'aave';
-  allowedCollateralAssets: string[];
-  allowedBorrowAssets: string[];
-  maxAllocationPct: number;
-  maxLtvBps: number;
-  minHealthFactor: string;
+export interface ManagedMandateInput {
+  allocation_basis: 'allocable_idle';
+  allowed_assets: string[];
+  asset_intent: {
+    root_asset: string;
+    network: 'arbitrum';
+    benchmark_asset: 'USD';
+    intent: 'deploy';
+    control_path: 'lending.supply';
+  };
 }
 
-export interface PortfolioManagerManagedAgentMandateInput {
-  agentKey: string;
-  agentType: 'ember-lending';
-  approved: true;
-  settings: EmberLendingManagedAgentSettings;
+export interface PortfolioManagerFirstManagedMandateInput {
+  targetAgentId: 'ember-lending';
+  targetAgentKey: string;
+  mandateSummary: string;
+  managedMandate: ManagedMandateInput;
 }
 
 export interface PortfolioManagerSetupInput {
   walletAddress: `0x${string}`;
   portfolioMandate: PortfolioManagerMandateApproval;
-  managedAgentMandates: PortfolioManagerManagedAgentMandateInput[];
+  firstManagedMandate: PortfolioManagerFirstManagedMandateInput;
 }
 
 export interface FundWalletAcknowledgement {

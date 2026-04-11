@@ -48,6 +48,7 @@ import type {
   TelemetryItem,
   ClmmEvent,
   ThreadLifecycle,
+  ManagedMandateInput,
 } from '../types/agent';
 import { getAgentConfig } from '../config/agents';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
@@ -83,6 +84,13 @@ import { resolveCurrentSetupStep } from './agentCurrentSetupStep';
 import { resolveSetupSteps } from './agentSetupSteps';
 import { emitAgentConnectDebug } from '../utils/agentConnectDebug';
 import { buildPortfolioManagerSetupInput } from '../utils/portfolioManagerSetup';
+import {
+  buildManagedMandateSummary,
+  canonicalizeManagedMandateAssets,
+  DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
+  normalizeManagedMandateAssetSymbol,
+  parseManagedMandateAssetList,
+} from '../utils/managedMandate';
 import {
   buildPiExampleInterruptA2UiView,
   buildPiExampleStatusA2UiView,
@@ -607,17 +615,7 @@ type ManagedMandateEditorSubmitInput = {
   targetAgentId: string;
   targetAgentRouteId: string;
   mandateSummary: string;
-  managedMandate: {
-    allocation_basis: string;
-    allowed_assets: string[];
-    asset_intent: {
-      root_asset: string;
-      network: string;
-      benchmark_asset: string;
-      intent: string;
-      control_path: string;
-    };
-  };
+  managedMandate: ManagedMandateInput;
 };
 
 function buildReservationSummaryFromProjection(
@@ -686,44 +684,6 @@ function readManagedMandateEditorView(
     rootedWalletContextId: readString(editor['rootedWalletContextId']),
     reservationSummary: buildReservationSummaryFromProjection(asRecord(editor['reservation'])),
   };
-}
-
-function normalizeManagedMandateAssetSymbol(value: string): string {
-  return value.trim().toUpperCase();
-}
-
-function parseManagedMandateAssetList(value: string): string[] {
-  const normalizedAssets: string[] = [];
-  const seen = new Set<string>();
-
-  for (const rawAsset of value.split(',')) {
-    const asset = normalizeManagedMandateAssetSymbol(rawAsset);
-    if (asset.length === 0 || seen.has(asset)) {
-      continue;
-    }
-    seen.add(asset);
-    normalizedAssets.push(asset);
-  }
-
-  return normalizedAssets;
-}
-
-function buildManagedMandateSummary(allowedAssets: readonly string[]): string {
-  if (allowedAssets.length === 0) {
-    return 'lend through the managed lending lane';
-  }
-
-  if (allowedAssets.length === 1) {
-    return `lend ${allowedAssets[0]} through the managed lending lane`;
-  }
-
-  if (allowedAssets.length === 2) {
-    return `lend ${allowedAssets[0]} and ${allowedAssets[1]} through the managed lending lane`;
-  }
-
-  return `lend ${allowedAssets.slice(0, -1).join(', ')}, and ${
-    allowedAssets[allowedAssets.length - 1]
-  } through the managed lending lane`;
 }
 
 type PortfolioManagerManagedAgentView = {
@@ -826,9 +786,10 @@ function ManagedMandateEditorCard(props: {
     }
 
     const allowedAssets = parseManagedMandateAssetList(allowedAssetsInput);
-    const normalizedAllowedAssets = allowedAssets.includes(normalizedRootAsset)
-      ? allowedAssets
-      : [normalizedRootAsset, ...allowedAssets];
+    const normalizedAllowedAssets = canonicalizeManagedMandateAssets(
+      normalizedRootAsset,
+      allowedAssets,
+    );
 
     if (normalizedAllowedAssets.length === 0) {
       setSubmitError('At least one allowed asset is required.');
@@ -912,15 +873,10 @@ function ManagedMandateEditorCard(props: {
         <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">Summary preview</div>
         <div className="mt-2 text-sm leading-relaxed text-gray-300">
           {buildManagedMandateSummary(
-            (() => {
-              const normalizedRootAsset = normalizeManagedMandateAssetSymbol(rootAsset);
-              const allowedAssets = parseManagedMandateAssetList(allowedAssetsInput);
-              return normalizedRootAsset.length === 0
-                ? allowedAssets
-                : allowedAssets.includes(normalizedRootAsset)
-                  ? allowedAssets
-                  : [normalizedRootAsset, ...allowedAssets];
-            })(),
+            canonicalizeManagedMandateAssets(
+              normalizeManagedMandateAssetSymbol(rootAsset),
+              parseManagedMandateAssetList(allowedAssetsInput),
+            ),
           )}
         </div>
       </div>
@@ -3005,6 +2961,12 @@ function AgentBlockersTab({
     settings?.amount?.toString() ?? '',
   );
   const [targetMarket, setTargetMarket] = useState<'BTC' | 'ETH'>('BTC');
+  const [portfolioManagerRootAsset, setPortfolioManagerRootAsset] = useState(
+    DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
+  );
+  const [portfolioManagerAllowedAssetsInput, setPortfolioManagerAllowedAssetsInput] = useState(
+    DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
+  );
   const [fundingTokenAddress, setFundingTokenAddress] = useState('');
   const [isSigningDelegations, setIsSigningDelegations] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -3024,6 +2986,17 @@ function AgentBlockersTab({
     maxSetupStep,
     onboardingFlow,
   });
+  const isPortfolioManagerSetupInterrupt =
+    activeInterrupt?.type === 'portfolio-manager-setup-request';
+
+  useEffect(() => {
+    if (!isPortfolioManagerSetupInterrupt) {
+      return;
+    }
+
+    setPortfolioManagerRootAsset(DEFAULT_MANAGED_MANDATE_ROOT_ASSET);
+    setPortfolioManagerAllowedAssetsInput(DEFAULT_MANAGED_MANDATE_ROOT_ASSET);
+  }, [isPortfolioManagerSetupInterrupt]);
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
   const uniqueAllowedPools: Pool[] = [];
@@ -3172,10 +3145,44 @@ function AgentBlockersTab({
       return;
     }
 
+    const normalizedRootAsset = normalizeManagedMandateAssetSymbol(portfolioManagerRootAsset);
+    if (normalizedRootAsset.length === 0) {
+      setError('Root asset is required.');
+      return;
+    }
+
+    const allowedAssets = parseManagedMandateAssetList(portfolioManagerAllowedAssetsInput);
+    const normalizedAllowedAssets = canonicalizeManagedMandateAssets(
+      normalizedRootAsset,
+      allowedAssets,
+    );
+
+    if (normalizedAllowedAssets.length === 0) {
+      setError('At least one allowed asset is required.');
+      return;
+    }
+
     onInterruptSubmit?.({
-      ...buildPortfolioManagerSetupInput(operatorWalletAddress as `0x${string}`),
+      ...buildPortfolioManagerSetupInput(operatorWalletAddress as `0x${string}`, {
+        rootAsset: normalizedRootAsset,
+        allowedAssetsInput: normalizedAllowedAssets.join(', '),
+      }),
     });
   };
+
+  const normalizedPortfolioManagerPreviewRootAsset = normalizeManagedMandateAssetSymbol(
+    portfolioManagerRootAsset,
+  );
+  const portfolioManagerPreviewAllowedAssets = parseManagedMandateAssetList(
+    portfolioManagerAllowedAssetsInput,
+  );
+  const portfolioManagerPreviewMandateAssets = canonicalizeManagedMandateAssets(
+    normalizedPortfolioManagerPreviewRootAsset,
+    portfolioManagerPreviewAllowedAssets,
+  );
+  const portfolioManagerPreviewSummary = buildManagedMandateSummary(
+    portfolioManagerPreviewMandateAssets,
+  );
 
   const handleGmxSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3595,11 +3602,53 @@ function AgentBlockersTab({
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
                     <div className="text-gray-300 text-sm font-medium mb-2">First managed lending lane</div>
-                    <p className="text-gray-400 text-xs">
-                      The first managed lane is preloaded for Arbitrum Aave lending with USDC-only
-                      collateral and borrow assets, a 35% allocation cap, 7000 max LTV bps, and a
-                      1.25 minimum health factor.
-                    </p>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label
+                          htmlFor="portfolio-manager-root-asset"
+                          className="block text-sm text-gray-400 mb-2"
+                        >
+                          Root asset
+                        </label>
+                        <input
+                          id="portfolio-manager-root-asset"
+                          name="portfolio-manager-root-asset"
+                          type="text"
+                          value={portfolioManagerRootAsset}
+                          onChange={(event) => setPortfolioManagerRootAsset(event.target.value)}
+                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                        />
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="portfolio-manager-allowed-assets"
+                          className="block text-sm text-gray-400 mb-2"
+                        >
+                          Allowed assets
+                        </label>
+                        <input
+                          id="portfolio-manager-allowed-assets"
+                          name="portfolio-manager-allowed-assets"
+                          type="text"
+                          value={portfolioManagerAllowedAssetsInput}
+                          onChange={(event) =>
+                            setPortfolioManagerAllowedAssetsInput(event.target.value)
+                          }
+                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                        />
+                        <div className="mt-2 text-xs text-gray-500">
+                          Comma-separated asset symbols. The root asset is always included.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                        Summary preview
+                      </div>
+                      <div className="mt-2 text-sm leading-relaxed text-gray-300">
+                        {portfolioManagerPreviewSummary}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

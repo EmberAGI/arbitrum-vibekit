@@ -92,22 +92,22 @@ function createPortfolioManagerSetupInput() {
       approved: true as const,
       riskLevel: 'medium' as const,
     },
-    managedAgentMandates: [
-      {
-        agentKey: 'ember-lending-primary',
-        agentType: 'ember-lending' as const,
-        approved: true as const,
-        settings: {
+    firstManagedMandate: {
+      targetAgentId: 'ember-lending' as const,
+      targetAgentKey: 'ember-lending-primary',
+      mandateSummary: 'lend USDC through the managed lending lane',
+      managedMandate: {
+        allocation_basis: 'allocable_idle' as const,
+        allowed_assets: ['USDC'],
+        asset_intent: {
+          root_asset: 'USDC',
           network: 'arbitrum' as const,
-          protocol: 'aave' as const,
-          allowedCollateralAssets: ['USDC'],
-          allowedBorrowAssets: ['USDC'],
-          maxAllocationPct: 35,
-          maxLtvBps: 7000,
-          minHealthFactor: '1.25',
+          benchmark_asset: 'USD',
+          intent: 'deploy' as const,
+          control_path: 'lending.supply' as const,
         },
       },
-    ],
+    },
   };
 }
 
@@ -122,27 +122,27 @@ function createOnboardingBootstrap() {
       registered_at: '2026-03-29T00:00:00Z',
       metadata: {
         source: 'onboarding_scan',
-        approvedMandateEnvelope: {
+        approvedOnboardingSetup: {
           portfolioMandate: {
             approved: true,
             riskLevel: 'medium',
           },
-          managedAgentMandates: [
-            {
-              agentKey: 'ember-lending-primary',
-              agentType: 'ember-lending',
-              approved: true,
-              settings: {
+          firstManagedMandate: {
+            targetAgentId: 'ember-lending',
+            targetAgentKey: 'ember-lending-primary',
+            mandateSummary: 'lend USDC through the managed lending lane',
+            managedMandate: {
+              allocation_basis: 'allocable_idle',
+              allowed_assets: ['USDC'],
+              asset_intent: {
+                root_asset: 'USDC',
                 network: 'arbitrum',
-                protocol: 'aave',
-                allowedCollateralAssets: ['USDC'],
-                allowedBorrowAssets: ['USDC'],
-                maxAllocationPct: 35,
-                maxLtvBps: 7000,
-                minHealthFactor: '1.25',
+                benchmark_asset: 'USD',
+                intent: 'deploy',
+                control_path: 'lending.supply',
               },
             },
-          ],
+          },
         },
       },
     },
@@ -156,7 +156,7 @@ function createOnboardingBootstrap() {
       {
         mandate_ref: 'mandate-ember-lending-protocol-001',
         agent_id: 'ember-lending',
-        mandate_summary: 'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+        mandate_summary: 'lend USDC through the managed lending lane',
         managed_mandate: {
           allocation_basis: 'allocable_idle',
           allowed_assets: ['USDC'],
@@ -537,9 +537,9 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingApprovedMandateEnvelope: {
+          pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
-            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+            firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
         operation: {
@@ -591,27 +591,27 @@ describe('createPortfolioManagerDomain', () => {
             rootedWalletContext: expect.objectContaining({
               wallet_address: '0x00000000000000000000000000000000000000a1',
               metadata: expect.objectContaining({
-                approvedMandateEnvelope: {
+                approvedOnboardingSetup: {
                   portfolioMandate: {
                     approved: true,
                     riskLevel: 'medium',
                   },
-                  managedAgentMandates: [
-                    {
-                      agentKey: 'ember-lending-primary',
-                      agentType: 'ember-lending',
-                      approved: true,
-                      settings: {
+                  firstManagedMandate: {
+                    targetAgentId: 'ember-lending',
+                    targetAgentKey: 'ember-lending-primary',
+                    mandateSummary: 'lend USDC through the managed lending lane',
+                    managedMandate: {
+                      allocation_basis: 'allocable_idle',
+                      allowed_assets: ['USDC'],
+                      asset_intent: {
+                        root_asset: 'USDC',
                         network: 'arbitrum',
-                        protocol: 'aave',
-                        allowedCollateralAssets: ['USDC'],
-                        allowedBorrowAssets: ['USDC'],
-                        maxAllocationPct: 35,
-                        maxLtvBps: 7000,
-                        minHealthFactor: '1.25',
+                        benchmark_asset: 'USD',
+                        intent: 'deploy',
+                        control_path: 'lending.supply',
                       },
                     },
-                  ],
+                  },
                 },
               }),
             }),
@@ -626,8 +626,7 @@ describe('createPortfolioManagerDomain', () => {
               {
                 mandate_ref: expect.stringContaining('mandate-'),
                 agent_id: 'ember-lending',
-                mandate_summary:
-                  'lend USDC on Aave within medium-risk allocation, LTV, and health-factor guardrails',
+                mandate_summary: 'lend USDC through the managed lending lane',
                 managed_mandate: {
                   allocation_basis: 'allocable_idle',
                   allowed_assets: ['USDC'],
@@ -877,18 +876,20 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingApprovedMandateEnvelope: {
+          pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
-            managedAgentMandates: [
-              {
-                ...createPortfolioManagerSetupInput().managedAgentMandates[0]!,
-                settings: {
-                  ...createPortfolioManagerSetupInput().managedAgentMandates[0]!.settings,
-                  allowedCollateralAssets: ['WETH'],
-                  allowedBorrowAssets: ['WETH'],
+            firstManagedMandate: {
+              ...createPortfolioManagerSetupInput().firstManagedMandate,
+              mandateSummary: 'lend WETH through the managed lending lane',
+              managedMandate: {
+                ...createPortfolioManagerSetupInput().firstManagedMandate.managedMandate,
+                allowed_assets: ['WETH'],
+                asset_intent: {
+                  ...createPortfolioManagerSetupInput().firstManagedMandate.managedMandate.asset_intent,
+                  root_asset: 'WETH',
                 },
               },
-            ],
+            },
           },
         },
         operation: {
@@ -1013,9 +1014,9 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingApprovedMandateEnvelope: {
+          pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
-            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+            firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
         operation: {
@@ -1212,9 +1213,9 @@ describe('createPortfolioManagerDomain', () => {
       lastRootedWalletContextId: null,
       activeWalletAddress: '0x00000000000000000000000000000000000000a1' as const,
       pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1' as const,
-      pendingApprovedMandateEnvelope: {
+      pendingApprovedSetup: {
         portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
-        managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+        firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
       },
     };
 
@@ -1317,9 +1318,9 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingApprovedMandateEnvelope: {
+          pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
-            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+            firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
         operation: {
@@ -1433,9 +1434,9 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingApprovedMandateEnvelope: {
+          pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
-            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+            firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
         operation: {
@@ -1549,9 +1550,9 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingApprovedMandateEnvelope: {
+          pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
-            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+            firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
         operation: {
@@ -1744,9 +1745,9 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingApprovedMandateEnvelope: {
+          pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
-            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+            firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
         operation: {
@@ -1856,9 +1857,9 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingApprovedMandateEnvelope: {
+          pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
-            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+            firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
         operation: {
@@ -1914,9 +1915,9 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingApprovedMandateEnvelope: {
+          pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
-            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+            firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
         operation: {
@@ -2139,9 +2140,9 @@ describe('createPortfolioManagerDomain', () => {
           lastRootedWalletContextId: null,
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          pendingApprovedMandateEnvelope: {
+          pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
-            managedAgentMandates: createPortfolioManagerSetupInput().managedAgentMandates,
+            firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
         operation: {

@@ -40,22 +40,22 @@ function createPortfolioManagerSetupInput(walletAddress: `0x${string}`) {
       approved: true,
       riskLevel: 'medium' as const,
     },
-    managedAgentMandates: [
-      {
-        agentKey: 'ember-lending-primary',
-        agentType: 'ember-lending' as const,
-        approved: true,
-        settings: {
+    firstManagedMandate: {
+      targetAgentId: 'ember-lending' as const,
+      targetAgentKey: 'ember-lending-primary',
+      mandateSummary: 'lend USDC through the managed lending lane',
+      managedMandate: {
+        allocation_basis: 'allocable_idle' as const,
+        allowed_assets: ['USDC'],
+        asset_intent: {
+          root_asset: 'USDC',
           network: 'arbitrum' as const,
-          protocol: 'aave' as const,
-          allowedCollateralAssets: ['USDC'],
-          allowedBorrowAssets: ['USDC'],
-          maxAllocationPct: 35,
-          maxLtvBps: 7000,
-          minHealthFactor: '1.25',
+          benchmark_asset: 'USD',
+          intent: 'deploy' as const,
+          control_path: 'lending.supply' as const,
         },
       },
-    ],
+    },
   };
 }
 
@@ -93,8 +93,7 @@ function createOnboardingBootstrap() {
       {
         mandate_ref: 'mandate-ember-lending-protocol-001',
         agent_id: 'ember-lending',
-        mandate_summary:
-          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+        mandate_summary: 'lend USDC through the managed lending lane',
         managed_mandate: {
           allocation_basis: 'allocable_idle',
           allowed_assets: ['USDC'],

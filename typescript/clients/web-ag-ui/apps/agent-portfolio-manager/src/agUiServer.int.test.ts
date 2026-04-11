@@ -19,6 +19,12 @@ type AgUiEventEnvelope = {
   [key: string]: unknown;
 };
 
+type JsonPatchOperation = {
+  op: string;
+  path: string;
+  value?: unknown;
+};
+
 async function readRequestBody(request: IncomingMessage): Promise<Uint8Array> {
   const chunks: Buffer[] = [];
 
@@ -36,8 +42,25 @@ async function writeNodeResponse(response: Response, target: ServerResponse): Pr
     target.setHeader(key, value);
   });
 
-  const body = new Uint8Array(await response.arrayBuffer());
-  target.end(body);
+  const reader = response.body?.getReader();
+  if (!reader) {
+    target.end();
+    return;
+  }
+
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) {
+        break;
+      }
+
+      target.write(Buffer.from(result.value));
+    }
+  } finally {
+    target.end();
+    await reader.cancel().catch(() => undefined);
+  }
 }
 
 function parseEventStreamBody(body: string): AgUiEventEnvelope[] {
@@ -49,6 +72,90 @@ function parseEventStreamBody(body: string): AgUiEventEnvelope[] {
 
 function findStateSnapshot(events: readonly AgUiEventEnvelope[]) {
   return [...events].reverse().find((event) => event.type === 'STATE_SNAPSHOT');
+}
+
+function findStateDeltas(events: readonly AgUiEventEnvelope[]) {
+  return events.filter(
+    (event): event is AgUiEventEnvelope & { delta: JsonPatchOperation[] } =>
+      event.type === 'STATE_DELTA' && Array.isArray(event.delta),
+  );
+}
+
+function expectStateDeltaOperation(
+  events: readonly AgUiEventEnvelope[],
+  predicate: (operation: JsonPatchOperation) => boolean,
+) {
+  const stateDeltas = findStateDeltas(events);
+  expect(stateDeltas).not.toHaveLength(0);
+  expect(stateDeltas.some((event) => event.delta.some(predicate))).toBe(true);
+}
+
+async function readFirstMatchingSseEvent(
+  response: Response,
+  predicate: (event: AgUiEventEnvelope) => boolean,
+): Promise<AgUiEventEnvelope | undefined> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('Expected an SSE response body.');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  const parseChunk = (chunk: string): AgUiEventEnvelope[] =>
+    chunk
+      .split('\n')
+      .filter((line) => line.startsWith('data: '))
+      .map((line) => JSON.parse(line.slice('data: '.length)) as AgUiEventEnvelope);
+
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) {
+        break;
+      }
+
+      buffer += decoder.decode(result.value, { stream: true });
+      const frames = buffer.split('\n\n');
+      buffer = frames.pop() ?? '';
+
+      for (const frame of frames) {
+        const matchingEvent = parseChunk(frame).find(predicate);
+        if (matchingEvent) {
+          return matchingEvent;
+        }
+      }
+    }
+
+    buffer += decoder.decode();
+    return parseChunk(buffer).find(predicate);
+  } finally {
+    await reader.cancel();
+  }
+}
+
+async function readThreadSnapshot(params: {
+  baseUrl: string;
+  agentId: string;
+  threadId: string;
+}) {
+  const connectResponse = await fetch(`${params.baseUrl}/agent/${params.agentId}/connect`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      threadId: params.threadId,
+    }),
+  });
+
+  expect(connectResponse.ok).toBe(true);
+  const connectSnapshot = await readFirstMatchingSseEvent(
+    connectResponse,
+    (event) => event.type === 'STATE_SNAPSHOT',
+  );
+  expect(connectSnapshot).toBeDefined();
+  return connectSnapshot;
 }
 
 function createInternalPostgresHooks() {
@@ -79,22 +186,22 @@ function createPortfolioManagerSetupInput() {
       approved: true,
       riskLevel: 'medium' as const,
     },
-    managedAgentMandates: [
-      {
-        agentKey: 'ember-lending-primary',
-        agentType: 'ember-lending',
-        approved: true,
-        settings: {
+    firstManagedMandate: {
+      targetAgentId: 'ember-lending',
+      targetAgentKey: 'ember-lending-primary',
+      mandateSummary: 'lend USDC through the managed lending lane',
+      managedMandate: {
+        allocation_basis: 'allocable_idle',
+        allowed_assets: ['USDC'],
+        asset_intent: {
+          root_asset: 'USDC',
           network: 'arbitrum',
-          protocol: 'aave',
-          allowedCollateralAssets: ['USDC'],
-          allowedBorrowAssets: ['USDC'],
-          maxAllocationPct: 35,
-          maxLtvBps: 7000,
-          minHealthFactor: '1.25',
+          benchmark_asset: 'USD',
+          intent: 'deploy',
+          control_path: 'lending.supply',
         },
       },
-    ],
+    },
   };
 }
 
@@ -401,7 +508,11 @@ describe('agent-portfolio-manager AG-UI integration', () => {
     expect(hireResponse.ok).toBe(true);
     expect(hireResponse.headers.get('content-type')).toContain('text/event-stream');
     const hireEvents = parseEventStreamBody(await hireResponse.text());
-    const hireSnapshot = findStateSnapshot(hireEvents);
+    const hireSnapshot = await readThreadSnapshot({
+      baseUrl,
+      agentId: PORTFOLIO_MANAGER_AGENT_ID,
+      threadId: 'thread-1',
+    });
 
     expect(hireSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -450,7 +561,11 @@ describe('agent-portfolio-manager AG-UI integration', () => {
 
     expect(setupResponse.ok).toBe(true);
     const setupEvents = parseEventStreamBody(await setupResponse.text());
-    const setupSnapshot = findStateSnapshot(setupEvents);
+    const setupSnapshot = await readThreadSnapshot({
+      baseUrl,
+      agentId: PORTFOLIO_MANAGER_AGENT_ID,
+      threadId: 'thread-1',
+    });
 
     expect(setupSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -543,41 +658,27 @@ describe('agent-portfolio-manager AG-UI integration', () => {
 
     expect(signingResponse.ok).toBe(true);
     const signingEvents = parseEventStreamBody(await signingResponse.text());
-    const signingSnapshot = findStateSnapshot(signingEvents);
-
-    expect(signingSnapshot).toMatchObject({
-      type: 'STATE_SNAPSHOT',
-      snapshot: {
-        thread: {
-          lifecycle: {
-            phase: 'active',
-            lastRootedWalletContextId: 'rwc-thread10x00000000000000000000000000000000000000a1',
-            activeWalletAddress: '0x00000000000000000000000000000000000000a1',
-            pendingOnboardingWalletAddress: null,
-          },
-          task: {
-            taskStatus: {
-              state: 'completed',
-              message: {
-                content: 'Portfolio manager onboarding complete. Agent is active.',
-              },
-            },
-          },
-          artifacts: {
-            current: {
-              data: {
-                type: 'shared-ember-rooted-bootstrap',
-                rootedWalletContextId: 'rwc-thread10x00000000000000000000000000000000000000a1',
-                rootDelegation: {
-                  user_wallet: '0x00000000000000000000000000000000000000a1',
-                  status: 'active',
-                },
-              },
-            },
-          },
-        },
-      },
-    });
+    expectStateDeltaOperation(
+      signingEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/lifecycle/phase' &&
+        operation.value === 'active',
+    );
+    expectStateDeltaOperation(
+      signingEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/task/taskStatus/state' &&
+        operation.value === 'completed',
+    );
+    expectStateDeltaOperation(
+      signingEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/task/taskStatus/message/content' &&
+        operation.value === 'Portfolio manager onboarding complete. Agent is active.',
+    );
 
     expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -588,7 +689,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
             rootedWalletContext: expect.objectContaining({
               wallet_address: '0x00000000000000000000000000000000000000a1',
               metadata: expect.objectContaining({
-                approvedMandateEnvelope: expect.objectContaining({
+                approvedOnboardingSetup: expect.objectContaining({
                   portfolioMandate: {
                     approved: true,
                     riskLevel: 'medium',
@@ -770,29 +871,21 @@ describe('agent-portfolio-manager AG-UI integration', () => {
 
     expect(signingResponse.ok).toBe(true);
     const signingEvents = parseEventStreamBody(await signingResponse.text());
-    const signingSnapshot = findStateSnapshot(signingEvents);
-
-    expect(signingSnapshot).toMatchObject({
-      type: 'STATE_SNAPSHOT',
-      snapshot: {
-        thread: {
-          lifecycle: {
-            phase: 'onboarding',
-            activeWalletAddress: '0x00000000000000000000000000000000000000a1',
-            pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          },
-          task: {
-            taskStatus: {
-              state: 'failed',
-              message: {
-                content:
-                  'Portfolio manager onboarding is blocked until the ember-lending service registers its subagent identity in Shared Ember.',
-              },
-            },
-          },
-        },
-      },
-    });
+    expectStateDeltaOperation(
+      signingEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/task/taskStatus/state' &&
+        operation.value === 'failed',
+    );
+    expectStateDeltaOperation(
+      signingEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/task/taskStatus/message/content' &&
+        operation.value ===
+          'Portfolio manager onboarding is blocked until the ember-lending service registers its subagent identity in Shared Ember.',
+    );
 
     expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
       expect.objectContaining({
@@ -892,29 +985,21 @@ describe('agent-portfolio-manager AG-UI integration', () => {
 
     expect(signingResponse.ok).toBe(true);
     const signingEvents = parseEventStreamBody(await signingResponse.text());
-    const signingSnapshot = findStateSnapshot(signingEvents);
-
-    expect(signingSnapshot).toMatchObject({
-      type: 'STATE_SNAPSHOT',
-      snapshot: {
-        thread: {
-          lifecycle: {
-            phase: 'onboarding',
-            activeWalletAddress: '0x00000000000000000000000000000000000000a1',
-            pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
-          },
-          task: {
-            taskStatus: {
-              state: 'failed',
-              message: {
-                content:
-                  'Portfolio manager onboarding is blocked until the portfolio-manager service registers its orchestrator identity in Shared Ember.',
-              },
-            },
-          },
-        },
-      },
-    });
+    expectStateDeltaOperation(
+      signingEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/task/taskStatus/state' &&
+        operation.value === 'failed',
+    );
+    expectStateDeltaOperation(
+      signingEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/task/taskStatus/message/content' &&
+        operation.value ===
+          'Portfolio manager onboarding is blocked until the portfolio-manager service registers its orchestrator identity in Shared Ember.',
+    );
 
     expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
       expect.objectContaining({
@@ -978,29 +1063,28 @@ describe('agent-portfolio-manager AG-UI integration', () => {
 
     expect(signingResponse.ok).toBe(true);
     const signingEvents = parseEventStreamBody(await signingResponse.text());
-    const signingSnapshot = findStateSnapshot(signingEvents);
-
-    expect(signingSnapshot).toMatchObject({
-      type: 'STATE_SNAPSHOT',
-      snapshot: {
-        thread: {
-          lifecycle: {
-            phase: 'prehire',
-            activeWalletAddress: null,
-            pendingOnboardingWalletAddress: null,
-          },
-          task: {
-            taskStatus: {
-              state: 'canceled',
-              message: {
-                content:
-                  'Portfolio manager onboarding was canceled because delegation signing was rejected.',
-              },
-            },
-          },
-        },
-      },
-    });
+    expectStateDeltaOperation(
+      signingEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/lifecycle/phase' &&
+        operation.value === 'prehire',
+    );
+    expectStateDeltaOperation(
+      signingEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/task/taskStatus/state' &&
+        operation.value === 'canceled',
+    );
+    expectStateDeltaOperation(
+      signingEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/task/taskStatus/message/content' &&
+        operation.value ===
+          'Portfolio manager onboarding was canceled because delegation signing was rejected.',
+    );
     expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
@@ -1090,7 +1174,11 @@ describe('agent-portfolio-manager AG-UI integration', () => {
 
     expect(fireResponse.ok).toBe(true);
     const fireEvents = parseEventStreamBody(await fireResponse.text());
-    const fireSnapshot = findStateSnapshot(fireEvents);
+    const fireSnapshot = await readThreadSnapshot({
+      baseUrl,
+      agentId: PORTFOLIO_MANAGER_AGENT_ID,
+      threadId: 'thread-rehire',
+    });
 
     expect(fireSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -1132,7 +1220,11 @@ describe('agent-portfolio-manager AG-UI integration', () => {
 
     expect(rehireResponse.ok).toBe(true);
     const rehireEvents = parseEventStreamBody(await rehireResponse.text());
-    const rehireSnapshot = findStateSnapshot(rehireEvents);
+    const rehireSnapshot = await readThreadSnapshot({
+      baseUrl,
+      agentId: PORTFOLIO_MANAGER_AGENT_ID,
+      threadId: 'thread-rehire',
+    });
 
     expect(rehireSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',

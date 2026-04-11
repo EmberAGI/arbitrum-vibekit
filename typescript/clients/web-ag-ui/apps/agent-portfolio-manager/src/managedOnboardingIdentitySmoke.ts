@@ -79,22 +79,22 @@ function createPortfolioManagerSetupInput() {
       approved: true,
       riskLevel: 'medium' as const,
     },
-    managedAgentMandates: [
-      {
-        agentKey: 'ember-lending-primary',
-        agentType: 'ember-lending',
-        approved: true,
-        settings: {
+    firstManagedMandate: {
+      targetAgentId: 'ember-lending',
+      targetAgentKey: 'ember-lending-primary',
+      mandateSummary: 'lend USDC through the managed lending lane',
+      managedMandate: {
+        allocation_basis: 'allocable_idle',
+        allowed_assets: ['USDC'],
+        asset_intent: {
+          root_asset: 'USDC',
           network: 'arbitrum',
-          protocol: 'aave',
-          allowedCollateralAssets: ['USDC'],
-          allowedBorrowAssets: ['USDC'],
-          maxAllocationPct: 35,
-          maxLtvBps: 7000,
-          minHealthFactor: '1.25',
+          benchmark_asset: 'USD',
+          intent: 'deploy',
+          control_path: 'lending.supply',
         },
       },
-    ],
+    },
   };
 }
 
