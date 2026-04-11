@@ -71,7 +71,6 @@ function createManagedLifecycleState() {
     anchoredPayloadRecords: [],
     lastExecutionResult: null,
     lastExecutionTxHash: null,
-    pendingExecutionSubmission: null,
     lastEscalationRequest: null,
     lastEscalationSummary: null,
   };

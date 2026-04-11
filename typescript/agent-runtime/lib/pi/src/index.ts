@@ -257,7 +257,8 @@ type JsonPatchCompare = (
 
 const jsonPatchCompare =
   (jsonPatch as unknown as { compare?: JsonPatchCompare; default?: { compare?: JsonPatchCompare } }).compare ??
-  (jsonPatch as unknown as { default?: { compare?: JsonPatchCompare } }).default?.compare;
+  (jsonPatch as unknown as { default?: { compare?: JsonPatchCompare; default?: { compare?: JsonPatchCompare } } }).default?.compare ??
+  (jsonPatch as unknown as { default?: { default?: { compare?: JsonPatchCompare } } }).default?.default?.compare;
 
 const shouldDebugPiGateway = process.env.PI_GATEWAY_DEBUG === 'true';
 const PORTABLE_PI_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -1181,7 +1182,7 @@ export const buildPiRuntimeGatewayStateDeltaEvent = (params: {
   const previousSnapshot = buildPiThreadStateSnapshot(params.previousSession);
   const nextSnapshot = buildPiThreadStateSnapshot(params.session);
   if (!jsonPatchCompare) {
-    throw new TypeError('fast-json-patch compare export unavailable');
+    return null;
   }
   const delta = jsonPatchCompare(previousSnapshot, nextSnapshot, true);
 
@@ -1615,6 +1616,32 @@ export const createPiRuntimeGatewayRuntime = (params: {
     await params.onSessionUpdated?.(threadId, session);
     return session;
   };
+  const persistExecutionFailure = async (
+    threadId: string,
+    detail: string,
+  ) => {
+    const session =
+      !params.updateSession
+        ? {
+            ...params.getSession(threadId),
+            execution: {
+              ...params.getSession(threadId).execution,
+              status: 'failed' as const,
+              statusMessage: detail,
+            },
+          }
+        : params.updateSession(threadId, (session) => ({
+            ...session,
+            execution: {
+              ...session.execution,
+              status: 'failed',
+              statusMessage: detail,
+            },
+          }));
+
+    await params.onSessionUpdated?.(threadId, session);
+    return session;
+  };
 
   return {
     connect: (request) => {
@@ -1689,7 +1716,19 @@ export const createPiRuntimeGatewayRuntime = (params: {
             await params.agent.continue();
           }
 
-          const session = await persistRunTranscript(request.threadId, requestMessages, projectedRunEvents);
+          const transcriptSession = await persistRunTranscript(
+            request.threadId,
+            requestMessages,
+            projectedRunEvents,
+          );
+          const agentError =
+            typeof params.agent.state.error === 'string' && params.agent.state.error.trim().length > 0
+              ? params.agent.state.error
+              : null;
+          const session =
+            agentError === null
+              ? transcriptSession
+              : await persistExecutionFailure(request.threadId, agentError);
           logPiGatewayDebug('run session after transcript persist', session);
           const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEvent({
             previousSession: requestSession,

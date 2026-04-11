@@ -15,6 +15,32 @@ const TEST_USER_WALLET = '0x00000000000000000000000000000000000000b1' as const;
 const TEST_ORCHESTRATOR_WALLET = '0x00000000000000000000000000000000000000b2' as const;
 const TEST_DELEGATION_MANAGER = '0x00000000000000000000000000000000000000b3' as const;
 
+function createManagedLendingAdapterContext() {
+  return {
+    policy: {
+      protocol_system: 'aave',
+      allowed_borrow_assets: ['USDC'],
+      max_allocation_pct: 35,
+      max_ltv_bps: 7500,
+      min_health_factor: '1.25',
+    },
+    data_sources: {
+      policy_source: 'portfolio_manager',
+      live_scope_projection: 'lending_position_scopes',
+    },
+  };
+}
+
+function createDefaultUserReservePolicies() {
+  return [
+    {
+      reserve_policy_ref: 'reserve-policy-portfolio-protocol-001',
+      summary: 'no additional direct-user idle reserve configured',
+      user_reserve_rules: [],
+    },
+  ];
+}
+
 function createRootDelegationHandoff(suffix: string) {
   return {
     handoff_id: `handoff-root-portfolio-int-${suffix}`,
@@ -54,6 +80,7 @@ function createPortfolioManagerSetupInput(walletAddress: `0x${string}`) {
           intent: 'deploy' as const,
           control_path: 'lending.supply' as const,
         },
+        adapter_context: createManagedLendingAdapterContext(),
       },
     },
   };
@@ -104,10 +131,11 @@ function createOnboardingBootstrap() {
             intent: 'deploy',
             control_path: 'lending.supply',
           },
+          adapter_context: createManagedLendingAdapterContext(),
         },
       },
     ],
-    userReservePolicies: [],
+    userReservePolicies: createDefaultUserReservePolicies(),
     activation: {
       mandateRef: 'mandate-ember-lending-protocol-001',
     },

@@ -5,6 +5,32 @@ import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 
 import { createPortfolioManagerDomain } from './sharedEmberAdapter.js';
 
+function createManagedLendingAdapterContext() {
+  return {
+    policy: {
+      protocol_system: 'aave',
+      allowed_borrow_assets: ['USDC'],
+      max_allocation_pct: 35,
+      max_ltv_bps: 7500,
+      min_health_factor: '1.25',
+    },
+    data_sources: {
+      policy_source: 'portfolio_manager',
+      live_scope_projection: 'lending_position_scopes',
+    },
+  };
+}
+
+function createDefaultUserReservePolicies() {
+  return [
+    {
+      reserve_policy_ref: 'reserve-policy-portfolio-protocol-001',
+      summary: 'no additional direct-user idle reserve configured',
+      user_reserve_rules: [],
+    },
+  ];
+}
+
 function createRuntimeSigningStub(signPayload: AgentRuntimeSigningService['signPayload']) {
   return {
     readAddress: vi.fn<AgentRuntimeSigningService['readAddress']>(),
@@ -92,6 +118,7 @@ function createPortfolioManagerSetupInput() {
       approved: true as const,
       riskLevel: 'medium' as const,
     },
+    blockedFromAgentsQuantity: null,
     firstManagedMandate: {
       targetAgentId: 'ember-lending' as const,
       targetAgentKey: 'ember-lending-primary',
@@ -106,6 +133,7 @@ function createPortfolioManagerSetupInput() {
           intent: 'deploy' as const,
           control_path: 'lending.supply' as const,
         },
+        adapter_context: createManagedLendingAdapterContext(),
       },
     },
   };
@@ -127,6 +155,7 @@ function createOnboardingBootstrap() {
             approved: true,
             riskLevel: 'medium',
           },
+          blockedFromAgentsQuantity: null,
           firstManagedMandate: {
             targetAgentId: 'ember-lending',
             targetAgentKey: 'ember-lending-primary',
@@ -141,6 +170,7 @@ function createOnboardingBootstrap() {
                 intent: 'deploy',
                 control_path: 'lending.supply',
               },
+              adapter_context: createManagedLendingAdapterContext(),
             },
           },
         },
@@ -167,17 +197,21 @@ function createOnboardingBootstrap() {
             intent: 'deploy',
             control_path: 'lending.supply',
           },
+          adapter_context: createManagedLendingAdapterContext(),
         },
       },
     ],
-    userReservePolicies: [],
+    userReservePolicies: createDefaultUserReservePolicies(),
     activation: {
       mandateRef: 'mandate-ember-lending-protocol-001',
     },
   };
 }
 
-function createLiveManagedAgentPortfolioState() {
+function createLiveManagedAgentPortfolioState(input?: {
+  controlPath?: string;
+}) {
+  const controlPath = input?.controlPath ?? 'lending.supply';
   return {
     agent_id: 'ember-lending',
     mandate_ref: 'mandate-ember-lending-live-001',
@@ -190,8 +224,9 @@ function createLiveManagedAgentPortfolioState() {
         network: 'arbitrum',
         benchmark_asset: 'USD',
         intent: 'deploy',
-        control_path: 'lending.supply',
+        control_path: controlPath,
       },
+      adapter_context: createManagedLendingAdapterContext(),
     },
     agent_wallet: '0x00000000000000000000000000000000000000e1',
     root_user_wallet: '0x00000000000000000000000000000000000000a1',
@@ -226,6 +261,7 @@ function createUpdatedManagedMandate() {
       intent: 'deploy',
       control_path: 'lending.supply',
     },
+    adapter_context: createManagedLendingAdapterContext(),
   };
 }
 
@@ -303,6 +339,9 @@ describe('createPortfolioManagerDomain', () => {
         phase: 'onboarding',
         activeWalletAddress: '0x00000000000000000000000000000000000000a1',
         pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingApprovedSetup: expect.objectContaining({
+          blockedFromAgentsQuantity: null,
+        }),
       },
       outputs: {
         status: {
@@ -539,6 +578,7 @@ describe('createPortfolioManagerDomain', () => {
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            blockedFromAgentsQuantity: createPortfolioManagerSetupInput().blockedFromAgentsQuantity,
             firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
@@ -596,6 +636,7 @@ describe('createPortfolioManagerDomain', () => {
                     approved: true,
                     riskLevel: 'medium',
                   },
+                  blockedFromAgentsQuantity: null,
                   firstManagedMandate: {
                     targetAgentId: 'ember-lending',
                     targetAgentKey: 'ember-lending-primary',
@@ -610,12 +651,19 @@ describe('createPortfolioManagerDomain', () => {
                         intent: 'deploy',
                         control_path: 'lending.supply',
                       },
+                      adapter_context: createManagedLendingAdapterContext(),
                     },
                   },
                 },
               }),
             }),
-            userReservePolicies: [],
+            userReservePolicies: [
+              expect.objectContaining({
+                reserve_policy_ref: expect.stringContaining('reserve-policy-'),
+                summary: 'no additional direct-user idle reserve configured',
+                user_reserve_rules: [],
+              }),
+            ],
             mandates: [
               {
                 mandate_ref: expect.stringContaining('mandate-'),
@@ -637,6 +685,7 @@ describe('createPortfolioManagerDomain', () => {
                     intent: 'deploy',
                     control_path: 'lending.supply',
                   },
+                  adapter_context: createManagedLendingAdapterContext(),
                 },
               },
             ],
@@ -722,6 +771,210 @@ describe('createPortfolioManagerDomain', () => {
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('ownedUnits');
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('reservations');
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('policySnapshots');
+  });
+
+  it('builds a reserve-policy rule when onboarding blocks root assets from agents', async () => {
+    const signedDelegation = createSignedRootDelegation(TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS);
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+        const params =
+          typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
+            ? (jsonRpcRequest['params'] as Record<string, unknown>)
+            : null;
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1') {
+          if (params?.['agent_id'] === 'portfolio-manager' && params['role'] === 'orchestrator') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'portfolio-manager',
+              role: 'orchestrator',
+              walletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
+            });
+          }
+
+          if (params?.['agent_id'] === 'ember-lending' && params['role'] === 'subagent') {
+            return createAgentServiceIdentityResponse({
+              agentId: 'ember-lending',
+              role: 'subagent',
+              walletAddress: '0x00000000000000000000000000000000000000e1',
+            });
+          }
+        }
+
+        if (jsonRpcRequest?.['method'] === 'subagent.readExecutionContext.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: 4,
+              execution_context: {
+                generated_at: '2026-04-02T15:00:00.000Z',
+                network: 'arbitrum',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary:
+                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                mandate_context: null,
+                subagent_wallet_address: '0x00000000000000000000000000000000000000e1',
+                root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                owned_units: [],
+                wallet_contents: [],
+              },
+            },
+          };
+        }
+
+        if (jsonRpcRequest?.['method'] === 'orchestrator.readOnboardingState.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-wallet-accounting-ember-lending-0x00000000000000000000000000000000000000a1',
+            result: {
+              revision: 4,
+              onboarding_state: {
+                wallet_address: '0x00000000000000000000000000000000000000a1',
+                network: 'arbitrum',
+                phase: 'active',
+                proofs: {
+                  rooted_wallet_context_registered: true,
+                  root_delegation_registered: true,
+                  root_authority_active: true,
+                  wallet_baseline_observed: true,
+                  accounting_units_seeded: true,
+                  mandate_inputs_configured: true,
+                  reserve_policy_configured: true,
+                  capital_reserved_for_agent: true,
+                  policy_snapshot_recorded: true,
+                  initial_subagent_delegation_issued: true,
+                  agent_active: true,
+                },
+                rooted_wallet_context: {
+                  rooted_wallet_context_id: 'rwc-user-protocol-001',
+                },
+                root_delegation: {
+                  root_delegation_id: 'root-user-protocol-001',
+                },
+                owned_units: [
+                  {
+                    unit_id: 'unit-usdc-protocol-001',
+                    root_asset: 'USDC',
+                    quantity: '10',
+                    status: 'reserved',
+                    control_path: 'lending.supply',
+                    reservation_id: 'reservation-usdc-protocol-001',
+                  },
+                ],
+                reservations: [
+                  {
+                    reservation_id: 'reservation-usdc-protocol-001',
+                    agent_id: 'ember-lending',
+                    purpose: 'deploy',
+                    status: 'active',
+                    control_path: 'lending.supply',
+                    unit_allocations: [
+                      {
+                        unit_id: 'unit-usdc-protocol-001',
+                        quantity: '10',
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          };
+        }
+
+        return {
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-complete-rooted-bootstrap',
+          result: {
+            protocol_version: 'v1',
+            revision: 3,
+            committed_event_ids: ['evt-rooted-bootstrap-1', 'evt-rooted-bootstrap-2'],
+            rooted_wallet_context_id: 'rwc-user-protocol-001',
+            root_delegation: {
+              root_delegation_id: 'root-user-protocol-001',
+              user_wallet: '0x00000000000000000000000000000000000000a1',
+              status: 'active',
+            },
+          },
+        };
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+      controllerWalletAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        phase: 'onboarding',
+        lastPortfolioState: null,
+        lastSharedEmberRevision: 0,
+        lastRootDelegation: null,
+        lastOnboardingBootstrap: null,
+        lastRootedWalletContextId: null,
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingApprovedSetup: {
+          ...createPortfolioManagerSetupInput(),
+          blockedFromAgentsQuantity: '125',
+        },
+      },
+      operation: {
+        source: 'interrupt',
+        name: 'portfolio-manager-delegation-signing-request',
+        input: {
+          outcome: 'signed',
+          signedDelegations: [signedDelegation],
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.completeRootedBootstrapFromUserSigning.v1',
+        params: expect.objectContaining({
+          onboarding: expect.objectContaining({
+            rootedWalletContext: expect.objectContaining({
+              metadata: expect.objectContaining({
+                approvedOnboardingSetup: expect.objectContaining({
+                  blockedFromAgentsQuantity: '125',
+                }),
+              }),
+            }),
+            userReservePolicies: [
+              expect.objectContaining({
+                summary: 'keep 125 USDC blocked from agents',
+                user_reserve_rules: [
+                  {
+                    root_asset: 'USDC',
+                    network: 'arbitrum',
+                    benchmark_asset: 'USD',
+                    reserved_quantity: '125',
+                    reason: 'keep 125 USDC blocked from agents',
+                  },
+                ],
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
   });
 
   it('keeps onboarding pending when Shared Ember cannot admit the mandate asset after signing', async () => {
@@ -878,6 +1131,7 @@ describe('createPortfolioManagerDomain', () => {
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            blockedFromAgentsQuantity: createPortfolioManagerSetupInput().blockedFromAgentsQuantity,
             firstManagedMandate: {
               ...createPortfolioManagerSetupInput().firstManagedMandate,
               mandateSummary: 'lend WETH through the managed lending lane',
@@ -1016,6 +1270,7 @@ describe('createPortfolioManagerDomain', () => {
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            blockedFromAgentsQuantity: createPortfolioManagerSetupInput().blockedFromAgentsQuantity,
             firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
@@ -1215,6 +1470,7 @@ describe('createPortfolioManagerDomain', () => {
       pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1' as const,
       pendingApprovedSetup: {
         portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+        blockedFromAgentsQuantity: createPortfolioManagerSetupInput().blockedFromAgentsQuantity,
         firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
       },
     };
@@ -1320,6 +1576,7 @@ describe('createPortfolioManagerDomain', () => {
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            blockedFromAgentsQuantity: createPortfolioManagerSetupInput().blockedFromAgentsQuantity,
             firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
@@ -1436,6 +1693,7 @@ describe('createPortfolioManagerDomain', () => {
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            blockedFromAgentsQuantity: createPortfolioManagerSetupInput().blockedFromAgentsQuantity,
             firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
@@ -1552,6 +1810,7 @@ describe('createPortfolioManagerDomain', () => {
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            blockedFromAgentsQuantity: createPortfolioManagerSetupInput().blockedFromAgentsQuantity,
             firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
@@ -1747,6 +2006,7 @@ describe('createPortfolioManagerDomain', () => {
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            blockedFromAgentsQuantity: createPortfolioManagerSetupInput().blockedFromAgentsQuantity,
             firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
@@ -1859,6 +2119,7 @@ describe('createPortfolioManagerDomain', () => {
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            blockedFromAgentsQuantity: createPortfolioManagerSetupInput().blockedFromAgentsQuantity,
             firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
@@ -1917,6 +2178,7 @@ describe('createPortfolioManagerDomain', () => {
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            blockedFromAgentsQuantity: createPortfolioManagerSetupInput().blockedFromAgentsQuantity,
             firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
@@ -2142,6 +2404,7 @@ describe('createPortfolioManagerDomain', () => {
           pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingApprovedSetup: {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
+            blockedFromAgentsQuantity: createPortfolioManagerSetupInput().blockedFromAgentsQuantity,
             firstManagedMandate: createPortfolioManagerSetupInput().firstManagedMandate,
           },
         },
@@ -3584,6 +3847,66 @@ describe('createPortfolioManagerDomain', () => {
         '      <allowed_assets>USDC,USDT</allowed_assets>',
         '    </managed_agent>',
         '  </managed_agent_mandates>',
+      ]),
+    );
+  });
+
+  it('renders the live managed mandate control path carried by Shared Ember instead of assuming lending.supply', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null
+            ? (request as { method?: unknown; params?: unknown })
+            : null;
+        const method = jsonRpcRequest?.method;
+        const params =
+          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+            ? (jsonRpcRequest.params as { agent_id?: unknown })
+            : null;
+
+        if (method === 'subagent.readPortfolioState.v1' && params?.agent_id === 'ember-lending') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-system-context-managed-agent-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: 4,
+              portfolio_state: createLiveManagedAgentPortfolioState({
+                controlPath: 'lending.borrow',
+              }),
+            },
+          };
+        }
+
+        throw new Error(`unexpected method: ${String(method ?? 'missing')}`);
+      }),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      protocolHost,
+    });
+
+    await expect(
+      domain.systemContext?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 4,
+          lastRootDelegation: {
+            root_delegation_id: 'root-a1',
+          },
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        '      <control_path>lending.borrow</control_path>',
       ]),
     );
   });

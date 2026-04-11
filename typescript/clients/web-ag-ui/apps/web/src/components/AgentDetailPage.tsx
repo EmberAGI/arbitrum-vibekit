@@ -83,7 +83,11 @@ import { resolveBlockersInterruptView } from './agentBlockersInterrupt';
 import { resolveCurrentSetupStep } from './agentCurrentSetupStep';
 import { resolveSetupSteps } from './agentSetupSteps';
 import { emitAgentConnectDebug } from '../utils/agentConnectDebug';
-import { buildPortfolioManagerSetupInput } from '../utils/portfolioManagerSetup';
+import {
+  buildManagedLendingAdapterContext,
+  buildPortfolioManagerSetupInput,
+  normalizeBlockedFromAgentsQuantityInput,
+} from '../utils/portfolioManagerSetup';
 import {
   buildManagedMandateSummary,
   canonicalizeManagedMandateAssets,
@@ -769,10 +773,13 @@ function ManagedMandateEditorCard(props: {
   }, [initialAllowedAssetsValue, initialRootAsset, props.view.mandateRef]);
 
   const assetIntent = asRecord(props.view.managedMandate?.['asset_intent']);
-  const network = readString(assetIntent?.['network']) ?? 'arbitrum';
-  const controlPath = readString(assetIntent?.['control_path']) ?? 'lending.supply';
-  const benchmarkAsset = readString(assetIntent?.['benchmark_asset']) ?? 'USD';
-  const allocationBasis = readString(props.view.managedMandate?.['allocation_basis']) ?? 'allocable_idle';
+  const network: ManagedMandateInput['asset_intent']['network'] = 'arbitrum';
+  const controlPath: ManagedMandateInput['asset_intent']['control_path'] = 'lending.supply';
+  const benchmarkAsset: ManagedMandateInput['asset_intent']['benchmark_asset'] = 'USD';
+  const allocationBasis: ManagedMandateInput['allocation_basis'] = 'allocable_idle';
+  const adapterContext =
+    (props.view.managedMandate?.['adapter_context'] as ManagedMandateInput['adapter_context'] | undefined) ??
+    buildManagedLendingAdapterContext();
 
   const handleSave = async () => {
     if (!props.onSave) {
@@ -811,9 +818,10 @@ function ManagedMandateEditorCard(props: {
             root_asset: normalizedRootAsset,
             network,
             benchmark_asset: benchmarkAsset,
-            intent: readString(assetIntent?.['intent']) ?? 'deploy',
+            intent: 'deploy',
             control_path: controlPath,
           },
+          adapter_context: adapterContext,
         },
       });
     } catch (error) {
@@ -2967,6 +2975,8 @@ function AgentBlockersTab({
   const [portfolioManagerAllowedAssetsInput, setPortfolioManagerAllowedAssetsInput] = useState(
     DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
   );
+  const [portfolioManagerBlockedFromAgentsQuantity, setPortfolioManagerBlockedFromAgentsQuantity] =
+    useState('');
   const [fundingTokenAddress, setFundingTokenAddress] = useState('');
   const [isSigningDelegations, setIsSigningDelegations] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2996,6 +3006,7 @@ function AgentBlockersTab({
 
     setPortfolioManagerRootAsset(DEFAULT_MANAGED_MANDATE_ROOT_ASSET);
     setPortfolioManagerAllowedAssetsInput(DEFAULT_MANAGED_MANDATE_ROOT_ASSET);
+    setPortfolioManagerBlockedFromAgentsQuantity('');
   }, [isPortfolioManagerSetupInterrupt]);
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
@@ -3162,10 +3173,19 @@ function AgentBlockersTab({
       return;
     }
 
+    const blockedFromAgentsQuantity = normalizeBlockedFromAgentsQuantityInput(
+      portfolioManagerBlockedFromAgentsQuantity,
+    );
+    if (blockedFromAgentsQuantity === undefined) {
+      setError('Blocked from agents must be a valid non-negative number.');
+      return;
+    }
+
     onInterruptSubmit?.({
       ...buildPortfolioManagerSetupInput(operatorWalletAddress as `0x${string}`, {
         rootAsset: normalizedRootAsset,
         allowedAssetsInput: normalizedAllowedAssets.join(', '),
+        blockedFromAgentsQuantity,
       }),
     });
   };
@@ -3182,6 +3202,9 @@ function AgentBlockersTab({
   );
   const portfolioManagerPreviewSummary = buildManagedMandateSummary(
     portfolioManagerPreviewMandateAssets,
+  );
+  const portfolioManagerPreviewBlockedFromAgents = normalizeBlockedFromAgentsQuantityInput(
+    portfolioManagerBlockedFromAgentsQuantity,
   );
 
   const handleGmxSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -3602,7 +3625,7 @@ function AgentBlockersTab({
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
                     <div className="text-gray-300 text-sm font-medium mb-2">First managed lending lane</div>
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 md:grid-cols-3">
                       <div>
                         <label
                           htmlFor="portfolio-manager-root-asset"
@@ -3640,6 +3663,29 @@ function AgentBlockersTab({
                           Comma-separated asset symbols. The root asset is always included.
                         </div>
                       </div>
+                      <div>
+                        <label
+                          htmlFor="portfolio-manager-blocked-from-agents"
+                          className="block text-sm text-gray-400 mb-2"
+                        >
+                          Blocked from agents
+                        </label>
+                        <input
+                          id="portfolio-manager-blocked-from-agents"
+                          name="portfolio-manager-blocked-from-agents"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={portfolioManagerBlockedFromAgentsQuantity}
+                          onChange={(event) =>
+                            setPortfolioManagerBlockedFromAgentsQuantity(event.target.value)
+                          }
+                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                        />
+                        <div className="mt-2 text-xs text-gray-500">
+                          Root-asset quantity to keep out of managed agent control. Leave blank to block nothing.
+                        </div>
+                      </div>
                     </div>
                     <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
                       <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
@@ -3647,6 +3693,17 @@ function AgentBlockersTab({
                       </div>
                       <div className="mt-2 text-sm leading-relaxed text-gray-300">
                         {portfolioManagerPreviewSummary}
+                      </div>
+                      <div className="mt-2 text-xs text-gray-500">
+                        {portfolioManagerPreviewBlockedFromAgents === undefined
+                          ? 'Blocked from agents: enter a non-negative number.'
+                          : `Blocked from agents: ${
+                              portfolioManagerPreviewBlockedFromAgents ?? 'none'
+                            }${
+                              portfolioManagerPreviewBlockedFromAgents
+                                ? ` ${normalizedPortfolioManagerPreviewRootAsset}`
+                                : ''
+                            }.`}
                       </div>
                     </div>
                   </div>

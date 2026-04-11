@@ -82,20 +82,56 @@ function createAnchoredPayloadRecord() {
   };
 }
 
+function createManagedLendingAdapterContext(input?: {
+  rootAsset?: string;
+  allowedBorrowAssets?: string[];
+}) {
+  const rootAsset = input?.rootAsset ?? 'USDC';
+
+  return {
+    policy: {
+      protocol_system: 'aave',
+      allowed_borrow_assets: input?.allowedBorrowAssets ?? [rootAsset],
+      max_allocation_pct: 35,
+      max_ltv_bps: 7000,
+      min_health_factor: '1.25',
+    },
+    data_sources: {
+      policy_source: 'portfolio_manager',
+      live_scope_projection: 'lending_position_scopes',
+    },
+  };
+}
+
+function createManagedLendingMandateContext(input?: {
+  rootAsset?: string;
+  allowedAssets?: string[];
+  controlPath?: string;
+  adapterContext?: Record<string, unknown>;
+}) {
+  const rootAsset = input?.rootAsset ?? 'USDC';
+
+  return {
+    allocation_basis: 'allocable_idle',
+    allowed_assets: input?.allowedAssets ?? [rootAsset],
+    asset_intent: {
+      root_asset: rootAsset,
+      network: 'arbitrum',
+      benchmark_asset: 'USD',
+      intent: 'deploy',
+      control_path: input?.controlPath ?? 'lending.supply',
+    },
+    adapter_context:
+      input?.adapterContext ?? createManagedLendingAdapterContext({ rootAsset }),
+  };
+}
+
 function createManagedLifecycleState() {
   return {
     phase: 'active' as const,
     mandateRef: 'mandate-ember-lending-001',
     mandateSummary: 'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-    mandateContext: {
-      network: 'arbitrum',
-      protocol: 'aave',
-      allowedCollateralAssets: ['USDC'],
-      allowedBorrowAssets: ['USDC'],
-      maxAllocationPct: 35,
-      maxLtvBps: 7000,
-      minHealthFactor: '1.25',
-    },
+    mandateContext: createManagedLendingMandateContext(),
     walletAddress: '0x00000000000000000000000000000000000000b1' as const,
     rootUserWalletAddress: '0x00000000000000000000000000000000000000a1' as const,
     rootedWalletContextId: 'rwc-ember-lending-thread-001',
@@ -145,15 +181,7 @@ function createPortfolioStateResponse() {
           mandate_ref: 'mandate-ember-lending-001',
           summary:
             'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-          context: {
-            network: 'arbitrum',
-            protocol: 'aave',
-            allowedCollateralAssets: ['USDC'],
-            allowedBorrowAssets: ['USDC'],
-            maxAllocationPct: 35,
-            maxLtvBps: 7000,
-            minHealthFactor: '1.25',
-          },
+          context: createManagedLendingMandateContext(),
         },
         owned_units: [
           {
@@ -221,15 +249,7 @@ function createPortfolioStateResponseWithoutRootedWalletContext() {
           mandate_ref: 'mandate-ember-lending-001',
           summary:
             'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-          context: {
-            network: 'arbitrum',
-            protocol: 'aave',
-            allowedCollateralAssets: ['USDC'],
-            allowedBorrowAssets: ['USDC'],
-            maxAllocationPct: 35,
-            maxLtvBps: 7000,
-            minHealthFactor: '1.25',
-          },
+          context: createManagedLendingMandateContext(),
         },
         owned_units: [
           {
@@ -270,15 +290,7 @@ function createExecutionContextResponse() {
         mandate_ref: 'mandate-ember-lending-001',
         mandate_summary:
           'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-        mandate_context: {
-          network: 'arbitrum',
-          protocol: 'aave',
-          allowedCollateralAssets: ['USDC'],
-          allowedBorrowAssets: ['USDC'],
-          maxAllocationPct: 35,
-          maxLtvBps: 7000,
-          minHealthFactor: '1.25',
-        },
+        mandate_context: createManagedLendingMandateContext(),
         subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
         root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
         owned_units: [
@@ -343,15 +355,7 @@ function createExecutionContextResponseWithoutReservations() {
         mandate_ref: 'mandate-ember-lending-001',
         mandate_summary:
           'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-        mandate_context: {
-          network: 'arbitrum',
-          protocol: 'aave',
-          allowedCollateralAssets: ['USDC'],
-          allowedBorrowAssets: ['USDC'],
-          maxAllocationPct: 35,
-          maxLtvBps: 7000,
-          minHealthFactor: '1.25',
-        },
+        mandate_context: createManagedLendingMandateContext(),
         subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
         root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
         owned_units: [],
@@ -1108,6 +1112,150 @@ describe('createEmberLendingDomain', () => {
     );
     expect(context?.join('\n')).not.toContain('shared_ember_accounting_context');
     expect(context?.join('\n')).not.toContain('<proofs>');
+  });
+
+  it('renders managed lending policy and live scope risk from the canonical Shared Ember lending reads', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+        if (request.method === 'subagent.readExecutionContext.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-execution-context',
+            result: {
+              protocol_version: 'v1',
+              revision: 12,
+              execution_context: {
+                generated_at: '2026-04-01T06:00:00.000Z',
+                network: 'arbitrum',
+                mandate_ref: 'mandate-ember-lending-001',
+                mandate_summary:
+                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
+                mandate_context: {
+                  allocation_basis: 'allocable_idle',
+                  allowed_assets: ['USDC'],
+                  asset_intent: {
+                    root_asset: 'USDC',
+                    network: 'arbitrum',
+                    benchmark_asset: 'USD',
+                    intent: 'deploy',
+                    control_path: 'lending.supply',
+                  },
+                  adapter_context: {
+                    policy: {
+                      protocol_system: 'aave',
+                      allowed_borrow_assets: ['USDC'],
+                      max_allocation_pct: 35,
+                      max_ltv_bps: 7000,
+                      min_health_factor: '1.25',
+                    },
+                    data_sources: {
+                      policy_source: 'portfolio_manager',
+                      live_scope_projection: 'lending_position_scopes',
+                    },
+                  },
+                },
+                subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
+                root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                owned_units: [],
+                reservations: [],
+                wallet_contents: [],
+                lending_position_scopes: [
+                  {
+                    position_scope_id:
+                      'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
+                    protocol_system: 'aave',
+                    market_metadata: {
+                      allowed_collateral_assets: ['USDC'],
+                      allowed_borrow_assets: ['USDC'],
+                      max_allocation_pct: 35,
+                      max_ltv_bps: 7000,
+                      min_health_factor: '1.25',
+                    },
+                    risk_state: {
+                      borrowable_headroom_usd: '63',
+                      health_factor: '1.42',
+                    },
+                    freshness: {
+                      source_kind: 'valuation_ref',
+                      latest_observed_at: '2026-04-01T05:59:00.000Z',
+                    },
+                  },
+                ],
+              },
+            },
+          };
+        }
+
+        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 12,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 12,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const context = await domain.systemContext?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+    });
+
+    expect(context).toEqual(
+      expect.arrayContaining([
+        '  <managed_lending_policy>',
+        '    <protocol_system>aave</protocol_system>',
+        '    <allowed_collateral_assets>USDC</allowed_collateral_assets>',
+        '    <allowed_borrow_assets>USDC</allowed_borrow_assets>',
+        '    <max_allocation_pct>35</max_allocation_pct>',
+        '    <max_ltv_bps>7000</max_ltv_bps>',
+        '    <min_health_factor>1.25</min_health_factor>',
+        '    <policy_source>portfolio_manager</policy_source>',
+        '    <live_scope_projection>lending_position_scopes</live_scope_projection>',
+        '  <lending_position_scopes>',
+        '    <lending_position_scope position_scope_id="position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1">',
+        '      <borrowable_headroom_usd>63</borrowable_headroom_usd>',
+        '      <health_factor>1.42</health_factor>',
+        '      <freshness_source_kind>valuation_ref</freshness_source_kind>',
+        '      <latest_observed_at>2026-04-01T05:59:00.000Z</latest_observed_at>',
+      ]),
+    );
+  });
+
+  it('ignores flattened adapter-specific policy when the managed mandate envelope is malformed', async () => {
+    const domain = createEmberLendingDomain({
+      agentId: 'ember-lending',
+    });
+
+    const context = await domain.systemContext?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        mandateContext: createManagedLendingMandateContext({
+          adapterContext: {
+            protocol_system: 'aave',
+            allowed_borrow_assets: ['USDC'],
+            max_allocation_pct: 35,
+            max_ltv_bps: 7000,
+            min_health_factor: '1.25',
+          },
+        }),
+      },
+    });
+
+    expect(context).not.toContain('  <managed_lending_policy>');
+    expect(context).not.toContain('  <policy_source>');
+    expect(context).not.toContain('  <live_scope_projection>');
   });
 
   it('falls back to persisted active reservations when the live execution-context payload is sparse', async () => {
@@ -2542,17 +2690,9 @@ describe('createEmberLendingDomain', () => {
                 mandate_ref: 'mandate-ember-lending-001',
                 mandate_summary:
                   'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
-                mandate_context: {
-                  allocation_basis: 'allocable_idle',
-                  allowed_assets: ['WETH'],
-                  asset_intent: {
-                    root_asset: 'WETH',
-                    network: 'arbitrum',
-                    benchmark_asset: 'USD',
-                    intent: 'deploy',
-                    control_path: 'lending.supply',
-                  },
-                },
+                mandate_context: createManagedLendingMandateContext({
+                  rootAsset: 'WETH',
+                }),
                 subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
                 root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
                 owned_units: [],
@@ -2637,17 +2777,9 @@ describe('createEmberLendingDomain', () => {
       state: {
         ...createManagedLifecycleState(),
         mandateSummary: 'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
-        mandateContext: {
-          allocation_basis: 'allocable_idle',
-          allowed_assets: ['WETH'],
-          asset_intent: {
-            root_asset: 'WETH',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            intent: 'deploy',
-            control_path: 'lending.supply',
-          },
-        },
+        mandateContext: createManagedLendingMandateContext({
+          rootAsset: 'WETH',
+        }),
         rootedWalletContextId: null,
         lastPortfolioState: {
           agent_id: 'ember-lending',
@@ -3143,6 +3275,412 @@ describe('createEmberLendingDomain', () => {
       },
     });
     expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+      }),
+    );
+  });
+
+  it('rehydrates authoritative portfolio state before follow-up withdraw planning after execution', async () => {
+    const staleIngressUnitId =
+      'unit-aarbweth-wallet-observation:arbitrum:0x00000000000000000000000000000000000000a1:2026-04-11T21:02:55.061Z:aArbWETH:ingress';
+    const freshCollateralUnitId =
+      'unit-aarbweth-wallet-observation:arbitrum:0x00000000000000000000000000000000000000a1:2026-03-30T00:00:00.000Z';
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown; params?: { handoff?: unknown } };
+
+        switch (request.method) {
+          case 'subagent.readPortfolioState.v1':
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-read-portfolio-state',
+              result: {
+                protocol_version: 'v1',
+                revision: 9,
+                portfolio_state: {
+                  agent_id: 'ember-lending',
+                  rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
+                  root_user_wallet: '0x00000000000000000000000000000000000000a1',
+                  agent_wallet: '0x00000000000000000000000000000000000000b1',
+                  mandate: {
+                    mandate_ref: 'mandate-ember-lending-001',
+                    summary:
+                      'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+                    context: createManagedLendingMandateContext({
+                      rootAsset: 'WETH',
+                      allowedAssets: ['WETH'],
+                    }),
+                  },
+                  owned_units: [
+                    {
+                      unit_id: freshCollateralUnitId,
+                      root_asset: 'aArbWETH',
+                      quantity: '10',
+                      reservation_id: 'reservation-ember-lending-withdraw-001',
+                      metadata: {
+                        underlying_asset_symbol: 'WETH',
+                        source_unit_id: staleIngressUnitId,
+                      },
+                      parent_unit_ids: [staleIngressUnitId],
+                    },
+                  ],
+                  reservations: [
+                    {
+                      reservation_id: 'reservation-ember-lending-withdraw-001',
+                      purpose: 'refresh withdraw coverage',
+                      control_path: 'lending.withdraw',
+                      unit_allocations: [
+                        {
+                          unit_id: freshCollateralUnitId,
+                          quantity: '10',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            };
+          case 'subagent.readExecutionContext.v1':
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-read-execution-context',
+              result: {
+                protocol_version: 'v1',
+                revision: 9,
+                execution_context: {
+                  generated_at: '2026-04-11T21:03:30.000Z',
+                  network: 'arbitrum',
+                  mandate_ref: 'mandate-ember-lending-001',
+                  mandate_summary:
+                    'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+                  mandate_context: createManagedLendingMandateContext({
+                    rootAsset: 'WETH',
+                    allowedAssets: ['WETH'],
+                  }),
+                  subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
+                  root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
+                  owned_units: [],
+                  reservations: [],
+                  wallet_contents: [],
+                },
+              },
+            };
+          case 'subagent.createTransactionPlan.v1':
+            expect(request.params?.handoff).toMatchObject({
+              control_path: 'lending.withdraw',
+              candidate_unit_ids: [freshCollateralUnitId],
+              requested_quantities: [
+                {
+                  unit_id: freshCollateralUnitId,
+                  quantity: '5',
+                },
+              ],
+            });
+
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-create-transaction-plan',
+              result: {
+                protocol_version: 'v1',
+                revision: 10,
+                committed_event_ids: ['event-ember-lending-plan-created-001'],
+                candidate_plan: {
+                  planning_kind: 'subagent_handoff',
+                  transaction_plan_id: 'txplan-ember-lending-withdraw-001',
+                  handoff: {
+                    handoff_id: 'handoff-thread-1',
+                    payload_builder_output: {
+                      transaction_payload_ref: 'txpayload-ember-lending-withdraw-001',
+                      required_control_path: 'lending.withdraw',
+                      network: 'arbitrum',
+                    },
+                  },
+                  compact_plan_summary: {
+                    control_path: 'lending.withdraw',
+                    asset: 'WETH',
+                    amount: '5',
+                    summary: 'withdraw part of the current WETH collateral from Aave',
+                  },
+                },
+              },
+            };
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const anchoredPayloadResolver = {
+      anchorCandidatePlanPayload: vi.fn(async () => ({
+        anchoredPayloadRef: 'txpayload-ember-lending-withdraw-001',
+        transactionRequests: [
+          {
+            type: 'EVM_TX' as const,
+            to: '0x00000000000000000000000000000000000000d1',
+            value: '0',
+            data: '0x617ba037',
+            chainId: '42161',
+          },
+        ],
+        controlPath: 'lending.withdraw',
+        network: 'arbitrum',
+        transactionPlanId: 'txplan-ember-lending-withdraw-001',
+      })),
+      resolvePreparedUnsignedTransaction: vi.fn(async () => TEST_UNSIGNED_EXECUTION_TRANSACTION_HEX),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver,
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        mandateSummary: 'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+        mandateContext: createManagedLendingMandateContext({
+          rootAsset: 'WETH',
+          allowedAssets: ['WETH'],
+        }),
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          owned_units: [
+            {
+              unit_id: staleIngressUnitId,
+              root_asset: 'aArbWETH',
+              quantity: '10',
+              reservation_id: 'reservation-ember-lending-supply-001',
+            },
+          ],
+          reservations: [
+            {
+              reservation_id: 'reservation-ember-lending-supply-001',
+              purpose: 'deploy',
+              control_path: 'lending.supply',
+              unit_allocations: [
+                {
+                  unit_id: staleIngressUnitId,
+                  quantity: '10',
+                },
+              ],
+            },
+          ],
+        },
+        lastReservationSummary:
+          'Reservation reservation-ember-lending-supply-001 deploys 10 WETH via lending.supply.',
+        lastExecutionResult: {
+          phase: 'completed',
+        },
+        lastExecutionTxHash:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      },
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          ...createCandidatePlanInput(),
+          intent: 'decrease',
+          action_summary: 'withdraw part of the current WETH collateral from Aave',
+          control_path: 'lending.withdraw',
+          candidate_unit_ids: [staleIngressUnitId],
+          requested_quantities: [
+            {
+              unit_id: staleIngressUnitId,
+              quantity: '5',
+            },
+          ],
+          payload_builder_output: {
+            transaction_payload_ref: 'tx-lending-withdraw-001',
+            required_control_path: 'lending.withdraw',
+            network: 'arbitrum',
+          },
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Candidate lending plan created through the Shared Ember planner.',
+        },
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.readPortfolioState.v1',
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransactionPlan.v1',
+      }),
+    );
+  });
+
+  it('fails closed when an alias-requested partial amount exceeds the admitted withdraw quantity', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+
+        switch (request.method) {
+          case 'subagent.readPortfolioState.v1':
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-read-portfolio-state',
+              result: {
+                protocol_version: 'v1',
+                revision: 7,
+                portfolio_state: {
+                  agent_id: 'ember-lending',
+                  rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
+                  root_user_wallet: '0x00000000000000000000000000000000000000a1',
+                  agent_wallet: '0x00000000000000000000000000000000000000b1',
+                  mandate: {
+                    mandate_ref: 'mandate-ember-lending-001',
+                    summary:
+                      'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+                    context: {
+                      network: 'arbitrum',
+                      protocol: 'aave',
+                      allowedCollateralAssets: ['WETH'],
+                      allowedBorrowAssets: ['WETH'],
+                      maxAllocationPct: 35,
+                      maxLtvBps: 7000,
+                      minHealthFactor: '1.25',
+                    },
+                  },
+                  owned_units: [
+                    {
+                      unit_id: 'unit-ember-lending-aave-collateral-001',
+                      root_asset: 'aArbWETH',
+                      quantity: '10',
+                      reservation_id: 'reservation-ember-lending-withdraw-001',
+                      metadata: {
+                        underlying_asset_symbol: 'WETH',
+                      },
+                    },
+                  ],
+                  reservations: [
+                    {
+                      reservation_id: 'reservation-ember-lending-withdraw-001',
+                      purpose: 'decrease',
+                      control_path: 'lending.withdraw',
+                      unit_allocations: [
+                        {
+                          unit_id: 'unit-ember-lending-aave-collateral-001',
+                          quantity: '10',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            };
+          case 'subagent.readExecutionContext.v1':
+            return createExecutionContextResponse();
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver: createAnchoredPayloadResolverStub(),
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        mandateSummary: 'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
+        mandateContext: {
+          network: 'arbitrum',
+          protocol: 'aave',
+          allowedCollateralAssets: ['WETH'],
+          allowedBorrowAssets: ['WETH'],
+          maxAllocationPct: 35,
+          maxLtvBps: 7000,
+          minHealthFactor: '1.25',
+        },
+        lastPortfolioState: {
+          agent_id: 'ember-lending',
+          owned_units: [
+            {
+              unit_id: 'unit-ember-lending-aave-collateral-001',
+              root_asset: 'aArbWETH',
+              quantity: '10',
+              reservation_id: 'reservation-ember-lending-withdraw-001',
+              metadata: {
+                underlying_asset_symbol: 'WETH',
+              },
+            },
+          ],
+          reservations: [
+            {
+              reservation_id: 'reservation-ember-lending-withdraw-001',
+              purpose: 'decrease',
+              control_path: 'lending.withdraw',
+              unit_allocations: [
+                {
+                  unit_id: 'unit-ember-lending-aave-collateral-001',
+                  quantity: '10',
+                },
+              ],
+            },
+          ],
+        },
+        lastReservationSummary:
+          'Reservation reservation-ember-lending-withdraw-001 withdraws 10 WETH via lending.withdraw.',
+      },
+      operation: {
+        source: 'tool',
+        name: 'create_transaction_plan',
+        input: {
+          ...createCandidatePlanInput(),
+          control_path: 'lending.withdraw',
+          candidate_unit_ids: ['WETH'],
+          requested_quantities: {
+            WETH: '11',
+          },
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending can only plan with Portfolio Manager-admitted units for this thread.',
+        },
+      },
+    });
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'subagent.createTransactionPlan.v1',
       }),
@@ -6664,11 +7202,6 @@ describe('createEmberLendingDomain', () => {
         lastSharedEmberRevision: 9,
         lastExecutionResult: null,
         lastExecutionTxHash: null,
-        pendingExecutionSubmission: {
-          transactionPlanId: 'txplan-ember-lending-001',
-          requestId: 'req-ember-lending-execution-001',
-          idempotencyKey: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
-        },
       },
       outputs: {
         status: {
@@ -6679,7 +7212,7 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
-  it('recovers a dropped submit response from the committed-event outbox without signing again', async () => {
+  it('retries execution through Shared Ember after a dropped submit response without local recovery state', async () => {
     const protocolHost = {
       handleJsonRpc: vi
         .fn()
@@ -6694,31 +7227,38 @@ describe('createEmberLendingDomain', () => {
           },
         })
         .mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:4010'))
-        .mockRejectedValueOnce(new Error('projection refresh unavailable')),
-      readCommittedEventOutbox: vi
-        .fn()
         .mockResolvedValueOnce({
-          protocol_version: 'v1',
-          revision: 10,
-          events: [
-            {
-              event_id: 'evt-request-execution-3',
-              sequence: 3,
-              aggregate: 'request',
-              aggregate_id: 'req-ember-lending-execution-001',
-              event_type: 'requestExecution.completed.v1',
-              committed_at: '2026-04-01T06:18:00Z',
-              payload: {
-                request_id: 'req-ember-lending-execution-001',
-                transaction_plan_id: 'txplan-ember-lending-001',
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: [],
+            execution_result: {
+              phase: 'completed',
+              request_id: 'req-ember-lending-execution-001',
+              transaction_plan_id: 'txplan-ember-lending-001',
+              execution: {
                 execution_id: 'exec-ember-lending-001',
                 status: 'confirmed',
                 transaction_hash:
                   '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
               },
             },
-          ],
+          },
+        })
+        .mockResolvedValueOnce({
+          ...createPortfolioStateResponse(),
+          result: {
+            ...createPortfolioStateResponse().result,
+            revision: 10,
+          },
         }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        events: [],
+      })),
       acknowledgeCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
         revision: 10,
@@ -6757,8 +7297,9 @@ describe('createEmberLendingDomain', () => {
         name: 'request_transaction_execution',
       },
     });
+    expect(firstAttempt?.state).not.toHaveProperty('pendingExecutionSubmission');
 
-    const resumedAttempt = await domain.handleOperation?.({
+    const retriedAttempt = await domain.handleOperation?.({
       threadId: 'thread-1',
       state: firstAttempt?.state,
       operation: {
@@ -6768,14 +7309,33 @@ describe('createEmberLendingDomain', () => {
     });
 
     expect(runtimeSigning.signPayload).toHaveBeenCalledTimes(1);
-    expect(protocolHost.handleJsonRpc).toHaveBeenCalledTimes(3);
-    expect(protocolHost.readCommittedEventOutbox).toHaveBeenNthCalledWith(1, {
-      protocol_version: 'v1',
-      consumer_id: 'ember-lending-req-ember-lending-execution-001',
-      after_sequence: 0,
-      limit: 100,
+    expect(protocolHost.readCommittedEventOutbox).not.toHaveBeenCalled();
+    const requestExecutionCalls = protocolHost.handleJsonRpc.mock.calls
+      .map(([request]) => request)
+      .filter(
+        (request): request is {
+          jsonrpc: '2.0';
+          id: string;
+          method: 'subagent.requestTransactionExecution.v1';
+          params: Record<string, unknown>;
+        } =>
+          typeof request === 'object' &&
+          request !== null &&
+          'method' in request &&
+          request.method === 'subagent.requestTransactionExecution.v1',
+      );
+    expect(requestExecutionCalls).toHaveLength(2);
+    expect(requestExecutionCalls[1]).toEqual({
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-request-transaction-execution',
+      method: 'subagent.requestTransactionExecution.v1',
+      params: {
+        idempotency_key: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
+        expected_revision: 9,
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
     });
-    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(3, {
+    expect(protocolHost.handleJsonRpc.mock.calls.map(([request]) => request)).toContainEqual({
       jsonrpc: '2.0',
       id: 'shared-ember-thread-1-hydrate-runtime-projection',
       method: 'subagent.readPortfolioState.v1',
@@ -6783,7 +7343,7 @@ describe('createEmberLendingDomain', () => {
         agent_id: 'ember-lending',
       },
     });
-    expect(resumedAttempt).toMatchObject({
+    expect(retriedAttempt).toMatchObject({
       state: {
         phase: 'active',
         lastSharedEmberRevision: 10,
@@ -6800,7 +7360,6 @@ describe('createEmberLendingDomain', () => {
         },
         lastExecutionTxHash:
           '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
-        pendingExecutionSubmission: null,
       },
       outputs: {
         status: {
@@ -6809,6 +7368,121 @@ describe('createEmberLendingDomain', () => {
         },
       },
     });
+    expect(retriedAttempt?.state).not.toHaveProperty('pendingExecutionSubmission');
+  });
+
+  it('ignores legacy persisted pending execution recovery state and executes the current plan directly', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-transaction-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-signed-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-request-execution-2'],
+            execution_result: {
+              phase: 'completed',
+              request_id: 'req-ember-lending-execution-001',
+              transaction_plan_id: 'txplan-ember-lending-001',
+              execution: {
+                execution_id: 'exec-ember-lending-001',
+                status: 'confirmed',
+                transaction_hash:
+                  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+              },
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          ...createPortfolioStateResponse(),
+          result: {
+            ...createPortfolioStateResponse().result,
+            revision: 10,
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      runtimeSigning,
+      runtimeSignerRef: 'service-wallet',
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+        pendingExecutionSubmission: {
+          transactionPlanId: 'txplan-ember-lending-001',
+          requestId: 'req-ember-lending-execution-001',
+          idempotencyKey: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
+          signedTransaction: {
+            execution_preparation_id: 'execprep-ember-lending-001',
+            transaction_plan_id: 'txplan-ember-lending-001',
+            request_id: 'req-ember-lending-execution-001',
+            signer_address: '0x00000000000000000000000000000000000000b1',
+            raw_transaction: '0x02deadbeef',
+          },
+          revision: 9,
+        },
+      } as typeof createManagedLifecycleState extends () => infer T ? T & {
+        pendingExecutionSubmission: Record<string, unknown>;
+      } : never,
+      operation: {
+        source: 'tool',
+        name: 'request_transaction_execution',
+      },
+    });
+
+    expect(runtimeSigning.signPayload).toHaveBeenCalledTimes(1);
+    expect(protocolHost.readCommittedEventOutbox).not.toHaveBeenCalled();
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-request-transaction-execution',
+      method: 'subagent.requestTransactionExecution.v1',
+      params: {
+        idempotency_key: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
+        expected_revision: 7,
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+    });
+    expect(result?.state).not.toHaveProperty('pendingExecutionSubmission');
   });
 
   it('surfaces blocked execution requests without claiming the transaction plan executed', async () => {

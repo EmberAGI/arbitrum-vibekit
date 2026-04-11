@@ -200,6 +200,19 @@ function createPortfolioManagerSetupInput() {
           intent: 'deploy',
           control_path: 'lending.supply',
         },
+        adapter_context: {
+          policy: {
+            protocol_system: 'aave',
+            allowed_borrow_assets: ['USDC'],
+            max_allocation_pct: 35,
+            max_ltv_bps: 7500,
+            min_health_factor: '1.25',
+          },
+          data_sources: {
+            policy_source: 'portfolio_manager',
+            live_scope_projection: 'lending_position_scopes',
+          },
+        },
       },
     },
   };
@@ -713,6 +726,19 @@ describe('agent-portfolio-manager AG-UI integration', () => {
                     benchmark_asset: 'USD',
                     intent: 'deploy',
                     control_path: 'lending.supply',
+                  },
+                  adapter_context: {
+                    policy: {
+                      protocol_system: 'aave',
+                      allowed_borrow_assets: ['USDC'],
+                      max_allocation_pct: 35,
+                      max_ltv_bps: 7500,
+                      min_health_factor: '1.25',
+                    },
+                    data_sources: {
+                      policy_source: 'portfolio_manager',
+                      live_scope_projection: 'lending_position_scopes',
+                    },
                   },
                 },
               }),

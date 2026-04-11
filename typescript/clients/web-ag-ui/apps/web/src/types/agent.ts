@@ -254,6 +254,24 @@ export interface PortfolioManagerMandateApproval {
   riskLevel: 'medium';
 }
 
+export interface ManagedMandateAdapterContextPolicyInput {
+  protocol_system: 'aave';
+  allowed_borrow_assets: string[];
+  max_allocation_pct: number;
+  max_ltv_bps: number;
+  min_health_factor: string | null;
+}
+
+export interface ManagedMandateAdapterContextDataSourcesInput {
+  policy_source: 'portfolio_manager';
+  live_scope_projection: 'lending_position_scopes';
+}
+
+export interface ManagedMandateAdapterContextInput {
+  policy: ManagedMandateAdapterContextPolicyInput;
+  data_sources: ManagedMandateAdapterContextDataSourcesInput;
+}
+
 export interface ManagedMandateInput {
   allocation_basis: 'allocable_idle';
   allowed_assets: string[];
@@ -264,6 +282,7 @@ export interface ManagedMandateInput {
     intent: 'deploy';
     control_path: 'lending.supply';
   };
+  adapter_context: ManagedMandateAdapterContextInput;
 }
 
 export interface PortfolioManagerFirstManagedMandateInput {
@@ -276,6 +295,7 @@ export interface PortfolioManagerFirstManagedMandateInput {
 export interface PortfolioManagerSetupInput {
   walletAddress: `0x${string}`;
   portfolioMandate: PortfolioManagerMandateApproval;
+  blockedFromAgentsQuantity: string | null;
   firstManagedMandate: PortfolioManagerFirstManagedMandateInput;
 }
 

@@ -594,10 +594,8 @@ const PORTFOLIO_MANAGER_DELEGATION_SALT =
 const PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP = '2026-03-30T00:00:00.000Z';
 const PORTFOLIO_MANAGER_PROTOCOL_SOURCE = 'onboarding_scan';
 const PORTFOLIO_MANAGER_DEFAULT_RISK_LEVEL = 'medium';
-const PORTFOLIO_MANAGER_ACTIVATION_PURPOSE = 'deploy';
 const FIRST_MANAGED_AGENT_TYPE = 'ember-lending';
 const FIRST_MANAGED_AGENT_ALLOCATION_MODE = 'allocable_idle';
-const FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH = 'lending.supply';
 const FIRST_MANAGED_AGENT_KEY = 'ember-lending-primary';
 const PORTFOLIO_MANAGER_ROUTE_AGENT_ID = 'agent-portfolio-manager';
 const FIRST_MANAGED_AGENT_ROUTE_ID = 'agent-ember-lending';
@@ -618,16 +616,22 @@ type PortfolioManagerPortfolioMandate = {
   riskLevel: typeof PORTFOLIO_MANAGER_DEFAULT_RISK_LEVEL;
 };
 
+type ManagedMandateAdapterContext = {
+  policy: Record<string, unknown>;
+  data_sources: Record<string, unknown>;
+};
+
 type ManagedMandate = {
   allocation_basis: typeof FIRST_MANAGED_AGENT_ALLOCATION_MODE;
   allowed_assets: string[];
   asset_intent: {
     root_asset: string;
-    network: typeof PORTFOLIO_MANAGER_NETWORK;
+    network: string;
     benchmark_asset: string;
-    intent: typeof PORTFOLIO_MANAGER_ACTIVATION_PURPOSE;
-    control_path: typeof FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH;
+    intent: string;
+    control_path: string;
   };
+  adapter_context: ManagedMandateAdapterContext;
 };
 
 type ManagedMandateEditorProjection = {
@@ -660,6 +664,7 @@ type PortfolioManagerFirstManagedMandate = {
 
 type PortfolioManagerApprovedSetup = {
   portfolioMandate: PortfolioManagerPortfolioMandate;
+  blockedFromAgentsQuantity: string | null;
   firstManagedMandate: PortfolioManagerFirstManagedMandate;
 };
 
@@ -748,6 +753,24 @@ function readFirstRecordFromArray(value: unknown): Record<string, unknown> | nul
   return null;
 }
 
+function readManagedMandateAdapterContext(input: unknown): ManagedMandateAdapterContext | null {
+  if (!isRecord(input)) {
+    return null;
+  }
+
+  const policy = isRecord(input['policy']) ? input['policy'] : null;
+  const dataSources = isRecord(input['data_sources']) ? input['data_sources'] : null;
+
+  if (policy === null || dataSources === null) {
+    return null;
+  }
+
+  return {
+    policy,
+    data_sources: dataSources,
+  };
+}
+
 function readManagedMandate(input: unknown): ManagedMandate | null {
   if (!isRecord(input)) {
     return null;
@@ -761,15 +784,18 @@ function readManagedMandate(input: unknown): ManagedMandate | null {
   const benchmarkAsset = readString(assetIntent?.['benchmark_asset']);
   const intent = readString(assetIntent?.['intent']);
   const controlPath = readString(assetIntent?.['control_path']);
+  const adapterContext = readManagedMandateAdapterContext(input['adapter_context']);
 
   if (
     allocationBasis !== FIRST_MANAGED_AGENT_ALLOCATION_MODE ||
     !isNonEmptyStringArray(allowedAssets) ||
     rootAsset === null ||
-    network !== PORTFOLIO_MANAGER_NETWORK ||
+    !allowedAssets.includes(rootAsset) ||
+    network === null ||
     benchmarkAsset === null ||
-    intent !== PORTFOLIO_MANAGER_ACTIVATION_PURPOSE ||
-    controlPath !== FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH
+    intent === null ||
+    controlPath === null ||
+    adapterContext === null
   ) {
     return null;
   }
@@ -779,11 +805,12 @@ function readManagedMandate(input: unknown): ManagedMandate | null {
     allowed_assets: allowedAssets,
     asset_intent: {
       root_asset: rootAsset,
-      network: PORTFOLIO_MANAGER_NETWORK,
+      network,
       benchmark_asset: benchmarkAsset,
-      intent: PORTFOLIO_MANAGER_ACTIVATION_PURPOSE,
-      control_path: FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH,
+      intent,
+      control_path: controlPath,
     },
+    adapter_context: adapterContext,
   };
 }
 
@@ -805,6 +832,28 @@ function parsePortfolioMandate(input: unknown): PortfolioManagerPortfolioMandate
     approved: true,
     riskLevel: PORTFOLIO_MANAGER_DEFAULT_RISK_LEVEL,
   };
+}
+
+function readOptionalQuantity(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    return null;
+  }
+
+  const parsedValue = Number(trimmedValue);
+  if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+    return undefined;
+  }
+
+  return String(parsedValue);
 }
 
 function parseFirstManagedMandate(input: unknown): PortfolioManagerFirstManagedMandate | null {
@@ -835,31 +884,37 @@ function parseFirstManagedMandate(input: unknown): PortfolioManagerFirstManagedM
 }
 
 function parsePortfolioManagerSetupInput(input: unknown): PortfolioManagerSetupInput | null {
-  if (typeof input !== 'object' || input === null) {
+  if (!isRecord(input)) {
     return null;
   }
 
   const walletAddress =
-    'walletAddress' in input && typeof input.walletAddress === 'string'
-      ? input.walletAddress
+    'walletAddress' in input && typeof input['walletAddress'] === 'string'
+      ? input['walletAddress']
       : null;
   if (!walletAddress?.startsWith('0x') || walletAddress.length < 4) {
     return null;
   }
 
-  const portfolioMandate = 'portfolioMandate' in input ? input.portfolioMandate : null;
+  const portfolioMandate = 'portfolioMandate' in input ? input['portfolioMandate'] : null;
   const firstManagedMandate =
-    'firstManagedMandate' in input ? input.firstManagedMandate : null;
+    'firstManagedMandate' in input ? input['firstManagedMandate'] : null;
   const parsedPortfolioMandate = parsePortfolioMandate(portfolioMandate);
   const parsedFirstManagedMandate = parseFirstManagedMandate(firstManagedMandate);
+  const blockedFromAgentsQuantity = readOptionalQuantity(input['blockedFromAgentsQuantity']);
 
-  if (!parsedPortfolioMandate || !parsedFirstManagedMandate) {
+  if (
+    !parsedPortfolioMandate ||
+    !parsedFirstManagedMandate ||
+    blockedFromAgentsQuantity === undefined
+  ) {
     return null;
   }
 
   return {
     walletAddress: walletAddress as `0x${string}`,
     portfolioMandate: parsedPortfolioMandate,
+    blockedFromAgentsQuantity,
     firstManagedMandate: parsedFirstManagedMandate,
   };
 }
@@ -906,25 +961,29 @@ function readApprovedSetupFromOnboardingBootstrap(
   }
 
   const approvedOnboardingSetup = value.rootedWalletContext.metadata.approvedOnboardingSetup;
-  if (typeof approvedOnboardingSetup !== 'object' || approvedOnboardingSetup === null) {
+  if (!isRecord(approvedOnboardingSetup)) {
     return null;
   }
 
   const portfolioMandate =
     'portfolioMandate' in approvedOnboardingSetup
-      ? parsePortfolioMandate(approvedOnboardingSetup.portfolioMandate)
+      ? parsePortfolioMandate(approvedOnboardingSetup['portfolioMandate'])
       : null;
+  const blockedFromAgentsQuantity = readOptionalQuantity(
+    approvedOnboardingSetup['blockedFromAgentsQuantity'],
+  );
   const firstManagedMandate =
     'firstManagedMandate' in approvedOnboardingSetup
-      ? parseFirstManagedMandate(approvedOnboardingSetup.firstManagedMandate)
+      ? parseFirstManagedMandate(approvedOnboardingSetup['firstManagedMandate'])
       : null;
 
-  if (!portfolioMandate || !firstManagedMandate) {
+  if (!portfolioMandate || !firstManagedMandate || blockedFromAgentsQuantity === undefined) {
     return null;
   }
 
   return {
     portfolioMandate,
+    blockedFromAgentsQuantity,
     firstManagedMandate,
   };
 }
@@ -1134,9 +1193,28 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
   const userId = `user-${identity}`;
   const rootedWalletContextId = `rwc-${identity}`;
   const portfolioMandateRef = `mandate-portfolio-${identity}`;
+  const reservePolicyRef = `reserve-policy-${identity}`;
   const firstManagedMandate = params.approvedSetup.firstManagedMandate;
   const managedAgentKeySegment = sanitizeIdentitySegment(firstManagedMandate.targetAgentKey);
   const managedAgentMandateRef = `mandate-${managedAgentKeySegment}-${identity}`;
+  const blockedFromAgentsQuantity = params.approvedSetup.blockedFromAgentsQuantity;
+  const primaryManagedRootAsset = readPrimaryManagedRootAsset(params.approvedSetup);
+  const reservePolicySummary =
+    blockedFromAgentsQuantity !== null && primaryManagedRootAsset !== null
+      ? `keep ${blockedFromAgentsQuantity} ${primaryManagedRootAsset} blocked from agents`
+      : 'no additional direct-user idle reserve configured';
+  const userReserveRules =
+    blockedFromAgentsQuantity !== null && primaryManagedRootAsset !== null
+      ? [
+          {
+            root_asset: primaryManagedRootAsset,
+            network: PORTFOLIO_MANAGER_NETWORK,
+            benchmark_asset: 'USD',
+            reserved_quantity: blockedFromAgentsQuantity,
+            reason: `keep ${blockedFromAgentsQuantity} ${primaryManagedRootAsset} blocked from agents`,
+          },
+        ]
+      : [];
 
   return {
     occurredAt: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
@@ -1167,7 +1245,13 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
         managed_mandate: firstManagedMandate.managedMandate,
       },
     ],
-    userReservePolicies: [],
+    userReservePolicies: [
+      {
+        reserve_policy_ref: reservePolicyRef,
+        summary: reservePolicySummary,
+        user_reserve_rules: userReserveRules,
+      },
+    ],
     activation: {
       mandateRef: managedAgentMandateRef,
     },
@@ -1306,12 +1390,13 @@ export function createPortfolioManagerDomain(
     systemContext: async ({ state }) => {
       const currentState = state ?? buildDefaultLifecycleState();
       const context = ['<portfolio_manager_context>'];
+      const protocolHost = options.protocolHost;
       const liveManagedMandateProjection =
-        currentState.phase === 'active' && options.protocolHost
+        currentState.phase === 'active' && protocolHost
           ? await (async () => {
               try {
                 const managedPortfolioState = await readSharedEmberPortfolioState({
-                  protocolHost: options.protocolHost,
+                  protocolHost,
                   threadId: 'system-context',
                   agentId: FIRST_MANAGED_AGENT_TYPE,
                 });
@@ -1567,6 +1652,7 @@ export function createPortfolioManagerDomain(
             pendingOnboardingWalletAddress: setupInput.walletAddress,
             pendingApprovedSetup: {
               portfolioMandate: setupInput.portfolioMandate,
+              blockedFromAgentsQuantity: setupInput.blockedFromAgentsQuantity,
               firstManagedMandate: setupInput.firstManagedMandate,
             },
           };

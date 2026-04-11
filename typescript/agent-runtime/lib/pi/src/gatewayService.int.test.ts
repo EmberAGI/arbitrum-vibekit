@@ -14,6 +14,7 @@ class ScriptedPiAgent {
   public readonly state = {
     messages: [],
     isStreaming: false,
+    error: undefined as string | undefined,
   };
 
   public abortCalled = false;
@@ -852,6 +853,120 @@ describe('pi gateway service integration', () => {
         type: EventType.TEXT_MESSAGE_END,
         messageId: 'pi:exec-4:assistant:1',
       },
+    });
+  });
+
+  it('surfaces provider failures as failed task state instead of a blank working turn', async () => {
+    const assistantErrorMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'error',
+      errorMessage: 'Key limit exceeded (monthly limit).',
+      timestamp: 1,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const agent = new ScriptedPiAgent([
+      { type: 'agent_start' },
+      { type: 'turn_start' },
+      { type: 'message_start', message: assistantErrorMessage },
+      { type: 'message_end', message: assistantErrorMessage },
+      { type: 'turn_end', message: assistantErrorMessage, toolResults: [] },
+      { type: 'agent_end', messages: [assistantErrorMessage] },
+    ]);
+    agent.state.error = 'Key limit exceeded (monthly limit).';
+
+    let session = {
+      thread: { id: 'thread-provider-error' },
+      execution: {
+        id: 'exec-provider-error',
+        status: 'working' as const,
+        statusMessage: 'Ready for a live runtime conversation.',
+      },
+      messages: [] as Array<Record<string, unknown>>,
+    };
+
+    const service = createPiRuntimeGatewayService({
+      runtime: createPiRuntimeGatewayRuntime({
+        agent,
+        getSession: () => session,
+        updateSession: (_threadId, update) => {
+          session = update(session);
+          return session;
+        },
+      }),
+      controlPlane: {
+        inspectHealth: async () => ({ status: 'ok' as const }),
+        listThreads: async () => ['thread-provider-error'],
+        listExecutions: async () => ['exec-provider-error'],
+        listAutomations: async () => [],
+        listAutomationRuns: async () => [],
+        inspectScheduler: async () => ({ dueAutomationIds: [], leases: [] }),
+        inspectOutbox: async () => ({ dueOutboxIds: [], intents: [] }),
+        inspectMaintenance: async () => ({
+          recovery: { automationIdsToResume: [] },
+          archival: { executionIds: [] },
+        }),
+      },
+    });
+
+    const events = await collectEventSource(
+      await service.run({
+        threadId: 'thread-provider-error',
+        runId: 'run-provider-error',
+        messages: [
+          {
+            id: 'message-provider-error',
+            role: 'user',
+            content: 'Create the plan now.',
+          },
+        ],
+      }),
+    );
+
+    const stateDelta = events.find(
+      (event): event is { type: EventType.STATE_DELTA; delta: Array<Record<string, unknown>> } =>
+        event.type === EventType.STATE_DELTA,
+    );
+    const finished = events.find(
+      (event): event is { type: EventType.RUN_FINISHED; result: { status: string } } =>
+        event.type === EventType.RUN_FINISHED,
+    );
+
+    expect(stateDelta).toBeDefined();
+    expect(stateDelta!.delta).toEqual(
+      expect.arrayContaining([
+        {
+          op: 'replace',
+          path: '/thread/task/taskStatus/state',
+          value: 'failed',
+        },
+        {
+          op: 'replace',
+          path: '/thread/task/taskStatus/message/content',
+          value: 'Key limit exceeded (monthly limit).',
+        },
+      ]),
+    );
+    expect(finished).toMatchObject({
+      type: EventType.RUN_FINISHED,
+      result: {
+        status: 'failed',
+      },
+    });
+    expect(session.execution).toMatchObject({
+      status: 'failed',
+      statusMessage: 'Key limit exceeded (monthly limit).',
     });
   });
 });

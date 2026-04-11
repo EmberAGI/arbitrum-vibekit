@@ -58,7 +58,6 @@ export type EmberLendingLifecycleState = {
   anchoredPayloadRecords: EmberLendingAnchoredPayloadRecord[];
   lastExecutionResult: unknown;
   lastExecutionTxHash: `0x${string}` | null;
-  pendingExecutionSubmission?: PendingExecutionSubmission | null;
   lastEscalationRequest: unknown;
   lastEscalationSummary: string | null;
 };
@@ -119,6 +118,7 @@ type SharedEmberExecutionContext = {
     amount?: string;
     benchmark_value_usd?: string;
   }>;
+  lending_position_scopes?: Record<string, unknown>[];
 } | null;
 
 type ExecutionContextResponse = {
@@ -131,14 +131,6 @@ type ExecutionContextResponse = {
 type SharedEmberExecutionContextEnvelope = {
   revision: number | null;
   executionContext: NonNullable<SharedEmberExecutionContext>;
-};
-
-type PendingExecutionSubmission = {
-  transactionPlanId: string;
-  requestId: string;
-  idempotencyKey: string;
-  signedTransaction: Record<string, unknown>;
-  revision: number | null;
 };
 
 type RequestedQuantity = {
@@ -188,6 +180,24 @@ type PortfolioProjection = Pick<
   | 'lastReservationSummary'
 >;
 
+type ManagedMandateAdapterContext = {
+  policy: Record<string, unknown>;
+  data_sources: Record<string, unknown>;
+};
+
+type ManagedMandate = {
+  allocation_basis: string;
+  allowed_assets: string[];
+  asset_intent: {
+    root_asset: string;
+    network: string;
+    benchmark_asset: string;
+    intent: string;
+    control_path: string;
+  };
+  adapter_context: ManagedMandateAdapterContext;
+};
+
 type ManagedMandateEditorProjection = {
   ownerAgentId: typeof PORTFOLIO_MANAGER_ROUTE_AGENT_ID;
   targetAgentId: typeof EMBER_LENDING_SHARED_EMBER_AGENT_ID;
@@ -196,17 +206,7 @@ type ManagedMandateEditorProjection = {
   targetAgentTitle: typeof EMBER_LENDING_ROUTE_AGENT_TITLE;
   mandateRef: string;
   mandateSummary: string;
-  managedMandate: {
-    allocation_basis: string;
-    allowed_assets: string[];
-    asset_intent: {
-      root_asset: string;
-      network: string;
-      benchmark_asset: string;
-      intent: string;
-      control_path: string;
-    };
-  };
+  managedMandate: ManagedMandate;
   agentWallet: `0x${string}` | null;
   rootUserWallet: `0x${string}` | null;
   rootedWalletContextId: string | null;
@@ -229,6 +229,20 @@ const MAX_PREPARE_TRANSACTION_ATTEMPTS = 3;
 const MAX_SIGNED_TRANSACTION_SUBMISSIONS = 8;
 const DEFAULT_RUNTIME_SIGNER_REF = 'service-wallet';
 const REDELEGATION_WAIT_TIMEOUT_MS = 1_000;
+const SHOULD_DEBUG_EXECUTION = process.env.EMBER_LENDING_DEBUG_EXECUTION === '1';
+
+function logExecutionDebug(
+  label: string,
+  details: Record<string, unknown>,
+): void {
+  if (!SHOULD_DEBUG_EXECUTION) {
+    return;
+  }
+
+  console.error(
+    `[ember-lending:execution-debug] ${new Date().toISOString()} ${label} ${JSON.stringify(details)}`,
+  );
+}
 
 class LocalExecutionFailureError extends Error {
   revision: number | null;
@@ -237,18 +251,6 @@ class LocalExecutionFailureError extends Error {
     super(message);
     this.name = 'LocalExecutionFailureError';
     this.revision = revision;
-  }
-}
-
-class PendingExecutionSubmissionError extends Error {
-  revision: number | null;
-  pendingSubmission: PendingExecutionSubmission;
-
-  constructor(message: string, revision: number | null, pendingSubmission: PendingExecutionSubmission) {
-    super(message);
-    this.name = 'PendingExecutionSubmissionError';
-    this.revision = revision;
-    this.pendingSubmission = pendingSubmission;
   }
 }
 
@@ -269,7 +271,6 @@ function buildDefaultLifecycleState(): EmberLendingLifecycleState {
     anchoredPayloadRecords: [],
     lastExecutionResult: null,
     lastExecutionTxHash: null,
-    pendingExecutionSubmission: null,
     lastEscalationRequest: null,
     lastEscalationSummary: null,
   };
@@ -278,11 +279,20 @@ function buildDefaultLifecycleState(): EmberLendingLifecycleState {
 function normalizeLifecycleState(
   state: Partial<EmberLendingLifecycleState> | null | undefined,
 ): EmberLendingLifecycleState {
+  const {
+    anchoredPayloadRecords,
+    pendingExecutionSubmission: _ignoredPendingExecutionSubmission,
+    ...stateWithoutExecutionRecovery
+  } = ((state ?? {}) as Partial<EmberLendingLifecycleState> & {
+    anchoredPayloadRecords?: unknown;
+    pendingExecutionSubmission?: unknown;
+  });
+
   return {
     ...buildDefaultLifecycleState(),
-    ...(state ?? {}),
-    anchoredPayloadRecords: Array.isArray(state?.anchoredPayloadRecords)
-      ? state.anchoredPayloadRecords
+    ...stateWithoutExecutionRecovery,
+    anchoredPayloadRecords: Array.isArray(anchoredPayloadRecords)
+      ? anchoredPayloadRecords
       : [],
   };
 }
@@ -293,6 +303,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function readHexAddress(value: unknown): `0x${string}` | null {
@@ -490,6 +504,16 @@ function readPortfolioOwnedUnits(portfolioState: unknown): Record<string, unknow
   );
 }
 
+function readPortfolioLendingPositionScopes(portfolioState: unknown): Record<string, unknown>[] {
+  if (!isRecord(portfolioState) || !Array.isArray(portfolioState['lending_position_scopes'])) {
+    return [];
+  }
+
+  return portfolioState['lending_position_scopes'].filter(
+    (candidate): candidate is Record<string, unknown> => isRecord(candidate),
+  );
+}
+
 function readLaneContextFallback(portfolioState: Record<string, unknown>): Record<string, unknown> | null {
   const ownedUnit = readPortfolioOwnedUnit(portfolioState);
   const reservation = readFirstRecordFromArray(portfolioState['reservations']);
@@ -642,31 +666,51 @@ function mergeExecutionContextProjection(
   };
 }
 
+function readManagedMandateAdapterContext(input: unknown): ManagedMandateAdapterContext | null {
+  if (!isRecord(input)) {
+    return null;
+  }
+
+  const policy = isRecord(input['policy']) ? input['policy'] : null;
+  const dataSources = isRecord(input['data_sources']) ? input['data_sources'] : null;
+
+  if (policy === null || dataSources === null) {
+    return null;
+  }
+
+  return {
+    policy,
+    data_sources: dataSources,
+  };
+}
+
 function readManagedMandate(
   mandateContext: Record<string, unknown> | null,
-): ManagedMandateEditorProjection['managedMandate'] | null {
+): ManagedMandate | null {
   if (!mandateContext) {
     return null;
   }
 
   const allocationBasis = readString(mandateContext['allocation_basis']);
-  const allowedAssets = mandateContext['allowed_assets'];
+  const allowedAssets = readStringArray(mandateContext['allowed_assets']);
   const assetIntent = isRecord(mandateContext['asset_intent']) ? mandateContext['asset_intent'] : null;
   const rootAsset = readString(assetIntent?.['root_asset']);
   const network = readString(assetIntent?.['network']);
   const benchmarkAsset = readString(assetIntent?.['benchmark_asset']);
   const intent = readString(assetIntent?.['intent']);
   const controlPath = readString(assetIntent?.['control_path']);
+  const adapterContext = readManagedMandateAdapterContext(mandateContext['adapter_context']);
 
   if (
     allocationBasis === null ||
-    !Array.isArray(allowedAssets) ||
-    !allowedAssets.every((value) => typeof value === 'string' && value.trim().length > 0) ||
+    allowedAssets === null ||
     rootAsset === null ||
+    !allowedAssets.includes(rootAsset) ||
     network === null ||
     benchmarkAsset === null ||
     intent === null ||
-    controlPath === null
+    controlPath === null ||
+    adapterContext === null
   ) {
     return null;
   }
@@ -681,6 +725,83 @@ function readManagedMandate(
       intent,
       control_path: controlPath,
     },
+    adapter_context: adapterContext,
+  };
+}
+
+type ManagedLendingPolicy = {
+  network: string | null;
+  protocolSystem: string | null;
+  allowedCollateralAssets: string[];
+  allowedBorrowAssets: string[];
+  maxAllocationPct: number | null;
+  maxLtvBps: number | null;
+  minHealthFactor: string | null;
+  dataSources: Record<string, unknown>;
+};
+
+function readManagedLendingAdapterContext(
+  adapterContext: ManagedMandateAdapterContext,
+): {
+  policyContext: Record<string, unknown>;
+  dataSources: Record<string, unknown>;
+} | null {
+  return {
+    policyContext: adapterContext.policy,
+    dataSources: adapterContext.data_sources,
+  };
+}
+
+function readManagedLendingPolicy(
+  mandateContext: Record<string, unknown> | null,
+): ManagedLendingPolicy | null {
+  if (!mandateContext) {
+    return null;
+  }
+
+  const managedMandate = readManagedMandate(mandateContext);
+  if (managedMandate) {
+    const adapterContext = readManagedLendingAdapterContext(managedMandate.adapter_context);
+    if (!adapterContext) {
+      return null;
+    }
+
+    const { policyContext, dataSources } = adapterContext;
+    return {
+      network: managedMandate.asset_intent.network,
+      protocolSystem: readString(policyContext['protocol_system']),
+      allowedCollateralAssets: managedMandate.allowed_assets,
+      allowedBorrowAssets: readStringArray(policyContext['allowed_borrow_assets']) ?? [],
+      maxAllocationPct: readFiniteNumber(policyContext['max_allocation_pct']),
+      maxLtvBps: readFiniteNumber(policyContext['max_ltv_bps']),
+      minHealthFactor: readString(policyContext['min_health_factor']),
+      dataSources,
+    };
+  }
+
+  const network = readString(mandateContext['network']);
+  const protocolSystem = readString(mandateContext['protocol']);
+  const allowedCollateralAssets = readStringArray(mandateContext['allowedCollateralAssets']) ?? [];
+  const allowedBorrowAssets = readStringArray(mandateContext['allowedBorrowAssets']) ?? [];
+
+  if (
+    network === null &&
+    protocolSystem === null &&
+    allowedCollateralAssets.length === 0 &&
+    allowedBorrowAssets.length === 0
+  ) {
+    return null;
+  }
+
+  return {
+    network,
+    protocolSystem,
+    allowedCollateralAssets,
+    allowedBorrowAssets,
+    maxAllocationPct: readFiniteNumber(mandateContext['maxAllocationPct']),
+    maxLtvBps: readFiniteNumber(mandateContext['maxLtvBps']),
+    minHealthFactor: readString(mandateContext['minHealthFactor']),
+    dataSources: {},
   };
 }
 
@@ -751,6 +872,15 @@ function mergePortfolioStateWithExecutionContext(input: {
         (candidate): candidate is Record<string, unknown> => isRecord(candidate),
       )
     : [];
+  const fallbackLendingPositionScopes = readPortfolioLendingPositionScopes(input.fallbackPortfolioState);
+  const portfolioLendingPositionScopes = readPortfolioLendingPositionScopes(input.portfolioState);
+  const executionContextLendingPositionScopes = Array.isArray(
+    input.executionContext?.lending_position_scopes,
+  )
+    ? input.executionContext.lending_position_scopes.filter(
+        (candidate): candidate is Record<string, unknown> => isRecord(candidate),
+      )
+    : [];
 
   const ownedUnits = mergeContextRecords({
     primary: portfolioOwnedUnits.length > 0 ? portfolioOwnedUnits : executionContextOwnedUnits,
@@ -777,12 +907,30 @@ function mergePortfolioStateWithExecutionContext(input: {
         : fallbackReservations,
     idKey: 'reservation_id',
   });
+  const lendingPositionScopes = mergeContextRecords({
+    primary:
+      portfolioLendingPositionScopes.length > 0
+        ? portfolioLendingPositionScopes
+        : executionContextLendingPositionScopes,
+    fallback:
+      portfolioLendingPositionScopes.length > 0
+        ? mergeContextRecords({
+            primary: executionContextLendingPositionScopes,
+            fallback: fallbackLendingPositionScopes,
+            idKey: 'position_scope_id',
+          })
+        : fallbackLendingPositionScopes,
+    idKey: 'position_scope_id',
+  });
 
   if (baseState === null) {
-    return ownedUnits.length > 0 || reservations.length > 0
+    return ownedUnits.length > 0 ||
+      reservations.length > 0 ||
+      lendingPositionScopes.length > 0
       ? {
           owned_units: ownedUnits,
           reservations,
+          lending_position_scopes: lendingPositionScopes,
         }
       : input.portfolioState;
   }
@@ -794,6 +942,9 @@ function mergePortfolioStateWithExecutionContext(input: {
       : {}),
     ...(reservations.length > 0 || Array.isArray(baseState['reservations'])
       ? { reservations }
+      : {}),
+    ...(lendingPositionScopes.length > 0 || Array.isArray(baseState['lending_position_scopes'])
+      ? { lending_position_scopes: lendingPositionScopes }
       : {}),
   };
 }
@@ -943,6 +1094,142 @@ function shouldReadSharedEmberExecutionContext(state: EmberLendingLifecycleState
   );
 }
 
+function shouldHydrateManagedPlanningState(state: EmberLendingLifecycleState): boolean {
+  return state.lastExecutionResult !== null || state.lastExecutionTxHash !== null;
+}
+
+function appendManagedLendingPolicyXml(
+  lines: string[],
+  mandateContext: Record<string, unknown> | null,
+): void {
+  const policy = readManagedLendingPolicy(mandateContext);
+  if (!policy) {
+    return;
+  }
+
+  lines.push('  <managed_lending_policy>');
+
+  if (policy.network) {
+    lines.push(`    <network>${escapeXml(policy.network)}</network>`);
+  }
+  if (policy.protocolSystem) {
+    lines.push(`    <protocol_system>${escapeXml(policy.protocolSystem)}</protocol_system>`);
+  }
+  if (policy.allowedCollateralAssets.length > 0) {
+    lines.push(
+      `    <allowed_collateral_assets>${escapeXml(policy.allowedCollateralAssets.join(','))}</allowed_collateral_assets>`,
+    );
+  }
+  if (policy.allowedBorrowAssets.length > 0) {
+    lines.push(
+      `    <allowed_borrow_assets>${escapeXml(policy.allowedBorrowAssets.join(','))}</allowed_borrow_assets>`,
+    );
+  }
+  if (policy.maxAllocationPct !== null) {
+    lines.push(`    <max_allocation_pct>${policy.maxAllocationPct}</max_allocation_pct>`);
+  }
+  if (policy.maxLtvBps !== null) {
+    lines.push(`    <max_ltv_bps>${policy.maxLtvBps}</max_ltv_bps>`);
+  }
+  if (policy.minHealthFactor) {
+    lines.push(`    <min_health_factor>${escapeXml(policy.minHealthFactor)}</min_health_factor>`);
+  }
+
+  const policySource = readString(policy.dataSources['policy_source']);
+  if (policySource) {
+    lines.push(`    <policy_source>${escapeXml(policySource)}</policy_source>`);
+  }
+  const liveScopeProjection = readString(policy.dataSources['live_scope_projection']);
+  if (liveScopeProjection) {
+    lines.push(
+      `    <live_scope_projection>${escapeXml(liveScopeProjection)}</live_scope_projection>`,
+    );
+  }
+
+  lines.push('  </managed_lending_policy>');
+}
+
+function appendLendingPositionScopesXml(input: {
+  lines: string[];
+  scopes: Record<string, unknown>[];
+}): void {
+  if (input.scopes.length === 0) {
+    return;
+  }
+
+  input.lines.push('  <lending_position_scopes>');
+  for (const scope of input.scopes) {
+    const positionScopeId = readString(scope['position_scope_id']);
+    input.lines.push(
+      `    <lending_position_scope${positionScopeId ? ` position_scope_id="${escapeXml(positionScopeId)}"` : ''}>`,
+    );
+
+    const protocolSystem = readString(scope['protocol_system']);
+    if (protocolSystem) {
+      input.lines.push(`      <protocol_system>${escapeXml(protocolSystem)}</protocol_system>`);
+    }
+
+    const marketMetadata = isRecord(scope['market_metadata']) ? scope['market_metadata'] : null;
+    if (marketMetadata) {
+      const allowedCollateralAssets = readStringArray(marketMetadata['allowed_collateral_assets']);
+      if (allowedCollateralAssets) {
+        input.lines.push(
+          `      <allowed_collateral_assets>${escapeXml(allowedCollateralAssets.join(','))}</allowed_collateral_assets>`,
+        );
+      }
+      const allowedBorrowAssets = readStringArray(marketMetadata['allowed_borrow_assets']);
+      if (allowedBorrowAssets) {
+        input.lines.push(
+          `      <allowed_borrow_assets>${escapeXml(allowedBorrowAssets.join(','))}</allowed_borrow_assets>`,
+        );
+      }
+      const maxAllocationPct = readFiniteNumber(marketMetadata['max_allocation_pct']);
+      if (maxAllocationPct !== null) {
+        input.lines.push(`      <max_allocation_pct>${maxAllocationPct}</max_allocation_pct>`);
+      }
+      const maxLtvBps = readFiniteNumber(marketMetadata['max_ltv_bps']);
+      if (maxLtvBps !== null) {
+        input.lines.push(`      <max_ltv_bps>${maxLtvBps}</max_ltv_bps>`);
+      }
+      const minHealthFactor = readString(marketMetadata['min_health_factor']);
+      if (minHealthFactor) {
+        input.lines.push(
+          `      <min_health_factor>${escapeXml(minHealthFactor)}</min_health_factor>`,
+        );
+      }
+    }
+
+    const riskState = isRecord(scope['risk_state']) ? scope['risk_state'] : null;
+    if (riskState) {
+      const borrowableHeadroomUsd = readString(riskState['borrowable_headroom_usd']);
+      if (borrowableHeadroomUsd) {
+        input.lines.push(
+          `      <borrowable_headroom_usd>${escapeXml(borrowableHeadroomUsd)}</borrowable_headroom_usd>`,
+        );
+      }
+      const healthFactor = readString(riskState['health_factor']);
+      if (healthFactor) {
+        input.lines.push(`      <health_factor>${escapeXml(healthFactor)}</health_factor>`);
+      }
+    }
+
+    const freshness = isRecord(scope['freshness']) ? scope['freshness'] : null;
+    if (freshness) {
+      const sourceKind = readString(freshness['source_kind']);
+      if (sourceKind) {
+        input.lines.push(`      <freshness_source_kind>${escapeXml(sourceKind)}</freshness_source_kind>`);
+      }
+      const latestObservedAt = readString(freshness['latest_observed_at']);
+      if (latestObservedAt) {
+        input.lines.push(`      <latest_observed_at>${escapeXml(latestObservedAt)}</latest_observed_at>`);
+      }
+    }
+
+    input.lines.push('    </lending_position_scope>');
+  }
+  input.lines.push('  </lending_position_scopes>');
+}
+
 function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): string[] {
   const lines = ['<ember_lending_execution_context freshness="cached">'];
   lines.push(`  <generated_at>${escapeXml(new Date().toISOString())}</generated_at>`);
@@ -971,6 +1258,12 @@ function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): st
       `  <root_user_wallet_address>${state.rootUserWalletAddress}</root_user_wallet_address>`,
     );
   }
+
+  appendManagedLendingPolicyXml(lines, isRecord(state.mandateContext) ? state.mandateContext : null);
+  appendLendingPositionScopesXml({
+    lines,
+    scopes: readPortfolioLendingPositionScopes(state.lastPortfolioState),
+  });
 
   lines.push('</ember_lending_execution_context>');
   return lines;
@@ -1032,6 +1325,18 @@ function buildSharedEmberExecutionContextXml(
   }
 
   lines.push(`  <network>${escapeXml(network)}</network>`);
+  appendManagedLendingPolicyXml(
+    lines,
+    isRecord(input.executionContext.mandate_context) ? input.executionContext.mandate_context : null,
+  );
+  appendLendingPositionScopesXml({
+    lines,
+    scopes: mergeContextRecords({
+      primary: input.executionContext.lending_position_scopes,
+      fallback: readPortfolioLendingPositionScopes(input.state.lastPortfolioState),
+      idKey: 'position_scope_id',
+    }),
+  });
 
   const ownedUnits = mergeContextRecords({
     primary: input.executionContext.owned_units,
@@ -1710,43 +2015,6 @@ async function submitSignedTransaction(input: {
   };
 }
 
-async function readRecoveredExecutionResultFromOutbox(input: {
-  protocolHost: EmberLendingSharedEmberProtocolHost;
-  agentId: string;
-  requestId: string;
-}): Promise<{
-  revision: number | null;
-  executionResult: unknown;
-} | null> {
-  const outboxPage = (await input.protocolHost.readCommittedEventOutbox({
-    protocol_version: 'v1',
-    consumer_id: `${input.agentId}-${input.requestId}`,
-    after_sequence: 0,
-    limit: 100,
-  })) as {
-    revision?: number;
-    events?: unknown[];
-  };
-
-  const matchingEvent = readCommittedExecutionProgressEvent({
-    events: outboxPage.events ?? [],
-    requestId: input.requestId,
-  });
-
-  if (
-    matchingEvent === null ||
-    !isRecord(matchingEvent.executionResult) ||
-    readString(matchingEvent.executionResult['phase']) !== 'completed'
-  ) {
-    return null;
-  }
-
-  return {
-    revision: outboxPage.revision ?? null,
-    executionResult: matchingEvent.executionResult,
-  };
-}
-
 async function readCommittedExecutionProgressFromOutbox(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
   agentId: string;
@@ -2306,6 +2574,20 @@ function expandManagedRequestedQuantityAcrossAliases(input: {
   }
 
   if (matchingUnitIds.length === 1) {
+    const availableQuantity = parseBaseUnitQuantity(
+      input.managedRequestedQuantities.find(
+        (candidate) => candidate.unit_id === matchingUnitIds[0],
+      )?.quantity ?? '',
+    );
+    const requestedQuantity = parseBaseUnitQuantity(input.requestedQuantity.quantity);
+    if (
+      availableQuantity === null ||
+      requestedQuantity === null ||
+      requestedQuantity > availableQuantity
+    ) {
+      return null;
+    }
+
     return [
       {
         unit_id: matchingUnitIds[0]!,
@@ -2674,6 +2956,8 @@ function buildFallbackActionSummary(input: {
   const asset = readString(input.source['asset']) ?? readString(ownedUnit?.['root_asset']) ?? 'capital';
   const protocol =
     readString(input.source['protocol']) ??
+    readManagedLendingPolicy(isRecord(input.state.mandateContext) ? input.state.mandateContext : null)
+      ?.protocolSystem ??
     (isRecord(input.state.mandateContext) ? readString(input.state.mandateContext['protocol']) : null);
   const controlPath = readString(reservation?.['control_path']);
   const verb = readManagedActionVerb(controlPath, input.intent);
@@ -3026,6 +3310,11 @@ async function runPreparedExecutionFlow(input: {
   committedEventIds: string[];
   executionResult: unknown;
 }> {
+  logExecutionDebug('requestExecution.start', {
+    threadId: input.threadId,
+    transactionPlanId: input.transactionPlanId,
+    revision: input.currentState.lastSharedEmberRevision,
+  });
   let requestResponse = await runSharedEmberCommandWithResolvedRevision<RequestTransactionExecutionResponse>({
     protocolHost: input.protocolHost,
     threadId: input.threadId,
@@ -3181,6 +3470,15 @@ async function runPreparedExecutionFlow(input: {
 
     const requestId = readString(executionResult['request_id']);
     const executionSigningPackage = readExecutionSigningPackage(executionResult)!;
+    logExecutionDebug('requestExecution.prepared', {
+      threadId: input.threadId,
+      transactionPlanId: input.transactionPlanId,
+      requestId,
+      revision: currentRevision,
+      executionPreparationId: readPreparedExecutionId(executionResult),
+      canonicalUnsignedPayloadRef:
+        readExecutionSigningPackageCanonicalUnsignedPayloadRef(executionResult),
+    });
     if (!input.runtimeSigning) {
       throw new LocalExecutionFailureError(
         'Runtime-owned signing service is not configured for lending transaction execution.',
@@ -3202,6 +3500,14 @@ async function runPreparedExecutionFlow(input: {
     const requiredControlPath = readPreparedExecutionRequiredControlPath(executionResult);
     let resolvedUnsignedTransactionHex: `0x${string}` | null = null;
     if (executionPreparationId && canonicalUnsignedPayloadRef) {
+      logExecutionDebug('requestExecution.resolveUnsigned.start', {
+        threadId: input.threadId,
+        transactionPlanId: input.transactionPlanId,
+        requestId,
+        executionPreparationId,
+        plannedTransactionPayloadRef,
+        canonicalUnsignedPayloadRef,
+      });
       try {
         resolvedUnsignedTransactionHex =
           (await input.anchoredPayloadResolver?.resolvePreparedUnsignedTransaction({
@@ -3218,7 +3524,22 @@ async function runPreparedExecutionFlow(input: {
             requiredControlPath,
             anchoredPayloadRecords: input.currentState.anchoredPayloadRecords,
           })) ?? null;
+        logExecutionDebug('requestExecution.resolveUnsigned.done', {
+          threadId: input.threadId,
+          transactionPlanId: input.transactionPlanId,
+          requestId,
+          executionPreparationId,
+          resolved: resolvedUnsignedTransactionHex !== null,
+          unsignedTransactionHexLength: resolvedUnsignedTransactionHex?.length ?? null,
+        });
       } catch (error) {
+        logExecutionDebug('requestExecution.resolveUnsigned.failed', {
+          threadId: input.threadId,
+          transactionPlanId: input.transactionPlanId,
+          requestId,
+          executionPreparationId,
+          message: error instanceof Error ? error.message : String(error),
+        });
         if (!(error instanceof Error)) {
           throw error;
         }
@@ -3235,6 +3556,13 @@ async function runPreparedExecutionFlow(input: {
       );
     }
 
+    logExecutionDebug('requestExecution.sign.start', {
+      threadId: input.threadId,
+      transactionPlanId: input.transactionPlanId,
+      requestId,
+      executionPreparationId,
+      unsignedTransactionHexLength: unsignedTransactionHex.length,
+    });
     const signedExecution = await signPreparedExecutionTransactionWithRuntimeService({
       runtimeSigning: input.runtimeSigning,
       runtimeSignerRef: input.runtimeSignerRef,
@@ -3245,6 +3573,14 @@ async function runPreparedExecutionFlow(input: {
         'Runtime-owned signing service is not configured for lending transaction execution.',
       addressMismatchMessage:
         'Lending execution signing could not continue because the runtime signer did not confirm the dedicated subagent wallet identity.',
+    });
+    logExecutionDebug('requestExecution.sign.done', {
+      threadId: input.threadId,
+      transactionPlanId: input.transactionPlanId,
+      requestId,
+      executionPreparationId,
+      confirmedAddress: signedExecution.confirmedAddress,
+      rawTransactionLength: signedExecution.rawTransaction.length,
     });
 
     const signedTransaction = {
@@ -3257,6 +3593,13 @@ async function runPreparedExecutionFlow(input: {
       raw_transaction: signedExecution.rawTransaction,
     };
 
+    logExecutionDebug('requestExecution.submit.start', {
+      threadId: input.threadId,
+      transactionPlanId: input.transactionPlanId,
+      requestId,
+      executionPreparationId,
+      currentRevision,
+    });
     const submitResponse = await submitSignedTransaction({
       protocolHost: input.protocolHost,
       threadId: input.threadId,
@@ -3267,19 +3610,31 @@ async function runPreparedExecutionFlow(input: {
       idempotencyKey: input.idempotencyKey,
       signedTransaction,
     }).catch((error: unknown) => {
+      logExecutionDebug('requestExecution.submit.failed', {
+        threadId: input.threadId,
+        transactionPlanId: input.transactionPlanId,
+        requestId,
+        executionPreparationId,
+        message: error instanceof Error ? error.message : String(error),
+      });
       if (!(error instanceof Error)) {
         throw error;
       }
 
-      throw new PendingExecutionSubmissionError(error.message, currentRevision, {
-        transactionPlanId: input.transactionPlanId,
-        requestId: requestId!,
-        idempotencyKey: input.idempotencyKey,
-        signedTransaction,
-        revision: currentRevision,
-      });
+      throw new LocalExecutionFailureError(error.message, currentRevision);
     });
 
+    logExecutionDebug('requestExecution.submit.done', {
+      threadId: input.threadId,
+      transactionPlanId: input.transactionPlanId,
+      requestId,
+      executionPreparationId,
+      revision: submitResponse.revision,
+      committedEventIds: submitResponse.committedEventIds.length,
+      phase: isRecord(submitResponse.executionResult)
+        ? readString(submitResponse.executionResult['phase'])
+        : null,
+    });
     currentRevision = submitResponse.revision;
     committedEventIds.push(...submitResponse.committedEventIds);
     executionResult = submitResponse.executionResult ?? null;
@@ -3290,60 +3645,6 @@ async function runPreparedExecutionFlow(input: {
     committedEventIds,
     executionResult,
   };
-}
-
-async function resumePendingExecutionSubmission(input: {
-  protocolHost: EmberLendingSharedEmberProtocolHost;
-  threadId: string;
-  agentId: string;
-  pendingSubmission: PendingExecutionSubmission;
-}): Promise<{
-  revision: number | null;
-  committedEventIds: string[];
-  executionResult: unknown;
-}> {
-  const recoveredResult = await readRecoveredExecutionResultFromOutbox({
-    protocolHost: input.protocolHost,
-    agentId: input.agentId,
-    requestId: input.pendingSubmission.requestId,
-  });
-
-  if (recoveredResult) {
-    return {
-      revision: recoveredResult.revision,
-      committedEventIds: [],
-      executionResult: recoveredResult.executionResult,
-    };
-  }
-
-  try {
-    const submitResponse = await submitSignedTransaction({
-      protocolHost: input.protocolHost,
-      threadId: input.threadId,
-      agentId: input.agentId,
-      currentRevision: input.pendingSubmission.revision,
-      transactionPlanId: input.pendingSubmission.transactionPlanId,
-      requestId: input.pendingSubmission.requestId,
-      idempotencyKey: input.pendingSubmission.idempotencyKey,
-      signedTransaction: input.pendingSubmission.signedTransaction,
-    });
-
-    return {
-      revision: submitResponse.revision,
-      committedEventIds: submitResponse.committedEventIds,
-      executionResult: submitResponse.executionResult,
-    };
-  } catch (error) {
-    if (!(error instanceof Error)) {
-      throw error;
-    }
-
-    throw new PendingExecutionSubmissionError(
-      error.message,
-      input.pendingSubmission.revision,
-      input.pendingSubmission,
-    );
-  }
 }
 
 function readEscalationResult(operationInput: unknown): unknown {
@@ -3496,6 +3797,20 @@ export function createEmberLendingDomain(
           }
 
           let planningState = currentState;
+          let hydratedBeforePlanning = false;
+          if (shouldHydrateManagedPlanningState(currentState)) {
+            try {
+              planningState = await hydrateManagedProjectionFromSharedEmber({
+                protocolHost: options.protocolHost,
+                state: currentState,
+                threadId,
+                agentId,
+              });
+              hydratedBeforePlanning = true;
+            } catch {
+              planningState = currentState;
+            }
+          }
           let planningReadiness = resolveManagedPlanningReadiness({
             state: planningState,
             operationInput: operation.input,
@@ -3506,7 +3821,7 @@ export function createEmberLendingDomain(
             agentId,
             operationInput: operation.input,
           });
-          if (planningReadiness.status === 'blocked' || !handoff) {
+          if ((planningReadiness.status === 'blocked' || !handoff) && !hydratedBeforePlanning) {
             planningState = await hydrateManagedProjectionFromSharedEmber({
               protocolHost: options.protocolHost,
               state: currentState,
@@ -3707,6 +4022,12 @@ export function createEmberLendingDomain(
           };
         }
         case 'request_transaction_execution': {
+          logExecutionDebug('requestExecution.command.enter', {
+            threadId,
+            hasProtocolHost: Boolean(options.protocolHost),
+            currentRevision: currentState.lastSharedEmberRevision,
+            hasCandidatePlan: currentState.lastCandidatePlan !== null,
+          });
           if (!options.protocolHost) {
             return {
               state: currentState,
@@ -3720,6 +4041,10 @@ export function createEmberLendingDomain(
           }
 
           const transactionPlanId = readTransactionPlanId(operation.input, currentState);
+          logExecutionDebug('requestExecution.command.transactionPlan', {
+            threadId,
+            transactionPlanId,
+          });
           if (!transactionPlanId) {
             return {
               state: currentState,
@@ -3743,29 +4068,40 @@ export function createEmberLendingDomain(
             expectedPrefix: 'idem-execute-transaction-plan-',
             stableBinding: buildStableCommandSuffix({ transactionPlanId }),
           });
+          logExecutionDebug('requestExecution.command.dispatch', {
+            threadId,
+            transactionPlanId,
+            idempotencyKey,
+          });
           let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>>;
           try {
-            preparedExecutionResult =
-              currentState.pendingExecutionSubmission?.transactionPlanId === transactionPlanId &&
-              currentState.pendingExecutionSubmission?.idempotencyKey === idempotencyKey
-                ? await resumePendingExecutionSubmission({
-                    protocolHost: options.protocolHost,
-                    threadId,
-                    agentId,
-                    pendingSubmission: currentState.pendingExecutionSubmission,
-                  })
-                : await runPreparedExecutionFlow({
-                    protocolHost: options.protocolHost,
-                    runtimeSigning: options.runtimeSigning,
-                    anchoredPayloadResolver: options.anchoredPayloadResolver,
-                    runtimeSignerRef: options.runtimeSignerRef,
-                    threadId,
-                    agentId,
-                    currentState,
-                    transactionPlanId,
-                    idempotencyKey,
-                  });
+            preparedExecutionResult = await runPreparedExecutionFlow({
+              protocolHost: options.protocolHost,
+              runtimeSigning: options.runtimeSigning,
+              anchoredPayloadResolver: options.anchoredPayloadResolver,
+              runtimeSignerRef: options.runtimeSignerRef,
+              threadId,
+              agentId,
+              currentState,
+              transactionPlanId,
+              idempotencyKey,
+            });
+            logExecutionDebug('requestExecution.command.result', {
+              threadId,
+              transactionPlanId,
+              revision: preparedExecutionResult.revision,
+              phase: isRecord(preparedExecutionResult.executionResult)
+                ? readString(preparedExecutionResult.executionResult['phase'])
+                : null,
+              committedEventIds: preparedExecutionResult.committedEventIds.length,
+            });
           } catch (error) {
+            logExecutionDebug('requestExecution.command.failed', {
+              threadId,
+              transactionPlanId,
+              message: error instanceof Error ? error.message : String(error),
+              isLocalExecutionFailure: error instanceof LocalExecutionFailureError,
+            });
             if (!(error instanceof Error)) {
               throw error;
             }
@@ -3775,16 +4111,11 @@ export function createEmberLendingDomain(
                 ...currentState,
                 phase: 'active',
                 lastSharedEmberRevision:
-                  error instanceof LocalExecutionFailureError ||
-                  error instanceof PendingExecutionSubmissionError
+                  error instanceof LocalExecutionFailureError
                     ? error.revision ?? currentState.lastSharedEmberRevision
                     : currentState.lastSharedEmberRevision,
                 lastExecutionResult: currentState.lastExecutionResult,
                 lastExecutionTxHash: null,
-                pendingExecutionSubmission:
-                  error instanceof PendingExecutionSubmissionError
-                    ? error.pendingSubmission
-                    : null,
               },
               outputs: {
                 status: {
@@ -3818,7 +4149,6 @@ export function createEmberLendingDomain(
             lastSharedEmberRevision: preparedExecutionResult.revision,
             lastExecutionResult: executionResult,
             lastExecutionTxHash: readExecutionTxHash(executionResult),
-            pendingExecutionSubmission: null,
           };
 
           if (shouldHydrateManagedProjection && options.protocolHost) {
@@ -3835,6 +4165,14 @@ export function createEmberLendingDomain(
               };
             }
           }
+
+          logExecutionDebug('requestExecution.command.return', {
+            threadId,
+            transactionPlanId,
+            revision: nextState.lastSharedEmberRevision,
+            executionStatus: executionStatus.executionStatus,
+            statusMessage: executionStatus.statusMessage,
+          });
 
           return {
             state: nextState,

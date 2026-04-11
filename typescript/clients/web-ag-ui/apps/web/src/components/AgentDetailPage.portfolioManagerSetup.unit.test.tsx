@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentDetailPage } from './AgentDetailPage';
 
+type AgentDetailPageProps = React.ComponentProps<typeof AgentDetailPage>;
+
 vi.mock('../hooks/usePrivyWalletClient', () => {
   return {
     usePrivyWalletClient: () => ({
@@ -24,7 +26,7 @@ vi.mock('../hooks/usePrivyWalletClient', () => {
 
 function renderPortfolioManagerSetupPage(
   container: HTMLDivElement,
-  onInterruptSubmit: ReturnType<typeof vi.fn>,
+  onInterruptSubmit: NonNullable<AgentDetailPageProps['onInterruptSubmit']>,
 ) {
   const root = createRoot(container);
 
@@ -110,17 +112,22 @@ describe('AgentDetailPage portfolio-manager setup', () => {
     const allowedAssetsInput = container.querySelector(
       'input[name="portfolio-manager-allowed-assets"]',
     ) as HTMLInputElement | null;
+    const blockedFromAgentsInput = container.querySelector(
+      'input[name="portfolio-manager-blocked-from-agents"]',
+    ) as HTMLInputElement | null;
     const submitButton = [...container.querySelectorAll('button')].find(
       (button) => button.textContent?.includes('Approve'),
     ) as HTMLButtonElement | undefined;
 
     expect(rootAssetInput).not.toBeNull();
     expect(allowedAssetsInput).not.toBeNull();
+    expect(blockedFromAgentsInput).not.toBeNull();
     expect(submitButton).toBeDefined();
 
     act(() => {
       setTextInputValue(rootAssetInput!, 'weth');
       setTextInputValue(allowedAssetsInput!, 'usdc, weth');
+      setTextInputValue(blockedFromAgentsInput!, '125');
     });
 
     act(() => {
@@ -133,6 +140,7 @@ describe('AgentDetailPage portfolio-manager setup', () => {
         approved: true,
         riskLevel: 'medium',
       },
+      blockedFromAgentsQuantity: '125',
       firstManagedMandate: {
         targetAgentId: 'ember-lending',
         targetAgentKey: 'ember-lending-primary',
@@ -146,6 +154,19 @@ describe('AgentDetailPage portfolio-manager setup', () => {
             benchmark_asset: 'USD',
             intent: 'deploy',
             control_path: 'lending.supply',
+          },
+          adapter_context: {
+            policy: {
+              protocol_system: 'aave',
+              allowed_borrow_assets: ['WETH'],
+              max_allocation_pct: 35,
+              max_ltv_bps: 7500,
+              min_health_factor: '1.25',
+            },
+            data_sources: {
+              policy_source: 'portfolio_manager',
+              live_scope_projection: 'lending_position_scopes',
+            },
           },
         },
       },
