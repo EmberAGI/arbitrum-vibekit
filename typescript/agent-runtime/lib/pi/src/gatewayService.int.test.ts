@@ -171,6 +171,8 @@ describe('pi gateway service integration', () => {
       {
         type: EventType.STATE_SNAPSHOT,
         snapshot: {
+          shared: {},
+          projected: {},
           thread: {
             id: 'thread-1',
             task: {
@@ -226,6 +228,15 @@ describe('pi gateway service integration', () => {
               current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
             },
           },
+        },
+      },
+      {
+        type: EventType.CUSTOM,
+        name: 'shared-state.control',
+        value: {
+          kind: 'hydration',
+          reason: 'bootstrap',
+          revision: 'shared-rev-0',
         },
       },
       {
@@ -758,6 +769,345 @@ describe('pi gateway service integration', () => {
         },
       },
     ]);
+  });
+
+  it('emits shared-state hydration metadata after the snapshot on connect', async () => {
+    const agent = new ScriptedPiAgent([]);
+    let session = {
+      thread: { id: 'thread-hydration' },
+      execution: { id: 'exec-hydration', status: 'working' as const, statusMessage: 'Hydrated.' },
+      sharedState: {
+        settings: {
+          amount: 250,
+        },
+      },
+      sharedStateVersion: 1,
+      sharedStateRevision: 'shared-rev-1',
+      sharedStateHydrated: false,
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    const bootstrapEvents = await collectEventSource(
+      await runtime.connect({
+        threadId: 'thread-hydration',
+      }),
+    );
+
+    expect(bootstrapEvents).toContainEqual({
+      type: EventType.STATE_SNAPSHOT,
+      snapshot: expect.objectContaining({
+        shared: {
+          settings: {
+            amount: 250,
+          },
+        },
+        projected: {},
+      }),
+    });
+    expect(bootstrapEvents).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'bootstrap',
+        revision: 'shared-rev-1',
+      },
+    });
+    expect(
+      bootstrapEvents.findIndex((event) => event.type === EventType.STATE_SNAPSHOT),
+    ).toBeLessThan(
+      bootstrapEvents.findIndex(
+        (event) =>
+          event.type === EventType.CUSTOM &&
+          'name' in event &&
+          event.name === 'shared-state.control',
+      ),
+    );
+
+    const reconnectEvents = await collectEventSource(
+      await runtime.connect({
+        threadId: 'thread-hydration',
+      }),
+    );
+
+    expect(reconnectEvents).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'reconnect',
+        revision: 'shared-rev-1',
+      },
+    });
+  });
+
+  it('accepts canonical shared-state updates and acknowledges them after the state delta', async () => {
+    const agent = new ScriptedPiAgent([]);
+    let session = {
+      thread: { id: 'thread-update' },
+      execution: { id: 'exec-update', status: 'working' as const, statusMessage: 'Ready.' },
+      sharedState: {
+        settings: {
+          amount: 100,
+        },
+      },
+      sharedStateVersion: 1,
+      sharedStateRevision: 'shared-rev-1',
+      sharedStateHydrated: true,
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-update',
+        runId: 'run-update',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: 'mutation-1',
+              baseRevision: 'shared-rev-1',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(agent.promptCalls).toEqual([]);
+    expect(agent.continueCalls).toBe(0);
+    expect(events).toContainEqual({
+      type: EventType.STATE_DELTA,
+      delta: expect.arrayContaining([
+        {
+          op: 'replace',
+          path: '/shared/settings/amount',
+          value: 250,
+        },
+      ]),
+    });
+    expect(events).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'update-ack',
+        clientMutationId: 'mutation-1',
+        status: 'accepted',
+        resultingRevision: 'shared-rev-2',
+        baseRevision: 'shared-rev-1',
+      },
+    });
+    expect(
+      events.findIndex((event) => event.type === EventType.STATE_DELTA),
+    ).toBeLessThan(
+      events.findIndex(
+        (event) =>
+          event.type === EventType.CUSTOM &&
+          'name' in event &&
+          event.name === 'shared-state.control',
+      ),
+    );
+    expect(session.sharedState).toEqual({
+      settings: {
+        amount: 250,
+      },
+    });
+    expect(session.sharedStateRevision).toBe('shared-rev-2');
+    expect(session.sharedStateVersion).toBe(2);
+  });
+
+  it('acknowledges noop shared-state updates without emitting a state delta', async () => {
+    const agent = new ScriptedPiAgent([]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => ({
+        thread: { id: 'thread-update-noop' },
+        execution: { id: 'exec-update-noop', status: 'working' as const, statusMessage: 'Ready.' },
+        sharedState: {
+          settings: {
+            amount: 250,
+          },
+        },
+        sharedStateVersion: 2,
+        sharedStateRevision: 'shared-rev-2',
+        sharedStateHydrated: true,
+      }),
+    });
+
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-update-noop',
+        runId: 'run-update-noop',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: 'mutation-noop',
+              baseRevision: 'shared-rev-2',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(events.filter((event) => event.type === EventType.STATE_DELTA)).toEqual([]);
+    expect(events).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'update-ack',
+        clientMutationId: 'mutation-noop',
+        status: 'noop',
+        resultingRevision: 'shared-rev-2',
+        baseRevision: 'shared-rev-2',
+      },
+    });
+  });
+
+  it('rejects shared-state updates without a base revision on hydrated threads', async () => {
+    const agent = new ScriptedPiAgent([]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => ({
+        thread: { id: 'thread-update-missing-base' },
+        execution: { id: 'exec-update-missing-base', status: 'working' as const, statusMessage: 'Ready.' },
+        sharedState: {
+          settings: {
+            amount: 100,
+          },
+        },
+        sharedStateVersion: 1,
+        sharedStateRevision: 'shared-rev-1',
+        sharedStateHydrated: true,
+      }),
+    });
+
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-update-missing-base',
+        runId: 'run-update-missing-base',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: 'mutation-missing-base',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(events.filter((event) => event.type === EventType.STATE_DELTA)).toEqual([]);
+    expect(events).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'update-ack',
+        clientMutationId: 'mutation-missing-base',
+        status: 'rejected',
+        resultingRevision: 'shared-rev-1',
+        code: 'missing_base_revision',
+      },
+    });
+  });
+
+  it('rejects shared-state updates that patch outside the writable shared surface', async () => {
+    const agent = new ScriptedPiAgent([]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => ({
+        thread: { id: 'thread-update-forbidden' },
+        execution: { id: 'exec-update-forbidden', status: 'working' as const, statusMessage: 'Ready.' },
+        sharedState: {
+          settings: {
+            amount: 100,
+          },
+        },
+        sharedStateVersion: 1,
+        sharedStateRevision: 'shared-rev-1',
+        sharedStateHydrated: true,
+      }),
+    });
+
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-update-forbidden',
+        runId: 'run-update-forbidden',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: 'mutation-forbidden',
+              baseRevision: 'shared-rev-1',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/projected/managedMandate',
+                  value: {
+                    status: 'active',
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(events.filter((event) => event.type === EventType.STATE_DELTA)).toEqual([]);
+    expect(events).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'update-ack',
+        clientMutationId: 'mutation-forbidden',
+        status: 'rejected',
+        resultingRevision: 'shared-rev-1',
+        baseRevision: 'shared-rev-1',
+        code: 'forbidden_path',
+      },
+    });
   });
 
   it('streams text events before the Pi prompt fully completes', async () => {

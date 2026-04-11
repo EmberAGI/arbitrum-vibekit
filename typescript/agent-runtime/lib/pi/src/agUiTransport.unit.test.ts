@@ -247,6 +247,61 @@ describe('Pi AG-UI transport helpers', () => {
     });
   });
 
+  it('preserves canonical shared-state update commands on AG-UI run requests', async () => {
+    const { service, run } = createStubService();
+    const handler = createPiRuntimeGatewayAgUiHandler({
+      agentId: 'agent-pi-example',
+      service,
+      basePath: '/ag-ui',
+    });
+
+    await handler(
+      new Request('http://localhost/ag-ui/agent/agent-pi-example/run', {
+        method: 'POST',
+        body: JSON.stringify({
+          threadId: 'thread-1',
+          runId: 'run-update',
+          forwardedProps: {
+            command: {
+              update: {
+                clientMutationId: 'mutation-1',
+                baseRevision: 'shared-rev-1',
+                patch: [
+                  {
+                    op: 'add',
+                    path: '/shared/settings/amount',
+                    value: 250,
+                  },
+                ],
+              },
+            },
+          },
+        }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    expect(run).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      runId: 'run-update',
+      forwardedProps: {
+        command: {
+          update: {
+            clientMutationId: 'mutation-1',
+            baseRevision: 'shared-rev-1',
+            patch: [
+              {
+                op: 'add',
+                path: '/shared/settings/amount',
+                value: 250,
+              },
+            ],
+          },
+        },
+      },
+    });
+  });
+
   it('uses HttpAgent semantics while targeting Pi connect and stop endpoints', async () => {
     const fetchMock = vi
       .fn()

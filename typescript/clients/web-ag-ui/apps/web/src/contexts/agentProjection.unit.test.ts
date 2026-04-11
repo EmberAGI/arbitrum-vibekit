@@ -205,4 +205,35 @@ describe('agentProjection', () => {
       },
     });
   });
+
+  it('hydrates legacy web-facing settings and domain projection from canonical shared/projected payloads', () => {
+    const projected = projectDetailStateFromPayload({
+      shared: {
+        settings: {
+          amount: 456,
+        },
+      },
+      projected: {
+        managedMandate: {
+          summary: {
+            status: 'active',
+          },
+        },
+      },
+      thread: {
+        setupComplete: true,
+      },
+    });
+
+    expect(projected).not.toBeNull();
+    expect(projected?.thread.setupComplete).toBe(true);
+    expect(projected?.settings.amount).toBe(456);
+    expect(projected?.thread.domainProjection).toEqual({
+      managedMandate: {
+        summary: {
+          status: 'active',
+        },
+      },
+    });
+  });
 });

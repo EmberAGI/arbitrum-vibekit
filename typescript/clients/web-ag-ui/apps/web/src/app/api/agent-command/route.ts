@@ -110,7 +110,7 @@ export async function POST(req: NextRequest): Promise<Response> {
           },
         },
       })
-      .pipe(verifyEvents(), toArray()),
+      .pipe(verifyEvents(false), toArray()),
   );
 
   const snapshot = readLatestStateSnapshot(runEvents);

@@ -193,6 +193,26 @@ describe('agent-runtime facade', () => {
     expect(source).toContain('export interface CreateAgentRuntimeOptions');
   });
 
+  it('exposes canonical shared-state update commands on the public forwarded command contract', () => {
+    const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+    const declarations = readFileSync(new URL('../dist/index.d.ts', import.meta.url), 'utf8');
+
+    expect(source).toContain('update?: {');
+    expect(source).toContain('clientMutationId: string;');
+    expect(source).toContain('baseRevision?: string;');
+    expect(source).toContain('export type AgentRuntimeSharedStatePatchOperation = {');
+    expect(source).toContain("op: 'add' | 'replace' | 'remove';");
+    expect(source).toContain('path: string;');
+    expect(source).toContain('patch: ReadonlyArray<AgentRuntimeSharedStatePatchOperation>;');
+    expect(declarations).toContain('update?: {');
+    expect(declarations).toContain('clientMutationId: string;');
+    expect(declarations).toContain('baseRevision?: string;');
+    expect(declarations).toContain('export type AgentRuntimeSharedStatePatchOperation = {');
+    expect(declarations).toContain("op: 'add' | 'replace' | 'remove';");
+    expect(declarations).toContain('path: string;');
+    expect(declarations).toContain('patch: ReadonlyArray<AgentRuntimeSharedStatePatchOperation>;');
+  });
+
   it('owns sessions and control-plane defaults inside the blessed builder', async () => {
     const internalPostgres = createInternalPostgresHooks();
     const runtime = await agentRuntime.createAgentRuntime({

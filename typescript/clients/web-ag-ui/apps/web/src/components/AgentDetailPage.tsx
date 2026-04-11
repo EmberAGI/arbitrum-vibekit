@@ -769,10 +769,18 @@ function ManagedMandateEditorCard(props: {
   }, [initialAllowedAssetsValue, initialRootAsset, props.view.mandateRef]);
 
   const assetIntent = asRecord(props.view.managedMandate?.['asset_intent']);
-  const network = readString(assetIntent?.['network']) ?? 'arbitrum';
-  const controlPath = readString(assetIntent?.['control_path']) ?? 'lending.supply';
-  const benchmarkAsset = readString(assetIntent?.['benchmark_asset']) ?? 'USD';
-  const allocationBasis = readString(props.view.managedMandate?.['allocation_basis']) ?? 'allocable_idle';
+  const network: ManagedMandateInput['asset_intent']['network'] =
+    assetIntent?.['network'] === 'arbitrum' ? 'arbitrum' : 'arbitrum';
+  const controlPath: ManagedMandateInput['asset_intent']['control_path'] =
+    assetIntent?.['control_path'] === 'lending.supply' ? 'lending.supply' : 'lending.supply';
+  const benchmarkAsset: ManagedMandateInput['asset_intent']['benchmark_asset'] =
+    assetIntent?.['benchmark_asset'] === 'USD' ? 'USD' : 'USD';
+  const intent: ManagedMandateInput['asset_intent']['intent'] =
+    assetIntent?.['intent'] === 'deploy' ? 'deploy' : 'deploy';
+  const allocationBasis: ManagedMandateInput['allocation_basis'] =
+    props.view.managedMandate?.['allocation_basis'] === 'allocable_idle'
+      ? 'allocable_idle'
+      : 'allocable_idle';
 
   const handleSave = async () => {
     if (!props.onSave) {
@@ -811,7 +819,7 @@ function ManagedMandateEditorCard(props: {
             root_asset: normalizedRootAsset,
             network,
             benchmark_asset: benchmarkAsset,
-            intent: readString(assetIntent?.['intent']) ?? 'deploy',
+            intent,
             control_path: controlPath,
           },
         },

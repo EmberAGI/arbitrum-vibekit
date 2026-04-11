@@ -45,6 +45,12 @@ describe('pi AG-UI projection', () => {
         },
       }),
     ).toEqual({
+      shared: {},
+      projected: {
+        managedMandate: {
+          status: 'active',
+        },
+      },
       thread: {
         id: 'thread-1',
         task: {

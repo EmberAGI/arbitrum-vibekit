@@ -230,6 +230,13 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     threadId: undefined,
     clientMutationId: null,
   });
+  const [sharedStateRevisionByThread, setSharedStateRevisionByThread] = useState<{
+    threadId: string | undefined;
+    revision: string | null;
+  }>({
+    threadId: undefined,
+    revision: null,
+  });
   const [connectRetryTick, setConnectRetryTick] = useState(0);
   const pendingSyncMutationRef = useRef<{
     threadId: string | undefined;
@@ -493,6 +500,63 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     return typeof mutationId === 'string' && mutationId.length > 0 ? mutationId : null;
   }, []);
 
+  const clearPendingSyncMutation = useCallback((clientMutationId: string | null) => {
+    if (!clientMutationId) return;
+    const pendingSyncMutation = pendingSyncMutationRef.current;
+    if (
+      pendingSyncMutation.clientMutationId !== null &&
+      pendingSyncMutation.threadId === threadIdRef.current &&
+      clientMutationId === pendingSyncMutation.clientMutationId
+    ) {
+      setPendingSyncMutationByThread({
+        threadId: threadIdRef.current,
+        clientMutationId: null,
+      });
+    }
+  }, []);
+
+  const extractSharedStateControlAckMutationId = useCallback((payload: unknown): string | null => {
+    if (typeof payload !== 'object' || payload === null) return null;
+    const eventEnvelope =
+      'event' in payload &&
+      typeof (payload as { event?: unknown }).event === 'object' &&
+      (payload as { event?: unknown }).event !== null
+        ? ((payload as { event: unknown }).event as { name?: unknown; value?: unknown })
+        : (payload as { name?: unknown; value?: unknown });
+
+    if (eventEnvelope.name !== 'shared-state.control') return null;
+    const value = eventEnvelope.value;
+    if (typeof value !== 'object' || value === null) return null;
+    if ((value as { kind?: unknown }).kind !== 'update-ack') return null;
+    const clientMutationId = (value as { clientMutationId?: unknown }).clientMutationId;
+    return typeof clientMutationId === 'string' && clientMutationId.length > 0
+      ? clientMutationId
+      : null;
+  }, []);
+
+  const extractSharedStateControlRevision = useCallback((payload: unknown): string | null => {
+    if (typeof payload !== 'object' || payload === null) return null;
+    const eventEnvelope =
+      'event' in payload &&
+      typeof (payload as { event?: unknown }).event === 'object' &&
+      (payload as { event?: unknown }).event !== null
+        ? ((payload as { event: unknown }).event as { name?: unknown; value?: unknown })
+        : (payload as { name?: unknown; value?: unknown });
+
+    if (eventEnvelope.name !== 'shared-state.control') return null;
+    const value = eventEnvelope.value;
+    if (typeof value !== 'object' || value === null) return null;
+
+    const revision =
+      (value as { kind?: unknown; revision?: unknown; resultingRevision?: unknown }).kind === 'hydration'
+        ? (value as { revision?: unknown }).revision
+        : (value as { kind?: unknown; resultingRevision?: unknown }).kind === 'update-ack'
+          ? (value as { resultingRevision?: unknown }).resultingRevision
+          : null;
+
+    return typeof revision === 'string' && revision.length > 0 ? revision : null;
+  }, []);
+
   useEffect(() => {
     pendingSyncMutationRef.current = pendingSyncMutationByThread;
   }, [pendingSyncMutationByThread]);
@@ -661,18 +725,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             : null,
       });
       const appliedMutationId = extractAppliedMutationId(statePayload);
-      const pendingSyncMutation = pendingSyncMutationRef.current;
-      if (
-        appliedMutationId &&
-        pendingSyncMutation.clientMutationId !== null &&
-        pendingSyncMutation.threadId === threadIdRef.current &&
-        appliedMutationId === pendingSyncMutation.clientMutationId
-      ) {
-        setPendingSyncMutationByThread({
-          threadId: threadIdRef.current,
-          clientMutationId: null,
-        });
-      }
+      clearPendingSyncMutation(appliedMutationId);
       const previousState = hasStateValues(agent.state) ? (agent.state as ThreadSnapshot) : null;
       const projectedState = projectDetailStateFromPayload(statePayload, previousState);
       if (projectedState) {
@@ -793,14 +846,28 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         if (!isCurrentThreadEvent(payload)) return;
         applyMessages(payload.messages);
       },
+      onCustomEvent: (payload) => {
+        if (!isCurrentThreadEvent(payload)) return;
+        const revision = extractSharedStateControlRevision(payload);
+        if (revision) {
+          setSharedStateRevisionByThread({
+            threadId: threadIdRef.current,
+            revision,
+          });
+        }
+        clearPendingSyncMutation(extractSharedStateControlAckMutationId(payload));
+      },
     });
 
     return () => subscription.unsubscribe();
   }, [
     agent,
     agentId,
+    clearPendingSyncMutation,
     emitConnectTrace,
     extractAppliedMutationId,
+    extractSharedStateControlAckMutationId,
+    extractSharedStateControlRevision,
     hasStateValues,
     logConnectEvent,
     setRunInFlight,
@@ -876,7 +943,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         commandSchedulerRef.current = null;
       }
     };
-  }, [agentId, copilotkit, setRunInFlight]);
+  }, [agentId, runAgentOnCurrentThread, setRunInFlight]);
 
   useEffect(() => {
     const ownerId = streamOwnerIdRef.current;
@@ -1469,11 +1536,73 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     (updates: Partial<AgentSettings>) => {
       setUiError(null);
       const clientMutationId = v7();
+      const sharedStateRevision =
+        sharedStateRevisionByThread.threadId === threadId ? sharedStateRevisionByThread.revision : null;
       setPendingSyncMutationByThread({
         threadId,
         clientMutationId,
       });
       updateSettings(updates);
+
+      if (config.imperativeCommandTransport === 'forwarded-props') {
+        const scheduler = commandSchedulerRef.current;
+        if (!scheduler || !sharedStateRevision) {
+          setPendingSyncMutationByThread({
+            threadId,
+            clientMutationId: null,
+          });
+          setUiError(
+            sharedStateRevision
+              ? 'Unable to sync settings right now. Please retry.'
+              : 'Unable to sync settings until shared state is hydrated.',
+          );
+          return;
+        }
+
+        const accepted = scheduler.dispatchCustom({
+          command: 'update',
+          run: async (currentAgent) => {
+            const nextState =
+              hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
+            const nextSettings = {
+              ...(nextState.settings ?? defaultSettings),
+              ...updates,
+            };
+            for (const [key, value] of Object.entries(nextSettings)) {
+              if (value === undefined) {
+                delete nextSettings[key as keyof AgentSettings];
+              }
+            }
+            await runAgentOnCurrentThread(currentAgent, {
+              forwardedProps: {
+                command: {
+                  update: {
+                    clientMutationId,
+                    baseRevision: sharedStateRevision,
+                    patch: [
+                      {
+                        op: 'add',
+                        path: '/shared/settings',
+                        value: nextSettings,
+                      },
+                    ],
+                  },
+                },
+              },
+            });
+          },
+        });
+
+        if (!accepted) {
+          setPendingSyncMutationByThread({
+            threadId,
+            clientMutationId: null,
+          });
+          setUiError('Unable to sync settings right now. Please retry.');
+        }
+        return;
+      }
+
       const accepted = dispatchCommand('sync', {
         allowSyncCoalesce: true,
         messagePayload: {
@@ -1488,7 +1617,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         setUiError('Unable to sync settings right now. Please retry.');
       }
     },
-    [dispatchCommand, threadId, updateSettings],
+    [
+      config.imperativeCommandTransport,
+      dispatchCommand,
+      hasStateValues,
+      runAgentOnCurrentThread,
+      sharedStateRevisionByThread.revision,
+      sharedStateRevisionByThread.threadId,
+      threadId,
+      updateSettings,
+    ],
   );
 
   const applyDomainProjection = useCallback((projection: Record<string, unknown>) => {

@@ -33,8 +33,25 @@ async function writeNodeResponse(response: Response, target: ServerResponse): Pr
     target.setHeader(key, value);
   });
 
-  const body = new Uint8Array(await response.arrayBuffer());
-  target.end(body);
+  if (!response.body) {
+    target.end();
+    return;
+  }
+
+  const reader = response.body.getReader();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      target.write(Buffer.from(value));
+    }
+  } finally {
+    target.end();
+  }
 }
 
 function parseEventStreamBody(body: string): AgUiEventEnvelope[] {
@@ -42,6 +59,49 @@ function parseEventStreamBody(body: string): AgUiEventEnvelope[] {
     .split('\n')
     .filter((line) => line.startsWith('data: '))
     .map((line) => JSON.parse(line.slice('data: '.length)) as AgUiEventEnvelope);
+}
+
+async function readEventStreamUntil(
+  response: Response,
+  predicate: (events: readonly AgUiEventEnvelope[]) => boolean,
+): Promise<AgUiEventEnvelope[]> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return [];
+  }
+
+  const decoder = new TextDecoder();
+  const events: AgUiEventEnvelope[] = [];
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) {
+          continue;
+        }
+
+        events.push(JSON.parse(line.slice('data: '.length)) as AgUiEventEnvelope);
+        if (predicate(events)) {
+          await reader.cancel();
+          return events;
+        }
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+
+  return events;
 }
 
 function findStateSnapshot(events: readonly AgUiEventEnvelope[]) {
@@ -422,6 +482,125 @@ describe('agent-pi-example AG-UI integration', () => {
                 operatorNote: 'safe window approved',
               },
             },
+          },
+        },
+      },
+    });
+  });
+
+  it('serves canonical shared-state hydration and update acknowledgments over AG-UI HTTP', async () => {
+    const connectResponse = await fetch(`${baseUrl}/agent/${PI_EXAMPLE_AGENT_ID}/connect`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-shared-state',
+      }),
+    });
+
+    expect(connectResponse.ok).toBe(true);
+    const connectEvents = await readEventStreamUntil(
+      connectResponse,
+      (events) =>
+        events.some(
+          (event) =>
+            event.type === 'CUSTOM' &&
+            event.name === 'shared-state.control' &&
+            typeof event.value === 'object' &&
+            event.value !== null &&
+            'kind' in event.value &&
+            event.value.kind === 'hydration',
+        ),
+    );
+
+    expect(findStateSnapshot(connectEvents)).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        shared: {},
+        projected: {},
+        thread: {
+          id: 'thread-shared-state',
+        },
+      },
+    });
+    expect(connectEvents).toContainEqual({
+      type: 'CUSTOM',
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'bootstrap',
+        revision: 'shared-rev-0',
+      },
+    });
+
+    const updateResponse = await fetch(`${baseUrl}/agent/${PI_EXAMPLE_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-shared-state',
+        runId: 'run-shared-state-update',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: 'mutation-1',
+              baseRevision: 'shared-rev-0',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    });
+
+    expect(updateResponse.ok).toBe(true);
+    const updateEvents = parseEventStreamBody(await updateResponse.text());
+    const updateSnapshot = projectStateSnapshot({
+      baseline: findStateSnapshot(connectEvents),
+      events: updateEvents,
+    });
+
+    expect(findStateDeltas(updateEvents)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          delta: expect.arrayContaining([
+            expect.objectContaining({
+              op: 'add',
+              path: '/shared/settings',
+              value: {
+                amount: 250,
+              },
+            }),
+          ]),
+        }),
+      ]),
+    );
+    expect(updateEvents).toContainEqual({
+      type: 'CUSTOM',
+      name: 'shared-state.control',
+      value: {
+        kind: 'update-ack',
+        clientMutationId: 'mutation-1',
+        status: 'accepted',
+        resultingRevision: 'shared-rev-1',
+        baseRevision: 'shared-rev-0',
+      },
+    });
+    expect(updateSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        shared: {
+          settings: {
+            amount: 250,
           },
         },
       },

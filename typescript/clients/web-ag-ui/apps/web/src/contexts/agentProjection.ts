@@ -71,9 +71,14 @@ function cloneInitialState(): ThreadSnapshot {
 function mergeStatePayload(projected: ThreadSnapshot, incoming: Partial<ThreadSnapshot>): ThreadSnapshot {
   type IncomingThreadEnvelope = Partial<ThreadSnapshot> & {
     thread?: Partial<ThreadState>;
+    shared?: {
+      settings?: Partial<ThreadSnapshot['settings']>;
+    };
+    projected?: Record<string, unknown>;
   };
   const incomingEnvelope = incoming as IncomingThreadEnvelope;
   const incomingThreadRaw = isRecord(incomingEnvelope.thread) ? incomingEnvelope.thread : {};
+  const incomingSharedRaw = isRecord(incomingEnvelope.shared) ? incomingEnvelope.shared : {};
   const { command: _droppedCommand, ...incomingThread } = incomingThreadRaw as Partial<ThreadState> & {
     command?: unknown;
   };
@@ -86,9 +91,13 @@ function mergeStatePayload(projected: ThreadSnapshot, incoming: Partial<ThreadSn
   const incomingMetrics = isRecord(incomingThread.metrics)
     ? incomingThread.metrics
     : ({} as Partial<ThreadState['metrics']>);
-  const incomingDomainProjection = isRecord(incomingThread.domainProjection)
+  const incomingThreadDomainProjection = isRecord(incomingThread.domainProjection)
     ? incomingThread.domainProjection
     : undefined;
+  const incomingProjectedDomainProjection = isRecord(incomingEnvelope.projected)
+    ? incomingEnvelope.projected
+    : undefined;
+  const incomingSharedSettings = isRecord(incomingSharedRaw.settings) ? incomingSharedRaw.settings : undefined;
 
   projected.messages = Array.isArray(incoming.messages) ? incoming.messages : projected.messages;
 
@@ -106,19 +115,33 @@ function mergeStatePayload(projected: ThreadSnapshot, incoming: Partial<ThreadSn
     };
   }
 
+  if (incomingSharedSettings) {
+    projected.settings = {
+      ...projected.settings,
+      ...incomingSharedSettings,
+    };
+  }
+
   if (Array.isArray(incoming.tasks)) {
     projected.tasks = incoming.tasks;
   }
 
+  const nextDomainProjectionBase = isRecord(projected.thread.domainProjection)
+    ? projected.thread.domainProjection
+    : {};
+  const nextDomainProjectionFromThread = incomingThreadDomainProjection
+    ? mergeProjectedDomainProjection(nextDomainProjectionBase, incomingThreadDomainProjection)
+    : nextDomainProjectionBase;
+  const nextDomainProjection = incomingProjectedDomainProjection
+    ? mergeProjectedDomainProjection(nextDomainProjectionFromThread, incomingProjectedDomainProjection)
+    : nextDomainProjectionFromThread;
+
   projected.thread = {
     ...projected.thread,
     ...incomingThread,
-    ...(incomingDomainProjection
+    ...(incomingThreadDomainProjection || incomingProjectedDomainProjection
       ? {
-          domainProjection: mergeProjectedDomainProjection(
-            isRecord(projected.thread.domainProjection) ? projected.thread.domainProjection : {},
-            incomingDomainProjection,
-          ),
+          domainProjection: nextDomainProjection,
         }
       : {}),
     profile: {

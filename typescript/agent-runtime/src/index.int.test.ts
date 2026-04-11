@@ -1,3 +1,4 @@
+import { EventType } from '@ag-ui/core';
 import {
   createAssistantMessageEventStream,
   type AssistantMessage,
@@ -511,7 +512,7 @@ function isStateDeltaEvent(event: GatewayEvent): event is StateDeltaEvent {
     typeof event === 'object' &&
     event !== null &&
     'type' in event &&
-    event.type === 'STATE_DELTA' &&
+    event.type === EventType.STATE_DELTA &&
     'delta' in event
   );
 }

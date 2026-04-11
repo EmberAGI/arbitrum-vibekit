@@ -84,18 +84,32 @@ function parseRunRequest(body: Record<string, unknown>): PiRuntimeGatewayRunRequ
   const resume = command ? readStringField(command, 'resume') : undefined;
   const name = command ? readStringField(command, 'name') : undefined;
   const input = command && Object.prototype.hasOwnProperty.call(command, 'input') ? command.input : undefined;
+  const update = command && isRecord(command.update) ? command.update : undefined;
+  const updateClientMutationId = update ? readStringField(update, 'clientMutationId') : undefined;
+  const updateBaseRevision = update ? readStringField(update, 'baseRevision') : undefined;
+  const updatePatch =
+    update && Object.prototype.hasOwnProperty.call(update, 'patch') ? update.patch : undefined;
 
   return {
     threadId,
     runId,
     messages: Array.isArray(body.messages) ? (body.messages as PiRuntimeGatewayRunRequest['messages']) : undefined,
-    ...(resume || name
+    ...(resume || name || update
       ? {
           forwardedProps: {
             command: {
               ...(name ? { name } : {}),
               ...(Object.prototype.hasOwnProperty.call(command ?? {}, 'input') ? { input } : {}),
               ...(resume ? { resume } : {}),
+              ...(update
+                ? {
+                    update: {
+                      ...(updateClientMutationId ? { clientMutationId: updateClientMutationId } : {}),
+                      ...(updateBaseRevision ? { baseRevision: updateBaseRevision } : {}),
+                      ...(Object.prototype.hasOwnProperty.call(update, 'patch') ? { patch: updatePatch } : {}),
+                    },
+                  }
+                : {}),
             },
           },
         }

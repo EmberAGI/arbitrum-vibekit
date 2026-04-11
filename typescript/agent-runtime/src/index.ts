@@ -22,6 +22,7 @@ import {
   type PiRuntimeGatewayActivityEvent,
   type PiRuntimeGatewayArtifact,
   type PiRuntimeGatewayInspectionState,
+  type PiRuntimeGatewayRunRequest,
   type PiRuntimeGatewayRuntime,
   type PiRuntimeGatewaySession,
 } from '../lib/pi/dist/index.js';
@@ -44,6 +45,9 @@ type AgentRuntimeGetApiKey = NonNullable<RuntimeAgentOptions['getApiKey']>;
 type AgentRuntimeInitialState = NonNullable<RuntimeAgentOptions['initialState']>;
 type AgentRuntimeConvertToLlm = NonNullable<RuntimeAgentOptions['convertToLlm']>;
 type AgentRuntimeTool = RuntimeAgentTool;
+type AgentRuntimeInternalForwardedCommand = NonNullable<
+  NonNullable<PiRuntimeGatewayRunRequest['forwardedProps']>['command']
+>;
 type AgentRuntimeConnectEvent = ReturnType<typeof buildPiRuntimeGatewayConnectEventsInternal>[number];
 type AgentRuntimeAttachedEventSource = readonly AgentRuntimeConnectEvent[] | AsyncIterable<AgentRuntimeConnectEvent>;
 type AgentRuntimeAttachedThreadListener = (event: AgentRuntimeConnectEvent) => void;
@@ -164,10 +168,21 @@ export interface AgentRuntimeAgentOptions {
   convertToLlm?: AgentRuntimeConvertToLlm;
 }
 
+export type AgentRuntimeSharedStatePatchOperation = {
+  op: 'add' | 'replace' | 'remove';
+  path: string;
+  value?: unknown;
+};
+
 export type AgentRuntimeForwardedCommand = {
   name?: string;
   input?: unknown;
   resume?: string;
+  update?: {
+    clientMutationId: string;
+    baseRevision?: string;
+    patch: ReadonlyArray<AgentRuntimeSharedStatePatchOperation>;
+  };
 };
 
 type AgentRuntimeDomainCommandToolArgs = {
@@ -723,7 +738,7 @@ function validateDomainLifecycle(lifecycle: AgentRuntimeDomainLifecycle): void {
 }
 
 function readDirectCommandOperation(
-  command: AgentRuntimeForwardedCommand | undefined,
+  command: Pick<AgentRuntimeInternalForwardedCommand, 'name' | 'input'> | undefined,
 ): AgentRuntimeDomainOperation | null {
   if (!command || typeof command.name !== 'string') {
     return null;
@@ -742,7 +757,7 @@ function readDirectCommandOperation(
 }
 
 function readInterruptOperation<TState>(params: {
-  command: AgentRuntimeForwardedCommand | undefined;
+  command: Pick<AgentRuntimeInternalForwardedCommand, 'resume'> | undefined;
   session: PiRuntimeGatewaySession;
   domain: AgentRuntimeDomainConfig<TState> | undefined;
 }): AgentRuntimeDomainOperation | null {
@@ -1398,6 +1413,12 @@ function cloneAttachedEvents(events: readonly AgentRuntimeConnectEvent[]): Agent
   return clonedEvents;
 }
 
+function isAttachedEventArray(
+  source: AgentRuntimeAttachedEventSource,
+): source is readonly AgentRuntimeConnectEvent[] {
+  return Array.isArray(source);
+}
+
 function injectAttachedEventsAfterFirstEvent(
   source: AgentRuntimeAttachedEventSource,
   injectedEvents: readonly AgentRuntimeConnectEvent[],
@@ -1406,16 +1427,14 @@ function injectAttachedEventsAfterFirstEvent(
     return source;
   }
 
-  if (Array.isArray(source)) {
+  if (isAttachedEventArray(source)) {
     if (source.length === 0) {
       return cloneAttachedEvents(injectedEvents);
     }
 
-    return [
-      source[0],
-      ...injectedEvents,
-      ...source.slice(1),
-    ];
+    const mergedEvents = cloneAttachedEvents(source);
+    mergedEvents.splice(1, 0, ...cloneAttachedEvents(injectedEvents));
+    return mergedEvents;
   }
 
   return {
