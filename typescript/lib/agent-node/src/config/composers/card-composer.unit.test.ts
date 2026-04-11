@@ -272,7 +272,7 @@ describe('composeAgentCard', () => {
               chainId: 42161,
               operatorAddress: '0x1234567890123456789012345678901234567890',
             },
-            mirrors: [{ chainId: 1 }, { chainId: 8453 }],
+            mirrors: [{ chainId: 1 }],
             identityRegistries: {
               '42161': '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
             },
@@ -404,7 +404,7 @@ describe('composeAgentCard', () => {
             mirrors: [],
             identityRegistries: {
               '1': '0x1111111111111111111111111111111111111111',
-              '8453': '0x2222222222222222222222222222222222222222',
+              '11155111': '0x2222222222222222222222222222222222222222',
             },
             registrations: {},
             supportedTrust: [],
@@ -563,7 +563,7 @@ describe('composeAgentCard', () => {
               chainId: 42161,
               operatorAddress: '0x1234567890123456789012345678901234567890',
             },
-            mirrors: [{ chainId: 1 }, { chainId: 8453 }],
+            mirrors: [{ chainId: 1 }],
             identityRegistries: {
               '42161': '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
             },

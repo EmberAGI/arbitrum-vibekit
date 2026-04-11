@@ -20,7 +20,6 @@ const marketMap: Record<number, keyof typeof markets> = {
   11155111: 'AaveV3Sepolia',
   42161: 'AaveV3Arbitrum',
   421614: 'AaveV3ArbitrumSepolia',
-  8453: 'AaveV3Base',
   137: 'AaveV3Polygon',
   10: 'AaveV3Optimism',
 };

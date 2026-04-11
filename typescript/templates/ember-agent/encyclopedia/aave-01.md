@@ -10,7 +10,7 @@ The protocol is governed by holders of its native token, **AAVE**, an ERC-20 tok
 
 Further expanding its ecosystem, Aave launched its native, decentralized, overcollateralized stablecoin, **GHO**, in July 2023.¹⁶ GHO aims to maintain a peg to the US dollar and leverages Aave's existing infrastructure, with interest payments contributing directly to the Aave DAO treasury.¹⁷ Mechanisms like the **GHO Stability Module (GSM)** are employed to help maintain its peg.¹⁸
 
-Aave boasts a significant market presence, consistently ranking among the top DeFi protocols by **Total Value Locked (TVL)**, which currently stands at nearly $20 billion across numerous blockchain networks including Ethereum, Arbitrum, Avalanche, Polygon, Base, and Sonic.³ This multi-chain strategy underscores its efforts to provide broad accessibility and capture liquidity across the evolving blockchain landscape.²¹ The protocol's open-source nature and composable design have established it as a fundamental "money market" layer, enabling integration and interaction with a wide array of other DeFi applications.³ Ongoing developments, including the "**Aavenomics**" proposal aimed at enhancing token utility and revenue distribution ²³ and the ambitious **Aave V4** roadmap targeting further improvements in efficiency, risk management, and scalability ⁹, signal Aave's continued commitment to innovation. This report provides a comprehensive, encyclopedic overview of the Aave protocol, covering its history, technology, tokenomics, governance, risk factors, market position, and future trajectory.
+Aave boasts a significant market presence, consistently ranking among the top DeFi protocols by **Total Value Locked (TVL)**, which currently stands at nearly $20 billion across numerous blockchain networks including Ethereum, Arbitrum, Avalanche, Polygon, Optimism, and Sonic.³ This multi-chain strategy underscores its efforts to provide broad accessibility and capture liquidity across the evolving blockchain landscape.²¹ The protocol's open-source nature and composable design have established it as a fundamental "money market" layer, enabling integration and interaction with a wide array of other DeFi applications.³ Ongoing developments, including the "**Aavenomics**" proposal aimed at enhancing token utility and revenue distribution ²³ and the ambitious **Aave V4** roadmap targeting further improvements in efficiency, risk management, and scalability ⁹, signal Aave's continued commitment to innovation. This report provides a comprehensive, encyclopedic overview of the Aave protocol, covering its history, technology, tokenomics, governance, risk factors, market position, and future trajectory.
 
 ## 2. Introduction to Aave: A DeFi Cornerstone
 
@@ -159,7 +159,7 @@ The **AAVE** token is the native asset of the Aave ecosystem, playing a central 
 
 ### 6.1 Tokenomics: Supply, Distribution, and Market Data
 
-AAVE is primarily an ERC-20 token deployed on the Ethereum blockchain, although cross-chain implementations exist on networks like Arbitrum, Base, Optimism, and Polygon, facilitated by canonical bridges.¹³ It serves as the core governance token for the entire Aave protocol across all deployments.³
+AAVE is primarily an ERC-20 token deployed on the Ethereum blockchain, although cross-chain implementations exist on networks like Arbitrum, Optimism, and Polygon, facilitated by canonical bridges.¹³ It serves as the core governance token for the entire Aave protocol across all deployments.³
 
 The current AAVE token originated from a **migration event** in October 2020, where the protocol's original token, LEND (from the ETHLend era), was swapped for AAVE at a ratio of 100 LEND to 1 AAVE.⁵ This migration was a key part of the Aave rebranding and significantly altered the token's supply dynamics, reducing the total supply from 1.3 billion LEND to a fixed maximum supply of **16 million AAVE tokens**.⁵ This fixed cap introduces an element of scarcity to the token.
 
@@ -253,9 +253,9 @@ GHO's circulating supply has seen significant expansion, particularly in 2024 an
 
 A key element of the GHO growth strategy is its expansion beyond Ethereum mainnet to Layer 2 networks and other blockchains. This **cross-chain strategy** aims to increase GHO's accessibility, reduce transaction costs for users, enhance user experience, improve liquidity across different ecosystems, and unlock new use cases.⁶⁸ The technical backbone for this expansion is Chainlink's **Cross-Chain Interoperability Protocol (CCIP)**, adopted by Aave Governance as the standard for secure GHO bridging.⁶⁴
 
-The rollout follows a phased approach, starting with Arbitrum (launched July 2024 ⁷³) and subsequently Base.⁶⁴ The cross-chain architecture utilizes different models depending on the networks involved ⁷³:
+The rollout follows a phased approach, starting with Arbitrum (launched July 2024 ⁷³). The cross-chain architecture utilizes different models depending on the networks involved ⁷³:
 
-- **Ethereum <-> L2 (e.g., Arbitrum, Base):** A **lock-and-mint** model is used. GHO tokens are locked in a bridge contract on Ethereum, and an equivalent amount of GHO is minted on the L2 network via CCIP. This ensures the total circulating supply remains consistent while being backed by reserves on Ethereum.
+- **Ethereum <-> L2 (e.g., Arbitrum):** A **lock-and-mint** model is used. GHO tokens are locked in a bridge contract on Ethereum, and an equivalent amount of GHO is minted on the L2 network via CCIP. This ensures the total circulating supply remains consistent while being backed by reserves on Ethereum.
 - **L2 <-> L2:** A **burn-and-mint** model is used for transfers between non-Ethereum chains. GHO is burned on the source L2, and an equivalent amount is minted on the destination L2 via CCIP, maximizing capital efficiency while still being ultimately backed by the locked reserves on Ethereum.
 
 Managing GHO's liquidity, incentives, and risk parameters across multiple networks is overseen by dedicated bodies operating under Aave Governance mandates:
@@ -391,7 +391,6 @@ Recognizing that DeFi activity is not confined to a single blockchain, Aave has 
 - Optimism (OP Mainnet)
 - Polygon (PoS)
 - Avalanche (C-Chain)
-- Base
 - Metis
 - Gnosis Chain
 - BNB Smart Chain (BSC)
@@ -414,7 +413,6 @@ _(Data sourced from DeFi Llama ²⁰)_
 | Arbitrum               | $707.66m     | V3               |
 | Avalanche              | $629.49m     | V3               |
 | Sonic                  | $396.22m     | V3               |
-| Base                   | $376.92m     | V3               |
 | Polygon                | $250.49m     | V2, V3           |
 | BSC                    | $162.00m     | V3               |
 | OP Mainnet             | $116.17m     | V3               |
@@ -430,7 +428,7 @@ _(Data sourced from DeFi Llama ²⁰)_
 
 _(Note: TVL figures are dynamic and subject to market fluctuations. Some smaller deployments or deprecated versions may exist.)_
 
-Ethereum clearly remains the dominant chain for Aave, holding the vast majority of the protocol's TVL.²⁰ This reflects Ethereum's status as the primary DeFi hub with the deepest liquidity and longest track record. However, the substantial TVL figures on Layer 2 solutions like Arbitrum, Base, and Optimism, as well as other Layer 1s like Avalanche and Polygon, demonstrate the success of Aave's multi-chain strategy in capturing significant user activity and liquidity across diverse ecosystems.²⁰ Aave is often one of the largest and foundational protocols on the newer networks it deploys to, highlighting its importance as a core DeFi primitive.²¹ Monitoring the shifts in TVL distribution over time can provide insights into changing user preferences, the relative growth of different blockchain ecosystems, and the perceived risk/reward of using Aave on specific chains.
+Ethereum clearly remains the dominant chain for Aave, holding the vast majority of the protocol's TVL.²⁰ This reflects Ethereum's status as the primary DeFi hub with the deepest liquidity and longest track record. However, the substantial TVL figures on Layer 2 solutions like Arbitrum and Optimism, as well as other Layer 1s like Avalanche and Polygon, demonstrate the success of Aave's multi-chain strategy in capturing significant user activity and liquidity across diverse ecosystems.²⁰ Aave is often one of the largest and foundational protocols on the newer networks it deploys to, highlighting its importance as a core DeFi primitive.²¹ Monitoring the shifts in TVL distribution over time can provide insights into changing user preferences, the relative growth of different blockchain ecosystems, and the perceived risk/reward of using Aave on specific chains.
 
 ### 10.2 Market Share and Competitor Comparison
 
@@ -586,7 +584,6 @@ Aave Labs has been actively developing V4 since mid-2024, providing regular upda
 65. Stake - Aave, accessed April 27, 2025, <https://aave.com/help/safety-module/stake>
 66. Aave Risk DAO - AWS, accessed April 27, 2025, <https://cdck-file-uploads-europe1.s3.dualstack.eu-west-1.amazonaws.com/flex013/uploads/aave/original/2X/b/bc7c2b259d6b9598ebb50dbdf21e4613d30e9cd8.pdf>
 67. AL Development Update | December 2024 - Aave - Governance Forum, accessed April 27, 2025, <https://governance.aave.com/t/al-development-update-december-2024/20535>
-68. Aave's GHO Stablecoin Now Live on Base, Expanding Access and Use Cases | Avara, accessed April 27, 2025, <https://avara.xyz/blog/gho-stablecoin-now-live-on-base>
 69. GHO | Aave Protocol Documentation, accessed April 27, 2025, <https://aave.com/docs/developers/gho>
 70. How GHO Works | GHO Document Hub - GHO Docs, accessed April 27, 2025, <https://docs.gho.xyz/concepts/how-gho-works/>
 71. How Aave's stablecoin GHO is core to its plan to 10X its revenue | The Block, accessed April 27, 2025, <https://www.theblock.co/post/350525/how-aaves-stablecoin-gho-is-core-to-its-plan-to-10x-its-revenue>

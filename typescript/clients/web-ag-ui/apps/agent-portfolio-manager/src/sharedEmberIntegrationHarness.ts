@@ -29,8 +29,6 @@ function resolveChainId(network: string): string {
   switch (network) {
     case 'arbitrum':
       return '42161';
-    case 'base':
-      return '8453';
     default:
       return '1';
   }

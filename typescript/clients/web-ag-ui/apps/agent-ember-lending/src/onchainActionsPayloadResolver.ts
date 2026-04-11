@@ -6,12 +6,11 @@ import {
 } from '@metamask/delegation-toolkit';
 import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
 import { createPublicClient, http, parseUnits, serializeTransaction } from 'viem';
-import { arbitrum, base, mainnet } from 'viem/chains';
+import { arbitrum, mainnet } from 'viem/chains';
 import { z } from 'zod';
 
 const DEFAULT_ONCHAIN_ACTIONS_API_URL = 'https://api.emberai.xyz';
 const DEFAULT_ARBITRUM_RPC_URL = 'https://arb1.arbitrum.io/rpc';
-const DEFAULT_BASE_RPC_URL = 'https://mainnet.base.org';
 const DEFAULT_ETHEREUM_RPC_URL = 'https://eth.merkle.io';
 const RPC_RETRY_COUNT = 2;
 const RPC_TIMEOUT_MS = 8_000;
@@ -131,12 +130,11 @@ export type EmberLendingAnchoredPayloadResolver = {
 type OnchainActionsApiEnv = NodeJS.ProcessEnv & {
   ONCHAIN_ACTIONS_API_URL?: string;
   ARBITRUM_RPC_URL?: string;
-  BASE_CHAIN_RPC_URL?: string;
   ETHEREUM_RPC_URL?: string;
 };
 
 type LendingOperation = 'supply' | 'withdraw' | 'borrow' | 'repay';
-type SupportedExecutionNetwork = 'arbitrum' | 'base' | 'mainnet';
+type SupportedExecutionNetwork = 'arbitrum' | 'mainnet';
 type EmberLendingExecutionPublicClient = {
   getTransactionCount: (input: {
     address: `0x${string}`;
@@ -199,8 +197,6 @@ function resolveChainId(network: string): string {
   switch (network.trim().toLowerCase()) {
     case 'arbitrum':
       return '42161';
-    case 'base':
-      return '8453';
     case 'ethereum':
     case 'mainnet':
       return '1';
@@ -213,8 +209,6 @@ function resolveSupportedExecutionNetwork(network: string): SupportedExecutionNe
   switch (network.trim().toLowerCase()) {
     case 'arbitrum':
       return 'arbitrum';
-    case 'base':
-      return 'base';
     case 'ethereum':
     case 'mainnet':
       return 'mainnet';
@@ -250,8 +244,6 @@ function resolveRpcUrl(
   switch (network) {
     case 'arbitrum':
       return env.ARBITRUM_RPC_URL?.trim() || DEFAULT_ARBITRUM_RPC_URL;
-    case 'base':
-      return env.BASE_CHAIN_RPC_URL?.trim() || DEFAULT_BASE_RPC_URL;
     case 'mainnet':
       return env.ETHEREUM_RPC_URL?.trim() || DEFAULT_ETHEREUM_RPC_URL;
   }
@@ -269,8 +261,7 @@ function createDefaultExecutionPublicClientResolver(
     }
 
     const client = createPublicClient({
-      chain:
-        network === 'arbitrum' ? arbitrum : network === 'base' ? base : mainnet,
+      chain: network === 'arbitrum' ? arbitrum : mainnet,
       transport: createRpcTransport(resolveRpcUrl(network, env)),
     }) as EmberLendingExecutionPublicClient;
     clients.set(network, client);

@@ -93,7 +93,7 @@ This document records significant architectural and implementation decisions mad
 
 **Decision**:
 - Default canonical chain: **Arbitrum One (chain ID 42161)**
-- Default mirror chains: **Ethereum Mainnet (1)** and **Base (8453)**
+- Default mirror chains: **Ethereum Mainnet (1)**
 - Allow user override during `agent init` wizard
 - Sepolia offered as optional testnet (default off)
 
@@ -101,12 +101,12 @@ This document records significant architectural and implementation decisions mad
 - Arbitrum One provides low transaction costs for canonical identity writes
 - High throughput supports frequent updates without prohibitive gas fees
 - Growing ecosystem adoption makes it a practical default
-- Mirrors on Ethereum and Base provide broad discovery across major L1 and L2 networks
+- Ethereum mainnet mirror provides broad discovery while keeping Arbitrum One as the canonical identity home
 - User can override during init or via config edit for different requirements
 
 **Alternatives Considered**:
 - Default to Ethereum Mainnet - rejected due to higher gas costs
-- Default to Base - rejected as less established for identity registries
+- Default to Ethereum-only registration with no canonical Arbitrum home - rejected because it raises costs and weakens the intended default path
 - No default, force user choice - rejected to streamline setup
 
 **Trade-offs**:
@@ -339,7 +339,7 @@ This document records significant architectural and implementation decisions mad
   - IPFS credentials (PINATA_JWT, PINATA_GATEWAY)
   - ERC-8004 enable toggle
   - Canonical chain selection (default Arbitrum One)
-  - Mirror chain multiselect (Ethereum + Base default on)
+  - Mirror chain multiselect (Ethereum default on)
   - Optional operator address with validation
 - Write collected secrets to `.env`
 - Generate agent.md dynamically from collected configuration
@@ -428,6 +428,6 @@ These decisions collectively establish a config-driven, composable approach to E
 - **Interactive with Graceful Degradation**: TTY-aware prompts with non-interactive fallback
 - **Validation Early and Often**: Strict schemas with actionable feedback
 - **Persistence with User Control**: Auto-persist registration results, prompt for overrides
-- **Sensible Defaults**: Arbitrum One canonical, Ethereum + Base mirrors, OpenRouter AI provider
+- **Sensible Defaults**: Arbitrum One canonical, Ethereum mirror, OpenRouter AI provider
 
 These decisions support the overarching goal of making ERC-8004 a first-class, frictionless feature of the agent-node config workspace.

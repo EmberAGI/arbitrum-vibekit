@@ -159,24 +159,23 @@ describe('Init Command Integration', () => {
       expect(parsed.data['erc8004']['canonical']['chainId']).toBe(42161);
     });
 
-    it('should set default mirrors to Ethereum (1) and Base (8453)', async () => {
+    it('should set default mirrors to Ethereum (1)', async () => {
       // Given: temp directory
       const tempDir = createTempDir();
 
       // When: running init
       await initCommand({ target: tempDir, yes: true, noInstall: true });
 
-      // Then: mirrors should include Ethereum and Base
+      // Then: mirrors should include only Ethereum
       const agentMdPath = join(tempDir, 'agent.md');
       const agentMdContent = readFileSync(agentMdPath, 'utf-8');
       const parsed = matter(agentMdContent);
 
       expect(parsed.data['erc8004']['mirrors']).toBeDefined();
-      expect(parsed.data['erc8004']['mirrors']).toHaveLength(2);
+      expect(parsed.data['erc8004']['mirrors']).toHaveLength(1);
 
       const chainIds = parsed.data['erc8004']['mirrors'].map((m: { chainId: number }) => m.chainId);
       expect(chainIds).toContain(1); // Ethereum
-      expect(chainIds).toContain(8453); // Base
     });
 
     it('should prefill identity registries with Sepolia and zero-address placeholders', async () => {
@@ -195,7 +194,6 @@ describe('Init Command Integration', () => {
 
       const registries = parsed.data['erc8004']['identityRegistries'];
       expect(registries['1']).toBe('0x0000000000000000000000000000000000000000'); // Ethereum placeholder
-      expect(registries['8453']).toBe('0x0000000000000000000000000000000000000000'); // Base placeholder
       expect(registries['11155111']).toBe('0x8004a6090Cd10A7288092483047B097295Fb8847'); // Sepolia real
       expect(registries['42161']).toBe('0x0000000000000000000000000000000000000000'); // Arbitrum placeholder
     });

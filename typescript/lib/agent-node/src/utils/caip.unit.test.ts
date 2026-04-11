@@ -40,16 +40,16 @@ describe('CAIP Utilities', () => {
       expect(result).toBe('eip155:42161:0xabcdef0123456789abcdef0123456789abcdef01');
     });
 
-    it('should format valid CAIP-2 blockchain ID for Base', () => {
-      // Given: Base chain ID and address
-      const chainId = 8453;
+    it('should format valid CAIP-2 blockchain ID for Arbitrum Sepolia', () => {
+      // Given: Arbitrum Sepolia chain ID and address
+      const chainId = 421614;
       const address = '0x0000000000000000000000000000000000000000';
 
       // When: formatting CAIP-2
       const result = formatCaip2(chainId, address);
 
       // Then: should return proper CAIP-2 format
-      expect(result).toBe('eip155:8453:0x0000000000000000000000000000000000000000');
+      expect(result).toBe('eip155:421614:0x0000000000000000000000000000000000000000');
     });
 
     it('should throw error for invalid chain ID (zero)', () => {

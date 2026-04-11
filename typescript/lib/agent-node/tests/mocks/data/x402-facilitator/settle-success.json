@@ -11,7 +11,7 @@
       "paymentPayload": {
         "x402Version": 1,
         "scheme": "exact",
-        "network": "base-sepolia",
+        "network": "arbitrum-sepolia",
         "payload": {
           "signature": "0x47859970f51ec1a6791f398a3a552a6fa4bc570c6b7a6136f712a694e0e82f4723ce487033978b74a752586208bae83718835c1312751e4563e2176549e551481b",
           "authorization": {
@@ -26,7 +26,7 @@
       },
       "paymentRequirements": {
         "scheme": "exact",
-        "network": "base-sepolia",
+        "network": "arbitrum-sepolia",
         "description": "Test",
         "resource": "https://example.test/resource",
         "payTo": "0x850051af81DF37ae20e6Fe2De405be96DC4b3d1f",

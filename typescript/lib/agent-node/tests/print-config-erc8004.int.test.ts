@@ -47,7 +47,7 @@ describe('print-config ERC-8004 visibility', () => {
     parsed.data['erc8004'] = {
       enabled: true,
       canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
-      mirrors: [{ chainId: 1 }, { chainId: 8453 }],
+      mirrors: [{ chainId: 1 }],
       identityRegistries: { '42161': '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd' },
       registrations: { '42161': { agentId: 456, registrationUri: 'ipfs://QmFullConfig' } },
       supportedTrust: ['dns', 'ens', 'lens'],

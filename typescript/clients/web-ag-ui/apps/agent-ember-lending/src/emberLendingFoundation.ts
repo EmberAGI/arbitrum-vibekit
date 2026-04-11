@@ -29,7 +29,6 @@ export type EmberLendingGatewayEnv = NodeJS.ProcessEnv & {
   SHARED_EMBER_BASE_URL?: string;
   ONCHAIN_ACTIONS_API_URL?: string;
   ARBITRUM_RPC_URL?: string;
-  BASE_CHAIN_RPC_URL?: string;
   ETHEREUM_RPC_URL?: string;
   EMBER_LENDING_OWS_WALLET_NAME?: string;
   EMBER_LENDING_OWS_PASSPHRASE?: string;

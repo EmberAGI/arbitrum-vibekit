@@ -52,7 +52,6 @@ const chainMappings = [
   { id: '42161', name: 'Arbitrum', aliases: [] },
   { id: '10', name: 'Optimism', aliases: [] },
   { id: '137', name: 'Polygon', aliases: ['matic'] },
-  { id: '8453', name: 'Base', aliases: [] },
 ];
 
 function mapChainNameToId(chainName: string): string | undefined {
@@ -76,7 +75,6 @@ const RPC_ENV_VAR_BY_CHAIN_ID: Record<string, string> = {
   '137': 'POLYGON_RPC_URL',
   '42161': 'ARBITRUM_RPC_URL',
   '421614': 'ARBITRUM_SEPOLIA_RPC_URL',
-  '8453': 'BASE_CHAIN_RPC_URL',
   '33139': 'APECHAIN_RPC_URL',
   '33111': 'APECHAIN_CURTIS_RPC_URL',
 };

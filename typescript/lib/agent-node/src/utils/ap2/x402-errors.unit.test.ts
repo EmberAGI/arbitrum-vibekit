@@ -251,14 +251,14 @@ describe('buildFailureMetadata()', () => {
     const context: FailureContext = {
       paymentRequirements: {
         scheme: 'exact',
-        network: 'base-sepolia',
+        network: 'arbitrum-sepolia',
         payTo: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
         asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
         amount: '100',
       },
       paymentPayload: {
         scheme: 'exact',
-        network: 'base-sepolia',
+        network: 'arbitrum-sepolia',
         payTo: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
         asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
         amount: '100',
@@ -278,7 +278,7 @@ describe('buildFailureMetadata()', () => {
     const context: FailureContext = {
       paymentRequirements: {
         scheme: 'exact',
-        network: 'base-sepolia',
+        network: 'arbitrum-sepolia',
         payTo: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
         asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
         amount: '100',
@@ -289,7 +289,7 @@ describe('buildFailureMetadata()', () => {
     const metadata = buildFailureMetadata('verify', new Error('Failed'), context);
 
     // Then: receipt should include network field
-    expect(metadata[X402_RECEIPTS_KEY][0].network).toBe('base-sepolia');
+    expect(metadata[X402_RECEIPTS_KEY][0].network).toBe('arbitrum-sepolia');
   });
 
   it('should handle undefined context gracefully', () => {

@@ -42,7 +42,7 @@ import {
   type McpGetCapabilitiesResponse,
 } from '@emberai/arbitrum-vibekit-core/ember-schemas';
 
-import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
+import { mainnet, arbitrum, optimism, polygon } from 'viem/chains';
 import type { Chain } from 'viem/chains';
 
 const providerSelector = createProviderSelector({
@@ -99,7 +99,6 @@ const chainIdMap: Record<string, ChainConfig> = {
   '42161': { viemChain: arbitrum, quicknodeSegment: 'arbitrum-mainnet' },
   '10': { viemChain: optimism, quicknodeSegment: 'optimism' },
   '137': { viemChain: polygon, quicknodeSegment: 'matic' },
-  '8453': { viemChain: base, quicknodeSegment: 'base-mainnet' },
 };
 
 export function getChainConfigById(chainId: string): ChainConfig {
@@ -196,13 +195,13 @@ export class Agent {
 </example>
 
 <example>
-<user>Swap 100.076 arb on arbitrum for dog on base</user>
+<user>Swap 100.076 eth on ethereum for arb on arbitrum</user>
 <parameters>
 <amount>100.076</amount>
-<fromToken>arb</fromToken>
-<toToken>dog</toToken>
-<fromChain>arbitrum</fromChain>
-<toChain>base</toChain>
+<fromToken>eth</fromToken>
+<toToken>arb</toToken>
+<fromChain>ethereum</fromChain>
+<toChain>arbitrum</toChain>
 </parameters>
 </example>
 </examples>

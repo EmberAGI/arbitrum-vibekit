@@ -10,6 +10,12 @@ type AgUiEventEnvelope = {
   [key: string]: unknown;
 };
 
+type JsonPatchOperation = {
+  op: string;
+  path: string;
+  value?: unknown;
+};
+
 async function readRequestBody(request: IncomingMessage): Promise<Uint8Array> {
   const chunks: Buffer[] = [];
 
@@ -40,6 +46,94 @@ function parseEventStreamBody(body: string): AgUiEventEnvelope[] {
 
 function findStateSnapshot(events: readonly AgUiEventEnvelope[]) {
   return [...events].reverse().find((event) => event.type === 'STATE_SNAPSHOT');
+}
+
+function findStateDeltas(events: readonly AgUiEventEnvelope[]) {
+  return events.filter(
+    (event): event is AgUiEventEnvelope & { delta: JsonPatchOperation[] } =>
+      event.type === 'STATE_DELTA' && Array.isArray(event.delta),
+  );
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function decodeJsonPointerToken(token: string): string {
+  return token.replaceAll('~1', '/').replaceAll('~0', '~');
+}
+
+function applyJsonPatchOperation(target: unknown, operation: JsonPatchOperation): unknown {
+  const tokens = operation.path
+    .split('/')
+    .slice(1)
+    .map((token) => decodeJsonPointerToken(token));
+
+  if (tokens.length === 0) {
+    return operation.value;
+  }
+
+  let cursor = target as Record<string, unknown> | unknown[];
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const token = tokens[index]!;
+    const nextToken = tokens[index + 1]!;
+    const nextContainer = Number.isInteger(Number(nextToken)) ? [] : {};
+
+    if (Array.isArray(cursor)) {
+      const slot = Number(token);
+      cursor[slot] ??= nextContainer;
+      cursor = cursor[slot] as Record<string, unknown> | unknown[];
+      continue;
+    }
+
+    const objectCursor = cursor as Record<string, unknown>;
+    objectCursor[token] ??= nextContainer;
+    cursor = objectCursor[token] as Record<string, unknown> | unknown[];
+  }
+
+  const finalToken = tokens.at(-1)!;
+  if (Array.isArray(cursor)) {
+    const slot = finalToken === '-' ? cursor.length : Number(finalToken);
+    if (operation.op === 'remove') {
+      cursor.splice(slot, 1);
+      return target;
+    }
+
+    cursor[slot] = operation.value;
+    return target;
+  }
+
+  const objectCursor = cursor as Record<string, unknown>;
+  if (operation.op === 'remove') {
+    delete objectCursor[finalToken];
+    return target;
+  }
+
+  objectCursor[finalToken] = operation.value;
+  return target;
+}
+
+function projectStateSnapshot(input: {
+  baseline?: AgUiEventEnvelope;
+  events: readonly AgUiEventEnvelope[];
+}) {
+  const projectedSnapshot = cloneJson(
+    (input.baseline && 'snapshot' in input.baseline ? input.baseline.snapshot : { thread: {} }) as Record<
+      string,
+      unknown
+    >,
+  );
+
+  for (const event of findStateDeltas(input.events)) {
+    for (const operation of event.delta) {
+      applyJsonPatchOperation(projectedSnapshot, operation);
+    }
+  }
+
+  return {
+    type: 'STATE_SNAPSHOT',
+    snapshot: projectedSnapshot,
+  } satisfies AgUiEventEnvelope;
 }
 
 function createInternalPostgresHooks() {
@@ -157,7 +251,7 @@ describe('agent-pi-example AG-UI integration', () => {
     expect(runResponse.ok).toBe(true);
     expect(runResponse.headers.get('content-type')).toContain('text/event-stream');
     const runEvents = parseEventStreamBody(await runResponse.text());
-    const runSnapshot = findStateSnapshot(runEvents);
+    const runSnapshot = findStateSnapshot(runEvents) ?? projectStateSnapshot({ events: runEvents });
 
     expect(runSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -197,7 +291,9 @@ describe('agent-pi-example AG-UI integration', () => {
 
     expect(resumeResponse.ok).toBe(true);
     const resumeEvents = parseEventStreamBody(await resumeResponse.text());
-    const resumeSnapshot = findStateSnapshot(resumeEvents);
+    const resumeSnapshot =
+      findStateSnapshot(resumeEvents) ??
+      projectStateSnapshot({ baseline: runSnapshot, events: resumeEvents });
 
     expect(resumeSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -247,7 +343,9 @@ describe('agent-pi-example AG-UI integration', () => {
 
     expect(completeResponse.ok).toBe(true);
     const completeEvents = parseEventStreamBody(await completeResponse.text());
-    const completeSnapshot = findStateSnapshot(completeEvents);
+    const completeSnapshot =
+      findStateSnapshot(completeEvents) ??
+      projectStateSnapshot({ baseline: resumeSnapshot, events: completeEvents });
 
     expect(completeSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -296,7 +394,9 @@ describe('agent-pi-example AG-UI integration', () => {
 
     expect(fireResponse.ok).toBe(true);
     const fireEvents = parseEventStreamBody(await fireResponse.text());
-    const fireSnapshot = findStateSnapshot(fireEvents);
+    const fireSnapshot =
+      findStateSnapshot(fireEvents) ??
+      projectStateSnapshot({ baseline: completeSnapshot, events: fireEvents });
 
     expect(fireSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',

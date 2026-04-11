@@ -50,6 +50,12 @@ type AgUiEventEnvelope = {
   [key: string]: unknown;
 };
 
+type JsonPatchOperation = {
+  op: string;
+  path: string;
+  value?: unknown;
+};
+
 type InternalPostgresStatement = {
   tableName: string;
   values: readonly unknown[];
@@ -145,6 +151,94 @@ function parseEventStreamBody(body: string): AgUiEventEnvelope[] {
 
 function findStateSnapshot(events: readonly AgUiEventEnvelope[]) {
   return [...events].reverse().find((event) => event.type === 'STATE_SNAPSHOT');
+}
+
+function findStateDeltas(events: readonly AgUiEventEnvelope[]) {
+  return events.filter(
+    (event): event is AgUiEventEnvelope & { delta: JsonPatchOperation[] } =>
+      event.type === 'STATE_DELTA' && Array.isArray(event.delta),
+  );
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function decodeJsonPointerToken(token: string): string {
+  return token.replaceAll('~1', '/').replaceAll('~0', '~');
+}
+
+function applyJsonPatchOperation(target: unknown, operation: JsonPatchOperation): unknown {
+  const tokens = operation.path
+    .split('/')
+    .slice(1)
+    .map((token) => decodeJsonPointerToken(token));
+
+  if (tokens.length === 0) {
+    return operation.value;
+  }
+
+  let cursor = target as Record<string, unknown> | unknown[];
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const token = tokens[index]!;
+    const nextToken = tokens[index + 1]!;
+    const nextContainer = Number.isInteger(Number(nextToken)) ? [] : {};
+
+    if (Array.isArray(cursor)) {
+      const slot = Number(token);
+      cursor[slot] ??= nextContainer;
+      cursor = cursor[slot] as Record<string, unknown> | unknown[];
+      continue;
+    }
+
+    const objectCursor = cursor as Record<string, unknown>;
+    objectCursor[token] ??= nextContainer;
+    cursor = objectCursor[token] as Record<string, unknown> | unknown[];
+  }
+
+  const finalToken = tokens.at(-1)!;
+  if (Array.isArray(cursor)) {
+    const slot = finalToken === '-' ? cursor.length : Number(finalToken);
+    if (operation.op === 'remove') {
+      cursor.splice(slot, 1);
+      return target;
+    }
+
+    cursor[slot] = operation.value;
+    return target;
+  }
+
+  const objectCursor = cursor as Record<string, unknown>;
+  if (operation.op === 'remove') {
+    delete objectCursor[finalToken];
+    return target;
+  }
+
+  objectCursor[finalToken] = operation.value;
+  return target;
+}
+
+function projectStateSnapshot(input: {
+  baseline?: AgUiEventEnvelope;
+  events: readonly AgUiEventEnvelope[];
+}) {
+  const projectedSnapshot = cloneJson(
+    (input.baseline && 'snapshot' in input.baseline ? input.baseline.snapshot : { thread: {} }) as Record<
+      string,
+      unknown
+    >,
+  );
+
+  for (const event of findStateDeltas(input.events)) {
+    for (const operation of event.delta) {
+      applyJsonPatchOperation(projectedSnapshot, operation);
+    }
+  }
+
+  return {
+    type: 'STATE_SNAPSHOT',
+    snapshot: projectedSnapshot,
+  } satisfies AgUiEventEnvelope;
 }
 
 async function readEventStreamUntilStateSnapshot(response: Response): Promise<AgUiEventEnvelope[]> {
@@ -959,7 +1053,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       },
     });
 
-    const { snapshot: planSnapshot } = await runAgUiCommand({
+    const { events: planEvents } = await runAgUiCommand({
       baseUrl,
       threadId: 'thread-lean-1',
       runId: 'run-plan-lean-1',
@@ -967,6 +1061,11 @@ describe('agent-ember-lending AG-UI integration', () => {
         name: 'create_transaction_plan',
         input: createCandidatePlanInput(),
       },
+    });
+
+    const planSnapshot = projectStateSnapshot({
+      baseline: connectSnapshot,
+      events: planEvents,
     });
 
     expect(planSnapshot).toMatchObject({
@@ -979,7 +1078,15 @@ describe('agent-ember-lending AG-UI integration', () => {
             walletAddress: null,
             rootUserWalletAddress: null,
             rootedWalletContextId: null,
-            lastCandidatePlanSummary: null,
+          },
+          task: {
+            taskStatus: {
+              state: 'failed',
+              message: {
+                content:
+                  'Portfolio Manager onboarding must complete before lending can plan transactions for this thread.',
+              },
+            },
           },
         },
       },
@@ -1202,7 +1309,14 @@ describe('agent-ember-lending AG-UI integration', () => {
       lastSharedEmberRevision: 3,
       lastPortfolioState: {
         agent_id: 'ember-lending',
-        owned_units: [],
+        owned_units: [
+          {
+            unit_id: 'unit-ember-lending-001',
+            root_asset: 'USDC',
+            amount: '10',
+            benchmark_value_usd: '10',
+          },
+        ],
         reservations: [],
       },
     });
@@ -1240,7 +1354,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       },
     });
 
-    const { events: planEvents, snapshot: planSnapshot } = await runAgUiCommand({
+    const { events: planEvents } = await runAgUiCommand({
       baseUrl,
       threadId: 'thread-plan-1',
       runId: 'run-plan',
@@ -1248,6 +1362,11 @@ describe('agent-ember-lending AG-UI integration', () => {
         name: 'create_transaction_plan',
         input: createCandidatePlanInput(),
       },
+    });
+
+    const planSnapshot = projectStateSnapshot({
+      baseline: connectSnapshot,
+      events: planEvents,
     });
 
     expect(planSnapshot).toMatchObject({
@@ -1290,6 +1409,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       transactionPlanId: 'txplan-ember-lending-001',
       walletAddress: '0x00000000000000000000000000000000000000b1',
       rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      useMaxRepayAmount: false,
       payloadBuilderOutput: {
         transaction_payload_ref: 'txpayload-ember-lending-001',
         required_control_path: 'lending.supply',
@@ -1315,7 +1435,7 @@ describe('agent-ember-lending AG-UI integration', () => {
   });
 
   it('serves lending candidate-plan materialization over real AG-UI HTTP endpoints without a separate lending connect step', async () => {
-    const { snapshot: planSnapshot } = await runAgUiCommand({
+    const { events: planEvents } = await runAgUiCommand({
       baseUrl,
       threadId: 'thread-plan-no-connect-1',
       runId: 'run-plan-no-connect',
@@ -1323,6 +1443,10 @@ describe('agent-ember-lending AG-UI integration', () => {
         name: 'create_transaction_plan',
         input: createCandidatePlanInput(),
       },
+    });
+
+    const planSnapshot = projectStateSnapshot({
+      events: planEvents,
     });
 
     expect(planSnapshot).toMatchObject({
@@ -1354,13 +1478,13 @@ describe('agent-ember-lending AG-UI integration', () => {
   });
 
   it('serves lending execution over real AG-UI HTTP endpoints', async () => {
-    await runAgUiConnect({
+    const { snapshot: connectSnapshot } = await runAgUiConnect({
       baseUrl,
       threadId: 'thread-execute-1',
       runId: 'run-connect-execute',
     });
 
-    await runAgUiCommand({
+    const { events: planEvents } = await runAgUiCommand({
       baseUrl,
       threadId: 'thread-execute-1',
       runId: 'run-plan',
@@ -1370,13 +1494,23 @@ describe('agent-ember-lending AG-UI integration', () => {
       },
     });
 
-    const { snapshot: executeSnapshot } = await runAgUiCommand({
+    const planSnapshot = projectStateSnapshot({
+      baseline: connectSnapshot,
+      events: planEvents,
+    });
+
+    const { events: executeEvents } = await runAgUiCommand({
       baseUrl,
       threadId: 'thread-execute-1',
       runId: 'run-execute',
       command: {
         name: 'request_transaction_execution',
       },
+    });
+
+    const executeSnapshot = projectStateSnapshot({
+      baseline: planSnapshot,
+      events: executeEvents,
     });
 
     expect(executeSnapshot).toMatchObject({
@@ -1491,13 +1625,13 @@ describe('agent-ember-lending AG-UI integration', () => {
       return defaultHandleJsonRpc(input);
     });
 
-    await runAgUiConnect({
+    const { snapshot: connectSnapshot } = await runAgUiConnect({
       baseUrl,
       threadId: 'thread-execute-blocked-1',
       runId: 'run-connect-execute-blocked',
     });
 
-    await runAgUiCommand({
+    const { events: planEvents } = await runAgUiCommand({
       baseUrl,
       threadId: 'thread-execute-blocked-1',
       runId: 'run-plan-blocked',
@@ -1507,13 +1641,23 @@ describe('agent-ember-lending AG-UI integration', () => {
       },
     });
 
-    const { snapshot: executeSnapshot } = await runAgUiCommand({
+    const planSnapshot = projectStateSnapshot({
+      baseline: connectSnapshot,
+      events: planEvents,
+    });
+
+    const { events: executeEvents } = await runAgUiCommand({
       baseUrl,
       threadId: 'thread-execute-blocked-1',
       runId: 'run-execute-blocked',
       command: {
         name: 'request_transaction_execution',
       },
+    });
+
+    const executeSnapshot = projectStateSnapshot({
+      baseline: planSnapshot,
+      events: executeEvents,
     });
 
     expect(executeSnapshot).toMatchObject({
@@ -1529,7 +1673,7 @@ describe('agent-ember-lending AG-UI integration', () => {
             current: {
               data: {
                 type: 'shared-ember-execution-result',
-                revision: 9,
+                revision: 11,
                 outcome: 'blocked',
                 message:
                   'Lending transaction execution request was blocked by Shared Ember: reserved capital is still claimed by another agent.',
@@ -1570,13 +1714,13 @@ describe('agent-ember-lending AG-UI integration', () => {
       return defaultHandleJsonRpc(input);
     });
 
-    await runAgUiConnect({
+    const { snapshot: connectSnapshot } = await runAgUiConnect({
       baseUrl,
       threadId: 'thread-execute-denied-1',
       runId: 'run-connect-execute-denied',
     });
 
-    await runAgUiCommand({
+    const { events: planEvents } = await runAgUiCommand({
       baseUrl,
       threadId: 'thread-execute-denied-1',
       runId: 'run-plan-denied',
@@ -1586,13 +1730,23 @@ describe('agent-ember-lending AG-UI integration', () => {
       },
     });
 
-    const { snapshot: executeSnapshot } = await runAgUiCommand({
+    const planSnapshot = projectStateSnapshot({
+      baseline: connectSnapshot,
+      events: planEvents,
+    });
+
+    const { events: executeEvents } = await runAgUiCommand({
       baseUrl,
       threadId: 'thread-execute-denied-1',
       runId: 'run-execute-denied',
       command: {
         name: 'request_transaction_execution',
       },
+    });
+
+    const executeSnapshot = projectStateSnapshot({
+      baseline: planSnapshot,
+      events: executeEvents,
     });
 
     expect(executeSnapshot).toMatchObject({
@@ -1608,7 +1762,7 @@ describe('agent-ember-lending AG-UI integration', () => {
             current: {
               data: {
                 type: 'shared-ember-execution-result',
-                revision: 9,
+                revision: 11,
                 outcome: 'denied',
                 message:
                   'Lending transaction execution request was denied by Shared Ember: risk policy denied the requested lending path.',
@@ -1621,13 +1775,13 @@ describe('agent-ember-lending AG-UI integration', () => {
   });
 
   it('serves lending escalation requests over real AG-UI HTTP endpoints', async () => {
-    await runAgUiConnect({
+    const { snapshot: connectSnapshot } = await runAgUiConnect({
       baseUrl,
       threadId: 'thread-escalation-1',
       runId: 'run-connect-escalation',
     });
 
-    const { snapshot: escalationSnapshot } = await runAgUiCommand({
+    const { events: escalationEvents } = await runAgUiCommand({
       baseUrl,
       threadId: 'thread-escalation-1',
       runId: 'run-escalation',
@@ -1635,6 +1789,11 @@ describe('agent-ember-lending AG-UI integration', () => {
         name: 'create_escalation_request',
         input: createEscalationRequestInput(),
       },
+    });
+
+    const escalationSnapshot = projectStateSnapshot({
+      baseline: connectSnapshot,
+      events: escalationEvents,
     });
 
     expect(escalationSnapshot).toMatchObject({
