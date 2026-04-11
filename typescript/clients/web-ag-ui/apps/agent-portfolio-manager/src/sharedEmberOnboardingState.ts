@@ -128,10 +128,6 @@ export function resolvePortfolioManagerAccountingAgentId(onboardingBootstrap: un
     activation && 'mandateRef' in activation && typeof activation.mandateRef === 'string'
       ? activation.mandateRef
       : null;
-  const activatedAgentId =
-    activation && 'agentId' in activation && typeof activation.agentId === 'string'
-      ? activation.agentId
-      : null;
 
   const managedMandates = mandates.filter(
     (mandate) =>
@@ -142,18 +138,9 @@ export function resolvePortfolioManagerAccountingAgentId(onboardingBootstrap: un
   const activatedManagedMandate = managedMandates.find(
     (mandate) => mandate.mandate_ref === activatedMandateRef,
   );
-  const legacyActivatedManagedMandate =
-    activatedAgentId === null
-      ? null
-      : mandates.find(
-          (mandate) =>
-            mandate.agent_id === activatedAgentId &&
-            mandate.agent_id !== 'portfolio-manager',
-        );
 
   return (
     activatedManagedMandate?.agent_id ??
-    legacyActivatedManagedMandate?.agent_id ??
     managedMandates[0]?.agent_id ??
     PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID
   );

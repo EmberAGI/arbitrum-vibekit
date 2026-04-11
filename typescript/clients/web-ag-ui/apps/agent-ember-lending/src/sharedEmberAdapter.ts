@@ -923,6 +923,13 @@ export function hasConnectReadyEmberLendingRuntimeProjection(state: unknown): bo
 }
 
 function readStateNetwork(state: EmberLendingLifecycleState): string | null {
+  const managedMandate = isRecord(state.mandateContext)
+    ? readManagedMandate(state.mandateContext)
+    : null;
+  if (managedMandate) {
+    return managedMandate.asset_intent.network;
+  }
+
   return isRecord(state.mandateContext) ? readString(state.mandateContext['network']) : null;
 }
 
@@ -2357,11 +2364,10 @@ function hasPortfolioManagerPlanningIdentity(state: EmberLendingLifecycleState):
 }
 
 function readManagedMandateCollateralAsset(state: EmberLendingLifecycleState): string | null {
-  if (!isRecord(state.mandateContext)) {
-    return null;
-  }
-
-  return readStringArray(state.mandateContext['allowedCollateralAssets'])?.[0] ?? null;
+  const managedMandate = isRecord(state.mandateContext)
+    ? readManagedMandate(state.mandateContext)
+    : null;
+  return managedMandate?.asset_intent.root_asset ?? managedMandate?.allowed_assets[0] ?? null;
 }
 
 async function readManagedOnboardingState(input: {
