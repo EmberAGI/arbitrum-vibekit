@@ -120,8 +120,6 @@ function resolveRpcUrl(chainId: number): string {
   switch (chainId) {
     case 42161:
       return process.env.ARBITRUM_RPC_URL?.trim() || 'https://arb1.arbitrum.io/rpc';
-    case 8453:
-      return process.env.BASE_CHAIN_RPC_URL?.trim() || 'https://mainnet.base.org';
     case 1:
       return process.env.ETHEREUM_RPC_URL?.trim() || 'https://eth.llamarpc.com';
     default:

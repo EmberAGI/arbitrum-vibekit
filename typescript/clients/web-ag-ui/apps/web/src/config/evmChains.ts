@@ -1,7 +1,7 @@
-import { arbitrum, base, mainnet, optimism, polygon } from 'viem/chains';
+import { arbitrum, mainnet, optimism, polygon } from 'viem/chains';
 import type { Chain } from 'viem';
 
-export const supportedEvmChains = [arbitrum, mainnet, polygon, optimism, base] as const;
+export const supportedEvmChains = [arbitrum, mainnet, polygon, optimism] as const;
 
 export type SupportedEvmChain = (typeof supportedEvmChains)[number];
 

@@ -183,11 +183,44 @@ describe('createPiExampleAgUiHandler', () => {
         ],
       }),
     );
-    const snapshot = runEvents.find(
-      (event) => typeof event === 'object' && event !== null && 'snapshot' in event,
-    ) as { snapshot?: { thread?: { artifacts?: { current?: { data?: { type?: string; status?: string } } } } } } | undefined;
 
-    expect(snapshot?.snapshot?.thread?.artifacts?.current?.data).toMatchObject({
+    expect(runEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'RUN_FINISHED',
+        result: expect.objectContaining({
+          status: 'queued',
+        }),
+      }),
+    );
+
+    const stateDelta = runEvents.find(
+      (event) =>
+        typeof event === 'object' &&
+        event !== null &&
+        'type' in event &&
+        event.type === 'STATE_DELTA' &&
+        Array.isArray((event as { delta?: unknown[] }).delta),
+    ) as
+      | {
+          delta?: Array<{
+            op?: string;
+            path?: string;
+            value?: {
+              current?: {
+                data?: { type?: string; status?: string };
+              };
+            };
+          }>;
+        }
+      | undefined;
+
+    const artifactsDelta = stateDelta?.delta?.find(
+      (operation) =>
+        operation.op === 'add' &&
+        operation.path === '/thread/artifacts',
+    );
+
+    expect(artifactsDelta?.value?.current?.data).toMatchObject({
       type: 'automation-status',
       status: 'scheduled',
     });

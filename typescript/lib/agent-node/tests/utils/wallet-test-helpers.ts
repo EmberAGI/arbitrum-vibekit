@@ -245,10 +245,10 @@ export const testTransactions = {
  */
 export const testChains = {
   ethereum: { id: 1, name: 'Ethereum Mainnet' },
+  sepolia: { id: 11155111, name: 'Ethereum Sepolia' },
   polygon: { id: 137, name: 'Polygon' },
   arbitrum: { id: 42161, name: 'Arbitrum One' },
   optimism: { id: 10, name: 'Optimism' },
-  base: { id: 8453, name: 'Base' },
   avalanche: { id: 43114, name: 'Avalanche C-Chain' },
   bsc: { id: 56, name: 'BNB Smart Chain' },
 };

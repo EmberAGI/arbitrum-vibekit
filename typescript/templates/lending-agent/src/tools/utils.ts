@@ -39,13 +39,11 @@ const quicknodeSegments: Record<string, string> = {
   '1': '', // Ethereum Mainnet
   '10': 'optimism', // Optimism Mainnet
   '137': 'matic', // Polygon Mainnet
-  '8453': 'base-mainnet', // Base Mainnet
   '42161': 'arbitrum-mainnet', // Arbitrum One
   // Add other supported chains here e.g.
   // '5': 'goerli',
   // '11155111': 'sepolia',
   // '421613': 'arbitrum-goerli',
-  // '84531': 'base-goerli',
   // '10200': 'chiado', // Gnosis Chiado Testnet
 };
 

@@ -3,14 +3,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider, getDefaultConfig, darkTheme } from '@rainbow-me/rainbowkit';
-import { arbitrum, mainnet, polygon, optimism, base } from 'wagmi/chains';
+import { arbitrum, mainnet, polygon, optimism } from 'wagmi/chains';
 import '@rainbow-me/rainbowkit/styles.css';
 import dynamic from 'next/dynamic';
 
 const config = getDefaultConfig({
   appName: 'EmberAI A2A Client',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id',
-  chains: [mainnet, arbitrum, polygon, optimism, base],
+  chains: [mainnet, arbitrum, polygon, optimism],
   ssr: true, // If your dApp uses server side rendering (SSR)
 });
 

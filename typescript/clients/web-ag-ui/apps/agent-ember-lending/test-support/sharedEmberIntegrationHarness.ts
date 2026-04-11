@@ -61,8 +61,6 @@ function resolveExecutionChainId(network: string): number {
   switch (network.trim().toLowerCase()) {
     case 'arbitrum':
       return 42161;
-    case 'base':
-      return 8453;
     case 'ethereum':
     case 'mainnet':
       return 1;

@@ -65,7 +65,6 @@ const chainMappings = [
   { id: '42161', name: 'Arbitrum One', aliases: ['arbitrum'] },
   { id: '10', name: 'Optimism', aliases: [] },
   { id: '137', name: 'Polygon', aliases: ['matic'] },
-  { id: '8453', name: 'Base', aliases: [] },
 ];
 
 function mapChainNameToId(chainName: string): string | undefined {

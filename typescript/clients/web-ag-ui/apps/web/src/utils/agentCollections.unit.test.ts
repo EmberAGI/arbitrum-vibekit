@@ -18,24 +18,24 @@ describe('agentCollections', () => {
   it('merges unique strings in stable order after mapping', () => {
     const result = mergeUniqueStrings({
       primary: ['Arbitrum One', ''],
-      secondary: ['arbitrum', '  Arbitrum  ', 'Base'],
+      secondary: ['arbitrum', '  Arbitrum  ', 'Arbitrum One'],
       mapFn: canonicalizeChainLabel,
       keyFn: (value) => canonicalizeChainLabel(value).toLowerCase(),
     });
 
-    expect(result).toEqual(['Arbitrum', 'Base']);
+    expect(result).toEqual(['Arbitrum']);
   });
 
   it('collects unique chain names across groups with canonicalization', () => {
     const result = collectUniqueChainNames({
       groups: [
-        { chains: ['Arbitrum One', 'Base'] },
+        { chains: ['Arbitrum One', 'Arbitrum'] },
         { chains: ['Arbitrum', 'Optimism'] },
       ],
       mapFn: canonicalizeChainLabel,
     });
 
-    expect(result).toEqual(['Arbitrum', 'Base', 'Optimism']);
+    expect(result).toEqual(['Arbitrum', 'Optimism']);
   });
 
   it('collects unique token symbols with protocol fallbacks', () => {

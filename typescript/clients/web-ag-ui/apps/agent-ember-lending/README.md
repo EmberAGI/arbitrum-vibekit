@@ -72,7 +72,7 @@ Runtime wiring:
 - `ONCHAIN_ACTIONS_API_URL` optionally overrides the Onchain Actions API origin
   used for service-owned planner payload anchoring and ordered transaction-step
   resolution
-- `ARBITRUM_RPC_URL`, `BASE_CHAIN_RPC_URL`, and `ETHEREUM_RPC_URL` optionally
+- `ARBITRUM_RPC_URL` and `ETHEREUM_RPC_URL` optionally
   override the chain RPC endpoints the lending service uses to prepare the
   requested unsigned transaction bytes just before runtime signing
 - `EMBER_LENDING_OWS_WALLET_NAME` selects the direct OWS wallet the runtime

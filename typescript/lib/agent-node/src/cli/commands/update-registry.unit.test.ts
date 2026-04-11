@@ -122,7 +122,7 @@ describe('updateRegistryCommand (from-config) - URL composition and chain target
     parsed.data['erc8004'] = {
       enabled: true,
       canonical: { chainId: 42161 },
-      mirrors: [{ chainId: 1 }, { chainId: 8453 }],
+      mirrors: [{ chainId: 1 }],
       identityRegistries: {},
       registrations: { '1': { agentId: 999 } },
       supportedTrust: [],
@@ -152,12 +152,11 @@ describe('updateRegistryCommand (from-config) - URL composition and chain target
     parsed.data['erc8004'] = {
       enabled: true,
       canonical: { chainId: 42161, operatorAddress: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd' },
-      mirrors: [{ chainId: 1 }, { chainId: 8453 }],
+      mirrors: [{ chainId: 1 }],
       identityRegistries: {},
       registrations: {
         '42161': { agentId: 101 },
         '1': { agentId: 202 },
-        '8453': { agentId: 303 },
       },
       supportedTrust: [],
     };
@@ -169,7 +168,7 @@ describe('updateRegistryCommand (from-config) - URL composition and chain target
       .spyOn(registrationUtils, 'buildRegistrationFile')
       .mockImplementation((...args) => {
         callCount += 1;
-        if (callCount === 3) {
+        if (callCount === 2) {
           throw new Error('TEST_ABORT');
         }
         return originalBuilder(...args);
@@ -183,9 +182,9 @@ describe('updateRegistryCommand (from-config) - URL composition and chain target
 
     await expect(updateRegistryCommand({ configDir })).rejects.toThrow('TEST_ABORT');
 
-    expect(builderSpy).toHaveBeenCalledTimes(3);
+    expect(builderSpy).toHaveBeenCalledTimes(2);
     const chainCalls = builderSpy.mock.calls.map((call) => call[5]);
-    expect(chainCalls).toEqual([42161, 1, 8453]);
+    expect(chainCalls).toEqual([42161, 1]);
   });
 
   it('prompts to persist overrides and updates agent.md when confirmed', async () => {

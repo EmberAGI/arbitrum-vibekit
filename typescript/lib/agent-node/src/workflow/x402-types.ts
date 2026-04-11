@@ -1,10 +1,56 @@
 import type { PaymentRequirements, Network, PaymentPayload } from 'x402/types';
-import {
-  NetworkSchema as x402NetworkSchema,
-  PaymentRequirementsSchema as x402PaymentRequirementsSchema,
-  PaymentPayloadSchema as x402PayloadPaymentSchema,
-} from 'x402/types';
 import { z } from 'zod';
+
+const supportedX402Networks = [
+  'arbitrum-sepolia',
+  'arbitrum',
+  'avalanche-fuji',
+  'avalanche',
+  'iotex',
+  'solana-devnet',
+  'solana',
+  'sei',
+  'sei-testnet',
+  'polygon',
+  'polygon-amoy',
+  'peaq',
+] as const;
+
+const X402SupportedNetworkSchema = z.enum(supportedX402Networks);
+const X402PaymentRequirementsValidationSchema = z.object({
+  scheme: z.literal('exact'),
+  network: X402SupportedNetworkSchema,
+  maxAmountRequired: z.string(),
+  resource: z.string(),
+  description: z.string(),
+  mimeType: z.string(),
+  outputSchema: z.record(z.string(), z.any()).optional(),
+  payTo: z.string(),
+  maxTimeoutSeconds: z.number(),
+  asset: z.string(),
+  extra: z.record(z.string(), z.any()).optional(),
+});
+const X402ExactEvmPayloadAuthorizationSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  value: z.string(),
+  validAfter: z.string(),
+  validBefore: z.string(),
+  nonce: z.string(),
+});
+const X402ExactEvmPayloadSchema = z.object({
+  signature: z.string(),
+  authorization: X402ExactEvmPayloadAuthorizationSchema,
+});
+const X402ExactSvmPayloadSchema = z.object({
+  transaction: z.string(),
+});
+const X402PaymentPayloadValidationSchema = z.object({
+  x402Version: z.literal(1),
+  scheme: z.literal('exact'),
+  network: X402SupportedNetworkSchema,
+  payload: z.union([X402ExactEvmPayloadSchema, X402ExactSvmPayloadSchema]),
+});
 
 /**
  * Key for x402 payment status in metadata
@@ -81,7 +127,7 @@ export interface X402FailureMetadata extends Record<string, unknown> {
 export const PaymentRequirementsSchema: z.ZodType<PaymentRequirements> = z
   .any()
   .superRefine((data, ctx) => {
-    const parsed = x402PaymentRequirementsSchema.safeParse(data);
+    const parsed = X402PaymentRequirementsValidationSchema.safeParse(data);
     if (!parsed.success) {
       // Replay every underlying issue so callers see the precise field failures.
       for (const issue of parsed.error.issues) {
@@ -136,12 +182,12 @@ export const EIP3009AuthorizationSchema = z.object({
  */
 export const NetworkSchema: z.ZodType<Network> = z
   .any()
-  .refine((data) => x402NetworkSchema.safeParse(data).success);
+  .refine((data) => X402SupportedNetworkSchema.safeParse(data).success);
 // We wrap the upstream x402 payload schema just like payment requirements so we can
 // (a) coerce its type locally and (b) surface ALL nested validation issues instead of one.
 // Using superRefine lets us replay each issue with a clear prefix for easier debugging.
 export const PayloadPaymentSchema: z.ZodType<PaymentPayload> = z.any().superRefine((data, ctx) => {
-  const parsed = x402PayloadPaymentSchema.safeParse(data);
+  const parsed = X402PaymentPayloadValidationSchema.safeParse(data);
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
       ctx.addIssue({

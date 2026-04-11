@@ -60,7 +60,6 @@ const DEFAULT_AGENT_VERSION = '1.0.0';
 // Chain configurations
 const CHAINS = {
   1: { name: 'Ethereum Mainnet', shortName: 'Ethereum' },
-  8453: { name: 'Base', shortName: 'Base' },
   11155111: { name: 'Ethereum Sepolia', shortName: 'Sepolia' },
   42161: { name: 'Arbitrum One', shortName: 'Arbitrum' },
 } as const;
@@ -335,7 +334,7 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
               .map(([id, info]) => ({
                 title: info.name,
                 value: parseInt(id, 10),
-                selected: parseInt(id, 10) === 1 || parseInt(id, 10) === 8453, // Default: Ethereum + Base
+                selected: parseInt(id, 10) === 1,
               })),
         },
         {
@@ -429,7 +428,7 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
         aiModel: 'openai/gpt-5',
         enableErc8004: true,
         canonicalChain: 42161,
-        mirrorChains: [1, 8453],
+        mirrorChains: [1],
         operatorAddress: undefined,
         secrets: {},
       };
