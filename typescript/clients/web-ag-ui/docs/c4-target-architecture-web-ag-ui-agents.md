@@ -130,14 +130,14 @@ Explicit non-goal container:
   - Removes split-brain between stream state and sync endpoint state.
 
 - `AgentCommandBus`:
-  - Sends `hire`, `sync`, `fire`, interrupt responses, and client mutation intents via AG-UI `run` payloads.
+  - Sends named commands such as `hire`/`fire`, interrupt responses, and shared-state `command.update` intents via AG-UI `run` payloads.
   - `fire` may invoke AG-UI `stop` as a pre-dispatch preemption control.
   - No out-of-band command mutation.
 
 - `AgentCommandScheduler` (new):
   - Enforces command concurrency policy by `agentId+threadId`.
   - `fire` is preemptive for backend and local ownership (`stop` then detach, wait terminal/timeout, then dispatch).
-  - `sync` uses coalescing intent policy (single pending intent, last-write-wins).
+  - Shared-state `command.update` uses coalescing intent policy (single pending intent, last-write-wins).
   - Normalizes server busy responses into deterministic observe/retry behavior.
 
 - `AgentMetricsRendererRegistry` (new):
@@ -276,7 +276,7 @@ sequenceDiagram
   participant Agent
 
   loop every 15s
-    Poller->>Runtime: bounded AG-UI run(agentId, threadId, status/sync)
+    Poller->>Runtime: bounded AG-UI run(agentId, threadId, status refresh)
     Runtime->>Agent: execute one-shot run
     Agent-->>Runtime: projection events + terminal
     Runtime-->>Poller: reduced status payload
@@ -292,13 +292,13 @@ sequenceDiagram
   participant Runtime as /api/copilotkit
   participant Agent
 
-  User->>Web: Trigger save/sync
-  Web->>Web: set local agent state/messages
-  Web->>Runtime: run(agentId, threadId, input.state/messages)
-  Runtime->>Agent: apply run input state/messages, execute run
-  Agent-->>Runtime: AG-UI state/message events + terminal event
+  User->>Web: Trigger shared-state save
+  Web->>Web: optimistically update local writable `/shared` view
+  Web->>Runtime: run(agentId, threadId, forwardedProps.command.update)
+  Runtime->>Agent: validate patch, update `/shared`, recompute `/projected`
+  Agent-->>Runtime: STATE_DELTA(shared + projected) then shared-state.control update-ack
   Runtime-->>Web: streamed events
-  Web->>Web: mark sync complete only after projected confirmation
+  Web->>Web: mark save complete only after matching update-ack
 ```
 
 ## 7. Data contracts
@@ -308,7 +308,7 @@ sequenceDiagram
 - `ThreadState@vN` (versioned, domain-facing): profile, metrics, activity, task, interrupts, onboarding.
 - `UiState` (web VM-facing): deterministic projection from AG-UI events + `ThreadState` snapshots.
 - `TaskState` enum (shared): `submitted`, `working`, `input-required`, `completed`, `failed`, `canceled`.
-- `AgentCommand` enum (shared control-plane intent): `hire`, `sync`, `fire`, plus typed interrupt resolutions.
+- Named control-plane commands stay explicit (`hire`, `fire`, typed interrupt resolutions); shared-state writes use `command.update` against writable `/shared`.
 
 ### 7.2 Rules
 
@@ -331,7 +331,7 @@ sequenceDiagram
    - non-active-detail agents -> polling snapshots projected from one-shot poll `run`,
    - fallback without either -> active `run` stream for that command lifecycle.
 7. Local run-in-flight gating is advisory; server busy responses are authoritative for global concurrency.
-8. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
+8. Shared-state `command.update` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
 9. `fire` is the only preemptive stop command: issue `stop`, detach local stream, wait terminal/timeout, then dispatch `fire`.
 10. Terminal run handling is idempotent: client converges on one terminal outcome even if terminal callbacks are duplicated.
 11. On detail-page route leave/unmount, stream teardown is deterministic.
@@ -342,7 +342,7 @@ sequenceDiagram
 ### Slice 1: Protocol boundary cleanup
 
 - Remove `apps/web/src/app/api/agents/sync/route.ts` and consumers.
-- Replace `useAgentConnection` sync fallback with AG-UI-only projection path.
+- Replace `useAgentConnection` mutation fallback with AG-UI-only direct-command projection path.
 - Keep behavior parity via tests before deletion.
 
 ### Slice 2: Detail-route stream governance
@@ -408,12 +408,12 @@ Completed:
 - Non-metrics blockers/onboarding branch helpers are extracted from `AgentDetailPage` into specialized modules:
   - `apps/web/src/components/agentBlockersBehavior.ts`,
   - `apps/web/src/components/agentBlockersInterrupt.ts`.
-- Web command scheduling now uses a dedicated `AgentCommandScheduler` (`apps/web/src/utils/agentCommandScheduler.ts`) with bounded busy-retry handling for `sync` and coalescing intent semantics.
+- Web command scheduling now uses a dedicated `AgentCommandScheduler` (`apps/web/src/utils/agentCommandScheduler.ts`) with bounded busy-retry handling for coalesced shared-state writes.
 - Integration coverage now verifies key lifecycle invariants:
   - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-active-detail polling fan-out and periodic no-overlap behavior.
   - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts detail-page connect and deterministic detach on unmount.
-  - `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts `sync` coalescing, terminal replay, bounded busy retries, and non-sync in-flight rejection.
-- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts sync confirmation semantics via client mutation id handshake between command dispatch and projected state acknowledgement.
+  - `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts coalescing, terminal replay, bounded busy retries, and non-update in-flight rejection.
+- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts `shared-state.control` confirmation and rejected-ack reconciliation semantics for optimistic shared-state writes.
 
 Remaining gaps:
 

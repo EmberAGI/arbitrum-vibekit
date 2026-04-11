@@ -213,6 +213,16 @@ export interface UseAgentConnectionResult {
 
 export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   type HookAgent = NonNullable<ReturnType<typeof useAgent>['agent']>;
+  type PendingSyncMutationState = {
+    threadId: string | undefined;
+    clientMutationId: string | null;
+    rollbackSettings: AgentSettings | null;
+  };
+  type SharedStateControlAck = {
+    clientMutationId: string;
+    status: 'accepted' | 'noop' | 'rejected';
+    code: string | null;
+  };
 
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
@@ -223,12 +233,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     threadId: undefined,
     isSyncing: false,
   });
-  const [pendingSyncMutationByThread, setPendingSyncMutationByThread] = useState<{
-    threadId: string | undefined;
-    clientMutationId: string | null;
-  }>({
+  const [pendingSyncMutationByThread, setPendingSyncMutationByThread] = useState<PendingSyncMutationState>({
     threadId: undefined,
     clientMutationId: null,
+    rollbackSettings: null,
   });
   const [sharedStateRevisionByThread, setSharedStateRevisionByThread] = useState<{
     threadId: string | undefined;
@@ -238,12 +246,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     revision: null,
   });
   const [connectRetryTick, setConnectRetryTick] = useState(0);
-  const pendingSyncMutationRef = useRef<{
-    threadId: string | undefined;
-    clientMutationId: string | null;
-  }>({
+  const pendingSyncMutationRef = useRef<PendingSyncMutationState>({
     threadId: undefined,
     clientMutationId: null,
+    rollbackSettings: null,
   });
   const [uiError, setUiError] = useState<string | null>(null);
   const [messageSnapshotEpoch, setMessageSnapshotEpoch] = useState(0);
@@ -509,13 +515,14 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       clientMutationId === pendingSyncMutation.clientMutationId
     ) {
       setPendingSyncMutationByThread({
-        threadId: threadIdRef.current,
+        threadId: pendingSyncMutation.threadId,
         clientMutationId: null,
+        rollbackSettings: null,
       });
     }
   }, []);
 
-  const extractSharedStateControlAckMutationId = useCallback((payload: unknown): string | null => {
+  const extractSharedStateControlAck = useCallback((payload: unknown): SharedStateControlAck | null => {
     if (typeof payload !== 'object' || payload === null) return null;
     const eventEnvelope =
       'event' in payload &&
@@ -529,9 +536,15 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     if (typeof value !== 'object' || value === null) return null;
     if ((value as { kind?: unknown }).kind !== 'update-ack') return null;
     const clientMutationId = (value as { clientMutationId?: unknown }).clientMutationId;
-    return typeof clientMutationId === 'string' && clientMutationId.length > 0
-      ? clientMutationId
-      : null;
+    const status = (value as { status?: unknown }).status;
+    const code = (value as { code?: unknown }).code;
+    if (typeof clientMutationId !== 'string' || clientMutationId.length === 0) return null;
+    if (status !== 'accepted' && status !== 'noop' && status !== 'rejected') return null;
+    return {
+      clientMutationId,
+      status,
+      code: typeof code === 'string' && code.length > 0 ? code : null,
+    };
   }, []);
 
   const extractSharedStateControlRevision = useCallback((payload: unknown): string | null => {
@@ -560,6 +573,50 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   useEffect(() => {
     pendingSyncMutationRef.current = pendingSyncMutationByThread;
   }, [pendingSyncMutationByThread]);
+
+  const reconcileSharedStateControlAck = useCallback(
+    (ack: SharedStateControlAck | null) => {
+      if (!ack) return;
+
+      const pendingSyncMutation = pendingSyncMutationRef.current;
+      if (
+        pendingSyncMutation.clientMutationId === null ||
+        pendingSyncMutation.threadId !== threadIdRef.current ||
+        ack.clientMutationId !== pendingSyncMutation.clientMutationId
+      ) {
+        return;
+      }
+
+      if (ack.status === 'rejected') {
+        const currentAgent = agentRef.current;
+        if (currentAgent && pendingSyncMutation.rollbackSettings) {
+          const nextState =
+            hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
+          currentAgent.setState({
+            ...nextState,
+            settings: {
+              ...pendingSyncMutation.rollbackSettings,
+            },
+          });
+        }
+
+        setUiError(
+          ack.code === 'stale_revision'
+            ? 'Shared settings changed elsewhere. Restored the last saved values; please retry.'
+            : ack.code === 'missing_base_revision'
+              ? 'Unable to sync settings until shared state is hydrated.'
+              : 'Unable to apply those settings. Restored the last saved values.',
+        );
+      }
+
+      setPendingSyncMutationByThread({
+        threadId: pendingSyncMutation.threadId,
+        clientMutationId: null,
+        rollbackSettings: null,
+      });
+    },
+    [hasStateValues],
+  );
 
   const needsSync = useCallback((value: unknown): boolean => {
     if (!value || typeof value !== 'object') return true;
@@ -855,7 +912,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             revision,
           });
         }
-        clearPendingSyncMutation(extractSharedStateControlAckMutationId(payload));
+        const sharedStateControlAck = extractSharedStateControlAck(payload);
+        reconcileSharedStateControlAck(sharedStateControlAck);
+        clearPendingSyncMutation(sharedStateControlAck?.clientMutationId ?? null);
       },
     });
 
@@ -866,10 +925,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     clearPendingSyncMutation,
     emitConnectTrace,
     extractAppliedMutationId,
-    extractSharedStateControlAckMutationId,
+    extractSharedStateControlAck,
     extractSharedStateControlRevision,
     hasStateValues,
     logConnectEvent,
+    reconcileSharedStateControlAck,
     setRunInFlight,
   ]);
 
@@ -905,6 +965,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           setPendingSyncMutationByThread({
             threadId: threadIdRef.current,
             clientMutationId: null,
+            rollbackSettings: null,
           });
         }
         setUiError(`Agent run is busy while processing '${command}'. Please retry in a moment.`);
@@ -921,6 +982,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           setPendingSyncMutationByThread({
             threadId: threadIdRef.current,
             clientMutationId: null,
+            rollbackSettings: null,
           });
         }
         const detail = error instanceof Error ? error.message : String(error);
@@ -1536,11 +1598,17 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     (updates: Partial<AgentSettings>) => {
       setUiError(null);
       const clientMutationId = v7();
+      const rollbackSettings = {
+        ...((hasStateValues(agentRef.current?.state)
+          ? ((agentRef.current?.state as ThreadSnapshot).settings ?? defaultSettings)
+          : defaultSettings) as AgentSettings),
+      };
       const sharedStateRevision =
         sharedStateRevisionByThread.threadId === threadId ? sharedStateRevisionByThread.revision : null;
       setPendingSyncMutationByThread({
         threadId,
         clientMutationId,
+        rollbackSettings,
       });
       updateSettings(updates);
 
@@ -1550,6 +1618,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           setPendingSyncMutationByThread({
             threadId,
             clientMutationId: null,
+            rollbackSettings: null,
           });
           setUiError(
             sharedStateRevision
@@ -1597,6 +1666,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           setPendingSyncMutationByThread({
             threadId,
             clientMutationId: null,
+            rollbackSettings: null,
           });
           setUiError('Unable to sync settings right now. Please retry.');
         }
@@ -1613,6 +1683,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         setPendingSyncMutationByThread({
           threadId,
           clientMutationId: null,
+          rollbackSettings: null,
         });
         setUiError('Unable to sync settings right now. Please retry.');
       }

@@ -35,7 +35,7 @@ Use one-way MVVM/MVI-lite rules:
 
 ### 3.1 Control Plane (intent)
 
-- User/system intents are ephemeral command events (`hire`, `sync`, `fire`, `resume`, `cycle`).
+- User/system intents are ephemeral command events (`hire`, `fire`, `resume`, `cycle`) plus shared-state `command.update`.
 - Intents are not durable render state.
 - Intent metadata must not live in shared render-driving state.
 
@@ -83,7 +83,7 @@ Command must not be persisted in shared render-driving state.
 2. `thread.lifecycle.phase` is render truth source.
 3. projection merge must be undefined-safe and preserve durable fields unless explicitly replaced.
 4. out-of-band cron updates must preserve full durable lifecycle context or skip state writes.
-5. sync confirmation remains explicit (`clientMutationId -> lastAppliedClientMutationId`) until lifecycle/version ack supersedes it.
+5. shared-state confirmation remains explicit through `shared-state.control` `update-ack` (`clientMutationId`, `status`, `resultingRevision`, optional `code`) until lifecycle/version ack supersedes it.
 6. Invariants are enforced in two layers:
    - domain invariants in agents (authoritative business/workflow truth),
    - VM invariants in web reducer (stale/out-of-order event defense).

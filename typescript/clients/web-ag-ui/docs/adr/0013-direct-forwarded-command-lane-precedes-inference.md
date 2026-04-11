@@ -13,9 +13,9 @@ Portfolio-manager onboarding exposed a separate contract gap on the command path
 - `agent-runtime` already supports a direct AG-UI control lane via `forwardedProps.command`
 - interrupt resumes already use that direct lane
 - some imperative web actions historically still traveled as JSON user messages and relied on the model to call `agent_runtime_domain_command`
-- LangGraph currently uses `forwardedProps.command` only for interrupt resume, not for imperative `hire`/`fire`/`sync` actions
+- LangGraph currently uses `forwardedProps.command` only for interrupt resume, not for imperative named commands or `command.update` state-write actions
 
-That split is architecturally wrong for imperative controls. Commands such as `hire`, `fire`, `sync`, and interrupt resume are not natural-language inputs that need interpretation. They are control-plane requests from the client to the runtime. Routing them through inference adds nondeterminism, couples business flow to prompt/tool behavior, and creates live regressions where the direct runtime path already exists and is better tested.
+That split is architecturally wrong for imperative controls. Commands such as `hire`, `fire`, `command.update`, and interrupt resume are not natural-language inputs that need interpretation. They are control-plane requests from the client to the runtime. Routing them through inference adds nondeterminism, couples business flow to prompt/tool behavior, and creates live regressions where the direct runtime path already exists and is better tested.
 
 ## Decision
 
@@ -24,7 +24,8 @@ Adopt `forwardedProps.command` as the canonical direct command lane for `agent-r
 The rules are:
 - when an AG-UI `run` request includes `forwardedProps.command`, `agent-runtime` must evaluate that command before any inference or model/tool routing
 - `forwardedProps.command` is an out-of-band control-plane input, not conversational message content
-- imperative client actions for `agent-runtime`, including `hire`, `fire`, `sync`, and interrupt resume, must use `forwardedProps.command` rather than synthesizing JSON chat messages
+- imperative client actions for `agent-runtime`, including named commands, `command.update`, and interrupt resume, must use `forwardedProps.command` rather than synthesizing JSON chat messages
+- `command.update` is the canonical shared-state mutation lane: the client writes writable `/shared` paths with revision-guarded JSON Patch, and the runtime answers with authoritative `shared-state.control` acknowledgments plus any resulting `/shared` and `/projected` state deltas
 - conversational turns remain message-driven and may use inference normally
 - if a direct command is present, the runtime must not require the model to rediscover that intent via `agent_runtime_domain_command`
 
@@ -66,5 +67,5 @@ Compatibility rule:
 - Follow-on work:
   - update web command dispatch so PI-runtime imperative actions use `forwardedProps.command`
   - keep LangGraph compatibility isolated until it gains an equivalent direct command lane for imperative actions
-  - add regression coverage that proves direct command forwarding is used for `agent-runtime` `hire`, `fire`, and `sync`
+  - add regression coverage that proves direct command forwarding is used for `agent-runtime` named commands and `command.update`
   - when LangGraph is retired or replaced, remove the remaining message-driven imperative-command compatibility path rather than preserving it as a permanent dual-mode convention

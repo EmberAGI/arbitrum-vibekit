@@ -189,7 +189,12 @@ describe('agent-runtime facade', () => {
     expect(declarations).not.toContain('__internalPostgres');
     expect(publicDomainContract).toContain('export type AgentRuntimeExecutionStatus');
     expect(source).toContain('export type AgentRuntimeDomainContext');
+    expect(publicDomainContract).toContain('export type AgentRuntimeSharedStateProjectionContext');
     expect(publicDomainContract).toContain('domainProjectionUpdate?: Record<string, unknown>;');
+    expect(publicDomainContract).toContain('projectSharedState?:');
+    expect(publicDomainContract).toContain('sharedState: Record<string, unknown>;');
+    expect(declarations).toContain('export type AgentRuntimeSharedStateProjectionContext');
+    expect(declarations).toContain('projectSharedState?:');
     expect(source).toContain('export interface CreateAgentRuntimeOptions');
   });
 

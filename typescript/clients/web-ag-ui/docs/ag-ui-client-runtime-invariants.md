@@ -10,7 +10,7 @@ Define non-negotiable client invariants for:
 
 - concurrent `connect` and `run` flows on the same `agentId+threadId`
 - server-reported busy run conditions
-- command-specific behavior (`sync` vs `fire`)
+- command-specific behavior (shared-state `update` vs `fire`)
 
 These rules complement the C4 target architecture and make runtime behavior deterministic under race conditions.
 
@@ -61,9 +61,9 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - Server busy is normalized to a deterministic concurrency outcome (not an unknown failure).
    - Client transitions to observe/retry policy instead of dead-ending.
 
-8. `sync` command policy (coalescing intent):
-   - `sync` represents “latest desired mutation/state refresh intent,” not an unbounded queue item.
-   - Keep a single pending `sync` intent per `agentId+threadId` (last-write-wins).
+8. Shared-state update policy (coalescing intent):
+   - `command.update` represents the latest desired writable `/shared` document intent, not an unbounded queue item.
+   - Keep a single pending shared-state mutation intent per `agentId+threadId` (last-write-wins).
    - If current run is active, defer dispatch; replay once terminal state is observed.
    - If replay hits busy, keep pending and retry with bounded policy.
 
@@ -76,13 +76,13 @@ These rules complement the C4 target architecture and make runtime behavior dete
 10. Imperative command transport policy:
    - Conversational user input belongs in AG-UI messages.
    - Imperative client controls belong in `forwardedProps.command` whenever the target runtime supports a direct command lane.
-   - Current preferred direct-command set is `hire`, `fire`, `sync`, and interrupt resume.
+   - Current preferred direct-command set is named commands such as `hire` and `fire`, shared-state `update`, and interrupt resume.
    - Compatibility note: LangGraph currently uses `forwardedProps.command` for resume only; imperative `hire`/`fire` remain message-driven there until an equivalent direct lane exists.
 
 11. Confirmation semantics:
    - “Saved/synced” UX should complete only when AG-UI state confirms application (e.g., task state, version, or acknowledged projection).
-   - Current handshake: client sends `clientMutationId` in `sync` command payload; agent projects `lastAppliedClientMutationId` acknowledgment state; UI clears pending sync only when ids match.
-   - Optimistic UI is allowed but must reconcile against streamed state.
+   - Current handshake for Pi-backed shared-state writes: client sends `forwardedProps.command.update` with `clientMutationId` and `baseRevision`; runtime emits `shared-state.control` `update-ack`; UI clears pending state only when ids match.
+   - Optimistic UI is allowed but must reconcile against streamed state, including rollback on rejected acknowledgments.
 
 12. Intent/state boundary:
    - Command intent is transport/control-plane input, not shared render truth.
@@ -98,7 +98,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
 
 - `AgentCommandScheduler` per `agentId+threadId`:
   - `fire`: preemptive lane
-  - `sync`: coalescing lane (single pending intent)
+  - shared-state `update`: coalescing lane (single pending intent)
   - other commands: explicit policy (reject-on-busy or constrained retry)
 - `AgentStatusPoller`:
   - dispatch one-shot poll `run` per non-active-detail agent on configured cadence
@@ -111,10 +111,10 @@ These rules complement the C4 target architecture and make runtime behavior dete
 ## 5. Open Design Decisions
 
 1. Confirmation payload:
-   - `clientMutationId`/`lastAppliedClientMutationId` is the current explicit mutation acknowledgment path.
+   - `shared-state.control` `update-ack` with `clientMutationId`, `status`, `resultingRevision`, and optional `code` is the current explicit mutation acknowledgment path.
    - A future `settingsVersion` contract can supersede this if agents move to versioned settings documents.
 2. Retry backoff tuning:
-   - Current implementation uses bounded `sync` replay retries (`3`) and replay delay (`500ms`) in `apps/web/src/utils/agentCommandScheduler.ts`.
+   - Current implementation uses bounded shared-state replay retries (`3`) and replay delay (`500ms`) in `apps/web/src/utils/agentCommandScheduler.ts`.
    - Remaining decision is whether these should become environment-tunable policy values.
 3. Telemetry:
    - Emit metrics for busy events, replay count, dropped stale events, and command latency.
