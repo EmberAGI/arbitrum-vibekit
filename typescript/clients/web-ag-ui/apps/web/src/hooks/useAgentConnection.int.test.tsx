@@ -1045,6 +1045,85 @@ describe('useAgentConnection integration', () => {
     expect(mocks.runAgent).not.toHaveBeenCalled();
   });
 
+  it('restores the last authoritative PI-runtime settings when a forwarded update run fails before any ack arrives', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.state = {
+      settings: {
+        amount: 100,
+      },
+      thread: {},
+    };
+    mocks.runAgent.mockRejectedValueOnce(new Error('update transport failed'));
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    (
+      subscriber as
+        | (AgentSubscriber & {
+            onCustomEvent?: (payload: {
+              input?: { threadId?: string };
+              name?: string;
+              value?: unknown;
+            }) => void;
+          })
+        | undefined
+    )?.onCustomEvent?.({
+      input: { threadId: 'thread-1' },
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'bootstrap',
+        revision: 'shared-rev-1',
+      },
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+
+    latestValue?.saveSettings({ amount: 250 });
+    await flushEffects();
+
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            update: expect.objectContaining({
+              baseRevision: 'shared-rev-1',
+            }),
+          },
+        },
+      }),
+    );
+
+    await flushEffects();
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+    expect(latestValue?.isSyncing).toBe(false);
+    expect(latestValue?.uiError).toBe("Agent command 'update' failed: update transport failed");
+  });
+
   it('applies authoritative PI STATE_DELTA settings updates to the visible detail state', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;

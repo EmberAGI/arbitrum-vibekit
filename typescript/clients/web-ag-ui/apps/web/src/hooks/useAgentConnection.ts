@@ -576,6 +576,14 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     });
   }, [hasStateValues]);
 
+  const rollbackPendingSyncMutation = useCallback(
+    (clientMutationId: string | null, rollbackSettings: AgentSettings | null) => {
+      restoreSettingsSnapshot(rollbackSettings);
+      clearPendingSyncMutation(clientMutationId);
+    },
+    [clearPendingSyncMutation, restoreSettingsSnapshot],
+  );
+
   const reconcileSharedStateControlAck = useCallback(
     (ack: SharedStateControlAck | null) => {
       if (!ack) return;
@@ -1622,12 +1630,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       if (config.imperativeCommandTransport === 'forwarded-props') {
         const scheduler = commandSchedulerRef.current;
         if (!scheduler || !sharedStateRevision) {
-          restoreSettingsSnapshot(rollbackSettings);
-          setPendingSyncMutationByThread({
-            threadId,
-            clientMutationId: null,
-            rollbackSettings: null,
-          });
+          rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
           setUiError(
             sharedStateRevision
               ? 'Unable to sync settings right now. Please retry.'
@@ -1650,33 +1653,33 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
                 delete nextSettings[key as keyof AgentSettings];
               }
             }
-            await runAgentOnCurrentThread(currentAgent, {
-              forwardedProps: {
-                command: {
-                  update: {
-                    clientMutationId,
-                    baseRevision: sharedStateRevision,
-                    patch: [
-                      {
-                        op: 'add',
-                        path: '/shared/settings',
-                        value: nextSettings,
-                      },
-                    ],
+            try {
+              await runAgentOnCurrentThread(currentAgent, {
+                forwardedProps: {
+                  command: {
+                    update: {
+                      clientMutationId,
+                      baseRevision: sharedStateRevision,
+                      patch: [
+                        {
+                          op: 'add',
+                          path: '/shared/settings',
+                          value: nextSettings,
+                        },
+                      ],
+                    },
                   },
                 },
-              },
-            });
+              });
+            } catch (error) {
+              rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
+              throw error;
+            }
           },
         });
 
         if (!accepted) {
-          restoreSettingsSnapshot(rollbackSettings);
-          setPendingSyncMutationByThread({
-            threadId,
-            clientMutationId: null,
-            rollbackSettings: null,
-          });
+          rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
           setUiError('Unable to sync settings right now. Please retry.');
         }
         return;
@@ -1689,12 +1692,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         },
       });
       if (!accepted) {
-        restoreSettingsSnapshot(rollbackSettings);
-        setPendingSyncMutationByThread({
-          threadId,
-          clientMutationId: null,
-          rollbackSettings: null,
-        });
+        rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
         setUiError('Unable to sync settings right now. Please retry.');
       }
     },
@@ -1703,7 +1701,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       dispatchCommand,
       hasStateValues,
       runAgentOnCurrentThread,
-      restoreSettingsSnapshot,
+      rollbackPendingSyncMutation,
       sharedStateRevisionByThread.revision,
       sharedStateRevisionByThread.threadId,
       threadId,
