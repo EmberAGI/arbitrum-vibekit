@@ -94,7 +94,6 @@ describe('agentListPolling', () => {
   it('projects state snapshot into list update and detaches the short-lived stream', async () => {
     const unsubscribe = vi.fn();
     const detachActiveRun = vi.fn().mockResolvedValue(undefined);
-    const addMessage = vi.fn();
 
     let stateSubscriber: AgentSubscriber | null = null;
 
@@ -103,8 +102,8 @@ describe('agentListPolling', () => {
         stateSubscriber = subscriber;
         return { unsubscribe };
       }),
-      addMessage,
-      runAgent: vi.fn(async () => {
+      addMessage: vi.fn(),
+      runAgent: vi.fn(async (_params?: { forwardedProps?: { command?: Record<string, unknown> } }) => {
         const snapshotState: ThreadSnapshot = {
           settings: {},
           thread: {
@@ -154,18 +153,16 @@ describe('agentListPolling', () => {
       taskMessage: 'Cycling',
     });
     expect(outcome.busy).toBe(false);
-    expect(addMessage).toHaveBeenCalledTimes(1);
-    const addMessageArg = addMessage.mock.calls[0]?.[0] as { role?: string; content?: string } | undefined;
-    expect(addMessageArg?.role).toBe('user');
-    const parsedContent =
-      typeof addMessageArg?.content === 'string'
-        ? (JSON.parse(addMessageArg.content) as { command?: string; source?: string })
-        : {};
-    expect(parsedContent).toMatchObject({
-      command: 'sync',
-      source: 'agent-list-poll',
-    });
+    expect(runtimeAgent.addMessage).not.toHaveBeenCalled();
     expect(runtimeAgent.runAgent).toHaveBeenCalledTimes(1);
+    expect(runtimeAgent.runAgent).toHaveBeenCalledWith({
+      forwardedProps: {
+        command: {
+          name: 'sync',
+          source: 'agent-list-poll',
+        },
+      },
+    });
     expect(runtimeAgent.connectAgent).not.toHaveBeenCalled();
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);

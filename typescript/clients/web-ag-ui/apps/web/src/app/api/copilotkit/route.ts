@@ -75,15 +75,6 @@ function extractThreadId(payloadBody: Record<string, unknown>): string | undefin
   return readString(configurable.threadId) ?? readString(configurable.thread_id);
 }
 
-function extractLastMessageContent(payloadBody: Record<string, unknown>): string | undefined {
-  const messages = payloadBody.messages;
-  if (!Array.isArray(messages) || messages.length === 0) return undefined;
-  const last = messages[messages.length - 1];
-  if (typeof last === 'string') return last;
-  if (!isRecord(last)) return undefined;
-  return readString(last.content);
-}
-
 function readResumeMetadata(payloadBody: Record<string, unknown>): {
   hasResumePayload: boolean;
   resumePayloadLength?: number;
@@ -118,31 +109,34 @@ function readResumeMetadata(payloadBody: Record<string, unknown>): {
   };
 }
 
-function readCommandMetadata(lastMessageContent: string | undefined): {
+function readCommandMetadata(payloadBody: Record<string, unknown>): {
   command?: string;
   source?: string;
   clientMutationId?: string;
 } {
-  if (!lastMessageContent) return {};
-  try {
-    const parsed = JSON.parse(lastMessageContent) as unknown;
-    if (!isRecord(parsed)) return {};
-    return {
-      command: readString(parsed.command),
-      source: readString(parsed.source),
-      clientMutationId: readString(parsed.clientMutationId),
-    };
-  } catch {
+  const forwardedProps = payloadBody.forwardedProps;
+  if (!isRecord(forwardedProps)) return {};
+  const command = forwardedProps.command;
+  if (!isRecord(command)) return {};
+
+  const update = isRecord(command.update) ? command.update : undefined;
+  const namedCommand = readString(command.name);
+  if (!namedCommand && !update) {
     return {};
   }
+
+  return {
+    command: namedCommand ?? (update ? 'update' : undefined),
+    source: readString(command.source),
+    clientMutationId: update ? readString(update.clientMutationId) : readString(command.clientMutationId),
+  };
 }
 
 function parseCopilotRouteMetadataFromObject(payload: Record<string, unknown>): CopilotRouteRequestMetadata {
   const method = readString(payload.method);
   const params = isRecord(payload.params) ? payload.params : undefined;
   const payloadBody = isRecord(payload.body) ? payload.body : undefined;
-  const lastMessageContent = payloadBody ? extractLastMessageContent(payloadBody) : undefined;
-  const commandMetadata = readCommandMetadata(lastMessageContent);
+  const commandMetadata = payloadBody ? readCommandMetadata(payloadBody) : {};
   const resumeMetadata = payloadBody ? readResumeMetadata(payloadBody) : { hasResumePayload: false };
   const threadId = payloadBody ? extractThreadId(payloadBody) : undefined;
   const agentId = readString(params?.agentId);

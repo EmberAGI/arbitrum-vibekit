@@ -118,6 +118,7 @@ Explicit non-goal container:
 - `AgentStatusPoller` (refactored list polling):
   - Every 15s, performs one-shot AG-UI `run` status sync for agents whose detail page is not currently active.
   - Poll runs are bounded lifecycle invocations (`run` start -> snapshot/events -> terminal), not persistent `connect` loops.
+  - Poll intent stays on `forwardedProps.command` for route tracing and runtime observability instead of synthetic JSON user messages.
   - Uses protocol-compliant calls only; no direct thread endpoints.
   - Writes normalized status to shared projection store.
 
@@ -152,6 +153,7 @@ Explicit non-goal container:
 - `CopilotKit Runtime Route` (`/api/copilotkit`):
   - The only server route used by web for agent communication.
   - Exposes AG-UI `connect`, `run`, and `stop` semantics used by web.
+  - Request metadata and debug traces should read command intent from `forwardedProps.command` and related control-lane fields, not by parsing the last chat message.
   - For standalone Pi-backed agents, imports runtime-owned transport helpers rather than defining Pi-specific transport behavior locally.
 
 - `Agent Registry`:

@@ -491,31 +491,23 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     );
   }, []);
 
-  const extractAppliedMutationId = useCallback((value: unknown): string | null => {
-    if (typeof value !== 'object' || value === null) return null;
-    const stateEnvelope = value as { thread?: unknown };
-    const stateSlice = stateEnvelope.thread;
-    if (typeof stateSlice !== 'object' || stateSlice === null) return null;
-    if (!('lastAppliedClientMutationId' in stateSlice)) return null;
-    const mutationId = (stateSlice as { lastAppliedClientMutationId?: unknown })
-      .lastAppliedClientMutationId;
-    return typeof mutationId === 'string' && mutationId.length > 0 ? mutationId : null;
-  }, []);
-
   const clearPendingSyncMutation = useCallback((clientMutationId: string | null) => {
     if (!clientMutationId) return;
-    const pendingSyncMutation = pendingSyncMutationRef.current;
-    if (
-      pendingSyncMutation.clientMutationId !== null &&
-      pendingSyncMutation.threadId === threadIdRef.current &&
-      clientMutationId === pendingSyncMutation.clientMutationId
-    ) {
-      setPendingSyncMutationByThread({
-        threadId: pendingSyncMutation.threadId,
-        clientMutationId: null,
-        rollbackSettings: null,
-      });
-    }
+    setPendingSyncMutationByThread((pendingSyncMutation) => {
+      if (
+        pendingSyncMutation.clientMutationId !== null &&
+        pendingSyncMutation.threadId === threadIdRef.current &&
+        clientMutationId === pendingSyncMutation.clientMutationId
+      ) {
+        return {
+          threadId: pendingSyncMutation.threadId,
+          clientMutationId: null,
+          rollbackSettings: null,
+        };
+      }
+
+      return pendingSyncMutation;
+    });
   }, []);
 
   const extractSharedStateControlAck = useCallback((payload: unknown): SharedStateControlAck | null => {
@@ -765,7 +757,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     const applyProjectedState = (statePayload: unknown) => {
       emitConnectTrace('state-apply-attempt', {
         currentThreadId: threadIdRef.current ?? null,
-        appliedMutationId: extractAppliedMutationId(statePayload),
         stateKeys:
           typeof statePayload === 'object' && statePayload !== null
             ? Object.keys(statePayload as Record<string, unknown>).slice(0, 20)
@@ -781,8 +772,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             ? (statePayload as { tasks: unknown[] }).tasks.length
             : null,
       });
-      const appliedMutationId = extractAppliedMutationId(statePayload);
-      clearPendingSyncMutation(appliedMutationId);
       const previousState = hasStateValues(agent.state) ? (agent.state as ThreadSnapshot) : null;
       const projectedState = projectDetailStateFromPayload(statePayload, previousState);
       if (projectedState) {
@@ -938,7 +927,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     agentId,
     clearPendingSyncMutation,
     emitConnectTrace,
-    extractAppliedMutationId,
     extractSharedStateControlAck,
     extractSharedStateControlRevision,
     hasStateValues,
@@ -972,6 +960,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           threadId: threadIdRef.current,
           isSyncing,
         });
+      },
+      onSyncRunTerminal: (messagePayload) => {
+        const clientMutationId =
+          typeof messagePayload?.clientMutationId === 'string' ? messagePayload.clientMutationId : null;
+        clearPendingSyncMutation(clientMutationId);
       },
       onCommandBusy: (command, error) => {
         const detail = error instanceof Error ? error.message : String(error);
@@ -1019,7 +1012,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         commandSchedulerRef.current = null;
       }
     };
-  }, [agentId, runAgentOnCurrentThread, setRunInFlight]);
+  }, [agentId, clearPendingSyncMutation, runAgentOnCurrentThread, setRunInFlight]);
 
   useEffect(() => {
     const ownerId = streamOwnerIdRef.current;
