@@ -17,3 +17,4 @@
 | [0013](./0013-direct-forwarded-command-lane-precedes-inference.md) | Direct forwarded command lane precedes inference | Accepted | 2026-03-30 |
 | [0014](./0014-fail-closed-service-identity-preflight-for-managed-shared-ember-agents.md) | Fail-closed service identity preflight for managed Shared Ember agents | Accepted | 2026-04-02 |
 | [0015](./0015-service-owned-onchain-actions-transaction-resolution-for-managed-lending.md) | Service-owned Onchain Actions transaction resolution for managed lending | Accepted | 2026-04-03 |
+| [0016](./0016-ag-ui-state-message-and-control-plane-boundaries.md) | AG-UI state, message, and control-plane boundaries | Accepted | 2026-04-12 |
