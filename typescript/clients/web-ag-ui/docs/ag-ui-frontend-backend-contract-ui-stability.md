@@ -57,6 +57,7 @@ Monotonic requirements:
 
 - A single projection reducer in the ViewModel applies AG-UI snapshots/events and builds `UiState`.
 - For Pi-backed flows, both `STATE_SNAPSHOT` and `STATE_DELTA` are authoritative inputs for the visible `/shared` plus `/projected` model.
+- In v1, the writable public slice is the subtree rooted at `/shared`; `/projected` is public but runtime-owned and read-only.
 - source authority is explicit per agent/thread:
   - active detail route: `connect` stream authority,
   - non-active detail: poll run authority,

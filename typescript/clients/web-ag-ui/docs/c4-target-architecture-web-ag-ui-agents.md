@@ -298,7 +298,7 @@ sequenceDiagram
   User->>Web: Trigger shared-state save
   Web->>Web: optimistically update local writable `/shared` view
   Web->>Runtime: run(agentId, threadId, forwardedProps.command.update)
-  Runtime->>Agent: validate command.update boundary, update `/shared`, recompute `/projected`
+  Runtime->>Agent: validate that every patch path stays rooted at `/shared`, update `/shared`, recompute `/projected`
   Agent-->>Runtime: STATE_DELTA(shared + projected) then shared-state.control update-ack
   Runtime-->>Web: streamed events
   Web->>Web: apply authoritative delta, then clear pending save after matching update-ack
@@ -313,7 +313,8 @@ sequenceDiagram
 - `ThreadState@vN` (versioned, domain-facing): profile, metrics, activity, task, interrupts, onboarding.
 - `UiState` (web VM-facing): deterministic projection from AG-UI events + `ThreadState` snapshots.
 - `TaskState` enum (shared): `submitted`, `working`, `input-required`, `completed`, `failed`, `canceled`.
-- Named control-plane commands stay explicit (`hire`, `fire`, typed interrupt resolutions); shared-state writes use `command.update` against writable `/shared`.
+- Named control-plane commands stay explicit (`hire`, `fire`, typed interrupt resolutions); shared-state writes use `command.update` against the writable public-state slice rooted at `/shared`.
+- In v1, `/shared` versus `/projected` is the editability model: `/shared` is writable, while `/projected` remains runtime-owned and non-patchable.
 - Typed interrupt resolutions may carry structured `command.resume` payload objects across the direct command lane without pre-stringifying them in the web client.
 
 ### 7.2 Rules

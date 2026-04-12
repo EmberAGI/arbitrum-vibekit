@@ -63,7 +63,8 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - Client transitions to observe/retry policy instead of dead-ending.
 
 8. Shared-state update policy (coalescing intent):
-   - `command.update` represents the latest desired writable `/shared` document intent, not an unbounded queue item.
+   - `command.update` represents the latest desired writable public-state intent rooted at `/shared`, not an unbounded queue item.
+   - In v1, `/shared` versus `/projected` is the editability model: any patch path rooted at `/shared` is writable, and `/projected` remains runtime-owned and non-patchable.
    - Keep a single pending shared-state mutation intent per `agentId+threadId` (last-write-wins).
    - If current run is active, defer dispatch; replay once terminal state is observed.
    - If replay hits busy, keep pending and retry with bounded policy.
