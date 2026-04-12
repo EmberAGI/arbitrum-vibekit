@@ -424,7 +424,7 @@ sequenceDiagram
 
     User->>Web: Submit connected wallet
     Web->>Web: buildPortfolioManagerSetupInput(walletAddress)
-    Web->>CK: AG-UI run(command.resume=setup JSON)
+    Web->>CK: AG-UI run(command.resume=setup object payload)
     CK->>PM: resume setup interrupt
     PM->>PM: save phase=onboarding + activeWalletAddress + pendingOnboardingWalletAddress + pendingApprovedMandateEnvelope
     PM-->>CK: input-required "portfolio-manager-delegation-signing-request"
@@ -432,7 +432,7 @@ sequenceDiagram
 
     User->>Wallet: Sign delegation(s)
     Wallet-->>Web: signedDelegations[]
-    Web->>CK: AG-UI run(command.resume=signed JSON)
+    Web->>CK: AG-UI run(command.resume=signed object payload)
     CK->>PM: resume signing interrupt
     PM->>PM: build onboarding bootstrap + root-delegation handoff
 

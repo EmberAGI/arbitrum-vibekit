@@ -917,7 +917,9 @@ describe('agent-runtime integration', () => {
         runId: 'run-resume',
         forwardedProps: {
           command: {
-            resume: '{"operatorNote":"safe window approved"}',
+            resume: {
+              operatorNote: 'safe window approved',
+            },
           },
         },
       }),
@@ -1661,7 +1663,9 @@ describe('agent-runtime integration', () => {
         runId: 'run-resume-checkpoint-alignment',
         forwardedProps: {
           command: {
-            resume: '{"operatorNote":"safe window approved"}',
+            resume: {
+              operatorNote: 'safe window approved',
+            },
           },
         },
       }),

@@ -103,11 +103,18 @@ function readResumeMetadata(payloadBody: Record<string, unknown>): {
     };
   }
 
-  const resume = readString(command.resume);
+  const hasResumePayload = Object.prototype.hasOwnProperty.call(command, 'resume');
+  const resume = command.resume;
+  const resumePreview =
+    typeof resume === 'string'
+      ? resume.slice(0, 240)
+      : hasResumePayload
+        ? JSON.stringify(resume)?.slice(0, 240)
+        : undefined;
   return {
-    hasResumePayload: typeof resume === 'string',
-    resumePayloadLength: typeof resume === 'string' ? resume.length : undefined,
-    resumePayloadPreview: typeof resume === 'string' ? resume.slice(0, 240) : undefined,
+    hasResumePayload,
+    resumePayloadLength: typeof resumePreview === 'string' ? resumePreview.length : undefined,
+    resumePayloadPreview: resumePreview,
   };
 }
 

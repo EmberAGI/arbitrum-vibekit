@@ -3,11 +3,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import type { Message } from '@ag-ui/core';
 import { useCopilotContext } from '@copilotkit/react-core';
-import {
-  useAgent,
-  useCopilotKit,
-  CopilotKitCoreRuntimeConnectionStatus,
-} from '@copilotkit/react-core/v2';
+import { useAgent, useCopilotKit, CopilotKitCoreRuntimeConnectionStatus } from '@copilotkit/react-core/v2';
 import { v7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
 import { getAgentConfig, type AgentConfig } from '../config/agents';
@@ -574,6 +570,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     pendingSyncMutationRef.current = pendingSyncMutationByThread;
   }, [pendingSyncMutationByThread]);
 
+  const restoreSettingsSnapshot = useCallback((rollbackSettings: AgentSettings | null) => {
+    const currentAgent = agentRef.current;
+    if (!currentAgent || !rollbackSettings) return;
+
+    const nextState =
+      hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
+    currentAgent.setState({
+      ...nextState,
+      settings: {
+        ...rollbackSettings,
+      },
+    });
+  }, [hasStateValues]);
+
   const reconcileSharedStateControlAck = useCallback(
     (ack: SharedStateControlAck | null) => {
       if (!ack) return;
@@ -588,17 +598,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       }
 
       if (ack.status === 'rejected') {
-        const currentAgent = agentRef.current;
-        if (currentAgent && pendingSyncMutation.rollbackSettings) {
-          const nextState =
-            hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
-          currentAgent.setState({
-            ...nextState,
-            settings: {
-              ...pendingSyncMutation.rollbackSettings,
-            },
-          });
-        }
+        restoreSettingsSnapshot(pendingSyncMutation.rollbackSettings);
 
         setUiError(
           ack.code === 'stale_revision'
@@ -615,7 +615,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         rollbackSettings: null,
       });
     },
-    [hasStateValues],
+    [restoreSettingsSnapshot],
   );
 
   const needsSync = useCallback((value: unknown): boolean => {
@@ -889,6 +889,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           return;
         }
         applyProjectedState(snapshotState);
+      },
+      onStateDeltaEvent: (payload) => {
+        const accepted = shouldApplyRunScopedState(payload);
+        emitConnectTrace('state-delta-event', {
+          accepted,
+          inputThreadId: getInputThreadId(payload),
+          inputRunId: getInputRunId(payload),
+          currentThreadId: threadIdRef.current ?? null,
+          activeRunThreadId: activeRunRef.current.threadId ?? null,
+          activeRunId: activeRunRef.current.runId ?? null,
+        });
+        if (!accepted) return;
+        rememberActiveRun(payload);
+        applyProjectedState(payload.state);
       },
       onMessagesSnapshotEvent: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
@@ -1535,7 +1549,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           });
           const resumed = await resumeInterruptViaAgent({
             agent: currentAgent,
-            resumePayload: serializedInput,
+            resumePayload: input,
             runResume: ({ agent: resumeAgent, payload }) =>
               runAgentOnCurrentThread(resumeAgent, {
                 forwardedProps: payload.forwardedProps,
@@ -1615,6 +1629,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       if (config.imperativeCommandTransport === 'forwarded-props') {
         const scheduler = commandSchedulerRef.current;
         if (!scheduler || !sharedStateRevision) {
+          restoreSettingsSnapshot(rollbackSettings);
           setPendingSyncMutationByThread({
             threadId,
             clientMutationId: null,
@@ -1663,6 +1678,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         });
 
         if (!accepted) {
+          restoreSettingsSnapshot(rollbackSettings);
           setPendingSyncMutationByThread({
             threadId,
             clientMutationId: null,
@@ -1680,6 +1696,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         },
       });
       if (!accepted) {
+        restoreSettingsSnapshot(rollbackSettings);
         setPendingSyncMutationByThread({
           threadId,
           clientMutationId: null,
@@ -1693,6 +1710,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       dispatchCommand,
       hasStateValues,
       runAgentOnCurrentThread,
+      restoreSettingsSnapshot,
       sharedStateRevisionByThread.revision,
       sharedStateRevisionByThread.threadId,
       threadId,

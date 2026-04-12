@@ -171,7 +171,7 @@ describe('Pi AG-UI transport helpers', () => {
     await expect(maintenanceResponse.text()).resolves.toContain('"automationIdsToResume":["automation-1"]');
   });
 
-  it('preserves explicit resume commands on AG-UI run requests', async () => {
+  it('preserves explicit object resume commands on AG-UI run requests', async () => {
     const { service, run } = createStubService();
     const handler = createPiRuntimeGatewayAgUiHandler({
       agentId: 'agent-pi-example',
@@ -187,7 +187,14 @@ describe('Pi AG-UI transport helpers', () => {
           runId: 'run-resume',
           forwardedProps: {
             command: {
-              resume: '{"outcome":"signed"}',
+              resume: {
+                outcome: 'signed',
+                signedDelegations: [
+                  {
+                    signature: '0x1234',
+                  },
+                ],
+              },
             },
           },
         }),
@@ -200,7 +207,14 @@ describe('Pi AG-UI transport helpers', () => {
       runId: 'run-resume',
       forwardedProps: {
         command: {
-          resume: '{"outcome":"signed"}',
+          resume: {
+            outcome: 'signed',
+            signedDelegations: [
+              {
+                signature: '0x1234',
+              },
+            ],
+          },
         },
       },
     });

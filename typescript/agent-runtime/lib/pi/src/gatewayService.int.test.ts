@@ -719,7 +719,7 @@ describe('pi gateway service integration', () => {
     ]);
   });
 
-  it('routes explicit resume payloads through Pi prompt instead of continue()', async () => {
+  it('routes explicit object resume payloads through Pi prompt instead of continue()', async () => {
     const agent = new ScriptedPiAgent([]);
 
     const runtime = createPiRuntimeGatewayRuntime({
@@ -737,7 +737,9 @@ describe('pi gateway service integration', () => {
         runId: 'run-5',
         forwardedProps: {
           command: {
-            resume: '{"operatorNote":"safe window approved"}',
+            resume: {
+              operatorNote: 'safe window approved',
+            },
           },
         },
       }),

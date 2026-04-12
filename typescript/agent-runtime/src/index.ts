@@ -185,7 +185,7 @@ export type AgentRuntimeSharedStatePatchOperation = {
 export type AgentRuntimeForwardedCommand = {
   name?: string;
   input?: unknown;
-  resume?: string;
+  resume?: unknown;
   update?: {
     clientMutationId: string;
     baseRevision?: string;
@@ -769,8 +769,9 @@ function readInterruptOperation<TState>(params: {
   session: PiRuntimeGatewaySession;
   domain: AgentRuntimeDomainConfig<TState> | undefined;
 }): AgentRuntimeDomainOperation | null {
+  const hasResume = Object.prototype.hasOwnProperty.call(params.command ?? {}, 'resume');
   const resumePayload = params.command?.resume;
-  if (typeof resumePayload !== 'string' || !params.domain?.handleOperation) {
+  if (!hasResume || !params.domain?.handleOperation) {
     return null;
   }
 
@@ -797,7 +798,10 @@ function readInterruptOperation<TState>(params: {
   return {
     source: 'interrupt',
     name: interruptType,
-    input: parseDomainCommandToolInput(resumePayload),
+    input:
+      typeof resumePayload === 'string'
+        ? parseDomainCommandToolInput(resumePayload)
+        : resumePayload,
   };
 }
 
@@ -2473,7 +2477,7 @@ export async function createAgentRuntime<TState = unknown>(
           session,
           domain,
         }) !== null;
-      if (typeof request.forwardedProps?.command?.resume === 'string' && !isDomainInterruptResume) {
+      if (Object.prototype.hasOwnProperty.call(request.forwardedProps?.command ?? {}, 'resume') && !isDomainInterruptResume) {
         const resumedSession = await resumeInterruptedSession(request.threadId);
         const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
           previousSession: session,

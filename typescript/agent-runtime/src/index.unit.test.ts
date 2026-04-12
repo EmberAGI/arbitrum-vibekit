@@ -218,6 +218,16 @@ describe('agent-runtime facade', () => {
     expect(declarations).toContain('patch: ReadonlyArray<AgentRuntimeSharedStatePatchOperation>;');
   });
 
+  it('keeps public resume payloads open for object passthrough on the forwarded command contract', () => {
+    const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+    const declarations = readFileSync(new URL('../dist/index.d.ts', import.meta.url), 'utf8');
+
+    expect(source).toContain('resume?: unknown;');
+    expect(source).not.toContain('resume?: string;');
+    expect(declarations).toContain('resume?: unknown;');
+    expect(declarations).not.toContain('resume?: string;');
+  });
+
   it('owns sessions and control-plane defaults inside the blessed builder', async () => {
     const internalPostgres = createInternalPostgresHooks();
     const runtime = await agentRuntime.createAgentRuntime({

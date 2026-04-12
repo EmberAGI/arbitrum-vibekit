@@ -72,7 +72,7 @@ export type PiRuntimeGatewayRunRequest = {
     command?: {
       name?: string;
       input?: unknown;
-      resume?: string;
+      resume?: unknown;
       update?: {
         clientMutationId?: string;
         baseRevision?: string;
@@ -193,6 +193,10 @@ export type PiRuntimeGatewayRuntime = {
   run: (request: PiRuntimeGatewayRunRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
   stop: (request: PiRuntimeGatewayStopRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
 };
+
+type PiRuntimeGatewayForwardedCommand = NonNullable<
+  NonNullable<PiRuntimeGatewayRunRequest['forwardedProps']>['command']
+>;
 
 export type PiRuntimeGatewayControlPlane = {
   inspectHealth: () => Promise<unknown>;
@@ -1272,10 +1276,23 @@ const parseAgUiToolCallArguments = (serializedArguments: string): unknown => {
   }
 };
 
-const buildResumePromptMessages = (resumePayload: string, now: () => number): AgentMessage[] => [
+function hasResumePayload(command: PiRuntimeGatewayForwardedCommand | undefined): boolean {
+  return !!command && Object.prototype.hasOwnProperty.call(command, 'resume');
+}
+
+function serializeResumePayload(resumePayload: unknown): string {
+  if (typeof resumePayload === 'string') {
+    return resumePayload;
+  }
+
+  const serialized = JSON.stringify(resumePayload);
+  return typeof serialized === 'string' ? serialized : String(resumePayload);
+}
+
+const buildResumePromptMessages = (resumePayload: unknown, now: () => number): AgentMessage[] => [
   {
     role: 'user',
-    content: resumePayload,
+    content: serializeResumePayload(resumePayload),
     timestamp: now(),
   },
 ];
@@ -1841,6 +1858,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
       const projectedRunEvents: BaseEvent[] = [];
       const requestMessages = request.messages ?? [];
       const resumePayload = request.forwardedProps?.command?.resume;
+      const requestHasResumePayload = hasResumePayload(request.forwardedProps?.command);
       const sharedStateUpdate = readSharedStateUpdateCommand(request);
 
       return createAsyncEventStream<BaseEvent>(async (controller) => {
@@ -1848,7 +1866,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
           threadId: request.threadId,
           runId: request.runId,
           messageCount: request.messages?.length ?? 0,
-          hasResumePayload: typeof resumePayload === 'string',
+          hasResumePayload: requestHasResumePayload,
         });
         controller.push(asBaseEvent({
           type: EventType.RUN_STARTED,
@@ -2026,9 +2044,9 @@ export const createPiRuntimeGatewayRuntime = (params: {
         });
 
         try {
-          if ((request.messages && request.messages.length > 0) || typeof resumePayload === 'string') {
+          if ((request.messages && request.messages.length > 0) || requestHasResumePayload) {
             const promptMessages =
-              typeof resumePayload === 'string'
+              requestHasResumePayload
                 ? buildResumePromptMessages(resumePayload, now)
                 : convertAgUiMessagesToPiMessages(request.messages ?? [], now);
             if (params.agent.state.isStreaming) {

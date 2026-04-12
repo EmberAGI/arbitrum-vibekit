@@ -298,7 +298,7 @@ sequenceDiagram
   Runtime->>Agent: validate patch, update `/shared`, recompute `/projected`
   Agent-->>Runtime: STATE_DELTA(shared + projected) then shared-state.control update-ack
   Runtime-->>Web: streamed events
-  Web->>Web: mark save complete only after matching update-ack
+  Web->>Web: apply authoritative delta, then clear pending save after matching update-ack
 ```
 
 ## 7. Data contracts
@@ -309,6 +309,7 @@ sequenceDiagram
 - `UiState` (web VM-facing): deterministic projection from AG-UI events + `ThreadState` snapshots.
 - `TaskState` enum (shared): `submitted`, `working`, `input-required`, `completed`, `failed`, `canceled`.
 - Named control-plane commands stay explicit (`hire`, `fire`, typed interrupt resolutions); shared-state writes use `command.update` against writable `/shared`.
+- Typed interrupt resolutions may carry structured `command.resume` payload objects across the direct command lane without pre-stringifying them in the web client.
 
 ### 7.2 Rules
 
@@ -411,9 +412,10 @@ Completed:
 - Web command scheduling now uses a dedicated `AgentCommandScheduler` (`apps/web/src/utils/agentCommandScheduler.ts`) with bounded busy-retry handling for coalesced shared-state writes.
 - Integration coverage now verifies key lifecycle invariants:
   - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-active-detail polling fan-out and periodic no-overlap behavior.
-  - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts detail-page connect and deterministic detach on unmount.
-  - `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts coalescing, terminal replay, bounded busy retries, and non-update in-flight rejection.
-- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts `shared-state.control` confirmation and rejected-ack reconciliation semantics for optimistic shared-state writes.
+- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts detail-page connect and deterministic detach on unmount.
+- `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts coalescing, terminal replay, bounded busy retries, and non-update in-flight rejection.
+- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts authoritative Pi `STATE_DELTA` hydration, `shared-state.control` confirmation, rejected-ack reconciliation, and rollback on local Pi dispatch failures for optimistic shared-state writes.
+- `apps/web/src/app/api/copilotkit/piRuntimeHttpAgent.int.test.ts` and `agent-runtime/src/index.int.test.ts` assert object `command.resume` payload passthrough across the web, transport, and Pi runtime layers.
 
 Remaining gaps:
 

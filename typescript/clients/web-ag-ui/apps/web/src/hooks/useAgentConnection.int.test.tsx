@@ -977,6 +977,221 @@ describe('useAgentConnection integration', () => {
     },
   );
 
+  it('restores the last authoritative PI-runtime settings when saveSettings runs before shared-state hydration', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      settings: {
+        amount: 100,
+      },
+      thread: {},
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+
+    latestValue?.saveSettings({ amount: 250 });
+    await flushEffects();
+    await flushEffects();
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+    expect(latestValue?.uiError).toBe('Unable to sync settings until shared state is hydrated.');
+    expect(mocks.runAgent).not.toHaveBeenCalled();
+  });
+
+  it('restores the last authoritative PI-runtime settings when a local PI update dispatch is rejected', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.state = {
+      settings: {
+        amount: 100,
+      },
+      thread: {},
+    };
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    (
+      subscriber as
+        | (AgentSubscriber & {
+            onCustomEvent?: (payload: {
+              input?: { threadId?: string };
+              name?: string;
+              value?: unknown;
+            }) => void;
+          })
+        | undefined
+    )?.onCustomEvent?.({
+      input: { threadId: 'thread-1' },
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'bootstrap',
+        revision: 'shared-rev-1',
+      },
+    });
+    await flushEffects();
+
+    subscriber?.onRunStartedEvent?.({
+      input: { threadId: 'thread-1', runId: 'run-busy' },
+      event: {
+        type: 'RUN_STARTED',
+        threadId: 'thread-1',
+        runId: 'run-busy',
+      },
+      messages: [],
+      state: mocks.agent.state,
+      agent: mocks.agent as never,
+    });
+    await flushEffects();
+
+    latestValue?.saveSettings({ amount: 250 });
+    await flushEffects();
+    await flushEffects();
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+    expect(latestValue?.uiError).toBe('Unable to sync settings right now. Please retry.');
+    expect(mocks.runAgent).not.toHaveBeenCalled();
+  });
+
+  it('applies authoritative PI STATE_DELTA settings updates to the visible detail state', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.state = {
+      settings: {
+        amount: 100,
+      },
+      thread: {},
+    };
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+
+    (
+      subscriber as
+        | (AgentSubscriber & {
+            onStateDeltaEvent?: (payload: {
+              input?: { threadId?: string; runId?: string };
+              event?: {
+                type?: 'STATE_DELTA';
+                delta?: Array<{ op: string; path: string; value?: unknown }>;
+              };
+              state?: Record<string, unknown>;
+            }) => void;
+          })
+        | undefined
+    )?.onStateDeltaEvent?.({
+      input: { threadId: 'thread-1', runId: 'run-1' },
+      event: {
+        type: 'STATE_DELTA',
+        delta: [
+          {
+            op: 'replace',
+            path: '/shared/settings/amount',
+            value: 250,
+          },
+        ],
+      },
+      state: {
+        shared: {
+          settings: {
+            amount: 250,
+          },
+        },
+        projected: {},
+        thread: {},
+      },
+    });
+    await flushEffects();
+    await flushEffects();
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(250);
+  });
+
   it('ignores stale run lifecycle events that do not match the active thread', async () => {
     let subscriber: AgentSubscriber | undefined;
 
@@ -2152,11 +2367,11 @@ describe('useAgentConnection integration', () => {
         threadId: 'thread-1',
         forwardedProps: {
           command: {
-            resume: JSON.stringify({
+            resume: {
               poolAddress: '0x0000000000000000000000000000000000000001',
               walletAddress: '0x0000000000000000000000000000000000000002',
               baseContributionUsd: 100,
-            }),
+            },
           },
         },
       }),
@@ -2364,9 +2579,9 @@ describe('useAgentConnection integration', () => {
         threadId: 'thread-1',
         forwardedProps: {
           command: {
-            resume: JSON.stringify({
+            resume: {
               operatorNote: 'Use the safe automation window',
-            }),
+            },
           },
         },
       }),
@@ -2431,7 +2646,7 @@ describe('useAgentConnection integration', () => {
       threadId: 'thread-1',
       forwardedProps: {
         command: {
-          resume: JSON.stringify({
+          resume: {
             outcome: 'signed',
             signedDelegations: [
               {
@@ -2443,7 +2658,7 @@ describe('useAgentConnection integration', () => {
                 signature: '0x1234',
               },
             ],
-          }),
+          },
         },
       },
     });

@@ -25,7 +25,9 @@ The rules are:
 - when an AG-UI `run` request includes `forwardedProps.command`, `agent-runtime` must evaluate that command before any inference or model/tool routing
 - `forwardedProps.command` is an out-of-band control-plane input, not conversational message content
 - imperative client actions for `agent-runtime`, including named commands, `command.update`, and interrupt resume, must use `forwardedProps.command` rather than synthesizing JSON chat messages
+- interrupt `resume` payloads may be structured objects and should traverse the direct command lane unchanged; only text-only runtime fallbacks may serialize them later
 - `command.update` is the canonical shared-state mutation lane: the client writes writable `/shared` paths with revision-guarded JSON Patch, and the runtime answers with authoritative `shared-state.control` acknowledgments plus any resulting `/shared` and `/projected` state deltas
+- accepted `command.update` writes must update the visible client model from the authoritative `STATE_DELTA` before the matching `shared-state.control` `update-ack` clears optimistic pending state
 - conversational turns remain message-driven and may use inference normally
 - if a direct command is present, the runtime must not require the model to rediscover that intent via `agent_runtime_domain_command`
 

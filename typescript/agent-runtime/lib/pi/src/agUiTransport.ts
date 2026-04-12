@@ -81,7 +81,8 @@ function parseRunRequest(body: Record<string, unknown>): PiRuntimeGatewayRunRequ
 
   const forwardedProps = isRecord(body.forwardedProps) ? body.forwardedProps : undefined;
   const command = forwardedProps && isRecord(forwardedProps.command) ? forwardedProps.command : undefined;
-  const resume = command ? readStringField(command, 'resume') : undefined;
+  const hasResume = command ? Object.prototype.hasOwnProperty.call(command, 'resume') : false;
+  const resume = hasResume ? command?.resume : undefined;
   const name = command ? readStringField(command, 'name') : undefined;
   const input = command && Object.prototype.hasOwnProperty.call(command, 'input') ? command.input : undefined;
   const update = command && isRecord(command.update) ? command.update : undefined;
@@ -94,13 +95,13 @@ function parseRunRequest(body: Record<string, unknown>): PiRuntimeGatewayRunRequ
     threadId,
     runId,
     messages: Array.isArray(body.messages) ? (body.messages as PiRuntimeGatewayRunRequest['messages']) : undefined,
-    ...(resume || name || update
+    ...(hasResume || name || update
       ? {
           forwardedProps: {
             command: {
               ...(name ? { name } : {}),
               ...(Object.prototype.hasOwnProperty.call(command ?? {}, 'input') ? { input } : {}),
-              ...(resume ? { resume } : {}),
+              ...(hasResume ? { resume } : {}),
               ...(update
                 ? {
                     update: {
