@@ -65,4 +65,41 @@ describe('parseCopilotRouteMetadata', () => {
       metadataMatched: true,
     });
   });
+
+  it('reports full serialized resume payload length while keeping the preview truncated', () => {
+    const resume = {
+      outcome: 'signed',
+      signedDelegations: [
+        {
+          signature: '0x' + 'a'.repeat(320),
+        },
+      ],
+    };
+
+    expect(
+      parseCopilotRouteMetadata({
+        method: 'agent/run',
+        params: {
+          agentId: 'agent-portfolio-manager',
+        },
+        body: {
+          threadId: 'thread-1',
+          forwardedProps: {
+            command: {
+              resume,
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      method: 'agent/run',
+      agentId: 'agent-portfolio-manager',
+      threadId: 'thread-1',
+      command: 'resume',
+      hasResumePayload: true,
+      resumePayloadLength: JSON.stringify(resume).length,
+      resumePayloadPreview: JSON.stringify(resume).slice(0, 240),
+      metadataMatched: true,
+    });
+  });
 });

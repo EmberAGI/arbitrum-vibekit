@@ -1112,6 +1112,53 @@ describe('pi gateway service integration', () => {
     });
   });
 
+  it('fails malformed shared-state update commands without emitting an uncorrelatable update ack', async () => {
+    const agent = new ScriptedPiAgent([]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => ({
+        thread: { id: 'thread-update-missing-client-mutation-id' },
+        execution: {
+          id: 'exec-update-missing-client-mutation-id',
+          status: 'working' as const,
+          statusMessage: 'Ready.',
+        },
+        sharedState: {
+          settings: {
+            amount: 100,
+          },
+        },
+        sharedStateVersion: 1,
+        sharedStateRevision: 'shared-rev-1',
+        sharedStateHydrated: true,
+      }),
+    });
+
+    expect(() =>
+      runtime.run({
+        threadId: 'thread-update-missing-client-mutation-id',
+        runId: 'run-update-missing-client-mutation-id',
+        forwardedProps: {
+          command: {
+            update: {
+              baseRevision: 'shared-rev-1',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrow('Shared-state update commands require a non-empty clientMutationId.');
+  });
+
   it('streams text events before the Pi prompt fully completes', async () => {
     let releasePrompt: (() => void) | null = null;
     const assistantMessage = {

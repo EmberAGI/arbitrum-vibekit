@@ -154,6 +154,7 @@ Explicit non-goal container:
   - The only server route used by web for agent communication.
   - Exposes AG-UI `connect`, `run`, and `stop` semantics used by web.
   - Request metadata and debug traces should read command intent from `forwardedProps.command` and related control-lane fields, not by parsing the last chat message.
+  - Structured interrupt-resume tracing should log full serialized `resumePayloadLength` separately from the truncated `resumePayloadPreview`.
   - For standalone Pi-backed agents, imports runtime-owned transport helpers rather than defining Pi-specific transport behavior locally.
 
 - `Agent Registry`:
@@ -297,11 +298,13 @@ sequenceDiagram
   User->>Web: Trigger shared-state save
   Web->>Web: optimistically update local writable `/shared` view
   Web->>Runtime: run(agentId, threadId, forwardedProps.command.update)
-  Runtime->>Agent: validate patch, update `/shared`, recompute `/projected`
+  Runtime->>Agent: validate command.update boundary, update `/shared`, recompute `/projected`
   Agent-->>Runtime: STATE_DELTA(shared + projected) then shared-state.control update-ack
   Runtime-->>Web: streamed events
   Web->>Web: apply authoritative delta, then clear pending save after matching update-ack
 ```
+
+- Malformed Pi `command.update` requests that omit `clientMutationId` are rejected at the runtime boundary before `shared-state.control` `update-ack`, because `clientMutationId` is the acknowledgment correlation key.
 
 ## 7. Data contracts
 

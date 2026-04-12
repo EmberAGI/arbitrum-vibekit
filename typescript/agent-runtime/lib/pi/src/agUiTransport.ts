@@ -15,6 +15,9 @@ export type PiRuntimeGatewayHttpAgentConfig = Omit<HttpAgentConfig, 'url'> & {
   runtimeUrl: string;
 };
 
+const MISSING_CLIENT_MUTATION_ID_ERROR =
+  'Shared-state update commands require a non-empty clientMutationId.';
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -90,6 +93,10 @@ function parseRunRequest(body: Record<string, unknown>): PiRuntimeGatewayRunRequ
   const updateBaseRevision = update ? readStringField(update, 'baseRevision') : undefined;
   const updatePatch =
     update && Object.prototype.hasOwnProperty.call(update, 'patch') ? update.patch : undefined;
+
+  if (update && !updateClientMutationId) {
+    return jsonResponse({ error: MISSING_CLIENT_MUTATION_ID_ERROR }, 400);
+  }
 
   return {
     threadId,

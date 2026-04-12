@@ -297,6 +297,8 @@ type PiRuntimeGatewaySharedStateUpdateAckCode =
 
 const PI_RUNTIME_SHARED_STATE_CONTROL_EVENT = 'shared-state.control';
 const PI_RUNTIME_SHARED_STATE_REVISION_PREFIX = 'shared-rev-';
+const MISSING_CLIENT_MUTATION_ID_ERROR =
+  'Shared-state update commands require a non-empty clientMutationId.';
 
 const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
@@ -373,22 +375,36 @@ const buildSharedStateControlUpdateAckEvent = (params: {
 const readSharedStateUpdateCommand = (
   request: PiRuntimeGatewayRunRequest,
 ):
+  | { kind: 'none' }
   | {
-      clientMutationId: string | null;
+      kind: 'invalid';
+      error: string;
+    }
+  | {
+      kind: 'update';
+      clientMutationId: string;
       baseRevision: string | undefined;
       patch: unknown;
-    }
-  | null => {
+    } => {
   const update = request.forwardedProps?.command?.update;
   if (!isRecord(update)) {
-    return null;
+    return { kind: 'none' };
+  }
+
+  const clientMutationId =
+    typeof update.clientMutationId === 'string' && update.clientMutationId.length > 0
+      ? update.clientMutationId
+      : undefined;
+  if (!clientMutationId) {
+    return {
+      kind: 'invalid',
+      error: MISSING_CLIENT_MUTATION_ID_ERROR,
+    };
   }
 
   return {
-    clientMutationId:
-      typeof update.clientMutationId === 'string' && update.clientMutationId.length > 0
-        ? update.clientMutationId
-        : null,
+    kind: 'update',
+    clientMutationId,
     baseRevision:
       typeof update.baseRevision === 'string' && update.baseRevision.length > 0
         ? update.baseRevision
@@ -1860,6 +1876,9 @@ export const createPiRuntimeGatewayRuntime = (params: {
       const resumePayload = request.forwardedProps?.command?.resume;
       const requestHasResumePayload = hasResumePayload(request.forwardedProps?.command);
       const sharedStateUpdate = readSharedStateUpdateCommand(request);
+      if (sharedStateUpdate.kind === 'invalid') {
+        throw new TypeError(sharedStateUpdate.error);
+      }
 
       return createAsyncEventStream<BaseEvent>(async (controller) => {
         logPiGatewayDebug('run start', {
@@ -1874,10 +1893,10 @@ export const createPiRuntimeGatewayRuntime = (params: {
           runId: request.runId,
         } satisfies RunStartedEvent));
 
-        if (sharedStateUpdate) {
+        if (sharedStateUpdate.kind === 'update') {
           const currentSession = initialSession;
           const currentRevision = getSharedStateRevision(currentSession);
-          const clientMutationId = sharedStateUpdate.clientMutationId ?? '';
+          const clientMutationId = sharedStateUpdate.clientMutationId;
           const finishWithAck = (paramsForAck: {
             status: PiRuntimeGatewaySharedStateUpdateAckStatus;
             resultingRevision: string;
@@ -1904,16 +1923,6 @@ export const createPiRuntimeGatewayRuntime = (params: {
             } satisfies RunFinishedEvent));
             controller.close();
           };
-
-          if (clientMutationId.length === 0) {
-            finishWithAck({
-              status: 'rejected',
-              resultingRevision: currentRevision,
-              code: 'invalid_patch',
-              ...(sharedStateUpdate.baseRevision ? { baseRevision: sharedStateUpdate.baseRevision } : {}),
-            });
-            return;
-          }
 
           if (currentSession.sharedStateHydrated && !sharedStateUpdate.baseRevision) {
             finishWithAck({

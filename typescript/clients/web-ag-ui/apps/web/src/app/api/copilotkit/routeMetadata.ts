@@ -56,15 +56,12 @@ function readResumeMetadata(payloadBody: Record<string, unknown>): {
 
   const hasResumePayload = Object.prototype.hasOwnProperty.call(command, 'resume');
   const resume = command.resume;
-  const resumePreview =
-    typeof resume === 'string'
-      ? resume.slice(0, 240)
-      : hasResumePayload
-        ? JSON.stringify(resume)?.slice(0, 240)
-        : undefined;
+  const serializedResume =
+    typeof resume === 'string' ? resume : hasResumePayload ? JSON.stringify(resume) : undefined;
+  const resumePreview = typeof serializedResume === 'string' ? serializedResume.slice(0, 240) : undefined;
   return {
     hasResumePayload,
-    resumePayloadLength: typeof resumePreview === 'string' ? resumePreview.length : undefined,
+    resumePayloadLength: typeof serializedResume === 'string' ? serializedResume.length : undefined,
     resumePayloadPreview: resumePreview,
   };
 }
