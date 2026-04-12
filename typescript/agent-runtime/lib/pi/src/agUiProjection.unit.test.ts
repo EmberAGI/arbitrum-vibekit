@@ -35,7 +35,7 @@ describe('pi AG-UI projection', () => {
           kind: 'interrupt',
           payload: { type: 'operator-config-request', artifactId: 'current-artifact' },
         },
-        domainProjection: {
+        projectedState: {
           managedMandate: {
             status: 'active',
           },
@@ -97,21 +97,9 @@ describe('pi AG-UI projection', () => {
             },
           ],
         },
-        messages: [
-          {
-            id: 'message-1',
-            role: 'user',
-            content: 'Please continue.',
-          },
-        ],
         artifacts: {
           current: { artifactId: 'current-artifact', data: { phase: 'setup' } },
           activity: { artifactId: 'activity-artifact', data: { entries: 3 } },
-        },
-        domainProjection: {
-          managedMandate: {
-            status: 'active',
-          },
         },
         profile: { principalId: 'wallet:0xabc' },
       },
@@ -127,7 +115,7 @@ describe('pi AG-UI projection', () => {
             id: 'exec-1',
             status: 'working',
           },
-          domainProjection: {
+          projectedState: {
             managedMandate: {
               summary: {
                 riskLevel: 'medium',
@@ -141,7 +129,7 @@ describe('pi AG-UI projection', () => {
             id: 'exec-1',
             status: 'completed',
           },
-          domainProjection: {
+          projectedState: {
             managedMandate: {
               summary: {
                 riskLevel: 'medium',
@@ -161,7 +149,7 @@ describe('pi AG-UI projection', () => {
         },
         {
           op: 'add',
-          path: '/thread/domainProjection/managedMandate/summary/status',
+          path: '/projected/managedMandate/summary/status',
           value: 'active',
         },
       ]),

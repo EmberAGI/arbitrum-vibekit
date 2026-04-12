@@ -212,18 +212,6 @@ describe('pi gateway service integration', () => {
                 },
               ],
             },
-            messages: [
-              {
-                id: 'user-msg-1',
-                role: 'user',
-                content: 'Connect now',
-              },
-              {
-                id: 'assistant-msg-1',
-                role: 'assistant',
-                content: 'Pi is connected.',
-              },
-            ],
             artifacts: {
               current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
             },

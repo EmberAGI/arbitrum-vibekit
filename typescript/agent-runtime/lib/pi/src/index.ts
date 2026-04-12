@@ -140,7 +140,6 @@ export type PiRuntimeGatewaySession = {
   };
   a2ui?: PiRuntimeGatewayA2UiPayload;
   activityEvents?: PiRuntimeGatewayActivityEvent[];
-  domainProjection?: Record<string, unknown>;
   projectedState?: Record<string, unknown>;
   sharedState?: Record<string, unknown>;
   sharedStateVersion?: number;
@@ -303,11 +302,7 @@ const MISSING_CLIENT_MUTATION_ID_ERROR =
 const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 const getProjectedState = (session: PiRuntimeGatewaySession): Record<string, unknown> =>
-  isRecord(session.projectedState)
-    ? session.projectedState
-    : isRecord(session.domainProjection)
-      ? session.domainProjection
-      : {};
+  isRecord(session.projectedState) ? session.projectedState : {};
 
 const getSharedState = (session: PiRuntimeGatewaySession): Record<string, unknown> =>
   isRecord(session.sharedState) ? session.sharedState : {};
@@ -1313,6 +1308,18 @@ const buildResumePromptMessages = (resumePayload: unknown, now: () => number): A
   },
 ];
 
+const stripLegacyThreadMirrors = <TThread extends Record<string, unknown>>(thread: TThread): TThread => {
+  const {
+    messages: _messages,
+    domainProjection: _domainProjection,
+    ...canonicalThread
+  } = thread as TThread & {
+    messages?: unknown;
+    domainProjection?: unknown;
+  };
+  return canonicalThread as TThread;
+};
+
 export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Record<string, unknown> => {
   const projectedState = getProjectedState(params);
   const activityEvents: PiRuntimeGatewayActivityEvent[] =
@@ -1379,17 +1386,17 @@ export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Rec
           },
         }
       : {}),
-    ...(params.messages ? { messages: params.messages } : {}),
-    ...(Object.keys(projectedState).length > 0 ? { domainProjection: projectedState } : {}),
   };
 
   return {
     shared: getSharedState(params),
     projected: projectedState,
-    thread: mergeThreadPatchForEmit({
-      currentThread: baseThread,
-      patchThread: params.threadPatch ?? {},
-    }),
+    thread: stripLegacyThreadMirrors(
+      mergeThreadPatchForEmit({
+        currentThread: baseThread,
+        patchThread: params.threadPatch ?? {},
+      }),
+    ),
   };
 };
 

@@ -115,6 +115,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const snapshot = readLatestStateSnapshot(runEvents);
   const thread = isRecord(snapshot?.['thread']) ? snapshot['thread'] : null;
+  const projected = isRecord(snapshot?.['projected']) ? snapshot['projected'] : null;
   const task = isRecord(thread?.['task']) ? thread['task'] : null;
   const taskStatus = isRecord(task?.['taskStatus']) ? task['taskStatus'] : null;
   const taskState = readString(taskStatus?.['state']);
@@ -140,6 +141,6 @@ export async function POST(req: NextRequest): Promise<Response> {
     ok: true,
     taskState,
     statusMessage,
-    domainProjection: isRecord(thread?.['domainProjection']) ? thread['domainProjection'] : null,
+    domainProjection: projected,
   });
 }

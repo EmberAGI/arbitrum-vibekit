@@ -897,19 +897,17 @@ describe('agent-runtime integration', () => {
         },
         {
           op: 'add',
-          path: '/thread/domainProjection',
+          path: '/projected/managedLifecycle',
           value: {
-            managedLifecycle: {
-              phase: 'onboarding',
-              onboardingStep: 'operator-profile',
-            },
+            phase: 'onboarding',
+            onboardingStep: 'operator-profile',
           },
         },
       ]),
     );
 
     expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('a2ui');
-    expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('domainProjection');
+    expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('projectedState');
 
     const resumeEvents = await collectEventSource(
       await runtime.service.run({
@@ -947,7 +945,7 @@ describe('agent-runtime integration', () => {
         },
         {
           op: 'add',
-          path: '/thread/domainProjection/managedLifecycle/operatorNote',
+          path: '/projected/managedLifecycle/operatorNote',
           value: 'safe window approved',
         },
       ]),
@@ -984,7 +982,7 @@ describe('agent-runtime integration', () => {
         },
         {
           op: 'replace',
-          path: '/thread/domainProjection/managedLifecycle/phase',
+          path: '/projected/managedLifecycle/phase',
           value: 'hired',
         },
         {
@@ -1019,7 +1017,7 @@ describe('agent-runtime integration', () => {
         },
         {
           op: 'replace',
-          path: '/thread/domainProjection/managedLifecycle/phase',
+          path: '/projected/managedLifecycle/phase',
           value: 'fired',
         },
       ]),
@@ -1157,7 +1155,7 @@ describe('agent-runtime integration', () => {
         },
         {
           op: 'replace',
-          path: '/thread/domainProjection/managedLifecycle/amountSummary',
+          path: '/projected/managedLifecycle/amountSummary',
           value: 'Managed amount: 250',
         },
       ]),

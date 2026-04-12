@@ -17,8 +17,10 @@ describe('agentProjection', () => {
       thread: {
         setupComplete: true,
       },
-      settings: {
-        amount: 123,
+      shared: {
+        settings: {
+          amount: 123,
+        },
       },
     });
 
@@ -33,8 +35,10 @@ describe('agentProjection', () => {
       thread: {
         setupComplete: true,
       },
-      settings: {
-        amount: 321,
+      shared: {
+        settings: {
+          amount: 321,
+        },
       },
     });
 
@@ -168,13 +172,11 @@ describe('agentProjection', () => {
 
   it('merges partial domain projection payloads onto the previous projected state', () => {
     const previous = projectDetailStateFromPayload({
-      thread: {
-        domainProjection: {
-          managedMandate: {
-            mandateRef: 'mandate-1',
-            summary: {
-              riskLevel: 'medium',
-            },
+      projected: {
+        managedMandate: {
+          mandateRef: 'mandate-1',
+          summary: {
+            riskLevel: 'medium',
           },
         },
       },
@@ -182,12 +184,10 @@ describe('agentProjection', () => {
 
     const projected = projectDetailStateFromPayload(
       {
-        thread: {
-          domainProjection: {
-            managedMandate: {
-              summary: {
-                status: 'active',
-              },
+        projected: {
+          managedMandate: {
+            summary: {
+              status: 'active',
             },
           },
         },
@@ -204,6 +204,93 @@ describe('agentProjection', () => {
         },
       },
     });
+  });
+
+  it('ignores legacy top-level settings and thread.domainProjection runtime payload shapes', () => {
+    const previous = projectDetailStateFromPayload({
+      shared: {
+        settings: {
+          amount: 456,
+        },
+      },
+      projected: {
+        managedMandate: {
+          summary: {
+            status: 'active',
+          },
+        },
+      },
+    });
+
+    const projected = projectDetailStateFromPayload(
+      {
+        settings: {
+          amount: 999,
+        },
+        thread: {
+          domainProjection: {
+            managedMandate: {
+              summary: {
+                status: 'stale-legacy-shape',
+              },
+            },
+          },
+        },
+      },
+      previous,
+    );
+
+    expect(projected?.settings.amount).toBe(456);
+    expect(projected?.thread.domainProjection).toEqual({
+      managedMandate: {
+        summary: {
+          status: 'active',
+        },
+      },
+    });
+  });
+
+  it('ignores state-embedded transcript payloads in runtime snapshots and deltas', () => {
+    const previous = projectDetailStateFromPayload({
+      shared: {
+        settings: {
+          amount: 123,
+        },
+      },
+    });
+
+    previous!.messages = [
+      {
+        id: 'message-1',
+        role: 'assistant',
+        content: 'Canonical transcript event',
+      },
+    ];
+
+    const projected = projectDetailStateFromPayload(
+      {
+        messages: [
+          {
+            id: 'legacy-top-level-message',
+            role: 'assistant',
+            content: 'Legacy top-level message payload',
+          },
+        ],
+        thread: {
+          messages: [
+            {
+              id: 'legacy-thread-message',
+              role: 'assistant',
+              content: 'Legacy thread message payload',
+            },
+          ],
+        },
+      },
+      previous,
+    );
+
+    expect(projected?.messages).toEqual(previous?.messages);
+    expect((projected?.thread as Record<string, unknown> | undefined)?.messages).toBeUndefined();
   });
 
   it('hydrates legacy web-facing settings and domain projection from canonical shared/projected payloads', () => {

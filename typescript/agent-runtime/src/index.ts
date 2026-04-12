@@ -948,9 +948,7 @@ function reconcileSharedStateProjection<TState>(params: {
 
   const currentProjection = isRecord(params.session.projectedState)
     ? params.session.projectedState
-    : isRecord(params.session.domainProjection)
-      ? params.session.domainProjection
-      : undefined;
+    : undefined;
   const projectionUpdate = projectSharedState({
     threadId: params.threadId,
     state: params.domainState,
@@ -1124,8 +1122,8 @@ function applyDomainOperationResult(params: {
   let nextA2Ui = params.session.a2ui;
   let shouldWriteA2Ui = false;
   const nextDomainProjection = hasDomainProjectionUpdate
-    ? mergeDomainProjection(params.session.domainProjection, params.result.domainProjectionUpdate)
-    : params.session.domainProjection;
+    ? mergeDomainProjection(params.session.projectedState, params.result.domainProjectionUpdate)
+    : params.session.projectedState;
 
   for (const artifactOutput of domainOutputs.artifacts ?? []) {
     const artifact = buildDomainArtifact({
@@ -1203,7 +1201,7 @@ function applyDomainOperationResult(params: {
     ...(nextArtifacts ? { artifacts: nextArtifacts } : {}),
     ...(nextActivityEvents.length > 0 ? { activityEvents: nextActivityEvents } : {}),
     ...(shouldWriteA2Ui ? { a2ui: nextA2Ui } : {}),
-    ...(hasDomainProjectionUpdate ? { domainProjection: nextDomainProjection } : {}),
+    ...(hasDomainProjectionUpdate ? { projectedState: nextDomainProjection } : {}),
     ...(lifecycleThreadPatch
       ? {
           threadPatch: mergeThreadPatch(params.session.threadPatch, lifecycleThreadPatch),

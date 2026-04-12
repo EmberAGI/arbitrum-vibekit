@@ -64,10 +64,10 @@ describe('POST /api/agent-command', () => {
                   },
                 },
               },
-              domainProjection: {
-                managedMandateEditor: {
-                  mandateSummary: 'lend USDC and DAI through the managed lending lane',
-                },
+            },
+            projected: {
+              managedMandateEditor: {
+                mandateSummary: 'lend USDC and DAI through the managed lending lane',
               },
             },
           },
@@ -99,6 +99,53 @@ describe('POST /api/agent-command', () => {
           mandateSummary: 'lend USDC and DAI through the managed lending lane',
         },
       },
+    });
+  });
+
+  it('does not treat legacy thread.domainProjection as a supported runtime response shape', async () => {
+    runMock.mockReturnValue(
+      from([
+        { type: EventType.RUN_STARTED, threadId: 'thread-1', runId: 'run-1' },
+        {
+          type: EventType.STATE_SNAPSHOT,
+          threadId: 'thread-1',
+          runId: 'run-1',
+          snapshot: {
+            thread: {
+              id: 'thread-1',
+              task: {
+                taskStatus: {
+                  state: 'completed',
+                },
+              },
+              domainProjection: {
+                managedMandateEditor: {
+                  mandateSummary: 'legacy fallback should be ignored',
+                },
+              },
+            },
+          },
+        },
+        { type: EventType.RUN_FINISHED, threadId: 'thread-1', runId: 'run-1' },
+      ]),
+    );
+
+    const response = await POST(
+      buildRequest({
+        agentId: 'agent-portfolio-manager',
+        threadId: 'thread-1',
+        command: {
+          name: 'hydrate_runtime_projection',
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      taskState: 'completed',
+      statusMessage: null,
+      domainProjection: null,
     });
   });
 
