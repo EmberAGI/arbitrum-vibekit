@@ -88,7 +88,7 @@ Command must not be persisted in shared render-driving state.
 4. out-of-band cron updates must preserve full durable lifecycle context or skip state writes.
 5. shared-state confirmation remains explicit through `shared-state.control` `update-ack` (`clientMutationId`, `status`, `resultingRevision`, optional `code`) until lifecycle/version ack supersedes it.
    Malformed Pi `command.update` requests that omit `clientMutationId` are rejected at the boundary before that ack lane rather than synthesizing an uncorrelatable acknowledgment.
-6. optimistic writable-state edits must roll back to the last authoritative projection when a Pi mutation is rejected or when local dispatch fails before the runtime accepts the command.
+6. optimistic writable-state edits must roll back to the last authoritative projection when a Pi mutation is rejected or when the local `command.update` run fails before any matching `shared-state.control` acknowledgment arrives.
 7. Invariants are enforced in two layers:
    - domain invariants in agents (authoritative business/workflow truth),
    - VM invariants in web reducer (stale/out-of-order event defense).

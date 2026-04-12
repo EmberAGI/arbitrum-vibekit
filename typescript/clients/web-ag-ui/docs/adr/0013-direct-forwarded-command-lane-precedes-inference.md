@@ -30,6 +30,7 @@ The rules are:
 - in v1, `/shared` versus `/projected` is the editability model; `command.update` does not add extra field-level mutability metadata or a second allowlist inside `/shared`
 - malformed `command.update` requests that omit `clientMutationId` are boundary-invalid and must be rejected before the `update-ack` lane rather than synthesizing an uncorrelatable acknowledgment
 - accepted `command.update` writes must update the visible client model from the authoritative `STATE_DELTA` before the matching `shared-state.control` `update-ack` clears optimistic pending state
+- if a forwarded `command.update` run fails locally before any matching `shared-state.control` acknowledgment arrives, the web must roll back the optimistic writable-state view and clear the pending mutation instead of leaving optimistic settings stranded
 - conversational turns remain message-driven and may use inference normally
 - if a direct command is present, the runtime must not require the model to rediscover that intent via `agent_runtime_domain_command`
 

@@ -87,7 +87,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - Current handshake for Pi-backed shared-state writes: client sends `forwardedProps.command.update` with `clientMutationId` and `baseRevision`; runtime emits `shared-state.control` `update-ack`; UI clears pending state only when ids match.
    - Malformed Pi `command.update` requests that omit `clientMutationId` are boundary-invalid and must be rejected before `update-ack`; the acknowledgment lane is reserved for writes that already have a real correlation key.
    - Accepted Pi-backed writes must reconcile the visible state from the authoritative `STATE_DELTA` payload that arrives before the matching `shared-state.control` `update-ack`.
-   - Optimistic UI is allowed but must reconcile against streamed state, including rollback on rejected acknowledgments and on local pre-dispatch failures that never reach the runtime.
+  - Optimistic UI is allowed but must reconcile against streamed state, including rollback on rejected acknowledgments and on local pre-ack run failures before any matching `shared-state.control` arrives.
 
 12. Intent/state boundary:
    - Command intent is transport/control-plane input, not shared render truth.

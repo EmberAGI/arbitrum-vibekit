@@ -22,7 +22,7 @@ Adopt AG-UI protocol operations (`connect`, `run`, `stop`) as the exclusive cont
 - Detail-page stream attachment is focus-scoped and must close on unfocus/navigation.
 - Agent-side lifecycle transitions should converge toward a shared kernel contract across `apps/agent*`.
 - Agent-specific metrics UI must be decomposed via a registry-driven renderer model, not centralized branching in a single detail component.
-- Web command concurrency, optimistic shared-state writes, and stream authority rules are governed by explicit client runtime invariants (`docs/ag-ui-client-runtime-invariants.md`), including named commands plus `command.update`, writable `/shared`, runtime-owned `/projected`, authoritative `STATE_SNAPSHOT`/`STATE_DELTA` hydration, `shared-state.control` acknowledgments for correlated writes, boundary rejection of malformed `command.update` requests that omit `clientMutationId`, unchanged structured `command.resume` payloads, and `fire` preemptive behavior.
+- Web command concurrency, optimistic shared-state writes, and stream authority rules are governed by explicit client runtime invariants (`docs/ag-ui-client-runtime-invariants.md`), including named commands plus `command.update`, writable `/shared`, runtime-owned `/projected`, authoritative `STATE_SNAPSHOT`/`STATE_DELTA` hydration, `shared-state.control` acknowledgments for correlated writes, rollback on rejected or pre-ack-failed optimistic shared-state writes, boundary rejection of malformed `command.update` requests that omit `clientMutationId`, unchanged structured `command.resume` payloads, and `fire` preemptive behavior.
 - Local patch exception is allowed for `@ag-ui/langgraph` `connect` behavior until upstream parity is available.
 
 ## Rationale

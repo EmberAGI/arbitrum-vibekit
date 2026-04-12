@@ -305,6 +305,7 @@ sequenceDiagram
 ```
 
 - Malformed Pi `command.update` requests that omit `clientMutationId` are rejected at the runtime boundary before `shared-state.control` `update-ack`, because `clientMutationId` is the acknowledgment correlation key.
+- If the local forwarded `command.update` run fails before any matching `shared-state.control` arrives, the web must roll back the optimistic `/shared` view immediately and clear the pending mutation locally.
 
 ## 7. Data contracts
 
@@ -420,7 +421,7 @@ Completed:
   - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-active-detail polling fan-out and periodic no-overlap behavior.
 - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts detail-page connect and deterministic detach on unmount.
 - `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts coalescing, terminal replay, bounded busy retries, and non-update in-flight rejection.
-- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts authoritative Pi `STATE_DELTA` hydration, `shared-state.control` confirmation, rejected-ack reconciliation, and rollback on local Pi dispatch failures for optimistic shared-state writes.
+- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts authoritative Pi `STATE_DELTA` hydration, `shared-state.control` confirmation, rejected-ack reconciliation, and rollback on local pre-ack Pi run failures for optimistic shared-state writes.
 - `apps/web/src/app/api/copilotkit/piRuntimeHttpAgent.int.test.ts` and `agent-runtime/src/index.int.test.ts` assert object `command.resume` payload passthrough across the web, transport, and Pi runtime layers.
 
 Remaining gaps:
