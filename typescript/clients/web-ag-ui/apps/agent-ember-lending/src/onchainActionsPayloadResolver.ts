@@ -155,6 +155,11 @@ type EmberLendingExecutionPublicClient = {
 type ResolveExecutionPublicClient = (
   network: SupportedExecutionNetwork,
 ) => EmberLendingExecutionPublicClient;
+type PreparedUnsignedTransactionSigningInputs = {
+  nonce: number;
+  feeEstimate: Awaited<ReturnType<EmberLendingExecutionPublicClient['estimateFeesPerGas']>>;
+  gas: bigint;
+};
 
 function trimTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
@@ -507,34 +512,12 @@ async function resolvePreparedUnsignedTransactionHex(input: {
     modes: [executions.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault],
     executions: [executions],
   });
-  let nonce: number;
-  let feeEstimate: Awaited<ReturnType<EmberLendingExecutionPublicClient['estimateFeesPerGas']>>;
-  let gas: bigint;
-
-  for (let attempt = 1; attempt <= SIGNING_RESOLUTION_ATTEMPTS; attempt += 1) {
-    try {
-      [nonce, feeEstimate, gas] = await Promise.all([
-        input.publicClient.getTransactionCount({
-          address: input.walletAddress,
-          blockTag: 'pending',
-        }),
-        input.publicClient.estimateFeesPerGas(),
-        input.publicClient.estimateGas({
-          account: input.walletAddress,
-          to: delegationManager,
-          value: 0n,
-          data: delegatedTransactionData,
-        }),
-      ]);
-      break;
-    } catch (error) {
-      if (attempt === SIGNING_RESOLUTION_ATTEMPTS) {
-        throw error;
-      }
-
-      await sleep(SIGNING_RESOLUTION_RETRY_DELAY_MS);
-    }
-  }
+  const { nonce, feeEstimate, gas } = await resolvePreparedUnsignedTransactionSigningInputs({
+    publicClient: input.publicClient,
+    walletAddress: input.walletAddress,
+    delegationManager,
+    delegatedTransactionData,
+  });
 
   if (
     typeof feeEstimate.maxFeePerGas === 'bigint' &&
@@ -566,6 +549,40 @@ async function resolvePreparedUnsignedTransactionHex(input: {
   }
 
   throw new Error('RPC fee estimation did not return a signable gas price or EIP-1559 fee pair.');
+}
+
+async function resolvePreparedUnsignedTransactionSigningInputs(input: {
+  publicClient: EmberLendingExecutionPublicClient;
+  walletAddress: `0x${string}`;
+  delegationManager: `0x${string}`;
+  delegatedTransactionData: `0x${string}`;
+}): Promise<PreparedUnsignedTransactionSigningInputs> {
+  for (let attempt = 1; attempt <= SIGNING_RESOLUTION_ATTEMPTS; attempt += 1) {
+    try {
+      const [nonce, feeEstimate, gas] = await Promise.all([
+        input.publicClient.getTransactionCount({
+          address: input.walletAddress,
+          blockTag: 'pending',
+        }),
+        input.publicClient.estimateFeesPerGas(),
+        input.publicClient.estimateGas({
+          account: input.walletAddress,
+          to: input.delegationManager,
+          value: 0n,
+          data: input.delegatedTransactionData,
+        }),
+      ]);
+      return { nonce, feeEstimate, gas };
+    } catch (error) {
+      if (attempt === SIGNING_RESOLUTION_ATTEMPTS) {
+        throw error;
+      }
+
+      await sleep(SIGNING_RESOLUTION_RETRY_DELAY_MS);
+    }
+  }
+
+  throw new Error('Failed to resolve delegated transaction signing inputs.');
 }
 
 function resolveAnchoredPayloadRef(input: {

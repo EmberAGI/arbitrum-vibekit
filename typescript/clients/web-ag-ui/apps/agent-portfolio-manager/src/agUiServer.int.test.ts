@@ -70,14 +70,10 @@ function parseEventStreamBody(body: string): AgUiEventEnvelope[] {
     .map((line) => JSON.parse(line.slice('data: '.length)) as AgUiEventEnvelope);
 }
 
-function findStateSnapshot(events: readonly AgUiEventEnvelope[]) {
-  return [...events].reverse().find((event) => event.type === 'STATE_SNAPSHOT');
-}
-
 function findStateDeltas(events: readonly AgUiEventEnvelope[]) {
   return events.filter(
     (event): event is AgUiEventEnvelope & { delta: JsonPatchOperation[] } =>
-      event.type === 'STATE_DELTA' && Array.isArray(event.delta),
+      event.type === 'STATE_DELTA' && Array.isArray(event['delta']),
   );
 }
 
@@ -507,7 +503,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
 
     expect(hireResponse.ok).toBe(true);
     expect(hireResponse.headers.get('content-type')).toContain('text/event-stream');
-    const hireEvents = parseEventStreamBody(await hireResponse.text());
+    expect(parseEventStreamBody(await hireResponse.text())).not.toHaveLength(0);
     const hireSnapshot = await readThreadSnapshot({
       baseUrl,
       agentId: PORTFOLIO_MANAGER_AGENT_ID,
@@ -560,7 +556,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
     });
 
     expect(setupResponse.ok).toBe(true);
-    const setupEvents = parseEventStreamBody(await setupResponse.text());
+    expect(parseEventStreamBody(await setupResponse.text())).not.toHaveLength(0);
     const setupSnapshot = await readThreadSnapshot({
       baseUrl,
       agentId: PORTFOLIO_MANAGER_AGENT_ID,
@@ -1173,7 +1169,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
     });
 
     expect(fireResponse.ok).toBe(true);
-    const fireEvents = parseEventStreamBody(await fireResponse.text());
+    expect(parseEventStreamBody(await fireResponse.text())).not.toHaveLength(0);
     const fireSnapshot = await readThreadSnapshot({
       baseUrl,
       agentId: PORTFOLIO_MANAGER_AGENT_ID,
@@ -1219,7 +1215,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
     });
 
     expect(rehireResponse.ok).toBe(true);
-    const rehireEvents = parseEventStreamBody(await rehireResponse.text());
+    expect(parseEventStreamBody(await rehireResponse.text())).not.toHaveLength(0);
     const rehireSnapshot = await readThreadSnapshot({
       baseUrl,
       agentId: PORTFOLIO_MANAGER_AGENT_ID,
