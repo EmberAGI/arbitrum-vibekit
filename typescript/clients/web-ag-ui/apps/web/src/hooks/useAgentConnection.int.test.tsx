@@ -435,7 +435,7 @@ describe('useAgentConnection integration', () => {
     }
   });
 
-  it('saveSettings mutates local state and dispatches sync through AG-UI run', async () => {
+  it('saveSettings mutates local state and dispatches refresh through AG-UI run', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
     await act(async () => {
@@ -465,7 +465,7 @@ describe('useAgentConnection integration', () => {
         threadId: 'thread-1',
         forwardedProps: {
           command: {
-            name: 'sync',
+            name: 'refresh',
             clientMutationId: expect.any(String),
           },
         },
@@ -473,7 +473,7 @@ describe('useAgentConnection integration', () => {
     );
   });
 
-  it('dispatches PI-runtime settings saves through forwardedProps.command.update instead of a JSON sync message', async () => {
+  it('dispatches PI-runtime settings saves through forwardedProps.command.update instead of a JSON refresh message', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;
 
@@ -688,7 +688,7 @@ describe('useAgentConnection integration', () => {
     );
   });
 
-  it('does not clear legacy sync pending from lastAppliedClientMutationId thread payloads', async () => {
+  it('does not clear legacy refresh pending from lastAppliedClientMutationId thread payloads', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;
 
@@ -716,7 +716,7 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.isSyncing).toBe(true);
 
     const forwardedCommand = readLastRunCommand();
-    expect(forwardedCommand?.name).toBe('sync');
+    expect(forwardedCommand?.name).toBe('refresh');
     expect(typeof forwardedCommand?.clientMutationId).toBe('string');
 
     subscriber?.onRunInitialized?.({
@@ -734,7 +734,7 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.isSyncing).toBe(true);
   });
 
-  it('clears PI-runtime sync pending when shared-state.control acknowledges the mutation', async () => {
+  it('clears PI-runtime refresh pending when shared-state.control acknowledges the mutation', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;
 
@@ -971,7 +971,7 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(latestValue?.settings.amount).toBe(100);
-    expect(latestValue?.uiError).toBe('Unable to sync settings until shared state is hydrated.');
+    expect(latestValue?.uiError).toBe('Unable to refresh settings until shared state is hydrated.');
     expect(mocks.runAgent).not.toHaveBeenCalled();
   });
 
@@ -1056,7 +1056,7 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(latestValue?.settings.amount).toBe(100);
-    expect(latestValue?.uiError).toBe('Unable to sync settings right now. Please retry.');
+    expect(latestValue?.uiError).toBe('Unable to refresh settings right now. Please retry.');
     expect(mocks.runAgent).not.toHaveBeenCalled();
   });
 
@@ -1575,7 +1575,7 @@ describe('useAgentConnection integration', () => {
         {
           id: 'assistant-1',
           role: 'assistant',
-          content: 'Scheduled sync every minute.',
+          content: 'Scheduled refresh every minute.',
         },
       ],
     });
@@ -1596,7 +1596,7 @@ describe('useAgentConnection integration', () => {
       expect.objectContaining({
         id: 'assistant-1',
         role: 'assistant',
-        content: 'Scheduled sync every minute.',
+        content: 'Scheduled refresh every minute.',
       }),
     ]);
 
@@ -1606,7 +1606,7 @@ describe('useAgentConnection integration', () => {
           id: 'task-1',
           taskStatus: {
             state: 'completed',
-            message: 'Automation sync executed successfully.',
+            message: 'Automation refresh executed successfully.',
           },
         },
       },
@@ -1699,7 +1699,7 @@ describe('useAgentConnection integration', () => {
     );
   });
 
-  it('surfaces busy UI state when saveSettings sync dispatch is rejected as busy', async () => {
+  it('surfaces busy UI state when saveSettings refresh dispatch is rejected as busy', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     vi.useFakeTimers();
     mocks.runAgent.mockRejectedValue(new Error('run already active'));
@@ -1722,7 +1722,7 @@ describe('useAgentConnection integration', () => {
       await vi.advanceTimersByTimeAsync(2_500);
       await flushEffects();
 
-      expect(latestValue?.uiError).toContain("busy while processing 'sync'");
+      expect(latestValue?.uiError).toContain("busy while processing 'refresh'");
     } finally {
       vi.useRealTimers();
     }
@@ -2171,7 +2171,7 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.isHired).toBe(false);
   });
 
-  it('treats thread payloads as loaded state for sync gating', async () => {
+  it('treats thread payloads as loaded state for refresh gating', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
     mocks.agent.state = {

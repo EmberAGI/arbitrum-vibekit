@@ -4,11 +4,6 @@ import type { ClmmState } from '../context.js';
 
 import { resolveCommandTarget, runCommandNode } from './runCommand.js';
 
-type PendingCommandEnvelope = {
-  command: 'hire' | 'fire' | 'cycle' | 'sync';
-  clientMutationId?: string;
-};
-
 const baseState = (): ClmmState => ({
   messages: [],
   copilotkit: { actions: [], context: [] },
@@ -76,10 +71,10 @@ const applyRunCommandUpdate = (state: ClmmState): ClmmState => {
 };
 
 describe('resolveCommandTarget', () => {
-  it('records lastAppliedClientMutationId when sync command includes one', () => {
+  it('records lastAppliedClientMutationId when refresh command includes one', () => {
     const state = baseState();
     state.private.pendingCommand = {
-      command: 'sync',
+      command: 'refresh',
       clientMutationId: 'mutation-1',
     };
 

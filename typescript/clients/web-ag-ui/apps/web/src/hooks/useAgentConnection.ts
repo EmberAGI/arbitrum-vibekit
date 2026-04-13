@@ -594,7 +594,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           ack.code === 'stale_revision'
             ? 'Shared settings changed elsewhere. Restored the last saved values; please retry.'
             : ack.code === 'missing_base_revision'
-              ? 'Unable to sync settings until shared state is hydrated.'
+              ? 'Unable to refresh settings until shared state is hydrated.'
               : 'Unable to apply those settings. Restored the last saved values.',
         );
       }
@@ -931,7 +931,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     setRunInFlight,
   ]);
 
-  // Initial sync when thread is established - runs once per agent instance
+  // Initial refresh when the thread is established - runs once per agent instance
   useEffect(() => {
     agentRef.current = agent ?? null;
   }, [agent]);
@@ -964,7 +964,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       },
       onCommandBusy: (command, error) => {
         const detail = error instanceof Error ? error.message : String(error);
-        if (command === 'sync') {
+        if (command === 'refresh') {
           setPendingSyncMutationByThread({
             threadId: threadIdRef.current,
             clientMutationId: null,
@@ -981,7 +981,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         });
       },
       onCommandError: (command, error) => {
-        if (command === 'sync') {
+        if (command === 'refresh') {
           setPendingSyncMutationByThread({
             threadId: threadIdRef.current,
             clientMutationId: null,
@@ -1331,9 +1331,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const runSync = useCallback(() => {
     setUiError(null);
-    const accepted = dispatchCommand('sync', { allowSyncCoalesce: true });
+    const accepted = dispatchCommand('refresh', { allowSyncCoalesce: true });
     if (!accepted) {
-      setUiError('Unable to queue sync right now. Please retry.');
+      setUiError('Unable to queue refresh right now. Please retry.');
     }
   }, [dispatchCommand]);
 
@@ -1573,7 +1573,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [effectiveActiveInterrupt?.type, emitConnectTrace, runAgentOnCurrentThread, runCommand],
   );
 
-  // Local settings mutation helper; caller decides whether to enqueue a sync run.
+  // Local settings mutation helper; caller decides whether to enqueue a refresh run.
   const updateSettings = useCallback(
     (updates: Partial<AgentSettings>) => {
       const currentAgent = agentRef.current;
@@ -1617,8 +1617,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
           setUiError(
             sharedStateRevision
-              ? 'Unable to sync settings right now. Please retry.'
-              : 'Unable to sync settings until shared state is hydrated.',
+              ? 'Unable to refresh settings right now. Please retry.'
+              : 'Unable to refresh settings until shared state is hydrated.',
           );
           return;
         }
@@ -1664,12 +1664,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
         if (!accepted) {
           rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
-          setUiError('Unable to sync settings right now. Please retry.');
+          setUiError('Unable to refresh settings right now. Please retry.');
         }
         return;
       }
 
-      const accepted = dispatchCommand('sync', {
+      const accepted = dispatchCommand('refresh', {
         allowSyncCoalesce: true,
         commandPayload: {
           clientMutationId,
@@ -1677,7 +1677,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       });
       if (!accepted) {
         rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
-        setUiError('Unable to sync settings right now. Please retry.');
+        setUiError('Unable to refresh settings right now. Please retry.');
       }
     },
     [

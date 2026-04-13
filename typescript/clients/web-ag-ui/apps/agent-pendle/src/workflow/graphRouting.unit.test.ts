@@ -67,9 +67,9 @@ const makeReadyState = (): ClmmState => {
 };
 
 describe('graphRouting', () => {
-  it('routes bootstrap to syncState for explicit sync command', () => {
+  it('routes bootstrap to syncState for explicit refresh command', () => {
     const state = createState();
-    state.private.activeCommand = 'sync';
+    state.private.activeCommand = 'refresh';
 
     expect(resolvePostBootstrap(state)).toBe('syncState');
   });

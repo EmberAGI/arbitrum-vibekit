@@ -37,9 +37,9 @@ describe('agents config', () => {
     expect(emberLending.protocols).toEqual(['Aave']);
     expect(clmm.surfaceTag).toBe('Workflow');
     expect(clmm.imperativeCommandTransport).toBe('forwarded-props');
-    expect(clmm.settingsSyncTransport).toBe('sync-command');
+    expect(clmm.settingsSyncTransport).toBe('refresh-command');
     expect(piExample.imperativeCommandTransport).toBe('forwarded-props');
-    expect(piExample.settingsSyncTransport).toBe('sync-command');
+    expect(piExample.settingsSyncTransport).toBe('refresh-command');
     expect(portfolioManager.imperativeCommandTransport).toBe('forwarded-props');
     expect(portfolioManager.settingsSyncTransport).toBe('shared-state-update');
     expect(emberLending.settingsSyncTransport).toBe('shared-state-update');

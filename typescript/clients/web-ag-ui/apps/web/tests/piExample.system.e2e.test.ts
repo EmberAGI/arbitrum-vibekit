@@ -62,7 +62,7 @@ describe('Pi example AG-UI system (web + runtime + control plane)', () => {
       {
         forwardedProps: {
           command: {
-            name: 'sync',
+            name: 'refresh',
             clientMutationId: crypto.randomUUID(),
           },
         },

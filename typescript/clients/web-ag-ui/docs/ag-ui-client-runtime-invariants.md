@@ -78,13 +78,13 @@ These rules complement the C4 target architecture and make runtime behavior dete
 10. Imperative command transport policy:
    - Conversational user input belongs in AG-UI messages.
    - Imperative client controls belong in `forwardedProps.command`.
-   - Current direct-command set includes named commands such as `hire`, `fire`, `cycle`, and `sync`, shared-state `update`, and interrupt resume.
+- Current direct-command set includes named commands such as `hire`, `fire`, `cycle`, and `refresh`, shared-state `update`, and interrupt resume.
    - Workflow runtimes may translate `forwardedProps.command` into internal `private.pendingCommand`/`activeCommand` state before graph execution, but that translation is runtime-internal and not a second public transport.
    - Interrupt `resume` payloads may be structured objects and should flow through the direct command lane unchanged until a text-only runtime boundary explicitly needs serialization.
    - Synthetic JSON user messages must not be used to carry imperative command intent.
 
 11. Confirmation semantics:
-   - “Saved/synced” UX should complete only when AG-UI state confirms application (e.g., task state, version, or acknowledged projection).
+- “Saved/refreshed” UX should complete only when AG-UI state confirms application (e.g., task state, version, or acknowledged projection).
    - Current handshake for Pi-backed shared-state writes: client sends `forwardedProps.command.update` with `clientMutationId` and `baseRevision`; runtime emits `shared-state.control` `update-ack`; UI clears pending state only when ids match.
    - Malformed Pi `command.update` requests that omit `clientMutationId` are boundary-invalid and must be rejected before `update-ack`; the acknowledgment lane is reserved for writes that already have a real correlation key.
    - Accepted Pi-backed writes must reconcile the visible state from the authoritative `STATE_DELTA` payload that arrives before the matching `shared-state.control` `update-ack`.
@@ -108,7 +108,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
   - other commands: explicit policy (reject-on-busy or constrained retry)
 - `AgentStatusPoller`:
   - dispatch one-shot poll `run` per non-active-detail agent on configured cadence
-  - use `forwardedProps.command.name = 'sync'` for poll runs across current registered agents
+- use `forwardedProps.command.name = 'refresh'` for poll runs across current registered agents
   - workflow runtimes translate that direct lane into internal pending-command state before entering `runCommand`
   - avoid persistent `connect` ownership in polling codepaths
 - central `AgentProjectionReducer`:

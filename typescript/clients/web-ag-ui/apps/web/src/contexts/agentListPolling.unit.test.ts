@@ -156,12 +156,12 @@ describe('agentListPolling', () => {
     expect(runtimeAgent.addMessage).not.toHaveBeenCalled();
     expect(runtimeAgent.runAgent).toHaveBeenCalledTimes(1);
     expect(runtimeAgent.runAgent).toHaveBeenCalledWith({
-      forwardedProps: {
-        command: {
-          name: 'sync',
-          source: 'agent-list-poll',
-        },
-      },
+          forwardedProps: {
+            command: {
+              name: 'refresh',
+              source: 'agent-list-poll',
+            },
+          },
     });
     expect(runtimeAgent.connectAgent).not.toHaveBeenCalled();
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
@@ -228,12 +228,12 @@ describe('agentListPolling', () => {
     expect(outcome.busy).toBe(false);
     expect(runtimeAgent.addMessage).not.toHaveBeenCalled();
     expect(runtimeAgent.runAgent).toHaveBeenCalledWith({
-      forwardedProps: {
-        command: {
-          name: 'sync',
-          source: 'agent-list-poll',
-        },
-      },
+          forwardedProps: {
+            command: {
+              name: 'refresh',
+              source: 'agent-list-poll',
+            },
+          },
     });
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
@@ -285,7 +285,7 @@ describe('agentListPolling', () => {
             snapshot: {
               settings: {},
               thread: {
-                command: 'sync',
+                command: 'refresh',
                 profile: {
                   chains: [],
                   protocols: [],
@@ -348,7 +348,7 @@ describe('agentListPolling', () => {
             snapshot: {
               settings: {},
               thread: {
-                command: 'sync',
+                command: 'refresh',
                 profile: {
                   chains: [],
                   protocols: [],

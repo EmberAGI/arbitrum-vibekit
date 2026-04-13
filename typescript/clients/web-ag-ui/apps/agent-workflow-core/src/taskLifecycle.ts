@@ -6,7 +6,7 @@ import type { CommandEnvelope } from './commandEnvelope.js';
 
 export type { CommandEnvelope } from './commandEnvelope.js';
 
-export const AGENT_COMMANDS = ['hire', 'fire', 'cycle', 'sync'] as const;
+export const AGENT_COMMANDS = ['hire', 'fire', 'cycle', 'refresh'] as const;
 export type AgentCommand = (typeof AGENT_COMMANDS)[number];
 
 const AGENT_COMMAND_SET = new Set<string>(AGENT_COMMANDS);

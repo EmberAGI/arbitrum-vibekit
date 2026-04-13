@@ -15,12 +15,12 @@ describe('parseCopilotRouteMetadata', () => {
           messages: [
             {
               role: 'user',
-              content: '{"command":"sync","source":"legacy-message"}',
+              content: '{"command":"refresh","source":"legacy-message"}',
             },
           ],
           forwardedProps: {
             command: {
-              name: 'sync',
+              name: 'refresh',
               source: 'agent-list-poll',
             },
           },
@@ -30,7 +30,7 @@ describe('parseCopilotRouteMetadata', () => {
       method: 'agent/run',
       agentId: 'agent-clmm',
       threadId: 'thread-1',
-      command: 'sync',
+      command: 'refresh',
       source: 'agent-list-poll',
       metadataMatched: true,
     });

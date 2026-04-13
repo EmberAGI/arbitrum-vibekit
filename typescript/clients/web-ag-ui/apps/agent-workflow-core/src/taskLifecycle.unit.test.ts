@@ -11,25 +11,25 @@ import {
 describe('taskLifecycle', () => {
   it('extracts supported commands from a normalized workflow command envelope', () => {
     const parsed = extractCommand({
-      command: 'sync',
+      command: 'refresh',
     });
-    expect(parsed).toBe('sync');
+    expect(parsed).toBe('refresh');
   });
 
   it('extracts command envelope metadata from a normalized workflow command envelope', () => {
     const parsed = extractCommandEnvelope({
-      command: 'sync',
+      command: 'refresh',
       clientMutationId: 'mutation-1',
     });
     expect(parsed).toEqual({
-      command: 'sync',
+      command: 'refresh',
       clientMutationId: 'mutation-1',
     });
   });
 
   it('returns null for unsupported or malformed normalized command envelopes', () => {
     expect(extractCommand({ command: 'oops' })).toBeNull();
-    expect(extractCommand('{"command":"sync"}')).toBeNull();
+    expect(extractCommand('{"command":"refresh"}')).toBeNull();
   });
 
   it('builds private pending-command state values for direct workflow command routing', () => {
@@ -53,16 +53,16 @@ describe('taskLifecycle', () => {
   it('builds runCommand state update payloads without legacy message input', () => {
     expect(
       buildRunCommandStateUpdate({
-        command: 'sync',
-        clientMutationId: 'sync-1',
+        command: 'refresh',
+        clientMutationId: 'refresh-1',
       }),
     ).toEqual({
       as_node: 'runCommand',
       values: {
         private: {
           pendingCommand: {
-            command: 'sync',
-            clientMutationId: 'sync-1',
+            command: 'refresh',
+            clientMutationId: 'refresh-1',
           },
         },
       },
@@ -70,6 +70,6 @@ describe('taskLifecycle', () => {
   });
 
   it('exports the canonical command vocabulary', () => {
-    expect(AGENT_COMMANDS).toEqual(['hire', 'fire', 'cycle', 'sync']);
+    expect(AGENT_COMMANDS).toEqual(['hire', 'fire', 'cycle', 'refresh']);
   });
 });

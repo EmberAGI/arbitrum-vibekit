@@ -65,7 +65,7 @@ function resolvePostBootstrap(
   | 'prepareOperator'
   | 'syncState' {
   const command = extractCommand(state.private.activeCommand);
-  const target = command === 'sync' ? 'syncState' : resolveNextOnboardingNode(state);
+  const target = command === 'refresh' ? 'syncState' : resolveNextOnboardingNode(state);
   logRouteDecision('bootstrap', target, {
     command,
     onboardingStatus: state.thread.onboardingFlow?.status,

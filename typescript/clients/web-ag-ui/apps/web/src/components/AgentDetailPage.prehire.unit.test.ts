@@ -253,8 +253,8 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
               data: {
                 type: 'automation-status',
                 status: 'scheduled',
-                command: 'sync',
-                detail: 'Scheduled sync every 5 minutes.',
+                command: 'refresh',
+                detail: 'Scheduled refresh every 5 minutes.',
               },
             },
           },
@@ -268,8 +268,8 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
                     kind: 'automation-status',
                     payload: {
                       status: 'scheduled',
-                      command: 'sync',
-                      detail: 'Scheduled sync every 5 minutes.',
+                      command: 'refresh',
+                      detail: 'Scheduled refresh every 5 minutes.',
                     },
                   },
                 },

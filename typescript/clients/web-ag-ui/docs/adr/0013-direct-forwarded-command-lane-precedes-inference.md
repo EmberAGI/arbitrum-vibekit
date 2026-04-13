@@ -13,7 +13,7 @@ Portfolio-manager onboarding exposed a separate contract gap on the command path
 - `agent-runtime` already supports a direct AG-UI control lane via `forwardedProps.command`
 - interrupt resumes already use that direct lane
 - some imperative web actions historically still traveled as JSON user messages and relied on the model to call `agent_runtime_domain_command`
-- workflow runtimes now translate named commands and sync/update intents from `forwardedProps.command` into internal `private.pendingCommand` state before graph execution
+- workflow runtimes now translate named commands and refresh/update intents from `forwardedProps.command` into internal `private.pendingCommand` state before graph execution
 
 That split is architecturally wrong for imperative controls. Commands such as `hire`, `fire`, `command.update`, and interrupt resume are not natural-language inputs that need interpretation. They are control-plane requests from the client to the runtime. Routing them through inference adds nondeterminism, couples business flow to prompt/tool behavior, and creates live regressions where the direct runtime path already exists and is better tested.
 
@@ -69,5 +69,5 @@ Preferred cross-runtime direction:
   - Workflow runtimes must own the extra translation layer from the public direct command lane to their internal pending-command state.
   - Existing tests and smoke helpers that asserted message-injection for imperative commands need to be updated.
 - Follow-on work:
-  - keep regression coverage that proves direct command forwarding is used for named commands, polling sync, and `command.update`
+  - keep regression coverage that proves direct command forwarding is used for named commands, polling refresh, and `command.update`
   - reject new runtime registrations that would reintroduce message-driven imperative command dispatch

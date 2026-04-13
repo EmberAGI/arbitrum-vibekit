@@ -726,7 +726,7 @@ function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
       const artifactData = asRecord(event.artifact?.data);
       if (artifactData?.type === 'automation-status') {
         const status = typeof artifactData.status === 'string' ? artifactData.status : 'unknown';
-        const command = typeof artifactData.command === 'string' ? artifactData.command : 'sync';
+        const command = typeof artifactData.command === 'string' ? artifactData.command : 'refresh';
         const detail = typeof artifactData.detail === 'string' ? artifactData.detail : 'Automation status updated.';
         return [
           {
@@ -801,7 +801,7 @@ function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
         }
 
         const status = typeof payload.status === 'string' ? payload.status : 'unknown';
-        const command = typeof payload.command === 'string' ? payload.command : 'sync';
+        const command = typeof payload.command === 'string' ? payload.command : 'refresh';
         const detail = typeof payload.detail === 'string' ? payload.detail : 'Automation status updated.';
         return [
           {
@@ -1484,7 +1484,7 @@ export function AgentDetailPage({
   ) : null;
 
   // Use the upgraded layout only for hired agents. Pre-hire must remain stable even
-  // while detail sync is still loading, otherwise the Hire CTA can disappear.
+  // while detail refresh is still loading, otherwise the Hire CTA can disappear.
   if (showPostHireLayout) {
     const tabs = (
       <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
@@ -1635,7 +1635,7 @@ export function AgentDetailPage({
               <ChevronRight className="w-4 h-4" />
               <span className="text-white">{agentName}</span>
             </div>
-            {/* Sync Button */}
+            {/* Refresh button */}
             <button
               onClick={onSync}
               disabled={isSyncing}

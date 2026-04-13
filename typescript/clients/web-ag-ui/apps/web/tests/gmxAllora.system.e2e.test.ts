@@ -87,7 +87,7 @@ describe('GMX Allora AG-UI system (web + runtime)', () => {
     expect(typeof sawConnectEvent).toBe('boolean');
   });
 
-  it('runs sync command via AG-UI run semantics only', async () => {
+  it('runs refresh command via AG-UI run semantics only', async () => {
     const webBaseUrl = requireEnv('WEB_E2E_BASE_URL');
     const agent = createRuntimeAgent({
       webBaseUrl,
@@ -116,7 +116,7 @@ describe('GMX Allora AG-UI system (web + runtime)', () => {
       {
         forwardedProps: {
           command: {
-            name: 'sync',
+            name: 'refresh',
             clientMutationId: crypto.randomUUID(),
           },
         },

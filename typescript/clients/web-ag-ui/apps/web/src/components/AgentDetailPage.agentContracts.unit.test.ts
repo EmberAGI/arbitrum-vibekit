@@ -118,7 +118,7 @@ function renderAgentDetail(params: {
 }
 
 describe('AgentDetailPage (cross-agent contracts)', () => {
-  it('keeps pre-hire layout visible even when detail sync has not loaded yet', () => {
+  it('keeps pre-hire layout visible even when detail refresh has not loaded yet', () => {
     const html = renderAgentDetail({
       agentId: 'agent-gmx-allora',
       agentName: 'GMX Allora Trader',

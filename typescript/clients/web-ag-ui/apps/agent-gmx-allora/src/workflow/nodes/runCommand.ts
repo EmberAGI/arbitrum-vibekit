@@ -37,7 +37,7 @@ export function runCommandNode(state: ClmmState): ClmmUpdate {
     lastAppliedCommandMutationId: state.private.lastAppliedCommandMutationId,
   });
   const lastAppliedClientMutationId =
-    parsedCommand === 'sync'
+    parsedCommand === 'refresh'
       ? commandEnvelope?.clientMutationId ?? state.thread.lastAppliedClientMutationId
       : state.thread.lastAppliedClientMutationId;
 

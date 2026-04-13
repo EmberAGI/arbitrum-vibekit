@@ -94,7 +94,7 @@ sequenceDiagram
 ## Notes
 
 - There is no model-visible `read_portfolio_state` tool.
-- There is no model-visible onboarding-context read or manual sync/bootstrap step.
+- There is no model-visible onboarding-context read or manual refresh/bootstrap step.
 - `request_transaction_execution` must surface admit-and-execute, blocked, and denied admission outcomes explicitly in status and artifacts.
 - Portfolio-manager and Ember Lending startup must both fail closed when Shared Ember does not echo back the confirmed durable service identity for the current OWS-resolved `agent_id`, `role`, and wallet.
 - The managed lending mandate supplied at bootstrap should carry `managed_onboarding` so Shared Ember can derive the initial lane and delegation inputs from structured mandate data.

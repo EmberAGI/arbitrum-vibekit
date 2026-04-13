@@ -31,7 +31,7 @@ export type AgentListPollOutcome = {
 
 const DEFAULT_RUN_COMPLETION_GRACE_MS = 1_000;
 const AGENT_LIST_POLL_SOURCE = 'agent-list-poll';
-const AGENT_LIST_POLL_COMMAND = 'sync';
+const AGENT_LIST_POLL_COMMAND = 'refresh';
 
 function describeError(error: unknown): string {
   if (error instanceof Error) return error.message;

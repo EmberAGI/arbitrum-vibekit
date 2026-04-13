@@ -4,7 +4,7 @@ import { createDefaultClmmThreadState, type ClmmState } from '../context.js';
 
 import { resolveCommandTarget, runCommandNode } from './runCommand.js';
 
-function createState(commandEnvelope: { command: 'hire' | 'fire' | 'cycle' | 'sync'; clientMutationId?: string }): ClmmState {
+function createState(commandEnvelope: { command: 'hire' | 'fire' | 'cycle' | 'refresh'; clientMutationId?: string }): ClmmState {
   return {
     messages: [],
     copilotkit: { actions: [], context: [] },
@@ -38,8 +38,8 @@ function applyRunCommandUpdate(state: ClmmState): ClmmState {
 }
 
 describe('runCommandNode', () => {
-  it('records sync mutation acknowledgements in thread state envelope', () => {
-    const state = createState({ command: 'sync', clientMutationId: 'cmid-1' });
+  it('records refresh mutation acknowledgements in thread state envelope', () => {
+    const state = createState({ command: 'refresh', clientMutationId: 'cmid-1' });
 
     const result = runCommandNode(state) as unknown as {
       thread?: { lastAppliedClientMutationId?: string };

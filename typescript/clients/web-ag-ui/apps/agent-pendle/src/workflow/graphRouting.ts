@@ -36,7 +36,7 @@ function resolveNextOnboardingNode(state: ClmmState): OnboardingNodeTarget {
 
 export function resolvePostBootstrap(state: ClmmState): OnboardingNodeTarget {
   const command = extractCommand(state.private.activeCommand);
-  if (command === 'sync') {
+  if (command === 'refresh') {
     return 'syncState';
   }
   return resolveNextOnboardingNode(state);

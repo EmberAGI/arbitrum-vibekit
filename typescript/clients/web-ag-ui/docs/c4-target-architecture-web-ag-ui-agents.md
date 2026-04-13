@@ -116,7 +116,7 @@ Explicit non-goal container:
   - Enforces a hard cap of active streams (target: `<= 1` long-lived detail stream).
 
 - `AgentStatusPoller` (refactored list polling):
-  - Every 15s, performs one-shot AG-UI `run` status sync for agents whose detail page is not currently active.
+  - Every 15s, performs one-shot AG-UI `run` status refresh for agents whose detail page is not currently active.
   - Poll runs are bounded lifecycle invocations (`run` start -> snapshot/events -> terminal), not persistent `connect` loops.
   - Poll intent stays on `forwardedProps.command` for route tracing and runtime observability instead of synthetic JSON user messages.
   - Uses protocol-compliant calls only; no direct thread endpoints.
@@ -363,7 +363,7 @@ sequenceDiagram
 
 ### Slice 3: Sidebar projection refactor
 
-- Replace `AgentListContext` direct sync with bounded AG-UI one-shot `run` status polling.
+- Replace `AgentListContext` direct status refresh with bounded AG-UI one-shot `run` status polling.
 - Share reducer/state model between sidebar and detail.
 
 ### Slice 4: Metrics UI decomposition
@@ -387,13 +387,13 @@ sequenceDiagram
   `@ag-ui/langgraph@0.0.25-alpha.0` do not expose `connect` on `LangGraphAgent` in `dist/index.d.ts`.
 - Exit criteria for this exception:
   - Upstream package exposes `connect` on `LangGraphAgent` (types and runtime),
-  - Behavior parity is validated against detail-page open/leave and sidebar sync scenarios,
+  - Behavior parity is validated against detail-page open/leave and sidebar refresh scenarios,
   - Local patch can be removed without regressing stream lifecycle correctness.
 
 ## 10. Success criteria for target architecture
 
 - Web has zero direct LangGraph thread API calls.
-- AG-UI events are the only source for UI state sync.
+- AG-UI events are the only source for UI state refresh.
 - Hidden persistent streams are eliminated.
 - Agent apps share one state-machine contract and lifecycle rules.
 - Sidebar and detail are consistent under load and navigation churn.

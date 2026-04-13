@@ -32,7 +32,7 @@ export function runCommandNode(state: ClmmState): ClmmUpdate {
     lastAppliedCommandMutationId: state.private.lastAppliedCommandMutationId,
   });
   const lastAppliedClientMutationId =
-    parsedCommand === 'sync'
+    parsedCommand === 'refresh'
       ? commandEnvelope?.clientMutationId ?? state.thread.lastAppliedClientMutationId
       : state.thread.lastAppliedClientMutationId;
 
@@ -49,7 +49,7 @@ export function runCommandNode(state: ClmmState): ClmmUpdate {
   };
 }
 
-export function resolveCommandTarget({ messages, private: priv, thread }: ClmmState): CommandTarget {
+export function resolveCommandTarget({ private: priv, thread }: ClmmState): CommandTarget {
   if (priv.suppressDuplicateCommand === true) {
     return '__end__';
   }

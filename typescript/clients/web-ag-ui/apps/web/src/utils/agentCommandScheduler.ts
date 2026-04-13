@@ -91,7 +91,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
     }
 
     if (params.getRunInFlight()) {
-      if (command === 'sync' && options?.allowSyncCoalesce) {
+      if (command === 'refresh' && options?.allowSyncCoalesce) {
         pendingSyncIntent = true;
         pendingSyncCommandPayload = options.commandPayload;
         refreshSyncing();
@@ -106,7 +106,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
 
     params.setRunInFlight(true);
 
-    if (command === 'sync') {
+    if (command === 'refresh') {
       syncRunInFlight = true;
       activeSyncCommandPayload = options?.commandPayload;
       pendingSyncIntent = false;
@@ -123,7 +123,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
     void Promise.resolve(run(agent)).catch((error) => {
       params.setRunInFlight(false);
 
-      if (command === 'sync') {
+      if (command === 'refresh') {
         syncRunInFlight = false;
         activeSyncCommandPayload = undefined;
 
@@ -208,7 +208,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
   const replayPendingSync = () => {
     if (!pendingSyncIntent) return;
     if (params.getRunInFlight()) return;
-    void dispatch('sync', {
+    void dispatch('refresh', {
       allowSyncCoalesce: true,
       isReplayAttempt: true,
       commandPayload: pendingSyncCommandPayload,

@@ -12,7 +12,7 @@ export function resolvePostBootstrap(
   | 'prepareOperator'
   | 'syncState' {
   const command = extractCommand(state.private.activeCommand);
-  if (command === 'sync') {
+  if (command === 'refresh') {
     return 'syncState';
   }
   return resolveNextOnboardingNode(state);

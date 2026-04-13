@@ -81,7 +81,7 @@ sequenceDiagram
 
 ## Notes
 
-- The model never sees `read_portfolio_state` or a refresh/sync bootstrap tool.
+- The model never sees `read_portfolio_state` or a refresh/bootstrap tool.
 - Blocked execution responses preserve the already-hydrated mandate and wallet context even when the blocked portfolio payload is sparse.
 - Nested raw `handoff` payloads, planner-owned `payload_builder_output`, and reasoning-trace fields are not forwarded on planning calls.
 - Escalation calls still forward only the bounded escalation handoff fields plus the blocked result.
