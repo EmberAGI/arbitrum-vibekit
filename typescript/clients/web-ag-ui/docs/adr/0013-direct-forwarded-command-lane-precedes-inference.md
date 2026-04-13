@@ -25,6 +25,7 @@ The rules are:
 - when an AG-UI `run` request includes `forwardedProps.command`, `agent-runtime` must evaluate that command before any inference or model/tool routing
 - `forwardedProps.command` is an out-of-band control-plane input, not conversational message content
 - imperative client actions, including named commands, `command.update`, and interrupt resume, must use `forwardedProps.command` rather than synthesizing JSON chat messages
+- observability provenance is not part of the public command contract and should travel in sibling forwarded-props metadata (for example `forwardedProps.source`) rather than inside `forwardedProps.command`
 - workflow runtimes that execute through LangGraph must translate direct command intent into internal `private.pendingCommand` state before graph execution rather than reconstructing that intent from transcript messages
 - interrupt `resume` payloads may be structured objects and should traverse the direct command lane unchanged; only text-only runtime fallbacks may serialize them later
 - `command.update` is the canonical shared-state mutation lane: the client writes revision-guarded JSON Patch against the writable public-state slice rooted at `/shared`, and the runtime answers with authoritative `shared-state.control` acknowledgments plus any resulting `/shared` and `/projected` state deltas

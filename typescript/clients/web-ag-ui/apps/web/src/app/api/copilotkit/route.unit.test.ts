@@ -19,9 +19,9 @@ describe('parseCopilotRouteMetadata', () => {
             },
           ],
           forwardedProps: {
+            source: 'agent-list-poll',
             command: {
               name: 'refresh',
-              source: 'agent-list-poll',
             },
           },
         },

@@ -15,9 +15,9 @@ export type AgentListPollingRuntimeAgent = {
   subscribe: (subscriber: AgentSubscriber) => RuntimeSubscription;
   runAgent: (params?: {
     forwardedProps?: {
+      source?: string;
       command?: {
         name?: string;
-        source?: string;
       };
     };
   }) => Promise<unknown>;
@@ -176,13 +176,13 @@ export async function pollAgentListUpdateViaAgUi(params: {
 
   const runPromise = Promise.resolve(
     runtimeAgent.runAgent({
-        forwardedProps: {
-          command: {
-            name: AGENT_LIST_POLL_COMMAND,
-            source: AGENT_LIST_POLL_SOURCE,
-          },
+      forwardedProps: {
+        source: AGENT_LIST_POLL_SOURCE,
+        command: {
+          name: AGENT_LIST_POLL_COMMAND,
         },
-      }),
+      },
+    }),
   )
     .then(() => {
       runCompleted = true;

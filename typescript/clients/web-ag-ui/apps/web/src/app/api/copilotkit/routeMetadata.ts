@@ -84,7 +84,7 @@ function readCommandMetadata(payloadBody: Record<string, unknown>): {
 
   return {
     command: namedCommand ?? (update ? 'update' : undefined),
-    source: readString(command.source),
+    source: readString(forwardedProps.source),
     clientMutationId: update ? readString(update.clientMutationId) : readString(command.clientMutationId),
   };
 }

@@ -79,6 +79,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
    - Conversational user input belongs in AG-UI messages.
    - Imperative client controls belong in `forwardedProps.command`.
 - Current direct-command set includes named commands such as `hire`, `fire`, `cycle`, and `refresh`, shared-state `update`, and interrupt resume.
+   - Observability provenance belongs in sibling forwarded-props metadata such as `forwardedProps.source`, not inside the public command envelope.
    - Workflow runtimes may translate `forwardedProps.command` into internal `private.pendingCommand`/`activeCommand` state before graph execution, but that translation is runtime-internal and not a second public transport.
    - Interrupt `resume` payloads may be structured objects and should flow through the direct command lane unchanged until a text-only runtime boundary explicitly needs serialization.
    - Synthetic JSON user messages must not be used to carry imperative command intent.
@@ -109,6 +110,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
 - `AgentStatusPoller`:
   - dispatch one-shot poll `run` per non-active-detail agent on configured cadence
 - use `forwardedProps.command.name = 'refresh'` for poll runs across current registered agents
+  - if poll provenance needs tracing, carry it in sibling observability metadata such as `forwardedProps.source = 'agent-list-poll'`
   - workflow runtimes translate that direct lane into internal pending-command state before entering `runCommand`
   - avoid persistent `connect` ownership in polling codepaths
 - central `AgentProjectionReducer`:

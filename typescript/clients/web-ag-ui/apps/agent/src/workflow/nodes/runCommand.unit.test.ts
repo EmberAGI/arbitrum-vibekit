@@ -1,11 +1,11 @@
+import { type CommandEnvelope } from 'agent-workflow-core';
 import { describe, expect, it } from 'vitest';
 
-import { type CommandEnvelope } from 'agent-workflow-core';
 import type { ClmmState } from '../context.js';
 
 import { resolveCommandTarget, runCommandNode } from './runCommand.js';
 
-function createState(commandEnvelope: CommandEnvelope<'hire' | 'fire' | 'cycle' | 'sync'> | null): ClmmState {
+function createState(commandEnvelope: CommandEnvelope<'hire' | 'fire' | 'cycle' | 'refresh'> | null): ClmmState {
   return {
     messages: [],
     copilotkit: { actions: [], context: [] },
@@ -47,8 +47,8 @@ function applyRunCommandUpdate(state: ClmmState): ClmmState {
 }
 
 describe('runCommandNode (starter agent)', () => {
-  it('records sync mutation acknowledgements in thread state envelope', () => {
-    const state = createState({ command: 'sync', clientMutationId: 'cmid-1' });
+  it('records refresh mutation acknowledgements in thread state envelope', () => {
+    const state = createState({ command: 'refresh', clientMutationId: 'cmid-1' });
 
     const result = runCommandNode(state) as unknown as {
       thread?: { lastAppliedClientMutationId?: string };
@@ -99,7 +99,7 @@ describe('runCommandNode (starter agent)', () => {
     expect(resolveCommandTarget(updated)).toBe('bootstrap');
   });
 
-  it('suppresses replayed non-sync command envelopes with the same clientMutationId', () => {
+  it('suppresses replayed non-refresh command envelopes with the same clientMutationId', () => {
     const state = createState({ command: 'cycle', clientMutationId: 'cycle-1' });
     state.thread.poolArtifact = {
       artifactId: 'camelot-pools',

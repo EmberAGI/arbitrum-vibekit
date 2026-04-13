@@ -157,9 +157,9 @@ describe('agentListPolling', () => {
     expect(runtimeAgent.runAgent).toHaveBeenCalledTimes(1);
     expect(runtimeAgent.runAgent).toHaveBeenCalledWith({
           forwardedProps: {
+            source: 'agent-list-poll',
             command: {
               name: 'refresh',
-              source: 'agent-list-poll',
             },
           },
     });
@@ -229,9 +229,9 @@ describe('agentListPolling', () => {
     expect(runtimeAgent.addMessage).not.toHaveBeenCalled();
     expect(runtimeAgent.runAgent).toHaveBeenCalledWith({
           forwardedProps: {
+            source: 'agent-list-poll',
             command: {
               name: 'refresh',
-              source: 'agent-list-poll',
             },
           },
     });
