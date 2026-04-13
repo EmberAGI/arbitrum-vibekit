@@ -107,7 +107,9 @@ These rules complement the C4 target architecture and make runtime behavior dete
   - other commands: explicit policy (reject-on-busy or constrained retry)
 - `AgentStatusPoller`:
   - dispatch one-shot poll `run` per non-active-detail agent on configured cadence
-  - express poll intent on the real command lane via `forwardedProps.command.name = 'sync'` so observability does not need to parse synthetic user-message JSON
+  - use the per-agent imperative command transport contract for poll runs:
+    - Pi-backed agents use `forwardedProps.command.name = 'sync'`
+    - LangGraph workflow agents remain message-driven for `sync` until an equivalent direct lane exists there
   - avoid persistent `connect` ownership in polling codepaths
 - central `AgentProjectionReducer`:
   - dedupe by run/event identity

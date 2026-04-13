@@ -1,4 +1,5 @@
 import type { AgentSubscriber } from '@ag-ui/client';
+import { getAgentConfig } from '../config/agents';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { isBusyRunError } from '../utils/runConcurrency';
 import {
@@ -37,6 +38,8 @@ export type AgentListPollOutcome = {
 };
 
 const DEFAULT_RUN_COMPLETION_GRACE_MS = 1_000;
+const AGENT_LIST_POLL_SOURCE = 'agent-list-poll';
+const AGENT_LIST_POLL_COMMAND = 'sync';
 
 function describeError(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -47,6 +50,10 @@ type PollRuntimeAgentFactory = (params: {
   agentId: string;
   threadId: string;
 }) => AgentListPollingRuntimeAgent;
+
+function resolveAgentListPollTransport(agentId: string): 'message' | 'forwarded-props' {
+  return getAgentConfig(agentId).imperativeCommandTransport ?? 'message';
+}
 
 export function resolveAgentListPollIntervalMs(rawValue: string | undefined): number {
   const parsed = Number(rawValue ?? 15_000);
@@ -180,14 +187,29 @@ export async function pollAgentListUpdateViaAgUi(params: {
   });
 
   const runPromise = Promise.resolve(
-    runtimeAgent.runAgent({
-      forwardedProps: {
-        command: {
-          name: 'sync',
-          source: 'agent-list-poll',
+    (() => {
+      const commandTransport = resolveAgentListPollTransport(params.agentId);
+      if (commandTransport === 'message') {
+        runtimeAgent.addMessage({
+          id: `agent-list-poll:${params.threadId}:${Date.now()}`,
+          role: 'user',
+          content: JSON.stringify({
+            command: AGENT_LIST_POLL_COMMAND,
+            source: AGENT_LIST_POLL_SOURCE,
+          }),
+        });
+        return runtimeAgent.runAgent();
+      }
+
+      return runtimeAgent.runAgent({
+        forwardedProps: {
+          command: {
+            name: AGENT_LIST_POLL_COMMAND,
+            source: AGENT_LIST_POLL_SOURCE,
+          },
         },
-      },
-    }),
+      });
+    })(),
   )
     .then(() => {
       runCompleted = true;
@@ -197,7 +219,7 @@ export async function pollAgentListUpdateViaAgUi(params: {
       runCompleted = true;
       pollBusy = isBusyRunError(error);
       console.warn('[agent-list-poll] Poll run rejected', {
-        source: 'agent-list-poll',
+        source: AGENT_LIST_POLL_SOURCE,
         agentId: params.agentId,
         threadId: params.threadId,
         busy: pollBusy,
@@ -215,7 +237,7 @@ export async function pollAgentListUpdateViaAgUi(params: {
   if (!runTerminated) {
     pollBusy = true;
     console.warn('[agent-list-poll] Poll run did not terminate before completion timeout', {
-      source: 'agent-list-poll',
+      source: AGENT_LIST_POLL_SOURCE,
       agentId: params.agentId,
       threadId: params.threadId,
       runCompletionTimeoutMs,

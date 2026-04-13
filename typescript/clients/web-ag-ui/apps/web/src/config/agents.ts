@@ -38,6 +38,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     avatar: '🏰',
     avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
     surfaceTag: 'Workflow',
+    imperativeCommandTransport: 'message',
     chains: ['Arbitrum'],
     protocols: ['Camelot'],
     tokens: ['USDC', 'WETH', 'WBTC'],
@@ -54,6 +55,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     avatar: '🪙',
     avatarBg: 'linear-gradient(135deg, #f97316 0%, #facc15 100%)',
     surfaceTag: 'Workflow',
+    imperativeCommandTransport: 'message',
     chains: ['Arbitrum'],
     protocols: ['Pendle'],
     tokens: [
@@ -85,6 +87,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     avatar: '📈',
     avatarBg: 'linear-gradient(135deg, #10b981 0%, #22c55e 100%)',
     surfaceTag: 'Workflow',
+    imperativeCommandTransport: 'message',
     chains: ['Arbitrum'],
     protocols: ['GMX', 'Allora'],
     tokens: ['USDC', 'WETH'],

@@ -91,7 +91,7 @@ describe('agentListPolling', () => {
     expect(resolveAgentListPollBusyCooldownMs('60000')).toBe(60_000);
   });
 
-  it('projects state snapshot into list update and detaches the short-lived stream', async () => {
+  it('preserves workflow-agent poll compatibility through message transport during the migration window', async () => {
     const unsubscribe = vi.fn();
     const detachActiveRun = vi.fn().mockResolvedValue(undefined);
 
@@ -153,8 +153,83 @@ describe('agentListPolling', () => {
       taskMessage: 'Cycling',
     });
     expect(outcome.busy).toBe(false);
-    expect(runtimeAgent.addMessage).not.toHaveBeenCalled();
+    expect(runtimeAgent.addMessage).toHaveBeenCalledTimes(1);
+    const syncMessage = runtimeAgent.addMessage.mock.calls[0]?.[0] as { content?: string; role?: string } | undefined;
+    const parsedSyncMessage =
+      typeof syncMessage?.content === 'string'
+        ? (JSON.parse(syncMessage.content) as { command?: string; source?: string })
+        : null;
+    expect(syncMessage?.role).toBe('user');
+    expect(parsedSyncMessage).toEqual({
+      command: 'sync',
+      source: 'agent-list-poll',
+    });
     expect(runtimeAgent.runAgent).toHaveBeenCalledTimes(1);
+    expect(runtimeAgent.runAgent).toHaveBeenCalledWith();
+    expect(runtimeAgent.connectAgent).not.toHaveBeenCalled();
+    expect(detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the canonical direct command lane for Pi-backed poll runs', async () => {
+    const unsubscribe = vi.fn();
+    const detachActiveRun = vi.fn().mockResolvedValue(undefined);
+    let stateSubscriber: AgentSubscriber | null = null;
+
+    const runtimeAgent = {
+      subscribe: vi.fn((subscriber: AgentSubscriber) => {
+        stateSubscriber = subscriber;
+        return { unsubscribe };
+      }),
+      addMessage: vi.fn(),
+      runAgent: vi.fn(async (_params?: { forwardedProps?: { command?: Record<string, unknown> } }) => {
+        stateSubscriber?.onStateSnapshotEvent?.({
+          event: {
+            type: 'STATE_SNAPSHOT',
+            snapshot: {
+              settings: {},
+              thread: {
+                command: 'hire',
+                profile: {
+                  chains: ['Arbitrum'],
+                  protocols: ['Pi Runtime'],
+                  tokens: ['USDC'],
+                  pools: [],
+                  allowedPools: [],
+                },
+                activity: { telemetry: [], events: [] },
+                metrics: { iteration: 0, cyclesSinceRebalance: 0, staleCycles: 0 },
+                task: {
+                  id: 'task-pi',
+                  taskStatus: {
+                    state: 'working',
+                    message: { content: 'Polling live runtime state' },
+                  },
+                },
+                transactionHistory: [],
+              },
+            } as ThreadSnapshot,
+          },
+        } as never);
+      }),
+      detachActiveRun,
+    };
+
+    const outcome = await pollAgentListUpdateViaAgUi({
+      agentId: 'agent-portfolio-manager',
+      threadId: 'thread-pi',
+      timeoutMs: 250,
+      createRuntimeAgent: () => runtimeAgent,
+    });
+
+    expect(outcome.update).toMatchObject({
+      synced: true,
+      taskId: 'task-pi',
+      taskState: 'working',
+      taskMessage: 'Polling live runtime state',
+    });
+    expect(outcome.busy).toBe(false);
+    expect(runtimeAgent.addMessage).not.toHaveBeenCalled();
     expect(runtimeAgent.runAgent).toHaveBeenCalledWith({
       forwardedProps: {
         command: {
@@ -163,7 +238,6 @@ describe('agentListPolling', () => {
         },
       },
     });
-    expect(runtimeAgent.connectAgent).not.toHaveBeenCalled();
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
