@@ -22,6 +22,7 @@ import {
   type PiRuntimeGatewayActivityEvent,
   type PiRuntimeGatewayArtifact,
   type PiRuntimeGatewayInspectionState,
+  type PiRuntimeGatewayRunRequest,
   type PiRuntimeGatewayRuntime,
   type PiRuntimeGatewaySession,
 } from '../lib/pi/dist/index.js';
@@ -44,6 +45,9 @@ type AgentRuntimeGetApiKey = NonNullable<RuntimeAgentOptions['getApiKey']>;
 type AgentRuntimeInitialState = NonNullable<RuntimeAgentOptions['initialState']>;
 type AgentRuntimeConvertToLlm = NonNullable<RuntimeAgentOptions['convertToLlm']>;
 type AgentRuntimeTool = RuntimeAgentTool;
+type AgentRuntimeInternalForwardedCommand = NonNullable<
+  NonNullable<PiRuntimeGatewayRunRequest['forwardedProps']>['command']
+>;
 type AgentRuntimeConnectEvent = ReturnType<typeof buildPiRuntimeGatewayConnectEventsInternal>[number];
 type AgentRuntimeAttachedEventSource = readonly AgentRuntimeConnectEvent[] | AsyncIterable<AgentRuntimeConnectEvent>;
 type AgentRuntimeAttachedThreadListener = (event: AgentRuntimeConnectEvent) => void;
@@ -140,6 +144,11 @@ export type AgentRuntimeDomainContext<TState = unknown> = {
   state?: TState;
 };
 
+export type AgentRuntimeSharedStateProjectionContext<TState = unknown> = AgentRuntimeDomainContext<TState> & {
+  sharedState: Record<string, unknown>;
+  currentProjection?: Record<string, unknown>;
+};
+
 export type AgentRuntimeDomainConfig<TState = unknown> = {
   lifecycle: AgentRuntimeDomainLifecycle;
   systemContext?: (
@@ -149,6 +158,9 @@ export type AgentRuntimeDomainConfig<TState = unknown> = {
     | readonly string[]
     | undefined
     | Promise<string | readonly string[] | undefined>;
+  projectSharedState?: (
+    params: AgentRuntimeSharedStateProjectionContext<TState>,
+  ) => Record<string, unknown> | undefined;
   handleOperation?: (params: AgentRuntimeDomainContext<TState> & {
     operation: AgentRuntimeDomainOperation;
   }) => AgentRuntimeDomainOperationResult<TState> | Promise<AgentRuntimeDomainOperationResult<TState>>;
@@ -164,10 +176,21 @@ export interface AgentRuntimeAgentOptions {
   convertToLlm?: AgentRuntimeConvertToLlm;
 }
 
+export type AgentRuntimeSharedStatePatchOperation = {
+  op: 'add' | 'replace' | 'remove';
+  path: string;
+  value?: unknown;
+};
+
 export type AgentRuntimeForwardedCommand = {
   name?: string;
   input?: unknown;
-  resume?: string;
+  resume?: unknown;
+  update?: {
+    clientMutationId: string;
+    baseRevision?: string;
+    patch: ReadonlyArray<AgentRuntimeSharedStatePatchOperation>;
+  };
 };
 
 type AgentRuntimeDomainCommandToolArgs = {
@@ -723,7 +746,7 @@ function validateDomainLifecycle(lifecycle: AgentRuntimeDomainLifecycle): void {
 }
 
 function readDirectCommandOperation(
-  command: AgentRuntimeForwardedCommand | undefined,
+  command: Pick<AgentRuntimeInternalForwardedCommand, 'name' | 'input'> | undefined,
 ): AgentRuntimeDomainOperation | null {
   if (!command || typeof command.name !== 'string') {
     return null;
@@ -742,12 +765,13 @@ function readDirectCommandOperation(
 }
 
 function readInterruptOperation<TState>(params: {
-  command: AgentRuntimeForwardedCommand | undefined;
+  command: Pick<AgentRuntimeInternalForwardedCommand, 'resume'> | undefined;
   session: PiRuntimeGatewaySession;
   domain: AgentRuntimeDomainConfig<TState> | undefined;
 }): AgentRuntimeDomainOperation | null {
+  const hasResume = Object.prototype.hasOwnProperty.call(params.command ?? {}, 'resume');
   const resumePayload = params.command?.resume;
-  if (typeof resumePayload !== 'string' || !params.domain?.handleOperation) {
+  if (!hasResume || !params.domain?.handleOperation) {
     return null;
   }
 
@@ -774,7 +798,10 @@ function readInterruptOperation<TState>(params: {
   return {
     source: 'interrupt',
     name: interruptType,
-    input: parseDomainCommandToolInput(resumePayload),
+    input:
+      typeof resumePayload === 'string'
+        ? parseDomainCommandToolInput(resumePayload)
+        : resumePayload,
   };
 }
 
@@ -906,6 +933,36 @@ function mergeDomainProjection(
 
   const merged = mergeDomainProjectionValue(currentProjection ?? {}, updateProjection);
   return isRecord(merged) ? merged : undefined;
+}
+
+function reconcileSharedStateProjection<TState>(params: {
+  threadId: string;
+  session: PiRuntimeGatewaySession;
+  domain: AgentRuntimeDomainConfig<TState> | undefined;
+  domainState: TState | undefined;
+}): PiRuntimeGatewaySession {
+  const projectSharedState = params.domain?.projectSharedState;
+  if (!projectSharedState) {
+    return params.session;
+  }
+
+  const currentProjection = isRecord(params.session.projectedState)
+    ? params.session.projectedState
+    : undefined;
+  const projectionUpdate = projectSharedState({
+    threadId: params.threadId,
+    state: params.domainState,
+    sharedState: isRecord(params.session.sharedState) ? params.session.sharedState : {},
+    currentProjection,
+  });
+  if (!projectionUpdate) {
+    return params.session;
+  }
+
+  return {
+    ...params.session,
+    projectedState: mergeDomainProjection(currentProjection, projectionUpdate),
+  };
 }
 
 function mergeThreadPatch(
@@ -1065,8 +1122,8 @@ function applyDomainOperationResult(params: {
   let nextA2Ui = params.session.a2ui;
   let shouldWriteA2Ui = false;
   const nextDomainProjection = hasDomainProjectionUpdate
-    ? mergeDomainProjection(params.session.domainProjection, params.result.domainProjectionUpdate)
-    : params.session.domainProjection;
+    ? mergeDomainProjection(params.session.projectedState, params.result.domainProjectionUpdate)
+    : params.session.projectedState;
 
   for (const artifactOutput of domainOutputs.artifacts ?? []) {
     const artifact = buildDomainArtifact({
@@ -1144,7 +1201,7 @@ function applyDomainOperationResult(params: {
     ...(nextArtifacts ? { artifacts: nextArtifacts } : {}),
     ...(nextActivityEvents.length > 0 ? { activityEvents: nextActivityEvents } : {}),
     ...(shouldWriteA2Ui ? { a2ui: nextA2Ui } : {}),
-    ...(hasDomainProjectionUpdate ? { domainProjection: nextDomainProjection } : {}),
+    ...(hasDomainProjectionUpdate ? { projectedState: nextDomainProjection } : {}),
     ...(lifecycleThreadPatch
       ? {
           threadPatch: mergeThreadPatch(params.session.threadPatch, lifecycleThreadPatch),
@@ -1398,6 +1455,12 @@ function cloneAttachedEvents(events: readonly AgentRuntimeConnectEvent[]): Agent
   return clonedEvents;
 }
 
+function isAttachedEventArray(
+  source: AgentRuntimeAttachedEventSource,
+): source is readonly AgentRuntimeConnectEvent[] {
+  return Array.isArray(source);
+}
+
 function injectAttachedEventsAfterFirstEvent(
   source: AgentRuntimeAttachedEventSource,
   injectedEvents: readonly AgentRuntimeConnectEvent[],
@@ -1406,16 +1469,14 @@ function injectAttachedEventsAfterFirstEvent(
     return source;
   }
 
-  if (Array.isArray(source)) {
+  if (isAttachedEventArray(source)) {
     if (source.length === 0) {
       return cloneAttachedEvents(injectedEvents);
     }
 
-    return [
-      source[0],
-      ...injectedEvents,
-      ...source.slice(1),
-    ];
+    const mergedEvents = cloneAttachedEvents(source);
+    mergedEvents.splice(1, 0, ...cloneAttachedEvents(injectedEvents));
+    return mergedEvents;
   }
 
   return {
@@ -1583,6 +1644,36 @@ export async function createAgentRuntime<TState = unknown>(
   const initialLifecyclePhase = domain?.lifecycle.initialPhase;
   const sessionStore = createSessionStore(initialLifecyclePhase);
   const domainStateStore = new Map<string, TState>();
+  const reconcileSession = (
+    threadId: string,
+    session: PiRuntimeGatewaySession,
+  ): PiRuntimeGatewaySession =>
+    reconcileSharedStateProjection({
+      threadId,
+      session,
+      domain,
+      domainState: domainStateStore.get(threadId),
+    });
+  const getSession = (threadId: string): PiRuntimeGatewaySession => {
+    const session = sessionStore.getSession(threadId);
+    const reconciled = reconcileSession(threadId, session);
+    if (reconciled !== session) {
+      sessionStore.setSession(threadId, reconciled);
+    }
+    return reconciled;
+  };
+  const setSession = (threadId: string, session: PiRuntimeGatewaySession): PiRuntimeGatewaySession => {
+    const reconciled = reconcileSession(threadId, session);
+    sessionStore.setSession(threadId, reconciled);
+    return reconciled;
+  };
+  const updateSession = (
+    threadId: string,
+    update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
+  ): PiRuntimeGatewaySession => {
+    const nextSession = update(getSession(threadId));
+    return setSession(threadId, nextSession);
+  };
   const automationRegistry = createAutomationRegistry();
   const attachedRuns = createAttachedRunRegistry();
   const executionContext = new AsyncLocalStorage<AgentRuntimeExecutionContext>();
@@ -1593,7 +1684,7 @@ export async function createAgentRuntime<TState = unknown>(
   };
   const getActiveSessionContext = (): PiRuntimeGatewaySession | undefined => {
     const threadId = getActiveThreadId();
-    return threadId ? sessionStore.getSession(threadId) : undefined;
+    return threadId ? getSession(threadId) : undefined;
   };
   const loadInspectionState = async (): Promise<PiRuntimeGatewayInspectionState> => {
     return await postgres.loadInspectionState({
@@ -1626,7 +1717,7 @@ export async function createAgentRuntime<TState = unknown>(
   };
   const persistSessionSnapshot = async (
     threadId: string,
-    session: PiRuntimeGatewaySession = sessionStore.getSession(threadId),
+    session: PiRuntimeGatewaySession = getSession(threadId),
   ): Promise<void> => {
     const ids = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
     const persistedExecutionId = resolvePersistedExecutionId(threadId, session);
@@ -1722,7 +1813,7 @@ export async function createAgentRuntime<TState = unknown>(
   };
   const hydrateThreadSession = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
     if (sessionStore.hasSession(threadId)) {
-      return sessionStore.getSession(threadId);
+      return getSession(threadId);
     }
 
     const inspectionState = await loadInspectionState();
@@ -1737,7 +1828,7 @@ export async function createAgentRuntime<TState = unknown>(
             ? readPersistedLifecycleDomainState<TState>(persistedThread.threadState)
             : undefined;
         const normalizedSession = materializeSessionLifecycle(persistedSession, initialLifecyclePhase);
-        const hydratedSession = sessionStore.setSession(threadId, normalizedSession);
+        const hydratedSession = setSession(threadId, normalizedSession);
         if (persistedDomainState !== undefined) {
           domainStateStore.set(threadId, persistedDomainState);
         } else if (recoveredLifecycleState !== undefined) {
@@ -1758,7 +1849,7 @@ export async function createAgentRuntime<TState = unknown>(
       }
     }
 
-    return sessionStore.getSession(threadId);
+    return getSession(threadId);
   };
   const ensureThread = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
     const session = await hydrateThreadSession(threadId);
@@ -1860,7 +1951,7 @@ export async function createAgentRuntime<TState = unknown>(
     operation: AgentRuntimeDomainOperation,
   ): Promise<PiRuntimeGatewaySession> => {
     if (!domain?.handleOperation) {
-      return sessionStore.getSession(threadId);
+      return getSession(threadId);
     }
 
     const result = await domain.handleOperation({
@@ -1876,7 +1967,7 @@ export async function createAgentRuntime<TState = unknown>(
       }
     }
 
-    const nextSession = sessionStore.updateSession(threadId, (currentSession) =>
+    const nextSession = updateSession(threadId, (currentSession) =>
       applyDomainOperationResult({
         threadId,
         now,
@@ -1891,7 +1982,7 @@ export async function createAgentRuntime<TState = unknown>(
   };
 
   const resumeInterruptedSession = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
-    const nextSession = sessionStore.updateSession(threadId, resolveInterruptedSessionForUserInput);
+    const nextSession = updateSession(threadId, resolveInterruptedSessionForUserInput);
     await persistSessionSnapshot(threadId, nextSession);
     return nextSession;
   };
@@ -1901,7 +1992,7 @@ export async function createAgentRuntime<TState = unknown>(
     error: unknown,
   ): Promise<PiRuntimeGatewaySession> => {
     const detail = error instanceof Error ? error.message : String(error);
-    const nextSession = sessionStore.updateSession(threadId, (session) => ({
+    const nextSession = updateSession(threadId, (session) => ({
       ...session,
       execution: {
         ...session.execution,
@@ -2143,9 +2234,9 @@ export async function createAgentRuntime<TState = unknown>(
             command: 'sync',
             schedule: { kind: 'every', intervalMinutes: 5 },
             runId: `run:${threadId}`,
-            executionId: sessionStore.getSession(threadId).execution.id,
+            executionId: getSession(threadId).execution.id,
             artifactId:
-              sessionStore.getSession(threadId).artifacts?.current?.artifactId ??
+              getSession(threadId).artifacts?.current?.artifactId ??
               `artifact:${threadId}:automation`,
             nextRunAt: null,
             status: 'active',
@@ -2307,8 +2398,8 @@ export async function createAgentRuntime<TState = unknown>(
 
   const runtime = createPiRuntimeGatewayRuntimeInternal({
     agent: foundation.agent,
-    getSession: sessionStore.getSession,
-    updateSession: sessionStore.updateSession,
+    getSession,
+    updateSession,
     onSessionUpdated: persistSessionSnapshot,
     now,
   });
@@ -2316,7 +2407,7 @@ export async function createAgentRuntime<TState = unknown>(
   const runtimeWithDomain: PiRuntimeGatewayRuntime = {
     ...runtime,
     run: async (request) => {
-      const session = sessionStore.getSession(request.threadId);
+      const session = getSession(request.threadId);
       const operation =
         readDirectCommandOperation(request.forwardedProps?.command) ??
         readInterruptOperation({
@@ -2384,7 +2475,7 @@ export async function createAgentRuntime<TState = unknown>(
           session,
           domain,
         }) !== null;
-      if (typeof request.forwardedProps?.command?.resume === 'string' && !isDomainInterruptResume) {
+      if (Object.prototype.hasOwnProperty.call(request.forwardedProps?.command ?? {}, 'resume') && !isDomainInterruptResume) {
         const resumedSession = await resumeInterruptedSession(request.threadId);
         const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
           previousSession: session,

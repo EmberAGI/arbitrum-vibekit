@@ -118,6 +118,7 @@ Explicit non-goal container:
 - `AgentStatusPoller` (refactored list polling):
   - Every 15s, performs one-shot AG-UI `run` status sync for agents whose detail page is not currently active.
   - Poll runs are bounded lifecycle invocations (`run` start -> snapshot/events -> terminal), not persistent `connect` loops.
+  - Poll intent stays on `forwardedProps.command` for route tracing and runtime observability instead of synthetic JSON user messages.
   - Uses protocol-compliant calls only; no direct thread endpoints.
   - Writes normalized status to shared projection store.
 
@@ -130,14 +131,14 @@ Explicit non-goal container:
   - Removes split-brain between stream state and sync endpoint state.
 
 - `AgentCommandBus`:
-  - Sends `hire`, `sync`, `fire`, interrupt responses, and client mutation intents via AG-UI `run` payloads.
+  - Sends named commands such as `hire`/`fire`, interrupt responses, and shared-state `command.update` intents via AG-UI `run` payloads.
   - `fire` may invoke AG-UI `stop` as a pre-dispatch preemption control.
   - No out-of-band command mutation.
 
 - `AgentCommandScheduler` (new):
   - Enforces command concurrency policy by `agentId+threadId`.
   - `fire` is preemptive for backend and local ownership (`stop` then detach, wait terminal/timeout, then dispatch).
-  - `sync` uses coalescing intent policy (single pending intent, last-write-wins).
+  - Shared-state `command.update` uses coalescing intent policy (single pending intent, last-write-wins).
   - Normalizes server busy responses into deterministic observe/retry behavior.
 
 - `AgentMetricsRendererRegistry` (new):
@@ -152,6 +153,8 @@ Explicit non-goal container:
 - `CopilotKit Runtime Route` (`/api/copilotkit`):
   - The only server route used by web for agent communication.
   - Exposes AG-UI `connect`, `run`, and `stop` semantics used by web.
+  - Request metadata and debug traces should read command intent from `forwardedProps.command` and related control-lane fields, not by parsing the last chat message.
+  - Structured interrupt-resume tracing should log full serialized `resumePayloadLength` separately from the truncated `resumePayloadPreview`.
   - For standalone Pi-backed agents, imports runtime-owned transport helpers rather than defining Pi-specific transport behavior locally.
 
 - `Agent Registry`:
@@ -276,7 +279,7 @@ sequenceDiagram
   participant Agent
 
   loop every 15s
-    Poller->>Runtime: bounded AG-UI run(agentId, threadId, status/sync)
+    Poller->>Runtime: bounded AG-UI run(agentId, threadId, status refresh)
     Runtime->>Agent: execute one-shot run
     Agent-->>Runtime: projection events + terminal
     Runtime-->>Poller: reduced status payload
@@ -292,14 +295,17 @@ sequenceDiagram
   participant Runtime as /api/copilotkit
   participant Agent
 
-  User->>Web: Trigger save/sync
-  Web->>Web: set local agent state/messages
-  Web->>Runtime: run(agentId, threadId, input.state/messages)
-  Runtime->>Agent: apply run input state/messages, execute run
-  Agent-->>Runtime: AG-UI state/message events + terminal event
+  User->>Web: Trigger shared-state save
+  Web->>Web: optimistically update local writable `/shared` view
+  Web->>Runtime: run(agentId, threadId, forwardedProps.command.update)
+  Runtime->>Agent: validate that every patch path stays rooted at `/shared`, update `/shared`, recompute `/projected`
+  Agent-->>Runtime: STATE_DELTA(shared + projected) then shared-state.control update-ack
   Runtime-->>Web: streamed events
-  Web->>Web: mark sync complete only after projected confirmation
+  Web->>Web: apply authoritative delta, then clear pending save after matching update-ack
 ```
+
+- Malformed Pi `command.update` requests that omit `clientMutationId` are rejected at the runtime boundary before `shared-state.control` `update-ack`, because `clientMutationId` is the acknowledgment correlation key.
+- If the local forwarded `command.update` run fails before any matching `shared-state.control` arrives, the web must roll back the optimistic `/shared` view immediately and clear the pending mutation locally.
 
 ## 7. Data contracts
 
@@ -308,7 +314,9 @@ sequenceDiagram
 - `ThreadState@vN` (versioned, domain-facing): profile, metrics, activity, task, interrupts, onboarding.
 - `UiState` (web VM-facing): deterministic projection from AG-UI events + `ThreadState` snapshots.
 - `TaskState` enum (shared): `submitted`, `working`, `input-required`, `completed`, `failed`, `canceled`.
-- `AgentCommand` enum (shared control-plane intent): `hire`, `sync`, `fire`, plus typed interrupt resolutions.
+- Named control-plane commands stay explicit (`hire`, `fire`, typed interrupt resolutions); shared-state writes use `command.update` against the writable public-state slice rooted at `/shared`.
+- In v1, `/shared` versus `/projected` is the editability model: `/shared` is writable, while `/projected` remains runtime-owned and non-patchable.
+- Typed interrupt resolutions may carry structured `command.resume` payload objects across the direct command lane without pre-stringifying them in the web client.
 
 ### 7.2 Rules
 
@@ -331,7 +339,7 @@ sequenceDiagram
    - non-active-detail agents -> polling snapshots projected from one-shot poll `run`,
    - fallback without either -> active `run` stream for that command lifecycle.
 7. Local run-in-flight gating is advisory; server busy responses are authoritative for global concurrency.
-8. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
+8. Shared-state `command.update` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
 9. `fire` is the only preemptive stop command: issue `stop`, detach local stream, wait terminal/timeout, then dispatch `fire`.
 10. Terminal run handling is idempotent: client converges on one terminal outcome even if terminal callbacks are duplicated.
 11. On detail-page route leave/unmount, stream teardown is deterministic.
@@ -342,7 +350,7 @@ sequenceDiagram
 ### Slice 1: Protocol boundary cleanup
 
 - Remove `apps/web/src/app/api/agents/sync/route.ts` and consumers.
-- Replace `useAgentConnection` sync fallback with AG-UI-only projection path.
+- Replace `useAgentConnection` mutation fallback with AG-UI-only direct-command projection path.
 - Keep behavior parity via tests before deletion.
 
 ### Slice 2: Detail-route stream governance
@@ -408,12 +416,13 @@ Completed:
 - Non-metrics blockers/onboarding branch helpers are extracted from `AgentDetailPage` into specialized modules:
   - `apps/web/src/components/agentBlockersBehavior.ts`,
   - `apps/web/src/components/agentBlockersInterrupt.ts`.
-- Web command scheduling now uses a dedicated `AgentCommandScheduler` (`apps/web/src/utils/agentCommandScheduler.ts`) with bounded busy-retry handling for `sync` and coalescing intent semantics.
+- Web command scheduling now uses a dedicated `AgentCommandScheduler` (`apps/web/src/utils/agentCommandScheduler.ts`) with bounded busy-retry handling for coalesced shared-state writes.
 - Integration coverage now verifies key lifecycle invariants:
   - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-active-detail polling fan-out and periodic no-overlap behavior.
-  - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts detail-page connect and deterministic detach on unmount.
-  - `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts `sync` coalescing, terminal replay, bounded busy retries, and non-sync in-flight rejection.
-- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts sync confirmation semantics via client mutation id handshake between command dispatch and projected state acknowledgement.
+- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts detail-page connect and deterministic detach on unmount.
+- `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts coalescing, terminal replay, bounded busy retries, and non-update in-flight rejection.
+- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts authoritative Pi `STATE_DELTA` hydration, `shared-state.control` confirmation, rejected-ack reconciliation, and rollback on local pre-ack Pi run failures for optimistic shared-state writes.
+- `apps/web/src/app/api/copilotkit/piRuntimeHttpAgent.int.test.ts` and `agent-runtime/src/index.int.test.ts` assert object `command.resume` payload passthrough across the web, transport, and Pi runtime layers.
 
 Remaining gaps:
 

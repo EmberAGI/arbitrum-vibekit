@@ -3,11 +3,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import type { Message } from '@ag-ui/core';
 import { useCopilotContext } from '@copilotkit/react-core';
-import {
-  useAgent,
-  useCopilotKit,
-  CopilotKitCoreRuntimeConnectionStatus,
-} from '@copilotkit/react-core/v2';
+import { useAgent, useCopilotKit, CopilotKitCoreRuntimeConnectionStatus } from '@copilotkit/react-core/v2';
 import { v7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
 import { getAgentConfig, type AgentConfig } from '../config/agents';
@@ -213,6 +209,16 @@ export interface UseAgentConnectionResult {
 
 export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   type HookAgent = NonNullable<ReturnType<typeof useAgent>['agent']>;
+  type PendingSyncMutationState = {
+    threadId: string | undefined;
+    clientMutationId: string | null;
+    rollbackSettings: AgentSettings | null;
+  };
+  type SharedStateControlAck = {
+    clientMutationId: string;
+    status: 'accepted' | 'noop' | 'rejected';
+    code: string | null;
+  };
 
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
@@ -223,20 +229,23 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     threadId: undefined,
     isSyncing: false,
   });
-  const [pendingSyncMutationByThread, setPendingSyncMutationByThread] = useState<{
-    threadId: string | undefined;
-    clientMutationId: string | null;
-  }>({
+  const [pendingSyncMutationByThread, setPendingSyncMutationByThread] = useState<PendingSyncMutationState>({
     threadId: undefined,
     clientMutationId: null,
+    rollbackSettings: null,
+  });
+  const [sharedStateRevisionByThread, setSharedStateRevisionByThread] = useState<{
+    threadId: string | undefined;
+    revision: string | null;
+  }>({
+    threadId: undefined,
+    revision: null,
   });
   const [connectRetryTick, setConnectRetryTick] = useState(0);
-  const pendingSyncMutationRef = useRef<{
-    threadId: string | undefined;
-    clientMutationId: string | null;
-  }>({
+  const pendingSyncMutationRef = useRef<PendingSyncMutationState>({
     threadId: undefined,
     clientMutationId: null,
+    rollbackSettings: null,
   });
   const [uiError, setUiError] = useState<string | null>(null);
   const [messageSnapshotEpoch, setMessageSnapshotEpoch] = useState(0);
@@ -482,20 +491,132 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     );
   }, []);
 
-  const extractAppliedMutationId = useCallback((value: unknown): string | null => {
+  const clearPendingSyncMutation = useCallback((clientMutationId: string | null) => {
+    if (!clientMutationId) return;
+    setPendingSyncMutationByThread((pendingSyncMutation) => {
+      if (
+        pendingSyncMutation.clientMutationId !== null &&
+        pendingSyncMutation.threadId === threadIdRef.current &&
+        clientMutationId === pendingSyncMutation.clientMutationId
+      ) {
+        return {
+          threadId: pendingSyncMutation.threadId,
+          clientMutationId: null,
+          rollbackSettings: null,
+        };
+      }
+
+      return pendingSyncMutation;
+    });
+  }, []);
+
+  const extractSharedStateControlAck = useCallback((payload: unknown): SharedStateControlAck | null => {
+    if (typeof payload !== 'object' || payload === null) return null;
+    const eventEnvelope =
+      'event' in payload &&
+      typeof (payload as { event?: unknown }).event === 'object' &&
+      (payload as { event?: unknown }).event !== null
+        ? ((payload as { event: unknown }).event as { name?: unknown; value?: unknown })
+        : (payload as { name?: unknown; value?: unknown });
+
+    if (eventEnvelope.name !== 'shared-state.control') return null;
+    const value = eventEnvelope.value;
     if (typeof value !== 'object' || value === null) return null;
-    const stateEnvelope = value as { thread?: unknown };
-    const stateSlice = stateEnvelope.thread;
-    if (typeof stateSlice !== 'object' || stateSlice === null) return null;
-    if (!('lastAppliedClientMutationId' in stateSlice)) return null;
-    const mutationId = (stateSlice as { lastAppliedClientMutationId?: unknown })
-      .lastAppliedClientMutationId;
-    return typeof mutationId === 'string' && mutationId.length > 0 ? mutationId : null;
+    if ((value as { kind?: unknown }).kind !== 'update-ack') return null;
+    const clientMutationId = (value as { clientMutationId?: unknown }).clientMutationId;
+    const status = (value as { status?: unknown }).status;
+    const code = (value as { code?: unknown }).code;
+    if (typeof clientMutationId !== 'string' || clientMutationId.length === 0) return null;
+    if (status !== 'accepted' && status !== 'noop' && status !== 'rejected') return null;
+    return {
+      clientMutationId,
+      status,
+      code: typeof code === 'string' && code.length > 0 ? code : null,
+    };
+  }, []);
+
+  const extractSharedStateControlRevision = useCallback((payload: unknown): string | null => {
+    if (typeof payload !== 'object' || payload === null) return null;
+    const eventEnvelope =
+      'event' in payload &&
+      typeof (payload as { event?: unknown }).event === 'object' &&
+      (payload as { event?: unknown }).event !== null
+        ? ((payload as { event: unknown }).event as { name?: unknown; value?: unknown })
+        : (payload as { name?: unknown; value?: unknown });
+
+    if (eventEnvelope.name !== 'shared-state.control') return null;
+    const value = eventEnvelope.value;
+    if (typeof value !== 'object' || value === null) return null;
+
+    const revision =
+      (value as { kind?: unknown; revision?: unknown; resultingRevision?: unknown }).kind === 'hydration'
+        ? (value as { revision?: unknown }).revision
+        : (value as { kind?: unknown; resultingRevision?: unknown }).kind === 'update-ack'
+          ? (value as { resultingRevision?: unknown }).resultingRevision
+          : null;
+
+    return typeof revision === 'string' && revision.length > 0 ? revision : null;
   }, []);
 
   useEffect(() => {
     pendingSyncMutationRef.current = pendingSyncMutationByThread;
   }, [pendingSyncMutationByThread]);
+
+  const restoreSettingsSnapshot = useCallback((rollbackSettings: AgentSettings | null) => {
+    const currentAgent = agentRef.current;
+    if (!currentAgent || !rollbackSettings) return;
+
+    const nextState =
+      hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
+    currentAgent.setState({
+      ...nextState,
+      settings: {
+        ...rollbackSettings,
+      },
+    });
+  }, [hasStateValues]);
+
+  const rollbackPendingSyncMutation = useCallback(
+    (clientMutationId: string | null, rollbackSettings: AgentSettings | null) => {
+      restoreSettingsSnapshot(rollbackSettings);
+      clearPendingSyncMutation(clientMutationId);
+    },
+    [clearPendingSyncMutation, restoreSettingsSnapshot],
+  );
+
+  const reconcileSharedStateControlAck = useCallback(
+    (ack: SharedStateControlAck | null) => {
+      if (!ack) return;
+
+      const pendingSyncMutation = pendingSyncMutationRef.current;
+      if (
+        pendingSyncMutation.clientMutationId === null ||
+        pendingSyncMutation.threadId !== threadIdRef.current ||
+        ack.clientMutationId !== pendingSyncMutation.clientMutationId
+      ) {
+        return;
+      }
+
+      if (ack.status === 'rejected') {
+        restoreSettingsSnapshot(pendingSyncMutation.rollbackSettings);
+
+        setUiError(
+          ack.code === 'stale_revision'
+            ? 'Shared settings changed elsewhere. Restored the last saved values; please retry.'
+            : ack.code === 'missing_base_revision'
+              ? 'Unable to sync settings until shared state is hydrated.'
+              : 'Unable to apply those settings. Restored the last saved values.',
+        );
+      }
+
+      setPendingSyncMutationByThread({
+        threadId: pendingSyncMutation.threadId,
+        clientMutationId: null,
+        rollbackSettings: null,
+      });
+    },
+    [restoreSettingsSnapshot],
+  );
 
   const needsSync = useCallback((value: unknown): boolean => {
     if (!value || typeof value !== 'object') return true;
@@ -644,7 +765,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     const applyProjectedState = (statePayload: unknown) => {
       emitConnectTrace('state-apply-attempt', {
         currentThreadId: threadIdRef.current ?? null,
-        appliedMutationId: extractAppliedMutationId(statePayload),
         stateKeys:
           typeof statePayload === 'object' && statePayload !== null
             ? Object.keys(statePayload as Record<string, unknown>).slice(0, 20)
@@ -660,19 +780,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             ? (statePayload as { tasks: unknown[] }).tasks.length
             : null,
       });
-      const appliedMutationId = extractAppliedMutationId(statePayload);
-      const pendingSyncMutation = pendingSyncMutationRef.current;
-      if (
-        appliedMutationId &&
-        pendingSyncMutation.clientMutationId !== null &&
-        pendingSyncMutation.threadId === threadIdRef.current &&
-        appliedMutationId === pendingSyncMutation.clientMutationId
-      ) {
-        setPendingSyncMutationByThread({
-          threadId: threadIdRef.current,
-          clientMutationId: null,
-        });
-      }
       const previousState = hasStateValues(agent.state) ? (agent.state as ThreadSnapshot) : null;
       const projectedState = projectDetailStateFromPayload(statePayload, previousState);
       if (projectedState) {
@@ -780,6 +887,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         }
         applyProjectedState(snapshotState);
       },
+      onStateDeltaEvent: (payload) => {
+        const accepted = shouldApplyRunScopedState(payload);
+        emitConnectTrace('state-delta-event', {
+          accepted,
+          inputThreadId: getInputThreadId(payload),
+          inputRunId: getInputRunId(payload),
+          currentThreadId: threadIdRef.current ?? null,
+          activeRunThreadId: activeRunRef.current.threadId ?? null,
+          activeRunId: activeRunRef.current.runId ?? null,
+        });
+        if (!accepted) return;
+        rememberActiveRun(payload);
+        applyProjectedState(payload.state);
+      },
       onMessagesSnapshotEvent: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
         emitConnectTrace('messages-snapshot-event', {
@@ -793,16 +914,32 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         if (!isCurrentThreadEvent(payload)) return;
         applyMessages(payload.messages);
       },
+      onCustomEvent: (payload) => {
+        if (!isCurrentThreadEvent(payload)) return;
+        const revision = extractSharedStateControlRevision(payload);
+        if (revision) {
+          setSharedStateRevisionByThread({
+            threadId: threadIdRef.current,
+            revision,
+          });
+        }
+        const sharedStateControlAck = extractSharedStateControlAck(payload);
+        reconcileSharedStateControlAck(sharedStateControlAck);
+        clearPendingSyncMutation(sharedStateControlAck?.clientMutationId ?? null);
+      },
     });
 
     return () => subscription.unsubscribe();
   }, [
     agent,
     agentId,
+    clearPendingSyncMutation,
     emitConnectTrace,
-    extractAppliedMutationId,
+    extractSharedStateControlAck,
+    extractSharedStateControlRevision,
     hasStateValues,
     logConnectEvent,
+    reconcileSharedStateControlAck,
     setRunInFlight,
   ]);
 
@@ -832,12 +969,18 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           isSyncing,
         });
       },
+      onSyncRunTerminal: (messagePayload) => {
+        const clientMutationId =
+          typeof messagePayload?.clientMutationId === 'string' ? messagePayload.clientMutationId : null;
+        clearPendingSyncMutation(clientMutationId);
+      },
       onCommandBusy: (command, error) => {
         const detail = error instanceof Error ? error.message : String(error);
         if (command === 'sync') {
           setPendingSyncMutationByThread({
             threadId: threadIdRef.current,
             clientMutationId: null,
+            rollbackSettings: null,
           });
         }
         setUiError(`Agent run is busy while processing '${command}'. Please retry in a moment.`);
@@ -854,6 +997,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           setPendingSyncMutationByThread({
             threadId: threadIdRef.current,
             clientMutationId: null,
+            rollbackSettings: null,
           });
         }
         const detail = error instanceof Error ? error.message : String(error);
@@ -876,7 +1020,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         commandSchedulerRef.current = null;
       }
     };
-  }, [agentId, copilotkit, setRunInFlight]);
+  }, [agentId, clearPendingSyncMutation, runAgentOnCurrentThread, setRunInFlight]);
 
   useEffect(() => {
     const ownerId = streamOwnerIdRef.current;
@@ -1406,7 +1550,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           });
           const resumed = await resumeInterruptViaAgent({
             agent: currentAgent,
-            resumePayload: serializedInput,
+            resumePayload: input,
             runResume: ({ agent: resumeAgent, payload }) =>
               runAgentOnCurrentThread(resumeAgent, {
                 forwardedProps: payload.forwardedProps,
@@ -1469,11 +1613,78 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     (updates: Partial<AgentSettings>) => {
       setUiError(null);
       const clientMutationId = v7();
+      const rollbackSettings = {
+        ...((hasStateValues(agentRef.current?.state)
+          ? ((agentRef.current?.state as ThreadSnapshot).settings ?? defaultSettings)
+          : defaultSettings) as AgentSettings),
+      };
+      const sharedStateRevision =
+        sharedStateRevisionByThread.threadId === threadId ? sharedStateRevisionByThread.revision : null;
       setPendingSyncMutationByThread({
         threadId,
         clientMutationId,
+        rollbackSettings,
       });
       updateSettings(updates);
+
+      if (config.imperativeCommandTransport === 'forwarded-props') {
+        const scheduler = commandSchedulerRef.current;
+        if (!scheduler || !sharedStateRevision) {
+          rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
+          setUiError(
+            sharedStateRevision
+              ? 'Unable to sync settings right now. Please retry.'
+              : 'Unable to sync settings until shared state is hydrated.',
+          );
+          return;
+        }
+
+        const accepted = scheduler.dispatchCustom({
+          command: 'update',
+          run: async (currentAgent) => {
+            const nextState =
+              hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
+            const nextSettings = {
+              ...(nextState.settings ?? defaultSettings),
+              ...updates,
+            };
+            for (const [key, value] of Object.entries(nextSettings)) {
+              if (value === undefined) {
+                delete nextSettings[key as keyof AgentSettings];
+              }
+            }
+            try {
+              await runAgentOnCurrentThread(currentAgent, {
+                forwardedProps: {
+                  command: {
+                    update: {
+                      clientMutationId,
+                      baseRevision: sharedStateRevision,
+                      patch: [
+                        {
+                          op: 'add',
+                          path: '/shared/settings',
+                          value: nextSettings,
+                        },
+                      ],
+                    },
+                  },
+                },
+              });
+            } catch (error) {
+              rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
+              throw error;
+            }
+          },
+        });
+
+        if (!accepted) {
+          rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
+          setUiError('Unable to sync settings right now. Please retry.');
+        }
+        return;
+      }
+
       const accepted = dispatchCommand('sync', {
         allowSyncCoalesce: true,
         messagePayload: {
@@ -1481,14 +1692,21 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         },
       });
       if (!accepted) {
-        setPendingSyncMutationByThread({
-          threadId,
-          clientMutationId: null,
-        });
+        rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
         setUiError('Unable to sync settings right now. Please retry.');
       }
     },
-    [dispatchCommand, threadId, updateSettings],
+    [
+      config.imperativeCommandTransport,
+      dispatchCommand,
+      hasStateValues,
+      runAgentOnCurrentThread,
+      rollbackPendingSyncMutation,
+      sharedStateRevisionByThread.revision,
+      sharedStateRevisionByThread.threadId,
+      threadId,
+      updateSettings,
+    ],
   );
 
   const applyDomainProjection = useCallback((projection: Record<string, unknown>) => {

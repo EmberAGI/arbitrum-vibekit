@@ -3,7 +3,7 @@ import { isAbortLikeError, isBusyRunError } from './runConcurrency';
 type ResumeRunPayload = {
   forwardedProps: {
     command: {
-      resume: string;
+      resume: unknown;
     };
   };
 };
@@ -15,7 +15,7 @@ type ResumeRunner<TAgent> = (params: {
 
 export async function resumeInterruptViaAgent<TAgent>(params: {
   agent: TAgent | null;
-  resumePayload: string;
+  resumePayload: unknown;
   runResume?: ResumeRunner<TAgent>;
   maxRetries?: number;
   retryDelayMs?: number;

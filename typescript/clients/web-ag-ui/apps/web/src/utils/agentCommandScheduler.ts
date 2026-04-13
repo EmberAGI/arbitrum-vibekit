@@ -41,6 +41,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
   isAbortLikeError?: (error: unknown) => boolean;
   isAgentRunning: (agent: TAgent) => boolean;
   onSyncingChange: (isSyncing: boolean) => void;
+  onSyncRunTerminal?: (messagePayload?: Record<string, unknown>) => void;
   onCommandError?: (command: string, error: unknown) => void;
   onCommandBusy?: (command: string, error: unknown) => void;
   syncReplayDelayMs?: number;
@@ -56,6 +57,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
   let pendingSyncIntent = false;
   let pendingSyncMessagePayload: Record<string, unknown> | undefined;
   let syncRunInFlight = false;
+  let activeSyncMessagePayload: Record<string, unknown> | undefined;
   let syncBusyRetries = 0;
   let replayTimer: TimerHandle | null = null;
 
@@ -105,6 +107,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
 
     if (command === 'sync') {
       syncRunInFlight = true;
+      activeSyncMessagePayload = options?.messagePayload;
       pendingSyncIntent = false;
       pendingSyncMessagePayload = options?.messagePayload;
       if (!options?.isReplayAttempt) {
@@ -121,6 +124,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
 
       if (command === 'sync') {
         syncRunInFlight = false;
+        activeSyncMessagePayload = undefined;
 
         const busy = params.isBusyRunError(error) || params.isAgentRunning(agent);
         const aborted = params.isAbortLikeError?.(error) ?? false;
@@ -219,7 +223,10 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
     params.setRunInFlight(false);
     syncBusyRetries = 0;
     if (syncRunInFlight) {
+      const completedSyncMessagePayload = activeSyncMessagePayload;
       syncRunInFlight = false;
+      activeSyncMessagePayload = undefined;
+      params.onSyncRunTerminal?.(completedSyncMessagePayload);
     }
     refreshSyncing();
     replayPendingSync();
@@ -229,6 +236,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
     pendingSyncIntent = false;
     pendingSyncMessagePayload = undefined;
     syncRunInFlight = false;
+    activeSyncMessagePayload = undefined;
     syncBusyRetries = 0;
     clearReplayTimer();
   };

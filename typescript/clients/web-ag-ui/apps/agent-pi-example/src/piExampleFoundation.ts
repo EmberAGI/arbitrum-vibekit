@@ -481,7 +481,7 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
       });
     }
 
-    if (latestUserText.includes('schedule') || latestUserText.includes('"command":"sync"')) {
+    if (latestUserText.includes('schedule')) {
       return createMockToolStream({
         model,
         toolName: AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL,

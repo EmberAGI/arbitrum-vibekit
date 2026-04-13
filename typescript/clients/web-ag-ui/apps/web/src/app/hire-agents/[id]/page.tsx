@@ -211,7 +211,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         }
       }
     },
-    [agent, agent.threadId, portfolioManagerThreadId, selectedAgentId],
+    [agent, portfolioManagerThreadId, selectedAgentId],
   );
 
   useEffect(() => {

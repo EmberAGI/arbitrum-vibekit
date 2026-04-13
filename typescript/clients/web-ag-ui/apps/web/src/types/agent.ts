@@ -431,7 +431,6 @@ export interface ThreadLifecycle {
 // Domain thread state emitted by agents
 export interface ThreadState {
   lifecycle?: ThreadLifecycle;
-  lastAppliedClientMutationId?: string;
   task?: Task;
   domainProjection?: Record<string, unknown>;
   onboardingFlow?: OnboardingFlow;
@@ -578,7 +577,6 @@ export const defaultThreadState: ThreadState = {
   lifecycle: {
     phase: 'prehire',
   },
-  lastAppliedClientMutationId: undefined,
   task: undefined,
   domainProjection: {},
   onboardingFlow: undefined,

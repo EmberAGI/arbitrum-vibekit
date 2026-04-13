@@ -452,6 +452,83 @@ describe('useAgentConnection integration', () => {
     );
   });
 
+  it('dispatches PI-runtime settings saves through forwardedProps.command.update instead of a JSON sync message', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    (
+      subscriber as
+        | (AgentSubscriber & {
+            onCustomEvent?: (payload: {
+              input?: { threadId?: string };
+              name?: string;
+              value?: unknown;
+            }) => void;
+          })
+        | undefined
+    )?.onCustomEvent?.({
+      input: { threadId: 'thread-1' },
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'bootstrap',
+        revision: 'shared-rev-1',
+      },
+    });
+    await flushEffects();
+
+    mocks.agent.addMessage.mockClear();
+    mocks.runAgent.mockClear();
+
+    latestValue?.saveSettings({ amount: 250 });
+    await flushEffects();
+
+    expect(mocks.agent.setState).toHaveBeenCalled();
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: expect.any(String),
+              baseRevision: 'shared-rev-1',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+  });
+
   it('applies returned domain projection to the current thread snapshot', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
@@ -590,7 +667,7 @@ describe('useAgentConnection integration', () => {
     );
   });
 
-  it('keeps sync pending until AG-UI state confirms the applied mutation id', async () => {
+  it('does not clear legacy sync pending from lastAppliedClientMutationId thread payloads', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;
 
@@ -626,11 +703,6 @@ describe('useAgentConnection integration', () => {
         : null;
     expect(parsedMessage?.command).toBe('sync');
     expect(typeof parsedMessage?.clientMutationId).toBe('string');
-    const clientMutationId = parsedMessage?.clientMutationId as string;
-
-    subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
-    await flushEffects();
-    expect(latestValue?.isSyncing).toBe(true);
 
     subscriber?.onRunInitialized?.({
       input: { threadId: 'thread-1' },
@@ -638,16 +710,16 @@ describe('useAgentConnection integration', () => {
         settings: { amount: 250 },
         thread: {
           command: 'cycle',
-          lastAppliedClientMutationId: clientMutationId,
-        },
+          lastAppliedClientMutationId: parsedMessage?.clientMutationId,
+        } as unknown as never,
       },
     });
     await flushEffects();
     await flushEffects();
-    expect(latestValue?.isSyncing).toBe(false);
+    expect(latestValue?.isSyncing).toBe(true);
   });
 
-  it('clears sync pending when mutation id acknowledgement arrives on thread payloads', async () => {
+  it('clears PI-runtime sync pending when shared-state.control acknowledges the mutation', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;
 
@@ -661,7 +733,7 @@ describe('useAgentConnection integration', () => {
     await act(async () => {
       root.render(
         <CapturingHarness
-          agentId="agent-clmm"
+          agentId="agent-portfolio-manager"
           onSnapshot={(value) => {
             latestValue = value;
           }}
@@ -670,38 +742,471 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
 
+    (
+      subscriber as
+        | (AgentSubscriber & {
+            onCustomEvent?: (payload: {
+              input?: { threadId?: string };
+              name?: string;
+              value?: unknown;
+            }) => void;
+          })
+        | undefined
+    )?.onCustomEvent?.({
+      input: { threadId: 'thread-1' },
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'bootstrap',
+        revision: 'shared-rev-1',
+      },
+    });
+    await flushEffects();
+
     latestValue?.saveSettings({ amount: 250 });
     await flushEffects();
     expect(latestValue?.isSyncing).toBe(true);
 
-    const syncMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
-      | { content?: string }
+    const forwardedCommand = mocks.runAgent.mock.calls.at(-1)?.[0] as
+      | {
+          forwardedProps?: {
+            command?: {
+              update?: {
+                clientMutationId?: string;
+              };
+            };
+          };
+        }
       | undefined;
-    const parsedMessage =
-      typeof syncMessage?.content === 'string'
-        ? (JSON.parse(syncMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(parsedMessage?.command).toBe('sync');
-    expect(typeof parsedMessage?.clientMutationId).toBe('string');
-    const clientMutationId = parsedMessage?.clientMutationId as string;
+    const clientMutationId = forwardedCommand?.forwardedProps?.command?.update?.clientMutationId;
+    expect(typeof clientMutationId).toBe('string');
 
     subscriber?.onRunFinishedEvent?.({ input: { threadId: 'thread-1' } });
     await flushEffects();
     expect(latestValue?.isSyncing).toBe(true);
 
-    subscriber?.onRunInitialized?.({
+    (
+      subscriber as
+        | (AgentSubscriber & {
+            onCustomEvent?: (payload: {
+              input?: { threadId?: string };
+              name?: string;
+              value?: unknown;
+            }) => void;
+          })
+        | undefined
+    )?.onCustomEvent?.({
       input: { threadId: 'thread-1' },
-      state: {
-        settings: { amount: 250 },
-        thread: {
-          lastAppliedClientMutationId: clientMutationId,
-        },
+      name: 'shared-state.control',
+      value: {
+        kind: 'update-ack',
+        clientMutationId,
+        status: 'accepted',
+        resultingRevision: 'shared-rev-2',
       },
     });
     await flushEffects();
     await flushEffects();
 
     expect(latestValue?.isSyncing).toBe(false);
+  });
+
+  it.each(['stale_revision', 'invalid_patch'] as const)(
+    'restores the last authoritative PI-runtime settings when shared-state.control rejects the mutation with %s',
+    async (code) => {
+      let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+      let subscriber: AgentSubscriber | undefined;
+
+      mocks.agent.state = {
+        settings: {
+          amount: 100,
+        },
+        thread: {},
+      };
+
+      mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+        subscriber = nextSubscriber as AgentSubscriber;
+        return {
+          unsubscribe: vi.fn(),
+        };
+      });
+
+      await act(async () => {
+        root.render(
+          <CapturingHarness
+            agentId="agent-portfolio-manager"
+            onSnapshot={(value) => {
+              latestValue = value;
+            }}
+          />,
+        );
+      });
+      await flushEffects();
+
+      (
+        subscriber as
+          | (AgentSubscriber & {
+              onCustomEvent?: (payload: {
+                input?: { threadId?: string };
+                name?: string;
+                value?: unknown;
+              }) => void;
+            })
+          | undefined
+      )?.onCustomEvent?.({
+        input: { threadId: 'thread-1' },
+        name: 'shared-state.control',
+        value: {
+          kind: 'hydration',
+          reason: 'bootstrap',
+          revision: 'shared-rev-1',
+        },
+      });
+      await flushEffects();
+
+      expect(latestValue?.settings.amount).toBe(100);
+
+      latestValue?.saveSettings({ amount: 250 });
+      await flushEffects();
+      expect(latestValue?.settings.amount).toBe(250);
+      expect(latestValue?.isSyncing).toBe(true);
+
+      const forwardedCommand = mocks.runAgent.mock.calls.at(-1)?.[0] as
+        | {
+            forwardedProps?: {
+              command?: {
+                update?: {
+                  clientMutationId?: string;
+                };
+              };
+            };
+          }
+        | undefined;
+      const clientMutationId = forwardedCommand?.forwardedProps?.command?.update?.clientMutationId;
+      expect(typeof clientMutationId).toBe('string');
+
+      (
+        subscriber as
+          | (AgentSubscriber & {
+              onCustomEvent?: (payload: {
+                input?: { threadId?: string };
+                name?: string;
+                value?: unknown;
+              }) => void;
+            })
+          | undefined
+      )?.onCustomEvent?.({
+        input: { threadId: 'thread-1' },
+        name: 'shared-state.control',
+        value: {
+          kind: 'update-ack',
+          clientMutationId,
+          status: 'rejected',
+          code,
+          resultingRevision: 'shared-rev-2',
+          baseRevision: 'shared-rev-1',
+        },
+      });
+      await flushEffects();
+      await flushEffects();
+
+      expect(latestValue?.settings.amount).toBe(100);
+      expect(latestValue?.isSyncing).toBe(false);
+    },
+  );
+
+  it('restores the last authoritative PI-runtime settings when saveSettings runs before shared-state hydration', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      settings: {
+        amount: 100,
+      },
+      thread: {},
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+
+    latestValue?.saveSettings({ amount: 250 });
+    await flushEffects();
+    await flushEffects();
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+    expect(latestValue?.uiError).toBe('Unable to sync settings until shared state is hydrated.');
+    expect(mocks.runAgent).not.toHaveBeenCalled();
+  });
+
+  it('restores the last authoritative PI-runtime settings when a local PI update dispatch is rejected', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.state = {
+      settings: {
+        amount: 100,
+      },
+      thread: {},
+    };
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    (
+      subscriber as
+        | (AgentSubscriber & {
+            onCustomEvent?: (payload: {
+              input?: { threadId?: string };
+              name?: string;
+              value?: unknown;
+            }) => void;
+          })
+        | undefined
+    )?.onCustomEvent?.({
+      input: { threadId: 'thread-1' },
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'bootstrap',
+        revision: 'shared-rev-1',
+      },
+    });
+    await flushEffects();
+
+    subscriber?.onRunStartedEvent?.({
+      input: { threadId: 'thread-1', runId: 'run-busy' },
+      event: {
+        type: 'RUN_STARTED',
+        threadId: 'thread-1',
+        runId: 'run-busy',
+      },
+      messages: [],
+      state: mocks.agent.state,
+      agent: mocks.agent as never,
+    });
+    await flushEffects();
+
+    latestValue?.saveSettings({ amount: 250 });
+    await flushEffects();
+    await flushEffects();
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+    expect(latestValue?.uiError).toBe('Unable to sync settings right now. Please retry.');
+    expect(mocks.runAgent).not.toHaveBeenCalled();
+  });
+
+  it('restores the last authoritative PI-runtime settings when a forwarded update run fails before any ack arrives', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.state = {
+      settings: {
+        amount: 100,
+      },
+      thread: {},
+    };
+    mocks.runAgent.mockRejectedValueOnce(new Error('update transport failed'));
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    (
+      subscriber as
+        | (AgentSubscriber & {
+            onCustomEvent?: (payload: {
+              input?: { threadId?: string };
+              name?: string;
+              value?: unknown;
+            }) => void;
+          })
+        | undefined
+    )?.onCustomEvent?.({
+      input: { threadId: 'thread-1' },
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'bootstrap',
+        revision: 'shared-rev-1',
+      },
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+
+    latestValue?.saveSettings({ amount: 250 });
+    await flushEffects();
+
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            update: expect.objectContaining({
+              baseRevision: 'shared-rev-1',
+            }),
+          },
+        },
+      }),
+    );
+
+    await flushEffects();
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+    expect(latestValue?.isSyncing).toBe(false);
+    expect(latestValue?.uiError).toBe("Agent command 'update' failed: update transport failed");
+  });
+
+  it('applies authoritative PI STATE_DELTA settings updates to the visible detail state', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.state = {
+      settings: {
+        amount: 100,
+      },
+      thread: {},
+    };
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(100);
+
+    (
+      subscriber as
+        | (AgentSubscriber & {
+            onStateDeltaEvent?: (payload: {
+              input?: { threadId?: string; runId?: string };
+              event?: {
+                type?: 'STATE_DELTA';
+                delta?: Array<{ op: string; path: string; value?: unknown }>;
+              };
+              state?: Record<string, unknown>;
+            }) => void;
+          })
+        | undefined
+    )?.onStateDeltaEvent?.({
+      input: { threadId: 'thread-1', runId: 'run-1' },
+      event: {
+        type: 'STATE_DELTA',
+        delta: [
+          {
+            op: 'replace',
+            path: '/shared/settings/amount',
+            value: 250,
+          },
+        ],
+      },
+      state: {
+        shared: {
+          settings: {
+            amount: 250,
+          },
+        },
+        projected: {},
+        thread: {},
+      },
+    });
+    await flushEffects();
+    await flushEffects();
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.settings.amount).toBe(250);
   });
 
   it('ignores stale run lifecycle events that do not match the active thread', async () => {
@@ -1879,11 +2384,11 @@ describe('useAgentConnection integration', () => {
         threadId: 'thread-1',
         forwardedProps: {
           command: {
-            resume: JSON.stringify({
+            resume: {
               poolAddress: '0x0000000000000000000000000000000000000001',
               walletAddress: '0x0000000000000000000000000000000000000002',
               baseContributionUsd: 100,
-            }),
+            },
           },
         },
       }),
@@ -2091,9 +2596,9 @@ describe('useAgentConnection integration', () => {
         threadId: 'thread-1',
         forwardedProps: {
           command: {
-            resume: JSON.stringify({
+            resume: {
               operatorNote: 'Use the safe automation window',
-            }),
+            },
           },
         },
       }),
@@ -2158,7 +2663,7 @@ describe('useAgentConnection integration', () => {
       threadId: 'thread-1',
       forwardedProps: {
         command: {
-          resume: JSON.stringify({
+          resume: {
             outcome: 'signed',
             signedDelegations: [
               {
@@ -2170,7 +2675,7 @@ describe('useAgentConnection integration', () => {
                 signature: '0x1234',
               },
             ],
-          }),
+          },
         },
       },
     });

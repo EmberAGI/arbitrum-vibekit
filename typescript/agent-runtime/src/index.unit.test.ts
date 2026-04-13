@@ -189,8 +189,43 @@ describe('agent-runtime facade', () => {
     expect(declarations).not.toContain('__internalPostgres');
     expect(publicDomainContract).toContain('export type AgentRuntimeExecutionStatus');
     expect(source).toContain('export type AgentRuntimeDomainContext');
+    expect(publicDomainContract).toContain('export type AgentRuntimeSharedStateProjectionContext');
     expect(publicDomainContract).toContain('domainProjectionUpdate?: Record<string, unknown>;');
+    expect(publicDomainContract).toContain('projectSharedState?:');
+    expect(publicDomainContract).toContain('sharedState: Record<string, unknown>;');
+    expect(declarations).toContain('export type AgentRuntimeSharedStateProjectionContext');
+    expect(declarations).toContain('projectSharedState?:');
     expect(source).toContain('export interface CreateAgentRuntimeOptions');
+  });
+
+  it('exposes canonical shared-state update commands on the public forwarded command contract', () => {
+    const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+    const declarations = readFileSync(new URL('../dist/index.d.ts', import.meta.url), 'utf8');
+
+    expect(source).toContain('update?: {');
+    expect(source).toContain('clientMutationId: string;');
+    expect(source).toContain('baseRevision?: string;');
+    expect(source).toContain('export type AgentRuntimeSharedStatePatchOperation = {');
+    expect(source).toContain("op: 'add' | 'replace' | 'remove';");
+    expect(source).toContain('path: string;');
+    expect(source).toContain('patch: ReadonlyArray<AgentRuntimeSharedStatePatchOperation>;');
+    expect(declarations).toContain('update?: {');
+    expect(declarations).toContain('clientMutationId: string;');
+    expect(declarations).toContain('baseRevision?: string;');
+    expect(declarations).toContain('export type AgentRuntimeSharedStatePatchOperation = {');
+    expect(declarations).toContain("op: 'add' | 'replace' | 'remove';");
+    expect(declarations).toContain('path: string;');
+    expect(declarations).toContain('patch: ReadonlyArray<AgentRuntimeSharedStatePatchOperation>;');
+  });
+
+  it('keeps public resume payloads open for object passthrough on the forwarded command contract', () => {
+    const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+    const declarations = readFileSync(new URL('../dist/index.d.ts', import.meta.url), 'utf8');
+
+    expect(source).toContain('resume?: unknown;');
+    expect(source).not.toContain('resume?: string;');
+    expect(declarations).toContain('resume?: unknown;');
+    expect(declarations).not.toContain('resume?: string;');
   });
 
   it('owns sessions and control-plane defaults inside the blessed builder', async () => {

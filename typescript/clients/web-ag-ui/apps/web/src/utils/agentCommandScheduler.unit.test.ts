@@ -15,6 +15,7 @@ describe('agentCommandScheduler', () => {
   let onSyncingChange: ReturnType<typeof vi.fn>;
   let onCommandError: ReturnType<typeof vi.fn>;
   let onCommandBusy: ReturnType<typeof vi.fn>;
+  let onSyncRunTerminal: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     runInFlight = false;
@@ -27,6 +28,7 @@ describe('agentCommandScheduler', () => {
     onSyncingChange = vi.fn();
     onCommandError = vi.fn();
     onCommandBusy = vi.fn();
+    onSyncRunTerminal = vi.fn();
   });
 
   const createScheduler = (options?: {
@@ -49,6 +51,7 @@ describe('agentCommandScheduler', () => {
       onSyncingChange,
       onCommandError,
       onCommandBusy,
+      onSyncRunTerminal,
       syncReplayDelayMs: options?.syncReplayDelayMs ?? 25,
       syncBusyMaxRetries: options?.syncBusyMaxRetries ?? 2,
     });
@@ -110,6 +113,43 @@ describe('agentCommandScheduler', () => {
 
     expect(runAgent).toHaveBeenCalledTimes(1);
     expect(agent?.addMessage).toHaveBeenCalledTimes(1);
+
+    scheduler.dispose();
+  });
+
+  it('reports only the completed sync mutation id when a newer sync is queued behind it', async () => {
+    const scheduler = createScheduler();
+
+    scheduler.dispatch('sync', {
+      allowSyncCoalesce: true,
+      messagePayload: { clientMutationId: 'm-1' },
+    });
+
+    runInFlight = true;
+    scheduler.dispatch('sync', {
+      allowSyncCoalesce: true,
+      messagePayload: { clientMutationId: 'm-2' },
+    });
+
+    runInFlight = false;
+    scheduler.handleRunTerminal();
+    await Promise.resolve();
+
+    expect(onSyncRunTerminal).toHaveBeenCalledTimes(1);
+    expect(onSyncRunTerminal).toHaveBeenCalledWith({
+      clientMutationId: 'm-1',
+    });
+
+    const replayMessage = agent?.addMessage.mock.calls.at(-1)?.[0] as { content?: string } | undefined;
+    const parsedReplay =
+      typeof replayMessage?.content === 'string'
+        ? (JSON.parse(replayMessage.content) as { command?: string; clientMutationId?: string })
+        : null;
+
+    expect(parsedReplay).toEqual({
+      command: 'sync',
+      clientMutationId: 'm-2',
+    });
 
     scheduler.dispose();
   });

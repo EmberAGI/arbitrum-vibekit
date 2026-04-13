@@ -1306,12 +1306,13 @@ export function createPortfolioManagerDomain(
     systemContext: async ({ state }) => {
       const currentState = state ?? buildDefaultLifecycleState();
       const context = ['<portfolio_manager_context>'];
+      const protocolHost = options.protocolHost;
       const liveManagedMandateProjection =
-        currentState.phase === 'active' && options.protocolHost
+        currentState.phase === 'active' && protocolHost
           ? await (async () => {
               try {
                 const managedPortfolioState = await readSharedEmberPortfolioState({
-                  protocolHost: options.protocolHost,
+                  protocolHost,
                   threadId: 'system-context',
                   agentId: FIRST_MANAGED_AGENT_TYPE,
                 });

@@ -69,7 +69,7 @@ function createPromptRunInput(prompt: string, overrides: Partial<RunAgentInput> 
   });
 }
 
-function createResumeRunInput(resumePayload: string, overrides: Partial<RunAgentInput> = {}): RunAgentInput {
+function createResumeRunInput(resumePayload: unknown, overrides: Partial<RunAgentInput> = {}): RunAgentInput {
   return createInput({
     forwardedProps: {
       command: {
@@ -516,7 +516,14 @@ describe('agent-runtime HTTP agent integration', () => {
 
     const resumedEvents = await collectEvents(
       agent
-        .run(createResumeRunInput('{"operatorNote":"Use the safe automation window."}', { runId: 'run-resume' }))
+        .run(
+          createResumeRunInput(
+            {
+              operatorNote: 'Use the safe automation window.',
+            },
+            { runId: 'run-resume' },
+          ),
+        )
         .pipe(verifyEvents()),
     );
 

@@ -250,6 +250,7 @@ Every Pi-owned domain module should define one explicit SPI surface:
   - domain-aware context appended to the system prompt path
 - normalized operation handling:
   - one domain-facing operation handler that is agnostic to whether the request came from the direct command lane or the LLM tool lane
+  - direct-lane payloads such as structured interrupt `resume` objects should stay structurally intact until the domain handler or a text-only fallback boundary consumes them
 - domain outputs:
   - adapter-neutral outputs such as artifacts, interrupts, and status-bearing domain results
 - automation policy hooks:

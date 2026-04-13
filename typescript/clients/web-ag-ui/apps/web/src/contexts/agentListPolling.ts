@@ -1,5 +1,4 @@
 import type { AgentSubscriber } from '@ag-ui/client';
-import { v7 as uuidv7 } from 'uuid';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { isBusyRunError } from '../utils/runConcurrency';
 import {
@@ -21,7 +20,14 @@ type CommandMessage = {
 export type AgentListPollingRuntimeAgent = {
   subscribe: (subscriber: AgentSubscriber) => RuntimeSubscription;
   addMessage: (message: CommandMessage) => void;
-  runAgent: () => Promise<unknown>;
+  runAgent: (params?: {
+    forwardedProps?: {
+      command?: {
+        name?: string;
+        source?: string;
+      };
+    };
+  }) => Promise<unknown>;
   detachActiveRun?: () => Promise<void> | void;
 };
 
@@ -173,22 +179,16 @@ export async function pollAgentListUpdateViaAgUi(params: {
     runCompletionTimeoutHandle = setTimeout(() => resolve(false), runCompletionTimeoutMs);
   });
 
-  try {
-    const clientMutationId = uuidv7();
-    runtimeAgent.addMessage({
-      id: uuidv7(),
-      role: 'user',
-      content: JSON.stringify({
-        command: 'sync',
-        source: 'agent-list-poll',
-        clientMutationId,
-      }),
-    });
-  } catch {
-    settle(null);
-  }
-
-  const runPromise = Promise.resolve(runtimeAgent.runAgent())
+  const runPromise = Promise.resolve(
+    runtimeAgent.runAgent({
+      forwardedProps: {
+        command: {
+          name: 'sync',
+          source: 'agent-list-poll',
+        },
+      },
+    }),
+  )
     .then(() => {
       runCompleted = true;
       return true;

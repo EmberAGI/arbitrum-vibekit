@@ -1,3 +1,4 @@
+import { EventType } from '@ag-ui/core';
 import {
   createAssistantMessageEventStream,
   type AssistantMessage,
@@ -511,7 +512,7 @@ function isStateDeltaEvent(event: GatewayEvent): event is StateDeltaEvent {
     typeof event === 'object' &&
     event !== null &&
     'type' in event &&
-    event.type === 'STATE_DELTA' &&
+    event.type === EventType.STATE_DELTA &&
     'delta' in event
   );
 }
@@ -536,7 +537,12 @@ function hasSystemPromptFragments(
   return prompts.some((prompt) => fragments.every((fragment) => prompt.includes(fragment)));
 }
 
-function createLifecycleDomain() {
+function createLifecycleDomain(options?: {
+  projectSharedState?: (params: {
+    sharedState: Record<string, unknown>;
+    currentProjection?: Record<string, unknown>;
+  }) => Record<string, unknown> | undefined;
+}) {
   const phases = new Map<string, LifecycleState>();
 
   const getState = (threadId: string) =>
@@ -592,6 +598,11 @@ function createLifecycleDomain() {
       phases.set(threadId, currentState);
       return [`Lifecycle phase: ${currentState.phase}.`];
     },
+    ...(options?.projectSharedState
+      ? {
+          projectSharedState: options.projectSharedState,
+        }
+      : {}),
     handleOperation: ({
       operation,
       threadId,
@@ -886,19 +897,17 @@ describe('agent-runtime integration', () => {
         },
         {
           op: 'add',
-          path: '/thread/domainProjection',
+          path: '/projected/managedLifecycle',
           value: {
-            managedLifecycle: {
-              phase: 'onboarding',
-              onboardingStep: 'operator-profile',
-            },
+            phase: 'onboarding',
+            onboardingStep: 'operator-profile',
           },
         },
       ]),
     );
 
     expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('a2ui');
-    expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('domainProjection');
+    expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('projectedState');
 
     const resumeEvents = await collectEventSource(
       await runtime.service.run({
@@ -906,7 +915,9 @@ describe('agent-runtime integration', () => {
         runId: 'run-resume',
         forwardedProps: {
           command: {
-            resume: '{"operatorNote":"safe window approved"}',
+            resume: {
+              operatorNote: 'safe window approved',
+            },
           },
         },
       }),
@@ -934,7 +945,7 @@ describe('agent-runtime integration', () => {
         },
         {
           op: 'add',
-          path: '/thread/domainProjection/managedLifecycle/operatorNote',
+          path: '/projected/managedLifecycle/operatorNote',
           value: 'safe window approved',
         },
       ]),
@@ -971,7 +982,7 @@ describe('agent-runtime integration', () => {
         },
         {
           op: 'replace',
-          path: '/thread/domainProjection/managedLifecycle/phase',
+          path: '/projected/managedLifecycle/phase',
           value: 'hired',
         },
         {
@@ -1006,7 +1017,7 @@ describe('agent-runtime integration', () => {
         },
         {
           op: 'replace',
-          path: '/thread/domainProjection/managedLifecycle/phase',
+          path: '/projected/managedLifecycle/phase',
           value: 'fired',
         },
       ]),
@@ -1066,6 +1077,101 @@ describe('agent-runtime integration', () => {
         },
       ]),
     );
+  });
+
+  it('emits one authoritative state delta when a shared-state update also recomputes projected state', async () => {
+    const { persistedThreads, hooks: internalPostgres } = createPersistingInternalPostgres();
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model-shared-update'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain({
+        projectSharedState: ({ sharedState, currentProjection }) => {
+          const settings =
+            typeof sharedState.settings === 'object' && sharedState.settings !== null
+              ? (sharedState.settings as { amount?: unknown })
+              : null;
+          const amount =
+            typeof settings?.amount === 'number' && Number.isFinite(settings.amount)
+              ? settings.amount
+              : null;
+
+          return {
+            ...(currentProjection ?? {}),
+            managedLifecycle: {
+              amountSummary: amount === null ? 'No managed amount configured.' : `Managed amount: ${amount}`,
+            },
+          };
+        },
+      }),
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await readFirstMatchingEvent(
+      await runtime.service.connect({
+        threadId: 'thread-shared-projection',
+        runId: 'run-connect-shared-projection',
+      }),
+      isStateSnapshotEvent,
+    );
+
+    const events = await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-shared-projection',
+        runId: 'run-shared-projection',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: 'mutation-1',
+              baseRevision: 'shared-rev-0',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    const delta = events.find(isStateDeltaEvent);
+    expect(delta?.delta).toEqual(
+      expect.arrayContaining([
+        {
+          op: 'add',
+          path: '/shared/settings',
+          value: {
+            amount: 250,
+          },
+        },
+        {
+          op: 'replace',
+          path: '/projected/managedLifecycle/amountSummary',
+          value: 'Managed amount: 250',
+        },
+        {
+          op: 'replace',
+          path: '/projected/managedLifecycle/amountSummary',
+          value: 'Managed amount: 250',
+        },
+      ]),
+    );
+    expect(persistedThreads.get('thread-shared-projection')?.threadState).toMatchObject({
+      sharedState: {
+        settings: {
+          amount: 250,
+        },
+      },
+      projectedState: {
+        managedLifecycle: {
+          amountSummary: 'Managed amount: 250',
+        },
+      },
+    });
   });
 
   it('logs the final system prompt when DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT is enabled', async () => {
@@ -1555,7 +1661,9 @@ describe('agent-runtime integration', () => {
         runId: 'run-resume-checkpoint-alignment',
         forwardedProps: {
           command: {
-            resume: '{"operatorNote":"safe window approved"}',
+            resume: {
+              operatorNote: 'safe window approved',
+            },
           },
         },
       }),
