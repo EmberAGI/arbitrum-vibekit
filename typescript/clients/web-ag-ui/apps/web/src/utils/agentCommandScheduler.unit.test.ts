@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAgentCommandScheduler } from './agentCommandScheduler';
 
 type SchedulerAgent = {
-  addMessage: ReturnType<typeof vi.fn>;
   isRunning?: boolean;
 };
 
@@ -11,7 +10,7 @@ describe('agentCommandScheduler', () => {
   let runInFlight = false;
   let threadId: string | undefined = 'thread-1';
   let agent: SchedulerAgent | null;
-  let runAgent: ReturnType<typeof vi.fn>;
+  let runCommand: ReturnType<typeof vi.fn>;
   let onSyncingChange: ReturnType<typeof vi.fn>;
   let onCommandError: ReturnType<typeof vi.fn>;
   let onCommandBusy: ReturnType<typeof vi.fn>;
@@ -21,10 +20,9 @@ describe('agentCommandScheduler', () => {
     runInFlight = false;
     threadId = 'thread-1';
     agent = {
-      addMessage: vi.fn(),
       isRunning: false,
     };
-    runAgent = vi.fn(async () => undefined);
+    runCommand = vi.fn(async () => undefined);
     onSyncingChange = vi.fn();
     onCommandError = vi.fn();
     onCommandBusy = vi.fn();
@@ -42,7 +40,7 @@ describe('agentCommandScheduler', () => {
       setRunInFlight: (next) => {
         runInFlight = next;
       },
-      runAgent,
+      runCommand,
       createId: () => 'msg-1',
       isBusyRunError: (error) =>
         error instanceof Error && error.message.includes('already active'),
@@ -64,38 +62,34 @@ describe('agentCommandScheduler', () => {
     const accepted = scheduler.dispatch('sync', { allowSyncCoalesce: true });
 
     expect(accepted).toBe(true);
-    expect(runAgent).not.toHaveBeenCalled();
-    expect(agent?.addMessage).not.toHaveBeenCalled();
+    expect(runCommand).not.toHaveBeenCalled();
     expect(onSyncingChange).toHaveBeenCalledWith(true);
 
     scheduler.dispose();
   });
 
-  it('replays coalesced sync using the latest message payload', async () => {
+  it('replays coalesced sync using the latest command payload', async () => {
     runInFlight = true;
     const scheduler = createScheduler();
 
     scheduler.dispatch('sync', {
       allowSyncCoalesce: true,
-      messagePayload: { clientMutationId: 'm-1' },
+      commandPayload: { clientMutationId: 'm-1' },
     });
     scheduler.dispatch('sync', {
       allowSyncCoalesce: true,
-      messagePayload: { clientMutationId: 'm-2' },
+      commandPayload: { clientMutationId: 'm-2' },
     });
 
     scheduler.handleRunTerminal();
     await Promise.resolve();
 
-    const replayMessage = agent?.addMessage.mock.calls.at(-1)?.[0] as { content?: string } | undefined;
-    const parsedContent =
-      typeof replayMessage?.content === 'string'
-        ? (JSON.parse(replayMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-
-    expect(parsedContent).toEqual({
+    expect(runCommand).toHaveBeenCalledTimes(1);
+    expect(runCommand).toHaveBeenCalledWith(agent, {
       command: 'sync',
-      clientMutationId: 'm-2',
+      commandPayload: {
+        clientMutationId: 'm-2',
+      },
     });
 
     scheduler.dispose();
@@ -106,13 +100,12 @@ describe('agentCommandScheduler', () => {
     const scheduler = createScheduler();
 
     scheduler.dispatch('sync', { allowSyncCoalesce: true });
-    expect(runAgent).not.toHaveBeenCalled();
+    expect(runCommand).not.toHaveBeenCalled();
 
     scheduler.handleRunTerminal();
     await Promise.resolve();
 
-    expect(runAgent).toHaveBeenCalledTimes(1);
-    expect(agent?.addMessage).toHaveBeenCalledTimes(1);
+    expect(runCommand).toHaveBeenCalledTimes(1);
 
     scheduler.dispose();
   });
@@ -122,13 +115,13 @@ describe('agentCommandScheduler', () => {
 
     scheduler.dispatch('sync', {
       allowSyncCoalesce: true,
-      messagePayload: { clientMutationId: 'm-1' },
+      commandPayload: { clientMutationId: 'm-1' },
     });
 
     runInFlight = true;
     scheduler.dispatch('sync', {
       allowSyncCoalesce: true,
-      messagePayload: { clientMutationId: 'm-2' },
+      commandPayload: { clientMutationId: 'm-2' },
     });
 
     runInFlight = false;
@@ -139,16 +132,11 @@ describe('agentCommandScheduler', () => {
     expect(onSyncRunTerminal).toHaveBeenCalledWith({
       clientMutationId: 'm-1',
     });
-
-    const replayMessage = agent?.addMessage.mock.calls.at(-1)?.[0] as { content?: string } | undefined;
-    const parsedReplay =
-      typeof replayMessage?.content === 'string'
-        ? (JSON.parse(replayMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-
-    expect(parsedReplay).toEqual({
+    expect(runCommand).toHaveBeenNthCalledWith(2, agent, {
       command: 'sync',
-      clientMutationId: 'm-2',
+      commandPayload: {
+        clientMutationId: 'm-2',
+      },
     });
 
     scheduler.dispose();
@@ -157,7 +145,7 @@ describe('agentCommandScheduler', () => {
   it('uses bounded retries for sync busy responses', async () => {
     vi.useFakeTimers();
 
-    runAgent = vi
+    runCommand = vi
       .fn<() => Promise<void>>()
       .mockRejectedValueOnce(new Error('run already active'))
       .mockRejectedValueOnce(new Error('run already active'));
@@ -170,7 +158,7 @@ describe('agentCommandScheduler', () => {
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(20);
 
-      expect(runAgent).toHaveBeenCalledTimes(2);
+      expect(runCommand).toHaveBeenCalledTimes(2);
       expect(onCommandBusy).toHaveBeenCalledTimes(1);
       expect(onCommandBusy).toHaveBeenCalledWith('sync', expect.any(Error));
       expect(onCommandError).not.toHaveBeenCalled();
@@ -184,7 +172,7 @@ describe('agentCommandScheduler', () => {
   it('retries sync on abort-like transport failures before surfacing busy state', async () => {
     vi.useFakeTimers();
 
-    runAgent = vi
+    runCommand = vi
       .fn<() => Promise<void>>()
       .mockRejectedValueOnce(new Error('BodyStreamBuffer was aborted'))
       .mockResolvedValueOnce(undefined);
@@ -197,7 +185,7 @@ describe('agentCommandScheduler', () => {
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(20);
 
-      expect(runAgent).toHaveBeenCalledTimes(2);
+      expect(runCommand).toHaveBeenCalledTimes(2);
       expect(onCommandBusy).not.toHaveBeenCalled();
       expect(onCommandError).not.toHaveBeenCalled();
     } finally {
@@ -213,34 +201,29 @@ describe('agentCommandScheduler', () => {
     const accepted = scheduler.dispatch('hire');
 
     expect(accepted).toBe(false);
-    expect(runAgent).not.toHaveBeenCalled();
-    expect(agent?.addMessage).not.toHaveBeenCalled();
+    expect(runCommand).not.toHaveBeenCalled();
 
     scheduler.dispose();
   });
 
-  it('adds a clientMutationId to command messages when one is not provided', () => {
+  it('adds a clientMutationId to direct command payloads when one is not provided', () => {
     const scheduler = createScheduler();
 
     const accepted = scheduler.dispatch('hire');
 
     expect(accepted).toBe(true);
-    const firstMessage = agent?.addMessage.mock.calls[0]?.[0] as { content?: string } | undefined;
-    const parsedContent =
-      typeof firstMessage?.content === 'string'
-        ? (JSON.parse(firstMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-
-    expect(parsedContent).toEqual({
+    expect(runCommand).toHaveBeenCalledWith(agent, {
       command: 'hire',
-      clientMutationId: 'msg-1',
+      commandPayload: {
+        clientMutationId: 'msg-1',
+      },
     });
 
     scheduler.dispose();
   });
 
   it('normalizes busy failures for non-sync commands via onCommandBusy', async () => {
-    runAgent = vi.fn(async () => {
+    runCommand = vi.fn(async () => {
       throw new Error('run already active');
     });
     const scheduler = createScheduler();
@@ -256,7 +239,7 @@ describe('agentCommandScheduler', () => {
   });
 
   it('treats abort-like failures for non-sync commands as transient busy responses', async () => {
-    runAgent = vi.fn(async () => {
+    runCommand = vi.fn(async () => {
       throw new Error('BodyStreamBuffer was aborted');
     });
     const scheduler = createScheduler();
@@ -283,7 +266,6 @@ describe('agentCommandScheduler', () => {
 
     expect(accepted).toBe(true);
     expect(runCustom).toHaveBeenCalledTimes(1);
-    expect(agent?.addMessage).not.toHaveBeenCalled();
 
     scheduler.dispose();
   });

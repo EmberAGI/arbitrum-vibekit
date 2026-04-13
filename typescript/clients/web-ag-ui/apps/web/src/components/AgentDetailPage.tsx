@@ -155,7 +155,6 @@ interface AgentDetailPageProps {
   telemetry?: TelemetryItem[];
   events?: ClmmEvent[];
   messages?: Message[];
-  messageSnapshotEpoch?: number;
   lifecycleState?: ThreadLifecycle;
   domainProjection?: Record<string, unknown>;
   // Settings
@@ -264,80 +263,9 @@ function asFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function parseJsonMessageContent(content: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(content) as unknown;
-    if (typeof parsed !== 'object' || parsed === null) return null;
-    return parsed as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-function parseCommandMessage(content: string): string | null {
-  const parsed = parseJsonMessageContent(content);
-  if (!parsed || !('command' in parsed)) {
-    return null;
-  }
-
-  const command = parsed.command;
-  if (command === 'hire') return 'Submitted hire request.';
-  if (command === 'fire') return 'Submitted fire request.';
-  if (command === 'sync') return 'Requested a runtime sync.';
-  if (command === 'resume') return 'Submitted onboarding response.';
-  return typeof command === 'string' ? `Submitted ${command} request.` : null;
-}
-
-function isSyncCommandMessage(message: Message): boolean {
-  if (message.role !== 'user' || typeof message.content !== 'string') {
-    return false;
-  }
-
-  return parseJsonMessageContent(message.content)?.command === 'sync';
-}
-
-function isSyncedAckMessage(message: Message): boolean {
-  if (message.role !== 'assistant' || typeof message.content !== 'string') {
-    return false;
-  }
-
-  const parsed = parseJsonMessageContent(message.content);
-  const clientMutationId = parsed?.clientMutationId;
-  return parsed?.status === 'synced' && typeof clientMutationId === 'string' && clientMutationId.trim().length > 0;
-}
-
-function getReasoningLinkedAssistantId(message: Message): string | null {
-  if (message.role !== 'reasoning') {
-    return null;
-  }
-
-  const parentMessageId = getParentMessageId(message);
-  if (parentMessageId) {
-    return parentMessageId;
-  }
-
-  const idMatch = message.id.match(/:reasoning:(.+):\d+$/);
-  return idMatch?.[1] ?? null;
-}
-
-function filterVisibleTranscriptMessages(messages: Message[]): Message[] {
-  const hiddenSyncAckMessageIds = new Set(
-    messages.filter((message) => isSyncedAckMessage(message)).map((message) => message.id),
-  );
-
-  return messages.filter((message) => {
-    if (isSyncCommandMessage(message) || hiddenSyncAckMessageIds.has(message.id)) {
-      return false;
-    }
-
-    const linkedAssistantId = getReasoningLinkedAssistantId(message);
-    return !(linkedAssistantId && hiddenSyncAckMessageIds.has(linkedAssistantId));
-  });
-}
-
 function getMessageText(message: Message): string {
   if (typeof message.content === 'string') {
-    return parseCommandMessage(message.content) ?? message.content;
+    return message.content;
   }
 
   if (Array.isArray(message.content)) {
@@ -368,131 +296,7 @@ type VisibleChatMessage = {
   label: string;
   text: string;
   role: Message['role'];
-  parentMessageId?: string;
-  originalIndex: number;
-  appearanceOrder: number;
 };
-
-type VisibleMessageOrderEntry = {
-  nextOrder: number;
-  orderById: Map<string, number>;
-  previousVisibleMessages: Array<{
-    id: string;
-    role: Message['role'];
-    text: string;
-    appearanceOrder: number;
-  }>;
-};
-
-const visibleMessageOrderCache = new Map<string, VisibleMessageOrderEntry>();
-
-function getVisibleMessageOrderEntry(cacheKey: string): VisibleMessageOrderEntry {
-  const existing = visibleMessageOrderCache.get(cacheKey);
-  if (existing) {
-    return existing;
-  }
-
-  const created: VisibleMessageOrderEntry = {
-    nextOrder: 0,
-    orderById: new Map<string, number>(),
-    previousVisibleMessages: [],
-  };
-  visibleMessageOrderCache.set(cacheKey, created);
-  return created;
-}
-
-function buildVisibleMessageReplacementKey(message: {
-  role: Message['role'];
-  text: string;
-}): string {
-  return `${message.role}\u0000${message.text}`;
-}
-
-function getIncrementalMessagePriority(role: Message['role']): number {
-  switch (role) {
-    case 'user':
-      return 0;
-    case 'reasoning':
-      return 1;
-    case 'assistant':
-      return 2;
-    default:
-      return 3;
-  }
-}
-
-function getParentMessageId(message: Message): string | undefined {
-  if (!('parentMessageId' in message)) {
-    return undefined;
-  }
-  return typeof message.parentMessageId === 'string' ? message.parentMessageId : undefined;
-}
-
-function orderVisibleChatMessages(
-  messages: Message[],
-  appearanceOrderById: ReadonlyMap<string, number>,
-): VisibleChatMessage[] {
-  const visibleMessages = messages
-    .map(
-      (message, originalIndex): VisibleChatMessage => ({
-        id: message.id,
-        label: getMessageRoleLabel(message),
-        text: getMessageText(message),
-        role: message.role,
-        parentMessageId: getParentMessageId(message),
-        originalIndex,
-        appearanceOrder: appearanceOrderById.get(message.id) ?? Number.MAX_SAFE_INTEGER,
-      }),
-    )
-    .filter((message) => message.text.length > 0);
-
-  const rankedVisibleMessages = [...visibleMessages].sort(
-    (left, right) =>
-      left.appearanceOrder - right.appearanceOrder || left.originalIndex - right.originalIndex,
-  );
-
-  const visibleMessageIds = new Set(rankedVisibleMessages.map((message) => message.id));
-  const reasoningByParentId = new Map<string, VisibleChatMessage[]>();
-
-  for (const message of rankedVisibleMessages) {
-    if (message.role !== 'reasoning' || !message.parentMessageId || !visibleMessageIds.has(message.parentMessageId)) {
-      continue;
-    }
-
-    const groupedMessages = reasoningByParentId.get(message.parentMessageId) ?? [];
-    groupedMessages.push(message);
-    reasoningByParentId.set(message.parentMessageId, groupedMessages);
-  }
-
-  const orderedMessages: VisibleChatMessage[] = [];
-  const appendedMessageIds = new Set<string>();
-
-  for (const message of rankedVisibleMessages) {
-    if (message.parentMessageId && reasoningByParentId.has(message.parentMessageId)) {
-      continue;
-    }
-
-    const reasoningMessages = reasoningByParentId.get(message.id) ?? [];
-    for (const reasoningMessage of reasoningMessages.sort(
-      (left, right) =>
-        left.appearanceOrder - right.appearanceOrder || left.originalIndex - right.originalIndex,
-    )) {
-      if (appendedMessageIds.has(reasoningMessage.id)) {
-        continue;
-      }
-      orderedMessages.push(reasoningMessage);
-      appendedMessageIds.add(reasoningMessage.id);
-    }
-
-    if (appendedMessageIds.has(message.id)) {
-      continue;
-    }
-    orderedMessages.push(message);
-    appendedMessageIds.add(message.id);
-  }
-
-  return orderedMessages;
-}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
@@ -1109,7 +913,6 @@ export function AgentDetailPage({
   telemetry = [],
   events = [],
   messages = [],
-  messageSnapshotEpoch = 0,
   lifecycleState,
   domainProjection,
   settings,
@@ -1484,7 +1287,6 @@ export function AgentDetailPage({
       isHired={isHired}
       isHiring={isHiring}
       messages={messages}
-      messageSnapshotEpoch={messageSnapshotEpoch}
       activityEvents={events}
       chatDraft={chatDraft}
       onChatDraftChange={setChatDraft}
@@ -2483,7 +2285,6 @@ function AgentChatTab(props: {
   isHired: boolean;
   isHiring: boolean;
   messages: Message[];
-  messageSnapshotEpoch: number;
   activityEvents: ClmmEvent[];
   chatDraft: string;
   onChatDraftChange: (value: string) => void;
@@ -2493,97 +2294,18 @@ function AgentChatTab(props: {
   onSendChatMessage?: (content: string) => void;
   onInterruptSubmit?: (input: PiOperatorNoteInput) => void;
 }) {
-  const visibleMessageOrderCacheKey = useId();
-  useEffect(() => {
-    return () => {
-      visibleMessageOrderCache.delete(visibleMessageOrderCacheKey);
-    };
-  }, [visibleMessageOrderCacheKey]);
-
   const visibleMessages = useMemo(() => {
-    const visibleMessageOrderEntry = getVisibleMessageOrderEntry(visibleMessageOrderCacheKey);
-    // TODO(i574): Remove this temporary sync-noise filter during the agent-state/thread-state refactor.
-    const filteredMessages = filterVisibleTranscriptMessages(props.messages);
-    const allMessageIds = new Set(filteredMessages.map((message) => message.id));
-    for (const messageId of [...visibleMessageOrderEntry.orderById.keys()]) {
-      if (!allMessageIds.has(messageId)) {
-        visibleMessageOrderEntry.orderById.delete(messageId);
-      }
-    }
-
-    const nextVisibleMessages = filteredMessages
-      .map((message) => ({
-        id: message.id,
-        role: message.role,
-        text: getMessageText(message),
-      }))
+    return props.messages
+      .map(
+        (message): VisibleChatMessage => ({
+          id: message.id,
+          label: getMessageRoleLabel(message),
+          role: message.role,
+          text: getMessageText(message),
+        }),
+      )
       .filter((message) => message.text.length > 0);
-
-    if (filteredMessages.length === 0) {
-      visibleMessageOrderEntry.orderById.clear();
-      visibleMessageOrderEntry.nextOrder = 0;
-      visibleMessageOrderEntry.previousVisibleMessages = [];
-      return [];
-    }
-
-    const nextVisibleMessageIds = new Set(nextVisibleMessages.map((message) => message.id));
-    const reusableOrdersByKey = new Map<string, number[]>();
-
-    for (const previousMessage of visibleMessageOrderEntry.previousVisibleMessages) {
-      if (nextVisibleMessageIds.has(previousMessage.id)) {
-        continue;
-      }
-
-      const replacementKey = buildVisibleMessageReplacementKey(previousMessage);
-      const reusableOrders = reusableOrdersByKey.get(replacementKey) ?? [];
-      reusableOrders.push(previousMessage.appearanceOrder);
-      reusableOrdersByKey.set(replacementKey, reusableOrders);
-    }
-
-    for (const reusableOrders of reusableOrdersByKey.values()) {
-      reusableOrders.sort((left, right) => left - right);
-    }
-
-    const pendingNewMessages: typeof nextVisibleMessages = [];
-
-    for (const message of nextVisibleMessages) {
-      if (visibleMessageOrderEntry.orderById.has(message.id)) {
-        continue;
-      }
-
-      const replacementKey = buildVisibleMessageReplacementKey(message);
-      const reusableOrders = reusableOrdersByKey.get(replacementKey);
-      const reusableOrder = reusableOrders?.shift();
-      if (reusableOrder !== undefined) {
-        visibleMessageOrderEntry.orderById.set(message.id, reusableOrder);
-        continue;
-      }
-
-      pendingNewMessages.push(message);
-    }
-
-    const orderedPendingNewMessages =
-      visibleMessageOrderEntry.previousVisibleMessages.length === 0
-        ? pendingNewMessages
-        : [...pendingNewMessages].sort(
-            (left, right) =>
-              getIncrementalMessagePriority(left.role) - getIncrementalMessagePriority(right.role) ||
-              left.id.localeCompare(right.id),
-          );
-
-    for (const message of orderedPendingNewMessages) {
-      visibleMessageOrderEntry.orderById.set(message.id, visibleMessageOrderEntry.nextOrder);
-      visibleMessageOrderEntry.nextOrder += 1;
-    }
-    const orderedMessages = orderVisibleChatMessages(filteredMessages, visibleMessageOrderEntry.orderById);
-    visibleMessageOrderEntry.previousVisibleMessages = orderedMessages.map((message) => ({
-      id: message.id,
-      role: message.role,
-      text: message.text,
-      appearanceOrder: message.appearanceOrder,
-    }));
-    return orderedMessages;
-  }, [props.messages, visibleMessageOrderCacheKey]);
+  }, [props.messages]);
   const activityCards = buildPiExampleChatCards(props.activityEvents);
 
   return (

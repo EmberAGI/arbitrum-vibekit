@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import { type CommandEnvelope } from 'agent-workflow-core';
 import type { ClmmState } from '../context.js';
 
 import { resolveCommandTarget, runCommandNode } from './runCommand.js';
 
-function createState(messageContent: string): ClmmState {
+function createState(commandEnvelope: CommandEnvelope<'hire' | 'fire' | 'cycle' | 'sync'> | null): ClmmState {
   return {
-    messages: [{ role: 'user', content: messageContent }],
+    messages: [],
     copilotkit: { actions: [], context: [] },
     settings: {},
     private: {
@@ -15,6 +16,8 @@ function createState(messageContent: string): ClmmState {
       streamLimit: -1,
       cronScheduled: false,
       bootstrapped: true,
+      pendingCommand: commandEnvelope,
+      activeCommand: null,
     },
     thread: {
       lastAppliedClientMutationId: undefined,
@@ -45,7 +48,7 @@ function applyRunCommandUpdate(state: ClmmState): ClmmState {
 
 describe('runCommandNode (starter agent)', () => {
   it('records sync mutation acknowledgements in thread state envelope', () => {
-    const state = createState(JSON.stringify({ command: 'sync', clientMutationId: 'cmid-1' }));
+    const state = createState({ command: 'sync', clientMutationId: 'cmid-1' });
 
     const result = runCommandNode(state) as unknown as {
       thread?: { lastAppliedClientMutationId?: string };
@@ -55,13 +58,14 @@ describe('runCommandNode (starter agent)', () => {
   });
 
   it('suppresses cycle commands while onboarding is incomplete', () => {
-    const state = createState(JSON.stringify({ command: 'cycle' }));
+    const state = createState({ command: 'cycle' });
+    const updated = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('syncState');
+    expect(resolveCommandTarget(updated)).toBe('syncState');
   });
 
   it('routes cycle commands once onboarding is complete', () => {
-    const state = createState(JSON.stringify({ command: 'cycle' }));
+    const state = createState({ command: 'cycle' });
     state.thread.poolArtifact = {
       artifactId: 'camelot-pools',
       parts: [],
@@ -82,18 +86,21 @@ describe('runCommandNode (starter agent)', () => {
       manualBandwidthBps: 125,
     };
 
-    expect(resolveCommandTarget(state)).toBe('runCycleCommand');
+    const updated = applyRunCommandUpdate(state);
+
+    expect(resolveCommandTarget(updated)).toBe('runCycleCommand');
   });
 
   it('routes cycle to bootstrap when thread is not bootstrapped', () => {
-    const state = createState(JSON.stringify({ command: 'cycle' }));
+    const state = createState({ command: 'cycle' });
     state.private.bootstrapped = false;
+    const updated = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('bootstrap');
+    expect(resolveCommandTarget(updated)).toBe('bootstrap');
   });
 
   it('suppresses replayed non-sync command envelopes with the same clientMutationId', () => {
-    const state = createState(JSON.stringify({ command: 'cycle', clientMutationId: 'cycle-1' }));
+    const state = createState({ command: 'cycle', clientMutationId: 'cycle-1' });
     state.thread.poolArtifact = {
       artifactId: 'camelot-pools',
       parts: [],

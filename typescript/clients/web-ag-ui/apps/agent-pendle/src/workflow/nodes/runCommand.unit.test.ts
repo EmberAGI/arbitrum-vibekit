@@ -4,6 +4,11 @@ import type { ClmmState } from '../context.js';
 
 import { resolveCommandTarget, runCommandNode } from './runCommand.js';
 
+type PendingCommandEnvelope = {
+  command: 'hire' | 'fire' | 'cycle' | 'sync';
+  clientMutationId?: string;
+};
+
 const baseState = (): ClmmState => ({
   messages: [],
   copilotkit: { actions: [], context: [] },
@@ -14,6 +19,8 @@ const baseState = (): ClmmState => ({
     streamLimit: -1,
     cronScheduled: false,
     bootstrapped: false,
+    pendingCommand: null,
+    activeCommand: null,
   },
   thread: {
     command: undefined,
@@ -53,12 +60,6 @@ const baseState = (): ClmmState => ({
   },
 });
 
-const message = (command: 'hire' | 'fire' | 'cycle' | 'sync') => ({
-  id: 'msg-1',
-  role: 'user' as const,
-  content: JSON.stringify({ command }),
-});
-
 const applyRunCommandUpdate = (state: ClmmState): ClmmState => {
   const update = runCommandNode(state);
   return {
@@ -77,13 +78,10 @@ const applyRunCommandUpdate = (state: ClmmState): ClmmState => {
 describe('resolveCommandTarget', () => {
   it('records lastAppliedClientMutationId when sync command includes one', () => {
     const state = baseState();
-    state.messages = [
-      {
-        id: 'msg-sync',
-        role: 'user',
-        content: JSON.stringify({ command: 'sync', clientMutationId: 'mutation-1' }),
-      },
-    ];
+    state.private.pendingCommand = {
+      command: 'sync',
+      clientMutationId: 'mutation-1',
+    };
 
     const next = runCommandNode(state);
 
@@ -92,26 +90,29 @@ describe('resolveCommandTarget', () => {
 
   it('routes cycle to bootstrap when not bootstrapped', () => {
     const state = baseState();
-    state.messages = [message('cycle')];
+    state.private.pendingCommand = { command: 'cycle' };
+    const next = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('bootstrap');
+    expect(resolveCommandTarget(next)).toBe('bootstrap');
   });
 
   it('routes cycle to syncState when bootstrapped but onboarding is incomplete', () => {
     const state = baseState();
     state.private.bootstrapped = true;
-    state.messages = [message('cycle')];
+    state.private.pendingCommand = { command: 'cycle' };
+    const next = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('syncState');
+    expect(resolveCommandTarget(next)).toBe('syncState');
   });
 
   it('routes cycle to syncState when funding token selection is missing', () => {
     const state = baseState();
     state.private.bootstrapped = true;
     state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
-    state.messages = [message('cycle')];
+    state.private.pendingCommand = { command: 'cycle' };
+    const next = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('syncState');
+    expect(resolveCommandTarget(next)).toBe('syncState');
   });
 
   it('routes cycle to syncState when delegations are required but missing', () => {
@@ -120,9 +121,10 @@ describe('resolveCommandTarget', () => {
     state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
     state.thread.fundingTokenInput = { fundingTokenAddress: '0xdef' as `0x${string}` };
     state.thread.delegationsBypassActive = false;
-    state.messages = [message('cycle')];
+    state.private.pendingCommand = { command: 'cycle' };
+    const next = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('syncState');
+    expect(resolveCommandTarget(next)).toBe('syncState');
   });
 
   it('routes cycle to syncState when operator config is missing', () => {
@@ -131,9 +133,10 @@ describe('resolveCommandTarget', () => {
     state.thread.operatorInput = { walletAddress: '0xabc', baseContributionUsd: 10 };
     state.thread.fundingTokenInput = { fundingTokenAddress: '0xdef' as `0x${string}` };
     state.thread.delegationsBypassActive = true;
-    state.messages = [message('cycle')];
+    state.private.pendingCommand = { command: 'cycle' };
+    const next = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('syncState');
+    expect(resolveCommandTarget(next)).toBe('syncState');
   });
 
   it('routes cycle to syncState when setup is not complete yet', () => {
@@ -159,9 +162,10 @@ describe('resolveCommandTarget', () => {
       },
     };
     state.thread.setupComplete = false;
-    state.messages = [message('cycle')];
+    state.private.pendingCommand = { command: 'cycle' };
+    const next = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('syncState');
+    expect(resolveCommandTarget(next)).toBe('syncState');
   });
 
   it('routes cycle to runCycleCommand when configured and setup complete', () => {
@@ -187,9 +191,10 @@ describe('resolveCommandTarget', () => {
       },
     };
     state.thread.setupComplete = true;
-    state.messages = [message('cycle')];
+    state.private.pendingCommand = { command: 'cycle' };
+    const next = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('runCycleCommand');
+    expect(resolveCommandTarget(next)).toBe('runCycleCommand');
   });
 
   it('suppresses replayed non-sync command envelopes with the same clientMutationId', () => {
@@ -215,15 +220,14 @@ describe('resolveCommandTarget', () => {
       },
     };
     state.thread.setupComplete = true;
-    state.messages = [
-      {
-        id: 'msg-1',
-        role: 'user',
-        content: JSON.stringify({ command: 'cycle', clientMutationId: 'cycle-1' }),
-      },
-    ];
+    state.private.pendingCommand = {
+      command: 'cycle',
+      clientMutationId: 'cycle-1',
+    };
 
     const first = applyRunCommandUpdate(state);
+    expect(first.private.activeCommand).toBe('cycle');
+    expect(first.private.pendingCommand).toBeNull();
     expect(resolveCommandTarget(first)).toBe('runCycleCommand');
 
     const second = applyRunCommandUpdate(first);

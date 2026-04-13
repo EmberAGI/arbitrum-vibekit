@@ -1,5 +1,4 @@
 import type { AgentSubscriber } from '@ag-ui/client';
-import { getAgentConfig } from '../config/agents';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { isBusyRunError } from '../utils/runConcurrency';
 import {
@@ -12,15 +11,8 @@ type RuntimeSubscription = {
   unsubscribe: () => void;
 };
 
-type CommandMessage = {
-  id: string;
-  role: 'user';
-  content: string;
-};
-
 export type AgentListPollingRuntimeAgent = {
   subscribe: (subscriber: AgentSubscriber) => RuntimeSubscription;
-  addMessage: (message: CommandMessage) => void;
   runAgent: (params?: {
     forwardedProps?: {
       command?: {
@@ -50,10 +42,6 @@ type PollRuntimeAgentFactory = (params: {
   agentId: string;
   threadId: string;
 }) => AgentListPollingRuntimeAgent;
-
-function resolveAgentListPollTransport(agentId: string): 'message' | 'forwarded-props' {
-  return getAgentConfig(agentId).imperativeCommandTransport ?? 'message';
-}
 
 export function resolveAgentListPollIntervalMs(rawValue: string | undefined): number {
   const parsed = Number(rawValue ?? 15_000);
@@ -187,29 +175,14 @@ export async function pollAgentListUpdateViaAgUi(params: {
   });
 
   const runPromise = Promise.resolve(
-    (() => {
-      const commandTransport = resolveAgentListPollTransport(params.agentId);
-      if (commandTransport === 'message') {
-        runtimeAgent.addMessage({
-          id: `agent-list-poll:${params.threadId}:${Date.now()}`,
-          role: 'user',
-          content: JSON.stringify({
-            command: AGENT_LIST_POLL_COMMAND,
-            source: AGENT_LIST_POLL_SOURCE,
-          }),
-        });
-        return runtimeAgent.runAgent();
-      }
-
-      return runtimeAgent.runAgent({
+    runtimeAgent.runAgent({
         forwardedProps: {
           command: {
             name: AGENT_LIST_POLL_COMMAND,
             source: AGENT_LIST_POLL_SOURCE,
           },
         },
-      });
-    })(),
+      }),
   )
     .then(() => {
       runCompleted = true;

@@ -172,7 +172,6 @@ export interface UseAgentConnectionResult {
   transactionHistory: Transaction[];
   events: ClmmEvent[];
   messages: Message[];
-  messageSnapshotEpoch: number;
   settings: AgentSettings;
 
   // Derived state
@@ -248,7 +247,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     rollbackSettings: null,
   });
   const [uiError, setUiError] = useState<string | null>(null);
-  const [messageSnapshotEpoch, setMessageSnapshotEpoch] = useState(0);
+  const [, setMessageStateRevision] = useState(0);
   const lastConnectedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
   const threadIdRef = useRef<string | undefined>(undefined);
@@ -415,7 +414,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const dispatchCommand = useCallback(
     (
       command: string,
-      options?: { allowSyncCoalesce?: boolean; messagePayload?: Record<string, unknown> },
+      options?: { allowSyncCoalesce?: boolean; commandPayload?: Record<string, unknown> },
     ) => {
       const scheduler = commandSchedulerRef.current;
       if (!scheduler) {
@@ -441,42 +440,33 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [copilotkit],
   );
 
+  const runNamedCommandOnCurrentThread = useCallback(
+    (
+      currentAgent: HookAgent,
+      params: {
+        command: string;
+        commandPayload?: Record<string, unknown>;
+      },
+    ) =>
+      runAgentOnCurrentThread(currentAgent, {
+        forwardedProps: {
+          command: {
+            name: params.command,
+            ...(params.commandPayload ?? {}),
+          },
+        },
+      }),
+    [runAgentOnCurrentThread],
+  );
+
   const stopAgentOnCurrentThread = useCallback(
     (currentAgent: HookAgent) => copilotkit.stopAgent({ agent: currentAgent }),
     [copilotkit],
   );
 
-  const runDirectCommand = useCallback(
-    (command: string) => {
-      const scheduler = commandSchedulerRef.current;
-      if (!scheduler) {
-        return false;
-      }
-
-      return scheduler.dispatchCustom({
-        command,
-        run: async (currentAgent) =>
-          runAgentOnCurrentThread(currentAgent, {
-            forwardedProps: {
-              command: {
-                name: command,
-              },
-            },
-          }),
-      });
-    },
-    [runAgentOnCurrentThread],
-  );
-
   const runCommand = useCallback(
-    (command: string) => {
-      if (config.imperativeCommandTransport === 'forwarded-props') {
-        return runDirectCommand(command);
-      }
-
-      return dispatchCommand(command);
-    },
-    [config.imperativeCommandTransport, dispatchCommand, runDirectCommand],
+    (command: string) => dispatchCommand(command),
+    [dispatchCommand],
   );
 
   const setRunInFlight = useCallback((next: boolean) => {
@@ -823,7 +813,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       return (event as { snapshot?: unknown }).snapshot ?? null;
     };
 
-    const applyMessages = (nextMessages: unknown, options?: { resetVisibleOrder?: boolean }) => {
+    const applyMessages = (nextMessages: unknown) => {
       const normalized = Array.isArray(nextMessages) ? (nextMessages as Message[]) : [];
       const previousState = hasStateValues(agent.state) ? (agent.state as ThreadSnapshot) : initialAgentState;
       const previousMessages = Array.isArray(previousState.messages)
@@ -832,13 +822,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       if (messagesEqual(previousMessages, normalized)) {
         return;
       }
-      if (options?.resetVisibleOrder) {
-        setMessageSnapshotEpoch((current) => current + 1);
-      }
       agent.setState({
         ...previousState,
         messages: normalized,
       });
+      setMessageStateRevision((current) => current + 1);
     };
 
     const subscription = agent.subscribe({
@@ -908,7 +896,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           inputRunId: getInputRunId(payload),
           currentThreadId: threadIdRef.current ?? null,
         });
-        applyMessages(payload.messages, { resetVisibleOrder: true });
+        applyMessages(payload.messages);
       },
       onMessagesChanged: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
@@ -958,7 +946,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       getThreadId: () => threadIdRef.current,
       getRunInFlight: () => runInFlightRef.current,
       setRunInFlight,
-      runAgent: async (currentAgent) => runAgentOnCurrentThread(currentAgent),
+      runCommand: async (currentAgent, params) => runNamedCommandOnCurrentThread(currentAgent, params),
       createId: v7,
       isBusyRunError,
       isAbortLikeError,
@@ -969,9 +957,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           isSyncing,
         });
       },
-      onSyncRunTerminal: (messagePayload) => {
+      onSyncRunTerminal: (commandPayload) => {
         const clientMutationId =
-          typeof messagePayload?.clientMutationId === 'string' ? messagePayload.clientMutationId : null;
+          typeof commandPayload?.clientMutationId === 'string' ? commandPayload.clientMutationId : null;
         clearPendingSyncMutation(clientMutationId);
       },
       onCommandBusy: (command, error) => {
@@ -1020,7 +1008,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         commandSchedulerRef.current = null;
       }
     };
-  }, [agentId, clearPendingSyncMutation, runAgentOnCurrentThread, setRunInFlight]);
+  }, [agentId, clearPendingSyncMutation, runNamedCommandOnCurrentThread, setRunInFlight]);
 
   useEffect(() => {
     const ownerId = streamOwnerIdRef.current;
@@ -1392,20 +1380,17 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         });
         const ok = await fireAgentRun({
           agent: value,
-          runAgent: async (current) => runAgentOnCurrentThread(current),
-          runDirectCommand: async (current, commandName) =>
-            runAgentOnCurrentThread(current, {
-              forwardedProps: {
-                command: {
-                  name: commandName,
-                },
+          runDirectCommand: async (current, input) =>
+            runNamedCommandOnCurrentThread(current, {
+              command: input.commandName,
+              commandPayload: {
+                clientMutationId: input.clientMutationId,
               },
             }),
           preemptActiveRun: stopAgentOnCurrentThread,
           threadId,
           runInFlightRef,
           createId: v7,
-          commandTransport: config.imperativeCommandTransport,
           onError: (message) => {
             setUiError(message);
             setIsFiring(false);
@@ -1439,9 +1424,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
     setTimeout(() => setIsFiring(false), 3000);
   }, [
-    config.imperativeCommandTransport,
     isFiring,
-    runAgentOnCurrentThread,
+    runNamedCommandOnCurrentThread,
     stopAgentOnCurrentThread,
     threadId,
   ]);
@@ -1627,7 +1611,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       });
       updateSettings(updates);
 
-      if (config.imperativeCommandTransport === 'forwarded-props') {
+      if (config.settingsSyncTransport === 'shared-state-update') {
         const scheduler = commandSchedulerRef.current;
         if (!scheduler || !sharedStateRevision) {
           rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
@@ -1687,7 +1671,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
       const accepted = dispatchCommand('sync', {
         allowSyncCoalesce: true,
-        messagePayload: {
+        commandPayload: {
           clientMutationId,
         },
       });
@@ -1697,7 +1681,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       }
     },
     [
-      config.imperativeCommandTransport,
+      config.settingsSyncTransport,
       dispatchCommand,
       hasStateValues,
       runAgentOnCurrentThread,
@@ -1746,7 +1730,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     transactionHistory,
     events,
     messages,
-    messageSnapshotEpoch,
     settings,
     isHired,
     isActive,

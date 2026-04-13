@@ -132,6 +132,7 @@ Explicit non-goal container:
 
 - `AgentCommandBus`:
   - Sends named commands such as `hire`/`fire`, interrupt responses, and shared-state `command.update` intents via AG-UI `run` payloads.
+  - Uses `forwardedProps.command` for imperative control intent instead of synthetic JSON chat messages.
   - `fire` may invoke AG-UI `stop` as a pre-dispatch preemption control.
   - No out-of-band command mutation.
 
@@ -154,6 +155,7 @@ Explicit non-goal container:
   - The only server route used by web for agent communication.
   - Exposes AG-UI `connect`, `run`, and `stop` semantics used by web.
   - Request metadata and debug traces should read command intent from `forwardedProps.command` and related control-lane fields, not by parsing the last chat message.
+  - Workflow-runtime adapters may translate `forwardedProps.command` into internal `private.pendingCommand` state updates before graph execution, but that is runtime-private implementation detail rather than a second web contract.
   - Structured interrupt-resume tracing should log full serialized `resumePayloadLength` separately from the truncated `resumePayloadPreview`.
   - For standalone Pi-backed agents, imports runtime-owned transport helpers rather than defining Pi-specific transport behavior locally.
 
@@ -181,7 +183,7 @@ Each `apps/agent*` uses a standard graph shape:
 Target factorization:
 
 - `@web-ag-ui/agent-workflow-core` (new shared internal package):
-  - Canonical command parsing
+  - Canonical direct-command envelope parsing and pending-command state-update helpers
   - Canonical onboarding + task state machine
   - Shared `ThreadState` schema + versioning
   - Shared event/status helpers

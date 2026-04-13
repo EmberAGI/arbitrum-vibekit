@@ -156,6 +156,28 @@ async function flushEffects(): Promise<void> {
   });
 }
 
+function readLastRunCommand():
+  | {
+      name?: string;
+      clientMutationId?: string;
+      update?: Record<string, unknown>;
+    }
+  | null {
+  const latestCall = mocks.runAgent.mock.calls.at(-1)?.[0] as
+    | {
+        forwardedProps?: {
+          command?: {
+            name?: string;
+            clientMutationId?: string;
+            update?: Record<string, unknown>;
+          };
+        };
+      }
+    | undefined;
+
+  return latestCall?.forwardedProps?.command ?? null;
+}
+
 describe('useAgentConnection integration', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -430,24 +452,23 @@ describe('useAgentConnection integration', () => {
 
     expect(latestValue).not.toBeNull();
 
+    mocks.agent.addMessage.mockClear();
+    mocks.runAgent.mockClear();
     latestValue?.saveSettings({ amount: 250 });
     await flushEffects();
 
     expect(mocks.agent.setState).toHaveBeenCalled();
-    const syncMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
-      | { content?: string; role?: string }
-      | undefined;
-    const parsedMessage =
-      typeof syncMessage?.content === 'string'
-        ? (JSON.parse(syncMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(syncMessage?.role).toBe('user');
-    expect(parsedMessage?.command).toBe('sync');
-    expect(typeof parsedMessage?.clientMutationId).toBe('string');
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
     expect(mocks.runAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         agent: mocks.agent,
         threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            name: 'sync',
+            clientMutationId: expect.any(String),
+          },
+        },
       }),
     );
   });
@@ -694,15 +715,9 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
     expect(latestValue?.isSyncing).toBe(true);
 
-    const syncMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
-      | { content?: string }
-      | undefined;
-    const parsedMessage =
-      typeof syncMessage?.content === 'string'
-        ? (JSON.parse(syncMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(parsedMessage?.command).toBe('sync');
-    expect(typeof parsedMessage?.clientMutationId).toBe('string');
+    const forwardedCommand = readLastRunCommand();
+    expect(forwardedCommand?.name).toBe('sync');
+    expect(typeof forwardedCommand?.clientMutationId).toBe('string');
 
     subscriber?.onRunInitialized?.({
       input: { threadId: 'thread-1' },
@@ -710,7 +725,7 @@ describe('useAgentConnection integration', () => {
         settings: { amount: 250 },
         thread: {
           command: 'cycle',
-          lastAppliedClientMutationId: parsedMessage?.clientMutationId,
+          lastAppliedClientMutationId: forwardedCommand?.clientMutationId,
         } as unknown as never,
       },
     });
@@ -1665,19 +1680,23 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     mocks.agent.addMessage.mockClear();
+    mocks.runAgent.mockClear();
     latestValue?.runHire();
     await flushEffects();
 
-    const resumedHireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
-      | { role?: string; content?: string }
-      | undefined;
-    const parsedResumedHireMessage =
-      typeof resumedHireMessage?.content === 'string'
-        ? (JSON.parse(resumedHireMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(resumedHireMessage?.role).toBe('user');
-    expect(parsedResumedHireMessage?.command).toBe('hire');
-    expect(typeof parsedResumedHireMessage?.clientMutationId).toBe('string');
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+            clientMutationId: expect.any(String),
+          },
+        },
+      }),
+    );
   });
 
   it('surfaces busy UI state when saveSettings sync dispatch is rejected as busy', async () => {
@@ -1748,19 +1767,24 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     mocks.agent.setState.mockClear();
+    mocks.agent.addMessage.mockClear();
+    mocks.runAgent.mockClear();
     latestValue?.runHire();
     await flushEffects();
 
-    const hireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
-      | { role?: string; content?: string }
-      | undefined;
-    const parsedHireMessage =
-      typeof hireMessage?.content === 'string'
-        ? (JSON.parse(hireMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(hireMessage?.role).toBe('user');
-    expect(parsedHireMessage?.command).toBe('hire');
-    expect(typeof parsedHireMessage?.clientMutationId).toBe('string');
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+            clientMutationId: expect.any(String),
+          },
+        },
+      }),
+    );
     expect(mocks.agent.setState).not.toHaveBeenCalled();
   });
 
@@ -1792,6 +1816,7 @@ describe('useAgentConnection integration', () => {
       forwardedProps: {
         command: {
           name: 'hire',
+          clientMutationId: expect.any(String),
         },
       },
     });
@@ -1856,16 +1881,19 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
     await flushEffects();
 
-    const fireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
-      | { role?: string; content?: string }
-      | undefined;
-    const parsedFireMessage =
-      typeof fireMessage?.content === 'string'
-        ? (JSON.parse(fireMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(fireMessage?.role).toBe('user');
-    expect(parsedFireMessage?.command).toBe('fire');
-    expect(typeof parsedFireMessage?.clientMutationId).toBe('string');
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: expect.objectContaining({
+            name: 'fire',
+            clientMutationId: expect.any(String),
+          }),
+        },
+      }),
+    );
   });
 
   it('uses stopAgent preemption when backend reports an active run during fire', async () => {
@@ -1943,9 +1971,10 @@ describe('useAgentConnection integration', () => {
         agent: mocks.agent,
         threadId: 'thread-1',
         forwardedProps: {
-          command: {
+          command: expect.objectContaining({
             name: 'fire',
-          },
+            clientMutationId: expect.any(String),
+          }),
         },
       }),
     );

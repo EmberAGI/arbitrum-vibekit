@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 
+import { buildPendingCommandStateValues } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 
 import { clmmGraph } from './agent.js';
@@ -85,17 +86,15 @@ export async function startClmmHire(
   options?: { durability?: LangGraphDurability },
 ) {
   const clientMutationId = uuidv7();
-  const hireMessage = {
-    id: uuidv7(),
-    role: 'user' as const,
-    content: JSON.stringify({ command: 'hire', clientMutationId }),
-  };
 
   type ClmmInvokeInput = Parameters<typeof clmmGraph.invoke>[0];
   type ClmmInvokeOutput = Awaited<ReturnType<typeof clmmGraph.invoke>>;
   type ClmmInvokeConfig = Parameters<typeof clmmGraph.invoke>[1];
 
-  const initialInput: ClmmInvokeInput = { messages: [hireMessage] } as ClmmInvokeInput;
+  const initialInput: ClmmInvokeInput = buildPendingCommandStateValues({
+    command: 'hire',
+    clientMutationId,
+  }) as ClmmInvokeInput;
   const invokeConfig: ClmmInvokeConfig = {
     configurable: { thread_id: threadId },
     durability: resolveLangGraphDurability(options?.durability),

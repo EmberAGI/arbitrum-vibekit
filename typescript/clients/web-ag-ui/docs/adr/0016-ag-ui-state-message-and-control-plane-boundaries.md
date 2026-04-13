@@ -84,6 +84,8 @@ Adopt one explicit three-plane AG-UI contract for the public web-facing payload:
 - Messages must not be duplicated into the state plane.
 - Public state snapshots and deltas must not include transcript fields such as `thread.messages`.
 - The authoritative transcript snapshot is `MESSAGES_SNAPSHOT`, and the authoritative incremental transcript updates are the AG-UI message events.
+- Imperative control intent is not transcript data.
+- Synthetic JSON user messages such as `{"command":"sync"}` are invalid as a public command/control transport and must not be emitted just to steer runtime behavior.
 
 ### Control plane rule
 
@@ -97,6 +99,7 @@ Adopt one explicit three-plane AG-UI contract for the public web-facing payload:
   - `thread.domainProjection`
   - top-level `settings`
   - `thread.messages`
+  - synthetic JSON transcript messages used to smuggle imperative command intent
   - fallback interpretation of legacy `domainProjection` as `/projected`
 - If older snapshots need temporary defensive handling, that handling is a migration fallback in consumers and not part of the supported runtime contract.
 

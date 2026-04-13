@@ -1,3 +1,4 @@
+import { buildPendingCommandStateValues } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -155,15 +156,9 @@ const createRun = async (params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       assistant_id: params.graphId,
-      input: {
-        messages: [
-          {
-            id: uuidv7(),
-            role: 'user',
-            content: JSON.stringify({ command: params.command }),
-          },
-        ],
-      },
+      input: buildPendingCommandStateValues({
+        command: params.command,
+      }),
       config: { configurable: { thread_id: params.threadId } },
       metadata: { source: 'smoke' },
       stream_mode: ['events', 'values', 'messages'],

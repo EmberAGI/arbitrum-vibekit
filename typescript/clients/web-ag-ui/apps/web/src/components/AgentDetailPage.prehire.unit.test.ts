@@ -179,7 +179,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('Analyzing the request before answering.');
   });
 
-  it('keeps reasoning ahead of its linked assistant response in the transcript', () => {
+  it('renders linked reasoning in the order supplied by the runtime transcript', () => {
     const messages: Message[] = [
       {
         id: 'assistant-1',
@@ -222,8 +222,8 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
 
     expect(html).toContain('Thinking through the request first.');
     expect(html).toContain('Here is the final answer.');
-    expect(html.indexOf('Thinking through the request first.')).toBeLessThan(
-      html.indexOf('Here is the final answer.'),
+    expect(html.indexOf('Here is the final answer.')).toBeLessThan(
+      html.indexOf('Thinking through the request first.'),
     );
   });
 

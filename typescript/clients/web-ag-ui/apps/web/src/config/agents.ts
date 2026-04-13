@@ -18,6 +18,7 @@ export interface AgentConfig {
   visibleInUserLists?: boolean;
   onboardingOwnerAgentId?: string;
   imperativeCommandTransport?: 'message' | 'forwarded-props';
+  settingsSyncTransport?: 'sync-command' | 'shared-state-update';
   // Static metadata used for pre-auth and degraded modes before runtime stream data arrives.
   chains?: string[];
   protocols?: string[];
@@ -38,7 +39,8 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     avatar: '🏰',
     avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
     surfaceTag: 'Workflow',
-    imperativeCommandTransport: 'message',
+    imperativeCommandTransport: 'forwarded-props',
+    settingsSyncTransport: 'sync-command',
     chains: ['Arbitrum'],
     protocols: ['Camelot'],
     tokens: ['USDC', 'WETH', 'WBTC'],
@@ -55,7 +57,8 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     avatar: '🪙',
     avatarBg: 'linear-gradient(135deg, #f97316 0%, #facc15 100%)',
     surfaceTag: 'Workflow',
-    imperativeCommandTransport: 'message',
+    imperativeCommandTransport: 'forwarded-props',
+    settingsSyncTransport: 'sync-command',
     chains: ['Arbitrum'],
     protocols: ['Pendle'],
     tokens: [
@@ -87,7 +90,8 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     avatar: '📈',
     avatarBg: 'linear-gradient(135deg, #10b981 0%, #22c55e 100%)',
     surfaceTag: 'Workflow',
-    imperativeCommandTransport: 'message',
+    imperativeCommandTransport: 'forwarded-props',
+    settingsSyncTransport: 'sync-command',
     chains: ['Arbitrum'],
     protocols: ['GMX', 'Allora'],
     tokens: ['USDC', 'WETH'],
@@ -105,6 +109,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     avatarBg: 'linear-gradient(135deg, #0891b2 0%, #2563eb 100%)',
     visibleInUserLists: false,
     imperativeCommandTransport: 'forwarded-props',
+    settingsSyncTransport: 'sync-command',
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'OpenRouter'],
     tokens: ['USDC'],
@@ -125,6 +130,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     marketplaceRowHoverBg: 'rgba(124,58,237,0.12)',
     surfaceTag: 'Swarm',
     imperativeCommandTransport: 'forwarded-props',
+    settingsSyncTransport: 'shared-state-update',
     chains: ['Arbitrum'],
     protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
     tokens: ['USDC'],
@@ -144,6 +150,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     surfaceTag: 'Swarm',
     onboardingOwnerAgentId: 'agent-portfolio-manager',
     imperativeCommandTransport: 'forwarded-props',
+    settingsSyncTransport: 'shared-state-update',
     chains: ['Arbitrum'],
     protocols: ['Aave'],
     tokens: ['USDC'],

@@ -112,13 +112,17 @@ describe('GMX Allora AG-UI system (web + runtime)', () => {
       },
     };
 
-    agent.addMessage({
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: JSON.stringify({ command: 'sync' }),
-    });
-
-    const runResult = await agent.runAgent(undefined, subscriber);
+    const runResult = await agent.runAgent(
+      {
+        forwardedProps: {
+          command: {
+            name: 'sync',
+            clientMutationId: crypto.randomUUID(),
+          },
+        },
+      },
+      subscriber,
+    );
 
     expect(runErrorMessage).toBeNull();
     expect(sawRunFinished).toBe(true);
@@ -148,13 +152,17 @@ describe('GMX Allora AG-UI system (web + runtime)', () => {
       },
     };
 
-    agent.addMessage({
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: JSON.stringify({ command: 'hire' }),
-    });
-
-    await agent.runAgent(undefined, subscriber);
+    await agent.runAgent(
+      {
+        forwardedProps: {
+          command: {
+            name: 'hire',
+            clientMutationId: crypto.randomUUID(),
+          },
+        },
+      },
+      subscriber,
+    );
 
     const afterHire = resolveThreadView(agent.state) ?? latestThreadView;
     expect(runErrorMessage).toBeNull();

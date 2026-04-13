@@ -58,13 +58,17 @@ describe('Pi example AG-UI system (web + runtime + control plane)', () => {
       },
     };
 
-    runAgent.addMessage({
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: JSON.stringify({ command: 'sync' }),
-    });
-
-    const runResult = await runAgent.runAgent(undefined, runSubscriber);
+    const runResult = await runAgent.runAgent(
+      {
+        forwardedProps: {
+          command: {
+            name: 'sync',
+            clientMutationId: crypto.randomUUID(),
+          },
+        },
+      },
+      runSubscriber,
+    );
     const threadsResponse = await fetch(`${piRuntimeUrl}/control/threads`);
     const executionsResponse = await fetch(`${piRuntimeUrl}/control/executions`);
     const schedulerResponse = await fetch(`${piRuntimeUrl}/control/scheduler`);

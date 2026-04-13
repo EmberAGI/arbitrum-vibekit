@@ -35,7 +35,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
 2. State write path:
    - Client-to-agent state mutation must flow through AG-UI `run` input (`RunAgentInput.state`).
    - `connect` is attach/replay for projection continuity and is not a mutation write channel.
-   - Practical client pattern: update local agent state/message model, then dispatch `run`.
+   - Practical client pattern: update local writable/shared view or local transient control state, then dispatch `run`.
    - For Pi-backed flows, the visible writable-state model must rehydrate from authoritative `STATE_SNAPSHOT` and `STATE_DELTA` events, not from acknowledgments alone.
 
 3. Stream ownership:
@@ -77,10 +77,11 @@ These rules complement the C4 target architecture and make runtime behavior dete
 
 10. Imperative command transport policy:
    - Conversational user input belongs in AG-UI messages.
-   - Imperative client controls belong in `forwardedProps.command` whenever the target runtime supports a direct command lane.
-   - Current preferred direct-command set is named commands such as `hire` and `fire`, shared-state `update`, and interrupt resume.
+   - Imperative client controls belong in `forwardedProps.command`.
+   - Current direct-command set includes named commands such as `hire`, `fire`, `cycle`, and `sync`, shared-state `update`, and interrupt resume.
+   - Workflow runtimes may translate `forwardedProps.command` into internal `private.pendingCommand`/`activeCommand` state before graph execution, but that translation is runtime-internal and not a second public transport.
    - Interrupt `resume` payloads may be structured objects and should flow through the direct command lane unchanged until a text-only runtime boundary explicitly needs serialization.
-   - Compatibility note: LangGraph currently uses `forwardedProps.command` for resume only; imperative `hire`/`fire` remain message-driven there until an equivalent direct lane exists.
+   - Synthetic JSON user messages must not be used to carry imperative command intent.
 
 11. Confirmation semantics:
    - “Saved/synced” UX should complete only when AG-UI state confirms application (e.g., task state, version, or acknowledged projection).
@@ -107,9 +108,8 @@ These rules complement the C4 target architecture and make runtime behavior dete
   - other commands: explicit policy (reject-on-busy or constrained retry)
 - `AgentStatusPoller`:
   - dispatch one-shot poll `run` per non-active-detail agent on configured cadence
-  - use the per-agent imperative command transport contract for poll runs:
-    - Pi-backed agents use `forwardedProps.command.name = 'sync'`
-    - LangGraph workflow agents remain message-driven for `sync` until an equivalent direct lane exists there
+  - use `forwardedProps.command.name = 'sync'` for poll runs across current registered agents
+  - workflow runtimes translate that direct lane into internal pending-command state before entering `runCommand`
   - avoid persistent `connect` ownership in polling codepaths
 - central `AgentProjectionReducer`:
   - dedupe by run/event identity

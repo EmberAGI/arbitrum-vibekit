@@ -8,6 +8,7 @@ import {
 } from 'agent-runtime-langgraph';
 import {
   analyzeCycleProjectionThread,
+  buildRunCommandStateUpdate,
   projectCycleCommandThread,
 } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
@@ -182,7 +183,7 @@ async function ensureThread(baseUrl: string, threadId: string, graphId: string) 
 async function updateCycleState(
   baseUrl: string,
   threadId: string,
-  runMessage: { id: string; role: 'user'; content: string },
+  cycleCommand: { command: 'cycle'; clientMutationId?: string },
 ): Promise<boolean> {
   let existingThread: Record<string, unknown> | null = null;
   try {
@@ -230,10 +231,12 @@ async function updateCycleState(
   const response = await fetchRequest(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      values: { messages: [runMessage], thread },
-      as_node: 'runCommand',
-    }),
+    body: JSON.stringify(
+      buildRunCommandStateUpdate({
+        ...cycleCommand,
+        thread,
+      }),
+    ),
   });
   if (isLangGraphBusyStatus(response.status)) {
     const payloadText = await response.text();
@@ -327,10 +330,8 @@ export async function runGraphOnce(
   const startedAt = Date.now();
   console.info(`[cron] Starting Pendle graph run via API (thread=${threadId})`);
 
-  const runMessage = {
-    id: uuidv7(),
-    role: 'user' as const,
-    content: JSON.stringify({ command: 'cycle' }),
+  const cycleCommand = {
+    command: 'cycle' as const,
   };
 
   const baseUrl = resolveLangGraphDeploymentUrl();
@@ -340,7 +341,7 @@ export async function runGraphOnce(
 
   try {
     await ensureThread(baseUrl, threadId, graphId);
-    const stateUpdated = await updateCycleState(baseUrl, threadId, runMessage);
+    const stateUpdated = await updateCycleState(baseUrl, threadId, cycleCommand);
     if (!stateUpdated) {
       return;
     }

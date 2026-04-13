@@ -100,7 +100,6 @@ function createAgentValue(overrides: Record<string, unknown> = {}) {
     transactionHistory: [],
     events: [],
     messages: [],
-    messageSnapshotEpoch: 0,
     settings: {
       amount: 100,
     },

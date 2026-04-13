@@ -91,7 +91,7 @@ describe('agentListPolling', () => {
     expect(resolveAgentListPollBusyCooldownMs('60000')).toBe(60_000);
   });
 
-  it('preserves workflow-agent poll compatibility through message transport during the migration window', async () => {
+  it('dispatches workflow-agent poll runs through the direct command lane', async () => {
     const unsubscribe = vi.fn();
     const detachActiveRun = vi.fn().mockResolvedValue(undefined);
 
@@ -153,19 +153,16 @@ describe('agentListPolling', () => {
       taskMessage: 'Cycling',
     });
     expect(outcome.busy).toBe(false);
-    expect(runtimeAgent.addMessage).toHaveBeenCalledTimes(1);
-    const syncMessage = runtimeAgent.addMessage.mock.calls[0]?.[0] as { content?: string; role?: string } | undefined;
-    const parsedSyncMessage =
-      typeof syncMessage?.content === 'string'
-        ? (JSON.parse(syncMessage.content) as { command?: string; source?: string })
-        : null;
-    expect(syncMessage?.role).toBe('user');
-    expect(parsedSyncMessage).toEqual({
-      command: 'sync',
-      source: 'agent-list-poll',
-    });
+    expect(runtimeAgent.addMessage).not.toHaveBeenCalled();
     expect(runtimeAgent.runAgent).toHaveBeenCalledTimes(1);
-    expect(runtimeAgent.runAgent).toHaveBeenCalledWith();
+    expect(runtimeAgent.runAgent).toHaveBeenCalledWith({
+      forwardedProps: {
+        command: {
+          name: 'sync',
+          source: 'agent-list-poll',
+        },
+      },
+    });
     expect(runtimeAgent.connectAgent).not.toHaveBeenCalled();
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);

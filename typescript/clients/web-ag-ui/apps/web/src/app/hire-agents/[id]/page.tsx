@@ -330,7 +330,6 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         telemetry={[]}
         events={[]}
         messages={EMPTY_MESSAGES}
-        messageSnapshotEpoch={0}
         lifecycleState={previewLifecycleState}
         domainProjection={previewDomainProjection}
         settings={agent.settings}
@@ -395,7 +394,6 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       telemetry={agent.activity.telemetry}
       events={agent.events}
       messages={agent.messages}
-      messageSnapshotEpoch={agent.messageSnapshotEpoch}
       lifecycleState={agent.uiState.lifecycle}
       domainProjection={agent.domainProjection}
       settings={agent.settings}

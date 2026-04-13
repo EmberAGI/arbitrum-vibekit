@@ -1,71 +1,44 @@
-type MessageRecord = {
-  content?: unknown;
-};
-
 export type CommandEnvelope<TCommand extends string = string> = {
   command: TCommand;
   clientMutationId?: string;
 };
 
-function getLastMessageContent(messages: unknown): string | null {
-  if (!messages) {
-    return null;
-  }
-
-  const list: unknown[] = Array.isArray(messages) ? messages : [messages];
-  if (list.length === 0) {
-    return null;
-  }
-
-  const lastMessage = list[list.length - 1];
-  if (typeof lastMessage === 'string') {
-    return lastMessage;
-  }
-  if (Array.isArray(lastMessage)) {
-    return null;
-  }
-  if (typeof lastMessage === 'object' && lastMessage !== null && 'content' in lastMessage) {
-    const value = (lastMessage as MessageRecord).content;
-    return typeof value === 'string' ? value : null;
-  }
-
-  return null;
-}
-
-export function extractCommandEnvelopeFromMessages<TCommand extends string>(params: {
-  messages: unknown;
+function extractCommandEnvelopeFromValue<TCommand extends string>(params: {
+  value: unknown;
   isCommand: (value: string) => value is TCommand;
 }): CommandEnvelope<TCommand> | null {
-  const content = getLastMessageContent(params.messages);
-  if (!content) {
+  if (typeof params.value !== 'object' || params.value === null || Array.isArray(params.value)) {
     return null;
   }
 
-  try {
-    const parsed = JSON.parse(content) as unknown;
-    if (typeof parsed !== 'object' || parsed === null || !('command' in parsed)) {
-      return null;
-    }
-    const command = (parsed as { command?: unknown }).command;
-    if (typeof command !== 'string' || !params.isCommand(command)) {
-      return null;
-    }
-
-    const clientMutationId = (parsed as { clientMutationId?: unknown }).clientMutationId;
-    return {
-      command,
-      ...(typeof clientMutationId === 'string' && clientMutationId.length > 0
-        ? { clientMutationId }
-        : {}),
-    };
-  } catch {
+  if (!('command' in params.value)) {
     return null;
   }
+
+  const command = (params.value as { command?: unknown }).command;
+  if (typeof command !== 'string' || !params.isCommand(command)) {
+    return null;
+  }
+
+  const clientMutationId = (params.value as { clientMutationId?: unknown }).clientMutationId;
+  return {
+    command,
+    ...(typeof clientMutationId === 'string' && clientMutationId.length > 0
+      ? { clientMutationId }
+      : {}),
+  };
 }
 
-export function extractCommandFromMessages<TCommand extends string>(params: {
-  messages: unknown;
+export function extractCommandEnvelope<TCommand extends string>(params: {
+  value: unknown;
+  isCommand: (value: string) => value is TCommand;
+}): CommandEnvelope<TCommand> | null {
+  return extractCommandEnvelopeFromValue(params);
+}
+
+export function extractCommand<TCommand extends string>(params: {
+  value: unknown;
   isCommand: (value: string) => value is TCommand;
 }): TCommand | null {
-  return extractCommandEnvelopeFromMessages(params)?.command ?? null;
+  return extractCommandEnvelopeFromValue(params)?.command ?? null;
 }

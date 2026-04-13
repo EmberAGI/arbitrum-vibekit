@@ -11,7 +11,7 @@ export function resolvePostBootstrap(
   | 'collectDelegations'
   | 'prepareOperator'
   | 'syncState' {
-  const command = extractCommand(state.messages);
+  const command = extractCommand(state.private.activeCommand);
   if (command === 'sync') {
     return 'syncState';
   }

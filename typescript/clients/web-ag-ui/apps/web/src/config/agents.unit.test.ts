@@ -36,9 +36,13 @@ describe('agents config', () => {
     expect(emberLending.surfaceTag).toBe('Swarm');
     expect(emberLending.protocols).toEqual(['Aave']);
     expect(clmm.surfaceTag).toBe('Workflow');
-    expect(clmm.imperativeCommandTransport).toBe('message');
+    expect(clmm.imperativeCommandTransport).toBe('forwarded-props');
+    expect(clmm.settingsSyncTransport).toBe('sync-command');
     expect(piExample.imperativeCommandTransport).toBe('forwarded-props');
+    expect(piExample.settingsSyncTransport).toBe('sync-command');
     expect(portfolioManager.imperativeCommandTransport).toBe('forwarded-props');
+    expect(portfolioManager.settingsSyncTransport).toBe('shared-state-update');
+    expect(emberLending.settingsSyncTransport).toBe('shared-state-update');
     expect(isRegisteredAgentId('agent-clmm')).toBe(true);
     expect(isRegisteredAgentId('agent-pi-example')).toBe(true);
     expect(isRegisteredAgentId('agent-portfolio-manager')).toBe(true);
