@@ -414,7 +414,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const dispatchCommand = useCallback(
     (
       command: string,
-      options?: { allowSyncCoalesce?: boolean; commandPayload?: Record<string, unknown> },
+      options?: { allowRefreshCoalesce?: boolean; commandPayload?: Record<string, unknown> },
     ) => {
       const scheduler = commandSchedulerRef.current;
       if (!scheduler) {
@@ -951,13 +951,13 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       isBusyRunError,
       isAbortLikeError,
       isAgentRunning,
-      onSyncingChange: (isSyncing) => {
+      onRefreshingChange: (isSyncing) => {
         setSyncingState({
           threadId: threadIdRef.current,
           isSyncing,
         });
       },
-      onSyncRunTerminal: (commandPayload) => {
+      onRefreshRunTerminal: (commandPayload) => {
         const clientMutationId =
           typeof commandPayload?.clientMutationId === 'string' ? commandPayload.clientMutationId : null;
         clearPendingSyncMutation(clientMutationId);
@@ -1331,7 +1331,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const runSync = useCallback(() => {
     setUiError(null);
-    const accepted = dispatchCommand('refresh', { allowSyncCoalesce: true });
+    const accepted = dispatchCommand('refresh', { allowRefreshCoalesce: true });
     if (!accepted) {
       setUiError('Unable to queue refresh right now. Please retry.');
     }
@@ -1611,7 +1611,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       });
       updateSettings(updates);
 
-      if (config.settingsSyncTransport === 'shared-state-update') {
+      if (config.settingsRefreshTransport === 'shared-state-update') {
         const scheduler = commandSchedulerRef.current;
         if (!scheduler || !sharedStateRevision) {
           rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
@@ -1670,7 +1670,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       }
 
       const accepted = dispatchCommand('refresh', {
-        allowSyncCoalesce: true,
+        allowRefreshCoalesce: true,
         commandPayload: {
           clientMutationId,
         },
@@ -1681,7 +1681,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       }
     },
     [
-      config.settingsSyncTransport,
+      config.settingsRefreshTransport,
       dispatchCommand,
       hasStateValues,
       runAgentOnCurrentThread,
