@@ -263,22 +263,6 @@ const EMPTY_USAGE = {
   },
 } as const;
 
-type JsonPatchCompare = (
-  left: object,
-  right: object,
-  invertible?: boolean,
-) => Array<Record<string, unknown>>;
-
-type JsonPatchApply = <T>(
-  document: T,
-  patch: ReadonlyArray<Record<string, unknown>>,
-  validateOperation?: boolean,
-  mutateDocument?: boolean,
-  banPrototypeModifications?: boolean,
-) => {
-  newDocument: T;
-};
-
 type PiRuntimeGatewaySharedStateHydrationReason = 'bootstrap' | 'reconnect';
 type PiRuntimeGatewaySharedStateUpdateAckStatus = 'accepted' | 'noop' | 'rejected';
 type PiRuntimeGatewaySharedStateUpdateAckCode =
