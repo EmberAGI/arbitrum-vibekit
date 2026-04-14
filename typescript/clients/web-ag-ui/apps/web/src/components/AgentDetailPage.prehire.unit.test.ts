@@ -111,6 +111,37 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toMatch(new RegExp('<button[^>]*disabled[^>]*>\\s*Chat\\s*</button>'));
   });
 
+  it('shows reconnecting state instead of a hire affordance while waiting for an authoritative snapshot', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        isHired: false,
+        isRestoringState: true,
+        isHiring: false,
+        hasLoadedView: false,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('Reconnecting...');
+    expect(html).toContain('Restoring state');
+    expect(html).not.toContain('>Hire<');
+  });
+
   it('enables pre-hire chat for the Pi example agent', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {

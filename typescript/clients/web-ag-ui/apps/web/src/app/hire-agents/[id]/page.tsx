@@ -126,22 +126,31 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const routeHasRegisteredAgent = isRegisteredAgentId(routeAgentId);
   const selectedAgentId = routeHasRegisteredAgent ? routeAgentId : activeAgentId;
   const selectedConfig = getAgentConfig(selectedAgentId);
+  const selectedLifecycleState = agent.uiState.lifecycle;
+  const selectedOnboardingFlow = agent.uiState.onboardingFlow;
+  const selectedTask = agent.uiState.task;
+  const selectedMetrics = agent.metrics;
+  const selectedActivity = agent.activity;
+  const selectedProfileSource = agent.profile;
   const onboardingOwnerAgentId = selectedConfig.onboardingOwnerAgentId;
   const selectedProfile = {
-    ...agent.profile,
+    ...selectedProfileSource,
     chains:
-      agent.profile.chains && agent.profile.chains.length > 0
-        ? agent.profile.chains
+      selectedProfileSource.chains && selectedProfileSource.chains.length > 0
+        ? selectedProfileSource.chains
         : selectedConfig.chains ?? [],
     protocols:
-      agent.profile.protocols && agent.profile.protocols.length > 0
-        ? agent.profile.protocols
+      selectedProfileSource.protocols && selectedProfileSource.protocols.length > 0
+        ? selectedProfileSource.protocols
         : selectedConfig.protocols ?? [],
     tokens:
-      agent.profile.tokens && agent.profile.tokens.length > 0
-        ? agent.profile.tokens
+      selectedProfileSource.tokens && selectedProfileSource.tokens.length > 0
+        ? selectedProfileSource.tokens
         : selectedConfig.tokens ?? [],
   };
+  const selectedHasLoadedView = agent.hasLoadedView;
+  const selectedIsHired = agent.isHired;
+  const isRestoringState = Boolean(agent.threadId && !agent.hasAuthoritativeState);
   const projectionHydrationKeyRef = useRef<string | null>(null);
 
   const handleBack = () => {
@@ -168,7 +177,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const uiPreviewTab = uiPreviewEnabled ? parseAgentRouteTab(searchParams.get('__tab')) : null;
   const uiPreviewFixture = uiPreviewEnabled ? parseUiPreviewFixture(searchParams.get('__fixture')) : null;
   const selectedTab = requestedTab ?? uiPreviewTab;
-  const selectedLifecyclePhase = agent.uiState.lifecycle?.phase;
+  const selectedLifecyclePhase = selectedLifecycleState?.phase;
   const hasManagedProjection = hasManagedMandateEditorProjection(agent.domainProjection);
   const portfolioManagerThreadId =
     selectedAgentId === 'agent-portfolio-manager' && agent.threadId
@@ -215,7 +224,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   );
 
   useEffect(() => {
-    if (!agent.threadId || !agent.isHired || selectedLifecyclePhase !== 'active' || hasManagedProjection) {
+    if (!agent.threadId || !selectedIsHired || selectedLifecyclePhase !== 'active' || hasManagedProjection) {
       return;
     }
 
@@ -248,7 +257,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         }
       })
       .catch(() => undefined);
-  }, [agent, agent.isHired, agent.threadId, hasManagedProjection, selectedAgentId, selectedLifecyclePhase]);
+  }, [agent, agent.threadId, hasManagedProjection, selectedAgentId, selectedIsHired, selectedLifecyclePhase]);
 
   if (uiPreviewState) {
     const previewAgentId = routeHasRegisteredAgent ? routeAgentId : selectedAgentId;
@@ -360,19 +369,20 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         tokens: selectedProfile.tokens,
       }}
       metrics={{
-        iteration: agent.metrics.iteration,
-        cyclesSinceRebalance: agent.metrics.cyclesSinceRebalance,
-        staleCycles: agent.metrics.staleCycles,
-        rebalanceCycles: agent.metrics.rebalanceCycles,
-        aumUsd: agent.metrics.aumUsd,
-        apy: agent.metrics.apy,
-        lifetimePnlUsd: agent.metrics.lifetimePnlUsd,
+        iteration: selectedMetrics.iteration,
+        cyclesSinceRebalance: selectedMetrics.cyclesSinceRebalance,
+        staleCycles: selectedMetrics.staleCycles,
+        rebalanceCycles: selectedMetrics.rebalanceCycles,
+        aumUsd: selectedMetrics.aumUsd,
+        apy: selectedMetrics.apy,
+        lifetimePnlUsd: selectedMetrics.lifetimePnlUsd,
       }}
-      fullMetrics={agent.metrics}
-      initialTab={agent.isHired ? (selectedTab ?? undefined) : undefined}
-      isHired={agent.isHired}
+      fullMetrics={selectedMetrics}
+      initialTab={selectedIsHired ? (selectedTab ?? undefined) : undefined}
+      isHired={selectedIsHired}
+      isRestoringState={isRestoringState}
       isHiring={agent.isHiring}
-      hasLoadedView={agent.hasLoadedView}
+      hasLoadedView={selectedHasLoadedView}
       isFiring={agent.isFiring}
       isSyncing={agent.isSyncing}
       uiError={agent.uiError}
@@ -384,17 +394,17 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       activeInterrupt={agent.activeInterrupt}
       allowedPools={selectedProfile.allowedPools ?? []}
       onInterruptSubmit={agent.resolveInterrupt}
-      taskId={agent.uiState.task?.id}
-      taskStatus={agent.uiState.task?.taskStatus?.state}
+      taskId={selectedTask?.id}
+      taskStatus={selectedTask?.taskStatus?.state}
       haltReason={agent.uiState.haltReason}
       executionError={agent.uiState.executionError}
       delegationsBypassActive={agent.uiState.delegationsBypassActive}
-      onboardingFlow={agent.uiState.onboardingFlow}
+      onboardingFlow={selectedOnboardingFlow}
       transactions={agent.transactionHistory}
-      telemetry={agent.activity.telemetry}
+      telemetry={selectedActivity.telemetry}
       events={agent.events}
       messages={agent.messages}
-      lifecycleState={agent.uiState.lifecycle}
+      lifecycleState={selectedLifecycleState}
       domainProjection={agent.domainProjection}
       settings={agent.settings}
       onSendChatMessage={agent.sendChatMessage}

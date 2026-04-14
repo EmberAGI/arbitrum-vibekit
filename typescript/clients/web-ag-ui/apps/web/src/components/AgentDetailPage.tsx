@@ -119,6 +119,7 @@ interface AgentDetailPageProps {
   fullMetrics?: ThreadMetrics;
   initialTab?: TabType;
   isHired: boolean;
+  isRestoringState?: boolean;
   isHiring: boolean;
   hasLoadedView: boolean;
   isFiring?: boolean;
@@ -890,6 +891,7 @@ export function AgentDetailPage({
   fullMetrics,
   initialTab,
   isHired,
+  isRestoringState = false,
   isHiring,
   hasLoadedView,
   isFiring,
@@ -1957,10 +1959,10 @@ export function AgentDetailPage({
 
               <button
                 onClick={handleHire}
-                disabled={isHiring}
+                disabled={isHiring || isRestoringState}
                 className={[
                   CTA_SIZE_MD_FULL,
-                  isHiring
+                  isHiring || isRestoringState
                     ? 'bg-purple-500/50 text-white cursor-wait'
                     : 'bg-purple-500 hover:bg-purple-600 text-white shadow-[0_10px_30px_rgba(168,85,247,0.25)]',
                   'transition-[background-color,box-shadow] duration-200',
@@ -1968,12 +1970,23 @@ export function AgentDetailPage({
               >
                 {managedOnboardingOwner
                   ? `Open ${managedOnboardingOwner.name}`
-                  : isHiring
+                  : isRestoringState
+                    ? 'Reconnecting...'
+                    : isHiring
                     ? 'Hiring...'
                     : 'Hire'}
               </button>
 
-              {managedOnboardingOwner ? (
+              {isRestoringState ? (
+                <div className="mt-4 rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                  <div className="text-gray-300 text-sm font-medium mb-2">Restoring state</div>
+                  <p className="text-gray-400 text-xs leading-relaxed">
+                    Waiting for the latest runtime snapshot before rendering agent controls.
+                  </p>
+                </div>
+              ) : null}
+
+              {managedOnboardingOwner && !isRestoringState ? (
                 <div className="mt-4 rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
                   <div className="text-gray-300 text-sm font-medium mb-2">Managed onboarding</div>
                   <p className="text-gray-400 text-xs leading-relaxed">

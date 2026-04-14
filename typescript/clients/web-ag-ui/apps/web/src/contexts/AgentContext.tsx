@@ -20,6 +20,7 @@ const inactiveAgent: UseAgentConnectionResult = {
   config: getAgentConfig('inactive-agent'),
   isConnected: false,
   hasLoadedView: false,
+  hasAuthoritativeState: false,
   threadId: undefined,
   domainProjection: {},
   applyDomainProjection: () => undefined,

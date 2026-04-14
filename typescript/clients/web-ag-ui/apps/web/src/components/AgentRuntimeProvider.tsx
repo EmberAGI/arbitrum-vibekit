@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { CopilotKit } from '@copilotkit/react-core';
 
 import { isRegisteredAgentId } from '../config/agents';
+import { AuthoritativeAgentSnapshotCacheProvider } from '../contexts/AuthoritativeAgentSnapshotCache';
 import { AgentProvider, InactiveAgentProvider, useAgent } from '../contexts/AgentContext';
 import { projectAgentListUpdate } from '../contexts/agentListProjection';
 import type { ThreadSnapshot, ThreadState } from '../types/agent';
@@ -156,17 +157,10 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
     walletThreadId,
   ]);
 
-  if (!agentId) {
-    return <InactiveAgentProvider>{children}</InactiveAgentProvider>;
-  }
-
   const threadId = walletThreadId ?? anonymousThreadId;
-
-  if (!threadId) {
-    return <InactiveAgentProvider>{children}</InactiveAgentProvider>;
-  }
-
-  return (
+  const content = !agentId || !threadId ? (
+    <InactiveAgentProvider>{children}</InactiveAgentProvider>
+  ) : (
     <CopilotKit
       runtimeUrl="/api/copilotkit"
       useSingleEndpoint
@@ -179,5 +173,11 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
         {children}
       </AgentProvider>
     </CopilotKit>
+  );
+
+  return (
+    <AuthoritativeAgentSnapshotCacheProvider>
+      {content}
+    </AuthoritativeAgentSnapshotCacheProvider>
   );
 }

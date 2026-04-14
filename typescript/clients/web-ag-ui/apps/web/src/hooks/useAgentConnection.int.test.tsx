@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSubscriber } from '@ag-ui/client';
 
 import { useAgentConnection } from './useAgentConnection';
+import { AuthoritativeAgentSnapshotCacheProvider } from '../contexts/AuthoritativeAgentSnapshotCache';
 import type { AgentInterrupt } from '../types/agent';
 import { __resetAgentStreamCoordinatorForTests } from '../utils/agentStreamCoordinator';
 import { getAgentThreadId } from '../utils/agentThread';
@@ -133,8 +134,28 @@ vi.mock('../hooks/usePrivyWalletClient', () => ({
   }),
 }));
 
-function TestHarness({ agentId }: { agentId: string }) {
+function TestHarnessInner({ agentId }: { agentId: string }) {
   useAgentConnection(agentId);
+  return <div data-testid="agent-connection-harness" />;
+}
+
+function TestHarness({ agentId }: { agentId: string }) {
+  return (
+    <AuthoritativeAgentSnapshotCacheProvider>
+      <TestHarnessInner agentId={agentId} />
+    </AuthoritativeAgentSnapshotCacheProvider>
+  );
+}
+
+function CapturingHarnessInner({
+  agentId,
+  onSnapshot,
+}: {
+  agentId: string;
+  onSnapshot: (value: ReturnType<typeof useAgentConnection>) => void;
+}) {
+  const value = useAgentConnection(agentId);
+  onSnapshot(value);
   return <div data-testid="agent-connection-harness" />;
 }
 
@@ -145,9 +166,27 @@ function CapturingHarness({
   agentId: string;
   onSnapshot: (value: ReturnType<typeof useAgentConnection>) => void;
 }) {
-  const value = useAgentConnection(agentId);
-  onSnapshot(value);
-  return <div data-testid="agent-connection-harness" />;
+  return (
+    <AuthoritativeAgentSnapshotCacheProvider>
+      <CapturingHarnessInner agentId={agentId} onSnapshot={onSnapshot} />
+    </AuthoritativeAgentSnapshotCacheProvider>
+  );
+}
+
+function RemountableCapturingHarness({
+  mounted,
+  agentId,
+  onSnapshot,
+}: {
+  mounted: boolean;
+  agentId: string;
+  onSnapshot: (value: ReturnType<typeof useAgentConnection>) => void;
+}) {
+  return (
+    <AuthoritativeAgentSnapshotCacheProvider>
+      {mounted ? <CapturingHarnessInner agentId={agentId} onSnapshot={onSnapshot} /> : null}
+    </AuthoritativeAgentSnapshotCacheProvider>
+  );
 }
 
 async function flushEffects(): Promise<void> {
@@ -663,13 +702,17 @@ describe('useAgentConnection integration', () => {
 
     subscriber?.onMessagesSnapshotEvent?.({
       input: { threadId: 'thread-1' },
-      messages: [
-        {
-          id: chatMessage?.id as string,
-          role: 'user',
-          content: 'Hello from the chat tab',
-        },
-      ],
+      messages: [],
+      event: {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          {
+            id: chatMessage?.id as string,
+            role: 'user',
+            content: 'Hello from the chat tab',
+          },
+        ],
+      },
     });
     await flushEffects();
 
@@ -1571,13 +1614,17 @@ describe('useAgentConnection integration', () => {
 
     subscriber?.onMessagesSnapshotEvent?.({
       input: { threadId: 'thread-1' },
-      messages: [
-        {
-          id: 'assistant-1',
-          role: 'assistant',
-          content: 'Scheduled refresh every minute.',
-        },
-      ],
+      messages: [],
+      event: {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Scheduled refresh every minute.',
+          },
+        ],
+      },
     });
     await flushEffects();
     await act(async () => {
@@ -2200,6 +2247,406 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(latestValue?.hasLoadedView).toBe(true);
+  });
+
+  it('surfaces an authoritative reconnect snapshot immediately without waiting for a later rerender', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasAuthoritativeState).toBe(false);
+
+    subscriber?.onStateSnapshotEvent?.({
+      event: {
+        snapshot: {
+          projected: {
+            managedMandateEditor: {
+              mandateRef: 'mandate-ember-lending-primary',
+            },
+          },
+          thread: {
+            lifecycle: {
+              phase: 'active',
+            },
+            task: {
+              id: 'task-refresh',
+              taskStatus: {
+                state: 'completed',
+                message: { content: 'Portfolio state refreshed from Shared Ember Domain Service.' },
+              },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1' },
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasAuthoritativeState).toBe(true);
+    expect(latestValue?.uiState.lifecycle?.phase).toBe('active');
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-primary',
+      },
+    });
+  });
+
+  it('retains the last authoritative snapshot across a route remount while reconnect is still in flight', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        lifecycle: {
+          phase: 'active',
+        },
+        task: {
+          id: 'task-managed',
+          taskStatus: {
+            state: 'completed',
+            message: { content: 'Managed lending lane ready.' },
+          },
+        },
+        profile: {
+          chains: ['Arbitrum'],
+          protocols: ['Aave'],
+          tokens: ['USDC'],
+          pools: [],
+          allowedPools: [],
+          totalUsers: 42,
+        },
+        metrics: {
+          iteration: 2,
+          cyclesSinceRebalance: 0,
+          staleCycles: 0,
+          rebalanceCycles: 0,
+          aumUsd: 1000,
+          apy: 4.2,
+          lifetimePnlUsd: 12,
+        },
+        domainProjection: {
+          managedMandateEditor: {
+            mandateRef: 'mandate-ember-lending-001',
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <RemountableCapturingHarness
+          mounted
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasAuthoritativeState).toBe(true);
+    expect(latestValue?.isHired).toBe(true);
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-001',
+      },
+    });
+
+    mocks.agent.state = {};
+
+    await act(async () => {
+      root.render(
+        <RemountableCapturingHarness
+          mounted={false}
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    await act(async () => {
+      root.render(
+        <RemountableCapturingHarness
+          mounted
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasAuthoritativeState).toBe(false);
+    expect(latestValue?.isHired).toBe(true);
+    expect(latestValue?.hasLoadedView).toBe(true);
+    expect(latestValue?.uiState.lifecycle?.phase).toBe('active');
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-001',
+      },
+    });
+  });
+
+  it('preserves normalized mandate projection and transcript when CopilotKit rerenders with raw AG-UI state', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onStateSnapshotEvent?.({
+      event: {
+        snapshot: {
+          projected: {
+            managedMandateEditor: {
+              mandateRef: 'mandate-ember-lending-primary',
+            },
+          },
+          thread: {
+            lifecycle: {
+              phase: 'active',
+            },
+            task: {
+              id: 'task-refresh',
+              taskStatus: {
+                state: 'completed',
+                message: { content: 'Portfolio state refreshed from Shared Ember Domain Service.' },
+              },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1' },
+    });
+    await flushEffects();
+
+    subscriber?.onMessagesSnapshotEvent?.({
+      input: { threadId: 'thread-1' },
+      messages: [],
+      event: {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Portfolio manager reconnected successfully.',
+          },
+        ],
+      },
+    });
+    await flushEffects();
+
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-primary',
+      },
+    });
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Portfolio manager reconnected successfully.',
+      }),
+    ]);
+
+    mocks.agent.state = {
+      projected: {
+        managedMandateEditor: {
+          mandateRef: 'mandate-ember-lending-primary',
+        },
+      },
+      thread: {
+        lifecycle: {
+          phase: 'active',
+        },
+        task: {
+          id: 'task-refresh',
+          taskStatus: {
+            state: 'completed',
+            message: { content: 'Portfolio state refreshed from Shared Ember Domain Service.' },
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-primary',
+      },
+    });
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Portfolio manager reconnected successfully.',
+      }),
+    ]);
+  });
+
+  it('keeps the last authoritative active snapshot when a later raw state rerender regresses lifecycle to prehire', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onStateSnapshotEvent?.({
+      event: {
+        snapshot: {
+          projected: {
+            managedMandateEditor: {
+              mandateRef: 'mandate-ember-lending-primary',
+            },
+          },
+          thread: {
+            lifecycle: {
+              phase: 'active',
+            },
+            task: {
+              id: 'task-refresh',
+              taskStatus: {
+                state: 'completed',
+                message: { content: 'Portfolio state refreshed from Shared Ember Domain Service.' },
+              },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1' },
+    });
+    await flushEffects();
+
+    subscriber?.onMessagesSnapshotEvent?.({
+      input: { threadId: 'thread-1' },
+      messages: [],
+      event: {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Portfolio manager reconnected successfully.',
+          },
+        ],
+      },
+    });
+    await flushEffects();
+
+    expect(latestValue?.isHired).toBe(true);
+    expect(latestValue?.uiState.lifecycle?.phase).toBe('active');
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-primary',
+      },
+    });
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Portfolio manager reconnected successfully.',
+      }),
+    ]);
+
+    mocks.agent.state = {
+      thread: {
+        lifecycle: {
+          phase: 'prehire',
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.isHired).toBe(true);
+    expect(latestValue?.uiState.lifecycle?.phase).toBe('active');
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-primary',
+      },
+    });
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Portfolio manager reconnected successfully.',
+      }),
+    ]);
   });
 
   it('marks agent active from non-terminal task state even when command is omitted', async () => {
