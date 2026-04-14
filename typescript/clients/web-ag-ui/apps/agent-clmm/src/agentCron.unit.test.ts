@@ -46,9 +46,15 @@ describe('runGraphOnce cron state update payload', () => {
     expect(stateUpdateBody).toMatchObject({
       as_node: 'runCommand',
       values: {
-        messages: [expect.objectContaining({ role: 'user' })],
+        private: {
+          pendingCommand: {
+            command: 'cycle',
+            clientMutationId: expect.any(String),
+          },
+        },
       },
     });
+    expect((stateUpdateBody?.['values'] as Record<string, unknown>) ?? {}).not.toHaveProperty('messages');
     expect((stateUpdateBody?.['values'] as Record<string, unknown>) ?? {}).not.toHaveProperty('thread');
 
     const calledUrls = fetchMock.mock.calls

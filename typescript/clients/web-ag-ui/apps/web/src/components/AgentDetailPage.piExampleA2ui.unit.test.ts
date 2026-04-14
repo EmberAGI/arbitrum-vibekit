@@ -95,8 +95,8 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
             data: {
               type: 'automation-status',
               status: 'scheduled',
-              command: 'sync',
-              detail: 'Scheduled sync every 5 minutes.',
+              command: 'refresh',
+              detail: 'Scheduled refresh every 5 minutes.',
             },
           },
         },
@@ -110,8 +110,8 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
                   kind: 'automation-status',
                   payload: {
                     status: 'scheduled',
-                    command: 'sync',
-                    detail: 'Scheduled sync every 5 minutes.',
+                    command: 'refresh',
+                    detail: 'Scheduled refresh every 5 minutes.',
                   },
                 },
               },
@@ -123,7 +123,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
 
     expect(container.querySelector('.a2ui-card')).not.toBeNull();
     expect(container.textContent).toContain('Automation scheduled');
-    expect(container.textContent).toContain('Scheduled sync every 5 minutes.');
+    expect(container.textContent).toContain('Scheduled refresh every 5 minutes.');
 
     act(() => {
       root.unmount();
@@ -205,8 +205,8 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
             data: {
               type: 'automation-status',
               status: 'running',
-              command: 'sync',
-              detail: 'Running automation sync.',
+              command: 'refresh',
+              detail: 'Running automation refresh.',
             },
           },
         },
@@ -217,16 +217,16 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
             data: {
               type: 'automation-status',
               status: 'completed',
-              command: 'sync',
-              detail: 'Automation sync executed successfully.',
+              command: 'refresh',
+              detail: 'Automation refresh executed successfully.',
             },
           },
         },
       ] as never,
     });
 
-    expect(container.textContent).toContain('Running automation sync.');
-    expect(container.textContent).toContain('Automation sync executed successfully.');
+    expect(container.textContent).toContain('Running automation refresh.');
+    expect(container.textContent).toContain('Automation refresh executed successfully.');
     expect(consoleErrorSpy).not.toHaveBeenCalledWith(
       expect.stringContaining('Encountered two children with the same key'),
     );

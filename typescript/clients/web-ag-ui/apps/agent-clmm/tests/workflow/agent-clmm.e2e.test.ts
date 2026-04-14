@@ -1,3 +1,4 @@
+import { buildPendingCommandStateValues } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { describe, expect, it } from 'vitest';
 
@@ -36,15 +37,9 @@ const createRun = async (params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       assistant_id: params.graphId,
-      input: {
-        messages: [
-          {
-            id: uuidv7(),
-            role: 'user',
-            content: JSON.stringify({ command: params.command }),
-          },
-        ],
-      },
+      input: buildPendingCommandStateValues({
+        command: params.command,
+      }),
       config: { configurable: { thread_id: params.threadId } },
       metadata: { source: 'e2e' },
       stream_mode: ['events', 'values', 'messages'],

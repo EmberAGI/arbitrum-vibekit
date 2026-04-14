@@ -217,7 +217,7 @@ describe('createPiExampleAgentConfig', () => {
       config.model!,
       {
         systemPrompt: config.systemPrompt,
-        messages: [{ role: 'user', content: 'schedule a sync' }],
+        messages: [{ role: 'user', content: 'schedule a refresh' }],
       } as never,
       {} as never,
     );

@@ -8,6 +8,7 @@ import { v7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
 import { getAgentConfig, type AgentConfig } from '../config/agents';
 import { projectDetailStateFromPayload } from '../contexts/agentProjection';
+import { useAuthoritativeAgentSnapshotCache } from '../contexts/AuthoritativeAgentSnapshotCache';
 import {
   type ThreadSnapshot,
   type ThreadState,
@@ -157,6 +158,7 @@ export interface UseAgentConnectionResult {
   config: AgentConfig;
   isConnected: boolean;
   hasLoadedView: boolean;
+  hasAuthoritativeState: boolean;
   threadId: string | undefined;
   domainProjection: Record<string, unknown>;
   applyDomainProjection: (projection: Record<string, unknown>) => void;
@@ -172,7 +174,6 @@ export interface UseAgentConnectionResult {
   transactionHistory: Transaction[];
   events: ClmmEvent[];
   messages: Message[];
-  messageSnapshotEpoch: number;
   settings: AgentSettings;
 
   // Derived state
@@ -248,10 +249,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     rollbackSettings: null,
   });
   const [uiError, setUiError] = useState<string | null>(null);
-  const [messageSnapshotEpoch, setMessageSnapshotEpoch] = useState(0);
+  const [, setLocalStateRevision] = useState(0);
   const lastConnectedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
   const threadIdRef = useRef<string | undefined>(undefined);
+  const retainedThreadSnapshotRef = useRef<ThreadSnapshot | null>(null);
+  const retainedThreadSnapshotKeyRef = useRef<string | null>(null);
   const activeRunRef = useRef<{
     threadId: string | undefined;
     runId: string | null;
@@ -281,9 +284,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     agentId,
     updates: ['OnStateChanged'] as NonNullable<Parameters<typeof useAgent>[0]>['updates'],
   });
+  const authoritativeSnapshotCache = useAuthoritativeAgentSnapshotCache();
   const { threadId: copilotThreadId } = useCopilotContext();
   const { privyWallet } = usePrivyWalletClient();
   const threadId = getAgentThreadId(agentId, privyWallet?.address) ?? copilotThreadId;
+  const authoritativeSnapshotCacheKey = threadId ? `${agentId}:${threadId}` : null;
   const runtimeStatus = copilotkit.runtimeConnectionStatus;
 
   const { activeInterrupt } = useLangGraphInterruptCustomUI<AgentInterrupt>({
@@ -415,7 +420,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const dispatchCommand = useCallback(
     (
       command: string,
-      options?: { allowSyncCoalesce?: boolean; messagePayload?: Record<string, unknown> },
+      options?: { allowRefreshCoalesce?: boolean; commandPayload?: Record<string, unknown> },
     ) => {
       const scheduler = commandSchedulerRef.current;
       if (!scheduler) {
@@ -441,42 +446,33 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [copilotkit],
   );
 
+  const runNamedCommandOnCurrentThread = useCallback(
+    (
+      currentAgent: HookAgent,
+      params: {
+        command: string;
+        commandPayload?: Record<string, unknown>;
+      },
+    ) =>
+      runAgentOnCurrentThread(currentAgent, {
+        forwardedProps: {
+          command: {
+            name: params.command,
+            ...(params.commandPayload ?? {}),
+          },
+        },
+      }),
+    [runAgentOnCurrentThread],
+  );
+
   const stopAgentOnCurrentThread = useCallback(
     (currentAgent: HookAgent) => copilotkit.stopAgent({ agent: currentAgent }),
     [copilotkit],
   );
 
-  const runDirectCommand = useCallback(
-    (command: string) => {
-      const scheduler = commandSchedulerRef.current;
-      if (!scheduler) {
-        return false;
-      }
-
-      return scheduler.dispatchCustom({
-        command,
-        run: async (currentAgent) =>
-          runAgentOnCurrentThread(currentAgent, {
-            forwardedProps: {
-              command: {
-                name: command,
-              },
-            },
-          }),
-      });
-    },
-    [runAgentOnCurrentThread],
-  );
-
   const runCommand = useCallback(
-    (command: string) => {
-      if (config.imperativeCommandTransport === 'forwarded-props') {
-        return runDirectCommand(command);
-      }
-
-      return dispatchCommand(command);
-    },
-    [config.imperativeCommandTransport, dispatchCommand, runDirectCommand],
+    (command: string) => dispatchCommand(command),
+    [dispatchCommand],
   );
 
   const setRunInFlight = useCallback((next: boolean) => {
@@ -490,6 +486,178 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       Object.keys(value as Record<string, unknown>).length > 0,
     );
   }, []);
+
+  const shouldPreserveRetainedThreadSnapshot = useCallback(
+    (params: {
+      rawValue: unknown;
+      nextSnapshot: ThreadSnapshot | null;
+      retainedSnapshot: ThreadSnapshot | null;
+    }): boolean => {
+      const { rawValue, nextSnapshot, retainedSnapshot } = params;
+      if (!nextSnapshot || !retainedSnapshot) {
+        return false;
+      }
+
+      const retainedPhase = retainedSnapshot.thread?.lifecycle?.phase ?? null;
+      if (retainedPhase !== 'active' && retainedPhase !== 'onboarding' && retainedPhase !== 'firing') {
+        return false;
+      }
+
+      const nextPhase = nextSnapshot.thread?.lifecycle?.phase ?? null;
+      if (nextPhase !== 'prehire') {
+        return false;
+      }
+
+      if (typeof rawValue !== 'object' || rawValue === null) {
+        return false;
+      }
+
+      const rawThread =
+        'thread' in rawValue &&
+        typeof (rawValue as { thread?: unknown }).thread === 'object' &&
+        (rawValue as { thread?: unknown }).thread !== null
+          ? ((rawValue as { thread: Record<string, unknown> }).thread as Record<string, unknown>)
+          : null;
+      const rawTask =
+        rawThread &&
+        typeof rawThread.task === 'object' &&
+        rawThread.task !== null
+          ? (rawThread.task as Record<string, unknown>)
+          : null;
+      const rawTaskStatus =
+        rawTask &&
+        typeof rawTask.taskStatus === 'object' &&
+        rawTask.taskStatus !== null
+          ? (rawTask.taskStatus as Record<string, unknown>)
+          : null;
+      const rawTaskState = typeof rawTaskStatus?.state === 'string' ? rawTaskStatus.state : null;
+      const rawProjected =
+        ('projected' in rawValue &&
+          typeof (rawValue as { projected?: unknown }).projected === 'object' &&
+          (rawValue as { projected?: unknown }).projected !== null) ||
+        Boolean(
+          rawThread &&
+            typeof rawThread.domainProjection === 'object' &&
+            rawThread.domainProjection !== null,
+        );
+      const rawMessages = Array.isArray((rawValue as { messages?: unknown }).messages)
+        ? ((rawValue as { messages: unknown[] }).messages as unknown[])
+        : null;
+
+      return rawTaskState === null && !rawProjected && (!rawMessages || rawMessages.length === 0);
+    },
+    [],
+  );
+
+  const bumpLocalStateRevision = useCallback(() => {
+    setLocalStateRevision((current) => current + 1);
+  }, []);
+
+  const readActiveRetainedThreadSnapshot = useCallback((): ThreadSnapshot | null => {
+    if (retainedThreadSnapshotKeyRef.current !== authoritativeSnapshotCacheKey) {
+      return null;
+    }
+    return retainedThreadSnapshotRef.current;
+  }, [authoritativeSnapshotCacheKey]);
+
+  const commitRetainedThreadSnapshot = useCallback(
+    (snapshot: ThreadSnapshot | null) => {
+      retainedThreadSnapshotKeyRef.current = authoritativeSnapshotCacheKey;
+      retainedThreadSnapshotRef.current = snapshot;
+      if (snapshot && authoritativeSnapshotCacheKey) {
+        authoritativeSnapshotCache.setSnapshot(authoritativeSnapshotCacheKey, snapshot);
+      }
+      bumpLocalStateRevision();
+    },
+    [authoritativeSnapshotCache, authoritativeSnapshotCacheKey, bumpLocalStateRevision],
+  );
+
+  const normalizeThreadSnapshotFromBase = useCallback(
+    (value: unknown, cachedSnapshot: ThreadSnapshot | null): ThreadSnapshot | null => {
+      if (!hasStateValues(value)) {
+        return cachedSnapshot;
+      }
+
+      const nextSnapshot = projectDetailStateFromPayload(value, cachedSnapshot);
+      if (!nextSnapshot) {
+        return cachedSnapshot;
+      }
+
+      if (
+        typeof value === 'object' &&
+        value !== null &&
+        Array.isArray((value as { messages?: unknown }).messages)
+      ) {
+        nextSnapshot.messages = (value as { messages: Message[] }).messages;
+      }
+
+      if (
+        typeof value === 'object' &&
+        value !== null &&
+        typeof (value as { settings?: unknown }).settings === 'object' &&
+        (value as { settings?: unknown }).settings !== null
+      ) {
+        nextSnapshot.settings = {
+          ...(nextSnapshot.settings ?? defaultSettings),
+          ...((value as { settings: Partial<AgentSettings> }).settings ?? {}),
+        };
+      }
+
+      const threadDomainProjection =
+        typeof value === 'object' &&
+        value !== null &&
+        typeof (value as { thread?: { domainProjection?: unknown } }).thread === 'object' &&
+        (value as { thread?: { domainProjection?: unknown } }).thread !== null &&
+        typeof (value as { thread?: { domainProjection?: unknown } }).thread?.domainProjection === 'object' &&
+        (value as { thread?: { domainProjection?: unknown } }).thread?.domainProjection !== null
+          ? ((value as { thread: { domainProjection: Record<string, unknown> } }).thread
+              .domainProjection as Record<string, unknown>)
+          : null;
+
+      if (threadDomainProjection) {
+        nextSnapshot.thread = {
+          ...nextSnapshot.thread,
+          domainProjection: {
+            ...(typeof nextSnapshot.thread.domainProjection === 'object' &&
+            nextSnapshot.thread.domainProjection !== null
+              ? (nextSnapshot.thread.domainProjection as Record<string, unknown>)
+              : {}),
+            ...threadDomainProjection,
+          },
+        };
+      }
+
+      return nextSnapshot;
+    },
+    [hasStateValues],
+  );
+
+  const normalizeThreadSnapshot = useCallback(
+    (value: unknown): ThreadSnapshot | null => {
+      const cachedSnapshot =
+        readActiveRetainedThreadSnapshot() ??
+        (authoritativeSnapshotCacheKey
+          ? authoritativeSnapshotCache.getSnapshot(authoritativeSnapshotCacheKey)
+          : null);
+
+      return normalizeThreadSnapshotFromBase(value, cachedSnapshot);
+    },
+    [
+      authoritativeSnapshotCache,
+      authoritativeSnapshotCacheKey,
+      normalizeThreadSnapshotFromBase,
+      readActiveRetainedThreadSnapshot,
+    ],
+  );
+
+  const readRetainedThreadSnapshot = useCallback(
+    (value: unknown): ThreadSnapshot | null => normalizeThreadSnapshot(value),
+    [normalizeThreadSnapshot],
+  );
+
+  const readEffectiveThreadSnapshot = useCallback((value: unknown): ThreadSnapshot => {
+    return readActiveRetainedThreadSnapshot() ?? readRetainedThreadSnapshot(value) ?? initialAgentState;
+  }, [readActiveRetainedThreadSnapshot, readRetainedThreadSnapshot]);
 
   const clearPendingSyncMutation = useCallback((clientMutationId: string | null) => {
     if (!clientMutationId) return;
@@ -562,19 +730,51 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     pendingSyncMutationRef.current = pendingSyncMutationByThread;
   }, [pendingSyncMutationByThread]);
 
+  useEffect(() => {
+    const activeRetainedSnapshot = readActiveRetainedThreadSnapshot();
+    const currentSnapshot = normalizeThreadSnapshot(agent.state);
+    if (!currentSnapshot) {
+      return;
+    }
+
+    if (
+      shouldPreserveRetainedThreadSnapshot({
+        rawValue: agent.state,
+        nextSnapshot: currentSnapshot,
+        retainedSnapshot: activeRetainedSnapshot,
+      })
+    ) {
+      return;
+    }
+
+    retainedThreadSnapshotKeyRef.current = authoritativeSnapshotCacheKey;
+    retainedThreadSnapshotRef.current = currentSnapshot;
+    if (authoritativeSnapshotCacheKey) {
+      authoritativeSnapshotCache.setSnapshot(authoritativeSnapshotCacheKey, currentSnapshot);
+    }
+  }, [
+    agent.state,
+    authoritativeSnapshotCache,
+    authoritativeSnapshotCacheKey,
+    normalizeThreadSnapshot,
+    readActiveRetainedThreadSnapshot,
+    shouldPreserveRetainedThreadSnapshot,
+  ]);
+
   const restoreSettingsSnapshot = useCallback((rollbackSettings: AgentSettings | null) => {
     const currentAgent = agentRef.current;
     if (!currentAgent || !rollbackSettings) return;
 
-    const nextState =
-      hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
-    currentAgent.setState({
+    const nextState = readEffectiveThreadSnapshot(currentAgent.state);
+    const restoredState = {
       ...nextState,
       settings: {
         ...rollbackSettings,
       },
-    });
-  }, [hasStateValues]);
+    };
+    currentAgent.setState(restoredState);
+    commitRetainedThreadSnapshot(restoredState);
+  }, [commitRetainedThreadSnapshot, readEffectiveThreadSnapshot]);
 
   const rollbackPendingSyncMutation = useCallback(
     (clientMutationId: string | null, rollbackSettings: AgentSettings | null) => {
@@ -604,7 +804,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           ack.code === 'stale_revision'
             ? 'Shared settings changed elsewhere. Restored the last saved values; please retry.'
             : ack.code === 'missing_base_revision'
-              ? 'Unable to sync settings until shared state is hydrated.'
+              ? 'Unable to refresh settings until shared state is hydrated.'
               : 'Unable to apply those settings. Restored the last saved values.',
         );
       }
@@ -780,7 +980,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             ? (statePayload as { tasks: unknown[] }).tasks.length
             : null,
       });
-      const previousState = hasStateValues(agent.state) ? (agent.state as ThreadSnapshot) : null;
+      const previousState = readRetainedThreadSnapshot(agent.state);
       const projectedState = projectDetailStateFromPayload(statePayload, previousState);
       if (projectedState) {
         const previousThread = previousState?.thread;
@@ -805,6 +1005,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           nextTopLevelTaskCount: Array.isArray(projectedState.tasks) ? projectedState.tasks.length : null,
         });
         agent.setState(projectedState);
+        commitRetainedThreadSnapshot(projectedState);
         return;
       }
 
@@ -823,22 +1024,30 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       return (event as { snapshot?: unknown }).snapshot ?? null;
     };
 
-    const applyMessages = (nextMessages: unknown, options?: { resetVisibleOrder?: boolean }) => {
+    const extractSnapshotMessages = (payload: unknown): unknown => {
+      if (typeof payload !== 'object' || payload === null) return null;
+      if (!('event' in payload)) return null;
+      const event = (payload as { event?: unknown }).event;
+      if (typeof event !== 'object' || event === null) return null;
+      if (!('messages' in event)) return null;
+      return (event as { messages?: unknown }).messages ?? null;
+    };
+
+    const applyMessages = (nextMessages: unknown) => {
       const normalized = Array.isArray(nextMessages) ? (nextMessages as Message[]) : [];
-      const previousState = hasStateValues(agent.state) ? (agent.state as ThreadSnapshot) : initialAgentState;
+      const previousState = readEffectiveThreadSnapshot(agent.state);
       const previousMessages = Array.isArray(previousState.messages)
         ? (previousState.messages as Message[])
         : [];
       if (messagesEqual(previousMessages, normalized)) {
         return;
       }
-      if (options?.resetVisibleOrder) {
-        setMessageSnapshotEpoch((current) => current + 1);
-      }
-      agent.setState({
+      const nextState = {
         ...previousState,
         messages: normalized,
-      });
+      };
+      agent.setState(nextState);
+      commitRetainedThreadSnapshot(nextState);
     };
 
     const subscription = agent.subscribe({
@@ -908,7 +1117,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           inputRunId: getInputRunId(payload),
           currentThreadId: threadIdRef.current ?? null,
         });
-        applyMessages(payload.messages, { resetVisibleOrder: true });
+        const snapshotMessages = extractSnapshotMessages(payload);
+        if (snapshotMessages === null) {
+          return;
+        }
+        applyMessages(snapshotMessages);
       },
       onMessagesChanged: (payload) => {
         if (!isCurrentThreadEvent(payload)) return;
@@ -937,13 +1150,15 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     emitConnectTrace,
     extractSharedStateControlAck,
     extractSharedStateControlRevision,
-    hasStateValues,
     logConnectEvent,
+    readEffectiveThreadSnapshot,
+    readRetainedThreadSnapshot,
     reconcileSharedStateControlAck,
     setRunInFlight,
+    commitRetainedThreadSnapshot,
   ]);
 
-  // Initial sync when thread is established - runs once per agent instance
+  // Initial refresh when the thread is established - runs once per agent instance
   useEffect(() => {
     agentRef.current = agent ?? null;
   }, [agent]);
@@ -958,25 +1173,25 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       getThreadId: () => threadIdRef.current,
       getRunInFlight: () => runInFlightRef.current,
       setRunInFlight,
-      runAgent: async (currentAgent) => runAgentOnCurrentThread(currentAgent),
+      runCommand: async (currentAgent, params) => runNamedCommandOnCurrentThread(currentAgent, params),
       createId: v7,
       isBusyRunError,
       isAbortLikeError,
       isAgentRunning,
-      onSyncingChange: (isSyncing) => {
+      onRefreshingChange: (isSyncing) => {
         setSyncingState({
           threadId: threadIdRef.current,
           isSyncing,
         });
       },
-      onSyncRunTerminal: (messagePayload) => {
+      onRefreshRunTerminal: (commandPayload) => {
         const clientMutationId =
-          typeof messagePayload?.clientMutationId === 'string' ? messagePayload.clientMutationId : null;
+          typeof commandPayload?.clientMutationId === 'string' ? commandPayload.clientMutationId : null;
         clearPendingSyncMutation(clientMutationId);
       },
       onCommandBusy: (command, error) => {
         const detail = error instanceof Error ? error.message : String(error);
-        if (command === 'sync') {
+        if (command === 'refresh') {
           setPendingSyncMutationByThread({
             threadId: threadIdRef.current,
             clientMutationId: null,
@@ -993,7 +1208,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         });
       },
       onCommandError: (command, error) => {
-        if (command === 'sync') {
+        if (command === 'refresh') {
           setPendingSyncMutationByThread({
             threadId: threadIdRef.current,
             clientMutationId: null,
@@ -1020,7 +1235,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         commandSchedulerRef.current = null;
       }
     };
-  }, [agentId, clearPendingSyncMutation, runAgentOnCurrentThread, setRunInFlight]);
+  }, [agentId, clearPendingSyncMutation, runNamedCommandOnCurrentThread, setRunInFlight]);
 
   useEffect(() => {
     const ownerId = streamOwnerIdRef.current;
@@ -1226,10 +1441,17 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   ]);
 
   // Extract state with defaults
-  const currentState =
-    agent.state && Object.keys(agent.state).length > 0
-      ? (agent.state as ThreadSnapshot)
-      : initialAgentState;
+  const renderCachedSnapshot = authoritativeSnapshotCacheKey
+    ? authoritativeSnapshotCache.getSnapshot(authoritativeSnapshotCacheKey)
+    : null;
+  const normalizedCurrentState = normalizeThreadSnapshotFromBase(agent.state, renderCachedSnapshot);
+  const currentState = shouldPreserveRetainedThreadSnapshot({
+    rawValue: agent.state,
+    nextSnapshot: normalizedCurrentState,
+    retainedSnapshot: renderCachedSnapshot,
+  })
+    ? renderCachedSnapshot ?? normalizedCurrentState ?? initialAgentState
+    : normalizedCurrentState ?? renderCachedSnapshot ?? initialAgentState;
   const threadState = currentState.thread ?? defaultThreadState;
   const syncRunPending = syncingState.threadId === threadId ? syncingState.isSyncing : false;
   const pendingSyncMutationId =
@@ -1238,6 +1460,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       : null;
   const isSyncing = syncRunPending || pendingSyncMutationId !== null;
   const hasLoadedView = !needsSync(currentState);
+  const hasAuthoritativeState = hasStateValues(agent.state);
   const uiState: UiState = deriveUiState({
     threadState,
     runtime: {
@@ -1264,10 +1487,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           ? latestEvent.parts[0]?.kind ?? null
           : null;
   const settings = currentState.settings ?? defaultSettings;
-  const messages = useMemo(
-    () => (Array.isArray(currentState.messages) ? (currentState.messages as Message[]) : []),
-    [currentState.messages],
-  );
+  const messages = Array.isArray(currentState.messages) ? (currentState.messages as Message[]) : [];
   const syncedPendingInterrupt = deriveSyncedInterrupt(currentState);
   useEffect(() => {
     emitConnectTrace('state-applied', {
@@ -1343,13 +1563,13 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const runSync = useCallback(() => {
     setUiError(null);
-    const accepted = dispatchCommand('sync', { allowSyncCoalesce: true });
+    const accepted = dispatchCommand('refresh', { allowRefreshCoalesce: true });
     if (!accepted) {
-      setUiError('Unable to queue sync right now. Please retry.');
+      setUiError('Unable to queue refresh right now. Please retry.');
     }
   }, [dispatchCommand]);
 
-  const runHire = useCallback(() => {
+  const runHire = () => {
     if (!isHired && !isHiring) {
       setUiError(null);
       if (!runCommand('hire')) {
@@ -1360,7 +1580,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       setIsHiring(true);
       setTimeout(() => setIsHiring(false), 5000);
     }
-  }, [isHired, isHiring, runCommand]);
+  };
 
   const runFire = useCallback(() => {
     if (isFiring) return;
@@ -1392,20 +1612,17 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         });
         const ok = await fireAgentRun({
           agent: value,
-          runAgent: async (current) => runAgentOnCurrentThread(current),
-          runDirectCommand: async (current, commandName) =>
-            runAgentOnCurrentThread(current, {
-              forwardedProps: {
-                command: {
-                  name: commandName,
-                },
+          runDirectCommand: async (current, input) =>
+            runNamedCommandOnCurrentThread(current, {
+              command: input.commandName,
+              commandPayload: {
+                clientMutationId: input.clientMutationId,
               },
             }),
           preemptActiveRun: stopAgentOnCurrentThread,
           threadId,
           runInFlightRef,
           createId: v7,
-          commandTransport: config.imperativeCommandTransport,
           onError: (message) => {
             setUiError(message);
             setIsFiring(false);
@@ -1439,9 +1656,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
     setTimeout(() => setIsFiring(false), 3000);
   }, [
-    config.imperativeCommandTransport,
     isFiring,
-    runAgentOnCurrentThread,
+    runNamedCommandOnCurrentThread,
     stopAgentOnCurrentThread,
     threadId,
   ]);
@@ -1589,24 +1805,25 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [effectiveActiveInterrupt?.type, emitConnectTrace, runAgentOnCurrentThread, runCommand],
   );
 
-  // Local settings mutation helper; caller decides whether to enqueue a sync run.
+  // Local settings mutation helper; caller decides whether to enqueue a refresh run.
   const updateSettings = useCallback(
     (updates: Partial<AgentSettings>) => {
       const currentAgent = agentRef.current;
       if (!currentAgent) return;
 
-      const nextState =
-        hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
+      const nextState = readEffectiveThreadSnapshot(currentAgent.state);
 
-      currentAgent.setState({
+      const nextSnapshot = {
         ...nextState,
         settings: {
           ...(nextState.settings ?? defaultSettings),
           ...updates,
         },
-      });
+      };
+      currentAgent.setState(nextSnapshot);
+      commitRetainedThreadSnapshot(nextSnapshot);
     },
-    [hasStateValues],
+    [commitRetainedThreadSnapshot, readEffectiveThreadSnapshot],
   );
 
   const saveSettings = useCallback(
@@ -1614,9 +1831,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       setUiError(null);
       const clientMutationId = v7();
       const rollbackSettings = {
-        ...((hasStateValues(agentRef.current?.state)
-          ? ((agentRef.current?.state as ThreadSnapshot).settings ?? defaultSettings)
-          : defaultSettings) as AgentSettings),
+        ...(readEffectiveThreadSnapshot(agentRef.current?.state).settings ?? defaultSettings),
       };
       const sharedStateRevision =
         sharedStateRevisionByThread.threadId === threadId ? sharedStateRevisionByThread.revision : null;
@@ -1627,14 +1842,14 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       });
       updateSettings(updates);
 
-      if (config.imperativeCommandTransport === 'forwarded-props') {
+      if (config.settingsRefreshTransport === 'shared-state-update') {
         const scheduler = commandSchedulerRef.current;
         if (!scheduler || !sharedStateRevision) {
           rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
           setUiError(
             sharedStateRevision
-              ? 'Unable to sync settings right now. Please retry.'
-              : 'Unable to sync settings until shared state is hydrated.',
+              ? 'Unable to refresh settings right now. Please retry.'
+              : 'Unable to refresh settings until shared state is hydrated.',
           );
           return;
         }
@@ -1642,8 +1857,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         const accepted = scheduler.dispatchCustom({
           command: 'update',
           run: async (currentAgent) => {
-            const nextState =
-              hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
+            const nextState = readEffectiveThreadSnapshot(currentAgent.state);
             const nextSettings = {
               ...(nextState.settings ?? defaultSettings),
               ...updates,
@@ -1680,26 +1894,26 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
         if (!accepted) {
           rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
-          setUiError('Unable to sync settings right now. Please retry.');
+          setUiError('Unable to refresh settings right now. Please retry.');
         }
         return;
       }
 
-      const accepted = dispatchCommand('sync', {
-        allowSyncCoalesce: true,
-        messagePayload: {
+      const accepted = dispatchCommand('refresh', {
+        allowRefreshCoalesce: true,
+        commandPayload: {
           clientMutationId,
         },
       });
       if (!accepted) {
         rollbackPendingSyncMutation(clientMutationId, rollbackSettings);
-        setUiError('Unable to sync settings right now. Please retry.');
+        setUiError('Unable to refresh settings right now. Please retry.');
       }
     },
     [
-      config.imperativeCommandTransport,
+      config.settingsRefreshTransport,
       dispatchCommand,
-      hasStateValues,
+      readEffectiveThreadSnapshot,
       runAgentOnCurrentThread,
       rollbackPendingSyncMutation,
       sharedStateRevisionByThread.revision,
@@ -1713,23 +1927,25 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     const currentAgent = agentRef.current;
     if (!currentAgent) return;
 
-    const previousState =
-      hasStateValues(currentAgent.state) ? (currentAgent.state as ThreadSnapshot) : initialAgentState;
+    const previousState = readEffectiveThreadSnapshot(currentAgent.state);
     const previousThread = previousState.thread ?? defaultThreadState;
 
-    currentAgent.setState({
+    const nextSnapshot = {
       ...previousState,
       thread: {
         ...previousThread,
         domainProjection: projection,
       },
-    });
-  }, [hasStateValues]);
+    };
+    currentAgent.setState(nextSnapshot);
+    commitRetainedThreadSnapshot(nextSnapshot);
+  }, [commitRetainedThreadSnapshot, readEffectiveThreadSnapshot]);
 
   return {
     config,
     isConnected: !!threadId,
     hasLoadedView,
+    hasAuthoritativeState,
     threadId,
     domainProjection:
       typeof threadState.domainProjection === 'object' && threadState.domainProjection !== null
@@ -1746,7 +1962,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     transactionHistory,
     events,
     messages,
-    messageSnapshotEpoch,
     settings,
     isHired,
     isActive,

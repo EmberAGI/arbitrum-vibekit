@@ -1,13 +1,8 @@
-type CommandMessage = {
-  id: string;
-  role: 'user';
-  content: string;
-};
-
 type SchedulableAgent = {
-  addMessage: (message: CommandMessage) => void;
   isRunning?: boolean | (() => boolean);
 };
+
+type CommandPayload = Record<string, unknown>;
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
@@ -15,9 +10,9 @@ export interface AgentCommandScheduler<TAgent extends SchedulableAgent> {
   dispatch(
     command: string,
     options?: {
-      allowSyncCoalesce?: boolean;
+      allowRefreshCoalesce?: boolean;
       isReplayAttempt?: boolean;
-      messagePayload?: Record<string, unknown>;
+      commandPayload?: CommandPayload;
     },
   ): boolean;
   dispatchCustom(params: {
@@ -35,34 +30,40 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
   getThreadId: () => string | undefined;
   getRunInFlight: () => boolean;
   setRunInFlight: (next: boolean) => void;
-  runAgent: (agent: TAgent) => Promise<unknown>;
+  runCommand: (
+    agent: TAgent,
+    params: {
+      command: string;
+      commandPayload?: CommandPayload;
+    },
+  ) => Promise<unknown>;
   createId: () => string;
   isBusyRunError: (error: unknown) => boolean;
   isAbortLikeError?: (error: unknown) => boolean;
   isAgentRunning: (agent: TAgent) => boolean;
-  onSyncingChange: (isSyncing: boolean) => void;
-  onSyncRunTerminal?: (messagePayload?: Record<string, unknown>) => void;
+  onRefreshingChange: (isRefreshing: boolean) => void;
+  onRefreshRunTerminal?: (commandPayload?: CommandPayload) => void;
   onCommandError?: (command: string, error: unknown) => void;
   onCommandBusy?: (command: string, error: unknown) => void;
-  syncReplayDelayMs?: number;
-  syncBusyMaxRetries?: number;
+  refreshReplayDelayMs?: number;
+  refreshBusyMaxRetries?: number;
   setTimer?: (callback: () => void, ms: number) => TimerHandle;
   clearTimer?: (handle: TimerHandle) => void;
 }): AgentCommandScheduler<TAgent> {
-  const syncReplayDelayMs = params.syncReplayDelayMs ?? 500;
-  const syncBusyMaxRetries = params.syncBusyMaxRetries ?? 3;
+  const refreshReplayDelayMs = params.refreshReplayDelayMs ?? 500;
+  const refreshBusyMaxRetries = params.refreshBusyMaxRetries ?? 3;
   const setTimer = params.setTimer ?? ((callback: () => void, ms: number) => setTimeout(callback, ms));
   const clearTimer = params.clearTimer ?? ((handle: TimerHandle) => clearTimeout(handle));
 
-  let pendingSyncIntent = false;
-  let pendingSyncMessagePayload: Record<string, unknown> | undefined;
-  let syncRunInFlight = false;
-  let activeSyncMessagePayload: Record<string, unknown> | undefined;
-  let syncBusyRetries = 0;
+  let pendingRefreshIntent = false;
+  let pendingRefreshCommandPayload: CommandPayload | undefined;
+  let refreshRunInFlight = false;
+  let activeRefreshCommandPayload: CommandPayload | undefined;
+  let refreshBusyRetries = 0;
   let replayTimer: TimerHandle | null = null;
 
-  const refreshSyncing = () => {
-    params.onSyncingChange(pendingSyncIntent || syncRunInFlight);
+  const updateRefreshing = () => {
+    params.onRefreshingChange(pendingRefreshIntent || refreshRunInFlight);
   };
 
   const clearReplayTimer = () => {
@@ -75,9 +76,9 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
     command: string;
     run: (agent: TAgent) => Promise<unknown>;
     options?: {
-      allowSyncCoalesce?: boolean;
+      allowRefreshCoalesce?: boolean;
       isReplayAttempt?: boolean;
-      messagePayload?: Record<string, unknown>;
+      commandPayload?: CommandPayload;
       allowPreemptive?: boolean;
     };
     beforeRun?: (agent: TAgent) => void;
@@ -90,10 +91,10 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
     }
 
     if (params.getRunInFlight()) {
-      if (command === 'sync' && options?.allowSyncCoalesce) {
-        pendingSyncIntent = true;
-        pendingSyncMessagePayload = options.messagePayload;
-        refreshSyncing();
+      if (command === 'refresh' && options?.allowRefreshCoalesce) {
+        pendingRefreshIntent = true;
+        pendingRefreshCommandPayload = options.commandPayload;
+        updateRefreshing();
         return true;
       }
       if (options?.allowPreemptive) {
@@ -105,16 +106,16 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
 
     params.setRunInFlight(true);
 
-    if (command === 'sync') {
-      syncRunInFlight = true;
-      activeSyncMessagePayload = options?.messagePayload;
-      pendingSyncIntent = false;
-      pendingSyncMessagePayload = options?.messagePayload;
+    if (command === 'refresh') {
+      refreshRunInFlight = true;
+      activeRefreshCommandPayload = options?.commandPayload;
+      pendingRefreshIntent = false;
+      pendingRefreshCommandPayload = options?.commandPayload;
       if (!options?.isReplayAttempt) {
-        syncBusyRetries = 0;
+        refreshBusyRetries = 0;
       }
       clearReplayTimer();
-      refreshSyncing();
+      updateRefreshing();
     }
 
     beforeRun?.(agent);
@@ -122,29 +123,29 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
     void Promise.resolve(run(agent)).catch((error) => {
       params.setRunInFlight(false);
 
-      if (command === 'sync') {
-        syncRunInFlight = false;
-        activeSyncMessagePayload = undefined;
+      if (command === 'refresh') {
+        refreshRunInFlight = false;
+        activeRefreshCommandPayload = undefined;
 
         const busy = params.isBusyRunError(error) || params.isAgentRunning(agent);
         const aborted = params.isAbortLikeError?.(error) ?? false;
-        if ((busy || aborted) && syncBusyRetries < syncBusyMaxRetries) {
-          syncBusyRetries += 1;
-          pendingSyncIntent = true;
-          refreshSyncing();
+        if ((busy || aborted) && refreshBusyRetries < refreshBusyMaxRetries) {
+          refreshBusyRetries += 1;
+          pendingRefreshIntent = true;
+          updateRefreshing();
 
           if (replayTimer === null) {
             replayTimer = setTimer(() => {
               replayTimer = null;
-              replayPendingSync();
-            }, syncReplayDelayMs);
+              replayPendingRefresh();
+            }, refreshReplayDelayMs);
           }
           return;
         }
 
-        pendingSyncIntent = false;
-        syncBusyRetries = 0;
-        refreshSyncing();
+        pendingRefreshIntent = false;
+        refreshBusyRetries = 0;
+        updateRefreshing();
       }
 
       const busy = params.isBusyRunError(error) || params.isAgentRunning(agent);
@@ -163,35 +164,30 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
   const dispatch = (
     command: string,
     options?: {
-      allowSyncCoalesce?: boolean;
+      allowRefreshCoalesce?: boolean;
       isReplayAttempt?: boolean;
-      messagePayload?: Record<string, unknown>;
+      commandPayload?: CommandPayload;
     },
   ): boolean => {
+    const payload = options?.commandPayload ?? {};
+    const hasClientMutationId =
+      typeof payload['clientMutationId'] === 'string' &&
+      (payload['clientMutationId'] as string).length > 0;
+    const commandPayload = hasClientMutationId
+      ? payload
+      : {
+          ...payload,
+          clientMutationId: params.createId(),
+        };
+
     return dispatchRun({
       command,
       options,
-      beforeRun: (agent) => {
-        const payload = options?.messagePayload ?? {};
-        const hasClientMutationId =
-          typeof payload['clientMutationId'] === 'string' &&
-          (payload['clientMutationId'] as string).length > 0;
-        const messagePayload = hasClientMutationId
-          ? payload
-          : {
-              ...payload,
-              clientMutationId: params.createId(),
-            };
-        agent.addMessage({
-          id: params.createId(),
-          role: 'user',
-          content: JSON.stringify({
-            command,
-            ...messagePayload,
-          }),
-        });
-      },
-      run: params.runAgent,
+      run: (agent) =>
+        params.runCommand(agent, {
+          command,
+          commandPayload,
+        }),
     });
   };
 
@@ -209,35 +205,35 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
     });
   };
 
-  const replayPendingSync = () => {
-    if (!pendingSyncIntent) return;
+  const replayPendingRefresh = () => {
+    if (!pendingRefreshIntent) return;
     if (params.getRunInFlight()) return;
-    void dispatch('sync', {
-      allowSyncCoalesce: true,
+    void dispatch('refresh', {
+      allowRefreshCoalesce: true,
       isReplayAttempt: true,
-      messagePayload: pendingSyncMessagePayload,
+      commandPayload: pendingRefreshCommandPayload,
     });
   };
 
   const handleRunTerminal = () => {
     params.setRunInFlight(false);
-    syncBusyRetries = 0;
-    if (syncRunInFlight) {
-      const completedSyncMessagePayload = activeSyncMessagePayload;
-      syncRunInFlight = false;
-      activeSyncMessagePayload = undefined;
-      params.onSyncRunTerminal?.(completedSyncMessagePayload);
+    refreshBusyRetries = 0;
+    if (refreshRunInFlight) {
+      const completedRefreshCommandPayload = activeRefreshCommandPayload;
+      refreshRunInFlight = false;
+      activeRefreshCommandPayload = undefined;
+      params.onRefreshRunTerminal?.(completedRefreshCommandPayload);
     }
-    refreshSyncing();
-    replayPendingSync();
+    updateRefreshing();
+    replayPendingRefresh();
   };
 
   const reset = () => {
-    pendingSyncIntent = false;
-    pendingSyncMessagePayload = undefined;
-    syncRunInFlight = false;
-    activeSyncMessagePayload = undefined;
-    syncBusyRetries = 0;
+    pendingRefreshIntent = false;
+    pendingRefreshCommandPayload = undefined;
+    refreshRunInFlight = false;
+    activeRefreshCommandPayload = undefined;
+    refreshBusyRetries = 0;
     clearReplayTimer();
   };
 

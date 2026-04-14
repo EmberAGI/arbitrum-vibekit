@@ -20,6 +20,7 @@ const inactiveAgent: UseAgentConnectionResult = {
   config: getAgentConfig('inactive-agent'),
   isConnected: false,
   hasLoadedView: false,
+  hasAuthoritativeState: false,
   threadId: undefined,
   domainProjection: {},
   applyDomainProjection: () => undefined,
@@ -35,7 +36,6 @@ const inactiveAgent: UseAgentConnectionResult = {
   messages: Array.isArray(initialAgentState.messages)
     ? (initialAgentState.messages as Message[])
     : emptyMessages,
-  messageSnapshotEpoch: 0,
   settings: defaultSettings,
   isHired: false,
   isActive: false,

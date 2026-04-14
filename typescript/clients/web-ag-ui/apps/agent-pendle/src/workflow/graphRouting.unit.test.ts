@@ -13,6 +13,9 @@ import {
 const createState = (): ClmmState =>
   ({
     messages: [],
+    private: {
+      activeCommand: null,
+    },
     thread: {
       operatorInput: undefined,
       fundingTokenInput: undefined,
@@ -64,9 +67,9 @@ const makeReadyState = (): ClmmState => {
 };
 
 describe('graphRouting', () => {
-  it('routes bootstrap to syncState for explicit sync command', () => {
+  it('routes bootstrap to syncState for explicit refresh command', () => {
     const state = createState();
-    state.messages = [{ id: 'msg-1', role: 'user', content: JSON.stringify({ command: 'sync' }) }];
+    state.private.activeCommand = 'refresh';
 
     expect(resolvePostBootstrap(state)).toBe('syncState');
   });

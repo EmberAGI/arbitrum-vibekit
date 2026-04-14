@@ -9,7 +9,7 @@ The Pi-backed agent is intended to serve `web-ag-ui` first, but future channels 
 - AG-UI concepts become the de facto internal runtime model
 - new clients are forced to sit on top of web-specific assumptions
 - thread identity fragments per client surface
-- shared setup/hire/sync/fire flows drift across channels
+- shared setup/hire/refresh/fire flows drift across channels
 
 We also know the current web app creates deterministic threads based on wallet address plus scoped identifiers, and future product work may need multiple deterministic user-visible threads.
 
@@ -33,7 +33,7 @@ Thread visibility rules:
 - Internal operational contexts such as background task/job execution are not first-class user threads by default.
 
 Channel behavior rules:
-- Shared flows such as hire/setup/sync/fire must belong to Pi-owned agent domain modules layered above the core runtime, not only to the AG-UI adapter.
+- Shared flows such as hire/setup/refresh/fire must belong to Pi-owned agent domain modules layered above the core runtime, not only to the AG-UI adapter.
 - If autonomous work needs user input, actionable interrupts surface into the root thread so user-visible channels can resolve them.
 - Rich channel-specific rendering remains the responsibility of each adapter.
 

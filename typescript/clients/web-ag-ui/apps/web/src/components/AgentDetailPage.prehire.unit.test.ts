@@ -111,6 +111,37 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toMatch(new RegExp('<button[^>]*disabled[^>]*>\\s*Chat\\s*</button>'));
   });
 
+  it('shows reconnecting state instead of a hire affordance while waiting for an authoritative snapshot', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        isHired: false,
+        isRestoringState: true,
+        isHiring: false,
+        hasLoadedView: false,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('Reconnecting...');
+    expect(html).toContain('Restoring state');
+    expect(html).not.toContain('>Hire<');
+  });
+
   it('enables pre-hire chat for the Pi example agent', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
@@ -179,7 +210,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('Analyzing the request before answering.');
   });
 
-  it('keeps reasoning ahead of its linked assistant response in the transcript', () => {
+  it('renders linked reasoning in the order supplied by the runtime transcript', () => {
     const messages: Message[] = [
       {
         id: 'assistant-1',
@@ -222,8 +253,8 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
 
     expect(html).toContain('Thinking through the request first.');
     expect(html).toContain('Here is the final answer.');
-    expect(html.indexOf('Thinking through the request first.')).toBeLessThan(
-      html.indexOf('Here is the final answer.'),
+    expect(html.indexOf('Here is the final answer.')).toBeLessThan(
+      html.indexOf('Thinking through the request first.'),
     );
   });
 
@@ -253,8 +284,8 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
               data: {
                 type: 'automation-status',
                 status: 'scheduled',
-                command: 'sync',
-                detail: 'Scheduled sync every 5 minutes.',
+                command: 'refresh',
+                detail: 'Scheduled refresh every 5 minutes.',
               },
             },
           },
@@ -268,8 +299,8 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
                     kind: 'automation-status',
                     payload: {
                       status: 'scheduled',
-                      command: 'sync',
-                      detail: 'Scheduled sync every 5 minutes.',
+                      command: 'refresh',
+                      detail: 'Scheduled refresh every 5 minutes.',
                     },
                   },
                 },

@@ -178,7 +178,7 @@ describe('createPiExampleAgUiHandler', () => {
           {
             id: 'message-1',
             role: 'user',
-            content: 'schedule a sync',
+            content: 'schedule a refresh',
           },
         ],
       }),

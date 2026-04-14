@@ -1,7 +1,7 @@
 import type { State } from '@ag-ui/langgraph';
 import { EventType, verifyEvents, type RunAgentInput } from '@ag-ui/client';
 import { Subject, lastValueFrom, toArray } from 'rxjs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { LangGraphInterruptSnapshotAgent } from './langGraphInterruptSnapshotAgent';
 import { assertSharedThreadSnapshotContract } from './sharedThreadSnapshotContract.test-support';
@@ -9,6 +9,90 @@ import { assertSharedThreadSnapshotContract } from './sharedThreadSnapshotContra
 type LangGraphThreadState = Parameters<LangGraphInterruptSnapshotAgent['getStateSnapshot']>[0];
 
 describe('LangGraphInterruptSnapshotAgent', () => {
+  it('translates named workflow commands into native LangGraph command updates before streaming', async () => {
+    const streamMock = vi.fn(async function* () {});
+    const agent = new LangGraphInterruptSnapshotAgent({
+      deploymentUrl: 'http://langgraph-gmx:8126',
+      graphId: 'agent-gmx-allora',
+    });
+
+    Reflect.set(agent, 'assistant', {
+      assistant_id: 'assistant-1',
+    });
+    Reflect.set(agent, 'activeRun', {
+      id: 'run-1',
+      threadId: 'thread-1',
+      hasFunctionStreaming: false,
+      hasPredictState: false,
+      manuallyEmittedState: null,
+    });
+    Reflect.set(agent, 'client', {
+      threads: {
+        getState: async () =>
+          ({
+            values: {
+              messages: [],
+              thread: {},
+              private: {},
+            },
+            tasks: [],
+            next: [],
+            metadata: { writes: {} },
+          }) as LangGraphThreadState,
+      },
+      assistants: {
+        getGraph: async () => ({ edges: [] }),
+      },
+      runs: {
+        stream: streamMock,
+      },
+    });
+
+    Reflect.set(agent, 'getOrCreateThread', vi.fn(async () => ({ thread_id: 'thread-1' })));
+    Reflect.set(agent, 'getSchemaKeys', vi.fn(async () => ({
+      config: [],
+      context: [],
+      input: ['thread', 'messages', 'copilotkit', 'tools'],
+      output: ['thread', 'messages', 'copilotkit', 'tools'],
+    })));
+
+    await agent.prepareStream(
+      {
+        threadId: 'thread-1',
+        runId: 'run-1',
+        messages: [],
+        state: {},
+        tools: [],
+        context: [],
+        forwardedProps: {
+          command: {
+            name: 'hire',
+            clientMutationId: 'hire-1',
+            source: 'detail-page',
+          },
+        },
+      },
+      ['events'],
+    );
+
+    expect(streamMock).toHaveBeenCalledWith(
+      'thread-1',
+      'assistant-1',
+      expect.objectContaining({
+        command: {
+          update: {
+            private: {
+              pendingCommand: {
+                command: 'hire',
+                clientMutationId: 'hire-1',
+              },
+            },
+          },
+        },
+      }),
+    );
+  });
+
   it('preserves top-level persisted task interrupts in projected snapshots', () => {
     const agent = new LangGraphInterruptSnapshotAgent({
       deploymentUrl: 'http://langgraph-gmx:8126',

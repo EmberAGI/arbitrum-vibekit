@@ -32,7 +32,7 @@ export function resolveCommandReplayGuardState(input: {
   suppressDuplicateCommand: boolean;
   lastAppliedCommandMutationId?: string;
 } {
-  if (!input.parsedCommand || input.parsedCommand === 'sync') {
+  if (!input.parsedCommand || input.parsedCommand === 'refresh') {
     return {
       suppressDuplicateCommand: false,
       lastAppliedCommandMutationId: input.lastAppliedCommandMutationId,
@@ -77,7 +77,7 @@ export function resolveCommandTargetForBootstrappedFlow(input: {
         bootstrapped: input.bootstrapped,
         onboardingReady: true,
       });
-    case 'sync':
+    case 'refresh':
       return input.bootstrapped ? 'syncState' : 'bootstrap';
     default:
       return '__end__';

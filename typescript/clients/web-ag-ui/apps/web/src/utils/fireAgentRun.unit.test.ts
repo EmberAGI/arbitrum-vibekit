@@ -2,21 +2,32 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { fireAgentRun } from './fireAgentRun';
 
+function expectFireDispatch(
+  runDirectCommand: ReturnType<typeof vi.fn>,
+  callIndex = 0,
+  clientMutationId = 'msg-1',
+): void {
+  expect(runDirectCommand.mock.calls[callIndex]?.[1]).toEqual({
+    commandName: 'fire',
+    clientMutationId,
+  });
+}
+
 describe('fireAgentRun', () => {
   it('detaches stale runtime ownership before dispatching fire when no run appears active', async () => {
     const calls: string[] = [];
     const agent = {
       isRunning: false,
       detachActiveRun: vi.fn(async () => calls.push('detachActiveRun')),
-      addMessage: vi.fn(() => calls.push('addMessage')),
     };
+    const runDirectCommand = vi.fn(async () => {
+      calls.push('runDirectCommand');
+    });
     const runInFlightRef = { current: false };
 
     const ok = await fireAgentRun({
       agent,
-      runAgent: async () => {
-        calls.push('runAgent');
-      },
+      runDirectCommand,
       threadId: 'thread-1',
       runInFlightRef,
       createId: () => 'msg-1',
@@ -24,55 +35,47 @@ describe('fireAgentRun', () => {
 
     expect(ok).toBe(true);
     expect(agent.detachActiveRun).toHaveBeenCalledTimes(1);
-    expect(calls).toEqual(['detachActiveRun', 'addMessage', 'runAgent']);
+    expect(runDirectCommand).toHaveBeenCalledTimes(1);
+    expectFireDispatch(runDirectCommand);
+    expect(calls).toEqual(['detachActiveRun', 'runDirectCommand']);
   });
 
-  it('enqueues fire command with a clientMutationId for replay-safe routing', async () => {
+  it('dispatches fire command with a clientMutationId for replay-safe routing', async () => {
     const agent = {
       isRunning: false,
       detachActiveRun: vi.fn(async () => undefined),
-      addMessage: vi.fn(),
     };
+    const runDirectCommand = vi.fn(async () => undefined);
     const runInFlightRef = { current: false };
 
     const ok = await fireAgentRun({
       agent,
-      runAgent: async () => undefined,
+      runDirectCommand,
       threadId: 'thread-1',
       runInFlightRef,
       createId: () => 'msg-1',
     });
 
     expect(ok).toBe(true);
-    const firstMessage = agent.addMessage.mock.calls[0]?.[0] as { content?: string } | undefined;
-    const parsedContent =
-      typeof firstMessage?.content === 'string'
-        ? (JSON.parse(firstMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(parsedContent).toEqual({
-      command: 'fire',
-      clientMutationId: 'msg-1',
-    });
+    expectFireDispatch(runDirectCommand);
   });
 
-  it('preempts the active run via stop callback, detaches, then sends the fire command', async () => {
+  it('preempts the active run via stop callback, detaches, then dispatches the fire command', async () => {
     const calls: string[] = [];
 
     const agent = {
       isRunning: true,
       abortRun: vi.fn(() => calls.push('abortRun')),
       detachActiveRun: vi.fn(async () => calls.push('detachActiveRun')),
-      addMessage: vi.fn(() => calls.push('addMessage')),
     };
-    const copilotkit = {
-      runAgent: vi.fn(async () => calls.push('runAgent')),
-    };
-
+    const runDirectCommand = vi.fn(async () => {
+      calls.push('runDirectCommand');
+    });
     const runInFlightRef = { current: true };
 
     const ok = await fireAgentRun({
       agent,
-      runAgent: async (value) => copilotkit.runAgent({ agent: value }),
+      runDirectCommand,
       preemptActiveRun: async () => {
         calls.push('stopAgent');
         runInFlightRef.current = false;
@@ -86,9 +89,9 @@ describe('fireAgentRun', () => {
     expect(runInFlightRef.current).toBe(true);
     expect(agent.abortRun).not.toHaveBeenCalled();
     expect(agent.detachActiveRun).toHaveBeenCalledTimes(1);
-    expect(agent.addMessage).toHaveBeenCalledTimes(1);
-    expect(copilotkit.runAgent).toHaveBeenCalledTimes(1);
-    expect(calls).toEqual(['stopAgent', 'detachActiveRun', 'addMessage', 'runAgent']);
+    expect(runDirectCommand).toHaveBeenCalledTimes(1);
+    expectFireDispatch(runDirectCommand);
+    expect(calls).toEqual(['stopAgent', 'detachActiveRun', 'runDirectCommand']);
   });
 
   it('does not call stop when local run ownership is stale but backend run is not active', async () => {
@@ -97,8 +100,10 @@ describe('fireAgentRun', () => {
     const agent = {
       isRunning: false,
       detachActiveRun: vi.fn(async () => calls.push('detachActiveRun')),
-      addMessage: vi.fn(() => calls.push('addMessage')),
     };
+    const runDirectCommand = vi.fn(async () => {
+      calls.push('runDirectCommand');
+    });
     const runInFlightRef = { current: true };
     const preemptActiveRun = vi.fn(async () => {
       calls.push('stopAgent');
@@ -106,9 +111,7 @@ describe('fireAgentRun', () => {
 
     const ok = await fireAgentRun({
       agent,
-      runAgent: async () => {
-        calls.push('runAgent');
-      },
+      runDirectCommand,
       preemptActiveRun,
       threadId: 'thread-1',
       runInFlightRef,
@@ -118,79 +121,73 @@ describe('fireAgentRun', () => {
     expect(ok).toBe(true);
     expect(preemptActiveRun).not.toHaveBeenCalled();
     expect(agent.detachActiveRun).toHaveBeenCalledTimes(1);
-    expect(calls).toEqual(['detachActiveRun', 'addMessage', 'runAgent']);
+    expect(runDirectCommand).toHaveBeenCalledTimes(1);
+    expectFireDispatch(runDirectCommand);
+    expect(calls).toEqual(['detachActiveRun', 'runDirectCommand']);
   });
 
-  it('retries run start when the runtime reports an active run, without re-adding fire message', async () => {
+  it('retries run start when the runtime reports an active run, without changing the fire mutation id', async () => {
     vi.useFakeTimers();
 
     const agent = {
-      addMessage: vi.fn(),
-      abortRun: vi.fn(),
       detachActiveRun: vi.fn(),
     };
-    const copilotkit = {
-      runAgent: vi
-        .fn()
-        .mockRejectedValueOnce(new Error('Cannot send RUN_STARTED while a run is still active.'))
-        .mockResolvedValueOnce(undefined),
-    };
+    const runDirectCommand = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Cannot send RUN_STARTED while a run is still active.'))
+      .mockResolvedValueOnce(undefined);
     const runInFlightRef = { current: false };
 
     try {
       const ok = await fireAgentRun({
         agent,
-        runAgent: async (value) => copilotkit.runAgent({ agent: value }),
+        runDirectCommand,
         threadId: 'thread-1',
         runInFlightRef,
         createId: () => 'msg-1',
       });
 
       expect(ok).toBe(true);
-      expect(agent.addMessage).toHaveBeenCalledTimes(1);
-      expect(copilotkit.runAgent).toHaveBeenCalledTimes(1);
+      expect(runDirectCommand).toHaveBeenCalledTimes(1);
+      expectFireDispatch(runDirectCommand);
       expect(runInFlightRef.current).toBe(true);
 
       await vi.advanceTimersByTimeAsync(300);
 
-      expect(copilotkit.runAgent).toHaveBeenCalledTimes(2);
-      expect(agent.addMessage).toHaveBeenCalledTimes(1);
+      expect(runDirectCommand).toHaveBeenCalledTimes(2);
+      expectFireDispatch(runDirectCommand, 1);
       expect(runInFlightRef.current).toBe(true);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('releases run-in-flight when run start fails for non-busy reasons', async () => {
+  it('releases run-in-flight when fire start fails for non-busy reasons', async () => {
     const agent = {
-      addMessage: vi.fn(),
-      abortRun: vi.fn(),
       detachActiveRun: vi.fn(),
     };
-    const copilotkit = {
-      runAgent: vi.fn(async () => {
-        throw new Error('bad gateway');
-      }),
-    };
+    const runDirectCommand = vi.fn(async () => {
+      throw new Error('bad gateway');
+    });
     const runInFlightRef = { current: true };
 
     const ok = await fireAgentRun({
       agent,
-      runAgent: async (value) => copilotkit.runAgent({ agent: value }),
+      runDirectCommand,
       threadId: 'thread-1',
       runInFlightRef,
       createId: () => 'msg-1',
     });
 
     expect(ok).toBe(true);
-    expect(runInFlightRef.current).toBe(true);
 
     await Promise.resolve();
     await Promise.resolve();
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     expect(runInFlightRef.current).toBe(false);
-    expect(copilotkit.runAgent).toHaveBeenCalledTimes(1);
+    expect(runDirectCommand).toHaveBeenCalledTimes(1);
+    expectFireDispatch(runDirectCommand);
   });
 
   it('retries on busy errors after detaching active run via AG-UI agent lifecycle', async () => {
@@ -202,22 +199,24 @@ describe('fireAgentRun', () => {
       isRunning: true,
       abortRun: vi.fn(),
       detachActiveRun: vi.fn(async () => calls.push('detachActiveRun')),
-      addMessage: vi.fn(() => calls.push('addMessage')),
     };
-    const copilotkit = {
-      runAgent: vi
-        .fn()
-        .mockRejectedValueOnce(
-          new Error('Thread is already running a task. Wait for it to finish or choose a different multitask strategy.'),
-        )
-        .mockResolvedValueOnce(undefined),
-    };
+    const runDirectCommand = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        calls.push('runDirectCommand');
+        throw new Error(
+          'Thread is already running a task. Wait for it to finish or choose a different multitask strategy.',
+        );
+      })
+      .mockImplementationOnce(async () => {
+        calls.push('runDirectCommand');
+      });
     const runInFlightRef = { current: false };
 
     try {
       const ok = await fireAgentRun({
         agent,
-        runAgent: async (value) => copilotkit.runAgent({ agent: value }),
+        runDirectCommand,
         preemptActiveRun: async () => {
           calls.push('stopAgent');
           runInFlightRef.current = false;
@@ -231,14 +230,16 @@ describe('fireAgentRun', () => {
       expect(ok).toBe(true);
       expect(agent.abortRun).not.toHaveBeenCalled();
       expect(agent.detachActiveRun).toHaveBeenCalledTimes(1);
-      expect(agent.addMessage).toHaveBeenCalledTimes(1);
+      expect(runDirectCommand).toHaveBeenCalledTimes(1);
+      expectFireDispatch(runDirectCommand);
       expect(calls[0]).toBe('stopAgent');
       expect(calls[1]).toBe('detachActiveRun');
-      expect(calls[2]).toBe('addMessage');
+      expect(calls[2]).toBe('runDirectCommand');
 
       await vi.advanceTimersByTimeAsync(300);
 
-      expect(copilotkit.runAgent).toHaveBeenCalledTimes(2);
+      expect(runDirectCommand).toHaveBeenCalledTimes(2);
+      expectFireDispatch(runDirectCommand, 1);
     } finally {
       vi.useRealTimers();
     }
@@ -249,11 +250,10 @@ describe('fireAgentRun', () => {
 
     const agent = {
       isRunning: false,
-      addMessage: vi.fn(),
       detachActiveRun: vi.fn(async () => undefined),
     };
     const runInFlightRef = { current: false };
-    const runAgent = vi
+    const runDirectCommand = vi
       .fn()
       .mockRejectedValueOnce(new Error('Thread is already running a task.'))
       .mockRejectedValueOnce(new Error('Thread is already running a task.'))
@@ -263,7 +263,7 @@ describe('fireAgentRun', () => {
     try {
       const ok = await fireAgentRun({
         agent,
-        runAgent,
+        runDirectCommand,
         threadId: 'thread-1',
         runInFlightRef,
         createId: () => 'msg-1',
@@ -272,13 +272,16 @@ describe('fireAgentRun', () => {
       });
 
       expect(ok).toBe(true);
-      expect(runAgent).toHaveBeenCalledTimes(1);
+      expect(runDirectCommand).toHaveBeenCalledTimes(1);
 
       await vi.advanceTimersByTimeAsync(3000);
 
-      expect(runAgent).toHaveBeenCalledTimes(4);
+      expect(runDirectCommand).toHaveBeenCalledTimes(4);
+      expectFireDispatch(runDirectCommand, 0);
+      expectFireDispatch(runDirectCommand, 1);
+      expectFireDispatch(runDirectCommand, 2);
+      expectFireDispatch(runDirectCommand, 3);
       expect(runInFlightRef.current).toBe(true);
-      expect(agent.addMessage).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
@@ -290,11 +293,10 @@ describe('fireAgentRun', () => {
     const onError = vi.fn();
     const agent = {
       isRunning: false,
-      addMessage: vi.fn(),
       detachActiveRun: vi.fn(async () => undefined),
     };
     const runInFlightRef = { current: false };
-    const runAgent = vi
+    const runDirectCommand = vi
       .fn()
       .mockRejectedValueOnce(new Error('BodyStreamBuffer was aborted'))
       .mockResolvedValueOnce(undefined);
@@ -302,7 +304,7 @@ describe('fireAgentRun', () => {
     try {
       const ok = await fireAgentRun({
         agent,
-        runAgent,
+        runDirectCommand,
         threadId: 'thread-1',
         runInFlightRef,
         createId: () => 'msg-1',
@@ -312,27 +314,28 @@ describe('fireAgentRun', () => {
       });
 
       expect(ok).toBe(true);
-      expect(runAgent).toHaveBeenCalledTimes(1);
+      expect(runDirectCommand).toHaveBeenCalledTimes(1);
 
       await vi.advanceTimersByTimeAsync(120);
 
-      expect(runAgent).toHaveBeenCalledTimes(2);
+      expect(runDirectCommand).toHaveBeenCalledTimes(2);
+      expectFireDispatch(runDirectCommand, 0);
+      expectFireDispatch(runDirectCommand, 1);
       expect(onError).not.toHaveBeenCalled();
       expect(runInFlightRef.current).toBe(true);
-      expect(agent.addMessage).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
   });
 
   it('does nothing when threadId is missing', async () => {
-    const agent = { abortRun: vi.fn(), detachActiveRun: vi.fn(), addMessage: vi.fn() };
-    const copilotkit = { runAgent: vi.fn() };
+    const agent = { abortRun: vi.fn(), detachActiveRun: vi.fn() };
+    const runDirectCommand = vi.fn();
     const runInFlightRef = { current: true };
 
     const ok = await fireAgentRun({
       agent,
-      runAgent: async (value) => copilotkit.runAgent({ agent: value }),
+      runDirectCommand,
       threadId: undefined,
       runInFlightRef,
       createId: () => 'msg-1',
@@ -341,8 +344,7 @@ describe('fireAgentRun', () => {
     expect(ok).toBe(false);
     expect(agent.abortRun).not.toHaveBeenCalled();
     expect(agent.detachActiveRun).not.toHaveBeenCalled();
-    expect(agent.addMessage).not.toHaveBeenCalled();
-    expect(copilotkit.runAgent).not.toHaveBeenCalled();
+    expect(runDirectCommand).not.toHaveBeenCalled();
   });
 
   it('waits for preemption timeout before dispatching fire when run ownership stays active', async () => {
@@ -352,17 +354,14 @@ describe('fireAgentRun', () => {
       isRunning: true,
       abortRun: vi.fn(),
       detachActiveRun: vi.fn(async () => undefined),
-      addMessage: vi.fn(),
     };
-    const copilotkit = {
-      runAgent: vi.fn(async () => undefined),
-    };
+    const runDirectCommand = vi.fn(async () => undefined);
     const runInFlightRef = { current: true };
 
     try {
       const firePromise = fireAgentRun({
         agent,
-        runAgent: async (value) => copilotkit.runAgent({ agent: value }),
+        runDirectCommand,
         preemptActiveRun: async () => undefined,
         threadId: 'thread-1',
         runInFlightRef,
@@ -372,14 +371,13 @@ describe('fireAgentRun', () => {
       });
 
       await vi.advanceTimersByTimeAsync(20);
-      expect(agent.addMessage).not.toHaveBeenCalled();
-      expect(copilotkit.runAgent).not.toHaveBeenCalled();
+      expect(runDirectCommand).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(40);
       await firePromise;
 
-      expect(agent.addMessage).toHaveBeenCalledTimes(1);
-      expect(copilotkit.runAgent).toHaveBeenCalledTimes(1);
+      expect(runDirectCommand).toHaveBeenCalledTimes(1);
+      expectFireDispatch(runDirectCommand);
     } finally {
       vi.useRealTimers();
     }

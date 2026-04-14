@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSubscriber } from '@ag-ui/client';
 
 import { useAgentConnection } from './useAgentConnection';
+import { AuthoritativeAgentSnapshotCacheProvider } from '../contexts/AuthoritativeAgentSnapshotCache';
 import type { AgentInterrupt } from '../types/agent';
 import { __resetAgentStreamCoordinatorForTests } from '../utils/agentStreamCoordinator';
 import { getAgentThreadId } from '../utils/agentThread';
@@ -133,12 +134,20 @@ vi.mock('../hooks/usePrivyWalletClient', () => ({
   }),
 }));
 
-function TestHarness({ agentId }: { agentId: string }) {
+function TestHarnessInner({ agentId }: { agentId: string }) {
   useAgentConnection(agentId);
   return <div data-testid="agent-connection-harness" />;
 }
 
-function CapturingHarness({
+function TestHarness({ agentId }: { agentId: string }) {
+  return (
+    <AuthoritativeAgentSnapshotCacheProvider>
+      <TestHarnessInner agentId={agentId} />
+    </AuthoritativeAgentSnapshotCacheProvider>
+  );
+}
+
+function CapturingHarnessInner({
   agentId,
   onSnapshot,
 }: {
@@ -150,10 +159,62 @@ function CapturingHarness({
   return <div data-testid="agent-connection-harness" />;
 }
 
+function CapturingHarness({
+  agentId,
+  onSnapshot,
+}: {
+  agentId: string;
+  onSnapshot: (value: ReturnType<typeof useAgentConnection>) => void;
+}) {
+  return (
+    <AuthoritativeAgentSnapshotCacheProvider>
+      <CapturingHarnessInner agentId={agentId} onSnapshot={onSnapshot} />
+    </AuthoritativeAgentSnapshotCacheProvider>
+  );
+}
+
+function RemountableCapturingHarness({
+  mounted,
+  agentId,
+  onSnapshot,
+}: {
+  mounted: boolean;
+  agentId: string;
+  onSnapshot: (value: ReturnType<typeof useAgentConnection>) => void;
+}) {
+  return (
+    <AuthoritativeAgentSnapshotCacheProvider>
+      {mounted ? <CapturingHarnessInner agentId={agentId} onSnapshot={onSnapshot} /> : null}
+    </AuthoritativeAgentSnapshotCacheProvider>
+  );
+}
+
 async function flushEffects(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
   });
+}
+
+function readLastRunCommand():
+  | {
+      name?: string;
+      clientMutationId?: string;
+      update?: Record<string, unknown>;
+    }
+  | null {
+  const latestCall = mocks.runAgent.mock.calls.at(-1)?.[0] as
+    | {
+        forwardedProps?: {
+          command?: {
+            name?: string;
+            clientMutationId?: string;
+            update?: Record<string, unknown>;
+          };
+        };
+      }
+    | undefined;
+
+  return latestCall?.forwardedProps?.command ?? null;
 }
 
 describe('useAgentConnection integration', () => {
@@ -413,7 +474,7 @@ describe('useAgentConnection integration', () => {
     }
   });
 
-  it('saveSettings mutates local state and dispatches sync through AG-UI run', async () => {
+  it('saveSettings mutates local state and dispatches refresh through AG-UI run', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
     await act(async () => {
@@ -430,29 +491,28 @@ describe('useAgentConnection integration', () => {
 
     expect(latestValue).not.toBeNull();
 
+    mocks.agent.addMessage.mockClear();
+    mocks.runAgent.mockClear();
     latestValue?.saveSettings({ amount: 250 });
     await flushEffects();
 
     expect(mocks.agent.setState).toHaveBeenCalled();
-    const syncMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
-      | { content?: string; role?: string }
-      | undefined;
-    const parsedMessage =
-      typeof syncMessage?.content === 'string'
-        ? (JSON.parse(syncMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(syncMessage?.role).toBe('user');
-    expect(parsedMessage?.command).toBe('sync');
-    expect(typeof parsedMessage?.clientMutationId).toBe('string');
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
     expect(mocks.runAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         agent: mocks.agent,
         threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            name: 'refresh',
+            clientMutationId: expect.any(String),
+          },
+        },
       }),
     );
   });
 
-  it('dispatches PI-runtime settings saves through forwardedProps.command.update instead of a JSON sync message', async () => {
+  it('dispatches PI-runtime settings saves through forwardedProps.command.update instead of a JSON refresh message', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;
 
@@ -642,13 +702,17 @@ describe('useAgentConnection integration', () => {
 
     subscriber?.onMessagesSnapshotEvent?.({
       input: { threadId: 'thread-1' },
-      messages: [
-        {
-          id: chatMessage?.id as string,
-          role: 'user',
-          content: 'Hello from the chat tab',
-        },
-      ],
+      messages: [],
+      event: {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          {
+            id: chatMessage?.id as string,
+            role: 'user',
+            content: 'Hello from the chat tab',
+          },
+        ],
+      },
     });
     await flushEffects();
 
@@ -667,7 +731,7 @@ describe('useAgentConnection integration', () => {
     );
   });
 
-  it('does not clear legacy sync pending from lastAppliedClientMutationId thread payloads', async () => {
+  it('does not clear legacy refresh pending from lastAppliedClientMutationId thread payloads', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;
 
@@ -694,15 +758,9 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
     expect(latestValue?.isSyncing).toBe(true);
 
-    const syncMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
-      | { content?: string }
-      | undefined;
-    const parsedMessage =
-      typeof syncMessage?.content === 'string'
-        ? (JSON.parse(syncMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(parsedMessage?.command).toBe('sync');
-    expect(typeof parsedMessage?.clientMutationId).toBe('string');
+    const forwardedCommand = readLastRunCommand();
+    expect(forwardedCommand?.name).toBe('refresh');
+    expect(typeof forwardedCommand?.clientMutationId).toBe('string');
 
     subscriber?.onRunInitialized?.({
       input: { threadId: 'thread-1' },
@@ -710,7 +768,7 @@ describe('useAgentConnection integration', () => {
         settings: { amount: 250 },
         thread: {
           command: 'cycle',
-          lastAppliedClientMutationId: parsedMessage?.clientMutationId,
+          lastAppliedClientMutationId: forwardedCommand?.clientMutationId,
         } as unknown as never,
       },
     });
@@ -719,7 +777,7 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.isSyncing).toBe(true);
   });
 
-  it('clears PI-runtime sync pending when shared-state.control acknowledges the mutation', async () => {
+  it('clears PI-runtime refresh pending when shared-state.control acknowledges the mutation', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;
 
@@ -956,7 +1014,7 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(latestValue?.settings.amount).toBe(100);
-    expect(latestValue?.uiError).toBe('Unable to sync settings until shared state is hydrated.');
+    expect(latestValue?.uiError).toBe('Unable to refresh settings until shared state is hydrated.');
     expect(mocks.runAgent).not.toHaveBeenCalled();
   });
 
@@ -1041,7 +1099,7 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(latestValue?.settings.amount).toBe(100);
-    expect(latestValue?.uiError).toBe('Unable to sync settings right now. Please retry.');
+    expect(latestValue?.uiError).toBe('Unable to refresh settings right now. Please retry.');
     expect(mocks.runAgent).not.toHaveBeenCalled();
   });
 
@@ -1556,13 +1614,17 @@ describe('useAgentConnection integration', () => {
 
     subscriber?.onMessagesSnapshotEvent?.({
       input: { threadId: 'thread-1' },
-      messages: [
-        {
-          id: 'assistant-1',
-          role: 'assistant',
-          content: 'Scheduled sync every minute.',
-        },
-      ],
+      messages: [],
+      event: {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Scheduled refresh every minute.',
+          },
+        ],
+      },
     });
     await flushEffects();
     await act(async () => {
@@ -1581,7 +1643,7 @@ describe('useAgentConnection integration', () => {
       expect.objectContaining({
         id: 'assistant-1',
         role: 'assistant',
-        content: 'Scheduled sync every minute.',
+        content: 'Scheduled refresh every minute.',
       }),
     ]);
 
@@ -1591,7 +1653,7 @@ describe('useAgentConnection integration', () => {
           id: 'task-1',
           taskStatus: {
             state: 'completed',
-            message: 'Automation sync executed successfully.',
+            message: 'Automation refresh executed successfully.',
           },
         },
       },
@@ -1665,22 +1727,26 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     mocks.agent.addMessage.mockClear();
+    mocks.runAgent.mockClear();
     latestValue?.runHire();
     await flushEffects();
 
-    const resumedHireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
-      | { role?: string; content?: string }
-      | undefined;
-    const parsedResumedHireMessage =
-      typeof resumedHireMessage?.content === 'string'
-        ? (JSON.parse(resumedHireMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(resumedHireMessage?.role).toBe('user');
-    expect(parsedResumedHireMessage?.command).toBe('hire');
-    expect(typeof parsedResumedHireMessage?.clientMutationId).toBe('string');
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+            clientMutationId: expect.any(String),
+          },
+        },
+      }),
+    );
   });
 
-  it('surfaces busy UI state when saveSettings sync dispatch is rejected as busy', async () => {
+  it('surfaces busy UI state when saveSettings refresh dispatch is rejected as busy', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     vi.useFakeTimers();
     mocks.runAgent.mockRejectedValue(new Error('run already active'));
@@ -1703,7 +1769,7 @@ describe('useAgentConnection integration', () => {
       await vi.advanceTimersByTimeAsync(2_500);
       await flushEffects();
 
-      expect(latestValue?.uiError).toContain("busy while processing 'sync'");
+      expect(latestValue?.uiError).toContain("busy while processing 'refresh'");
     } finally {
       vi.useRealTimers();
     }
@@ -1748,19 +1814,24 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     mocks.agent.setState.mockClear();
+    mocks.agent.addMessage.mockClear();
+    mocks.runAgent.mockClear();
     latestValue?.runHire();
     await flushEffects();
 
-    const hireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
-      | { role?: string; content?: string }
-      | undefined;
-    const parsedHireMessage =
-      typeof hireMessage?.content === 'string'
-        ? (JSON.parse(hireMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(hireMessage?.role).toBe('user');
-    expect(parsedHireMessage?.command).toBe('hire');
-    expect(typeof parsedHireMessage?.clientMutationId).toBe('string');
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+            clientMutationId: expect.any(String),
+          },
+        },
+      }),
+    );
     expect(mocks.agent.setState).not.toHaveBeenCalled();
   });
 
@@ -1792,6 +1863,7 @@ describe('useAgentConnection integration', () => {
       forwardedProps: {
         command: {
           name: 'hire',
+          clientMutationId: expect.any(String),
         },
       },
     });
@@ -1856,16 +1928,19 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
     await flushEffects();
 
-    const fireMessage = mocks.agent.addMessage.mock.calls.at(-1)?.[0] as
-      | { role?: string; content?: string }
-      | undefined;
-    const parsedFireMessage =
-      typeof fireMessage?.content === 'string'
-        ? (JSON.parse(fireMessage.content) as { command?: string; clientMutationId?: string })
-        : null;
-    expect(fireMessage?.role).toBe('user');
-    expect(parsedFireMessage?.command).toBe('fire');
-    expect(typeof parsedFireMessage?.clientMutationId).toBe('string');
+    expect(mocks.agent.addMessage).not.toHaveBeenCalled();
+    expect(mocks.runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: mocks.agent,
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: expect.objectContaining({
+            name: 'fire',
+            clientMutationId: expect.any(String),
+          }),
+        },
+      }),
+    );
   });
 
   it('uses stopAgent preemption when backend reports an active run during fire', async () => {
@@ -1943,9 +2018,10 @@ describe('useAgentConnection integration', () => {
         agent: mocks.agent,
         threadId: 'thread-1',
         forwardedProps: {
-          command: {
+          command: expect.objectContaining({
             name: 'fire',
-          },
+            clientMutationId: expect.any(String),
+          }),
         },
       }),
     );
@@ -2142,7 +2218,7 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.isHired).toBe(false);
   });
 
-  it('treats thread payloads as loaded state for sync gating', async () => {
+  it('treats thread payloads as loaded state for refresh gating', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
     mocks.agent.state = {
@@ -2171,6 +2247,406 @@ describe('useAgentConnection integration', () => {
     await flushEffects();
 
     expect(latestValue?.hasLoadedView).toBe(true);
+  });
+
+  it('surfaces an authoritative reconnect snapshot immediately without waiting for a later rerender', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasAuthoritativeState).toBe(false);
+
+    subscriber?.onStateSnapshotEvent?.({
+      event: {
+        snapshot: {
+          projected: {
+            managedMandateEditor: {
+              mandateRef: 'mandate-ember-lending-primary',
+            },
+          },
+          thread: {
+            lifecycle: {
+              phase: 'active',
+            },
+            task: {
+              id: 'task-refresh',
+              taskStatus: {
+                state: 'completed',
+                message: { content: 'Portfolio state refreshed from Shared Ember Domain Service.' },
+              },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1' },
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasAuthoritativeState).toBe(true);
+    expect(latestValue?.uiState.lifecycle?.phase).toBe('active');
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-primary',
+      },
+    });
+  });
+
+  it('retains the last authoritative snapshot across a route remount while reconnect is still in flight', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        lifecycle: {
+          phase: 'active',
+        },
+        task: {
+          id: 'task-managed',
+          taskStatus: {
+            state: 'completed',
+            message: { content: 'Managed lending lane ready.' },
+          },
+        },
+        profile: {
+          chains: ['Arbitrum'],
+          protocols: ['Aave'],
+          tokens: ['USDC'],
+          pools: [],
+          allowedPools: [],
+          totalUsers: 42,
+        },
+        metrics: {
+          iteration: 2,
+          cyclesSinceRebalance: 0,
+          staleCycles: 0,
+          rebalanceCycles: 0,
+          aumUsd: 1000,
+          apy: 4.2,
+          lifetimePnlUsd: 12,
+        },
+        domainProjection: {
+          managedMandateEditor: {
+            mandateRef: 'mandate-ember-lending-001',
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <RemountableCapturingHarness
+          mounted
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasAuthoritativeState).toBe(true);
+    expect(latestValue?.isHired).toBe(true);
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-001',
+      },
+    });
+
+    mocks.agent.state = {};
+
+    await act(async () => {
+      root.render(
+        <RemountableCapturingHarness
+          mounted={false}
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    await act(async () => {
+      root.render(
+        <RemountableCapturingHarness
+          mounted
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasAuthoritativeState).toBe(false);
+    expect(latestValue?.isHired).toBe(true);
+    expect(latestValue?.hasLoadedView).toBe(true);
+    expect(latestValue?.uiState.lifecycle?.phase).toBe('active');
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-001',
+      },
+    });
+  });
+
+  it('preserves normalized mandate projection and transcript when CopilotKit rerenders with raw AG-UI state', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onStateSnapshotEvent?.({
+      event: {
+        snapshot: {
+          projected: {
+            managedMandateEditor: {
+              mandateRef: 'mandate-ember-lending-primary',
+            },
+          },
+          thread: {
+            lifecycle: {
+              phase: 'active',
+            },
+            task: {
+              id: 'task-refresh',
+              taskStatus: {
+                state: 'completed',
+                message: { content: 'Portfolio state refreshed from Shared Ember Domain Service.' },
+              },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1' },
+    });
+    await flushEffects();
+
+    subscriber?.onMessagesSnapshotEvent?.({
+      input: { threadId: 'thread-1' },
+      messages: [],
+      event: {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Portfolio manager reconnected successfully.',
+          },
+        ],
+      },
+    });
+    await flushEffects();
+
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-primary',
+      },
+    });
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Portfolio manager reconnected successfully.',
+      }),
+    ]);
+
+    mocks.agent.state = {
+      projected: {
+        managedMandateEditor: {
+          mandateRef: 'mandate-ember-lending-primary',
+        },
+      },
+      thread: {
+        lifecycle: {
+          phase: 'active',
+        },
+        task: {
+          id: 'task-refresh',
+          taskStatus: {
+            state: 'completed',
+            message: { content: 'Portfolio state refreshed from Shared Ember Domain Service.' },
+          },
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-primary',
+      },
+    });
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Portfolio manager reconnected successfully.',
+      }),
+    ]);
+  });
+
+  it('keeps the last authoritative active snapshot when a later raw state rerender regresses lifecycle to prehire', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onStateSnapshotEvent?.({
+      event: {
+        snapshot: {
+          projected: {
+            managedMandateEditor: {
+              mandateRef: 'mandate-ember-lending-primary',
+            },
+          },
+          thread: {
+            lifecycle: {
+              phase: 'active',
+            },
+            task: {
+              id: 'task-refresh',
+              taskStatus: {
+                state: 'completed',
+                message: { content: 'Portfolio state refreshed from Shared Ember Domain Service.' },
+              },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1' },
+    });
+    await flushEffects();
+
+    subscriber?.onMessagesSnapshotEvent?.({
+      input: { threadId: 'thread-1' },
+      messages: [],
+      event: {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Portfolio manager reconnected successfully.',
+          },
+        ],
+      },
+    });
+    await flushEffects();
+
+    expect(latestValue?.isHired).toBe(true);
+    expect(latestValue?.uiState.lifecycle?.phase).toBe('active');
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-primary',
+      },
+    });
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Portfolio manager reconnected successfully.',
+      }),
+    ]);
+
+    mocks.agent.state = {
+      thread: {
+        lifecycle: {
+          phase: 'prehire',
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.isHired).toBe(true);
+    expect(latestValue?.uiState.lifecycle?.phase).toBe('active');
+    expect(latestValue?.domainProjection).toMatchObject({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-primary',
+      },
+    });
+    expect(latestValue?.messages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Portfolio manager reconnected successfully.',
+      }),
+    ]);
   });
 
   it('marks agent active from non-terminal task state even when command is omitted', async () => {

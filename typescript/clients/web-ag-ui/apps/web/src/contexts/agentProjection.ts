@@ -47,6 +47,7 @@ function cloneInitialState(): ThreadSnapshot {
     settings: { ...defaultSettings },
     thread: {
       ...defaultThreadState,
+      lifecycle: undefined,
       profile: {
         ...defaultProfile,
         chains: [],

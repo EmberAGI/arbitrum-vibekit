@@ -59,6 +59,7 @@ function createAgentValue(overrides: Record<string, unknown> = {}) {
     },
     isConnected: true,
     hasLoadedView: true,
+    hasAuthoritativeState: true,
     threadId: 'thread-1',
     domainProjection: {},
     applyDomainProjection: mocks.applyDomainProjection,
@@ -100,7 +101,6 @@ function createAgentValue(overrides: Record<string, unknown> = {}) {
     transactionHistory: [],
     events: [],
     messages: [],
-    messageSnapshotEpoch: 0,
     settings: {
       amount: 100,
     },
@@ -205,6 +205,57 @@ describe('AgentDetailRoute managed mandate wiring', () => {
         mandateRef: 'mandate-ember-lending-001',
       },
     });
+  });
+
+  it('keeps the route in reconnecting mode until an authoritative thread snapshot lands', async () => {
+    mocks.agentValue = createAgentValue({
+      hasLoadedView: false,
+      hasAuthoritativeState: false,
+      isHired: false,
+      isActive: false,
+      uiState: {
+        lifecycle: undefined,
+        task: undefined,
+        haltReason: undefined,
+        executionError: undefined,
+        delegationsBypassActive: false,
+        onboardingFlow: undefined,
+      },
+      profile: {
+        agentIncome: 0,
+        aum: 0,
+        totalUsers: 0,
+        apy: 0,
+        chains: [],
+        protocols: [],
+        tokens: [],
+      },
+      metrics: {
+        iteration: 0,
+        cyclesSinceRebalance: 0,
+        staleCycles: 0,
+        rebalanceCycles: 0,
+        aumUsd: 0,
+        apy: 0,
+        lifetimePnlUsd: 0,
+      },
+    });
+    mocks.invokeAgentCommandRoute.mockResolvedValue({
+      ok: true,
+      domainProjection: {
+        managedMandateEditor: {
+          mandateRef: 'mandate-ember-lending-001',
+        },
+      },
+    });
+
+    await renderRoute('agent-portfolio-manager');
+
+    const props = readCapturedProps();
+    expect(props.isHired).toBe(false);
+    expect(props.isRestoringState).toBe(true);
+    expect(props.hasLoadedView).toBe(false);
+    expect(mocks.invokeAgentCommandRoute).not.toHaveBeenCalled();
   });
 
   it('routes hosted lending edits through the PM-owned command and then rehydrates the lending thread projection', async () => {

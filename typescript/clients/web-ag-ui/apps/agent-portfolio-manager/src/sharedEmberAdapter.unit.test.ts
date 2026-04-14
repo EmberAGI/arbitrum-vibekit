@@ -170,7 +170,21 @@ function createOnboardingBootstrap() {
         },
       },
     ],
-    userReservePolicies: [],
+    userReservePolicies: [
+      {
+        reserve_policy_ref: 'reserve-policy-ember-lending-protocol-001',
+        summary: 'allow managed lending to admit allocable idle USDC',
+        user_reserve_rules: [
+          {
+            root_asset: 'USDC',
+            network: 'arbitrum',
+            benchmark_asset: 'USD',
+            reserved_quantity: '0',
+            reason: 'allow managed lending to admit allocable idle USDC',
+          },
+        ],
+      },
+    ],
     activation: {
       mandateRef: 'mandate-ember-lending-protocol-001',
     },
@@ -615,7 +629,21 @@ describe('createPortfolioManagerDomain', () => {
                 },
               }),
             }),
-            userReservePolicies: [],
+            userReservePolicies: [
+              {
+                reserve_policy_ref: expect.stringContaining('reserve-policy-'),
+                summary: 'allow managed lending to admit allocable idle USDC',
+                user_reserve_rules: [
+                  {
+                    root_asset: 'USDC',
+                    network: 'arbitrum',
+                    benchmark_asset: 'USD',
+                    reserved_quantity: '0',
+                    reason: 'allow managed lending to admit allocable idle USDC',
+                  },
+                ],
+              },
+            ],
             mandates: [
               {
                 mandate_ref: expect.stringContaining('mandate-'),

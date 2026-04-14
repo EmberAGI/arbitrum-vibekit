@@ -8,6 +8,8 @@ type HireAgentsRoutePropsCapture = {
   agents: Array<{
     id: string;
     name: string;
+    status: 'for_hire' | 'hired' | 'unavailable';
+    isActive?: boolean;
     chains: string[];
     protocols: string[];
     tokens: string[];
@@ -24,6 +26,7 @@ type HireAgentsRoutePropsCapture = {
   featuredAgents: Array<{
     id: string;
     name: string;
+    status: 'for_hire' | 'hired' | 'unavailable';
     description?: string;
     chains: string[];
     protocols: string[];
@@ -124,6 +127,36 @@ describe('HireAgentsRoute integration', () => {
             iteration: 1,
           },
         },
+        'agent-portfolio-manager': {
+          synced: true,
+          lifecyclePhase: 'active',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+            tokens: ['USDC'],
+            totalUsers: 12,
+            aum: 9200,
+            apy: 4,
+          },
+          metrics: {
+            iteration: 5,
+          },
+        },
+        'agent-ember-lending': {
+          synced: true,
+          lifecyclePhase: 'active',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Aave'],
+            tokens: ['USDC'],
+            totalUsers: 4,
+            aum: 9100,
+            apy: 3,
+          },
+          metrics: {
+            iteration: 2,
+          },
+        },
       },
     });
   });
@@ -167,8 +200,10 @@ describe('HireAgentsRoute integration', () => {
     expect(portfolioManager?.marketplaceRowBg).toBe('rgba(124,58,237,0.08)');
     expect(portfolioManager?.marketplaceRowHoverBg).toBe('rgba(124,58,237,0.12)');
     expect(portfolioManager?.surfaceTag).toBe('Swarm');
-    expect(portfolioManager?.pointsTrend).toBeUndefined();
-    expect(portfolioManager?.trendMultiplier).toBeUndefined();
+    expect(portfolioManager?.status).toBe('hired');
+    expect(portfolioManager?.isActive).toBe(true);
+    expect(portfolioManager?.pointsTrend).toBe('up');
+    expect(portfolioManager?.trendMultiplier).toBe('5x');
 
     expect(emberLending?.chains).toEqual(['Arbitrum']);
     expect(emberLending?.name).toBe('Ember Lending');
@@ -177,8 +212,10 @@ describe('HireAgentsRoute integration', () => {
     expect(emberLending?.imageUrl).toBe('/ember-lending-avatar.svg');
     expect(emberLending?.avatarBg).toBe('#9896FF');
     expect(emberLending?.surfaceTag).toBe('Swarm');
-    expect(emberLending?.pointsTrend).toBeUndefined();
-    expect(emberLending?.trendMultiplier).toBeUndefined();
+    expect(emberLending?.status).toBe('hired');
+    expect(emberLending?.isActive).toBe(true);
+    expect(emberLending?.pointsTrend).toBe('up');
+    expect(emberLending?.trendMultiplier).toBe('2x');
     expect(clmm?.surfaceTag).toBe('Workflow');
 
     expect(props.featuredAgents.map((agent) => agent.id).slice(0, 3)).toEqual([
@@ -186,6 +223,12 @@ describe('HireAgentsRoute integration', () => {
       'agent-ember-lending',
       'agent-clmm',
     ]);
+    expect(props.featuredAgents.find((agent) => agent.id === 'agent-portfolio-manager')?.status).toBe(
+      'hired',
+    );
+    expect(props.featuredAgents.find((agent) => agent.id === 'agent-ember-lending')?.status).toBe(
+      'hired',
+    );
   });
 
   it('routes hire/view handlers to the correct detail URL', () => {

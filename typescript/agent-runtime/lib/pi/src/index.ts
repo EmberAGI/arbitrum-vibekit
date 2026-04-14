@@ -34,7 +34,8 @@ import {
   type PiThreadRecord,
   type PostgresBootstrapPlan,
 } from 'agent-runtime-postgres';
-import * as jsonPatch from 'fast-json-patch';
+import { applyPatch as jsonPatchApply } from 'fast-json-patch/module/core.mjs';
+import { compare as jsonPatchCompare } from 'fast-json-patch/module/duplex.mjs';
 
 import { type TaskState } from './taskState.js';
 import { mergeThreadPatchForEmit } from './threadEmission.js';
@@ -261,30 +262,6 @@ const EMPTY_USAGE = {
     total: 0,
   },
 } as const;
-
-type JsonPatchCompare = (
-  left: object,
-  right: object,
-  invertible?: boolean,
-) => Array<Record<string, unknown>>;
-
-type JsonPatchApply = <T>(
-  document: T,
-  patch: ReadonlyArray<Record<string, unknown>>,
-  validateOperation?: boolean,
-  mutateDocument?: boolean,
-  banPrototypeModifications?: boolean,
-) => {
-  newDocument: T;
-};
-
-const jsonPatchCompare =
-  (jsonPatch as unknown as { compare?: JsonPatchCompare; default?: { compare?: JsonPatchCompare } }).compare ??
-  (jsonPatch as unknown as { default?: { compare?: JsonPatchCompare } }).default?.compare;
-const jsonPatchApply =
-  (jsonPatch as unknown as { applyPatch?: JsonPatchApply; default?: { applyPatch?: JsonPatchApply } })
-    .applyPatch ??
-  (jsonPatch as unknown as { default?: { applyPatch?: JsonPatchApply } }).default?.applyPatch;
 
 type PiRuntimeGatewaySharedStateHydrationReason = 'bootstrap' | 'reconnect';
 type PiRuntimeGatewaySharedStateUpdateAckStatus = 'accepted' | 'noop' | 'rejected';

@@ -143,7 +143,7 @@ sequenceDiagram
 ## Notes
 
 - There is still no model-visible `read_portfolio_state` tool.
-- There is still no model-visible onboarding-context read or manual sync/bootstrap step.
+- There is still no model-visible onboarding-context read or manual refresh/bootstrap step.
 - By default, the runtime-facing result should include only:
   - final `status`
   - `transaction_hash` when available

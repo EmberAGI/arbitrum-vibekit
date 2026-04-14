@@ -35,7 +35,7 @@ These rules complement the C4 target architecture and make runtime behavior dete
 2. State write path:
    - Client-to-agent state mutation must flow through AG-UI `run` input (`RunAgentInput.state`).
    - `connect` is attach/replay for projection continuity and is not a mutation write channel.
-   - Practical client pattern: update local agent state/message model, then dispatch `run`.
+   - Practical client pattern: update local writable/shared view or local transient control state, then dispatch `run`.
    - For Pi-backed flows, the visible writable-state model must rehydrate from authoritative `STATE_SNAPSHOT` and `STATE_DELTA` events, not from acknowledgments alone.
 
 3. Stream ownership:
@@ -77,13 +77,15 @@ These rules complement the C4 target architecture and make runtime behavior dete
 
 10. Imperative command transport policy:
    - Conversational user input belongs in AG-UI messages.
-   - Imperative client controls belong in `forwardedProps.command` whenever the target runtime supports a direct command lane.
-   - Current preferred direct-command set is named commands such as `hire` and `fire`, shared-state `update`, and interrupt resume.
+   - Imperative client controls belong in `forwardedProps.command`.
+- Current direct-command set includes named commands such as `hire`, `fire`, `cycle`, and `refresh`, shared-state `update`, and interrupt resume.
+   - Observability provenance belongs in sibling forwarded-props metadata such as `forwardedProps.source`, not inside the public command envelope.
+   - Workflow runtimes may translate `forwardedProps.command` into internal `private.pendingCommand`/`activeCommand` state before graph execution, but that translation is runtime-internal and not a second public transport.
    - Interrupt `resume` payloads may be structured objects and should flow through the direct command lane unchanged until a text-only runtime boundary explicitly needs serialization.
-   - Compatibility note: LangGraph currently uses `forwardedProps.command` for resume only; imperative `hire`/`fire` remain message-driven there until an equivalent direct lane exists.
+   - Synthetic JSON user messages must not be used to carry imperative command intent.
 
 11. Confirmation semantics:
-   - “Saved/synced” UX should complete only when AG-UI state confirms application (e.g., task state, version, or acknowledged projection).
+- “Saved/refreshed” UX should complete only when AG-UI state confirms application (e.g., task state, version, or acknowledged projection).
    - Current handshake for Pi-backed shared-state writes: client sends `forwardedProps.command.update` with `clientMutationId` and `baseRevision`; runtime emits `shared-state.control` `update-ack`; UI clears pending state only when ids match.
    - Malformed Pi `command.update` requests that omit `clientMutationId` are boundary-invalid and must be rejected before `update-ack`; the acknowledgment lane is reserved for writes that already have a real correlation key.
    - Accepted Pi-backed writes must reconcile the visible state from the authoritative `STATE_DELTA` payload that arrives before the matching `shared-state.control` `update-ack`.
@@ -107,7 +109,9 @@ These rules complement the C4 target architecture and make runtime behavior dete
   - other commands: explicit policy (reject-on-busy or constrained retry)
 - `AgentStatusPoller`:
   - dispatch one-shot poll `run` per non-active-detail agent on configured cadence
-  - express poll intent on the real command lane via `forwardedProps.command.name = 'sync'` so observability does not need to parse synthetic user-message JSON
+- use `forwardedProps.command.name = 'refresh'` for poll runs across current registered agents
+  - if poll provenance needs tracing, carry it in sibling observability metadata such as `forwardedProps.source = 'agent-list-poll'`
+  - workflow runtimes translate that direct lane into internal pending-command state before entering `runCommand`
   - avoid persistent `connect` ownership in polling codepaths
 - central `AgentProjectionReducer`:
   - dedupe by run/event identity

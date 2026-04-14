@@ -1,20 +1,13 @@
 import { pathToFileURL } from 'node:url';
 
+import { buildPendingCommandStateValues } from 'agent-workflow-core';
 import cron from 'node-cron';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
-type MessageInput = {
-  id: string;
-  role: 'user';
-  content: string;
-};
-
 type RunCreatePayload = {
   assistant_id: string;
-  input?: {
-    messages: MessageInput[];
-  };
+  input?: Record<string, unknown>;
   config?: {
     configurable?: {
       thread_id?: string;
@@ -91,17 +84,11 @@ const resolveThreadId = () => process.env.STARTER_THREAD_ID ?? uuidv7();
 const resolveIntervalMs = () =>
   parseNumber(process.env.STARTER_CRON_INTERVAL_MS) ?? DEFAULT_INTERVAL_MS;
 
-const buildCycleMessage = (): MessageInput => ({
-  id: uuidv7(),
-  role: 'user',
-  content: JSON.stringify({ command: 'cycle' }),
-});
-
 const buildRunPayload = (params: { graphId: string; threadId: string }): RunCreatePayload => ({
   assistant_id: params.graphId,
-  input: {
-    messages: [buildCycleMessage()],
-  },
+  input: buildPendingCommandStateValues({
+    command: 'cycle',
+  }),
   config: {
     configurable: {
       thread_id: params.threadId,

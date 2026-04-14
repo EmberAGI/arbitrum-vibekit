@@ -4,12 +4,28 @@ import { useRouter } from 'next/navigation';
 import { HireAgentsPage, type Agent, type FeaturedAgent } from '@/components/HireAgentsPage';
 import { useAgentList } from '@/contexts/AgentListContext';
 import { getFeaturedAgents, getVisibleAgents } from '@/config/agents';
+import type { AgentListEntry } from '@/contexts/agentListTypes';
 import { canonicalizeChainLabel } from '@/utils/iconResolution';
 import { mergeUniqueStrings, normalizeStringList } from '@/utils/agentCollections';
 
 const PAGINATION_QA_MOCK_COUNT = 27;
 const PAGINATION_QA_MOCKS_ENABLED =
   process.env.NEXT_PUBLIC_ENABLE_HIRE_AGENTS_PAGINATION_MOCKS === 'true';
+
+function deriveMarketplaceAgentStatus(
+  listState: AgentListEntry | undefined,
+): Pick<Agent, 'status' | 'isActive'> {
+  const lifecyclePhase = listState?.lifecyclePhase ?? null;
+  const isHired =
+    lifecyclePhase === 'onboarding' ||
+    lifecyclePhase === 'active' ||
+    lifecyclePhase === 'firing';
+
+  return {
+    status: isHired ? 'hired' : 'for_hire',
+    isActive: lifecyclePhase === 'active',
+  };
+}
 
 export default function HireAgentsRoute() {
   const router = useRouter();
@@ -22,6 +38,7 @@ export default function HireAgentsRoute() {
     const profile = listState?.profile;
     const metrics = listState?.metrics;
     const isLoaded = Boolean(listState?.synced);
+    const { status, isActive } = deriveMarketplaceAgentStatus(listState);
 
     const chains = mergeUniqueStrings({
       primary: normalizeStringList(profile?.chains),
@@ -65,8 +82,8 @@ export default function HireAgentsRoute() {
       marketplaceCardHoverBg: agentConfig.marketplaceCardHoverBg,
       marketplaceRowBg: agentConfig.marketplaceRowBg,
       marketplaceRowHoverBg: agentConfig.marketplaceRowHoverBg,
-      status: 'for_hire' as const,
-      isActive: false,
+      status,
+      isActive,
       isFeatured: agentConfig.isFeatured,
       featuredRank: agentConfig.featuredRank,
       isLoaded,
@@ -113,6 +130,7 @@ export default function HireAgentsRoute() {
     const profile = listState?.profile;
     const metrics = listState?.metrics;
     const isLoaded = Boolean(listState?.synced);
+    const { status } = deriveMarketplaceAgentStatus(listState);
 
     const chains = mergeUniqueStrings({
       primary: normalizeStringList(profile?.chains),
@@ -156,7 +174,7 @@ export default function HireAgentsRoute() {
       marketplaceRowHoverBg: config.marketplaceRowHoverBg,
       pointsTrend: isLoaded && metrics?.iteration && metrics.iteration > 0 ? 'up' : undefined,
       trendMultiplier: isLoaded && metrics?.iteration ? `${metrics.iteration}x` : undefined,
-      status: 'for_hire' as const,
+      status,
       isLoaded,
     };
   });

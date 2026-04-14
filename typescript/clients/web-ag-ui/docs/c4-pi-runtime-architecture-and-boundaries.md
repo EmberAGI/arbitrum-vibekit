@@ -237,7 +237,7 @@ Definitions:
 
 Examples:
 
-- DeFi agents may use domain modules with lifecycle terms such as hire/setup/sync/fire.
+- DeFi agents may use domain modules with lifecycle terms such as hire/setup/refresh/fire.
 - Other agent types may define different lifecycle vocabularies without changing the core runtime model.
 
 ### Domain-Module SPI
@@ -262,11 +262,11 @@ For the first DeFi lifecycle module, the boundary is:
 
 | Owned by DeFi domain module | Owned by core Pi runtime |
 | --- | --- |
-| `hire/setup/sync/fire` command vocabulary | `PiThread`, `PiExecution`, `PiAutomation`, `AutomationRun` |
+| `hire/setup/refresh/fire` command vocabulary | `PiThread`, `PiExecution`, `PiAutomation`, `AutomationRun` |
 | DeFi lifecycle phases and transitions | durable persistence and restart boundaries |
 | DeFi-specific interrupt schemas and policy | interrupt delivery and resurfacing plumbing |
 | dynamic system context and adapter-neutral domain outputs | canonical execution identity and protocol projections |
-| sync automation policy decisions | scheduler, outbox/dedupe, and operator control-plane infrastructure |
+| refresh command / automation policy decisions | scheduler, outbox/dedupe, and operator control-plane infrastructure |
 
 ## 6. Projection model
 

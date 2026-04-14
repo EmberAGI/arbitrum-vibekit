@@ -11,7 +11,7 @@ The Pi-backed architecture now has a clearer foundational runtime model:
 - `PiAutomation`
 - `AutomationRun`
 
-That core model is intentionally about durable execution, persistence, interrupts, automation firing, and protocol projection boundaries. It is not, by itself, the right place to encode opinionated user-facing workflows such as hire, setup, sync, or fire.
+That core model is intentionally about durable execution, persistence, interrupts, automation firing, and protocol projection boundaries. It is not, by itself, the right place to encode opinionated user-facing workflows such as hire, setup, refresh, or fire.
 
 Those flows are:
 - higher-level than the execution core
@@ -43,7 +43,7 @@ Layering:
 
 Rules:
 - The Pi core runtime must not assume one universal lifecycle vocabulary for all agent types.
-- Higher-level workflows such as hire/setup/sync/fire belong in a Pi-owned agent domain module, not in the AG-UI adapter and not in the frontend.
+- Higher-level workflows such as hire/setup/refresh/fire belong in a Pi-owned agent domain module, not in the AG-UI adapter and not in the frontend.
 - Different agent families may supply different lifecycle vocabularies, interrupt schemas, and artifact shapes while reusing the same core runtime model.
 - The reusable boundary is the domain-module contract, not a forced universal lifecycle terminology.
 - Protocol adapters project the outputs of the active agent domain module; they do not become the source of truth for domain lifecycle semantics.
@@ -61,7 +61,7 @@ Rules:
 
 ## Alternatives Considered
 
-- Put hire/setup/sync/fire directly into the core runtime model:
+- Put hire/setup/refresh/fire directly into the core runtime model:
   - Rejected because it overfits the foundational runtime to one agent family.
 - Keep lifecycle flows only in AG-UI/A2UI adapters:
   - Rejected because adapters should project domain state, not own domain truth.

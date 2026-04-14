@@ -24,12 +24,12 @@ installCopilotRuntimeDebugFilter({ enabled: shouldLogCopilotRuntimeDebug });
 
 const shouldLogCopilotRouteRequests =
   process.env.NODE_ENV !== 'production' || process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
-const shouldLogCopilotRouteSyncPolls =
+const shouldLogCopilotRouteRefreshPolls =
   process.env.COPILOTKIT_ROUTE_DEBUG === 'true' || process.env.COPILOTKIT_ROUTE_LOG_SYNC === 'true';
 const shouldTraceAllRunCommands =
   process.env.COPILOTKIT_ROUTE_TRACE_RUN_ALL === 'true' ||
   process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
-const shouldWarnOnSlowSyncPolls = process.env.COPILOTKIT_ROUTE_WARN_SYNC_SLOW !== 'false';
+const shouldWarnOnSlowRefreshPolls = process.env.COPILOTKIT_ROUTE_WARN_SYNC_SLOW !== 'false';
 const shouldLogUnmatchedRequests =
   process.env.COPILOTKIT_ROUTE_LOG_UNMATCHED === 'true' || process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
 const slowCopilotRouteWarnThresholdMs = (() => {
@@ -57,10 +57,10 @@ async function appendCopilotRouteTrace(entry: Record<string, unknown>): Promise<
 function monitorCopilotResponseStream(params: {
   requestId: string;
   requestMetadata: CopilotRouteRequestMetadata;
-  isAgentListSyncPoll: boolean;
+  isAgentListRefreshPoll: boolean;
   shouldTraceRequest: boolean;
   shouldLogCopilotRouteRequests: boolean;
-  shouldWarnOnSlowSyncPolls: boolean;
+  shouldWarnOnSlowRefreshPolls: boolean;
   slowCopilotRouteWarnThresholdMs: number;
   startedAt: number;
   stream: ReadableStream<Uint8Array>;
@@ -84,14 +84,14 @@ function monitorCopilotResponseStream(params: {
       const streamDurationMs = Date.now() - streamStartedAt;
       const shouldWarnSlowStream =
         params.shouldLogCopilotRouteRequests &&
-        (params.shouldWarnOnSlowSyncPolls || !params.isAgentListSyncPoll) &&
+        (params.shouldWarnOnSlowRefreshPolls || !params.isAgentListRefreshPoll) &&
         totalDurationMs >= params.slowCopilotRouteWarnThresholdMs;
 
       if (params.shouldTraceRequest || shouldWarnSlowStream) {
         const payload = {
           requestId: params.requestId,
           ...params.requestMetadata,
-          isAgentListSyncPoll: params.isAgentListSyncPoll,
+          isAgentListRefreshPoll: params.isAgentListRefreshPoll,
           totalDurationMs,
           streamDurationMs,
           chunkCount,
@@ -138,9 +138,9 @@ async function readCopilotRouteMetadata(req: NextRequest): Promise<CopilotRouteR
 export const POST = async (req: NextRequest) => {
   const requestId = randomUUID();
   const requestMetadata = await readCopilotRouteMetadata(req);
-  const isAgentListSyncPoll =
+  const isAgentListRefreshPoll =
     requestMetadata.method === 'agent/run' &&
-    requestMetadata.command === 'sync' &&
+    requestMetadata.command === 'refresh' &&
     requestMetadata.source === 'agent-list-poll';
   const isFireRun = requestMetadata.method === 'agent/run' && requestMetadata.command === 'fire';
   const shouldTraceRunCommand =
@@ -152,7 +152,7 @@ export const POST = async (req: NextRequest) => {
   const shouldTraceRequest =
     shouldLogCopilotRouteRequests &&
     shouldTraceMethod &&
-    (!isAgentListSyncPoll || shouldLogCopilotRouteSyncPolls);
+    (!isAgentListRefreshPoll || shouldLogCopilotRouteRefreshPolls);
   const startedAt = Date.now();
   const metadataParsedAt = Date.now();
 
@@ -222,16 +222,16 @@ export const POST = async (req: NextRequest) => {
   }
   if (
     shouldLogCopilotRouteRequests &&
-    (shouldWarnOnSlowSyncPolls || !isAgentListSyncPoll) &&
+    (shouldWarnOnSlowRefreshPolls || !isAgentListRefreshPoll) &&
     durationMs >= slowCopilotRouteWarnThresholdMs
   ) {
     console.warn('[copilotkit-route] slow request', {
       requestId,
       ...requestMetadata,
-      isAgentListSyncPoll,
+      isAgentListRefreshPoll,
       status: response.status,
       durationMs,
-      shouldWarnOnSlowSyncPolls,
+      shouldWarnOnSlowRefreshPolls,
       phaseDurationsMs: {
         metadataParse: metadataParseDurationMs,
         handlerInit: handlerInitDurationMs,
@@ -275,10 +275,10 @@ export const POST = async (req: NextRequest) => {
   monitorCopilotResponseStream({
     requestId,
     requestMetadata,
-    isAgentListSyncPoll,
+    isAgentListRefreshPoll,
     shouldTraceRequest,
     shouldLogCopilotRouteRequests,
-    shouldWarnOnSlowSyncPolls,
+    shouldWarnOnSlowRefreshPolls,
     slowCopilotRouteWarnThresholdMs,
     startedAt,
     stream: bodyForMonitor,

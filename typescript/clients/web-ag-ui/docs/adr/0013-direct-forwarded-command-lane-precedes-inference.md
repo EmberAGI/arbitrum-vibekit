@@ -13,18 +13,20 @@ Portfolio-manager onboarding exposed a separate contract gap on the command path
 - `agent-runtime` already supports a direct AG-UI control lane via `forwardedProps.command`
 - interrupt resumes already use that direct lane
 - some imperative web actions historically still traveled as JSON user messages and relied on the model to call `agent_runtime_domain_command`
-- LangGraph currently uses `forwardedProps.command` only for interrupt resume, not for imperative named commands or `command.update` state-write actions
+- workflow runtimes now translate named commands and refresh/update intents from `forwardedProps.command` into internal `private.pendingCommand` state before graph execution
 
 That split is architecturally wrong for imperative controls. Commands such as `hire`, `fire`, `command.update`, and interrupt resume are not natural-language inputs that need interpretation. They are control-plane requests from the client to the runtime. Routing them through inference adds nondeterminism, couples business flow to prompt/tool behavior, and creates live regressions where the direct runtime path already exists and is better tested.
 
 ## Decision
 
-Adopt `forwardedProps.command` as the canonical direct command lane for `agent-runtime`.
+Adopt `forwardedProps.command` as the canonical direct command lane across current registered runtime families.
 
 The rules are:
 - when an AG-UI `run` request includes `forwardedProps.command`, `agent-runtime` must evaluate that command before any inference or model/tool routing
 - `forwardedProps.command` is an out-of-band control-plane input, not conversational message content
-- imperative client actions for `agent-runtime`, including named commands, `command.update`, and interrupt resume, must use `forwardedProps.command` rather than synthesizing JSON chat messages
+- imperative client actions, including named commands, `command.update`, and interrupt resume, must use `forwardedProps.command` rather than synthesizing JSON chat messages
+- observability provenance is not part of the public command contract and should travel in sibling forwarded-props metadata (for example `forwardedProps.source`) rather than inside `forwardedProps.command`
+- workflow runtimes that execute through LangGraph must translate direct command intent into internal `private.pendingCommand` state before graph execution rather than reconstructing that intent from transcript messages
 - interrupt `resume` payloads may be structured objects and should traverse the direct command lane unchanged; only text-only runtime fallbacks may serialize them later
 - `command.update` is the canonical shared-state mutation lane: the client writes revision-guarded JSON Patch against the writable public-state slice rooted at `/shared`, and the runtime answers with authoritative `shared-state.control` acknowledgments plus any resulting `/shared` and `/projected` state deltas
 - in v1, `/shared` versus `/projected` is the editability model; `command.update` does not add extra field-level mutability metadata or a second allowlist inside `/shared`
@@ -33,14 +35,12 @@ The rules are:
 - if a forwarded `command.update` run fails locally before any matching `shared-state.control` acknowledgment arrives, the web must roll back the optimistic writable-state view and clear the pending mutation instead of leaving optimistic settings stranded
 - conversational turns remain message-driven and may use inference normally
 - if a direct command is present, the runtime must not require the model to rediscover that intent via `agent_runtime_domain_command`
+- no registered agent runtime may rely on parsing the last chat message to recover explicit client control intent
 
 Preferred cross-runtime direction:
 - `forwardedProps.command` is the preferred transport for imperative client actions across runtime families, not only for `agent-runtime`
 - runtime families may keep different internal execution models, but the web should converge on one command-lane convention: conversational user input in messages, imperative control actions in `forwardedProps.command`
-- until a legacy runtime gains equivalent direct-command support, compatibility branching may remain in the web, but it is a migration state rather than the desired permanent contract
-
-Compatibility rule:
-- legacy runtime families may continue using message-driven command dispatch until they gain an equivalent direct command lane, but that compatibility path must not redefine the `agent-runtime` contract or the preferred long-term web command convention
+- runtime-specific translation into pending-command state or other internal control structures is acceptable, but those translations are implementation details rather than public transport branches
 
 ## Rationale
 
@@ -67,10 +67,8 @@ Compatibility rule:
   - Manual QA and automated tests can exercise command flows without depending on prompt/tool behavior.
   - Future migration away from LangGraph can converge on one control-lane convention instead of preserving two imperative command transports forever.
 - Tradeoffs:
-  - The web app must distinguish between direct command-capable runtimes and legacy message-driven runtimes during the migration period.
-  - Existing tests that assert message-injection for imperative `agent-runtime` commands need to be updated.
+  - Workflow runtimes must own the extra translation layer from the public direct command lane to their internal pending-command state.
+  - Existing tests and smoke helpers that asserted message-injection for imperative commands need to be updated.
 - Follow-on work:
-  - update web command dispatch so PI-runtime imperative actions use `forwardedProps.command`
-  - keep LangGraph compatibility isolated until it gains an equivalent direct command lane for imperative actions
-  - add regression coverage that proves direct command forwarding is used for `agent-runtime` named commands and `command.update`
-  - when LangGraph is retired or replaced, remove the remaining message-driven imperative-command compatibility path rather than preserving it as a permanent dual-mode convention
+  - keep regression coverage that proves direct command forwarding is used for named commands, polling refresh, and `command.update`
+  - reject new runtime registrations that would reintroduce message-driven imperative command dispatch

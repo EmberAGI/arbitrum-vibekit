@@ -408,7 +408,7 @@ describe('agent-runtime HTTP agent integration', () => {
 
     const runEvents = await collectEvents(
       agent
-        .run(createPromptRunInput('Please schedule sync automation.', { runId: 'run-schedule' }))
+        .run(createPromptRunInput('Please schedule refresh automation.', { runId: 'run-schedule' }))
         .pipe(verifyEvents()),
     );
 
@@ -439,7 +439,7 @@ describe('agent-runtime HTTP agent integration', () => {
         matchesArtifactData(operation.value, {
           type: 'automation-status',
           status: 'scheduled',
-          command: 'sync',
+          command: 'refresh',
         }),
     );
     expectStateDeltaOperation(
