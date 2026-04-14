@@ -1124,6 +1124,12 @@ function buildPortfolioManagerOnboardingBlockedMessage(input: {
   return `Portfolio manager onboarding is not complete. Shared Ember onboarding phase is ${input.onboardingDetails.onboarding.phase}.${missingProofs.length > 0 ? ` Missing proofs: ${missingProofs.join(', ')}.` : ''}`;
 }
 
+function buildManagedReservePolicySummary(input: {
+  managedMandate: ManagedMandate;
+}): string {
+  return `allow managed lending to admit allocable idle ${input.managedMandate.asset_intent.root_asset}`;
+}
+
 function buildPortfolioManagerOnboardingBootstrap(params: {
   agentId: string;
   threadId: string;
@@ -1137,6 +1143,9 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
   const firstManagedMandate = params.approvedSetup.firstManagedMandate;
   const managedAgentKeySegment = sanitizeIdentitySegment(firstManagedMandate.targetAgentKey);
   const managedAgentMandateRef = `mandate-${managedAgentKeySegment}-${identity}`;
+  const reservePolicySummary = buildManagedReservePolicySummary({
+    managedMandate: firstManagedMandate.managedMandate,
+  });
 
   return {
     occurredAt: PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
@@ -1167,7 +1176,21 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
         managed_mandate: firstManagedMandate.managedMandate,
       },
     ],
-    userReservePolicies: [],
+    userReservePolicies: [
+      {
+        reserve_policy_ref: `reserve-policy-${managedAgentKeySegment}-${identity}`,
+        summary: reservePolicySummary,
+        user_reserve_rules: [
+          {
+            root_asset: firstManagedMandate.managedMandate.asset_intent.root_asset,
+            network: firstManagedMandate.managedMandate.asset_intent.network,
+            benchmark_asset: firstManagedMandate.managedMandate.asset_intent.benchmark_asset,
+            reserved_quantity: '0',
+            reason: reservePolicySummary,
+          },
+        ],
+      },
+    ],
     activation: {
       mandateRef: managedAgentMandateRef,
     },
