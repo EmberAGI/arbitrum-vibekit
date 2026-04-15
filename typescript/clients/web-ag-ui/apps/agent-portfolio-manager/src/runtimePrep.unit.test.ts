@@ -47,4 +47,32 @@ describe('resolveManagedSharedEmberBootstrap', () => {
       'ember-lending': subagentRuntimes['ember-lending'],
     });
   });
+
+  it('defaults managed shared ember bootstrap to the real planner for the managed agent', async () => {
+    const resolveReferenceBootstrap = vi
+      .fn()
+      .mockImplementation(async (env?: NodeJS.ProcessEnv) => ({
+        plannerAgentIds: env?.SHARED_EMBER_ONCHAIN_ACTIONS_PLANNER_AGENT_IDS ?? null,
+      }));
+
+    const bootstrap = await resolveManagedSharedEmberBootstrap(
+      {
+        specRoot: '/tmp/spec-root',
+        vibekitRoot: '/tmp/vibekit-root',
+        managedAgentId: 'ember-lending',
+      },
+      {
+        resolveReferenceBootstrap,
+        createManagedOnboardingIssuers: vi.fn().mockResolvedValue(undefined),
+        createSubagentRuntimes: vi.fn().mockResolvedValue(undefined),
+      },
+    );
+
+    expect(resolveReferenceBootstrap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        SHARED_EMBER_ONCHAIN_ACTIONS_PLANNER_AGENT_IDS: 'ember-lending',
+      }),
+    );
+    expect(bootstrap.plannerAgentIds).toBe('ember-lending');
+  });
 });

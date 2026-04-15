@@ -22,7 +22,9 @@ type StartedAgUiServer = StartedServer & {
 type StartedChildProcessServer = StartedServer;
 type SharedEmberReferenceBootstrap = Record<string, unknown>;
 type ResolveManagedSharedEmberBootstrapDependencies = {
-  resolveReferenceBootstrap?: () => Promise<SharedEmberReferenceBootstrap>;
+  resolveReferenceBootstrap?: (
+    env?: NodeJS.ProcessEnv,
+  ) => Promise<SharedEmberReferenceBootstrap>;
   createManagedOnboardingIssuers?: typeof maybeCreateManagedOnboardingIssuers;
   createSubagentRuntimes?: typeof maybeCreateSubagentRuntimes;
 };
@@ -44,6 +46,26 @@ function readString(value: unknown): string | null {
 function readHexAddress(value: unknown): `0x${string}` | null {
   const normalized = readString(value);
   return normalized?.startsWith('0x') ? (normalized.toLowerCase() as `0x${string}`) : null;
+}
+
+function withDefaultManagedPlannerAgentId(input: {
+  env?: NodeJS.ProcessEnv;
+  managedAgentId: string;
+}): NodeJS.ProcessEnv {
+  const env = input.env ?? process.env;
+  const configuredAgentIds = new Set(
+    (env.SHARED_EMBER_ONCHAIN_ACTIONS_PLANNER_AGENT_IDS ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+
+  configuredAgentIds.add(input.managedAgentId);
+
+  return {
+    ...env,
+    SHARED_EMBER_ONCHAIN_ACTIONS_PLANNER_AGENT_IDS: Array.from(configuredAgentIds).join(','),
+  };
 }
 
 export function parseDotEnvFile(filePath: string): Record<string, string> {
@@ -729,9 +751,12 @@ export async function resolveManagedSharedEmberBootstrap(
   dependencies: ResolveManagedSharedEmberBootstrapDependencies = {},
 ): Promise<SharedEmberReferenceBootstrap> {
   const managedAgentId = input.managedAgentId ?? DEFAULT_MANAGED_AGENT_ID;
+  const managedPlannerEnv = withDefaultManagedPlannerAgentId({
+    managedAgentId,
+  });
   const bootstrap = await (
     dependencies.resolveReferenceBootstrap ??
-    (async () => {
+    (async (env?: NodeJS.ProcessEnv) => {
       const bootstrapModule = (await import(
         pathToFileURL(
           path.join(
@@ -740,12 +765,14 @@ export async function resolveManagedSharedEmberBootstrap(
           ),
         ).href
       )) as {
-        resolveSharedEmberReferenceBootstrapFromEnv: () => Promise<SharedEmberReferenceBootstrap>;
+        resolveSharedEmberReferenceBootstrapFromEnv: (
+          env?: NodeJS.ProcessEnv,
+        ) => Promise<SharedEmberReferenceBootstrap>;
       };
 
-      return bootstrapModule.resolveSharedEmberReferenceBootstrapFromEnv();
+      return bootstrapModule.resolveSharedEmberReferenceBootstrapFromEnv(env);
     })
-  )();
+  )(managedPlannerEnv);
   const managedOnboardingIssuers = await (
     dependencies.createManagedOnboardingIssuers ?? maybeCreateManagedOnboardingIssuers
   )({
