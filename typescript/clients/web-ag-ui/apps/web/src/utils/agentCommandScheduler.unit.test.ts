@@ -270,6 +270,29 @@ describe('agentCommandScheduler', () => {
     scheduler.dispose();
   });
 
+  it('releases local run ownership after a successful custom run resolves without a terminal callback', async () => {
+    const scheduler = createScheduler();
+    const runCustom = vi.fn(async () => undefined);
+
+    const firstAccepted = scheduler.dispatchCustom({
+      command: 'chat',
+      run: runCustom,
+    });
+    await Promise.resolve();
+
+    const secondAccepted = scheduler.dispatchCustom({
+      command: 'chat',
+      run: runCustom,
+    });
+    await Promise.resolve();
+
+    expect(firstAccepted).toBe(true);
+    expect(secondAccepted).toBe(true);
+    expect(runCustom).toHaveBeenCalledTimes(2);
+
+    scheduler.dispose();
+  });
+
   it('allows fire custom dispatch to preempt while a run is already in flight', async () => {
     runInFlight = true;
     const scheduler = createScheduler();

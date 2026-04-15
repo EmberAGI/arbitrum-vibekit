@@ -239,6 +239,104 @@ describe('agentListPolling', () => {
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  it('seeds fresh runtime agents so delta-only poll runs can resolve through state changes', async () => {
+    const unsubscribe = vi.fn();
+    const detachActiveRun = vi.fn().mockResolvedValue(undefined);
+    const setState = vi.fn();
+    let stateSubscriber: AgentSubscriber | null = null;
+    let currentState: Record<string, unknown> = {};
+
+    const runtimeAgent = {
+      subscribe: vi.fn((subscriber: AgentSubscriber) => {
+        stateSubscriber = subscriber;
+        return { unsubscribe };
+      }),
+      setState: vi.fn((state: unknown) => {
+        currentState = structuredClone(state as Record<string, unknown>);
+        setState(state);
+      }),
+      runAgent: vi.fn(async () => {
+        currentState = {
+          ...currentState,
+          thread: {
+            ...(currentState.thread as Record<string, unknown>),
+            lifecycle: {
+              ...((currentState.thread as { lifecycle?: Record<string, unknown> }).lifecycle ?? {}),
+              phase: 'active',
+            },
+            task: {
+              ...((currentState.thread as { task?: Record<string, unknown> }).task ?? {}),
+              taskStatus: {
+                state: 'completed',
+                message: {
+                  content: 'Lending runtime projection hydrated from Shared Ember Domain Service.',
+                },
+              },
+            },
+          },
+        };
+
+        await stateSubscriber?.onStateChanged?.({
+          state: currentState as never,
+          messages: [],
+          agent: runtimeAgent as never,
+          input: {
+            threadId: 'thread-lending',
+            runId: 'run-lending',
+            tools: [],
+            context: [],
+            forwardedProps: {
+              source: 'agent-list-poll',
+              command: {
+                name: 'refresh',
+              },
+            },
+            state: currentState as never,
+            messages: [],
+          },
+        });
+      }),
+      detachActiveRun,
+    };
+
+    const outcome = await pollAgentListUpdateViaAgUi({
+      agentId: 'agent-ember-lending',
+      threadId: 'thread-lending',
+      timeoutMs: 250,
+      createRuntimeAgent: () => runtimeAgent,
+    });
+
+    expect(outcome.update).toMatchObject({
+      synced: true,
+      lifecyclePhase: 'active',
+      taskState: 'completed',
+      taskMessage: 'Lending runtime projection hydrated from Shared Ember Domain Service.',
+    });
+    expect(outcome.busy).toBe(false);
+    expect(runtimeAgent.setState).toHaveBeenCalledTimes(1);
+    expect(runtimeAgent.setState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thread: expect.objectContaining({
+          lifecycle: expect.objectContaining({
+            phase: 'prehire',
+          }),
+          task: expect.objectContaining({
+            id: 'agent-runtime:thread-lending',
+            taskStatus: expect.objectContaining({
+              state: 'working',
+              message: expect.objectContaining({
+                content: 'Ready for a live runtime conversation.',
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+    expect(setState).toHaveBeenCalledTimes(1);
+    expect(detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
   it('returns null when no snapshot arrives before timeout and still detaches stream', async () => {
     vi.useFakeTimers();
     const unsubscribe = vi.fn();

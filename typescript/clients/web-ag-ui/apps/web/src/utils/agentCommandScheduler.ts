@@ -80,6 +80,7 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
       isReplayAttempt?: boolean;
       commandPayload?: CommandPayload;
       allowPreemptive?: boolean;
+      releaseOwnershipOnResolve?: boolean;
     };
     beforeRun?: (agent: TAgent) => void;
   }): boolean => {
@@ -120,43 +121,51 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
 
     beforeRun?.(agent);
 
-    void Promise.resolve(run(agent)).catch((error) => {
-      params.setRunInFlight(false);
+    void Promise.resolve(run(agent)).then(
+      () => {
+        if (!options?.releaseOwnershipOnResolve) return;
+        if (!params.getRunInFlight()) return;
+        if (params.isAgentRunning(agent)) return;
+        handleRunTerminal();
+      },
+      (error) => {
+        params.setRunInFlight(false);
 
-      if (command === 'refresh') {
-        refreshRunInFlight = false;
-        activeRefreshCommandPayload = undefined;
+        if (command === 'refresh') {
+          refreshRunInFlight = false;
+          activeRefreshCommandPayload = undefined;
+
+          const busy = params.isBusyRunError(error) || params.isAgentRunning(agent);
+          const aborted = params.isAbortLikeError?.(error) ?? false;
+          if ((busy || aborted) && refreshBusyRetries < refreshBusyMaxRetries) {
+            refreshBusyRetries += 1;
+            pendingRefreshIntent = true;
+            updateRefreshing();
+
+            if (replayTimer === null) {
+              replayTimer = setTimer(() => {
+                replayTimer = null;
+                replayPendingRefresh();
+              }, refreshReplayDelayMs);
+            }
+            return;
+          }
+
+          pendingRefreshIntent = false;
+          refreshBusyRetries = 0;
+          updateRefreshing();
+        }
 
         const busy = params.isBusyRunError(error) || params.isAgentRunning(agent);
         const aborted = params.isAbortLikeError?.(error) ?? false;
-        if ((busy || aborted) && refreshBusyRetries < refreshBusyMaxRetries) {
-          refreshBusyRetries += 1;
-          pendingRefreshIntent = true;
-          updateRefreshing();
-
-          if (replayTimer === null) {
-            replayTimer = setTimer(() => {
-              replayTimer = null;
-              replayPendingRefresh();
-            }, refreshReplayDelayMs);
-          }
+        if (busy || aborted) {
+          params.onCommandBusy?.(command, error);
           return;
         }
 
-        pendingRefreshIntent = false;
-        refreshBusyRetries = 0;
-        updateRefreshing();
-      }
-
-      const busy = params.isBusyRunError(error) || params.isAgentRunning(agent);
-      const aborted = params.isAbortLikeError?.(error) ?? false;
-      if (busy || aborted) {
-        params.onCommandBusy?.(command, error);
-        return;
-      }
-
-      params.onCommandError?.(command, error);
-    });
+        params.onCommandError?.(command, error);
+      },
+    );
 
     return true;
   };
@@ -194,12 +203,14 @@ export function createAgentCommandScheduler<TAgent extends SchedulableAgent>(par
   const dispatchCustom = (customRunParams: {
     command: string;
     allowPreemptive?: boolean;
+    releaseOwnershipOnResolve?: boolean;
     run: (agent: TAgent) => Promise<unknown>;
   }): boolean => {
     return dispatchRun({
       command: customRunParams.command,
       options: {
         allowPreemptive: customRunParams.allowPreemptive,
+        releaseOwnershipOnResolve: customRunParams.releaseOwnershipOnResolve ?? true,
       },
       run: customRunParams.run,
     });

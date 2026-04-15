@@ -731,6 +731,49 @@ describe('useAgentConnection integration', () => {
     );
   });
 
+  it('allows a second chat turn after a successful run resolves without waiting for a terminal callback', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    const chatApi = latestValue as unknown as {
+      sendChatMessage: (content: string) => void;
+    };
+
+    chatApi.sendChatMessage('First turn');
+    await flushEffects();
+
+    chatApi.sendChatMessage('Second turn');
+    await flushEffects();
+
+    expect(mocks.agent.addMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        role: 'user',
+        content: 'First turn',
+      }),
+    );
+    expect(mocks.agent.addMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        role: 'user',
+        content: 'Second turn',
+      }),
+    );
+    expect(mocks.runAgent).toHaveBeenCalledTimes(2);
+    expect(latestValue?.uiError).toBeNull();
+  });
+
   it('does not clear legacy refresh pending from lastAppliedClientMutationId thread payloads', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     let subscriber: AgentSubscriber | undefined;

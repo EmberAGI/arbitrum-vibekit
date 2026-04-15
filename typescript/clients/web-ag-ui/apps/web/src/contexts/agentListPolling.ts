@@ -13,6 +13,7 @@ type RuntimeSubscription = {
 
 export type AgentListPollingRuntimeAgent = {
   subscribe: (subscriber: AgentSubscriber) => RuntimeSubscription;
+  setState?: (state: unknown) => void;
   runAgent: (params?: {
     forwardedProps?: {
       source?: string;
@@ -32,6 +33,7 @@ export type AgentListPollOutcome = {
 const DEFAULT_RUN_COMPLETION_GRACE_MS = 1_000;
 const AGENT_LIST_POLL_SOURCE = 'agent-list-poll';
 const AGENT_LIST_POLL_COMMAND = 'refresh';
+const READY_RUNTIME_TASK_MESSAGE = 'Ready for a live runtime conversation.';
 
 function describeError(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -42,6 +44,26 @@ type PollRuntimeAgentFactory = (params: {
   agentId: string;
   threadId: string;
 }) => AgentListPollingRuntimeAgent;
+
+function createAgentListPollSeedState(threadId: string): unknown {
+  return projectDetailStateFromPayload({
+    thread: {
+      id: threadId,
+      lifecycle: {
+        phase: 'prehire',
+      },
+      task: {
+        id: `agent-runtime:${threadId}`,
+        taskStatus: {
+          state: 'working',
+          message: {
+            content: READY_RUNTIME_TASK_MESSAGE,
+          },
+        },
+      },
+    },
+  });
+}
 
 export function resolveAgentListPollIntervalMs(rawValue: string | undefined): number {
   const parsed = Number(rawValue ?? 15_000);
@@ -116,6 +138,10 @@ export async function pollAgentListUpdateViaAgUi(params: {
     agentId: params.agentId,
     threadId: params.threadId,
   });
+  const seedState = createAgentListPollSeedState(params.threadId);
+  if (seedState) {
+    runtimeAgent.setState?.(seedState);
+  }
 
   let settled = false;
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
@@ -125,6 +151,8 @@ export async function pollAgentListUpdateViaAgUi(params: {
   const runCompletionTimeoutMs = params.runCompletionTimeoutMs ?? DEFAULT_RUN_COMPLETION_GRACE_MS;
   let runCompleted = false;
   let latestProjectedUpdate: Partial<AgentListEntry> | null = null;
+  let latestProjectedState =
+    (seedState ? projectDetailStateFromPayload(seedState) : null) ?? null;
 
   const settle = (value: Partial<AgentListEntry> | null) => {
     if (settled) return;
@@ -136,20 +164,21 @@ export async function pollAgentListUpdateViaAgUi(params: {
   };
 
   const captureProjectedUpdate = (statePayload: unknown) => {
-    const projectedState = projectDetailStateFromPayload(statePayload);
+    const projectedState = projectDetailStateFromPayload(statePayload, latestProjectedState);
     if (!projectedState) {
       return;
     }
+    latestProjectedState = projectedState;
     latestProjectedUpdate = projectAgentListUpdateFromState(projectedState);
     settle(latestProjectedUpdate);
   };
 
   const subscriber: AgentSubscriber = {
-    onRunInitialized: ({ state }) => {
-      captureProjectedUpdate(state);
-    },
     onStateSnapshotEvent: ({ event }) => {
       captureProjectedUpdate(event.snapshot);
+    },
+    onStateChanged: ({ state }) => {
+      captureProjectedUpdate(state);
     },
     onRunErrorEvent: (payload) => {
       const message = payload.event.message;
