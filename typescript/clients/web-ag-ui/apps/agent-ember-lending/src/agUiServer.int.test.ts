@@ -641,6 +641,113 @@ async function runAgUiConnect(input: {
   };
 }
 
+async function startAgUiServer(input: {
+  persistedPostgres: ReturnType<typeof createPersistingInternalPostgres>;
+  protocolHost: {
+    handleJsonRpc: ReturnType<typeof vi.fn>;
+    readCommittedEventOutbox: ReturnType<typeof vi.fn>;
+    acknowledgeCommittedEventOutbox: ReturnType<typeof vi.fn>;
+  };
+  runtimeSigning: {
+    readAddress: ReturnType<typeof vi.fn>;
+    signPayload: ReturnType<typeof vi.fn>;
+  };
+  anchoredPayloadResolver: ReturnType<typeof createAnchoredPayloadResolverStub>;
+}) {
+  const service = await createEmberLendingGatewayService({
+    runtimeConfig: {
+      model: {
+        id: 'openai/gpt-5.4',
+        name: 'openai/gpt-5.4',
+        api: 'openai-responses',
+        provider: 'openrouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        reasoning: true,
+      },
+      systemPrompt: 'Managed lending test runtime.',
+      tools: [],
+      domain: createEmberLendingDomain({
+        protocolHost: input.protocolHost,
+        runtimeSigning: input.runtimeSigning,
+        anchoredPayloadResolver: input.anchoredPayloadResolver,
+        runtimeSignerRef: 'service-wallet',
+        agentId: 'ember-lending',
+      }),
+      agentOptions: {
+        initialState: {
+          thinkingLevel: 'low',
+        },
+        getApiKey: () => 'test-openrouter-key',
+      },
+    },
+    __internalPostgres: input.persistedPostgres.hooks,
+  } as any);
+
+  const handler = createEmberLendingAgUiHandler({
+    agentId: EMBER_LENDING_AGENT_ID,
+    service,
+  });
+
+  const server = createServer((request, response) => {
+    void (async () => {
+      const body = await readRequestBody(request);
+      const origin = `http://${request.headers.host ?? '127.0.0.1'}`;
+      const url = new URL(request.url ?? '/', origin);
+
+      const headers = Object.entries(request.headers).flatMap(
+        ([name, value]): Array<[string, string]> => {
+          if (Array.isArray(value)) {
+            return value.map((entry) => [name, entry]);
+          }
+
+          return value ? [[name, value]] : [];
+        },
+      );
+
+      const webRequest = new Request(url, {
+        method: request.method,
+        headers: new Headers(headers),
+        body: body.length > 0 ? body : undefined,
+        duplex: 'half',
+      });
+      const webResponse = await handler(webRequest);
+      await writeNodeResponse(webResponse, response);
+    })().catch((error: unknown) => {
+      response.statusCode = 500;
+      response.end(error instanceof Error ? error.message : 'unknown error');
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  const address = server.address() as AddressInfo;
+  return {
+    service,
+    server,
+    baseUrl: `http://127.0.0.1:${address.port}/ag-ui`,
+  };
+}
+
+async function stopAgUiServer(server: Server) {
+  server.closeAllConnections?.();
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
 describe('agent-ember-lending AG-UI integration', () => {
   let server: Server;
   let baseUrl: string;
@@ -831,94 +938,16 @@ describe('agent-ember-lending AG-UI integration', () => {
         },
       })),
     };
-    service = await createEmberLendingGatewayService({
-      runtimeConfig: {
-        model: {
-          id: 'openai/gpt-5.4',
-          name: 'openai/gpt-5.4',
-          api: 'openai-responses',
-          provider: 'openrouter',
-          baseUrl: 'https://openrouter.ai/api/v1',
-          reasoning: true,
-        },
-        systemPrompt: 'Managed lending test runtime.',
-        tools: [],
-        domain: createEmberLendingDomain({
-          protocolHost,
-          runtimeSigning,
-          anchoredPayloadResolver,
-          runtimeSignerRef: 'service-wallet',
-          agentId: 'ember-lending',
-        }),
-        agentOptions: {
-          initialState: {
-            thinkingLevel: 'low',
-          },
-          getApiKey: () => 'test-openrouter-key',
-        },
-      },
-      __internalPostgres: persistedPostgres.hooks,
-    } as any);
-
-    const handler = createEmberLendingAgUiHandler({
-      agentId: EMBER_LENDING_AGENT_ID,
-      service,
-    });
-
-    server = createServer((request, response) => {
-      void (async () => {
-        const body = await readRequestBody(request);
-        const origin = `http://${request.headers.host ?? '127.0.0.1'}`;
-        const url = new URL(request.url ?? '/', origin);
-
-        const headers = Object.entries(request.headers).flatMap(
-          ([name, value]): Array<[string, string]> => {
-            if (Array.isArray(value)) {
-              return value.map((entry) => [name, entry]);
-            }
-
-            return value ? [[name, value]] : [];
-          },
-        );
-
-        const webRequest = new Request(url, {
-          method: request.method,
-          headers: new Headers(headers),
-          body: body.length > 0 ? body : undefined,
-          duplex: 'half',
-        });
-        const webResponse = await handler(webRequest);
-        await writeNodeResponse(webResponse, response);
-      })().catch((error: unknown) => {
-        response.statusCode = 500;
-        response.end(error instanceof Error ? error.message : 'unknown error');
-      });
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
-        server.off('error', reject);
-        resolve();
-      });
-    });
-
-    const address = server.address() as AddressInfo;
-    baseUrl = `http://127.0.0.1:${address.port}/ag-ui`;
+    ({ service, server, baseUrl } = await startAgUiServer({
+      persistedPostgres,
+      protocolHost,
+      runtimeSigning,
+      anchoredPayloadResolver,
+    }));
   });
 
   afterEach(async () => {
-    server.closeAllConnections?.();
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve();
-      });
-    });
+    await stopAgUiServer(server);
     protocolHost.handleJsonRpc.mockReset();
     protocolHost.handleJsonRpc.mockImplementation(defaultHandleJsonRpc);
     protocolHost.readCommittedEventOutbox.mockClear();
@@ -1593,6 +1622,117 @@ describe('agent-ember-lending AG-UI integration', () => {
           transactionPlanId: 'txplan-ember-lending-001',
         },
       ],
+    });
+  });
+
+  it('rehydrates the execution artifact and tx hash on reconnect after process restart', async () => {
+    const threadId = 'thread-execute-reconnect-1';
+    const { snapshot: connectSnapshot } = await runAgUiConnect({
+      baseUrl,
+      threadId,
+      runId: 'run-connect-execute-reconnect',
+    });
+
+    const { events: planEvents } = await runAgUiCommand({
+      baseUrl,
+      threadId,
+      runId: 'run-plan-execute-reconnect',
+      command: {
+        name: 'create_transaction_plan',
+        input: createCandidatePlanInput(),
+      },
+    });
+
+    const planSnapshot = projectStateSnapshot({
+      baseline: connectSnapshot,
+      events: planEvents,
+    });
+
+    const { events: executeEvents } = await runAgUiCommand({
+      baseUrl,
+      threadId,
+      runId: 'run-execute-reconnect',
+      command: {
+        name: 'request_transaction_execution',
+      },
+    });
+
+    const executeSnapshot = projectStateSnapshot({
+      baseline: planSnapshot,
+      events: executeEvents,
+    });
+
+    expect(executeSnapshot).toMatchObject({
+      snapshot: {
+        thread: {
+          artifacts: {
+            current: {
+              data: {
+                type: 'shared-ember-execution-result',
+                outcome: 'confirmed',
+                transactionHash:
+                  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+              },
+            },
+          },
+          lifecycle: {
+            lastExecutionTxHash:
+              '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          },
+        },
+      },
+    });
+
+    expect(
+      readPersistedLifecycleState(persistedPostgres.persistedThreads.values(), threadId),
+    ).toMatchObject({
+      lastExecutionTxHash:
+        '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+    });
+
+    await stopAgUiServer(server);
+    ({ service, server, baseUrl } = await startAgUiServer({
+      persistedPostgres,
+      protocolHost,
+      runtimeSigning,
+      anchoredPayloadResolver,
+    }));
+
+    const { snapshot: reconnectSnapshot } = await runAgUiConnect({
+      baseUrl,
+      threadId,
+      runId: 'run-reconnect-execute-reconnect',
+    });
+
+    expect(reconnectSnapshot).toMatchObject({
+      snapshot: {
+        thread: {
+          artifacts: {
+            current: {
+              data: {
+                type: 'shared-ember-execution-result',
+                revision: 10,
+                outcome: 'confirmed',
+                transactionHash:
+                  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+              },
+            },
+          },
+          lifecycle: {
+            phase: 'active',
+            lastExecutionTxHash:
+              '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          },
+          task: {
+            taskStatus: {
+              state: 'completed',
+              message: {
+                content: 'Lending transaction execution confirmed through Shared Ember.',
+              },
+            },
+          },
+        },
+      },
     });
   });
 
