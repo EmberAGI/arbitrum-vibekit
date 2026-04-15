@@ -14,6 +14,7 @@ class ScriptedPiAgent {
   public readonly state = {
     messages: [],
     isStreaming: false,
+    error: undefined as string | undefined,
   };
 
   public abortCalled = false;
@@ -269,7 +270,7 @@ describe('pi gateway service integration', () => {
     });
     expect(runEvents).toContainEqual({
       type: EventType.TEXT_MESSAGE_CONTENT,
-      messageId: 'pi:exec-1:assistant:1',
+      messageId: 'pi:exec-1:run-1:assistant:1',
       delta: 'Pi is connected.',
     });
     expect(
@@ -414,9 +415,154 @@ describe('pi gateway service integration', () => {
         content: 'Schedule a sync every minute.',
       },
       {
-        id: 'pi:exec-1:assistant:2',
+        id: 'pi:exec-1:run-2:assistant:2',
         role: 'assistant',
         content: 'Scheduled sync every minute.',
+      },
+    ]);
+  });
+
+  it('keeps multi-turn request and assistant transcript entries separated when the execution id stays stable', async () => {
+    const firstEchoedUserMessage = {
+      role: 'user',
+      content: 'whats in my wallet',
+      timestamp: 1,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+    const firstAssistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: 2,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+    const secondEchoedUserMessage = {
+      role: 'user',
+      content: 'borrow usdc',
+      timestamp: 1,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+    const secondAssistantMessage = {
+      ...firstAssistantMessage,
+      timestamp: 2,
+    };
+
+    class QueuedScriptedPiAgent extends ScriptedPiAgent {
+      constructor(private readonly queuedRunEvents: AgentEvent[][]) {
+        super([]);
+      }
+
+      override async prompt(messages: unknown): Promise<void> {
+        this.promptCalls.push(messages);
+        const nextRunEvents = this.queuedRunEvents.shift() ?? [];
+        for (const event of nextRunEvents) {
+          this.emit(event);
+        }
+      }
+    }
+
+    const agent = new QueuedScriptedPiAgent([
+      [
+        { type: 'agent_start' },
+        { type: 'turn_start' },
+        { type: 'message_start', message: firstEchoedUserMessage },
+        { type: 'message_end', message: firstEchoedUserMessage },
+        { type: 'message_start', message: firstAssistantMessage },
+        {
+          type: 'message_update',
+          message: firstAssistantMessage,
+          assistantMessageEvent: {
+            type: 'text_delta',
+            contentIndex: 0,
+            delta: 'You have collateral available.',
+            partial: firstAssistantMessage,
+          },
+        },
+        { type: 'message_end', message: firstAssistantMessage },
+        { type: 'turn_end', message: firstAssistantMessage, toolResults: [] },
+        { type: 'agent_end', messages: [firstAssistantMessage] },
+      ],
+      [
+        { type: 'agent_start' },
+        { type: 'turn_start' },
+        { type: 'message_start', message: secondEchoedUserMessage },
+        { type: 'message_end', message: secondEchoedUserMessage },
+        { type: 'message_start', message: secondAssistantMessage },
+        {
+          type: 'message_update',
+          message: secondAssistantMessage,
+          assistantMessageEvent: {
+            type: 'text_delta',
+            contentIndex: 0,
+            delta: 'I created a borrow plan for USDC.',
+            partial: secondAssistantMessage,
+          },
+        },
+        { type: 'message_end', message: secondAssistantMessage },
+        { type: 'turn_end', message: secondAssistantMessage, toolResults: [] },
+        { type: 'agent_end', messages: [secondAssistantMessage] },
+      ],
+    ]);
+
+    let session = {
+      thread: { id: 'thread-multi-turn' },
+      execution: { id: 'exec-stable-thread', status: 'working' as const },
+      messages: [],
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-multi-turn',
+        runId: 'run-wallet',
+        messages: [{ id: 'request-wallet', role: 'user', content: 'whats in my wallet' }],
+      }),
+    );
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-multi-turn',
+        runId: 'run-borrow',
+        messages: [{ id: 'request-borrow', role: 'user', content: 'borrow usdc' }],
+      }),
+    );
+
+    expect(session.messages).toEqual([
+      {
+        id: 'request-wallet',
+        role: 'user',
+        content: 'whats in my wallet',
+      },
+      {
+        id: 'pi:exec-stable-thread:run-wallet:assistant:2',
+        role: 'assistant',
+        content: 'You have collateral available.',
+      },
+      {
+        id: 'request-borrow',
+        role: 'user',
+        content: 'borrow usdc',
+      },
+      {
+        id: 'pi:exec-stable-thread:run-borrow:assistant:2',
+        role: 'assistant',
+        content: 'I created a borrow plan for USDC.',
       },
     ]);
   });
@@ -598,6 +744,162 @@ describe('pi gateway service integration', () => {
     expect(firstRequestSnapshotIndex).toBeGreaterThan(-1);
     expect(firstAssistantDeltaIndex).toBeGreaterThan(-1);
     expect(firstRequestSnapshotIndex).toBeLessThan(firstAssistantDeltaIndex);
+  });
+
+  it('does not duplicate canonical request messages when provider events echo the same user input', async () => {
+    const startedUserMessage = {
+      role: 'user',
+      content: '',
+      timestamp: 2,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const completedUserMessage = {
+      ...startedUserMessage,
+      content: 'Refresh your runtime state and tell me what you see.',
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent: new ScriptedPiAgent([
+        { type: 'agent_start' },
+        { type: 'turn_start' },
+        { type: 'message_start', message: startedUserMessage },
+        { type: 'message_end', message: completedUserMessage },
+        { type: 'turn_end', message: completedUserMessage, toolResults: [] },
+        { type: 'agent_end', messages: [completedUserMessage] },
+      ]),
+      getSession: () => ({
+        thread: { id: 'thread-user-backfill' },
+        execution: { id: 'exec-user-backfill', status: 'working', statusMessage: 'Waiting.' },
+        messages: [],
+      }),
+      updateSession: (_threadId, update) =>
+        update({
+          thread: { id: 'thread-user-backfill' },
+          execution: { id: 'exec-user-backfill', status: 'working', statusMessage: 'Waiting.' },
+          messages: [],
+        }),
+    });
+
+    const runEvents = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-user-backfill',
+        runId: 'run-user-backfill',
+        messages: [{ id: 'request-user-msg', role: 'user', content: 'Refresh your runtime state and tell me what you see.' }],
+      }),
+    );
+
+    const finalMessagesSnapshot = [...runEvents]
+      .reverse()
+      .find((event) => event.type === EventType.MESSAGES_SNAPSHOT);
+
+    expect(finalMessagesSnapshot).toEqual({
+      type: EventType.MESSAGES_SNAPSHOT,
+      messages: [
+        {
+          id: 'request-user-msg',
+          role: 'user',
+          content: 'Refresh your runtime state and tell me what you see.',
+        },
+      ],
+    });
+  });
+
+  it('surfaces provider failures as failed runs with assistant error text', async () => {
+    const failedAssistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openrouter',
+      model: 'openai/gpt-5.4',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'error',
+      errorMessage: 'Key limit exceeded (monthly limit).',
+      timestamp: 5,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    class FailedRunPiAgent extends ScriptedPiAgent {
+      override async prompt(messages: unknown): Promise<void> {
+        await super.prompt(messages);
+        this.state.error = 'Key limit exceeded (monthly limit).';
+      }
+    }
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent: new FailedRunPiAgent([
+        { type: 'agent_start' },
+        { type: 'turn_start' },
+        { type: 'message_start', message: failedAssistantMessage },
+        { type: 'message_end', message: failedAssistantMessage },
+        { type: 'turn_end', message: failedAssistantMessage, toolResults: [] },
+        { type: 'agent_end', messages: [failedAssistantMessage] },
+      ]),
+      getSession: () => ({
+        thread: { id: 'thread-failed-run' },
+        execution: { id: 'exec-failed-run', status: 'working', statusMessage: 'Waiting.' },
+        messages: [],
+      }),
+      updateSession: (_threadId, update) =>
+        update({
+          thread: { id: 'thread-failed-run' },
+          execution: { id: 'exec-failed-run', status: 'working', statusMessage: 'Waiting.' },
+          messages: [],
+        }),
+    });
+
+    const runEvents = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-failed-run',
+        runId: 'run-failed-run',
+        messages: [{ id: 'request-user-msg', role: 'user', content: 'Try again.' }],
+      }),
+    );
+
+    expect(runEvents).toContainEqual({
+      type: EventType.TEXT_MESSAGE_CONTENT,
+      messageId: 'pi:exec-failed-run:run-failed-run:assistant:5',
+      delta: 'Key limit exceeded (monthly limit).',
+    });
+    expect(runEvents).toContainEqual({
+      type: EventType.RUN_FINISHED,
+      threadId: 'thread-failed-run',
+      runId: 'run-failed-run',
+      result: {
+        executionId: 'exec-failed-run',
+        status: 'failed',
+      },
+    });
+    expect(runEvents).toContainEqual({
+      type: EventType.STATE_DELTA,
+      delta: expect.arrayContaining([
+        {
+          op: 'replace',
+          path: '/thread/task/taskStatus/state',
+          value: 'failed',
+        },
+        {
+          op: 'replace',
+          path: '/thread/task/taskStatus/message/content',
+          value: 'Key limit exceeded (monthly limit).',
+        },
+      ]),
+    });
+    expect(runEvents).toContainEqual({
+      type: EventType.MESSAGES_SNAPSHOT,
+      messages: expect.arrayContaining([
+        {
+          id: 'pi:exec-failed-run:run-failed-run:assistant:5',
+          role: 'assistant',
+          content: 'Key limit exceeded (monthly limit).',
+        },
+      ]),
+    });
   });
 
   it('queues active-run user input through Pi steering instead of re-prompting the agent', async () => {
@@ -1218,7 +1520,7 @@ describe('pi gateway service integration', () => {
       done: false,
       value: {
         type: EventType.TEXT_MESSAGE_START,
-        messageId: 'pi:exec-4:assistant:1',
+        messageId: 'pi:exec-4:run-4:assistant:1',
         role: 'assistant',
       },
     });
@@ -1226,7 +1528,7 @@ describe('pi gateway service integration', () => {
       done: false,
       value: {
         type: EventType.TEXT_MESSAGE_CONTENT,
-        messageId: 'pi:exec-4:assistant:1',
+        messageId: 'pi:exec-4:run-4:assistant:1',
         delta: 'Streaming from Pi.',
       },
     });
@@ -1237,7 +1539,7 @@ describe('pi gateway service integration', () => {
       done: false,
       value: {
         type: EventType.TEXT_MESSAGE_END,
-        messageId: 'pi:exec-4:assistant:1',
+        messageId: 'pi:exec-4:run-4:assistant:1',
       },
     });
   });

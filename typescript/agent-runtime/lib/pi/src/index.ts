@@ -585,6 +585,9 @@ const isTextPart = (value: unknown): value is { type: 'text'; text: string } =>
 const isThinkingPart = (value: unknown): value is { type: 'thinking'; thinking: string } =>
   isRecord(value) && value.type === 'thinking' && typeof value.thinking === 'string';
 
+const getMessageErrorText = (message: unknown): string | undefined =>
+  isRecord(message) && typeof message.errorMessage === 'string' ? message.errorMessage : undefined;
+
 const isToolCallPart = (
   value: unknown,
 ): value is { type: 'toolCall'; id: string; name: string; arguments: unknown } =>
@@ -608,7 +611,7 @@ const resolveProjectedReasoningMessageId = (
 
 const getTextContent = (message: AgentMessage): string | undefined => {
   if (typeof message !== 'object' || message === null || !('content' in message)) {
-    return undefined;
+    return getMessageErrorText(message);
   }
 
   const { content } = message as { content?: unknown };
@@ -624,7 +627,11 @@ const getTextContent = (message: AgentMessage): string | undefined => {
     .flatMap((part) => (isTextPart(part) ? [part.text] : []))
     .join('');
 
-  return text.length > 0 ? text : undefined;
+  if (text.length > 0) {
+    return text;
+  }
+
+  return getMessageErrorText(message);
 };
 
 const getAssistantToolCalls = (message: AgentMessage): Array<{
@@ -1018,14 +1025,18 @@ const applyProjectedRunEventsToMessages = (
           role: 'assistant',
           content: '',
         }),
-        (message) => ({
-          id: event.messageId,
-          role: 'assistant',
-          content: `${typeof message.content === 'string' ? message.content : ''}${event.delta}`,
-          ...(message.role === 'assistant' && Array.isArray(message.toolCalls)
-            ? { toolCalls: message.toolCalls }
-            : {}),
-        }),
+        (message) => {
+          const role = message.role === 'user' ? 'user' : 'assistant';
+
+          return {
+            id: event.messageId,
+            role,
+            content: `${typeof message.content === 'string' ? message.content : ''}${event.delta}`,
+            ...(role === 'assistant' && message.role === 'assistant' && Array.isArray(message.toolCalls)
+              ? { toolCalls: message.toolCalls }
+              : {}),
+          };
+        },
       );
       continue;
     }
@@ -1121,6 +1132,26 @@ const buildExecutionStatusText = (session: PiRuntimeGatewaySession): string =>
   ]
     .filter((part): part is string => typeof part === 'string' && part.length > 0)
     .join(' ');
+
+const getAgentFailureMessage = (agent: PiRuntimeGatewayAgent): string | undefined => {
+  const { error } = agent.state as { error?: unknown };
+  return typeof error === 'string' && error.trim().length > 0 ? error : undefined;
+};
+
+const applyAgentFailureToSession = (
+  session: PiRuntimeGatewaySession,
+  failureMessage: string | undefined,
+): PiRuntimeGatewaySession =>
+  failureMessage
+    ? {
+        ...session,
+        execution: {
+          ...session.execution,
+          status: 'failed',
+          statusMessage: failureMessage,
+        },
+      }
+    : session;
 
 const buildPiRuntimeGatewaySystemPromptLines = (session: PiRuntimeGatewaySession): string[] => {
   const executionStatusText = buildExecutionStatusText(session);
@@ -1499,12 +1530,19 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
   return params.events.flatMap((event) => projector.project(event));
 };
 
-function createPiAgentEventProjector(executionId: string): {
+function createPiAgentEventProjector(
+  executionId: string,
+  options: {
+    projectUserMessages?: boolean;
+  } = {},
+): {
   project: (event: AgentEvent) => BaseEvent[];
 } {
   const mapped: BaseEvent[] = [];
   const seenToolStarts = new Set<string>();
+  const messageIdsWithTextContent = new Set<string>();
   const openReasoningMessageIds = new Set<string>();
+  const projectUserMessages = options.projectUserMessages ?? true;
   let currentMessageId: string | null = null;
   let fallbackIndex = 0;
 
@@ -1526,9 +1564,15 @@ function createPiAgentEventProjector(executionId: string): {
         mapped.push(asBaseEvent({ type: EventType.STEP_FINISHED, stepName: 'turn' }));
         break;
       case 'message_start': {
+        const role = getMessageRole(event.message);
+        const shouldProjectMessage =
+          role === 'assistant' || (role === 'user' && projectUserMessages);
+        if (!shouldProjectMessage) {
+          currentMessageId = null;
+          break;
+        }
         fallbackIndex += 1;
         currentMessageId = resolveProjectedMessageId(executionId, event.message, fallbackIndex);
-        const role = getMessageRole(event.message);
         if (role === 'assistant' || role === 'user') {
           mapped.push(asBaseEvent({
             type: EventType.TEXT_MESSAGE_START,
@@ -1545,6 +1589,7 @@ function createPiAgentEventProjector(executionId: string): {
         const detail = event.assistantMessageEvent;
 
         if (detail.type === 'text_delta') {
+          messageIdsWithTextContent.add(messageId);
           mapped.push(asBaseEvent({
             type: EventType.TEXT_MESSAGE_CONTENT,
             messageId,
@@ -1664,11 +1709,21 @@ function createPiAgentEventProjector(executionId: string): {
         if (currentMessageId) {
           const role = getMessageRole(event.message);
           if (role === 'assistant' || role === 'user') {
+            const content = getTextContent(event.message);
+            if (!messageIdsWithTextContent.has(currentMessageId) && content) {
+              messageIdsWithTextContent.add(currentMessageId);
+              mapped.push(asBaseEvent({
+                type: EventType.TEXT_MESSAGE_CONTENT,
+                messageId: currentMessageId,
+                delta: content,
+              }));
+            }
             mapped.push(asBaseEvent({
               type: EventType.TEXT_MESSAGE_END,
               messageId: currentMessageId,
             }));
           }
+          messageIdsWithTextContent.delete(currentMessageId);
         }
         currentMessageId = null;
         break;
@@ -1843,12 +1898,13 @@ export const createPiRuntimeGatewayRuntime = (params: {
     threadId: string,
     requestMessages: readonly AgUiMessage[],
     projectedEvents: readonly BaseEvent[],
+    failureMessage?: string,
   ) => {
     const session =
       !params.updateSession
-        ? params.getSession(threadId)
+        ? applyAgentFailureToSession(params.getSession(threadId), failureMessage)
         : params.updateSession(threadId, (session) => ({
-            ...session,
+            ...applyAgentFailureToSession(session, failureMessage),
             messages: applyProjectedRunEventsToMessages(
               mergeAgUiMessages(session.messages ?? [], requestMessages),
               projectedEvents,
@@ -1888,7 +1944,9 @@ export const createPiRuntimeGatewayRuntime = (params: {
       syncAgentSessionId(request.threadId);
       const initialSession = normalizeSharedStateSession(params.getSession(request.threadId));
       const executionId = initialSession.execution.id;
-      const projector = createPiAgentEventProjector(executionId);
+      const projector = createPiAgentEventProjector(`${executionId}:${request.runId}`, {
+        projectUserMessages: (request.messages?.length ?? 0) === 0,
+      });
       const projectedRunEvents: BaseEvent[] = [];
       const requestMessages = request.messages ?? [];
       const resumePayload = request.forwardedProps?.command?.resume;
@@ -2095,7 +2153,13 @@ export const createPiRuntimeGatewayRuntime = (params: {
             await params.agent.continue();
           }
 
-          const session = await persistRunTranscript(request.threadId, requestMessages, projectedRunEvents);
+          const failureMessage = getAgentFailureMessage(params.agent);
+          const session = await persistRunTranscript(
+            request.threadId,
+            requestMessages,
+            projectedRunEvents,
+            failureMessage,
+          );
           logPiGatewayDebug('run session after transcript persist', session);
           const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEvent({
             previousSession: requestSession,

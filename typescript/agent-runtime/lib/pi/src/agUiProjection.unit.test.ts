@@ -353,6 +353,140 @@ describe('pi AG-UI projection', () => {
     ]);
   });
 
+  it('backfills final assistant text from message_end when no text delta was streamed', () => {
+    const startedAssistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: 2,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const completedAssistantMessage = {
+      ...startedAssistantMessage,
+      content: [{ type: 'text', text: 'Final assistant reply.' }],
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    expect(
+      mapPiAgentEventsToAgUiEvents({
+        executionId: 'exec-2',
+        events: [
+          { type: 'message_start', message: startedAssistantMessage },
+          { type: 'message_end', message: completedAssistantMessage },
+        ],
+      }),
+    ).toEqual([
+      {
+        type: EventType.TEXT_MESSAGE_START,
+        messageId: 'pi:exec-2:assistant:2',
+        role: 'assistant',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        messageId: 'pi:exec-2:assistant:2',
+        delta: 'Final assistant reply.',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_END,
+        messageId: 'pi:exec-2:assistant:2',
+      },
+    ]);
+  });
+
+  it('surfaces assistant error text from message_end when provider output failed before any text delta', () => {
+    const failedAssistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openrouter',
+      model: 'openai/gpt-5.4',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'error',
+      errorMessage: 'Key limit exceeded (monthly limit).',
+      timestamp: 4,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    expect(
+      mapPiAgentEventsToAgUiEvents({
+        executionId: 'exec-4',
+        events: [
+          { type: 'message_start', message: failedAssistantMessage },
+          { type: 'message_end', message: failedAssistantMessage },
+        ],
+      }),
+    ).toEqual([
+      {
+        type: EventType.TEXT_MESSAGE_START,
+        messageId: 'pi:exec-4:assistant:4',
+        role: 'assistant',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        messageId: 'pi:exec-4:assistant:4',
+        delta: 'Key limit exceeded (monthly limit).',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_END,
+        messageId: 'pi:exec-4:assistant:4',
+      },
+    ]);
+  });
+
+  it('backfills final user text from message_end when no text delta was streamed', () => {
+    const startedUserMessage = {
+      role: 'user',
+      content: '',
+      timestamp: 3,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const completedUserMessage = {
+      ...startedUserMessage,
+      content: 'Refresh your runtime state and tell me what you see.',
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    expect(
+      mapPiAgentEventsToAgUiEvents({
+        executionId: 'exec-3',
+        events: [
+          { type: 'message_start', message: startedUserMessage },
+          { type: 'message_end', message: completedUserMessage },
+        ],
+      }),
+    ).toEqual([
+      {
+        type: EventType.TEXT_MESSAGE_START,
+        messageId: 'pi:exec-3:user:3',
+        role: 'user',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        messageId: 'pi:exec-3:user:3',
+        delta: 'Refresh your runtime state and tell me what you see.',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_END,
+        messageId: 'pi:exec-3:user:3',
+      },
+    ]);
+  });
+
   it('projects A2UI payloads into activity dispatch events', () => {
     expect(
       buildPiA2UiActivityEvent({
