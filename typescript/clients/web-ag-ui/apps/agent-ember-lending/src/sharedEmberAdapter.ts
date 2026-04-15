@@ -2093,13 +2093,11 @@ function inferIntentFromActionSummary(value: unknown): string | null {
 function inferIntentFromControlPath(controlPath: string | null): string | null {
   switch (controlPath) {
     case 'lending.withdraw':
-    case 'vault.withdraw':
     case 'lending.repay':
       return 'decrease';
     case 'lending.borrow':
       return 'increase';
     case 'lending.supply':
-    case 'vault.deposit':
       return 'position.enter';
     default:
       return null;

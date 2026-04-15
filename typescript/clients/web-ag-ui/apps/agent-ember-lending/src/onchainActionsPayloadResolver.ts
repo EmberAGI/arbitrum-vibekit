@@ -277,16 +277,12 @@ function createDefaultExecutionPublicClientResolver(
 function resolveLendingOperation(controlPath: string): LendingOperation {
   switch (controlPath.trim().toLowerCase()) {
     case 'lending.supply':
-    case 'vault.deposit':
       return 'supply';
     case 'lending.withdraw':
-    case 'vault.withdraw':
       return 'withdraw';
     case 'lending.borrow':
-    case 'vault.borrow':
       return 'borrow';
     case 'lending.repay':
-    case 'vault.repay':
       return 'repay';
     default:
       throw new Error(`Unsupported lending control path "${controlPath}".`);

@@ -255,7 +255,7 @@ function createBaseSharedEmberExecutionSeed() {
         agent_id: TEST_EMBER_LENDING_AGENT_ID,
         owner_id: 'user_idle',
         purpose: 'unwind',
-        control_path: 'vault.withdraw',
+        control_path: 'lending.withdraw',
         unit_allocations: [
           {
             unit_id: 'unit-ember-lending-001',
@@ -309,7 +309,7 @@ function createBaseSharedEmberExecutionSeed() {
         status: 'active',
         reservation_ids: ['reservation-ember-lending-001'],
         unit_ids: ['unit-ember-lending-001'],
-        control_paths: ['vault.deposit'],
+        control_paths: ['lending.withdraw'],
         network: 'arbitrum',
         issued_at: '2026-04-01T06:00:00Z',
         activated_at: '2026-04-01T06:00:05Z',
@@ -327,7 +327,7 @@ function createBaseSharedEmberExecutionSeed() {
         policy_snapshot_ref: 'pol-ember-lending-001',
         agent_id: TEST_EMBER_LENDING_AGENT_ID,
         network: 'arbitrum',
-        control_paths: ['vault.withdraw'],
+        control_paths: ['lending.withdraw'],
         unit_bounds: [
           {
             unit_id: 'unit-ember-lending-001',
@@ -395,7 +395,7 @@ function createSubagentRuntime() {
   const executionPayload: HarnessExecutionPayloadArtifact = {
     action: 'raw',
     transaction_payload_ref: 'txpayload-handoff-ember-lending-int-001',
-    required_control_path: 'vault.withdraw',
+    required_control_path: 'lending.withdraw',
     network: 'arbitrum',
     target: '0x00000000000000000000000000000000000000c1',
     callData: '0xdeadbeef',
@@ -454,7 +454,7 @@ function createSubagentRuntime() {
               wallet_address: TEST_EMBER_LENDING_AGENT_WALLET,
               quantity: '10',
               position_kind: 'loan' as const,
-              control_path: 'vault.withdraw' as const,
+              control_path: 'lending.withdraw' as const,
               benchmark_value: '10',
               valuation_ref: 'val-ember-lending-successor-001',
               metadata: {
@@ -481,7 +481,7 @@ function createSubagentRuntime() {
               wallet_address: TEST_EMBER_LENDING_AGENT_WALLET,
               quantity: '10',
               position_kind: 'loan' as const,
-              control_path: 'vault.withdraw' as const,
+              control_path: 'lending.withdraw' as const,
               benchmark_value: '10',
               valuation_ref: 'val-ember-lending-successor-001',
               metadata: {

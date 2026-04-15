@@ -119,13 +119,13 @@ function createManagedLifecycleState() {
         {
           reservation_id: 'reservation-ember-lending-001',
           purpose: 'unwind',
-          control_path: 'vault.withdraw',
+          control_path: 'lending.withdraw',
         },
       ],
     },
     lastSharedEmberRevision: 0,
     lastReservationSummary:
-      'Reservation reservation-ember-lending-001 unwinds 10 USDC via vault.withdraw.',
+      'Reservation reservation-ember-lending-001 unwinds 10 USDC via lending.withdraw.',
     lastCandidatePlan: null,
     lastCandidatePlanSummary: null,
     anchoredPayloadRecords: [],
@@ -154,7 +154,7 @@ function createCandidatePlanInput() {
       accounting_state_summary:
         'the reserved unit remains associated with the current delegation',
       why_this_path_is_best:
-        'vault.withdraw is the direct path to unwind the managed position',
+        'lending.withdraw is the direct path to unwind the managed position',
       consequence_if_delayed: 'the capital remains trapped in the active position',
       alternatives_considered: ['wait for a later retry'],
     },
