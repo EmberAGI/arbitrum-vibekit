@@ -596,6 +596,7 @@ const PORTFOLIO_MANAGER_PROTOCOL_SOURCE = 'onboarding_scan';
 const PORTFOLIO_MANAGER_DEFAULT_RISK_LEVEL = 'medium';
 const PORTFOLIO_MANAGER_ACTIVATION_PURPOSE = 'position.enter';
 const FIRST_MANAGED_AGENT_TYPE = 'ember-lending';
+const FIRST_MANAGED_AGENT_PROTOCOL_SYSTEM = 'aave';
 const FIRST_MANAGED_AGENT_ALLOCATION_MODE = 'allocable_idle';
 const FIRST_MANAGED_AGENT_ONBOARDING_CONTROL_PATH = 'lending.supply';
 const FIRST_MANAGED_AGENT_KEY = 'ember-lending-primary';
@@ -623,6 +624,7 @@ type ManagedMandate = {
   allowed_assets: string[];
   asset_intent: {
     root_asset: string;
+    protocol_system: typeof FIRST_MANAGED_AGENT_PROTOCOL_SYSTEM;
     network: typeof PORTFOLIO_MANAGER_NETWORK;
     benchmark_asset: string;
     intent: typeof PORTFOLIO_MANAGER_ACTIVATION_PURPOSE;
@@ -757,6 +759,7 @@ function readManagedMandate(input: unknown): ManagedMandate | null {
   const allowedAssets = input['allowed_assets'];
   const assetIntent = isRecord(input['asset_intent']) ? input['asset_intent'] : null;
   const rootAsset = readString(assetIntent?.['root_asset']);
+  const protocolSystem = readString(assetIntent?.['protocol_system']);
   const network = readString(assetIntent?.['network']);
   const benchmarkAsset = readString(assetIntent?.['benchmark_asset']);
   const intent = readString(assetIntent?.['intent']);
@@ -766,6 +769,7 @@ function readManagedMandate(input: unknown): ManagedMandate | null {
     allocationBasis !== FIRST_MANAGED_AGENT_ALLOCATION_MODE ||
     !isNonEmptyStringArray(allowedAssets) ||
     rootAsset === null ||
+    protocolSystem !== FIRST_MANAGED_AGENT_PROTOCOL_SYSTEM ||
     network !== PORTFOLIO_MANAGER_NETWORK ||
     benchmarkAsset === null ||
     intent !== PORTFOLIO_MANAGER_ACTIVATION_PURPOSE ||
@@ -779,6 +783,7 @@ function readManagedMandate(input: unknown): ManagedMandate | null {
     allowed_assets: allowedAssets,
     asset_intent: {
       root_asset: rootAsset,
+      protocol_system: FIRST_MANAGED_AGENT_PROTOCOL_SYSTEM,
       network: PORTFOLIO_MANAGER_NETWORK,
       benchmark_asset: benchmarkAsset,
       intent: PORTFOLIO_MANAGER_ACTIVATION_PURPOSE,

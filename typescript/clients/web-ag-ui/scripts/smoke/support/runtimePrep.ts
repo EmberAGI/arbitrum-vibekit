@@ -20,6 +20,12 @@ type StartedAgUiServer = StartedServer & {
 };
 
 type StartedChildProcessServer = StartedServer;
+type SharedEmberReferenceBootstrap = Record<string, unknown>;
+type ResolveManagedSharedEmberBootstrapDependencies = {
+  resolveReferenceBootstrap?: () => Promise<SharedEmberReferenceBootstrap>;
+  createManagedOnboardingIssuers?: typeof maybeCreateManagedOnboardingIssuers;
+  createSubagentRuntimes?: typeof maybeCreateSubagentRuntimes;
+};
 
 const DEFAULT_MANAGED_AGENT_ID = 'ember-lending';
 const DEFAULT_OWS_CHAIN = 'evm';
@@ -547,6 +553,19 @@ async function maybeCreateSubagentRuntimes(input: {
       rpcUrl: string;
       fetchImpl?: typeof fetch;
     }) => unknown;
+    createObservedSubmissionExecutor: (input: {
+      signerAddress: string;
+      signedPayloadRefPrefix?: string;
+    }) => {
+      signDelegatedPayload(input: {
+        request: {
+          request_id: string;
+        };
+      }): Promise<{
+        signedPayloadRef: string;
+        signerAddress: string;
+      }>;
+    };
     createInMemoryPayloadArtifactStore: (input: {
       executionPayloads?: unknown[];
       signedPayloads?: unknown[];
@@ -597,6 +616,10 @@ async function maybeCreateSubagentRuntimes(input: {
   const payloadStore = domainModules.createInMemoryPayloadArtifactStore({
     executionPayloads: [],
   });
+  const executor = domainModules.createObservedSubmissionExecutor({
+    signerAddress: agentWallet,
+    signedPayloadRefPrefix: `managed-shared-ember-${input.managedAgentId}`,
+  });
   const submissionBackend = domainModules.createJsonRpcSignedTransactionSubmissionBackend({
     rpcClient,
     maxReceiptPollAttempts: 8,
@@ -604,9 +627,16 @@ async function maybeCreateSubagentRuntimes(input: {
       await new Promise((resolve) => setTimeout(resolve, 2_000));
     },
     settlementProjector: {
-      async projectConfirmedExecution({ request, sourceUnits, executionId, transactionHash }) {
+      async projectConfirmedExecution({
+        request,
+        transactionPlan,
+        sourceUnits,
+        executionId,
+        transactionHash,
+      }) {
         return accountingModule.projectLendingExecutionSuccessorPlans({
           request,
+          transactionPlan,
           sourceUnits: sourceUnits ?? [],
           executionId,
           transactionHash,
@@ -627,6 +657,7 @@ async function maybeCreateSubagentRuntimes(input: {
           );
         },
       },
+      executor,
       chainAdapter: {
         async submitSignedPayload() {
           throw new Error(
@@ -667,45 +698,89 @@ export async function startManagedSharedEmberHarness(input: {
       ),
     ).href
   )) as {
-    resolveSharedEmberReferenceBootstrapFromEnv: () => Record<string, unknown>;
+    resolveSharedEmberReferenceBootstrapFromEnv: () => Promise<SharedEmberReferenceBootstrap>;
   };
 
-  const bootstrap = bootstrapModule.resolveSharedEmberReferenceBootstrapFromEnv();
-  const managedOnboardingIssuers = await maybeCreateManagedOnboardingIssuers({
-    specRoot: input.specRoot,
-    vibekitRoot: input.vibekitRoot,
-    managedAgentId,
-  });
-  const subagentRuntimes = await maybeCreateSubagentRuntimes({
-    specRoot: input.specRoot,
-    vibekitRoot: input.vibekitRoot,
-    managedAgentId,
-  });
+  const bootstrap = await resolveManagedSharedEmberBootstrap(
+    {
+      specRoot: input.specRoot,
+      vibekitRoot: input.vibekitRoot,
+      managedAgentId,
+    },
+    {
+      resolveReferenceBootstrap: () =>
+        bootstrapModule.resolveSharedEmberReferenceBootstrapFromEnv(),
+    },
+  );
 
   return harnessModule.startRepoLocalSharedEmberDomainProtocolHttpServer({
-    bootstrap: {
-      ...bootstrap,
-      ...(managedOnboardingIssuers === undefined
-        ? {}
-        : {
-            managedOnboardingIssuers: {
-              ...((bootstrap.managedOnboardingIssuers as Record<string, unknown> | undefined) ??
-                {}),
-              ...managedOnboardingIssuers,
-            },
-          }),
-      ...(subagentRuntimes === undefined
-        ? {}
-        : {
-            subagentRuntimes: {
-              ...((bootstrap.subagentRuntimes as Record<string, unknown> | undefined) ?? {}),
-              ...subagentRuntimes,
-            },
-          }),
-    },
+    bootstrap,
     host,
     port,
   });
+}
+
+export async function resolveManagedSharedEmberBootstrap(
+  input: {
+    specRoot: string;
+    vibekitRoot: string;
+    managedAgentId?: string;
+  },
+  dependencies: ResolveManagedSharedEmberBootstrapDependencies = {},
+): Promise<SharedEmberReferenceBootstrap> {
+  const managedAgentId = input.managedAgentId ?? DEFAULT_MANAGED_AGENT_ID;
+  const bootstrap = await (
+    dependencies.resolveReferenceBootstrap ??
+    (async () => {
+      const bootstrapModule = (await import(
+        pathToFileURL(
+          path.join(
+            input.specRoot,
+            'packages/orchestration-domain-integration/src/reference-server-bootstrap.ts',
+          ),
+        ).href
+      )) as {
+        resolveSharedEmberReferenceBootstrapFromEnv: () => Promise<SharedEmberReferenceBootstrap>;
+      };
+
+      return bootstrapModule.resolveSharedEmberReferenceBootstrapFromEnv();
+    })
+  )();
+  const managedOnboardingIssuers = await (
+    dependencies.createManagedOnboardingIssuers ?? maybeCreateManagedOnboardingIssuers
+  )({
+    specRoot: input.specRoot,
+    vibekitRoot: input.vibekitRoot,
+    managedAgentId,
+  });
+  const subagentRuntimes = await (
+    dependencies.createSubagentRuntimes ?? maybeCreateSubagentRuntimes
+  )({
+    specRoot: input.specRoot,
+    vibekitRoot: input.vibekitRoot,
+    managedAgentId,
+  });
+
+  return {
+    ...bootstrap,
+    ...(managedOnboardingIssuers === undefined
+      ? {}
+      : {
+          managedOnboardingIssuers: {
+            ...((bootstrap.managedOnboardingIssuers as Record<string, unknown> | undefined) ??
+              {}),
+            ...managedOnboardingIssuers,
+          },
+        }),
+    ...(subagentRuntimes === undefined
+      ? {}
+      : {
+          subagentRuntimes: {
+            ...((bootstrap.subagentRuntimes as Record<string, unknown> | undefined) ?? {}),
+            ...subagentRuntimes,
+          },
+        }),
+  };
 }
 
 async function readRequestBody(request: http.IncomingMessage): Promise<Buffer> {

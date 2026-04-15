@@ -23,6 +23,7 @@ export async function preparePortfolioManagerServer(
   const service = await (options.createService ?? createPortfolioManagerGatewayService)({
     env,
   });
+  await service.control.inspectHealth();
 
   return {
     port: Number.parseInt(env.PORT ?? '3420', 10),

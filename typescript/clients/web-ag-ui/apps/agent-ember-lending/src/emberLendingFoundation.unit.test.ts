@@ -26,6 +26,12 @@ describe('createEmberLendingAgentConfig', () => {
     expect(config.systemPrompt).toContain(
       'Reason from mandate_summary, wallet_contents, active_position_scopes, market_state, and current_candidate_plan',
     );
+    expect(config.systemPrompt).toContain(
+      'wallet_contents and active_position_scopes describe the rooted user wallet context',
+    );
+    expect(config.systemPrompt).toContain(
+      'not balances held in subagent_wallet_address',
+    );
     expect(config.systemPrompt).toContain('lending.borrow');
     expect(config.systemPrompt).toContain('lending.supply adds collateral');
     expect(config.systemPrompt).toContain('lending.withdraw removes collateral');

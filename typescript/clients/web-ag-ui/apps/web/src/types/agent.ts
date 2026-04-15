@@ -259,6 +259,7 @@ export interface ManagedMandateInput {
   allowed_assets: string[];
   asset_intent: {
     root_asset: string;
+    protocol_system: 'aave';
     network: 'arbitrum';
     benchmark_asset: 'USD';
     intent: 'position.enter';

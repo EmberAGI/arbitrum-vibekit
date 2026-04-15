@@ -85,7 +85,35 @@ function createAgentServiceIdentityResponse(input: {
   };
 }
 
-function createPortfolioManagerSetupInput() {
+type PortfolioManagerSetupInputFixture = {
+  walletAddress: `0x${string}`;
+  portfolioMandate: {
+    approved: true;
+    riskLevel: 'medium';
+  };
+  firstManagedMandate: {
+    targetAgentId: 'ember-lending';
+    targetAgentKey: string;
+    mandateSummary: string;
+    managedMandate: {
+      allocation_basis: 'allocable_idle';
+      allowed_assets: string[];
+      asset_intent: {
+        root_asset: string;
+        protocol_system: 'aave';
+        network: 'arbitrum';
+        benchmark_asset: string;
+        intent: 'position.enter';
+        control_path: 'lending.supply';
+      };
+    };
+  };
+};
+
+type ManagedMandateFixture =
+  PortfolioManagerSetupInputFixture['firstManagedMandate']['managedMandate'];
+
+function createPortfolioManagerSetupInput(): PortfolioManagerSetupInputFixture {
   return {
     walletAddress: '0x00000000000000000000000000000000000000a1' as const,
     portfolioMandate: {
@@ -101,6 +129,7 @@ function createPortfolioManagerSetupInput() {
         allowed_assets: ['USDC'],
         asset_intent: {
           root_asset: 'USDC',
+          protocol_system: 'aave' as const,
           network: 'arbitrum' as const,
           benchmark_asset: 'USD',
           intent: 'position.enter' as const,
@@ -136,6 +165,7 @@ function createOnboardingBootstrap() {
               allowed_assets: ['USDC'],
               asset_intent: {
                 root_asset: 'USDC',
+                protocol_system: 'aave',
                 network: 'arbitrum',
                 benchmark_asset: 'USD',
                 intent: 'position.enter',
@@ -162,6 +192,7 @@ function createOnboardingBootstrap() {
           allowed_assets: ['USDC'],
           asset_intent: {
             root_asset: 'USDC',
+            protocol_system: 'aave',
             network: 'arbitrum',
             benchmark_asset: 'USD',
             intent: 'position.enter',
@@ -201,6 +232,7 @@ function createLiveManagedAgentPortfolioState() {
       allowed_assets: ['USDC', 'USDT'],
       asset_intent: {
         root_asset: 'USDC',
+        protocol_system: 'aave',
         network: 'arbitrum',
         benchmark_asset: 'USD',
         intent: 'position.enter',
@@ -235,12 +267,13 @@ function createUpdatedManagedMandate() {
     allowed_assets: ['USDC', 'DAI'],
     asset_intent: {
       root_asset: 'USDC',
+      protocol_system: 'aave' as const,
       network: 'arbitrum',
       benchmark_asset: 'USD',
       intent: 'position.enter',
       control_path: 'lending.supply',
     },
-  };
+  } satisfies ManagedMandateFixture;
 }
 
 describe('createPortfolioManagerDomain', () => {
@@ -619,6 +652,7 @@ describe('createPortfolioManagerDomain', () => {
                       allowed_assets: ['USDC'],
                       asset_intent: {
                         root_asset: 'USDC',
+                        protocol_system: 'aave',
                         network: 'arbitrum',
                         benchmark_asset: 'USD',
                         intent: 'position.enter',
@@ -660,6 +694,7 @@ describe('createPortfolioManagerDomain', () => {
                   allowed_assets: ['USDC'],
                   asset_intent: {
                     root_asset: 'USDC',
+                    protocol_system: 'aave',
                     network: 'arbitrum',
                     benchmark_asset: 'USD',
                     intent: 'position.enter',

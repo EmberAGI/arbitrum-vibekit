@@ -20,6 +20,7 @@ describe('resolvePortfolioManagerAccountingAgentId', () => {
               allowed_assets: ['USDC'],
               asset_intent: {
                 root_asset: 'USDC',
+                protocol_system: 'aave',
                 network: 'arbitrum',
                 benchmark_asset: 'USD',
                 intent: 'position.enter',

@@ -1437,6 +1437,15 @@ function appendCurrentCandidatePlanXml(input: {
   input.lines.push('  </current_candidate_plan>');
 }
 
+function appendWalletOwnershipGuidanceXml(lines: string[]): void {
+  lines.push(
+    '  <portfolio_scope_guidance>wallet_contents and active_position_scopes describe rooted user wallet context, not balances held in subagent_wallet_address.</portfolio_scope_guidance>',
+  );
+  lines.push(
+    '  <subagent_wallet_guidance>subagent_wallet_address is the dedicated execution wallet and only reflects balances explicitly surfaced for that wallet.</subagent_wallet_guidance>',
+  );
+}
+
 function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): string[] {
   const lines = ['<ember_lending_execution_context freshness="cached">'];
   lines.push(`  <generated_at>${escapeXml(new Date().toISOString())}</generated_at>`);
@@ -1464,6 +1473,7 @@ function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): st
       `  <root_user_wallet_address>${state.rootUserWalletAddress}</root_user_wallet_address>`,
     );
   }
+  appendWalletOwnershipGuidanceXml(lines);
 
   appendCurrentCandidatePlanXml({
     lines,
@@ -1536,6 +1546,7 @@ function buildSharedEmberExecutionContextXml(
       `  <root_user_wallet_address>${rootUserWalletAddress}</root_user_wallet_address>`,
     );
   }
+  appendWalletOwnershipGuidanceXml(lines);
 
   lines.push(`  <network>${escapeXml(network)}</network>`);
   appendCurrentCandidatePlanXml({
@@ -3454,7 +3465,7 @@ export function createEmberLendingDomain(
         {
           name: 'create_transaction',
           description:
-            'Create or refresh a candidate transaction plan for the managed lending position. Reason from mandate_summary, wallet_contents, active_position_scopes, and the current candidate plan. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with control_path, asset, protocol_system, network, and quantity. quantity must be either { "kind": "exact", "value": "1.25" } using asset-unit decimal strings or { "kind": "percent", "value": 50 } using percent of the relevant base for that action. asset is the actionable observed asset; active_position_scopes expose economic_exposures when the asset is a wrapper or synthetic token.',
+            'Create or refresh a candidate transaction plan for the managed lending position. Reason from mandate_summary, wallet_contents, active_position_scopes, and the current candidate plan. wallet_contents and active_position_scopes describe rooted user wallet context, not balances held in subagent_wallet_address. subagent_wallet_address is the dedicated execution wallet and only reflects balances explicitly surfaced for that wallet. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with control_path, asset, protocol_system, network, and quantity. quantity must be either { "kind": "exact", "value": "1.25" } using asset-unit decimal strings or { "kind": "percent", "value": 50 } using percent of the relevant base for that action. asset is the actionable observed asset; active_position_scopes expose economic_exposures when the asset is a wrapper or synthetic token.',
         },
         {
           name: 'request_execution',

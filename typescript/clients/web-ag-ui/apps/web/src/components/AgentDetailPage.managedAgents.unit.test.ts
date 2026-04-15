@@ -32,6 +32,7 @@ function createManagedMandateEditorProjection(overrides: Record<string, unknown>
         allowed_assets: ['USDC', 'WETH'],
         asset_intent: {
           root_asset: 'USDC',
+          protocol_system: 'aave',
           network: 'arbitrum',
           benchmark_asset: 'USD',
           intent: 'position.enter',
@@ -181,6 +182,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
           allowed_assets: ['WETH'],
           asset_intent: {
             root_asset: 'WETH',
+            protocol_system: 'aave',
             network: 'arbitrum',
             benchmark_asset: 'USD',
             intent: 'position.enter',

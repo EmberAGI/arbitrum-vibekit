@@ -142,6 +142,7 @@ describe('AgentDetailPage portfolio-manager setup', () => {
           allowed_assets: ['WETH', 'USDC'],
           asset_intent: {
             root_asset: 'WETH',
+            protocol_system: 'aave',
             network: 'arbitrum',
             benchmark_asset: 'USD',
             intent: 'position.enter',

@@ -940,6 +940,8 @@ describe('createEmberLendingDomain', () => {
     expect(createTransactionPlan?.description).toContain('asset-unit decimal strings');
     expect(createTransactionPlan?.description).toContain('actionable observed asset');
     expect(createTransactionPlan?.description).toContain('economic_exposures');
+    expect(createTransactionPlan?.description).toContain('rooted user wallet context');
+    expect(createTransactionPlan?.description).toContain('not balances held in subagent_wallet_address');
 
     const requestExecution = domain.lifecycle.commands.find(
       (command) => command.name === 'request_execution',
@@ -1128,6 +1130,8 @@ describe('createEmberLendingDomain', () => {
         '  <mandate_summary>lend USDC on Aave within medium-risk allocation and health-factor guardrails</mandate_summary>',
         '  <subagent_wallet_address>0x00000000000000000000000000000000000000b1</subagent_wallet_address>',
         '  <root_user_wallet_address>0x00000000000000000000000000000000000000a1</root_user_wallet_address>',
+        '  <portfolio_scope_guidance>wallet_contents and active_position_scopes describe rooted user wallet context, not balances held in subagent_wallet_address.</portfolio_scope_guidance>',
+        '  <subagent_wallet_guidance>subagent_wallet_address is the dedicated execution wallet and only reflects balances explicitly surfaced for that wallet.</subagent_wallet_guidance>',
         '  <network>arbitrum</network>',
         '  <active_position_scopes>',
         '    <active_position_scope scope_id="position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1">',

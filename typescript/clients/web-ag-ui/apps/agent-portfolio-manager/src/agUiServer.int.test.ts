@@ -191,6 +191,7 @@ function createPortfolioManagerSetupInput() {
         allowed_assets: ['USDC'],
         asset_intent: {
           root_asset: 'USDC',
+          protocol_system: 'aave',
           network: 'arbitrum',
           benchmark_asset: 'USD',
           intent: 'position.enter',
@@ -698,21 +699,22 @@ describe('agent-portfolio-manager AG-UI integration', () => {
                 agent_id: 'portfolio-manager',
                 managed_mandate: null,
               }),
-              expect.objectContaining({
-                agent_id: 'ember-lending',
-                managed_mandate: {
-                  allocation_basis: 'allocable_idle',
-                  allowed_assets: ['USDC'],
-                  asset_intent: {
-                    root_asset: 'USDC',
-                    network: 'arbitrum',
-                    benchmark_asset: 'USD',
-                    intent: 'position.enter',
-                    control_path: 'lending.supply',
-                  },
-                },
-              }),
-            ]),
+	              expect.objectContaining({
+	                agent_id: 'ember-lending',
+	                managed_mandate: {
+	                  allocation_basis: 'allocable_idle',
+	                  allowed_assets: ['USDC'],
+	                  asset_intent: {
+	                    root_asset: 'USDC',
+	                    network: 'arbitrum',
+	                    benchmark_asset: 'USD',
+	                    intent: 'position.enter',
+	                    control_path: 'lending.supply',
+	                    protocol_system: 'aave',
+	                  },
+	                },
+	              }),
+	            ]),
             activation: {
               mandateRef: expect.stringContaining('mandate-'),
             },

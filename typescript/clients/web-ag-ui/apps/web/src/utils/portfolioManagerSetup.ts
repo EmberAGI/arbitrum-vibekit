@@ -16,14 +16,15 @@ const DEFAULT_PORTFOLIO_MANAGER_SETUP = {
     targetAgentId: 'ember-lending',
     targetAgentKey: 'ember-lending-primary',
     mandateSummary: buildManagedMandateSummary([DEFAULT_MANAGED_MANDATE_ROOT_ASSET]),
-    managedMandate: {
-      allocation_basis: 'allocable_idle',
-      allowed_assets: [DEFAULT_MANAGED_MANDATE_ROOT_ASSET],
-      asset_intent: {
-        root_asset: DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
-        network: 'arbitrum',
-        benchmark_asset: 'USD',
-        intent: 'position.enter',
+      managedMandate: {
+        allocation_basis: 'allocable_idle',
+        allowed_assets: [DEFAULT_MANAGED_MANDATE_ROOT_ASSET],
+        asset_intent: {
+          root_asset: DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
+          protocol_system: 'aave',
+          network: 'arbitrum',
+          benchmark_asset: 'USD',
+          intent: 'position.enter',
         control_path: 'lending.supply',
       },
     },
@@ -61,6 +62,8 @@ export function buildPortfolioManagerSetupInput(
         allowed_assets: normalizedAllowedAssets,
         asset_intent: {
           root_asset: normalizedRootAsset,
+          protocol_system:
+            DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.managedMandate.asset_intent.protocol_system,
           network:
             DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.managedMandate.asset_intent.network,
           benchmark_asset:

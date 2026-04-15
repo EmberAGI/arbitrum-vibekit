@@ -25,6 +25,7 @@ export async function prepareEmberLendingServer(
   const service = await (options.createService ?? createEmberLendingGatewayService)({
     env,
   });
+  await service.control.inspectHealth();
 
   return {
     port: Number.parseInt(env.PORT ?? '3430', 10),

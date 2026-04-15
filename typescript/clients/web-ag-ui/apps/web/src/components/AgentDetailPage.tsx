@@ -574,6 +574,8 @@ function ManagedMandateEditorCard(props: {
   }, [initialAllowedAssetsValue, initialRootAsset, props.view.mandateRef]);
 
   const assetIntent = asRecord(props.view.managedMandate?.['asset_intent']);
+  const protocolSystem: ManagedMandateInput['asset_intent']['protocol_system'] =
+    assetIntent?.['protocol_system'] === 'aave' ? 'aave' : 'aave';
   const network: ManagedMandateInput['asset_intent']['network'] =
     assetIntent?.['network'] === 'arbitrum' ? 'arbitrum' : 'arbitrum';
   const controlPath: ManagedMandateInput['asset_intent']['control_path'] =
@@ -622,6 +624,7 @@ function ManagedMandateEditorCard(props: {
           allowed_assets: normalizedAllowedAssets,
           asset_intent: {
             root_asset: normalizedRootAsset,
+            protocol_system: protocolSystem,
             network,
             benchmark_asset: benchmarkAsset,
             intent,

@@ -49,6 +49,7 @@ function createPortfolioManagerSetupInput(walletAddress: `0x${string}`) {
         allowed_assets: ['USDC'],
         asset_intent: {
           root_asset: 'USDC',
+          protocol_system: 'aave',
           network: 'arbitrum' as const,
           benchmark_asset: 'USD',
           intent: 'position.enter' as const,
@@ -97,11 +98,12 @@ function createOnboardingBootstrap() {
         managed_mandate: {
           allocation_basis: 'allocable_idle',
           allowed_assets: ['USDC'],
-          asset_intent: {
-            root_asset: 'USDC',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            intent: 'position.enter',
+        asset_intent: {
+          root_asset: 'USDC',
+          protocol_system: 'aave',
+          network: 'arbitrum',
+          benchmark_asset: 'USD',
+          intent: 'position.enter',
             control_path: 'lending.supply',
           },
         },
