@@ -8,6 +8,7 @@ import {
   type StateDeltaEvent,
   type StateSnapshotEvent,
 } from '@ag-ui/core';
+import { createRequire } from 'node:module';
 import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
 import {
   createAssistantMessageEventStream,
@@ -34,8 +35,6 @@ import {
   type PiThreadRecord,
   type PostgresBootstrapPlan,
 } from 'agent-runtime-postgres';
-import { applyPatch as jsonPatchApply } from 'fast-json-patch/module/core.mjs';
-import { compare as jsonPatchCompare } from 'fast-json-patch/module/duplex.mjs';
 
 import { type TaskState } from './taskState.js';
 import { mergeThreadPatchForEmit } from './threadEmission.js';
@@ -262,6 +261,41 @@ const EMPTY_USAGE = {
     total: 0,
   },
 } as const;
+
+type JsonPatchCompare = (
+  left: object,
+  right: object,
+  invertible?: boolean,
+) => Array<Record<string, unknown>>;
+
+type JsonPatchApply = <T>(
+  document: T,
+  patch: ReadonlyArray<Record<string, unknown>>,
+  validateOperation?: boolean,
+  mutateDocument?: boolean,
+  banPrototypeModifications?: boolean,
+) => {
+  newDocument: T;
+};
+
+type JsonPatchModule = {
+  compare?: JsonPatchCompare;
+  applyPatch?: JsonPatchApply;
+  default?: JsonPatchModule;
+  'module.exports'?: JsonPatchModule;
+};
+
+const require = createRequire(import.meta.url);
+const jsonPatchModule = require('fast-json-patch') as JsonPatchModule;
+
+const resolveJsonPatchCompare = (module: JsonPatchModule | undefined): JsonPatchCompare | undefined =>
+  module?.compare ?? module?.default?.compare ?? module?.['module.exports']?.compare;
+
+const resolveJsonPatchApply = (module: JsonPatchModule | undefined): JsonPatchApply | undefined =>
+  module?.applyPatch ?? module?.default?.applyPatch ?? module?.['module.exports']?.applyPatch;
+
+const jsonPatchCompare = resolveJsonPatchCompare(jsonPatchModule);
+const jsonPatchApply = resolveJsonPatchApply(jsonPatchModule);
 
 type PiRuntimeGatewaySharedStateHydrationReason = 'bootstrap' | 'reconnect';
 type PiRuntimeGatewaySharedStateUpdateAckStatus = 'accepted' | 'noop' | 'rejected';
