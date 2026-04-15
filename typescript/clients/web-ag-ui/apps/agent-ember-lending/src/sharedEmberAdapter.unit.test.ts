@@ -101,6 +101,77 @@ function createManagedLifecycleState() {
     rootedWalletContextId: 'rwc-ember-lending-thread-001',
     lastPortfolioState: {
       agent_id: 'ember-lending',
+      wallet_contents: [
+        {
+          asset: 'USDC',
+          network: 'arbitrum',
+          quantity: '100',
+          value_usd: '100.00',
+        },
+      ],
+      active_position_scopes: [
+        {
+          scope_id:
+            'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
+          kind: 'lending',
+          scope_type_id: 'lending.aave.position',
+          root_user_wallet: '0x00000000000000000000000000000000000000a1',
+          network: 'arbitrum',
+          protocol_system: 'aave',
+          container_ref: 'aave:0x00000000000000000000000000000000000000a1',
+          status: 'active',
+          market_state: {
+            available_borrows_usd: '63.00',
+            borrowable_headroom_usd: '63.00',
+            current_ltv_bps: 3000,
+            liquidation_threshold_bps: 8400,
+            health_factor: '1.42',
+            freshness: {
+              derived_at: '2026-04-01T06:00:00.000Z',
+              oldest_observed_at: '2026-04-01T05:59:00.000Z',
+              latest_observed_at: '2026-04-01T06:00:00.000Z',
+              source_kind: 'valuation_ref',
+            },
+          },
+          members: [
+            {
+              member_id:
+                'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC',
+              role: 'collateral',
+              asset: 'aArbUSDC',
+              quantity: '90',
+              value_usd: '90.00',
+              economic_exposures: [
+                {
+                  asset: 'USDC',
+                  quantity: '90',
+                },
+              ],
+              state: {
+                withdrawable_quantity: '63',
+                supply_apr: '0.03',
+              },
+            },
+            {
+              member_id:
+                'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:debt:USDC',
+              role: 'debt',
+              asset: 'variableDebtArbUSDC',
+              quantity: '27',
+              value_usd: '27.00',
+              economic_exposures: [
+                {
+                  asset: 'USDC',
+                  quantity: '27',
+                },
+              ],
+              state: {
+                borrow_apr: '0.05',
+              },
+            },
+          ],
+        },
+      ],
       owned_units: [
         {
           unit_id: 'unit-ember-lending-001',
@@ -155,6 +226,77 @@ function createPortfolioStateResponse() {
             minHealthFactor: '1.25',
           },
         },
+        wallet_contents: [
+          {
+            asset: 'USDC',
+            network: 'arbitrum',
+            quantity: '100',
+            value_usd: '100.00',
+          },
+        ],
+        active_position_scopes: [
+          {
+            scope_id:
+              'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
+            kind: 'lending',
+            scope_type_id: 'lending.aave.position',
+            root_user_wallet: '0x00000000000000000000000000000000000000a1',
+            network: 'arbitrum',
+            protocol_system: 'aave',
+            container_ref: 'aave:0x00000000000000000000000000000000000000a1',
+            status: 'active',
+            market_state: {
+              available_borrows_usd: '63.00',
+              borrowable_headroom_usd: '63.00',
+              current_ltv_bps: 3000,
+              liquidation_threshold_bps: 8400,
+              health_factor: '1.42',
+              freshness: {
+                derived_at: '2026-04-01T06:00:00.000Z',
+                oldest_observed_at: '2026-04-01T05:59:00.000Z',
+                latest_observed_at: '2026-04-01T06:00:00.000Z',
+                source_kind: 'valuation_ref',
+              },
+            },
+            members: [
+              {
+                member_id:
+                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC',
+                role: 'collateral',
+                asset: 'aArbUSDC',
+                quantity: '90',
+                value_usd: '90.00',
+                economic_exposures: [
+                  {
+                    asset: 'USDC',
+                    quantity: '90',
+                  },
+                ],
+                state: {
+                  withdrawable_quantity: '63',
+                  supply_apr: '0.03',
+                },
+              },
+              {
+                member_id:
+                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:debt:USDC',
+                role: 'debt',
+                asset: 'variableDebtArbUSDC',
+                quantity: '27',
+                value_usd: '27.00',
+                economic_exposures: [
+                  {
+                    asset: 'USDC',
+                    quantity: '27',
+                  },
+                ],
+                state: {
+                  borrow_apr: '0.05',
+                },
+              },
+            ],
+          },
+        ],
         owned_units: [
           {
             unit_id: 'unit-ember-lending-001',
@@ -281,39 +423,65 @@ function createExecutionContextResponse() {
         },
         subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
         root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
-        owned_units: [
+        active_position_scopes: [
           {
-            unit_id: 'unit-unreserved-001',
-            root_asset: 'USDC',
-            amount: '90',
-            status: 'deployed',
-            control_path: 'lending.supply',
-            position_kind: 'loan',
-            protocol_family: 'aave',
-            protocol_position_ref: 'aave-supplied-usdc-001',
-            benchmark_value_usd: '90.00',
-          },
-        ],
-        reservations: [
-          {
-            reservation_id: 'res-ember-lending-withdraw-001',
-            control_path: 'lending.withdraw',
-            purpose: 'refresh withdraw coverage',
-            unit_allocations: [
-              {
-                unit_id: 'unit-unreserved-001',
-                quantity: '90',
+            scope_id:
+              'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
+            kind: 'lending',
+            scope_type_id: 'lending.aave.position',
+            root_user_wallet: '0x00000000000000000000000000000000000000a1',
+            network: 'arbitrum',
+            protocol_system: 'aave',
+            container_ref: 'aave:0x00000000000000000000000000000000000000a1',
+            status: 'active',
+            market_state: {
+              available_borrows_usd: '63.00',
+              borrowable_headroom_usd: '63.00',
+              current_ltv_bps: 3000,
+              liquidation_threshold_bps: 8400,
+              health_factor: '1.42',
+              freshness: {
+                derived_at: '2026-04-01T06:00:00.000Z',
+                oldest_observed_at: '2026-04-01T05:59:00.000Z',
+                latest_observed_at: '2026-04-01T06:00:00.000Z',
+                source_kind: 'valuation_ref',
               },
-            ],
-          },
-          {
-            reservation_id: 'res-ember-lending-borrow-001',
-            control_path: 'lending.borrow',
-            purpose: 'refresh borrow coverage',
-            unit_allocations: [
+            },
+            members: [
               {
-                unit_id: 'unit-unreserved-001',
+                member_id:
+                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC',
+                role: 'collateral',
+                asset: 'aArbUSDC',
                 quantity: '90',
+                value_usd: '90.00',
+                economic_exposures: [
+                  {
+                    asset: 'USDC',
+                    quantity: '90',
+                  },
+                ],
+                state: {
+                  withdrawable_quantity: '63',
+                  supply_apr: '0.03',
+                },
+              },
+              {
+                member_id:
+                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:debt:USDC',
+                role: 'debt',
+                asset: 'variableDebtArbUSDC',
+                quantity: '27',
+                value_usd: '27.00',
+                economic_exposures: [
+                  {
+                    asset: 'USDC',
+                    quantity: '27',
+                  },
+                ],
+                state: {
+                  borrow_apr: '0.05',
+                },
               },
             ],
           },
@@ -321,8 +489,9 @@ function createExecutionContextResponse() {
         wallet_contents: [
           {
             asset: 'USDC',
-            amount: '100',
-            benchmark_value_usd: '100.00',
+            network: 'arbitrum',
+            quantity: '100',
+            value_usd: '100.00',
           },
         ],
       },
@@ -354,13 +523,13 @@ function createExecutionContextResponseWithoutReservations() {
         },
         subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
         root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
-        owned_units: [],
-        reservations: [],
+        active_position_scopes: [],
         wallet_contents: [
           {
             asset: 'USDC',
-            amount: '100',
-            benchmark_value_usd: '100.00',
+            network: 'arbitrum',
+            quantity: '100',
+            value_usd: '100.00',
           },
         ],
       },
@@ -959,27 +1128,33 @@ describe('createEmberLendingDomain', () => {
       expect.arrayContaining([
         '<ember_lending_execution_context freshness="live">',
         '  <generated_at>2026-04-01T06:00:00.000Z</generated_at>',
+        '  <shared_ember_revision>11</shared_ember_revision>',
         '  <mandate_ref>mandate-ember-lending-001</mandate_ref>',
         '  <mandate_summary>lend USDC on Aave within medium-risk allocation and health-factor guardrails</mandate_summary>',
         '  <subagent_wallet_address>0x00000000000000000000000000000000000000b1</subagent_wallet_address>',
         '  <root_user_wallet_address>0x00000000000000000000000000000000000000a1</root_user_wallet_address>',
         '  <network>arbitrum</network>',
-        '      <status>deployed</status>',
-        '      <control_path>lending.supply</control_path>',
-        '      <position_kind>loan</position_kind>',
-        '      <protocol_family>aave</protocol_family>',
-        '      <protocol_position_ref>aave-supplied-usdc-001</protocol_position_ref>',
-        '      <benchmark_value_usd>90.00</benchmark_value_usd>',
-        '  <active_reservations>',
-        '      <control_path>lending.withdraw</control_path>',
-        '      <control_path>lending.borrow</control_path>',
-        '      <benchmark_value_usd>100.00</benchmark_value_usd>',
+        '  <active_position_scopes>',
+        '    <active_position_scope scope_id="position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1">',
+        '      <kind>lending</kind>',
+        '      <protocol_system>aave</protocol_system>',
+        '      <market_state>',
+        '        <health_factor>1.42</health_factor>',
+        '      <members>',
+        '        <member member_id="position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC" role="collateral" asset="aArbUSDC">',
+        '          <value_usd>90.00</value_usd>',
+        '  <wallet_contents>',
+        '    <wallet_balance asset="USDC" network="arbitrum">',
+        '      <quantity>100</quantity>',
+        '      <value_usd>100.00</value_usd>',
       ]),
     );
     expect(context).not.toContain('  <lifecycle_phase>active</lifecycle_phase>');
     expect(context).not.toContain(
       '  <rooted_wallet_context_id>rwc-ember-lending-thread-001</rooted_wallet_context_id>',
     );
+    expect(context?.join('\n')).not.toContain('<active_reservations>');
+    expect(context?.join('\n')).not.toContain('<owned_units>');
   });
 
   it('keeps wallet identity unset for lean execution-context payloads that omit authoritative handoff fields', async () => {
@@ -1047,7 +1222,7 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
-  it('injects minimal execution context into system context with benchmark-aware wallet data', async () => {
+  it('injects minimal execution context into system context with active position scopes and wallet contents', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (input: unknown) => {
         const request = input as { method?: unknown };
@@ -1092,25 +1267,26 @@ describe('createEmberLendingDomain', () => {
       expect.arrayContaining([
         '<ember_lending_execution_context freshness="live">',
         '  <generated_at>2026-04-01T06:00:00.000Z</generated_at>',
-        '  <network>arbitrum</network>',
+        '  <shared_ember_revision>7</shared_ember_revision>',
+        '  <mandate_ref>mandate-ember-lending-001</mandate_ref>',
+        '  <mandate_summary>lend USDC on Aave within medium-risk allocation and health-factor guardrails</mandate_summary>',
         '  <subagent_wallet_address>0x00000000000000000000000000000000000000b1</subagent_wallet_address>',
         '  <root_user_wallet_address>0x00000000000000000000000000000000000000a1</root_user_wallet_address>',
-        '      <status>deployed</status>',
-        '      <control_path>lending.supply</control_path>',
-        '      <position_kind>loan</position_kind>',
-        '      <protocol_family>aave</protocol_family>',
-        '      <protocol_position_ref>aave-supplied-usdc-001</protocol_position_ref>',
-        '  <active_reservations>',
-        '      <control_path>lending.withdraw</control_path>',
-        '      <control_path>lending.borrow</control_path>',
-        '      <benchmark_value_usd>100.00</benchmark_value_usd>',
+        '  <network>arbitrum</network>',
+        '  <active_position_scopes>',
+        '      <protocol_system>aave</protocol_system>',
+        '        <borrowable_headroom_usd>63.00</borrowable_headroom_usd>',
+        '    <wallet_balance asset="USDC" network="arbitrum">',
+        '      <value_usd>100.00</value_usd>',
       ]),
     );
     expect(context?.join('\n')).not.toContain('shared_ember_accounting_context');
     expect(context?.join('\n')).not.toContain('<proofs>');
+    expect(context?.join('\n')).not.toContain('<active_reservations>');
+    expect(context?.join('\n')).not.toContain('<owned_units>');
   });
 
-  it('falls back to persisted active reservations when the live execution-context payload is sparse', async () => {
+  it('falls back to persisted active position scopes when the live execution-context payload is sparse', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (input: unknown) => {
         const request = input as { method?: unknown };
@@ -1145,15 +1321,15 @@ describe('createEmberLendingDomain', () => {
     expect(context).toEqual(
       expect.arrayContaining([
         '<ember_lending_execution_context freshness="live">',
-        '  <active_reservations>',
-        '    <reservation reservation_id="reservation-ember-lending-001">',
-        '      <control_path>lending.supply</control_path>',
-        '      <purpose>position.enter</purpose>',
-        '  <owned_units>',
-        '    <owned_unit unit_id="unit-ember-lending-001">',
-        '      <root_asset>USDC</root_asset>',
+        '  <active_position_scopes>',
+        '    <active_position_scope scope_id="position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1">',
+        '      <protocol_system>aave</protocol_system>',
+        '      <market_state>',
+        '        <health_factor>1.42</health_factor>',
       ]),
     );
+    expect(context?.join('\n')).not.toContain('<active_reservations>');
+    expect(context?.join('\n')).not.toContain('<owned_units>');
   });
 
   it('does not promote the thread to active when Shared Ember returns no managed-lane execution context', async () => {
@@ -6065,22 +6241,23 @@ describe('createEmberLendingDomain', () => {
             expect.objectContaining({
               unit_id: 'unit-ember-lending-001',
             }),
-            expect.objectContaining({
-              unit_id: 'unit-unreserved-001',
-            }),
           ]),
           reservations: expect.arrayContaining([
             expect.objectContaining({
               reservation_id: 'reservation-ember-lending-001',
               control_path: 'lending.supply',
             }),
+          ]),
+          active_position_scopes: expect.arrayContaining([
             expect.objectContaining({
-              reservation_id: 'res-ember-lending-withdraw-001',
-              control_path: 'lending.withdraw',
+              scope_id:
+                'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
             }),
+          ]),
+          wallet_contents: expect.arrayContaining([
             expect.objectContaining({
-              reservation_id: 'res-ember-lending-borrow-001',
-              control_path: 'lending.borrow',
+              asset: 'USDC',
+              quantity: '100',
             }),
           ]),
         },
@@ -6224,22 +6401,23 @@ describe('createEmberLendingDomain', () => {
             expect.objectContaining({
               unit_id: 'unit-ember-lending-001',
             }),
-            expect.objectContaining({
-              unit_id: 'unit-unreserved-001',
-            }),
           ]),
           reservations: expect.arrayContaining([
             expect.objectContaining({
               reservation_id: 'reservation-ember-lending-001',
               control_path: 'lending.supply',
             }),
+          ]),
+          active_position_scopes: expect.arrayContaining([
             expect.objectContaining({
-              reservation_id: 'res-ember-lending-withdraw-001',
-              control_path: 'lending.withdraw',
+              scope_id:
+                'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
             }),
+          ]),
+          wallet_contents: expect.arrayContaining([
             expect.objectContaining({
-              reservation_id: 'res-ember-lending-borrow-001',
-              control_path: 'lending.borrow',
+              asset: 'USDC',
+              quantity: '100',
             }),
           ]),
         },

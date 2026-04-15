@@ -116,8 +116,25 @@ type SharedEmberExecutionContext = {
   }>;
   wallet_contents?: Array<{
     asset?: string;
-    amount?: string;
-    benchmark_value_usd?: string;
+    network?: string;
+    quantity?: string;
+    value_usd?: string;
+    economic_exposures?: Array<{
+      asset?: string;
+      quantity?: string;
+    }>;
+  }>;
+  active_position_scopes?: Array<{
+    scope_id?: string;
+    kind?: string;
+    scope_type_id?: string;
+    root_user_wallet?: string;
+    network?: string;
+    protocol_system?: string;
+    container_ref?: string;
+    status?: string;
+    market_state?: Record<string, unknown> | null;
+    members?: Record<string, unknown>[];
   }>;
 } | null;
 
@@ -490,6 +507,147 @@ function readPortfolioOwnedUnits(portfolioState: unknown): Record<string, unknow
   );
 }
 
+function readPortfolioActivePositionScopes(portfolioState: unknown): Record<string, unknown>[] {
+  if (!isRecord(portfolioState) || !Array.isArray(portfolioState['active_position_scopes'])) {
+    return [];
+  }
+
+  return portfolioState['active_position_scopes'].filter(
+    (candidate): candidate is Record<string, unknown> => isRecord(candidate),
+  );
+}
+
+function scoreActivePositionScopeVisibility(scope: Record<string, unknown>): number {
+  let score = 0;
+
+  const marketState = readRecordKey(scope, 'market_state');
+  if (marketState) {
+    if (readString(marketState['available_borrows_usd'])) {
+      score += 1;
+    }
+    if (readString(marketState['borrowable_headroom_usd'])) {
+      score += 1;
+    }
+    if (readFiniteNumber(marketState['current_ltv_bps']) !== null) {
+      score += 1;
+    }
+    if (readFiniteNumber(marketState['liquidation_threshold_bps']) !== null) {
+      score += 1;
+    }
+    if (readString(marketState['health_factor'])) {
+      score += 1;
+    }
+
+    const freshness = readRecordKey(marketState, 'freshness');
+    if (freshness) {
+      if (readString(freshness['derived_at'])) {
+        score += 1;
+      }
+      if (readString(freshness['latest_observed_at'])) {
+        score += 1;
+      }
+      if (readString(freshness['source_kind'])) {
+        score += 1;
+      }
+    }
+  }
+
+  const members = Array.isArray(scope['members'])
+    ? scope['members'].filter((candidate): candidate is Record<string, unknown> => isRecord(candidate))
+    : [];
+  score += members.length * 2;
+
+  for (const member of members) {
+    if (Array.isArray(member['economic_exposures'])) {
+      score += member['economic_exposures'].filter((candidate) => isRecord(candidate)).length;
+    }
+    if (isRecord(member['state'])) {
+      const memberState = member['state'];
+      if (readString(memberState['withdrawable_quantity'])) {
+        score += 1;
+      }
+      if (readString(memberState['supply_apr'])) {
+        score += 1;
+      }
+      if (readString(memberState['borrow_apr'])) {
+        score += 1;
+      }
+    }
+  }
+
+  return score;
+}
+
+function readActivePositionScopeObservedAt(scope: Record<string, unknown>): number | null {
+  const freshness = readRecordKey(readRecordKey(scope, 'market_state'), 'freshness');
+  const timestampSource =
+    readString(freshness?.['latest_observed_at']) ?? readString(freshness?.['derived_at']);
+  if (!timestampSource) {
+    return null;
+  }
+
+  const timestamp = Date.parse(timestampSource);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function selectPreferredActivePositionScope(input: {
+  rawScope: Record<string, unknown>;
+  hydratedScope: Record<string, unknown>;
+}): Record<string, unknown> {
+  const rawObservedAt = readActivePositionScopeObservedAt(input.rawScope);
+  const hydratedObservedAt = readActivePositionScopeObservedAt(input.hydratedScope);
+  if (rawObservedAt !== null && hydratedObservedAt !== null && rawObservedAt !== hydratedObservedAt) {
+    return hydratedObservedAt > rawObservedAt ? input.hydratedScope : input.rawScope;
+  }
+
+  return scoreActivePositionScopeVisibility(input.hydratedScope) >
+    scoreActivePositionScopeVisibility(input.rawScope)
+    ? input.hydratedScope
+    : input.rawScope;
+}
+
+function selectPreferredActivePositionScopesForContext(input: {
+  rawPortfolioState: unknown;
+  hydratedPortfolioState: unknown;
+}): Record<string, unknown>[] {
+  const rawScopes = readPortfolioActivePositionScopes(input.rawPortfolioState);
+  const hydratedScopes = readPortfolioActivePositionScopes(input.hydratedPortfolioState);
+  if (rawScopes.length === 0) {
+    return hydratedScopes;
+  }
+  if (hydratedScopes.length === 0) {
+    return rawScopes;
+  }
+
+  const hydratedScopesById = new Map<string, Record<string, unknown>>();
+  for (const scope of hydratedScopes) {
+    const scopeId = readString(scope['scope_id']);
+    if (scopeId) {
+      hydratedScopesById.set(scopeId, scope);
+    }
+  }
+
+  const mergedScopes = rawScopes.map((rawScope) => {
+    const scopeId = readString(rawScope['scope_id']);
+    if (!scopeId) {
+      return rawScope;
+    }
+
+    const hydratedScope = hydratedScopesById.get(scopeId);
+    if (!hydratedScope) {
+      return rawScope;
+    }
+
+    hydratedScopesById.delete(scopeId);
+    return selectPreferredActivePositionScope({
+      rawScope,
+      hydratedScope,
+    });
+  });
+
+  return [...mergedScopes, ...hydratedScopesById.values()];
+}
+
 function readLaneContextFallback(portfolioState: Record<string, unknown>): Record<string, unknown> | null {
   const ownedUnit = readPortfolioOwnedUnit(portfolioState);
   const reservation = readFirstRecordFromArray(portfolioState['reservations']);
@@ -739,50 +897,79 @@ function mergePortfolioStateWithExecutionContext(input: {
       : null;
   const fallbackOwnedUnits = readPortfolioOwnedUnits(input.fallbackPortfolioState);
   const portfolioOwnedUnits = readPortfolioOwnedUnits(input.portfolioState);
-  const executionContextOwnedUnits = Array.isArray(input.executionContext?.owned_units)
-    ? input.executionContext.owned_units.filter(
-        (candidate): candidate is Record<string, unknown> => isRecord(candidate),
-      )
-    : [];
+  const executionContextOwnedUnits = readExplicitContextRecords({
+    context: input.executionContext,
+    key: 'owned_units',
+  });
   const fallbackReservations = readPortfolioReservations(input.fallbackPortfolioState);
   const portfolioReservations = readPortfolioReservations(input.portfolioState);
-  const executionContextReservations = Array.isArray(input.executionContext?.reservations)
-    ? input.executionContext.reservations.filter(
-        (candidate): candidate is Record<string, unknown> => isRecord(candidate),
-      )
-    : [];
+  const executionContextReservations = readExplicitContextRecords({
+    context: input.executionContext,
+    key: 'reservations',
+  });
+  const fallbackActivePositionScopes = readPortfolioActivePositionScopes(input.fallbackPortfolioState);
+  const portfolioActivePositionScopes = readPortfolioActivePositionScopes(input.portfolioState);
+  const executionContextActivePositionScopes = readExplicitContextRecords({
+    context: input.executionContext,
+    key: 'active_position_scopes',
+  });
+  const fallbackWalletContents =
+    isRecord(input.fallbackPortfolioState) && Array.isArray(input.fallbackPortfolioState['wallet_contents'])
+      ? input.fallbackPortfolioState['wallet_contents']
+      : [];
+  const portfolioWalletContents =
+    isRecord(input.portfolioState) && Array.isArray(input.portfolioState['wallet_contents'])
+      ? input.portfolioState['wallet_contents']
+      : [];
+  const walletContents =
+    Array.isArray(input.executionContext?.wallet_contents) && input.executionContext.wallet_contents.length > 0
+      ? input.executionContext.wallet_contents
+      : portfolioWalletContents.length > 0
+        ? portfolioWalletContents
+        : fallbackWalletContents;
 
-  const ownedUnits = mergeContextRecords({
-    primary: portfolioOwnedUnits.length > 0 ? portfolioOwnedUnits : executionContextOwnedUnits,
-    fallback:
-      portfolioOwnedUnits.length > 0
+  const ownedUnits = portfolioOwnedUnits.length > 0
+    ? portfolioOwnedUnits
+    : executionContextOwnedUnits.status === 'present'
+      ? executionContextOwnedUnits.records
+      : fallbackOwnedUnits;
+  const reservations = portfolioReservations.length > 0
+    ? portfolioReservations
+    : executionContextReservations.status === 'present'
+      ? executionContextReservations.records
+      : fallbackReservations;
+  const activePositionScopes =
+    executionContextActivePositionScopes.status === 'present'
+      ? executionContextActivePositionScopes.records.length > 0
         ? mergeContextRecords({
-            primary: executionContextOwnedUnits,
-            fallback: fallbackOwnedUnits,
-            idKey: 'unit_id',
+            primary: executionContextActivePositionScopes.records,
+            fallback:
+              portfolioActivePositionScopes.length > 0
+                ? portfolioActivePositionScopes
+                : fallbackActivePositionScopes,
+            idKey: 'scope_id',
           })
-        : fallbackOwnedUnits,
-    idKey: 'unit_id',
-  });
-  const reservations = mergeContextRecords({
-    primary:
-      portfolioReservations.length > 0 ? portfolioReservations : executionContextReservations,
-    fallback:
-      portfolioReservations.length > 0
-        ? mergeContextRecords({
-            primary: executionContextReservations,
-            fallback: fallbackReservations,
-            idKey: 'reservation_id',
-          })
-        : fallbackReservations,
-    idKey: 'reservation_id',
-  });
+        : portfolioActivePositionScopes.length > 0
+          ? portfolioActivePositionScopes
+          : []
+      : portfolioActivePositionScopes.length > 0
+        ? portfolioActivePositionScopes
+        : fallbackActivePositionScopes;
+  const hasExplicitActivePositionScopes = executionContextActivePositionScopes.status === 'present';
 
   if (baseState === null) {
-    return ownedUnits.length > 0 || reservations.length > 0
+    return ownedUnits.length > 0 ||
+      reservations.length > 0 ||
+      activePositionScopes.length > 0 ||
+      walletContents.length > 0 ||
+      hasExplicitActivePositionScopes
       ? {
-          owned_units: ownedUnits,
-          reservations,
+          ...(ownedUnits.length > 0 ? { owned_units: ownedUnits } : {}),
+          ...(reservations.length > 0 ? { reservations } : {}),
+          ...(activePositionScopes.length > 0 || hasExplicitActivePositionScopes
+            ? { active_position_scopes: activePositionScopes }
+            : {}),
+          ...(walletContents.length > 0 ? { wallet_contents: walletContents } : {}),
         }
       : input.portfolioState;
   }
@@ -794,6 +981,14 @@ function mergePortfolioStateWithExecutionContext(input: {
       : {}),
     ...(reservations.length > 0 || Array.isArray(baseState['reservations'])
       ? { reservations }
+      : {}),
+    ...(activePositionScopes.length > 0 ||
+    hasExplicitActivePositionScopes ||
+    Array.isArray(baseState['active_position_scopes'])
+      ? { active_position_scopes: activePositionScopes }
+      : {}),
+    ...(walletContents.length > 0 || Array.isArray(baseState['wallet_contents'])
+      ? { wallet_contents: walletContents }
       : {}),
   };
 }
@@ -875,6 +1070,20 @@ function hasManagedPortfolioProjection(portfolioState: unknown): boolean {
     return false;
   }
 
+  if (
+    Array.isArray(portfolioState['wallet_contents']) &&
+    portfolioState['wallet_contents'].length > 0
+  ) {
+    return true;
+  }
+
+  if (
+    Array.isArray(portfolioState['active_position_scopes']) &&
+    portfolioState['active_position_scopes'].length > 0
+  ) {
+    return true;
+  }
+
   if (Array.isArray(portfolioState['owned_units']) && portfolioState['owned_units'].length > 0) {
     return true;
   }
@@ -899,7 +1108,9 @@ function hasManagedExecutionContextProjection(executionContext: SharedEmberExecu
   return (
     readString(executionContext.mandate_ref) !== null ||
     readString(executionContext.mandate_summary) !== null ||
-    isRecord(executionContext.mandate_context) ||
+    (Array.isArray(executionContext.wallet_contents) && executionContext.wallet_contents.length > 0) ||
+    (Array.isArray(executionContext.active_position_scopes) &&
+      executionContext.active_position_scopes.length > 0) ||
     readHexAddress(executionContext.subagent_wallet_address) !== null ||
     readHexAddress(executionContext.root_user_wallet_address) !== null
   );
@@ -943,9 +1154,300 @@ function shouldReadSharedEmberExecutionContext(state: EmberLendingLifecycleState
   );
 }
 
+function appendEconomicExposuresXml(input: {
+  lines: string[];
+  economicExposures: unknown;
+  indent: string;
+}): void {
+  if (!Array.isArray(input.economicExposures) || input.economicExposures.length === 0) {
+    return;
+  }
+
+  const exposures = input.economicExposures.filter(
+    (candidate): candidate is Record<string, unknown> => isRecord(candidate),
+  );
+  if (exposures.length === 0) {
+    return;
+  }
+
+  input.lines.push(`${input.indent}<economic_exposures>`);
+  for (const exposure of exposures) {
+    const asset = readString(exposure['asset']);
+    input.lines.push(
+      `${input.indent}  <economic_exposure${asset ? ` asset="${escapeXml(asset)}"` : ''}>`,
+    );
+    const quantity = readString(exposure['quantity']);
+    if (quantity) {
+      input.lines.push(`${input.indent}    <quantity>${escapeXml(quantity)}</quantity>`);
+    }
+    input.lines.push(`${input.indent}  </economic_exposure>`);
+  }
+  input.lines.push(`${input.indent}</economic_exposures>`);
+}
+
+function appendWalletContentsXml(input: {
+  lines: string[];
+  walletContents: unknown;
+}): void {
+  if (!Array.isArray(input.walletContents) || input.walletContents.length === 0) {
+    return;
+  }
+
+  const walletContents = input.walletContents.filter(
+    (candidate): candidate is Record<string, unknown> => isRecord(candidate),
+  );
+  if (walletContents.length === 0) {
+    return;
+  }
+
+  input.lines.push('  <wallet_contents>');
+  for (const walletBalance of walletContents) {
+    const asset = readString(walletBalance['asset']);
+    const network = readString(walletBalance['network']);
+    const attributes = [
+      asset ? `asset="${escapeXml(asset)}"` : null,
+      network ? `network="${escapeXml(network)}"` : null,
+    ]
+      .filter((value): value is string => value !== null)
+      .join(' ');
+    input.lines.push(`    <wallet_balance${attributes ? ` ${attributes}` : ''}>`);
+
+    const quantity = readString(walletBalance['quantity']);
+    if (quantity) {
+      input.lines.push(`      <quantity>${escapeXml(quantity)}</quantity>`);
+    }
+
+    const valueUsd = readString(walletBalance['value_usd']);
+    if (valueUsd) {
+      input.lines.push(`      <value_usd>${escapeXml(valueUsd)}</value_usd>`);
+    }
+
+    appendEconomicExposuresXml({
+      lines: input.lines,
+      economicExposures: walletBalance['economic_exposures'],
+      indent: '      ',
+    });
+
+    input.lines.push('    </wallet_balance>');
+  }
+  input.lines.push('  </wallet_contents>');
+}
+
+function appendActivePositionScopesXml(input: {
+  lines: string[];
+  scopes: Record<string, unknown>[];
+}): void {
+  if (input.scopes.length === 0) {
+    return;
+  }
+
+  input.lines.push('  <active_position_scopes>');
+  for (const scope of input.scopes) {
+    const scopeId = readString(scope['scope_id']);
+    input.lines.push(
+      `    <active_position_scope${scopeId ? ` scope_id="${escapeXml(scopeId)}"` : ''}>`,
+    );
+
+    const kind = readString(scope['kind']);
+    if (kind) {
+      input.lines.push(`      <kind>${escapeXml(kind)}</kind>`);
+    }
+
+    const scopeTypeId = readString(scope['scope_type_id']);
+    if (scopeTypeId) {
+      input.lines.push(`      <scope_type_id>${escapeXml(scopeTypeId)}</scope_type_id>`);
+    }
+
+    const protocolSystem = readString(scope['protocol_system']);
+    if (protocolSystem) {
+      input.lines.push(`      <protocol_system>${escapeXml(protocolSystem)}</protocol_system>`);
+    }
+
+    const network = readString(scope['network']);
+    if (network) {
+      input.lines.push(`      <network>${escapeXml(network)}</network>`);
+    }
+
+    const containerRef = readString(scope['container_ref']);
+    if (containerRef) {
+      input.lines.push(`      <container_ref>${escapeXml(containerRef)}</container_ref>`);
+    }
+
+    const status = readString(scope['status']);
+    if (status) {
+      input.lines.push(`      <status>${escapeXml(status)}</status>`);
+    }
+
+    const marketState = readRecordKey(scope, 'market_state');
+    if (marketState) {
+      input.lines.push('      <market_state>');
+
+      const availableBorrowsUsd = readString(marketState['available_borrows_usd']);
+      if (availableBorrowsUsd) {
+        input.lines.push(
+          `        <available_borrows_usd>${escapeXml(availableBorrowsUsd)}</available_borrows_usd>`,
+        );
+      }
+      const borrowableHeadroomUsd = readString(marketState['borrowable_headroom_usd']);
+      if (borrowableHeadroomUsd) {
+        input.lines.push(
+          `        <borrowable_headroom_usd>${escapeXml(borrowableHeadroomUsd)}</borrowable_headroom_usd>`,
+        );
+      }
+      const currentLtvBps = readFiniteNumber(marketState['current_ltv_bps']);
+      if (currentLtvBps !== null) {
+        input.lines.push(`        <current_ltv_bps>${currentLtvBps}</current_ltv_bps>`);
+      }
+      const liquidationThresholdBps = readFiniteNumber(marketState['liquidation_threshold_bps']);
+      if (liquidationThresholdBps !== null) {
+        input.lines.push(
+          `        <liquidation_threshold_bps>${liquidationThresholdBps}</liquidation_threshold_bps>`,
+        );
+      }
+      const healthFactor = readString(marketState['health_factor']);
+      if (healthFactor) {
+        input.lines.push(`        <health_factor>${escapeXml(healthFactor)}</health_factor>`);
+      }
+
+      const freshness = readRecordKey(marketState, 'freshness');
+      if (freshness) {
+        input.lines.push('        <freshness>');
+        const derivedAt = readString(freshness['derived_at']);
+        if (derivedAt) {
+          input.lines.push(`          <derived_at>${escapeXml(derivedAt)}</derived_at>`);
+        }
+        const sourceKind = readString(freshness['source_kind']);
+        if (sourceKind) {
+          input.lines.push(`          <source_kind>${escapeXml(sourceKind)}</source_kind>`);
+        }
+        const oldestObservedAt = readString(freshness['oldest_observed_at']);
+        if (oldestObservedAt) {
+          input.lines.push(
+            `          <oldest_observed_at>${escapeXml(oldestObservedAt)}</oldest_observed_at>`,
+          );
+        }
+        const latestObservedAt = readString(freshness['latest_observed_at']);
+        if (latestObservedAt) {
+          input.lines.push(
+            `          <latest_observed_at>${escapeXml(latestObservedAt)}</latest_observed_at>`,
+          );
+        }
+        input.lines.push('        </freshness>');
+      }
+
+      input.lines.push('      </market_state>');
+    }
+
+    const members = Array.isArray(scope['members'])
+      ? scope['members'].filter((candidate): candidate is Record<string, unknown> => isRecord(candidate))
+      : [];
+    if (members.length > 0) {
+      input.lines.push('      <members>');
+      for (const member of members) {
+        const memberId = readString(member['member_id']);
+        const role = readString(member['role']);
+        const asset = readString(member['asset']);
+        const attributes = [
+          memberId ? `member_id="${escapeXml(memberId)}"` : null,
+          role ? `role="${escapeXml(role)}"` : null,
+          asset ? `asset="${escapeXml(asset)}"` : null,
+        ]
+          .filter((value): value is string => value !== null)
+          .join(' ');
+        input.lines.push(`        <member${attributes ? ` ${attributes}` : ''}>`);
+
+        const quantity = readString(member['quantity']);
+        if (quantity) {
+          input.lines.push(`          <quantity>${escapeXml(quantity)}</quantity>`);
+        }
+
+        const valueUsd = readString(member['value_usd']);
+        if (valueUsd) {
+          input.lines.push(`          <value_usd>${escapeXml(valueUsd)}</value_usd>`);
+        }
+
+        appendEconomicExposuresXml({
+          lines: input.lines,
+          economicExposures: member['economic_exposures'],
+          indent: '          ',
+        });
+
+        const memberState = readRecordKey(member, 'state');
+        if (memberState) {
+          input.lines.push('          <state>');
+          const withdrawableQuantity = readString(memberState['withdrawable_quantity']);
+          if (withdrawableQuantity) {
+            input.lines.push(
+              `            <withdrawable_quantity>${escapeXml(withdrawableQuantity)}</withdrawable_quantity>`,
+            );
+          }
+          const supplyApr = readString(memberState['supply_apr']);
+          if (supplyApr) {
+            input.lines.push(`            <supply_apr>${escapeXml(supplyApr)}</supply_apr>`);
+          }
+          const borrowApr = readString(memberState['borrow_apr']);
+          if (borrowApr) {
+            input.lines.push(`            <borrow_apr>${escapeXml(borrowApr)}</borrow_apr>`);
+          }
+          input.lines.push('          </state>');
+        }
+
+        input.lines.push('        </member>');
+      }
+      input.lines.push('      </members>');
+    }
+
+    input.lines.push('    </active_position_scope>');
+  }
+  input.lines.push('  </active_position_scopes>');
+}
+
+function appendCurrentCandidatePlanXml(input: {
+  lines: string[];
+  state: EmberLendingLifecycleState;
+}): void {
+  const transactionPlanId = readCandidatePlanTransactionPlanId(input.state.lastCandidatePlan);
+  const compactPlanSummary = readCandidatePlanCompactPlanSummary(input.state.lastCandidatePlan);
+  const payloadBuilderOutput = readCandidatePlanPayloadBuilderOutput(input.state.lastCandidatePlan);
+  const summary =
+    input.state.lastCandidatePlanSummary ?? readCandidatePlanSummary(input.state.lastCandidatePlan);
+  const controlPath =
+    compactPlanSummary?.control_path ?? payloadBuilderOutput?.required_control_path ?? null;
+
+  if (!transactionPlanId && !summary && !controlPath) {
+    return;
+  }
+
+  input.lines.push('  <current_candidate_plan>');
+  if (transactionPlanId) {
+    input.lines.push(`    <transaction_plan_id>${escapeXml(transactionPlanId)}</transaction_plan_id>`);
+  }
+  if (controlPath) {
+    input.lines.push(`    <control_path>${escapeXml(controlPath)}</control_path>`);
+  }
+  if (compactPlanSummary?.asset) {
+    input.lines.push(`    <asset>${escapeXml(compactPlanSummary.asset)}</asset>`);
+  }
+  if (compactPlanSummary?.amount) {
+    input.lines.push(`    <amount>${escapeXml(compactPlanSummary.amount)}</amount>`);
+  }
+  if (summary) {
+    input.lines.push(`    <summary>${escapeXml(summary)}</summary>`);
+  }
+  input.lines.push(
+    '    <execute_now_rule>While current_candidate_plan exists, execute, submit, send, or run requests must call request_execution instead of create_transaction.</execute_now_rule>',
+  );
+  input.lines.push('  </current_candidate_plan>');
+}
+
 function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): string[] {
   const lines = ['<ember_lending_execution_context freshness="cached">'];
   lines.push(`  <generated_at>${escapeXml(new Date().toISOString())}</generated_at>`);
+  if (state.lastSharedEmberRevision !== null) {
+    lines.push(
+      `  <shared_ember_revision>${escapeXml(state.lastSharedEmberRevision.toString())}</shared_ember_revision>`,
+    );
+  }
   lines.push(`  <network>${escapeXml(readStateNetwork(state) ?? SHARED_EMBER_NETWORK)}</network>`);
 
   if (state.mandateRef) {
@@ -954,12 +1456,6 @@ function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): st
 
   if (state.mandateSummary) {
     lines.push(`  <mandate_summary>${escapeXml(state.mandateSummary)}</mandate_summary>`);
-  }
-
-  if (state.mandateContext) {
-    lines.push(
-      `  <mandate_context_json>${escapeXml(JSON.stringify(state.mandateContext))}</mandate_context_json>`,
-    );
   }
 
   if (state.walletAddress) {
@@ -971,6 +1467,22 @@ function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): st
       `  <root_user_wallet_address>${state.rootUserWalletAddress}</root_user_wallet_address>`,
     );
   }
+
+  appendCurrentCandidatePlanXml({
+    lines,
+    state,
+  });
+  appendActivePositionScopesXml({
+    lines,
+    scopes: readPortfolioActivePositionScopes(state.lastPortfolioState),
+  });
+  appendWalletContentsXml({
+    lines,
+    walletContents:
+      isRecord(state.lastPortfolioState) && Array.isArray(state.lastPortfolioState['wallet_contents'])
+        ? state.lastPortfolioState['wallet_contents']
+        : [],
+  });
 
   lines.push('</ember_lending_execution_context>');
   return lines;
@@ -1000,6 +1512,11 @@ function buildSharedEmberExecutionContextXml(
   const network = readString(input.executionContext.network) ?? SHARED_EMBER_NETWORK;
   const lines = ['<ember_lending_execution_context freshness="live">'];
   lines.push(`  <generated_at>${escapeXml(generatedAt)}</generated_at>`);
+  if (input.state.lastSharedEmberRevision !== null) {
+    lines.push(
+      `  <shared_ember_revision>${escapeXml(input.state.lastSharedEmberRevision.toString())}</shared_ember_revision>`,
+    );
+  }
 
   const mandateRef = readString(input.executionContext.mandate_ref);
   if (mandateRef) {
@@ -1009,14 +1526,6 @@ function buildSharedEmberExecutionContextXml(
   const mandateSummary = readString(input.executionContext.mandate_summary);
   if (mandateSummary) {
     lines.push(`  <mandate_summary>${escapeXml(mandateSummary)}</mandate_summary>`);
-  }
-
-  if (isRecord(input.executionContext.mandate_context)) {
-    lines.push(
-      `  <mandate_context_json>${escapeXml(
-        JSON.stringify(input.executionContext.mandate_context),
-      )}</mandate_context_json>`,
-    );
   }
 
   const subagentWalletAddress = readHexAddress(input.executionContext.subagent_wallet_address);
@@ -1032,132 +1541,23 @@ function buildSharedEmberExecutionContextXml(
   }
 
   lines.push(`  <network>${escapeXml(network)}</network>`);
-
-  const ownedUnits = mergeContextRecords({
-    primary: input.executionContext.owned_units,
-    fallback: readPortfolioOwnedUnits(input.state.lastPortfolioState),
-    idKey: 'unit_id',
+  appendCurrentCandidatePlanXml({
+    lines,
+    state: input.state,
   });
-  if (ownedUnits.length > 0) {
-    lines.push('  <owned_units>');
-    for (const ownedUnit of ownedUnits) {
-      const unitId = readString(ownedUnit.unit_id);
-      lines.push(`    <owned_unit${unitId ? ` unit_id="${escapeXml(unitId)}"` : ''}>`);
-
-      const rootAsset = readString(ownedUnit.root_asset);
-      if (rootAsset) {
-        lines.push(`      <root_asset>${escapeXml(rootAsset)}</root_asset>`);
-      }
-
-      const status = readString(ownedUnit.status);
-      if (status) {
-        lines.push(`      <status>${escapeXml(status)}</status>`);
-      }
-
-      const controlPath = readString(ownedUnit.control_path);
-      if (controlPath) {
-        lines.push(`      <control_path>${escapeXml(controlPath)}</control_path>`);
-      }
-
-      const positionKind = readString(ownedUnit.position_kind);
-      if (positionKind) {
-        lines.push(`      <position_kind>${escapeXml(positionKind)}</position_kind>`);
-      }
-
-      const protocolFamily = readString(ownedUnit.protocol_family);
-      if (protocolFamily) {
-        lines.push(`      <protocol_family>${escapeXml(protocolFamily)}</protocol_family>`);
-      }
-
-      const protocolPositionRef = readString(ownedUnit.protocol_position_ref);
-      if (protocolPositionRef) {
-        lines.push(
-          `      <protocol_position_ref>${escapeXml(protocolPositionRef)}</protocol_position_ref>`,
-        );
-      }
-
-      const amount = readString(ownedUnit.amount);
-      if (amount) {
-        lines.push(`      <amount>${escapeXml(amount)}</amount>`);
-      }
-
-      const benchmarkValueUsd = readString(ownedUnit.benchmark_value_usd);
-      if (benchmarkValueUsd) {
-        lines.push(`      <benchmark_value_usd>${escapeXml(benchmarkValueUsd)}</benchmark_value_usd>`);
-      }
-
-      lines.push('    </owned_unit>');
-    }
-    lines.push('  </owned_units>');
-  }
-
-  const reservations = mergeContextRecords({
-    primary: input.executionContext.reservations,
-    fallback: readPortfolioReservations(input.state.lastPortfolioState),
-    idKey: 'reservation_id',
+  appendActivePositionScopesXml({
+    lines,
+    scopes: selectPreferredActivePositionScopesForContext({
+      rawPortfolioState: input.executionContext,
+      hydratedPortfolioState: input.state.lastPortfolioState,
+    }),
   });
-  if (reservations.length > 0) {
-    lines.push('  <active_reservations>');
-    for (const reservation of reservations) {
-      const reservationId = readString(reservation.reservation_id);
-      lines.push(
-        `    <reservation${reservationId ? ` reservation_id="${escapeXml(reservationId)}"` : ''}>`,
-      );
-
-      const controlPath = readString(reservation.control_path);
-      if (controlPath) {
-        lines.push(`      <control_path>${escapeXml(controlPath)}</control_path>`);
-      }
-
-      const purpose = readString(reservation.purpose);
-      if (purpose) {
-        lines.push(`      <purpose>${escapeXml(purpose)}</purpose>`);
-      }
-
-      if (Array.isArray(reservation.unit_allocations) && reservation.unit_allocations.length > 0) {
-        lines.push('      <unit_allocations>');
-        for (const allocation of reservation.unit_allocations) {
-          const unitId = readString(allocation.unit_id);
-          lines.push(
-            `        <unit_allocation${unitId ? ` unit_id="${escapeXml(unitId)}"` : ''}>`,
-          );
-          const quantity = readString(allocation.quantity);
-          if (quantity) {
-            lines.push(`          <quantity>${escapeXml(quantity)}</quantity>`);
-          }
-          lines.push('        </unit_allocation>');
-        }
-        lines.push('      </unit_allocations>');
-      }
-
-      lines.push('    </reservation>');
-    }
-    lines.push('  </active_reservations>');
-  }
-
-  if (
-    Array.isArray(input.executionContext.wallet_contents) &&
-    input.executionContext.wallet_contents.length > 0
-  ) {
-    lines.push('  <wallet_contents>');
-    for (const walletBalance of input.executionContext.wallet_contents) {
-      const asset = readString(walletBalance.asset);
-      lines.push(`    <wallet_balance${asset ? ` asset="${escapeXml(asset)}"` : ''}>`);
-
-      const amount = readString(walletBalance.amount);
-      if (amount) {
-        lines.push(`      <amount>${escapeXml(amount)}</amount>`);
-      }
-
-      const benchmarkValueUsd = readString(walletBalance.benchmark_value_usd);
-      if (benchmarkValueUsd) {
-        lines.push(`      <benchmark_value_usd>${escapeXml(benchmarkValueUsd)}</benchmark_value_usd>`);
-      }
-
-      lines.push('    </wallet_balance>');
-    }
-    lines.push('  </wallet_contents>');
-  }
+  appendWalletContentsXml({
+    lines,
+    walletContents:
+      input.executionContext.wallet_contents ??
+      (isRecord(input.state.lastPortfolioState) ? input.state.lastPortfolioState['wallet_contents'] : []),
+  });
 
   lines.push('</ember_lending_execution_context>');
   return lines;
@@ -1882,6 +2282,10 @@ function readBoolean(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null;
 }
 
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 function readPortfolioReservation(portfolioState: unknown): Record<string, unknown> | null {
   return isRecord(portfolioState) ? readFirstRecordFromArray(portfolioState['reservations']) : null;
 }
@@ -1901,41 +2305,92 @@ function readPortfolioReservations(portfolioState: unknown): Record<string, unkn
   );
 }
 
+function mergeRecordWithFallback(input: {
+  primary: Record<string, unknown>;
+  fallback: Record<string, unknown>;
+}): Record<string, unknown> {
+  const merged: Record<string, unknown> = {
+    ...input.fallback,
+    ...input.primary,
+  };
+
+  for (const [key, fallbackValue] of Object.entries(input.fallback)) {
+    const primaryValue = input.primary[key];
+    if (isRecord(fallbackValue) && isRecord(primaryValue)) {
+      merged[key] = {
+        ...fallbackValue,
+        ...primaryValue,
+      };
+    }
+  }
+
+  return merged;
+}
+
 function mergeContextRecords(input: {
   primary: unknown;
   fallback: Record<string, unknown>[];
   idKey: string;
 }): Record<string, unknown>[] {
-  const merged: Record<string, unknown>[] = [];
-  const seenIds = new Set<string>();
+  if (!Array.isArray(input.primary)) {
+    return [];
+  }
 
-  const pushRecord = (candidate: unknown) => {
-    if (!isRecord(candidate)) {
-      return;
-    }
-
+  const fallbackById = new Map<string, Record<string, unknown>>();
+  for (const candidate of input.fallback) {
     const recordId = readString(candidate[input.idKey]);
     if (recordId) {
-      if (seenIds.has(recordId)) {
-        return;
+      fallbackById.set(recordId, candidate);
+    }
+  }
+
+  return input.primary
+    .filter((candidate): candidate is Record<string, unknown> => isRecord(candidate))
+    .map((candidate) => {
+      const recordId = readString(candidate[input.idKey]);
+      if (!recordId) {
+        return candidate;
       }
-      seenIds.add(recordId);
-    }
 
-    merged.push(candidate);
+      const fallbackCandidate = fallbackById.get(recordId);
+      return fallbackCandidate
+        ? mergeRecordWithFallback({
+            primary: candidate,
+            fallback: fallbackCandidate,
+          })
+        : candidate;
+    });
+}
+
+function readExplicitContextRecords(input: {
+  context: unknown;
+  key: string;
+}):
+  | {
+      status: 'missing';
+    }
+  | {
+      status: 'present';
+      records: Record<string, unknown>[];
+    } {
+  if (!isRecord(input.context) || !Object.prototype.hasOwnProperty.call(input.context, input.key)) {
+    return {
+      status: 'missing',
+    };
+  }
+
+  const value = input.context[input.key];
+  if (!Array.isArray(value)) {
+    return {
+      status: 'present',
+      records: [],
+    };
+  }
+
+  return {
+    status: 'present',
+    records: value.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate)),
   };
-
-  if (Array.isArray(input.primary)) {
-    for (const candidate of input.primary) {
-      pushRecord(candidate);
-    }
-  }
-
-  for (const candidate of input.fallback) {
-    pushRecord(candidate);
-  }
-
-  return merged;
 }
 
 function inferPreferredControlPathFromActionSummary(value: unknown): string | null {
