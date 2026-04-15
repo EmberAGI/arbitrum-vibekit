@@ -2617,7 +2617,7 @@ function buildManagedPlanningBlockedMessageFromOnboardingState(input: {
       return `Portfolio Manager onboarding is not complete for this thread because Shared Ember could not admit any ${targetAsset} for lending.${assetSummary}`;
     }
 
-    return 'Portfolio Manager onboarding is not complete for this thread because Shared Ember has not reserved capital for the lending lane yet.';
+    return 'Portfolio Manager onboarding is not complete for this thread because Shared Ember has not reserved capital for the managed lending position yet.';
   }
 
   if (policySnapshotRecorded === false) {
@@ -2817,15 +2817,15 @@ function buildFallbackActionSummary(input: {
 function buildFallbackObjectiveSummary(intent: string): string {
   switch (intent) {
     case 'rebalance':
-      return 'rebalance reserved capital within the approved lending lane';
+      return 'rebalance reserved capital within the approved lending position';
     case 'increase':
-      return 'increase the current lending position within the approved lane';
+      return 'increase the current lending position within the approved lending position';
     case 'decrease':
-      return 'decrease the current lending position within the approved lane';
+      return 'decrease the current lending position within the approved lending position';
     case 'transfer':
       return 'transfer reserved capital within the approved managed flow';
     default:
-      return 'supply reserved capital into the approved lending lane';
+      return 'supply reserved capital into the approved lending position';
   }
 }
 
@@ -2850,7 +2850,7 @@ function buildManagedSubagentDecisionContext(input: {
     accounting_state_summary:
       readString(sourceDecisionContext?.['accounting_state_summary']) ??
       input.state.lastReservationSummary ??
-      'Reserved capital is hydrated for the managed lending lane.',
+      'Reserved capital is hydrated for the managed lending position.',
     why_this_path_is_best:
       readString(sourceDecisionContext?.['why_this_path_is_best']) ??
       'This matches the current lending mandate and reserved control path.',
@@ -3454,7 +3454,7 @@ export function createEmberLendingDomain(
         {
           name: 'create_transaction',
           description:
-            'Create or refresh a candidate transaction plan for the managed lending lane. Reason from mandate_summary, wallet_contents, active_position_scopes, and the current candidate plan. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with control_path, asset, protocol_system, network, and quantity. quantity must be either { "kind": "exact", "value": "1.25" } using asset-unit decimal strings or { "kind": "percent", "value": 50 } using percent of the relevant base for that action. asset is the actionable observed asset; active_position_scopes expose economic_exposures when the asset is a wrapper or synthetic token.',
+            'Create or refresh a candidate transaction plan for the managed lending position. Reason from mandate_summary, wallet_contents, active_position_scopes, and the current candidate plan. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with control_path, asset, protocol_system, network, and quantity. quantity must be either { "kind": "exact", "value": "1.25" } using asset-unit decimal strings or { "kind": "percent", "value": 50 } using percent of the relevant base for that action. asset is the actionable observed asset; active_position_scopes expose economic_exposures when the asset is a wrapper or synthetic token.',
         },
         {
           name: 'request_execution',
@@ -3463,7 +3463,7 @@ export function createEmberLendingDomain(
         },
         {
           name: 'create_escalation_request',
-          description: 'Create a bounded escalation request when the lending lane cannot proceed locally.',
+          description: 'Create a bounded escalation request when the managed lending position cannot proceed locally.',
         },
       ],
       transitions: [],

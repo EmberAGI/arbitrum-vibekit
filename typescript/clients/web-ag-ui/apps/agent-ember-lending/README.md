@@ -22,14 +22,15 @@ subagent surface for:
 
 Direct lending-agent onboarding is intentionally out of scope here. The
 portfolio manager owns onboarding and activation; this runtime reads the
-managed lane's current Shared Ember truth and projects the lending wallet,
+managed position's current Shared Ember truth and projects the lending wallet,
 mandate, planning, execution, and escalation state into AG-UI.
 
 Current execution-context semantics:
 
 - onboarding completion is expected to materialize the initial `ember-lending`
-  lane for the first managed runtime pair
-- `owned_units` and `reservations` remain agent-scoped to that lending lane
+  position for the first managed runtime pair
+- `owned_units` and `reservations` remain agent-scoped to that managed lending
+  position
 - `wallet_contents` contains only rooted-wallet holdings that are not
   reconciled into an `active_position_scope`
 - `active_position_scopes` is the planner-visible semantic surface for

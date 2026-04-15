@@ -1003,7 +1003,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         asset: 'WETH',
         amount: '20000000000000000',
         summary:
-          'repay the full outstanding WETH loan so the lending lane returns to a debt-free supplied state',
+          'repay the full outstanding WETH loan so the managed lending position returns to a debt-free supplied state',
       },
     });
 

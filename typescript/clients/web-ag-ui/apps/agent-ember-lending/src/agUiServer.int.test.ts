@@ -405,7 +405,7 @@ function createEscalationRequestInput() {
         },
       },
       decision_context: {
-        objective_summary: 'supply reserved capital into the approved lending lane',
+        objective_summary: 'supply reserved capital into the approved lending position',
         accounting_state_summary: 'reserved capital is still claimed by another agent',
         why_this_path_is_best: 'lending.supply remains the approved path once capital is free',
         consequence_if_delayed: 'reserved capital remains idle',

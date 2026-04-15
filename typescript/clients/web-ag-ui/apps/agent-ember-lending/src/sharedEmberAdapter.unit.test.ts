@@ -663,7 +663,7 @@ function createEscalationRequestInput() {
         },
       },
       decision_context: {
-        objective_summary: 'supply reserved capital into the approved lending lane',
+        objective_summary: 'supply reserved capital into the approved lending position',
         accounting_state_summary: 'reserved capital is still claimed by another agent',
         why_this_path_is_best: 'lending.supply remains the approved path once capital is free',
         consequence_if_delayed: 'reserved capital remains idle',
@@ -1327,7 +1327,7 @@ describe('createEmberLendingDomain', () => {
     expect(context?.join('\n')).not.toContain('<owned_units>');
   });
 
-  it('does not promote the thread to active when Shared Ember returns no managed-lane execution context', async () => {
+  it('does not promote the thread to active when Shared Ember returns no managed-position execution context', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (input: unknown) => {
         const request = input as { method?: unknown };
@@ -7005,7 +7005,7 @@ describe('createEmberLendingDomain', () => {
               },
             ],
             decision_context: {
-              objective_summary: 'supply reserved capital into the approved lending lane',
+              objective_summary: 'supply reserved capital into the approved lending position',
               accounting_state_summary:
                 'reserved capital is still claimed by another agent',
               why_this_path_is_best: 'lending.supply remains the approved path once capital is free',
@@ -7088,7 +7088,7 @@ describe('createEmberLendingDomain', () => {
           decision_context: {
             mandate_summary:
               'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-            objective_summary: 'supply reserved capital into the approved lending lane',
+            objective_summary: 'supply reserved capital into the approved lending position',
             accounting_state_summary: 'reserved capital is still claimed by another agent',
             why_this_path_is_best:
               'lending.supply remains the approved path once capital is free',
