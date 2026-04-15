@@ -24,6 +24,23 @@ export type PortfolioManagerGatewayService = AgentRuntimeService;
 const CONTROLLER_DEPLOYMENT_INSUFFICIENT_FUNDS_PATTERN =
   /insufficient funds for gas \* price \+ value/i;
 
+function maybeWrapControllerDeploymentError(input: {
+  error: unknown;
+  controllerSignerAddress: `0x${string}`;
+  controllerSmartAccountAddress: `0x${string}`;
+}): Error | null {
+  if (
+    input.error instanceof Error &&
+    CONTROLLER_DEPLOYMENT_INSUFFICIENT_FUNDS_PATTERN.test(input.error.message)
+  ) {
+    return new Error(
+      `Portfolio-manager startup failed because controller signer ${input.controllerSignerAddress} has no ETH to deploy controller smart account ${input.controllerSmartAccountAddress} on Arbitrum. Fund the controller signer and restart the service.`,
+    );
+  }
+
+  return null;
+}
+
 type PortfolioManagerAgUiHandlerOptions = {
   agentId: string;
   service: PortfolioManagerGatewayService;
@@ -124,16 +141,16 @@ export async function createPortfolioManagerGatewayService(
             signerAddress: controllerSignerAddress,
           });
         } catch (error) {
-          if (
-            error instanceof Error &&
-            CONTROLLER_DEPLOYMENT_INSUFFICIENT_FUNDS_PATTERN.test(error.message)
-          ) {
-            console.warn(
-              'Portfolio-manager startup skipped controller smart-account deployment because the configured controller signer has no ETH to pay deployment gas.',
-            );
-          } else {
-            throw error;
+          const wrappedError = maybeWrapControllerDeploymentError({
+            error,
+            controllerSignerAddress,
+            controllerSmartAccountAddress,
+          });
+          if (wrappedError) {
+            throw wrappedError;
           }
+
+          throw error;
         }
         const ensuredIdentity = await (
           options.__internalEnsureServiceIdentity ?? ensurePortfolioManagerServiceIdentity

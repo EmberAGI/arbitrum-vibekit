@@ -134,4 +134,53 @@ describe('createPortfolioManagerGatewayService', () => {
     expect(ensureServiceIdentity).not.toHaveBeenCalled();
     expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
   });
+
+  it('fails closed when the controller signer cannot fund smart-account deployment gas', async () => {
+    const deriveControllerSmartAccountAddress = vi.fn(
+      async () => '0x00000000000000000000000000000000000000c2' as const,
+    );
+    const ensureControllerSmartAccountDeployed = vi.fn(async () => {
+      throw new Error('insufficient funds for gas * price + value');
+    });
+    const ensureServiceIdentity = vi.fn(async () => ({
+      revision: 2,
+      wroteIdentity: false,
+      identity: {
+        wallet_address: '0x00000000000000000000000000000000000000c2',
+      },
+    }));
+    const createAgentRuntimeKernel = vi.fn(async ({ createRuntimeOptions }) => {
+      const signing = {
+        readAddress: vi.fn(async () => '0x00000000000000000000000000000000000000c1' as const),
+        signPayload: vi.fn(),
+      };
+      await createRuntimeOptions({
+        signing,
+      });
+      throw new Error('runtime creation should not be reached');
+    });
+
+    await expect(
+      createPortfolioManagerGatewayService({
+        env: {
+          OPENROUTER_API_KEY: 'test-openrouter-key',
+          SHARED_EMBER_BASE_URL: 'http://127.0.0.1:56436',
+          PORTFOLIO_MANAGER_OWS_WALLET_NAME: 'portfolio-manager-controller-wallet',
+          PORTFOLIO_MANAGER_OWS_VAULT_PATH: '/tmp/portfolio-manager-ows-vault',
+        },
+        __internalDeriveControllerSmartAccountAddress: deriveControllerSmartAccountAddress,
+        __internalEnsureControllerSmartAccountDeployed: ensureControllerSmartAccountDeployed,
+        __internalEnsureServiceIdentity: ensureServiceIdentity,
+        __internalCreateAgentRuntimeKernel: createAgentRuntimeKernel,
+      } as never),
+    ).rejects.toThrow(
+      'Portfolio-manager startup failed because controller signer 0x00000000000000000000000000000000000000c1 has no ETH to deploy controller smart account 0x00000000000000000000000000000000000000c2 on Arbitrum. Fund the controller signer and restart the service.',
+    );
+
+    expect(deriveControllerSmartAccountAddress).toHaveBeenCalledWith({
+      signerAddress: '0x00000000000000000000000000000000000000c1',
+    });
+    expect(ensureServiceIdentity).not.toHaveBeenCalled();
+    expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
+  });
 });
