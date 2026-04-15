@@ -261,7 +261,7 @@ export interface ManagedMandateInput {
     root_asset: string;
     network: 'arbitrum';
     benchmark_asset: 'USD';
-    intent: 'deploy';
+    intent: 'position.enter';
     control_path: 'lending.supply';
   };
 }

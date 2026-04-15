@@ -51,8 +51,8 @@ const TEST_TRANSACTION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 const ALT_TEST_TRANSACTION_SIGNATURE =
   '0x564a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
-const DEFAULT_THIN_PLAN_HANDOFF_ID = 'handoff-thread-1-725367bc459d';
-const DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY = 'idem-create-transaction-plan-thread-1-9490180973b4';
+const DEFAULT_THIN_PLAN_HANDOFF_ID = 'handoff-thread-1-dc37565ed97c';
+const DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY = 'idem-create-transaction-plan-thread-1-d7eb712f5155';
 const DEFAULT_RICH_PLAN_HANDOFF_ID = 'handoff-thread-1-05c10d6a10a6';
 const DEFAULT_EXECUTION_IDEMPOTENCY_KEY =
   'idem-execute-transaction-plan-thread-1-07b74ae67cd9';
@@ -112,13 +112,13 @@ function createManagedLifecycleState() {
       reservations: [
         {
           reservation_id: 'reservation-ember-lending-001',
-          purpose: 'deploy',
+          purpose: 'position.enter',
           control_path: 'lending.supply',
         },
       ],
     },
     lastSharedEmberRevision: 7,
-    lastReservationSummary: 'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+    lastReservationSummary: 'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
     lastCandidatePlan: null,
     lastCandidatePlanSummary: null,
     anchoredPayloadRecords: [],
@@ -166,7 +166,7 @@ function createPortfolioStateResponse() {
         reservations: [
           {
             reservation_id: 'reservation-ember-lending-001',
-            purpose: 'deploy',
+            purpose: 'position.enter',
             control_path: 'lending.supply',
           },
         ],
@@ -197,7 +197,7 @@ function createLeanPortfolioStateResponse() {
         reservations: [
           {
             reservation_id: 'reservation-ember-lending-001',
-            purpose: 'deploy',
+            purpose: 'position.enter',
             control_path: 'lending.supply',
           },
         ],
@@ -242,7 +242,7 @@ function createPortfolioStateResponseWithoutRootedWalletContext() {
         reservations: [
           {
             reservation_id: 'reservation-ember-lending-001',
-            purpose: 'deploy',
+            purpose: 'position.enter',
             control_path: 'lending.supply',
             unit_allocations: [
               {
@@ -432,7 +432,7 @@ function createEmptyPortfolioStateResponse() {
 function createCandidatePlanInput() {
   return {
     idempotencyKey: 'idem-candidate-plan-001',
-    intent: 'deploy',
+    intent: 'position.enter',
     action_summary: 'supply reserved USDC on Aave',
     candidate_unit_ids: ['unit-ember-lending-001'],
     requested_quantities: [
@@ -442,7 +442,7 @@ function createCandidatePlanInput() {
       },
     ],
     decision_context: {
-      objective_summary: 'deploy reserved capital into the approved lending lane',
+      objective_summary: 'supply reserved capital into the approved lending lane',
       accounting_state_summary: 'one reserved USDC unit is available for the lending agent',
       why_this_path_is_best: 'lending.supply is the admitted path for this reservation',
       consequence_if_delayed: 'reserved capital remains idle',
@@ -477,7 +477,7 @@ function createEscalationRequestInput() {
   return {
     handoff: {
       handoff_id: 'handoff-ember-lending-escalation-001',
-      intent: 'deploy',
+      intent: 'position.enter',
       action_summary: 'supply reserved USDC on Aave',
       candidate_unit_ids: ['unit-ember-lending-001'],
       requested_quantities: [
@@ -487,7 +487,7 @@ function createEscalationRequestInput() {
         },
       ],
       decision_context: {
-        objective_summary: 'deploy reserved capital into the approved lending lane',
+        objective_summary: 'supply reserved capital into the approved lending lane',
         accounting_state_summary: 'reserved capital is still claimed by another agent',
         why_this_path_is_best: 'lending.supply remains the approved path once capital is free',
         consequence_if_delayed: 'reserved capital remains idle',
@@ -915,7 +915,7 @@ describe('createEmberLendingDomain', () => {
         rootedWalletContextId: 'rwc-ember-lending-thread-001',
         lastSharedEmberRevision: 11,
         lastReservationSummary:
-          'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+          'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
       },
       outputs: {
         status: {
@@ -1042,7 +1042,7 @@ describe('createEmberLendingDomain', () => {
         rootedWalletContextId: null,
         lastSharedEmberRevision: 8,
         lastReservationSummary:
-          'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+          'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
       },
     });
   });
@@ -1148,7 +1148,7 @@ describe('createEmberLendingDomain', () => {
         '  <active_reservations>',
         '    <reservation reservation_id="reservation-ember-lending-001">',
         '      <control_path>lending.supply</control_path>',
-        '      <purpose>deploy</purpose>',
+        '      <purpose>position.enter</purpose>',
         '  <owned_units>',
         '    <owned_unit unit_id="unit-ember-lending-001">',
         '      <root_asset>USDC</root_asset>',
@@ -1388,7 +1388,7 @@ describe('createEmberLendingDomain', () => {
           reservations: [
             {
               reservation_id: 'reservation-emberlendingprimary-thread-001',
-              purpose: 'deploy',
+              purpose: 'position.enter',
               control_path: 'lending.supply',
             },
           ],
@@ -2320,7 +2320,7 @@ describe('createEmberLendingDomain', () => {
           reservations: [
             {
               reservation_id: 'reservation-ember-lending-stale-001',
-              purpose: 'deploy',
+              purpose: 'position.enter',
               control_path: 'lending.supply',
               status: 'consumed',
               unit_allocations: [
@@ -2549,7 +2549,7 @@ describe('createEmberLendingDomain', () => {
                     root_asset: 'WETH',
                     network: 'arbitrum',
                     benchmark_asset: 'USD',
-                    intent: 'deploy',
+                    intent: 'position.enter',
                     control_path: 'lending.supply',
                   },
                 },
@@ -2644,7 +2644,7 @@ describe('createEmberLendingDomain', () => {
             root_asset: 'WETH',
             network: 'arbitrum',
             benchmark_asset: 'USD',
-            intent: 'deploy',
+            intent: 'position.enter',
             control_path: 'lending.supply',
           },
         },
@@ -3515,7 +3515,7 @@ describe('createEmberLendingDomain', () => {
           decision_context: {
             mandate_summary:
               'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-            objective_summary: 'deploy reserved capital into the approved lending lane',
+            objective_summary: 'supply reserved capital into the approved lending lane',
             accounting_state_summary: 'one reserved USDC unit is available for the lending agent',
             why_this_path_is_best: 'lending.supply is the admitted path for this reservation',
             consequence_if_delayed: 'reserved capital remains idle',
@@ -3737,7 +3737,7 @@ describe('createEmberLendingDomain', () => {
           agent_id: 'ember-lending',
           root_user_wallet: '0x00000000000000000000000000000000000000a1',
           mandate_ref: 'mandate-ember-lending-001',
-          intent: 'deploy',
+          intent: 'position.enter',
           control_path: 'lending.supply',
           action_summary: 'supply reserved USDC on Aave',
           candidate_unit_ids: ['unit-ember-lending-001'],
@@ -3750,7 +3750,7 @@ describe('createEmberLendingDomain', () => {
           decision_context: {
             mandate_summary:
               'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-            objective_summary: 'deploy reserved capital into the approved lending lane',
+            objective_summary: 'supply reserved capital into the approved lending lane',
             accounting_state_summary:
               'one reserved USDC unit is available for the lending agent',
             why_this_path_is_best: 'lending.supply is the admitted path for this reservation',
@@ -4145,7 +4145,7 @@ describe('createEmberLendingDomain', () => {
           agent_id: 'ember-lending',
           root_user_wallet: '0x00000000000000000000000000000000000000a1',
           mandate_ref: 'mandate-ember-lending-001',
-          intent: 'deploy',
+          intent: 'position.enter',
           action_summary: 'supply reserved 10 USDC on Aave',
           control_path: 'lending.supply',
           candidate_unit_ids: ['unit-ember-lending-001'],
@@ -4158,9 +4158,9 @@ describe('createEmberLendingDomain', () => {
           decision_context: {
             mandate_summary:
               'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-            objective_summary: 'deploy reserved capital into the approved lending lane',
+            objective_summary: 'supply reserved capital into the approved lending lane',
             accounting_state_summary:
-              'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+              'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
             why_this_path_is_best:
               'This matches the current lending mandate and reserved control path.',
             consequence_if_delayed: 'Reserved capital remains idle.',
@@ -4634,7 +4634,7 @@ describe('createEmberLendingDomain', () => {
         lastExecutionTxHash:
           '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
         lastReservationSummary:
-          'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+          'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
       },
       outputs: {
         status: {
@@ -6870,7 +6870,7 @@ describe('createEmberLendingDomain', () => {
         lastSharedEmberRevision: 9,
         lastExecutionTxHash: null,
         lastReservationSummary:
-          'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+          'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
         lastExecutionResult: {
           phase: 'blocked',
           transaction_plan_id: 'txplan-ember-lending-001',
@@ -7031,7 +7031,7 @@ describe('createEmberLendingDomain', () => {
         input: {
           handoff: {
             handoff_id: 'handoff-ember-lending-escalation-001',
-            intent: 'deploy',
+            intent: 'position.enter',
             action_summary: 'supply reserved USDC on Aave',
             candidate_unit_ids: ['unit-ember-lending-001'],
             requested_quantities: [
@@ -7041,7 +7041,7 @@ describe('createEmberLendingDomain', () => {
               },
             ],
             decision_context: {
-              objective_summary: 'deploy reserved capital into the approved lending lane',
+              objective_summary: 'supply reserved capital into the approved lending lane',
               accounting_state_summary:
                 'reserved capital is still claimed by another agent',
               why_this_path_is_best: 'lending.supply remains the approved path once capital is free',
@@ -7112,7 +7112,7 @@ describe('createEmberLendingDomain', () => {
           agent_id: 'ember-lending',
           root_user_wallet: '0x00000000000000000000000000000000000000a1',
           mandate_ref: 'mandate-ember-lending-001',
-          intent: 'deploy',
+          intent: 'position.enter',
           action_summary: 'supply reserved USDC on Aave',
           candidate_unit_ids: ['unit-ember-lending-001'],
           requested_quantities: [
@@ -7124,7 +7124,7 @@ describe('createEmberLendingDomain', () => {
           decision_context: {
             mandate_summary:
               'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-            objective_summary: 'deploy reserved capital into the approved lending lane',
+            objective_summary: 'supply reserved capital into the approved lending lane',
             accounting_state_summary: 'reserved capital is still claimed by another agent',
             why_this_path_is_best:
               'lending.supply remains the approved path once capital is free',
@@ -7235,7 +7235,7 @@ describe('createEmberLendingDomain', () => {
           reservations: [
             {
               reservation_id: 'reservation-emberlendingprimary-thread-001',
-              purpose: 'deploy',
+              purpose: 'position.enter',
               control_path: 'lending.supply',
             },
           ],
@@ -7314,7 +7314,7 @@ describe('createEmberLendingDomain', () => {
                 reservations: [
                   {
                     reservation_id: 'reservation-ember-lending-001',
-                    purpose: 'deploy',
+                    purpose: 'position.enter',
                     control_path: 'lending.supply',
                   },
                 ],

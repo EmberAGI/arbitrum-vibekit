@@ -97,7 +97,7 @@ function buildUiPreviewDomainProjection(args: {
           root_asset: 'USDC',
           network: 'arbitrum',
           benchmark_asset: 'USD',
-          intent: 'deploy',
+          intent: 'position.enter',
           control_path: 'lending.supply',
         },
       },
@@ -106,7 +106,7 @@ function buildUiPreviewDomainProjection(args: {
       rootedWalletContextId: 'rwc-ember-lending-thread-001',
       reservation: {
         reservationId: 'reservation-ember-lending-001',
-        purpose: 'deploy',
+        purpose: 'position.enter',
         controlPath: 'lending.supply',
         rootAsset: 'USDC',
         quantity: '10',

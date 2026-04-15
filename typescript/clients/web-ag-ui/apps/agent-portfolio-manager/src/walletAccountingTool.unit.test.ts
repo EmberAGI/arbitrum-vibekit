@@ -49,7 +49,7 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
               {
                 reservation_id: 'reservation-usdc-a1',
                 agent_id: 'ember-lending',
-                purpose: 'deploy',
+                purpose: 'position.enter',
                 status: 'active',
                 control_path: 'lending.supply',
                 unit_allocations: [

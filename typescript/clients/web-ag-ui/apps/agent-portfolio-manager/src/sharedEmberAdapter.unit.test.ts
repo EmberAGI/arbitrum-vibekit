@@ -103,7 +103,7 @@ function createPortfolioManagerSetupInput() {
           root_asset: 'USDC',
           network: 'arbitrum' as const,
           benchmark_asset: 'USD',
-          intent: 'deploy' as const,
+          intent: 'position.enter' as const,
           control_path: 'lending.supply' as const,
         },
       },
@@ -138,7 +138,7 @@ function createOnboardingBootstrap() {
                 root_asset: 'USDC',
                 network: 'arbitrum',
                 benchmark_asset: 'USD',
-                intent: 'deploy',
+                intent: 'position.enter',
                 control_path: 'lending.supply',
               },
             },
@@ -164,7 +164,7 @@ function createOnboardingBootstrap() {
             root_asset: 'USDC',
             network: 'arbitrum',
             benchmark_asset: 'USD',
-            intent: 'deploy',
+            intent: 'position.enter',
             control_path: 'lending.supply',
           },
         },
@@ -203,7 +203,7 @@ function createLiveManagedAgentPortfolioState() {
         root_asset: 'USDC',
         network: 'arbitrum',
         benchmark_asset: 'USD',
-        intent: 'deploy',
+        intent: 'position.enter',
         control_path: 'lending.supply',
       },
     },
@@ -222,7 +222,7 @@ function createLiveManagedAgentPortfolioState() {
     reservations: [
       {
         reservation_id: 'reservation-ember-lending-001',
-        purpose: 'deploy',
+        purpose: 'position.enter',
         control_path: 'lending.supply',
       },
     ],
@@ -237,7 +237,7 @@ function createUpdatedManagedMandate() {
       root_asset: 'USDC',
       network: 'arbitrum',
       benchmark_asset: 'USD',
-      intent: 'deploy',
+      intent: 'position.enter',
       control_path: 'lending.supply',
     },
   };
@@ -488,7 +488,7 @@ describe('createPortfolioManagerDomain', () => {
                   {
                     reservation_id: 'reservation-usdc-protocol-001',
                     agent_id: 'ember-lending',
-                    purpose: 'deploy',
+                    purpose: 'position.enter',
                     status: 'active',
                     control_path: 'lending.supply',
                     unit_allocations: [
@@ -621,7 +621,7 @@ describe('createPortfolioManagerDomain', () => {
                         root_asset: 'USDC',
                         network: 'arbitrum',
                         benchmark_asset: 'USD',
-                        intent: 'deploy',
+                        intent: 'position.enter',
                         control_path: 'lending.supply',
                       },
                     },
@@ -662,7 +662,7 @@ describe('createPortfolioManagerDomain', () => {
                     root_asset: 'USDC',
                     network: 'arbitrum',
                     benchmark_asset: 'USD',
-                    intent: 'deploy',
+                    intent: 'position.enter',
                     control_path: 'lending.supply',
                   },
                 },
@@ -2105,7 +2105,7 @@ describe('createPortfolioManagerDomain', () => {
                   {
                     reservation_id: 'reservation-usdc-protocol-001',
                     agent_id: 'ember-lending',
-                    purpose: 'deploy',
+                    purpose: 'position.enter',
                     status: 'active',
                     control_path: 'lending.supply',
                     unit_allocations: [
@@ -3029,7 +3029,7 @@ describe('createPortfolioManagerDomain', () => {
               root_asset: 'USDC',
               network: 'arbitrum',
               benchmark_asset: 'USD',
-              intent: 'deploy',
+              intent: 'position.enter',
               control_path: 'lending.supply',
             },
           },
@@ -3038,7 +3038,7 @@ describe('createPortfolioManagerDomain', () => {
           rootedWalletContextId: 'rwc-user-protocol-001',
           reservation: {
             reservationId: 'reservation-ember-lending-001',
-            purpose: 'deploy',
+            purpose: 'position.enter',
             controlPath: 'lending.supply',
             rootAsset: 'USDC',
             quantity: '25',
@@ -3659,7 +3659,7 @@ describe('createPortfolioManagerDomain', () => {
               {
                 reservation_id: 'reservation-a1',
                 agent_id: 'ember-lending',
-                purpose: 'deploy',
+                purpose: 'position.enter',
                 status: 'active',
                 control_path: 'lending.supply',
                 unit_allocations: [

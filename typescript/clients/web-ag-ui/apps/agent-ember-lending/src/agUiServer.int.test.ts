@@ -368,7 +368,7 @@ function createPersistingInternalPostgres() {
 function createCandidatePlanInput() {
   return {
     idempotencyKey: 'idem-candidate-plan-001',
-    intent: 'deploy',
+    intent: 'position.enter',
     action_summary: 'supply reserved USDC on Aave',
     candidate_unit_ids: ['unit-ember-lending-001'],
     requested_quantities: [
@@ -378,7 +378,7 @@ function createCandidatePlanInput() {
       },
     ],
     decision_context: {
-      objective_summary: 'deploy reserved capital into the approved lending lane',
+      objective_summary: 'supply reserved capital into the approved lending lane',
       accounting_state_summary: 'one reserved USDC unit is available for the lending agent',
       why_this_path_is_best: 'lending.supply is the admitted path for this reservation',
       consequence_if_delayed: 'reserved capital remains idle',
@@ -400,7 +400,7 @@ function createEscalationRequestInput() {
   return {
     handoff: {
       handoff_id: 'handoff-ember-lending-escalation-001',
-      intent: 'deploy',
+      intent: 'position.enter',
       action_summary: 'supply reserved USDC on Aave',
       candidate_unit_ids: ['unit-ember-lending-001'],
       requested_quantities: [
@@ -410,7 +410,7 @@ function createEscalationRequestInput() {
         },
       ],
       decision_context: {
-        objective_summary: 'deploy reserved capital into the approved lending lane',
+        objective_summary: 'supply reserved capital into the approved lending lane',
         accounting_state_summary: 'reserved capital is still claimed by another agent',
         why_this_path_is_best: 'lending.supply remains the approved path once capital is free',
         consequence_if_delayed: 'reserved capital remains idle',
@@ -563,7 +563,7 @@ function createTerminalExecutionResult(input: {
       reservations: [
         {
           reservation_id: 'reservation-ember-lending-001',
-          purpose: 'deploy',
+          purpose: 'position.enter',
           control_path: 'lending.supply',
         },
       ],
@@ -785,7 +785,7 @@ describe('agent-ember-lending AG-UI integration', () => {
               reservations: [
                 {
                   reservation_id: 'reservation-ember-lending-001',
-                  purpose: 'deploy',
+                  purpose: 'position.enter',
                   control_path: 'lending.supply',
                 },
               ],
@@ -972,7 +972,7 @@ describe('agent-ember-lending AG-UI integration', () => {
             rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
             rootedWalletContextId: 'rwc-ember-lending-thread-001',
             lastReservationSummary:
-              'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+              'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
           },
         },
       },
@@ -1026,7 +1026,7 @@ describe('agent-ember-lending AG-UI integration', () => {
                 reservations: [
                   {
                     reservation_id: 'reservation-emberlendingprimary-thread-001',
-                    purpose: 'deploy',
+                    purpose: 'position.enter',
                     control_path: 'lending.supply',
                   },
                 ],
@@ -1369,7 +1369,7 @@ describe('agent-ember-lending AG-UI integration', () => {
             rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
             rootedWalletContextId: 'rwc-ember-lending-thread-001',
             lastReservationSummary:
-              'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+              'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
           },
           artifacts: {
             current: {
@@ -1551,7 +1551,7 @@ describe('agent-ember-lending AG-UI integration', () => {
             lastExecutionTxHash:
               '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
             lastReservationSummary:
-              'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+              'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
           },
           artifacts: {
             current: {
@@ -1807,7 +1807,7 @@ describe('agent-ember-lending AG-UI integration', () => {
           lifecycle: {
             phase: 'active',
             lastReservationSummary:
-              'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+              'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
           },
           artifacts: {
             current: {
@@ -1896,7 +1896,7 @@ describe('agent-ember-lending AG-UI integration', () => {
           lifecycle: {
             phase: 'active',
             lastReservationSummary:
-              'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+              'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
           },
           artifacts: {
             current: {

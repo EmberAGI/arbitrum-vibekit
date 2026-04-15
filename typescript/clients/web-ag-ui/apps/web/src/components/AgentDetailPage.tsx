@@ -440,7 +440,7 @@ function buildReservationSummaryFromProjection(
   const rootAsset = readString(reservation['rootAsset']);
   const quantity = readString(reservation['quantity']);
   const reservationAction =
-    purpose === 'deploy' ? 'deploys' : purpose ? `${purpose}s` : 'moves';
+    purpose === 'position.enter' ? 'supplies' : purpose ? `${purpose}s` : 'moves';
   const quantitySummary = quantity && rootAsset ? ` ${quantity} ${rootAsset}` : ' capital';
   const controlPathSummary = controlPath ? ` via ${controlPath}` : '';
 
@@ -581,7 +581,7 @@ function ManagedMandateEditorCard(props: {
   const benchmarkAsset: ManagedMandateInput['asset_intent']['benchmark_asset'] =
     assetIntent?.['benchmark_asset'] === 'USD' ? 'USD' : 'USD';
   const intent: ManagedMandateInput['asset_intent']['intent'] =
-    assetIntent?.['intent'] === 'deploy' ? 'deploy' : 'deploy';
+    assetIntent?.['intent'] === 'position.enter' ? 'position.enter' : 'position.enter';
   const allocationBasis: ManagedMandateInput['allocation_basis'] =
     props.view.managedMandate?.['allocation_basis'] === 'allocable_idle'
       ? 'allocable_idle'

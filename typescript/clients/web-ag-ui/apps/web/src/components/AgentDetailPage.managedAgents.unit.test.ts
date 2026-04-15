@@ -34,7 +34,7 @@ function createManagedMandateEditorProjection(overrides: Record<string, unknown>
           root_asset: 'USDC',
           network: 'arbitrum',
           benchmark_asset: 'USD',
-          intent: 'deploy',
+          intent: 'position.enter',
           control_path: 'lending.supply',
         },
       },
@@ -43,7 +43,7 @@ function createManagedMandateEditorProjection(overrides: Record<string, unknown>
       rootedWalletContextId: 'rwc-ember-lending-thread-001',
       reservation: {
         reservationId: 'reservation-ember-lending-001',
-        purpose: 'deploy',
+        purpose: 'position.enter',
         controlPath: 'lending.supply',
         rootAsset: 'USDC',
         quantity: '10',
@@ -136,7 +136,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).toContain('lend USDC and WETH through the managed lending lane');
     expect(html).toContain('Reservation');
     expect(html).toContain(
-      'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+      'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
     );
     expect(html).toContain('class="grid gap-3 lg:grid-cols-2"');
     expect(html).toContain('>Manage<');
@@ -183,13 +183,13 @@ describe('AgentDetailPage managed-agent affordances', () => {
             root_asset: 'WETH',
             network: 'arbitrum',
             benchmark_asset: 'USD',
-            intent: 'deploy',
+            intent: 'position.enter',
             control_path: 'lending.supply',
           },
         },
         reservation: {
           reservationId: 'reservation-ember-lending-001',
-          purpose: 'deploy',
+          purpose: 'position.enter',
           controlPath: 'lending.supply',
           rootAsset: 'WETH',
           quantity: '10',
@@ -253,7 +253,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
       domainProjection: createManagedMandateEditorProjection({
         reservation: {
           reservationId: longReservationId,
-          purpose: 'deploy',
+          purpose: 'position.enter',
           controlPath: 'lending.supply',
           rootAsset: 'USDC',
           quantity: '10',
@@ -261,7 +261,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
       }),
     });
 
-    expect(html).toContain('Reservation res...lending...57c258d deploys 10 USDC via lending.supply.');
+    expect(html).toContain('Reservation res...lending...57c258d supplies 10 USDC via lending.supply.');
     expect(html).not.toContain(longReservationId);
   });
 

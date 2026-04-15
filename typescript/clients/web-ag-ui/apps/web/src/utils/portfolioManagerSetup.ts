@@ -23,7 +23,7 @@ const DEFAULT_PORTFOLIO_MANAGER_SETUP = {
         root_asset: DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
         network: 'arbitrum',
         benchmark_asset: 'USD',
-        intent: 'deploy',
+        intent: 'position.enter',
         control_path: 'lending.supply',
       },
     },

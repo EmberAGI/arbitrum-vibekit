@@ -90,7 +90,7 @@ function createPortfolioManagerSetupInput() {
           root_asset: 'USDC',
           network: 'arbitrum',
           benchmark_asset: 'USD',
-          intent: 'deploy',
+          intent: 'position.enter',
           control_path: 'lending.supply',
         },
       },

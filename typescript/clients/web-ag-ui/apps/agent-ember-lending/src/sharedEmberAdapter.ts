@@ -459,7 +459,7 @@ function summarizeReservation(portfolioState: unknown): string | null {
   }
 
   const reservationAction =
-    purpose === 'deploy' ? 'deploys' : purpose ? `${purpose}s` : 'moves';
+    purpose === 'position.enter' ? 'supplies' : purpose ? `${purpose}s` : 'moves';
   const quantitySummary = quantity && rootAsset ? ` ${quantity} ${rootAsset}` : ' capital';
   const controlPathSummary = controlPath ? ` via ${controlPath}` : '';
 
@@ -1843,7 +1843,7 @@ function buildManagedSubagentHandoffBase(input: {
 }
 
 const REQUEST_INTENTS = new Set([
-  'deploy',
+  'position.enter',
   'rebalance',
   'increase',
   'decrease',
@@ -2084,7 +2084,7 @@ function inferIntentFromActionSummary(value: unknown): string | null {
     normalized.includes('deposit') ||
     normalized.includes('deploy')
   ) {
-    return 'deploy';
+    return 'position.enter';
   }
 
   return null;
@@ -2100,7 +2100,7 @@ function inferIntentFromControlPath(controlPath: string | null): string | null {
       return 'increase';
     case 'lending.supply':
     case 'vault.deposit':
-      return 'deploy';
+      return 'position.enter';
     default:
       return null;
   }
@@ -2134,7 +2134,7 @@ function resolveManagedPlanningIntent(source: Record<string, unknown>, portfolio
     }
   }
 
-  return 'deploy';
+  return 'position.enter';
 }
 
 function readManagedRequestedQuantities(
@@ -2654,7 +2654,7 @@ function readManagedActionVerb(controlPath: string | null, intent: string): stri
     return pathAction;
   }
 
-  return intent === 'deploy' ? 'deploy' : intent;
+  return intent === 'position.enter' ? 'enter' : intent;
 }
 
 function formatDisplayLabel(value: string): string {
@@ -2704,7 +2704,7 @@ function buildFallbackObjectiveSummary(intent: string): string {
     case 'transfer':
       return 'transfer reserved capital within the approved managed flow';
     default:
-      return 'deploy reserved capital into the approved lending lane';
+      return 'supply reserved capital into the approved lending lane';
   }
 }
 
@@ -3376,7 +3376,7 @@ export function createEmberLendingDomain(
         {
           name: 'create_transaction_plan',
           description:
-            'Create or refresh a candidate transaction plan for the managed lending lane. Treat the current live Shared Ember execution context as authoritative: if active reservations or owned units expose lending.borrow, lending.withdraw, or lending.repay after an earlier transaction, those follow-up actions are in scope for the current mandate and should be planned directly from this thread without involving the portfolio manager. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with action_summary, optional control_path, optional intent, optional candidate_unit_ids, and optional requested_quantities as either an array of { unit_id, quantity } objects or an object map of unit_id to quantity. When a specific follow-up reservation is active, prefer setting control_path to the exact admitted path such as lending.repay or lending.withdraw so planning binds to the right reservation. If you provide intent, use one of deploy, increase, decrease, rebalance, or transfer. Every requested_quantities quantity must use base-unit quantity strings. When the user asks for an exact amount or any partial amount such as half, you must include requested_quantities with the exact base-unit quantity strings; a partial or exact plan without requested_quantities is invalid. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
+            'Create or refresh a candidate transaction plan for the managed lending lane. Treat the current live Shared Ember execution context as authoritative: if active reservations or owned units expose lending.borrow, lending.withdraw, or lending.repay after an earlier transaction, those follow-up actions are in scope for the current mandate and should be planned directly from this thread without involving the portfolio manager. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with action_summary, optional control_path, optional intent, optional candidate_unit_ids, and optional requested_quantities as either an array of { unit_id, quantity } objects or an object map of unit_id to quantity. When a specific follow-up reservation is active, prefer setting control_path to the exact admitted path such as lending.repay or lending.withdraw so planning binds to the right reservation. If you provide intent, use one of position.enter, increase, decrease, rebalance, or transfer. Every requested_quantities quantity must use base-unit quantity strings. When the user asks for an exact amount or any partial amount such as half, you must include requested_quantities with the exact base-unit quantity strings; a partial or exact plan without requested_quantities is invalid. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
         },
         {
           name: 'request_transaction_execution',

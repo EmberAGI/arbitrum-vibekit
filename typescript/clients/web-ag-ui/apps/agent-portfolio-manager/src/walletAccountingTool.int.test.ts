@@ -65,7 +65,7 @@ function createOnboardingBootstrap(suffix: string, walletAddress: `0x${string}`)
             root_asset: 'USDC',
             network: 'arbitrum',
             benchmark_asset: 'USD',
-            intent: 'deploy',
+            intent: 'position.enter',
             control_path: 'lending.supply',
           },
         },

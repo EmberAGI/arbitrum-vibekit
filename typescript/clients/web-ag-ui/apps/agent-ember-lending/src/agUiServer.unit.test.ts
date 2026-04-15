@@ -59,13 +59,13 @@ function createManagedLifecycleState() {
       reservations: [
         {
           reservation_id: 'reservation-ember-lending-001',
-          purpose: 'deploy',
+          purpose: 'position.enter',
           control_path: 'lending.supply',
         },
       ],
     },
     lastSharedEmberRevision: 7,
-    lastReservationSummary: 'Reservation reservation-ember-lending-001 deploys 10 USDC via lending.supply.',
+    lastReservationSummary: 'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
     lastCandidatePlan: null,
     lastCandidatePlanSummary: null,
     anchoredPayloadRecords: [],
@@ -80,7 +80,7 @@ function createManagedLifecycleState() {
 function createCandidatePlanInput() {
   return {
     idempotencyKey: 'idem-candidate-plan-001',
-    intent: 'deploy',
+    intent: 'position.enter',
     action_summary: 'supply reserved USDC on Aave',
     candidate_unit_ids: ['unit-ember-lending-001'],
     requested_quantities: [
@@ -90,7 +90,7 @@ function createCandidatePlanInput() {
       },
     ],
     decision_context: {
-      objective_summary: 'deploy reserved capital into the approved lending lane',
+      objective_summary: 'supply reserved capital into the approved lending lane',
       accounting_state_summary: 'one reserved USDC unit is available for the lending agent',
       why_this_path_is_best: 'lending.supply is the admitted path for this reservation',
       consequence_if_delayed: 'reserved capital remains idle',

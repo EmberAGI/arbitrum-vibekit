@@ -144,7 +144,7 @@ describe('AgentDetailPage portfolio-manager setup', () => {
             root_asset: 'WETH',
             network: 'arbitrum',
             benchmark_asset: 'USD',
-            intent: 'deploy',
+            intent: 'position.enter',
             control_path: 'lending.supply',
           },
         },

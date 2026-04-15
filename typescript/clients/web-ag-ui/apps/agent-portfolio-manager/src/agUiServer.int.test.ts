@@ -193,7 +193,7 @@ function createPortfolioManagerSetupInput() {
           root_asset: 'USDC',
           network: 'arbitrum',
           benchmark_asset: 'USD',
-          intent: 'deploy',
+          intent: 'position.enter',
           control_path: 'lending.supply',
         },
       },
@@ -354,7 +354,7 @@ async function handleDefaultSharedEmberJsonRpc(input: unknown): Promise<unknown>
               {
                 reservation_id: 'reservation-thread1-usdc-001',
                 agent_id: 'ember-lending',
-                purpose: 'deploy',
+                purpose: 'position.enter',
                 status: 'active',
                 control_path: 'lending.supply',
                 unit_allocations: [
@@ -707,7 +707,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
                     root_asset: 'USDC',
                     network: 'arbitrum',
                     benchmark_asset: 'USD',
-                    intent: 'deploy',
+                    intent: 'position.enter',
                     control_path: 'lending.supply',
                   },
                 },
