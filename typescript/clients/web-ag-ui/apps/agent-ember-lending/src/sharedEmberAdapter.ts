@@ -35,12 +35,8 @@ const EMBER_LENDING_ROUTE_AGENT_TITLE = 'Ember Lending';
 
 const PLANNING_PM_ONBOARDING_BLOCKED_MESSAGE =
   'Portfolio Manager onboarding must complete before lending can plan transactions for this thread.';
-const PLANNING_PM_ADMISSION_BLOCKED_MESSAGE =
-  'Portfolio Manager must admit a lending unit before lending can plan transactions for this thread.';
-const PLANNING_PM_UNIT_SCOPE_BLOCKED_MESSAGE =
-  'Lending can only plan with Portfolio Manager-admitted units for this thread.';
-const PLANNING_PM_REQUESTED_QUANTITIES_BLOCKED_MESSAGE =
-  'Lending requested_quantities must be JSON using Portfolio Manager-admitted unit ids and base-unit quantity strings.';
+const CREATE_TRANSACTION_INPUT_BLOCKED_MESSAGE =
+  'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}.';
 
 export type EmberLendingLifecycleState = {
   phase: 'prehire' | 'onboarding' | 'active' | 'firing' | 'inactive';
@@ -158,32 +154,33 @@ type PendingExecutionSubmission = {
   revision: number | null;
 };
 
-type RequestedQuantity = {
-  unit_id: string;
-  quantity: string;
+type SemanticQuantity =
+  | {
+      kind: 'exact';
+      value: string;
+    }
+  | {
+      kind: 'percent';
+      value: number;
+    };
+
+type SemanticTransactionRequest = {
+  control_path: 'lending.supply' | 'lending.withdraw' | 'lending.borrow' | 'lending.repay';
+  asset: string;
+  protocol_system: string;
+  network: string;
+  quantity: SemanticQuantity;
 };
 
 type ManagedPlanningReadiness =
   | {
       status: 'ready';
-      candidateUnitIds: string[];
-      requestedQuantities: RequestedQuantity[];
+      request: SemanticTransactionRequest;
     }
   | {
       status: 'blocked';
       statusMessage: string;
-    };
-
-type ParsedRequestedQuantitiesInput =
-  | {
-      status: 'absent';
-    }
-  | {
-      status: 'valid';
-      requestedQuantities: RequestedQuantity[];
-    }
-  | {
-      status: 'invalid';
+      reason: 'onboarding' | 'invalid_request';
     };
 
 type SharedEmberCommittedEvent = {
@@ -1583,10 +1580,7 @@ function readCandidatePlanTransactionPlanId(candidatePlan: unknown): string | nu
 function readCandidatePlanPayloadBuilderOutput(
   candidatePlan: unknown,
 ): EmberLendingPayloadBuilderOutput | null {
-  const payloadBuilderOutput = readRecordKey(
-    readRecordKey(candidatePlan, 'handoff'),
-    'payload_builder_output',
-  );
+  const payloadBuilderOutput = readRecordKey(candidatePlan, 'payload_builder_output');
   const transactionPayloadRef = readString(payloadBuilderOutput?.['transaction_payload_ref']);
   const requiredControlPath = readString(payloadBuilderOutput?.['required_control_path']);
   const network = readString(payloadBuilderOutput?.['network']);
@@ -2449,51 +2443,7 @@ function readPortfolioReservationForSource(
     }
   }
 
-  const sourceUnitIds = readManagedPlanningSourceUnitIds(source);
-  if (sourceUnitIds.length > 0) {
-    const exactMatchingReservation = reservations.find((reservation) => {
-      const reservationUnitIds = new Set(readReservationUnitIds(reservation));
-      return sourceUnitIds.every((unitId) => reservationUnitIds.has(unitId));
-    });
-    if (exactMatchingReservation) {
-      return exactMatchingReservation;
-    }
-
-    const overlappingReservation = reservations.find((reservation) =>
-      readReservationUnitIds(reservation).some((unitId) => sourceUnitIds.includes(unitId)),
-    );
-    if (overlappingReservation) {
-      return overlappingReservation;
-    }
-  }
-
   return reservations.length === 1 ? reservations[0] ?? null : null;
-}
-
-function readReservationUnitIds(reservation: Record<string, unknown>): string[] {
-  if (!Array.isArray(reservation['unit_allocations'])) {
-    return [];
-  }
-
-  return reservation['unit_allocations']
-    .map((candidate) => (isRecord(candidate) ? readString(candidate['unit_id']) : null))
-    .filter((unitId): unitId is string => unitId !== null);
-}
-
-function readManagedPlanningSourceUnitIds(source: unknown): string[] {
-  if (!isRecord(source)) {
-    return [];
-  }
-
-  const unitIds = new Set<string>(readStringArray(source['candidate_unit_ids']) ?? []);
-  const requestedQuantities = readRequestedQuantitiesInput(source['requested_quantities']);
-  if (requestedQuantities.status === 'valid') {
-    for (const requestedQuantity of requestedQuantities.requestedQuantities) {
-      unitIds.add(requestedQuantity.unit_id);
-    }
-  }
-
-  return [...unitIds];
 }
 
 function resolveManagedPlanningControlPath(
@@ -2588,223 +2538,6 @@ function resolveManagedPlanningIntent(source: Record<string, unknown>, portfolio
   }
 
   return 'position.enter';
-}
-
-function readManagedRequestedQuantities(
-  portfolioState: unknown,
-  source?: unknown,
-): Array<{ unit_id: string; quantity: string }> | null {
-  if (!isRecord(portfolioState)) {
-    return null;
-  }
-
-  const reservation =
-    typeof source === 'undefined'
-      ? readPortfolioReservation(portfolioState)
-      : readPortfolioReservationForSource(portfolioState, source);
-  if (reservation && Array.isArray(reservation['unit_allocations'])) {
-    const allocations = reservation['unit_allocations']
-      .map((candidate) => {
-        if (!isRecord(candidate)) {
-          return null;
-        }
-
-        const unitId = readString(candidate['unit_id']);
-        const quantity = readString(candidate['quantity']);
-        return unitId && quantity ? { unit_id: unitId, quantity } : null;
-      })
-      .filter((candidate): candidate is { unit_id: string; quantity: string } => candidate !== null);
-    if (allocations.length > 0) {
-      return allocations;
-    }
-  }
-
-  if (!Array.isArray(portfolioState['owned_units'])) {
-    return null;
-  }
-
-  const reservationId = readString(reservation?.['reservation_id']);
-  const requestedQuantities = portfolioState['owned_units']
-    .map((candidate) => {
-      if (!isRecord(candidate)) {
-        return null;
-      }
-
-      if (reservationId && readString(candidate['reservation_id']) !== reservationId) {
-        return null;
-      }
-
-      const unitId = readString(candidate['unit_id']);
-      const quantity = readString(candidate['quantity']);
-      return unitId && quantity ? { unit_id: unitId, quantity } : null;
-    })
-    .filter((candidate): candidate is { unit_id: string; quantity: string } => candidate !== null);
-
-  if (requestedQuantities.length > 0) {
-    return requestedQuantities;
-  }
-
-  const fallbackOwnedUnit = readPortfolioOwnedUnit(portfolioState);
-  const unitId = readString(fallbackOwnedUnit?.['unit_id']);
-  const quantity = readString(fallbackOwnedUnit?.['quantity']);
-  return unitId && quantity ? [{ unit_id: unitId, quantity }] : null;
-}
-
-function readManagedCandidateUnitIds(portfolioState: unknown, source?: unknown): string[] | null {
-  const requestedQuantities = readManagedRequestedQuantities(portfolioState, source);
-  return requestedQuantities?.map((candidate) => candidate.unit_id) ?? null;
-}
-
-function buildManagedPlanningUnitAliasIndex(input: {
-  portfolioState: unknown;
-  managedCandidateUnitIds: string[];
-}): Map<string, string[]> {
-  const aliasIndex = new Map<string, string[]>();
-  const managedUnitIds = new Set(input.managedCandidateUnitIds);
-
-  const registerAlias = (alias: string, managedUnitId: string) => {
-    const existing = aliasIndex.get(alias);
-    if (!existing) {
-      aliasIndex.set(alias, [managedUnitId]);
-      return;
-    }
-
-    if (!existing.includes(managedUnitId)) {
-      existing.push(managedUnitId);
-    }
-  };
-
-  for (const managedUnitId of input.managedCandidateUnitIds) {
-    registerAlias(managedUnitId, managedUnitId);
-  }
-
-  if (!isRecord(input.portfolioState) || !Array.isArray(input.portfolioState['owned_units'])) {
-    return aliasIndex;
-  }
-
-  for (const candidate of input.portfolioState['owned_units']) {
-    if (!isRecord(candidate)) {
-      continue;
-    }
-
-    const unitId = readString(candidate['unit_id']);
-    if (!unitId || !managedUnitIds.has(unitId)) {
-      continue;
-    }
-
-    registerAlias(unitId, unitId);
-
-    const rootAsset = readString(candidate['root_asset']);
-    if (rootAsset) {
-      registerAlias(rootAsset, unitId);
-      registerAlias(rootAsset.toLowerCase(), unitId);
-    }
-
-    const metadata = isRecord(candidate['metadata']) ? candidate['metadata'] : null;
-    const underlyingAsset = readString(metadata?.['underlying_asset']);
-    if (underlyingAsset) {
-      registerAlias(underlyingAsset, unitId);
-      registerAlias(underlyingAsset.toLowerCase(), unitId);
-    }
-
-    const underlyingAssetSymbol = readString(metadata?.['underlying_asset_symbol']);
-    if (underlyingAssetSymbol) {
-      registerAlias(underlyingAssetSymbol, unitId);
-      registerAlias(underlyingAssetSymbol.toLowerCase(), unitId);
-    }
-
-    const sourceUnitId = readString(metadata?.['source_unit_id']);
-    if (sourceUnitId) {
-      registerAlias(sourceUnitId, unitId);
-    }
-
-    for (const parentUnitId of readStringArray(candidate['parent_unit_ids']) ?? []) {
-      registerAlias(parentUnitId, unitId);
-    }
-  }
-
-  return aliasIndex;
-}
-
-function readManagedPlanningAliasUnitIds(
-  unitId: string,
-  aliasIndex: Map<string, string[]>,
-): string[] {
-  return [...(aliasIndex.get(unitId) ?? [])];
-}
-
-function parseBaseUnitQuantity(quantity: string): bigint | null {
-  if (!/^\d+$/.test(quantity)) {
-    return null;
-  }
-
-  try {
-    return BigInt(quantity);
-  } catch {
-    return null;
-  }
-}
-
-function expandManagedRequestedQuantityAcrossAliases(input: {
-  requestedQuantity: RequestedQuantity;
-  aliasIndex: Map<string, string[]>;
-  managedRequestedQuantities: RequestedQuantity[];
-}): RequestedQuantity[] | null {
-  const matchingUnitIds = readManagedPlanningAliasUnitIds(
-    input.requestedQuantity.unit_id,
-    input.aliasIndex,
-  );
-  if (matchingUnitIds.length === 0) {
-    return null;
-  }
-
-  if (matchingUnitIds.length === 1) {
-    return [
-      {
-        unit_id: matchingUnitIds[0]!,
-        quantity: input.requestedQuantity.quantity,
-      },
-    ];
-  }
-
-  const remainingQuantity = parseBaseUnitQuantity(input.requestedQuantity.quantity);
-  if (remainingQuantity === null) {
-    return null;
-  }
-
-  let remaining = remainingQuantity;
-  const matchingUnitIdsSet = new Set(matchingUnitIds);
-  const distributedRequestedQuantities: RequestedQuantity[] = [];
-
-  for (const managedRequestedQuantity of input.managedRequestedQuantities) {
-    if (!matchingUnitIdsSet.has(managedRequestedQuantity.unit_id)) {
-      continue;
-    }
-
-    const availableQuantity = parseBaseUnitQuantity(managedRequestedQuantity.quantity);
-    if (availableQuantity === null) {
-      return null;
-    }
-
-    if (availableQuantity <= 0n) {
-      continue;
-    }
-
-    const allocatedQuantity = remaining < availableQuantity ? remaining : availableQuantity;
-    if (allocatedQuantity > 0n) {
-      distributedRequestedQuantities.push({
-        unit_id: managedRequestedQuantity.unit_id,
-        quantity: allocatedQuantity.toString(),
-      });
-      remaining -= allocatedQuantity;
-    }
-
-    if (remaining === 0n) {
-      return distributedRequestedQuantities;
-    }
-  }
-
-  return null;
 }
 
 function hasPortfolioManagerPlanningIdentity(state: EmberLendingLifecycleState): boolean {
@@ -2911,10 +2644,7 @@ async function resolveManagedPlanningBlockedMessage(input: {
   state: EmberLendingLifecycleState;
   fallbackStatusMessage: string;
 }): Promise<string> {
-  if (
-    input.fallbackStatusMessage !== PLANNING_PM_ONBOARDING_BLOCKED_MESSAGE &&
-    input.fallbackStatusMessage !== PLANNING_PM_ADMISSION_BLOCKED_MESSAGE
-  ) {
+  if (input.fallbackStatusMessage !== PLANNING_PM_ONBOARDING_BLOCKED_MESSAGE) {
     return input.fallbackStatusMessage;
   }
 
@@ -2939,166 +2669,92 @@ async function resolveManagedPlanningBlockedMessage(input: {
   });
 }
 
+function readSemanticQuantityInput(value: unknown): SemanticQuantity | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const kind = readString(value['kind']);
+  if (kind === 'exact') {
+    const exactValue = readString(value['value']);
+    return exactValue ? { kind: 'exact', value: exactValue } : null;
+  }
+
+  if (kind === 'percent') {
+    const percentValue = readFiniteNumber(value['value']);
+    return percentValue && percentValue > 0 && percentValue <= 100
+      ? {
+          kind: 'percent',
+          value: percentValue,
+        }
+      : null;
+  }
+
+  return null;
+}
+
+function readSemanticTransactionRequestInput(value: unknown): SemanticTransactionRequest | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const controlPath = readString(value['control_path']);
+  const asset = readString(value['asset']);
+  const protocolSystem = readString(value['protocol_system']);
+  const network = readString(value['network']);
+  const quantity = readSemanticQuantityInput(value['quantity']);
+
+  if (
+    (controlPath !== 'lending.supply' &&
+      controlPath !== 'lending.withdraw' &&
+      controlPath !== 'lending.borrow' &&
+      controlPath !== 'lending.repay') ||
+    !asset ||
+    !protocolSystem ||
+    !network ||
+    !quantity
+  ) {
+    return null;
+  }
+
+  return {
+    control_path: controlPath,
+    asset,
+    protocol_system: protocolSystem,
+    network,
+    quantity,
+  };
+}
+
 function resolveManagedPlanningReadiness(input: {
   state: EmberLendingLifecycleState;
   operationInput: unknown;
 }): ManagedPlanningReadiness {
-  if (!hasPortfolioManagerPlanningIdentity(input.state)) {
+  if (
+    !hasPortfolioManagerPlanningIdentity(input.state) ||
+    !hasConnectReadyEmberLendingRuntimeProjection(input.state)
+  ) {
     return {
       status: 'blocked',
       statusMessage: PLANNING_PM_ONBOARDING_BLOCKED_MESSAGE,
+      reason: 'onboarding',
     };
   }
 
-  const managedRequestedQuantities = readManagedRequestedQuantities(
-    input.state.lastPortfolioState,
-    input.operationInput,
-  );
-  const managedCandidateUnitIds = readManagedCandidateUnitIds(
-    input.state.lastPortfolioState,
-    input.operationInput,
-  );
-  if (!managedRequestedQuantities || !managedCandidateUnitIds) {
-    return {
-      status: 'blocked',
-      statusMessage: PLANNING_PM_ADMISSION_BLOCKED_MESSAGE,
-    };
-  }
-
-  const managedUnitAliases = buildManagedPlanningUnitAliasIndex({
-    portfolioState: input.state.lastPortfolioState,
-    managedCandidateUnitIds,
-  });
   const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
-  const candidateUnitIdsInput =
-    readStringArray(commandInput['candidate_unit_ids']) ?? managedCandidateUnitIds;
-  const requestedQuantitiesInput = Object.prototype.hasOwnProperty.call(
-    commandInput,
-    'requested_quantities',
-  )
-    ? readRequestedQuantitiesInput(commandInput['requested_quantities'])
-    : { status: 'absent' as const };
-  if (requestedQuantitiesInput.status === 'invalid') {
+  const request = readSemanticTransactionRequestInput(commandInput);
+  if (!request) {
     return {
       status: 'blocked',
-      statusMessage: PLANNING_PM_REQUESTED_QUANTITIES_BLOCKED_MESSAGE,
+      statusMessage: CREATE_TRANSACTION_INPUT_BLOCKED_MESSAGE,
+      reason: 'invalid_request',
     };
-  }
-  const candidateUnitIds = [...new Set(candidateUnitIdsInput.flatMap((unitId) => {
-    const normalizedUnitIds = readManagedPlanningAliasUnitIds(unitId, managedUnitAliases);
-    return normalizedUnitIds.length > 0 ? normalizedUnitIds : [null];
-  }))];
-  if (candidateUnitIds.some((unitId) => unitId === null)) {
-    return {
-      status: 'blocked',
-      statusMessage: PLANNING_PM_UNIT_SCOPE_BLOCKED_MESSAGE,
-    };
-  }
-
-  const requestedQuantitiesByUnitId = new Map<string, string>();
-  for (const requestedQuantity of
-    requestedQuantitiesInput.status === 'valid'
-      ? requestedQuantitiesInput.requestedQuantities
-      : managedRequestedQuantities) {
-    const normalizedRequestedQuantities =
-      requestedQuantitiesInput.status === 'valid'
-        ? expandManagedRequestedQuantityAcrossAliases({
-            requestedQuantity,
-            aliasIndex: managedUnitAliases,
-            managedRequestedQuantities,
-          })
-        : [
-            {
-              unit_id: requestedQuantity.unit_id,
-              quantity: requestedQuantity.quantity,
-            },
-          ];
-    if (!normalizedRequestedQuantities) {
-      return {
-        status: 'blocked',
-        statusMessage: PLANNING_PM_UNIT_SCOPE_BLOCKED_MESSAGE,
-      };
-    }
-
-    for (const normalizedRequestedQuantity of normalizedRequestedQuantities) {
-      requestedQuantitiesByUnitId.set(
-        normalizedRequestedQuantity.unit_id,
-        normalizedRequestedQuantity.quantity,
-      );
-    }
   }
 
   return {
     status: 'ready',
-    candidateUnitIds: candidateUnitIds.filter((unitId): unitId is string => unitId !== null),
-    requestedQuantities: [...requestedQuantitiesByUnitId].map(([unit_id, quantity]) => ({
-      unit_id,
-      quantity,
-    })),
+    request,
   };
-}
-
-function readRequestedQuantitiesInput(
-  value: unknown,
-): ParsedRequestedQuantitiesInput {
-  if (value === null || typeof value === 'undefined') {
-    return { status: 'absent' };
-  }
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return { status: 'invalid' };
-    }
-
-    const requestedQuantities: RequestedQuantity[] = [];
-    for (const candidate of value) {
-      if (!isRecord(candidate)) {
-        return { status: 'invalid' };
-      }
-
-      const requestedQuantity = readRequestedQuantityEntry(candidate['unit_id'], candidate['quantity']);
-      if (!requestedQuantity) {
-        return { status: 'invalid' };
-      }
-      requestedQuantities.push(requestedQuantity);
-    }
-
-    return {
-      status: 'valid',
-      requestedQuantities,
-    };
-  }
-
-  if (isRecord(value)) {
-    const entries = Object.entries(value);
-    if (entries.length === 0) {
-      return { status: 'invalid' };
-    }
-
-    const requestedQuantities: RequestedQuantity[] = [];
-    for (const [unitId, quantity] of entries) {
-      const requestedQuantity = readRequestedQuantityEntry(unitId, quantity);
-      if (!requestedQuantity) {
-        return { status: 'invalid' };
-      }
-      requestedQuantities.push(requestedQuantity);
-    }
-
-    return {
-      status: 'valid',
-      requestedQuantities,
-    };
-  }
-
-  return { status: 'invalid' };
-}
-
-function readRequestedQuantityEntry(unitId: unknown, quantity: unknown): RequestedQuantity | null {
-  const parsedUnitId = readString(unitId);
-  const parsedQuantity = readString(quantity);
-  return parsedUnitId && parsedQuantity
-    ? { unit_id: parsedUnitId, quantity: parsedQuantity }
-    : null;
 }
 
 function readManagedActionVerb(controlPath: string | null, intent: string): string {
@@ -3114,6 +2770,17 @@ function formatDisplayLabel(value: string): string {
   return value.length > 0 ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
 }
 
+function formatSemanticQuantitySummary(quantity: unknown): string | null {
+  const semanticQuantity = readSemanticQuantityInput(quantity);
+  if (!semanticQuantity) {
+    return null;
+  }
+
+  return semanticQuantity.kind === 'percent'
+    ? `${semanticQuantity.value}%`
+    : semanticQuantity.value;
+}
+
 function buildFallbackActionSummary(input: {
   source: Record<string, unknown>;
   state: EmberLendingLifecycleState;
@@ -3122,13 +2789,14 @@ function buildFallbackActionSummary(input: {
   const portfolioState = isRecord(input.state.lastPortfolioState) ? input.state.lastPortfolioState : null;
   const reservation = readPortfolioReservationForSource(portfolioState, input.source);
   const ownedUnit = portfolioState ? readPortfolioOwnedUnit(portfolioState) : null;
-  const requestedQuantities = readManagedRequestedQuantities(portfolioState, input.source);
-  const quantity = readString(input.source['amount']) ?? requestedQuantities?.[0]?.quantity ?? null;
+  const quantity =
+    formatSemanticQuantitySummary(input.source['quantity']) ?? readString(input.source['amount']) ?? null;
   const asset = readString(input.source['asset']) ?? readString(ownedUnit?.['root_asset']) ?? 'capital';
   const protocol =
+    readString(input.source['protocol_system']) ??
     readString(input.source['protocol']) ??
     (isRecord(input.state.mandateContext) ? readString(input.state.mandateContext['protocol']) : null);
-  const controlPath = readString(reservation?.['control_path']);
+  const controlPath = readString(input.source['control_path']) ?? readString(reservation?.['control_path']);
   const verb = readManagedActionVerb(controlPath, input.intent);
 
   if (quantity && protocol) {
@@ -3246,60 +2914,16 @@ function resolveOperationIdempotencyKey(input: {
   return normalized.endsWith(bindingSuffix) ? normalized : `${normalized}${bindingSuffix}`;
 }
 
-function buildTransactionPlanningHandoff(input: {
+function buildCreateTransactionRequest(input: {
   state: EmberLendingLifecycleState;
-  threadId: string;
-  agentId: string;
   operationInput: unknown;
-}): Record<string, unknown> | null {
-  const base = buildManagedSubagentHandoffBase(input);
-  if (!base) {
-    return null;
-  }
-
-  const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
+}): SemanticTransactionRequest | null {
   const planningReadiness = resolveManagedPlanningReadiness({
     state: input.state,
     operationInput: input.operationInput,
   });
-  if (planningReadiness.status === 'blocked') {
-    return null;
-  }
-  const intent = resolveManagedPlanningIntent(commandInput, input.state.lastPortfolioState);
-  const actionSummary =
-    readString(commandInput['action_summary']) ??
-    buildFallbackActionSummary({
-      source: commandInput,
-      state: input.state,
-      intent,
-    });
-  const controlPath = resolveManagedPlanningControlPath(
-    commandInput,
-    input.state.lastPortfolioState,
-  );
 
-  const handoffPayload: Record<string, unknown> = {
-    ...base,
-    intent,
-    action_summary: actionSummary,
-    candidate_unit_ids: planningReadiness.candidateUnitIds,
-    requested_quantities: planningReadiness.requestedQuantities,
-    ...(controlPath === null ? {} : { control_path: controlPath }),
-    decision_context: buildManagedSubagentDecisionContext({
-      source: commandInput,
-      state: input.state,
-      mandateSummary: input.state.mandateSummary,
-      intent,
-    }),
-  };
-  const handoff: Record<string, unknown> = {
-    handoff_id:
-      readString(commandInput['handoff_id']) ??
-      `handoff-${input.threadId}-${buildStableCommandSuffix(handoffPayload)}`,
-    ...handoffPayload,
-  };
-
-  return handoff;
+  return planningReadiness.status === 'ready' ? planningReadiness.request : null;
 }
 
 function buildEscalationHandoff(input: {
@@ -3332,6 +2956,7 @@ function buildEscalationHandoff(input: {
     action_summary: actionSummary,
   };
   for (const key of [
+    'semantic_request',
     'candidate_unit_ids',
     'requested_quantities',
     'payload_builder_output',
@@ -3486,8 +3111,8 @@ async function runPreparedExecutionFlow(input: {
     currentRevision: input.currentState.lastSharedEmberRevision,
     buildRequest: (expectedRevision) => ({
       jsonrpc: '2.0',
-      id: `shared-ember-${input.threadId}-request-transaction-execution`,
-      method: 'subagent.requestTransactionExecution.v1',
+      id: `shared-ember-${input.threadId}-request-execution`,
+      method: 'subagent.requestExecution.v1',
       params: {
         idempotency_key: buildExecutionPreparationContinuationIdempotencyKey({
           baseIdempotencyKey: input.idempotencyKey,
@@ -3522,8 +3147,8 @@ async function runPreparedExecutionFlow(input: {
       currentRevision: requestResponse.result?.revision ?? null,
       buildRequest: (expectedRevision) => ({
         jsonrpc: '2.0',
-        id: `shared-ember-${input.threadId}-request-transaction-execution`,
-        method: 'subagent.requestTransactionExecution.v1',
+        id: `shared-ember-${input.threadId}-request-execution`,
+        method: 'subagent.requestExecution.v1',
         params: {
           idempotency_key: buildExecutionPreparationContinuationIdempotencyKey({
             baseIdempotencyKey: input.idempotencyKey,
@@ -3579,8 +3204,8 @@ async function runPreparedExecutionFlow(input: {
             currentRevision: latestProgress?.revision ?? requestResponse.result?.revision ?? null,
             buildRequest: (expectedRevision) => ({
               jsonrpc: '2.0',
-              id: `shared-ember-${input.threadId}-request-transaction-execution`,
-              method: 'subagent.requestTransactionExecution.v1',
+              id: `shared-ember-${input.threadId}-request-execution`,
+              method: 'subagent.requestExecution.v1',
               params: {
                 idempotency_key: buildExecutionPreparationContinuationIdempotencyKey({
                   baseIdempotencyKey: input.idempotencyKey,
@@ -3827,14 +3452,14 @@ export function createEmberLendingDomain(
           description: 'Route managed-agent deactivation back to the portfolio manager.',
         },
         {
-          name: 'create_transaction_plan',
+          name: 'create_transaction',
           description:
-            'Create or refresh a candidate transaction plan for the managed lending lane. Treat the current live Shared Ember execution context as authoritative: if active reservations or owned units expose lending.borrow, lending.withdraw, or lending.repay after an earlier transaction, those follow-up actions are in scope for the current mandate and should be planned directly from this thread without involving the portfolio manager. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with action_summary, optional control_path, optional intent, optional candidate_unit_ids, and optional requested_quantities as either an array of { unit_id, quantity } objects or an object map of unit_id to quantity. When a specific follow-up reservation is active, prefer setting control_path to the exact admitted path such as lending.repay or lending.withdraw so planning binds to the right reservation. If you provide intent, use one of position.enter, increase, decrease, rebalance, or transfer. Every requested_quantities quantity must use base-unit quantity strings. When the user asks for an exact amount or any partial amount such as half, you must include requested_quantities with the exact base-unit quantity strings; a partial or exact plan without requested_quantities is invalid. Omit requested_quantities only when the user clearly wants the full or max-possible amount.',
+            'Create or refresh a candidate transaction plan for the managed lending lane. Reason from mandate_summary, wallet_contents, active_position_scopes, and the current candidate plan. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with control_path, asset, protocol_system, network, and quantity. quantity must be either { "kind": "exact", "value": "1.25" } using asset-unit decimal strings or { "kind": "percent", "value": 50 } using percent of the relevant base for that action. asset is the actionable observed asset; active_position_scopes expose economic_exposures when the asset is a wrapper or synthetic token.',
         },
         {
-          name: 'request_transaction_execution',
+          name: 'request_execution',
           description:
-            'Request admission and execution for the current lending transaction plan through the bounded Shared Ember surface. When the user asks to execute the current plan, call this tool in the current turn instead of only describing the plan or speculating about the outcome. If the current thread already has a lastCandidatePlan plus an active reservation summary or active reservation for the same control path, treat that as enough context to attempt execution now. Do not refuse execution by claiming the reservation is inactive unless the current thread state explicitly shows no matching active reservation for the plan.',
+            'Request admission and execution for the current lending transaction plan through the bounded Shared Ember surface. When the user asks to execute the current plan, call this tool in the current turn instead of only describing the plan or speculating about the outcome. If current_candidate_plan is present, treat that as enough context to attempt execution now.',
         },
         {
           name: 'create_escalation_request',
@@ -3935,7 +3560,7 @@ export function createEmberLendingDomain(
               },
             },
           };
-        case 'create_transaction_plan': {
+        case 'create_transaction': {
           if (!options.protocolHost) {
             return {
               state: currentState,
@@ -3953,13 +3578,11 @@ export function createEmberLendingDomain(
             state: planningState,
             operationInput: operation.input,
           });
-          let handoff = buildTransactionPlanningHandoff({
+          let semanticRequest = buildCreateTransactionRequest({
             state: planningState,
-            threadId,
-            agentId,
             operationInput: operation.input,
           });
-          if (planningReadiness.status === 'blocked' || !handoff) {
+          if (planningReadiness.status === 'blocked' && planningReadiness.reason === 'onboarding') {
             planningState = await hydrateManagedProjectionFromSharedEmber({
               protocolHost: options.protocolHost,
               state: currentState,
@@ -3970,10 +3593,8 @@ export function createEmberLendingDomain(
               state: planningState,
               operationInput: operation.input,
             });
-            handoff = buildTransactionPlanningHandoff({
+            semanticRequest = buildCreateTransactionRequest({
               state: planningState,
-              threadId,
-              agentId,
               operationInput: operation.input,
             });
           }
@@ -3996,26 +3617,26 @@ export function createEmberLendingDomain(
               },
             };
           }
-          if (!handoff) {
+          if (!semanticRequest) {
             return {
               state: planningState,
               outputs: {
                 status: {
                   executionStatus: 'failed',
                   statusMessage:
-                    'Lending runtime context could not be hydrated from Shared Ember for planning.',
+                    CREATE_TRANSACTION_INPUT_BLOCKED_MESSAGE,
                 },
               },
             };
           }
 
           const fallbackIdempotencyKey =
-            `idem-create-transaction-plan-${threadId}-${buildStableCommandSuffix(handoff)}`;
+            `idem-create-transaction-${threadId}-${buildStableCommandSuffix(semanticRequest)}`;
           const idempotencyKey = resolveOperationIdempotencyKey({
             provided: readStringKey(operation.input, 'idempotencyKey'),
             fallback: fallbackIdempotencyKey,
-            expectedPrefix: 'idem-create-transaction-plan-',
-            stableBinding: buildStableCommandSuffix(handoff),
+            expectedPrefix: 'idem-create-transaction-',
+            stableBinding: buildStableCommandSuffix(semanticRequest),
           });
           let response: {
             result?: {
@@ -4038,12 +3659,13 @@ export function createEmberLendingDomain(
               currentRevision: planningState.lastSharedEmberRevision,
               buildRequest: (expectedRevision) => ({
                 jsonrpc: '2.0',
-                id: `shared-ember-${threadId}-create-transaction-plan`,
-                method: 'subagent.createTransactionPlan.v1',
+                id: `shared-ember-${threadId}-create-transaction`,
+                method: 'subagent.createTransaction.v1',
                 params: {
                   idempotency_key: idempotencyKey,
                   expected_revision: expectedRevision,
-                  handoff,
+                  agent_id: agentId,
+                  request: semanticRequest,
                 },
               }),
             });
@@ -4105,10 +3727,8 @@ export function createEmberLendingDomain(
             compactPlanSummary: compactPlanSummary!,
             useMaxRepayAmount:
               payloadBuilderOutput?.required_control_path === 'lending.repay' &&
-              !Object.prototype.hasOwnProperty.call(
-                isRecord(operation.input) ? operation.input : {},
-                'requested_quantities',
-              ),
+              semanticRequest.quantity.kind === 'percent' &&
+              semanticRequest.quantity.value === 100,
           });
           if (!anchoredPayloadRecord) {
             return {
@@ -4159,7 +3779,7 @@ export function createEmberLendingDomain(
             },
           };
         }
-        case 'request_transaction_execution': {
+        case 'request_execution': {
           if (!options.protocolHost) {
             return {
               state: currentState,
@@ -4187,13 +3807,13 @@ export function createEmberLendingDomain(
           }
 
           const fallbackIdempotencyKey =
-            `idem-execute-transaction-plan-${threadId}-${buildStableCommandSuffix({
+            `idem-request-execution-${threadId}-${buildStableCommandSuffix({
               transactionPlanId,
             })}`;
           const idempotencyKey = resolveOperationIdempotencyKey({
             provided: readStringKey(operation.input, 'idempotencyKey'),
             fallback: fallbackIdempotencyKey,
-            expectedPrefix: 'idem-execute-transaction-plan-',
+            expectedPrefix: 'idem-request-execution-',
             stableBinding: buildStableCommandSuffix({ transactionPlanId }),
           });
           let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>>;

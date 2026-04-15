@@ -13,25 +13,28 @@ This package currently establishes the thin blessed app scaffold:
 The intended downstream role for this agent is to act on a bounded Shared Ember
 subagent surface for:
 
-- portfolio-state reads
-- planner-backed candidate-plan creation
-- transaction execution preparation and runtime-owned signing behind one
+- portfolio-state reads projected into `mandate_summary`, `wallet_contents`, and
+  `active_position_scopes`
+- semantic `create_transaction` requests that materialize candidate plans
+- `request_execution` submission plus runtime-owned signing behind one
   execution tool
 - escalation requests
 
 Direct lending-agent onboarding is intentionally out of scope here. The
 portfolio manager owns onboarding and activation; this runtime reads the
 managed lane's current Shared Ember truth and projects the lending wallet,
-mandate, reservation, planning, execution, and escalation state into AG-UI.
+mandate, planning, execution, and escalation state into AG-UI.
 
 Current execution-context semantics:
 
 - onboarding completion is expected to materialize the initial `ember-lending`
   lane for the first managed runtime pair
 - `owned_units` and `reservations` remain agent-scoped to that lending lane
-- `wallet_contents` reflects the full rooted wallet so the lending prompt can
-  see total wallet inventory even when agent-scoped delegation state is still
-  sparse
+- `wallet_contents` contains only rooted-wallet holdings that are not
+  reconciled into an `active_position_scope`
+- `active_position_scopes` is the planner-visible semantic surface for
+  protocol-bound positions, including wrapper and synthetic assets plus current
+  `market_state`
 - before healthy managed onboarding completes or when startup identity proof has
   not succeeded, `subagent_wallet_address` can still be `null`; after
   successful identity registration plus onboarding, the first healthy
@@ -48,22 +51,27 @@ Current execution-context semantics:
   and resolves the exact unsigned transaction bytes for the requested step only
   at execution time using the managed wallet address plus chain RPC state,
   instead of relying on a process-local map or a test-only harness seam
-- `create_transaction_plan` now fails closed unless that service-owned
+- `create_transaction` now fails closed unless that service-owned
   anchoring step succeeds; missing planner payload metadata, missing managed
   wallet context, or missing anchored-resolver wiring must stop plan creation
   before a locally executable candidate plan is recorded
 
 Planner input contract:
 
-- `create_transaction_plan` accepts `requested_quantities` either as an array
-  of `{ unit_id, quantity }` objects or as an object map of `unit_id` to
-  `quantity`
-- every `requested_quantities` value must be a base-unit decimal string such as
-  `"5000000"`, not a number literal
-- omit `requested_quantities` only when the caller clearly wants the full or
-  max-possible managed amount already projected by Portfolio Manager
-- explicit malformed or mixed-validity `requested_quantities` input now fails
-  closed locally before the handoff reaches Shared Ember
+- `create_transaction` requires JSON with:
+  - `control_path`
+  - `asset`
+  - `protocol_system`
+  - `network`
+  - `quantity`
+- `quantity` must be either:
+  - `{ "kind": "exact", "value": "1.25" }`
+  - `{ "kind": "percent", "value": 50 }`
+- `asset` is the actionable observed asset, not a hidden underlying alias
+- the model reasons from `mandate_summary`, `wallet_contents`, and
+  `active_position_scopes`, not from reservations or `owned_units`
+- malformed semantic transaction requests fail closed locally before the request
+  reaches Shared Ember
 
 Runtime wiring:
 

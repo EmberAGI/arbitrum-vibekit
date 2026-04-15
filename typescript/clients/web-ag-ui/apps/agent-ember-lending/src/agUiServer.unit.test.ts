@@ -80,21 +80,13 @@ function createManagedLifecycleState() {
 function createCandidatePlanInput() {
   return {
     idempotencyKey: 'idem-candidate-plan-001',
-    intent: 'position.enter',
-    action_summary: 'supply reserved USDC on Aave',
-    candidate_unit_ids: ['unit-ember-lending-001'],
-    requested_quantities: [
-      {
-        unit_id: 'unit-ember-lending-001',
-        quantity: '10',
-      },
-    ],
-    decision_context: {
-      objective_summary: 'supply reserved capital into the approved lending lane',
-      accounting_state_summary: 'one reserved USDC unit is available for the lending agent',
-      why_this_path_is_best: 'lending.supply is the admitted path for this reservation',
-      consequence_if_delayed: 'reserved capital remains idle',
-      alternatives_considered: ['leave the unit idle'],
+    control_path: 'lending.supply',
+    asset: 'USDC',
+    protocol_system: 'aave',
+    network: 'arbitrum',
+    quantity: {
+      kind: 'exact',
+      value: '10',
     },
     payload_builder_output: {
       transaction_payload_ref: 'tx-lending-supply-001',
@@ -252,7 +244,7 @@ describe('createEmberLendingGatewayService', () => {
         .fn()
         .mockResolvedValueOnce({
           jsonrpc: '2.0',
-          id: 'shared-ember-thread-1-create-transaction-plan',
+          id: 'shared-ember-thread-1-create-transaction',
           result: {
             protocol_version: 'v1',
             revision: 8,
@@ -260,13 +252,10 @@ describe('createEmberLendingGatewayService', () => {
             candidate_plan: {
               planning_kind: 'subagent_handoff',
               transaction_plan_id: 'txplan-ember-lending-001',
-              handoff: {
-                handoff_id: 'handoff-thread-1',
-                payload_builder_output: {
-                  transaction_payload_ref: 'txpayload-ember-lending-001',
-                  required_control_path: 'lending.supply',
-                  network: 'arbitrum',
-                },
+              payload_builder_output: {
+                transaction_payload_ref: 'txpayload-ember-lending-001',
+                required_control_path: 'lending.supply',
+                network: 'arbitrum',
               },
               compact_plan_summary: {
                 control_path: 'lending.supply',
@@ -279,7 +268,7 @@ describe('createEmberLendingGatewayService', () => {
         })
         .mockResolvedValueOnce({
           jsonrpc: '2.0',
-          id: 'shared-ember-thread-1-request-transaction-execution',
+          id: 'shared-ember-thread-1-request-execution',
           result: {
             protocol_version: 'v1',
             revision: 9,
@@ -386,7 +375,7 @@ describe('createEmberLendingGatewayService', () => {
       state: createManagedLifecycleState(),
       operation: {
         source: 'tool',
-        name: 'create_transaction_plan',
+        name: 'create_transaction',
         input: createCandidatePlanInput(),
       },
     });
@@ -396,7 +385,7 @@ describe('createEmberLendingGatewayService', () => {
       state: candidatePlanResult?.state ?? createManagedLifecycleState(),
       operation: {
         source: 'tool',
-        name: 'request_transaction_execution',
+        name: 'request_execution',
       },
     });
 

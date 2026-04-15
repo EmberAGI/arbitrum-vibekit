@@ -140,23 +140,13 @@ function createManagedLifecycleState() {
 function createCandidatePlanInput() {
   return {
     idempotencyKey: 'idem-candidate-plan-ember-int-001',
-    intent: 'unwind',
-    action_summary: 'withdraw the active lending position and return capital',
-    candidate_unit_ids: ['unit-ember-lending-001'],
-    requested_quantities: [
-      {
-        unit_id: 'unit-ember-lending-001',
-        quantity: '10',
-      },
-    ],
-    decision_context: {
-      objective_summary: 'free the reserved capital for the user',
-      accounting_state_summary:
-        'the reserved unit remains associated with the current delegation',
-      why_this_path_is_best:
-        'lending.withdraw is the direct path to unwind the managed position',
-      consequence_if_delayed: 'the capital remains trapped in the active position',
-      alternatives_considered: ['wait for a later retry'],
+    control_path: 'lending.withdraw',
+    asset: 'aArbUSDC',
+    protocol_system: 'aave',
+    network: 'arbitrum',
+    quantity: {
+      kind: 'exact',
+      value: '10',
     },
   };
 }
@@ -379,7 +369,7 @@ async function startAuthorityPreparationRecoveryProxy(input: {
         body,
       });
 
-      if (requestPath === '/jsonrpc' && body['method'] === 'subagent.requestTransactionExecution.v1') {
+      if (requestPath === '/jsonrpc' && body['method'] === 'subagent.requestExecution.v1') {
         const parsedBody = isRecord(forwarded.parsedBody) ? forwarded.parsedBody : null;
         const result = parsedBody && isRecord(parsedBody['result']) ? parsedBody['result'] : null;
         const executionResult = result && isRecord(result['execution_result']) ? result['execution_result'] : null;
@@ -763,7 +753,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       state: createManagedLifecycleState(),
       operation: {
         source: 'tool',
-        name: 'create_transaction_plan',
+        name: 'create_transaction',
         input: createCandidatePlanInput(),
       },
     });
@@ -788,7 +778,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       state: planResult?.state,
       operation: {
         source: 'tool',
-        name: 'request_transaction_execution',
+        name: 'request_execution',
       },
     });
 
@@ -847,7 +837,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         },
         operation: {
           source: 'tool',
-          name: 'create_transaction_plan',
+          name: 'create_transaction',
           input: createCandidatePlanInput(),
         },
       });
@@ -857,7 +847,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         state: planResult?.state,
         operation: {
           source: 'tool',
-          name: 'request_transaction_execution',
+          name: 'request_execution',
         },
       });
 
@@ -912,7 +902,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       state: createManagedLifecycleState(),
       operation: {
         source: 'tool',
-        name: 'create_transaction_plan',
+        name: 'create_transaction',
         input: createCandidatePlanInput(),
       },
     });
@@ -922,7 +912,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       state: planResult?.state,
       operation: {
         source: 'tool',
-        name: 'request_transaction_execution',
+        name: 'request_execution',
       },
     });
 
@@ -990,7 +980,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         state: createManagedLifecycleState(),
         operation: {
           source: 'tool',
-          name: 'create_transaction_plan',
+          name: 'create_transaction',
           input: createCandidatePlanInput(),
         },
       });
@@ -1000,7 +990,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         state: planResult?.state,
         operation: {
           source: 'tool',
-          name: 'request_transaction_execution',
+          name: 'request_execution',
         },
       });
 
@@ -1054,7 +1044,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         state: createManagedLifecycleState(),
         operation: {
           source: 'tool',
-          name: 'create_transaction_plan',
+          name: 'create_transaction',
           input: createCandidatePlanInput(),
         },
       });
@@ -1064,7 +1054,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         state: planResult?.state,
         operation: {
           source: 'tool',
-          name: 'request_transaction_execution',
+          name: 'request_execution',
         },
       });
 
@@ -1144,7 +1134,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
       });
       const threadId = 'thread-ember-lending-int-transport-retry';
       const executionInput = {
-        idempotencyKey: 'idem-execute-transaction-plan-ember-int-transport-retry',
+        idempotencyKey: 'idem-request-execution-ember-int-transport-retry',
       };
 
       const planResult = await domain.handleOperation?.({
@@ -1152,7 +1142,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         state: createManagedLifecycleState(),
         operation: {
           source: 'tool',
-          name: 'create_transaction_plan',
+          name: 'create_transaction',
           input: createCandidatePlanInput(),
         },
       });
@@ -1162,7 +1152,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         state: planResult?.state,
         operation: {
           source: 'tool',
-          name: 'request_transaction_execution',
+          name: 'request_execution',
           input: executionInput,
         },
       });
@@ -1189,7 +1179,7 @@ describeSharedEmberIntegration('ember-lending Shared Ember execution integration
         state: interruptedResult?.state,
         operation: {
           source: 'tool',
-          name: 'request_transaction_execution',
+          name: 'request_execution',
           input: executionInput,
         },
       });

@@ -368,21 +368,13 @@ function createPersistingInternalPostgres() {
 function createCandidatePlanInput() {
   return {
     idempotencyKey: 'idem-candidate-plan-001',
-    intent: 'position.enter',
-    action_summary: 'supply reserved USDC on Aave',
-    candidate_unit_ids: ['unit-ember-lending-001'],
-    requested_quantities: [
-      {
-        unit_id: 'unit-ember-lending-001',
-        quantity: '10',
-      },
-    ],
-    decision_context: {
-      objective_summary: 'supply reserved capital into the approved lending lane',
-      accounting_state_summary: 'one reserved USDC unit is available for the lending agent',
-      why_this_path_is_best: 'lending.supply is the admitted path for this reservation',
-      consequence_if_delayed: 'reserved capital remains idle',
-      alternatives_considered: ['leave the unit idle'],
+    control_path: 'lending.supply',
+    asset: 'USDC',
+    protocol_system: 'aave',
+    network: 'arbitrum',
+    quantity: {
+      kind: 'exact',
+      value: '10',
     },
     payload_builder_output: {
       transaction_payload_ref: 'tx-lending-supply-001',
@@ -402,13 +394,16 @@ function createEscalationRequestInput() {
       handoff_id: 'handoff-ember-lending-escalation-001',
       intent: 'position.enter',
       action_summary: 'supply reserved USDC on Aave',
-      candidate_unit_ids: ['unit-ember-lending-001'],
-      requested_quantities: [
-        {
-          unit_id: 'unit-ember-lending-001',
-          quantity: '10',
+      semantic_request: {
+        control_path: 'lending.supply',
+        asset: 'USDC',
+        protocol_system: 'aave',
+        network: 'arbitrum',
+        quantity: {
+          kind: 'exact',
+          value: '10',
         },
-      ],
+      },
       decision_context: {
         objective_summary: 'supply reserved capital into the approved lending lane',
         accounting_state_summary: 'reserved capital is still claimed by another agent',
@@ -837,7 +832,7 @@ describe('agent-ember-lending AG-UI integration', () => {
             },
           },
         };
-      case 'subagent.createTransactionPlan.v1':
+      case 'subagent.createTransaction.v1':
         return {
           jsonrpc: '2.0',
           id: 'shared-ember-thread-1-materialize-candidate-plan',
@@ -848,13 +843,10 @@ describe('agent-ember-lending AG-UI integration', () => {
             candidate_plan: {
               planning_kind: 'subagent_handoff',
               transaction_plan_id: 'txplan-ember-lending-001',
-              handoff: {
-                handoff_id: 'handoff-thread-1',
-                payload_builder_output: {
-                  transaction_payload_ref: 'txpayload-ember-lending-001',
-                  required_control_path: 'lending.supply',
-                  network: 'arbitrum',
-                },
+              payload_builder_output: {
+                transaction_payload_ref: 'txpayload-ember-lending-001',
+                required_control_path: 'lending.supply',
+                network: 'arbitrum',
               },
               compact_plan_summary: {
                 control_path: 'lending.supply',
@@ -865,10 +857,10 @@ describe('agent-ember-lending AG-UI integration', () => {
             },
           },
         };
-      case 'subagent.requestTransactionExecution.v1':
+      case 'subagent.requestExecution.v1':
         return {
           jsonrpc: '2.0',
-          id: 'shared-ember-thread-1-request-transaction-execution',
+          id: 'shared-ember-thread-1-request-execution',
           result: {
             protocol_version: 'v1',
             revision: 9,
@@ -1033,7 +1025,7 @@ describe('agent-ember-lending AG-UI integration', () => {
               },
             },
           };
-        case 'subagent.createTransactionPlan.v1':
+        case 'subagent.createTransaction.v1':
           return {
             jsonrpc: '2.0',
             id: 'shared-ember-thread-lean-materialize-candidate-plan',
@@ -1087,7 +1079,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId: 'thread-lean-1',
       runId: 'run-plan-lean-1',
       command: {
-        name: 'create_transaction_plan',
+        name: 'create_transaction',
         input: createCandidatePlanInput(),
       },
     });
@@ -1123,7 +1115,7 @@ describe('agent-ember-lending AG-UI integration', () => {
 
     expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        method: 'subagent.createTransactionPlan.v1',
+        method: 'subagent.createTransaction.v1',
       }),
     );
   });
@@ -1388,7 +1380,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId: 'thread-plan-1',
       runId: 'run-plan',
       command: {
-        name: 'create_transaction_plan',
+        name: 'create_transaction',
         input: createCandidatePlanInput(),
       },
     });
@@ -1423,7 +1415,7 @@ describe('agent-ember-lending AG-UI integration', () => {
 
     expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
       expect.objectContaining({
-        method: 'subagent.createTransactionPlan.v1',
+        method: 'subagent.createTransaction.v1',
         params: expect.objectContaining({
           handoff: expect.objectContaining({
             agent_id: 'ember-lending',
@@ -1453,7 +1445,7 @@ describe('agent-ember-lending AG-UI integration', () => {
     });
     expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        method: 'subagent.createTransactionPlan.v1',
+        method: 'subagent.createTransaction.v1',
         params: expect.objectContaining({
           handoff: expect.objectContaining({
             payload_builder_output: expect.anything(),
@@ -1469,7 +1461,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId: 'thread-plan-no-connect-1',
       runId: 'run-plan-no-connect',
       command: {
-        name: 'create_transaction_plan',
+        name: 'create_transaction',
         input: createCandidatePlanInput(),
       },
     });
@@ -1518,7 +1510,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId: 'thread-execute-1',
       runId: 'run-plan',
       command: {
-        name: 'create_transaction_plan',
+        name: 'create_transaction',
         input: createCandidatePlanInput(),
       },
     });
@@ -1533,7 +1525,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId: 'thread-execute-1',
       runId: 'run-execute',
       command: {
-        name: 'request_transaction_execution',
+        name: 'request_execution',
       },
     });
 
@@ -1579,7 +1571,7 @@ describe('agent-ember-lending AG-UI integration', () => {
     });
     expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
       expect.objectContaining({
-        method: 'subagent.requestTransactionExecution.v1',
+        method: 'subagent.requestExecution.v1',
         params: expect.objectContaining({
           expected_revision: 8,
           transaction_plan_id: 'txplan-ember-lending-001',
@@ -1638,7 +1630,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId,
       runId: 'run-plan-execute-reconnect',
       command: {
-        name: 'create_transaction_plan',
+        name: 'create_transaction',
         input: createCandidatePlanInput(),
       },
     });
@@ -1653,7 +1645,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId,
       runId: 'run-execute-reconnect',
       command: {
-        name: 'request_transaction_execution',
+        name: 'request_execution',
       },
     });
 
@@ -1743,10 +1735,10 @@ describe('agent-ember-lending AG-UI integration', () => {
           ? (input as { method?: unknown })
           : {};
 
-      if (request.method === 'subagent.requestTransactionExecution.v1') {
+      if (request.method === 'subagent.requestExecution.v1') {
         return {
           jsonrpc: '2.0',
-          id: 'shared-ember-thread-1-request-transaction-execution',
+          id: 'shared-ember-thread-1-request-execution',
           result: {
             protocol_version: 'v1',
             revision: 9,
@@ -1776,7 +1768,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId: 'thread-execute-blocked-1',
       runId: 'run-plan-blocked',
       command: {
-        name: 'create_transaction_plan',
+        name: 'create_transaction',
         input: createCandidatePlanInput(),
       },
     });
@@ -1791,7 +1783,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId: 'thread-execute-blocked-1',
       runId: 'run-execute-blocked',
       command: {
-        name: 'request_transaction_execution',
+        name: 'request_execution',
       },
     });
 
@@ -1832,10 +1824,10 @@ describe('agent-ember-lending AG-UI integration', () => {
           ? (input as { method?: unknown })
           : {};
 
-      if (request.method === 'subagent.requestTransactionExecution.v1') {
+      if (request.method === 'subagent.requestExecution.v1') {
         return {
           jsonrpc: '2.0',
-          id: 'shared-ember-thread-1-request-transaction-execution',
+          id: 'shared-ember-thread-1-request-execution',
           result: {
             protocol_version: 'v1',
             revision: 9,
@@ -1865,7 +1857,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId: 'thread-execute-denied-1',
       runId: 'run-plan-denied',
       command: {
-        name: 'create_transaction_plan',
+        name: 'create_transaction',
         input: createCandidatePlanInput(),
       },
     });
@@ -1880,7 +1872,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       threadId: 'thread-execute-denied-1',
       runId: 'run-execute-denied',
       command: {
-        name: 'request_transaction_execution',
+        name: 'request_execution',
       },
     });
 

@@ -24,7 +24,7 @@ describe('createEmberLendingAgentConfig', () => {
     );
 
     expect(config.systemPrompt).toContain(
-      'Treat the live Shared Ember execution context as authoritative for what is currently admitted',
+      'Reason from mandate_summary, wallet_contents, active_position_scopes, market_state, and current_candidate_plan',
     );
     expect(config.systemPrompt).toContain('lending.borrow');
     expect(config.systemPrompt).toContain('lending.supply adds collateral');
@@ -34,20 +34,19 @@ describe('createEmberLendingAgentConfig', () => {
     expect(config.systemPrompt).toContain(
       'never satisfy a withdraw request by creating another repay or supply plan',
     );
-    expect(config.systemPrompt).toContain('call the planning tool in that turn');
-    expect(config.systemPrompt).toContain('call the execution tool instead of only describing');
+    expect(config.systemPrompt).toContain('call create_transaction in that turn');
+    expect(config.systemPrompt).toContain('call request_execution instead of only describing');
     expect(config.systemPrompt).toContain(
-      'treat that as sufficient evidence to attempt execution through Shared Ember now',
+      'Do not self-censor because execution authority may be insufficient',
     );
     expect(config.systemPrompt).toContain(
-      'Do not claim the reservation is inactive unless the current thread state explicitly shows that no matching active reservation exists',
+      'Do not reason from owned units, reservations, or other internal execution machinery',
     );
-    expect(config.systemPrompt).toContain(
-      'When the user asks for an exact amount or any partial amount such as half',
-    );
-    expect(config.systemPrompt).toContain(
-      'omitting requested_quantities is invalid for that request',
-    );
+    expect(config.systemPrompt).toContain('control_path, asset, protocol_system, network, and quantity');
+    expect(config.systemPrompt).toContain('{ "kind": "exact", "value": "1.25" }');
+    expect(config.systemPrompt).toContain('{ "kind": "percent", "value": 50 }');
+    expect(config.systemPrompt).toContain('supply uses idle wallet amount');
+    expect(config.systemPrompt).toContain('repay uses total debt');
     expect(config.systemPrompt).toContain(
       'instead of routing back through the portfolio manager for delegation refresh',
     );
