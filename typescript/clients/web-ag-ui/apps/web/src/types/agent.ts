@@ -254,23 +254,29 @@ export interface PortfolioManagerMandateApproval {
   riskLevel: 'medium';
 }
 
-export interface ManagedMandateInput {
-  allocation_basis: 'allocable_idle';
-  allowed_assets: string[];
-  asset_intent: {
-    root_asset: string;
-    protocol_system: 'aave';
-    network: 'arbitrum';
-    benchmark_asset: 'USD';
-    intent: 'position.enter';
-    control_path: 'lending.supply';
+export interface ManagedLendingCollateralAssetPolicyInput {
+  asset: string;
+  max_allocation_pct: number;
+}
+
+export interface ManagedMandateInput extends Record<string, unknown> {
+  lending_policy: Record<string, unknown> & {
+    collateral_policy: {
+      assets: ManagedLendingCollateralAssetPolicyInput[];
+    };
+    borrow_policy: {
+      allowed_assets: string[];
+    };
+    risk_policy: {
+      max_ltv_bps: number;
+      min_health_factor: string;
+    };
   };
 }
 
 export interface PortfolioManagerFirstManagedMandateInput {
   targetAgentId: 'ember-lending';
   targetAgentKey: string;
-  mandateSummary: string;
   managedMandate: ManagedMandateInput;
 }
 

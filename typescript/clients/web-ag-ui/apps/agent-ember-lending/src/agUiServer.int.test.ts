@@ -553,8 +553,6 @@ function createTerminalExecutionResult(input: {
       agent_wallet: '0x00000000000000000000000000000000000000b1',
       root_user_wallet: '0x00000000000000000000000000000000000000a1',
       mandate_ref: 'mandate-ember-lending-001',
-      mandate_summary:
-        'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
       reservations: [
         {
           reservation_id: 'reservation-ember-lending-001',
@@ -806,8 +804,6 @@ describe('agent-ember-lending AG-UI integration', () => {
               generated_at: '2026-04-01T06:00:00.000Z',
               network: 'arbitrum',
               mandate_ref: 'mandate-ember-lending-001',
-              mandate_summary:
-                'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
               mandate_context: {
                 network: 'arbitrum',
                 protocol: 'aave',
@@ -1153,8 +1149,6 @@ describe('agent-ember-lending AG-UI integration', () => {
                 generated_at: '2026-04-01T06:30:00.000Z',
                 network: 'arbitrum',
                 mandate_ref: 'mandate-ember-lending-001',
-                mandate_summary:
-                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
                 mandate_context: null,
                 subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
                 root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
@@ -1181,8 +1175,6 @@ describe('agent-ember-lending AG-UI integration', () => {
           lifecycle: {
             phase: 'active',
             mandateRef: 'mandate-ember-lending-001',
-            mandateSummary:
-              'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
             mandateContext: {
               network: 'arbitrum',
             },
@@ -1233,7 +1225,6 @@ describe('agent-ember-lending AG-UI integration', () => {
                       generated_at: '2026-04-01T06:30:00.000Z',
                       network: 'arbitrum',
                       mandate_ref: null,
-                      mandate_summary: null,
                       mandate_context: null,
                       subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
                       root_user_wallet_address: null,
@@ -1244,8 +1235,6 @@ describe('agent-ember-lending AG-UI integration', () => {
                       generated_at: '2026-04-01T06:31:00.000Z',
                       network: 'arbitrum',
                       mandate_ref: 'mandate-ember-lending-001',
-                      mandate_summary:
-                        'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
                       mandate_context: null,
                       subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
                       root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
@@ -1307,8 +1296,6 @@ describe('agent-ember-lending AG-UI integration', () => {
           lifecycle: {
             phase: 'active',
             mandateRef: 'mandate-ember-lending-001',
-            mandateSummary:
-              'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
             mandateContext: {
               network: 'arbitrum',
             },

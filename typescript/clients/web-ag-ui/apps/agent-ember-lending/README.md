@@ -13,7 +13,7 @@ This package currently establishes the thin blessed app scaffold:
 The intended downstream role for this agent is to act on a bounded Shared Ember
 subagent surface for:
 
-- portfolio-state reads projected into `mandate_summary`, `wallet_contents`, and
+- portfolio-state reads projected into `mandate_context`, `wallet_contents`, and
   `active_position_scopes`
 - semantic `create_transaction` requests that materialize candidate plans
 - `request_execution` submission plus runtime-owned signing behind one
@@ -64,12 +64,11 @@ Planner input contract:
   - `asset`
   - `protocol_system`
   - `network`
-  - `quantity`
 - `quantity` must be either:
   - `{ "kind": "exact", "value": "1.25" }`
   - `{ "kind": "percent", "value": 50 }`
 - `asset` is the actionable observed asset, not a hidden underlying alias
-- the model reasons from `mandate_summary`, `wallet_contents`, and
+- the model reasons from `mandate_context`, `wallet_contents`, and
   `active_position_scopes`, not from reservations or `owned_units`
 - malformed semantic transaction requests fail closed locally before the request
   reaches Shared Ember

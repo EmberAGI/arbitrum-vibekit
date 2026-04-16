@@ -185,17 +185,23 @@ function createPortfolioManagerSetupInput() {
     firstManagedMandate: {
       targetAgentId: 'ember-lending',
       targetAgentKey: 'ember-lending-primary',
-      mandateSummary: 'lend USDC through the managed lending lane',
       managedMandate: {
-        allocation_basis: 'allocable_idle',
-        allowed_assets: ['USDC'],
-        asset_intent: {
-          root_asset: 'USDC',
-          protocol_system: 'aave',
-          network: 'arbitrum',
-          benchmark_asset: 'USD',
-          intent: 'position.enter',
-          control_path: 'lending.supply',
+        lending_policy: {
+          collateral_policy: {
+            assets: [
+              {
+                asset: 'USDC',
+                max_allocation_pct: 35,
+              },
+            ],
+          },
+          borrow_policy: {
+            allowed_assets: ['USDC'],
+          },
+          risk_policy: {
+            max_ltv_bps: 7000,
+            min_health_factor: '1.25',
+          },
         },
       },
     },
@@ -699,20 +705,27 @@ describe('agent-portfolio-manager AG-UI integration', () => {
                 agent_id: 'portfolio-manager',
                 managed_mandate: null,
               }),
-	              expect.objectContaining({
-	                agent_id: 'ember-lending',
-	                managed_mandate: {
-	                  allocation_basis: 'allocable_idle',
-	                  allowed_assets: ['USDC'],
-	                  asset_intent: {
-	                    root_asset: 'USDC',
-	                    network: 'arbitrum',
-	                    benchmark_asset: 'USD',
-	                    intent: 'position.enter',
-	                    control_path: 'lending.supply',
-	                    protocol_system: 'aave',
-	                  },
-	                },
+              expect.objectContaining({
+                agent_id: 'ember-lending',
+                managed_mandate: {
+                  lending_policy: {
+                    collateral_policy: {
+                      assets: [
+                        {
+                          asset: 'USDC',
+                          max_allocation_pct: 35,
+                        },
+                      ],
+                    },
+                    borrow_policy: {
+                      allowed_assets: ['USDC'],
+                    },
+                    risk_policy: {
+                      max_ltv_bps: 7000,
+                      min_health_factor: '1.25',
+                    },
+                  },
+                },
 	              }),
 	            ]),
             activation: {

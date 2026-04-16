@@ -1,9 +1,10 @@
 import type { PortfolioManagerSetupInput } from '../types/agent';
 import {
-  buildManagedMandateSummary,
-  canonicalizeManagedMandateAssets,
-  DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
-  normalizeManagedMandateAssetSymbol,
+  buildManagedLendingPolicy,
+  DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
+  DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
+  formatManagedLendingCollateralPolicies,
+  parseManagedLendingCollateralPolicies,
   parseManagedMandateAssetList,
 } from './managedMandate';
 
@@ -15,18 +16,17 @@ const DEFAULT_PORTFOLIO_MANAGER_SETUP = {
   firstManagedMandate: {
     targetAgentId: 'ember-lending',
     targetAgentKey: 'ember-lending-primary',
-    mandateSummary: buildManagedMandateSummary([DEFAULT_MANAGED_MANDATE_ROOT_ASSET]),
-      managedMandate: {
-        allocation_basis: 'allocable_idle',
-        allowed_assets: [DEFAULT_MANAGED_MANDATE_ROOT_ASSET],
-        asset_intent: {
-          root_asset: DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
-          protocol_system: 'aave',
-          network: 'arbitrum',
-          benchmark_asset: 'USD',
-          intent: 'position.enter',
-        control_path: 'lending.supply',
-      },
+    managedMandate: {
+      lending_policy: buildManagedLendingPolicy({
+        existingManagedMandate: null,
+        collateralPolicies: [
+          {
+            asset: DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
+            max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
+          },
+        ],
+        allowedBorrowAssets: [],
+      }),
     },
   },
 } satisfies Omit<PortfolioManagerSetupInput, 'walletAddress'>;
@@ -34,20 +34,23 @@ const DEFAULT_PORTFOLIO_MANAGER_SETUP = {
 export function buildPortfolioManagerSetupInput(
   walletAddress: `0x${string}`,
   input: {
-    rootAsset?: string;
-    allowedAssetsInput?: string;
+    collateralPoliciesInput?: string;
+    allowedBorrowAssetsInput?: string;
+    maxLtvBps?: number;
+    minHealthFactor?: string;
   } = {},
 ): PortfolioManagerSetupInput {
-  const normalizedRootAsset = normalizeManagedMandateAssetSymbol(
-    input.rootAsset ?? DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.managedMandate.asset_intent.root_asset,
+  const defaultManagedMandate =
+    DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.managedMandate;
+  const normalizedCollateralPolicies = parseManagedLendingCollateralPolicies(
+    input.collateralPoliciesInput ??
+      formatManagedLendingCollateralPolicies(
+        defaultManagedMandate.lending_policy.collateral_policy.assets,
+      ),
   );
-  const parsedAllowedAssets = parseManagedMandateAssetList(
-    input.allowedAssetsInput ??
-      DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.managedMandate.allowed_assets.join(', '),
-  );
-  const normalizedAllowedAssets = canonicalizeManagedMandateAssets(
-    normalizedRootAsset,
-    parsedAllowedAssets,
+  const normalizedAllowedBorrowAssets = parseManagedMandateAssetList(
+    input.allowedBorrowAssetsInput ??
+      defaultManagedMandate.lending_policy.borrow_policy.allowed_assets.join(', '),
   );
 
   return {
@@ -56,23 +59,14 @@ export function buildPortfolioManagerSetupInput(
     firstManagedMandate: {
       targetAgentId: DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.targetAgentId,
       targetAgentKey: DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.targetAgentKey,
-      mandateSummary: buildManagedMandateSummary(normalizedAllowedAssets),
       managedMandate: {
-        allocation_basis: DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.managedMandate.allocation_basis,
-        allowed_assets: normalizedAllowedAssets,
-        asset_intent: {
-          root_asset: normalizedRootAsset,
-          protocol_system:
-            DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.managedMandate.asset_intent.protocol_system,
-          network:
-            DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.managedMandate.asset_intent.network,
-          benchmark_asset:
-            DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.managedMandate.asset_intent.benchmark_asset,
-          intent:
-            DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.managedMandate.asset_intent.intent,
-          control_path:
-            DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.managedMandate.asset_intent.control_path,
-        },
+        lending_policy: buildManagedLendingPolicy({
+          existingManagedMandate: defaultManagedMandate,
+          collateralPolicies: normalizedCollateralPolicies,
+          allowedBorrowAssets: normalizedAllowedBorrowAssets,
+          maxLtvBps: input.maxLtvBps,
+          minHealthFactor: input.minHealthFactor,
+        }),
       },
     },
   };

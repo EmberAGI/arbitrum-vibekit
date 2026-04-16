@@ -180,6 +180,9 @@ Container responsibilities:
     boundary; missing planner metadata, missing managed wallet context, or
     missing resolver wiring must stop plan creation before local state records a
     candidate plan as executable.
+  - Model-visible managed-lending tools stay free of Shared Ember idempotency
+    controls; the lending runtime owns create-plan and execution idempotency
+    internally at the adapter boundary.
   - The repo-local validation lane for the managed-identity boundary is
     `pnpm smoke:managed-identities`, and the repo-backed validation lane for
     the real redelegation signing seam is

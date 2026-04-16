@@ -171,6 +171,10 @@ function sleep(milliseconds: number): Promise<void> {
   });
 }
 
+function bufferDelegatedExecutionGas(gasEstimate: bigint): bigint {
+  return (gasEstimate * 3n) / 2n;
+}
+
 function createRpcTransport(url: string): ReturnType<typeof http> {
   const baseTransport = http(url);
   const baseTransportValue: unknown = baseTransport;
@@ -555,7 +559,7 @@ async function resolvePreparedUnsignedTransactionSigningInputs(input: {
 }): Promise<PreparedUnsignedTransactionSigningInputs> {
   for (let attempt = 1; attempt <= SIGNING_RESOLUTION_ATTEMPTS; attempt += 1) {
     try {
-      const [nonce, feeEstimate, gas] = await Promise.all([
+      const [nonce, feeEstimate, gasEstimate] = await Promise.all([
         input.publicClient.getTransactionCount({
           address: input.walletAddress,
           blockTag: 'pending',
@@ -568,7 +572,11 @@ async function resolvePreparedUnsignedTransactionSigningInputs(input: {
           data: input.delegatedTransactionData,
         }),
       ]);
-      return { nonce, feeEstimate, gas };
+      return {
+        nonce,
+        feeEstimate,
+        gas: bufferDelegatedExecutionGas(gasEstimate),
+      };
     } catch (error) {
       if (attempt === SIGNING_RESOLUTION_ATTEMPTS) {
         throw error;

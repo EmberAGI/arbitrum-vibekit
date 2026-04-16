@@ -89,6 +89,10 @@ function buildExpectedDelegatedUnsignedTransactionHex(input: {
   });
 }
 
+function bufferDelegatedExecutionGas(gasEstimate: bigint): bigint {
+  return (gasEstimate * 3n) / 2n;
+}
+
 const TEST_ROOT_DELEGATION = createSignedDelegation({
   delegate: '0x00000000000000000000000000000000000000c1',
   delegator: '0x00000000000000000000000000000000000000a1',
@@ -519,7 +523,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         chainId: '42161',
       },
       nonce: 7,
-      gas: 55_000n,
+      gas: bufferDelegatedExecutionGas(55_000n),
       maxFeePerGas: 200n,
       maxPriorityFeePerGas: 3n,
     });
@@ -660,7 +664,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         chainId: '42161',
       },
       nonce: 9,
-      gas: 65_000n,
+      gas: bufferDelegatedExecutionGas(65_000n),
       maxFeePerGas: 200n,
       maxPriorityFeePerGas: 3n,
     });
@@ -1334,7 +1338,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
           chainId: '42161',
         },
         nonce: 7,
-        gas: 55_000n,
+        gas: bufferDelegatedExecutionGas(55_000n),
         maxFeePerGas: 200n,
         maxPriorityFeePerGas: 3n,
       }),
@@ -1503,7 +1507,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         },
       ],
       nonce: 9,
-      gas: 55_000n,
+      gas: bufferDelegatedExecutionGas(55_000n),
       maxFeePerGas: 200n,
       maxPriorityFeePerGas: 3n,
     });
@@ -1515,7 +1519,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         chainId: '42161',
       },
       nonce: 9,
-      gas: 55_000n,
+      gas: bufferDelegatedExecutionGas(55_000n),
       maxFeePerGas: 200n,
       maxPriorityFeePerGas: 3n,
     });
@@ -1677,7 +1681,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
           chainId: '42161',
         },
         nonce: 11,
-        gas: 65_000n,
+        gas: bufferDelegatedExecutionGas(65_000n),
         maxFeePerGas: 300n,
         maxPriorityFeePerGas: 5n,
       }),
@@ -1783,7 +1787,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
           data: '0xabcdef12',
         },
         nonce: 9,
-        gas: 210000n,
+        gas: bufferDelegatedExecutionGas(210000n),
         maxFeePerGas: 15n,
         maxPriorityFeePerGas: 2n,
       }),

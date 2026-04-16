@@ -85,11 +85,18 @@ import { resolveSetupSteps } from './agentSetupSteps';
 import { emitAgentConnectDebug } from '../utils/agentConnectDebug';
 import { buildPortfolioManagerSetupInput } from '../utils/portfolioManagerSetup';
 import {
-  buildManagedMandateSummary,
-  canonicalizeManagedMandateAssets,
-  DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
+  buildManagedLendingPolicy,
+  DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
+  formatManagedLendingCollateralPolicies,
+  parseManagedLendingCollateralPolicies,
+  DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
+  DEFAULT_MANAGED_LENDING_MAX_LTV_BPS,
+  DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
   normalizeManagedMandateAssetSymbol,
   parseManagedMandateAssetList,
+  readManagedLendingBorrowAssets,
+  readManagedLendingCollateralPolicies,
+  readManagedLendingRiskPolicy,
 } from '../utils/managedMandate';
 import {
   buildPiExampleInterruptA2UiView,
@@ -104,6 +111,15 @@ const MIN_BASE_CONTRIBUTION_USD = 10;
 const AGENT_WEBSITE_URL = 'https://emberai.xyz';
 const AGENT_GITHUB_URL = 'https://github.com/EmberAGI/arbitrum-vibekit';
 const AGENT_X_URL = 'https://x.com/emberagi';
+const MANAGED_LENDING_NETWORK = 'arbitrum';
+const MANAGED_LENDING_PROTOCOL = 'aave';
+const MANAGED_LENDING_CONTROL_PATH = 'lending.supply';
+const DEFAULT_MANAGED_LENDING_COLLATERAL_POLICIES_INPUT = formatManagedLendingCollateralPolicies([
+  {
+    asset: DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
+    max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
+  },
+]);
 
 interface AgentDetailPageProps {
   agentId: string;
@@ -407,7 +423,6 @@ type ManagedMandateEditorView = {
   title: string;
   laneLabel: string | null;
   mandateRef: string | null;
-  mandateSummary: string | null;
   managedMandate: Record<string, unknown> | null;
   walletAddress: string | null;
   rootUserWallet: string | null;
@@ -419,9 +434,93 @@ type ManagedMandateEditorSubmitInput = {
   ownerAgentId: string;
   targetAgentId: string;
   targetAgentRouteId: string;
-  mandateSummary: string;
   managedMandate: ManagedMandateInput;
 };
+
+type ManagedMandateDisplayField = {
+  key: string;
+  value: string;
+};
+
+function readStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const entries = value
+    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter((entry) => entry.length > 0);
+
+  return entries.length > 0 ? entries : null;
+}
+
+function isManagedMandateDisplayScalar(value: unknown): value is string | number | boolean {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+}
+
+function buildManagedMandateDisplayFields(
+  managedMandate: Record<string, unknown> | null,
+): ManagedMandateDisplayField[] {
+  if (!managedMandate) {
+    return [];
+  }
+
+  const fields: ManagedMandateDisplayField[] = [];
+
+  const visit = (value: unknown, path: string[]) => {
+    if (Array.isArray(value)) {
+      const stringArray = readStringArray(value);
+      if (stringArray) {
+        fields.push({
+          key: path.join('.'),
+          value: stringArray.join(', '),
+        });
+        return;
+      }
+
+      value.forEach((entry, index) => visit(entry, [...path, String(index)]));
+      return;
+    }
+
+    const record = asRecord(value);
+    if (record) {
+      Object.entries(record).forEach(([key, entry]) => visit(entry, [...path, key]));
+      return;
+    }
+
+    if (isManagedMandateDisplayScalar(value)) {
+      fields.push({
+        key: path.join('.'),
+        value: String(value),
+      });
+    }
+  };
+
+  visit(managedMandate, []);
+  return fields;
+}
+
+function ManagedMandateDetails(props: { managedMandate: Record<string, unknown> | null }) {
+  const fields = buildManagedMandateDisplayFields(props.managedMandate);
+
+  if (fields.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2 grid gap-3 sm:grid-cols-2">
+      {fields.map((field) => (
+        <div
+          key={field.key}
+          className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5"
+        >
+          <div className="text-[11px] font-mono tracking-[0.04em] text-white/40">{field.key}</div>
+          <div className="mt-1 break-words text-sm leading-relaxed text-gray-200">{field.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function buildReservationSummaryFromProjection(
   reservation: Record<string, unknown> | null,
@@ -469,7 +568,8 @@ function readManagedMandateEditorView(
   }
 
   const managedMandate = asRecord(editor['managedMandate']);
-  const assetIntent = asRecord(managedMandate?.['asset_intent']);
+  const reservation = asRecord(editor['reservation']);
+  const controlPath = readString(reservation?.['controlPath']) ?? MANAGED_LENDING_CONTROL_PATH;
 
   return {
     ownerAgentId,
@@ -478,11 +578,10 @@ function readManagedMandateEditorView(
     targetAgentKey,
     title: readString(editor['targetAgentTitle']) ?? 'Managed lending lane',
     laneLabel: formatManagedLaneLabel(
-      readString(assetIntent?.['network']),
-      readLaneProtocolFromControlPath(readString(assetIntent?.['control_path'])),
+      MANAGED_LENDING_NETWORK,
+      readLaneProtocolFromControlPath(controlPath) ?? MANAGED_LENDING_PROTOCOL,
     ),
     mandateRef: readString(editor['mandateRef']),
-    mandateSummary: readString(editor['mandateSummary']),
     managedMandate,
     walletAddress: readString(editor['agentWallet']),
     rootUserWallet: readString(editor['rootUserWallet']),
@@ -495,7 +594,7 @@ type PortfolioManagerManagedAgentView = {
   title: string;
   detailHref: string;
   laneLabel: string | null;
-  mandateSummary: string | null;
+  managedMandate: Record<string, unknown> | null;
   reservationSummary: string | null;
 };
 
@@ -511,7 +610,7 @@ function buildPortfolioManagerManagedAgentView(
     title: managedMandateEditorView.title,
     detailHref: `/hire-agents/${managedMandateEditorView.targetAgentRouteId}`,
     laneLabel: managedMandateEditorView.laneLabel,
-    mandateSummary: managedMandateEditorView.mandateSummary,
+    managedMandate: managedMandateEditorView.managedMandate,
     reservationSummary: managedMandateEditorView.reservationSummary,
   };
 }
@@ -520,7 +619,7 @@ type EmberLendingRuntimeView = {
   phase: string | null;
   laneLabel: string | null;
   walletAddress: string | null;
-  mandateSummary: string | null;
+  managedMandate: Record<string, unknown> | null;
   reservationSummary: string | null;
 };
 
@@ -536,78 +635,118 @@ function buildEmberLendingRuntimeView(
     phase: readString(lifecycleRecord?.['phase']),
     laneLabel: managedMandateEditorView?.laneLabel ?? null,
     walletAddress: managedMandateEditorView?.walletAddress ?? null,
-    mandateSummary: managedMandateEditorView?.mandateSummary ?? null,
+    managedMandate: managedMandateEditorView?.managedMandate ?? null,
     reservationSummary: managedMandateEditorView?.reservationSummary ?? null,
   };
 
   return runtimeView.phase ||
     runtimeView.laneLabel ||
     runtimeView.walletAddress ||
-    runtimeView.mandateSummary ||
+    runtimeView.managedMandate ||
     runtimeView.reservationSummary
     ? runtimeView
     : null;
+}
+
+function buildUpdatedManagedMandate(params: {
+  existingManagedMandate: Record<string, unknown> | null;
+  collateralPolicies: ManagedMandateInput['lending_policy']['collateral_policy']['assets'];
+  allowedBorrowAssets: string[];
+  maxLtvBps?: number;
+  minHealthFactor?: string;
+}): ManagedMandateInput {
+  return {
+    lending_policy: buildManagedLendingPolicy({
+      existingManagedMandate: params.existingManagedMandate,
+      collateralPolicies: params.collateralPolicies,
+      allowedBorrowAssets: params.allowedBorrowAssets,
+      maxLtvBps: params.maxLtvBps,
+      minHealthFactor: params.minHealthFactor,
+    }),
+  };
 }
 
 function ManagedMandateEditorCard(props: {
   view: ManagedMandateEditorView;
   onSave?: (input: ManagedMandateEditorSubmitInput) => Promise<void> | void;
 }) {
-  const initialRootAsset = normalizeManagedMandateAssetSymbol(
-    readString(asRecord(props.view.managedMandate?.['asset_intent'])?.['root_asset']) ?? '',
+  const initialCollateralPolicies = readManagedLendingCollateralPolicies(props.view.managedMandate);
+  const initialCollateralPoliciesValue = formatManagedLendingCollateralPolicies(
+    initialCollateralPolicies.length > 0
+      ? initialCollateralPolicies
+      : [
+          {
+            asset: DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
+            max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
+          },
+        ],
   );
-  const initialAllowedAssets = Array.isArray(props.view.managedMandate?.['allowed_assets'])
-    ? props.view.managedMandate?.['allowed_assets']
-        .map((value) => (typeof value === 'string' ? normalizeManagedMandateAssetSymbol(value) : ''))
-        .filter((value) => value.length > 0)
-    : [];
-  const initialAllowedAssetsValue = initialAllowedAssets.join(', ');
-  const [rootAsset, setRootAsset] = useState(initialRootAsset);
-  const [allowedAssetsInput, setAllowedAssetsInput] = useState(initialAllowedAssetsValue);
+  const initialAllowedBorrowAssets = readManagedLendingBorrowAssets(props.view.managedMandate);
+  const initialAllowedBorrowAssetsValue = initialAllowedBorrowAssets.join(', ');
+  const initialRiskPolicy = readManagedLendingRiskPolicy(props.view.managedMandate);
+  const [collateralPoliciesInput, setCollateralPoliciesInput] = useState(
+    initialCollateralPoliciesValue,
+  );
+  const [allowedBorrowAssetsInput, setAllowedBorrowAssetsInput] = useState(
+    initialAllowedBorrowAssetsValue,
+  );
+  const [maxLtvBpsInput, setMaxLtvBpsInput] = useState(
+    String(initialRiskPolicy.maxLtvBps ?? DEFAULT_MANAGED_LENDING_MAX_LTV_BPS),
+  );
+  const [minHealthFactorInput, setMinHealthFactorInput] = useState(
+    initialRiskPolicy.minHealthFactor ?? DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    setRootAsset(initialRootAsset);
-    setAllowedAssetsInput(initialAllowedAssetsValue);
+    setCollateralPoliciesInput(initialCollateralPoliciesValue);
+    setAllowedBorrowAssetsInput(initialAllowedBorrowAssetsValue);
+    setMaxLtvBpsInput(String(initialRiskPolicy.maxLtvBps ?? DEFAULT_MANAGED_LENDING_MAX_LTV_BPS));
+    setMinHealthFactorInput(
+      initialRiskPolicy.minHealthFactor ?? DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
+    );
     setSubmitError(null);
-  }, [initialAllowedAssetsValue, initialRootAsset, props.view.mandateRef]);
+  }, [
+    initialCollateralPoliciesValue,
+    initialAllowedBorrowAssetsValue,
+    initialRiskPolicy.maxLtvBps,
+    initialRiskPolicy.minHealthFactor,
+    props.view.mandateRef,
+  ]);
 
-  const assetIntent = asRecord(props.view.managedMandate?.['asset_intent']);
-  const protocolSystem: ManagedMandateInput['asset_intent']['protocol_system'] =
-    assetIntent?.['protocol_system'] === 'aave' ? 'aave' : 'aave';
-  const network: ManagedMandateInput['asset_intent']['network'] =
-    assetIntent?.['network'] === 'arbitrum' ? 'arbitrum' : 'arbitrum';
-  const controlPath: ManagedMandateInput['asset_intent']['control_path'] =
-    assetIntent?.['control_path'] === 'lending.supply' ? 'lending.supply' : 'lending.supply';
-  const benchmarkAsset: ManagedMandateInput['asset_intent']['benchmark_asset'] =
-    assetIntent?.['benchmark_asset'] === 'USD' ? 'USD' : 'USD';
-  const intent: ManagedMandateInput['asset_intent']['intent'] =
-    assetIntent?.['intent'] === 'position.enter' ? 'position.enter' : 'position.enter';
-  const allocationBasis: ManagedMandateInput['allocation_basis'] =
-    props.view.managedMandate?.['allocation_basis'] === 'allocable_idle'
-      ? 'allocable_idle'
-      : 'allocable_idle';
+  const network = MANAGED_LENDING_NETWORK;
+  const controlPath = MANAGED_LENDING_CONTROL_PATH;
+  const previewCollateralPolicies = parseManagedLendingCollateralPolicies(collateralPoliciesInput);
+  const previewAllowedBorrowAssets = parseManagedMandateAssetList(allowedBorrowAssetsInput);
+  const previewMaxLtvBps = readFiniteNumber(Number(maxLtvBpsInput));
+  const previewManagedMandate = buildUpdatedManagedMandate({
+    existingManagedMandate: props.view.managedMandate,
+    collateralPolicies: previewCollateralPolicies,
+    allowedBorrowAssets: previewAllowedBorrowAssets,
+    maxLtvBps: previewMaxLtvBps ?? undefined,
+    minHealthFactor: minHealthFactorInput.trim() || undefined,
+  });
 
   const handleSave = async () => {
     if (!props.onSave) {
       return;
     }
 
-    const normalizedRootAsset = normalizeManagedMandateAssetSymbol(rootAsset);
-    if (normalizedRootAsset.length === 0) {
-      setSubmitError('Root asset is required.');
+    const collateralPolicies = parseManagedLendingCollateralPolicies(collateralPoliciesInput);
+    if (collateralPolicies.length === 0) {
+      setSubmitError('At least one collateral policy is required.');
       return;
     }
-
-    const allowedAssets = parseManagedMandateAssetList(allowedAssetsInput);
-    const normalizedAllowedAssets = canonicalizeManagedMandateAssets(
-      normalizedRootAsset,
-      allowedAssets,
-    );
-
-    if (normalizedAllowedAssets.length === 0) {
-      setSubmitError('At least one allowed asset is required.');
+    const allowedBorrowAssets = parseManagedMandateAssetList(allowedBorrowAssetsInput);
+    const maxLtvBps = Number(maxLtvBpsInput);
+    if (!Number.isFinite(maxLtvBps)) {
+      setSubmitError('Max LTV bps must be a valid number.');
+      return;
+    }
+    const normalizedMinHealthFactor = minHealthFactorInput.trim();
+    if (normalizedMinHealthFactor.length === 0) {
+      setSubmitError('Minimum health factor is required.');
       return;
     }
 
@@ -618,19 +757,13 @@ function ManagedMandateEditorCard(props: {
         ownerAgentId: props.view.ownerAgentId,
         targetAgentId: props.view.targetAgentId,
         targetAgentRouteId: props.view.targetAgentRouteId,
-        mandateSummary: buildManagedMandateSummary(normalizedAllowedAssets),
-        managedMandate: {
-          allocation_basis: allocationBasis,
-          allowed_assets: normalizedAllowedAssets,
-          asset_intent: {
-            root_asset: normalizedRootAsset,
-            protocol_system: protocolSystem,
-            network,
-            benchmark_asset: benchmarkAsset,
-            intent,
-            control_path: controlPath,
-          },
-        },
+        managedMandate: buildUpdatedManagedMandate({
+          existingManagedMandate: props.view.managedMandate,
+          collateralPolicies,
+          allowedBorrowAssets,
+          maxLtvBps,
+          minHealthFactor: normalizedMinHealthFactor,
+        }),
       });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Managed mandate update failed.');
@@ -665,36 +798,61 @@ function ManagedMandateEditorCard(props: {
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <div>
-          <label className="block text-sm text-gray-400 mb-2">Root asset</label>
+          <label className="block text-sm text-gray-400 mb-2">Collateral policy</label>
           <input
+            id="managed-mandate-collateral-policies"
+            name="managed-mandate-collateral-policies"
             type="text"
-            value={rootAsset}
-            onChange={(event) => setRootAsset(event.target.value)}
+            value={collateralPoliciesInput}
+            onChange={(event) => setCollateralPoliciesInput(event.target.value)}
+            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+          />
+          <div className="mt-2 text-xs text-gray-500">
+            Use <span className="font-mono">ASSET:PCT</span> entries, for example{' '}
+            <span className="font-mono">USDC:70, WETH:50</span>.
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">Allowed borrow assets</label>
+          <input
+            id="managed-mandate-allowed-borrow-assets"
+            name="managed-mandate-allowed-borrow-assets"
+            type="text"
+            value={allowedBorrowAssetsInput}
+            onChange={(event) => setAllowedBorrowAssetsInput(event.target.value)}
+            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+          />
+          <div className="mt-2 text-xs text-gray-500">
+            Leave blank for a supply-only mandate.
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">Max LTV bps</label>
+          <input
+            id="managed-mandate-max-ltv-bps"
+            name="managed-mandate-max-ltv-bps"
+            type="number"
+            value={maxLtvBpsInput}
+            onChange={(event) => setMaxLtvBpsInput(event.target.value)}
             className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
           />
         </div>
         <div>
-          <label className="block text-sm text-gray-400 mb-2">Allowed assets</label>
+          <label className="block text-sm text-gray-400 mb-2">Minimum health factor</label>
           <input
+            id="managed-mandate-min-health-factor"
+            name="managed-mandate-min-health-factor"
             type="text"
-            value={allowedAssetsInput}
-            onChange={(event) => setAllowedAssetsInput(event.target.value)}
+            value={minHealthFactorInput}
+            onChange={(event) => setMinHealthFactorInput(event.target.value)}
             className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
           />
-          <div className="mt-2 text-xs text-gray-500">Comma-separated asset symbols.</div>
         </div>
       </div>
 
       <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">Summary preview</div>
-        <div className="mt-2 text-sm leading-relaxed text-gray-300">
-          {buildManagedMandateSummary(
-            canonicalizeManagedMandateAssets(
-              normalizeManagedMandateAssetSymbol(rootAsset),
-              parseManagedMandateAssetList(allowedAssetsInput),
-            ),
-          )}
-        </div>
+        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">Exact mandate preview</div>
+        <ManagedMandateDetails managedMandate={previewManagedMandate as Record<string, unknown>} />
       </div>
 
       {submitError ? (
@@ -1304,8 +1462,7 @@ export function AgentDetailPage({
   ) : null;
   const showManagedLendingRuntimeCards = Boolean(
     emberLendingRuntimeView &&
-      (emberLendingRuntimeView.mandateSummary ||
-        emberLendingRuntimeView.reservationSummary),
+      (emberLendingRuntimeView.managedMandate || emberLendingRuntimeView.reservationSummary),
   );
   const managedAgentContextCards =
     portfolioManagerManagedAgentView || showManagedLendingRuntimeCards || managedMandateEditorView ? (
@@ -1352,14 +1509,12 @@ export function AgentDetailPage({
             </div>
             {isManagedLaneExpanded ? (
               <div id={managedLaneContentId}>
-                {portfolioManagerManagedAgentView.mandateSummary ? (
+                {portfolioManagerManagedAgentView.managedMandate ? (
                   <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
                     <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
                       Mandate
                     </div>
-                    <p className="mt-2 text-sm leading-relaxed text-gray-300">
-                      {portfolioManagerManagedAgentView.mandateSummary}
-                    </p>
+                    <ManagedMandateDetails managedMandate={portfolioManagerManagedAgentView.managedMandate} />
                   </div>
                 ) : null}
                 {portfolioManagerManagedAgentView.reservationSummary ? (
@@ -1379,14 +1534,12 @@ export function AgentDetailPage({
 
         {showManagedLendingRuntimeCards && emberLendingRuntimeView ? (
           <div className="grid gap-3 lg:grid-cols-2">
-            {emberLendingRuntimeView.mandateSummary ? (
+            {emberLendingRuntimeView.managedMandate ? (
               <div className="min-w-0 rounded-xl border border-white/10 bg-[#151515] p-4">
                 <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
                   Mandate
                 </div>
-                <div className="mt-2 text-sm leading-relaxed text-gray-300">
-                  {emberLendingRuntimeView.mandateSummary}
-                </div>
+                <ManagedMandateDetails managedMandate={emberLendingRuntimeView.managedMandate} />
               </div>
             ) : null}
             {emberLendingRuntimeView.reservationSummary ? (
@@ -2707,11 +2860,15 @@ function AgentBlockersTab({
     settings?.amount?.toString() ?? '',
   );
   const [targetMarket, setTargetMarket] = useState<'BTC' | 'ETH'>('BTC');
-  const [portfolioManagerRootAsset, setPortfolioManagerRootAsset] = useState(
-    DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
+  const [portfolioManagerCollateralPoliciesInput, setPortfolioManagerCollateralPoliciesInput] =
+    useState(DEFAULT_MANAGED_LENDING_COLLATERAL_POLICIES_INPUT);
+  const [portfolioManagerAllowedBorrowAssetsInput, setPortfolioManagerAllowedBorrowAssetsInput] =
+    useState('');
+  const [portfolioManagerMaxLtvBpsInput, setPortfolioManagerMaxLtvBpsInput] = useState(
+    String(DEFAULT_MANAGED_LENDING_MAX_LTV_BPS),
   );
-  const [portfolioManagerAllowedAssetsInput, setPortfolioManagerAllowedAssetsInput] = useState(
-    DEFAULT_MANAGED_MANDATE_ROOT_ASSET,
+  const [portfolioManagerMinHealthFactorInput, setPortfolioManagerMinHealthFactorInput] = useState(
+    DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
   );
   const [fundingTokenAddress, setFundingTokenAddress] = useState('');
   const [isSigningDelegations, setIsSigningDelegations] = useState(false);
@@ -2740,8 +2897,10 @@ function AgentBlockersTab({
       return;
     }
 
-    setPortfolioManagerRootAsset(DEFAULT_MANAGED_MANDATE_ROOT_ASSET);
-    setPortfolioManagerAllowedAssetsInput(DEFAULT_MANAGED_MANDATE_ROOT_ASSET);
+    setPortfolioManagerCollateralPoliciesInput(DEFAULT_MANAGED_LENDING_COLLATERAL_POLICIES_INPUT);
+    setPortfolioManagerAllowedBorrowAssetsInput('');
+    setPortfolioManagerMaxLtvBpsInput(String(DEFAULT_MANAGED_LENDING_MAX_LTV_BPS));
+    setPortfolioManagerMinHealthFactorInput(DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR);
   }, [isPortfolioManagerSetupInterrupt]);
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
@@ -2891,44 +3050,47 @@ function AgentBlockersTab({
       return;
     }
 
-    const normalizedRootAsset = normalizeManagedMandateAssetSymbol(portfolioManagerRootAsset);
-    if (normalizedRootAsset.length === 0) {
-      setError('Root asset is required.');
+    const collateralPolicies = parseManagedLendingCollateralPolicies(
+      portfolioManagerCollateralPoliciesInput,
+    );
+    if (collateralPolicies.length === 0) {
+      setError('At least one collateral policy is required.');
       return;
     }
-
-    const allowedAssets = parseManagedMandateAssetList(portfolioManagerAllowedAssetsInput);
-    const normalizedAllowedAssets = canonicalizeManagedMandateAssets(
-      normalizedRootAsset,
-      allowedAssets,
+    const normalizedAllowedBorrowAssets = parseManagedMandateAssetList(
+      portfolioManagerAllowedBorrowAssetsInput,
     );
-
-    if (normalizedAllowedAssets.length === 0) {
-      setError('At least one allowed asset is required.');
+    const maxLtvBps = Number(portfolioManagerMaxLtvBpsInput);
+    if (!Number.isFinite(maxLtvBps)) {
+      setError('Max LTV bps must be a valid number.');
+      return;
+    }
+    const minHealthFactor = portfolioManagerMinHealthFactorInput.trim();
+    if (minHealthFactor.length === 0) {
+      setError('Minimum health factor is required.');
       return;
     }
 
     onInterruptSubmit?.({
       ...buildPortfolioManagerSetupInput(operatorWalletAddress as `0x${string}`, {
-        rootAsset: normalizedRootAsset,
-        allowedAssetsInput: normalizedAllowedAssets.join(', '),
+        collateralPoliciesInput: formatManagedLendingCollateralPolicies(collateralPolicies),
+        allowedBorrowAssetsInput: normalizedAllowedBorrowAssets.join(', '),
+        maxLtvBps,
+        minHealthFactor,
       }),
     });
   };
 
-  const normalizedPortfolioManagerPreviewRootAsset = normalizeManagedMandateAssetSymbol(
-    portfolioManagerRootAsset,
+  const portfolioManagerPreviewCollateralPolicies = parseManagedLendingCollateralPolicies(
+    portfolioManagerCollateralPoliciesInput,
   );
-  const portfolioManagerPreviewAllowedAssets = parseManagedMandateAssetList(
-    portfolioManagerAllowedAssetsInput,
-  );
-  const portfolioManagerPreviewMandateAssets = canonicalizeManagedMandateAssets(
-    normalizedPortfolioManagerPreviewRootAsset,
-    portfolioManagerPreviewAllowedAssets,
-  );
-  const portfolioManagerPreviewSummary = buildManagedMandateSummary(
-    portfolioManagerPreviewMandateAssets,
-  );
+  const portfolioManagerPreviewManagedMandate = buildUpdatedManagedMandate({
+    existingManagedMandate: null,
+    collateralPolicies: portfolioManagerPreviewCollateralPolicies,
+    allowedBorrowAssets: parseManagedMandateAssetList(portfolioManagerAllowedBorrowAssetsInput),
+    maxLtvBps: readFiniteNumber(Number(portfolioManagerMaxLtvBpsInput)) ?? undefined,
+    minHealthFactor: portfolioManagerMinHealthFactorInput.trim() || undefined,
+  });
 
   const handleGmxSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3351,49 +3513,91 @@ function AgentBlockersTab({
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
                         <label
-                          htmlFor="portfolio-manager-root-asset"
+                          htmlFor="portfolio-manager-collateral-policies"
                           className="block text-sm text-gray-400 mb-2"
                         >
-                          Root asset
+                          Collateral policy
                         </label>
                         <input
-                          id="portfolio-manager-root-asset"
-                          name="portfolio-manager-root-asset"
+                          id="portfolio-manager-collateral-policies"
+                          name="portfolio-manager-collateral-policies"
                           type="text"
-                          value={portfolioManagerRootAsset}
-                          onChange={(event) => setPortfolioManagerRootAsset(event.target.value)}
+                          value={portfolioManagerCollateralPoliciesInput}
+                          onChange={(event) =>
+                            setPortfolioManagerCollateralPoliciesInput(event.target.value)
+                          }
+                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                        />
+                        <div className="mt-2 text-xs text-gray-500">
+                          Use <span className="font-mono">ASSET:PCT</span> entries, for example{' '}
+                          <span className="font-mono">USDC:70, WETH:50</span>.
+                        </div>
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="portfolio-manager-allowed-borrow-assets"
+                          className="block text-sm text-gray-400 mb-2"
+                        >
+                          Allowed borrow assets
+                        </label>
+                        <input
+                          id="portfolio-manager-allowed-borrow-assets"
+                          name="portfolio-manager-allowed-borrow-assets"
+                          type="text"
+                          value={portfolioManagerAllowedBorrowAssetsInput}
+                          onChange={(event) =>
+                            setPortfolioManagerAllowedBorrowAssetsInput(event.target.value)
+                          }
+                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                        />
+                        <div className="mt-2 text-xs text-gray-500">
+                          Leave blank for a supply-only mandate.
+                        </div>
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="portfolio-manager-max-ltv-bps"
+                          className="block text-sm text-gray-400 mb-2"
+                        >
+                          Max LTV bps
+                        </label>
+                        <input
+                          id="portfolio-manager-max-ltv-bps"
+                          name="portfolio-manager-max-ltv-bps"
+                          type="number"
+                          value={portfolioManagerMaxLtvBpsInput}
+                          onChange={(event) =>
+                            setPortfolioManagerMaxLtvBpsInput(event.target.value)
+                          }
                           className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
                         />
                       </div>
                       <div>
                         <label
-                          htmlFor="portfolio-manager-allowed-assets"
+                          htmlFor="portfolio-manager-min-health-factor"
                           className="block text-sm text-gray-400 mb-2"
                         >
-                          Allowed assets
+                          Minimum health factor
                         </label>
                         <input
-                          id="portfolio-manager-allowed-assets"
-                          name="portfolio-manager-allowed-assets"
+                          id="portfolio-manager-min-health-factor"
+                          name="portfolio-manager-min-health-factor"
                           type="text"
-                          value={portfolioManagerAllowedAssetsInput}
+                          value={portfolioManagerMinHealthFactorInput}
                           onChange={(event) =>
-                            setPortfolioManagerAllowedAssetsInput(event.target.value)
+                            setPortfolioManagerMinHealthFactorInput(event.target.value)
                           }
                           className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
                         />
-                        <div className="mt-2 text-xs text-gray-500">
-                          Comma-separated asset symbols. The root asset is always included.
-                        </div>
                       </div>
                     </div>
                     <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
                       <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                        Summary preview
+                        Exact mandate preview
                       </div>
-                      <div className="mt-2 text-sm leading-relaxed text-gray-300">
-                        {portfolioManagerPreviewSummary}
-                      </div>
+                      <ManagedMandateDetails
+                        managedMandate={portfolioManagerPreviewManagedMandate as Record<string, unknown>}
+                      />
                     </div>
                   </div>
                 </div>

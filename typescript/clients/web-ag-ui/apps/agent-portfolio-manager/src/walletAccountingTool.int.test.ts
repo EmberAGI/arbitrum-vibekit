@@ -51,23 +51,28 @@ function createOnboardingBootstrap(suffix: string, walletAddress: `0x${string}`)
       {
         mandate_ref: `mandate-portfolio-manager-${suffix}`,
         agent_id: 'portfolio-manager',
-        mandate_summary: 'activate portfolio manager reserves',
         managed_mandate: null,
       },
       {
         mandate_ref: `mandate-ember-lending-${suffix}`,
         agent_id: 'ember-lending',
-        mandate_summary: 'lend USDC through the managed lending lane',
         managed_mandate: {
-          allocation_basis: 'allocable_idle',
-          allowed_assets: ['USDC'],
-          asset_intent: {
-            root_asset: 'USDC',
-            protocol_system: 'aave',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            intent: 'position.enter',
-            control_path: 'lending.supply',
+          lending_policy: {
+            collateral_policy: {
+              assets: [
+                {
+                  asset: 'USDC',
+                  max_allocation_pct: 35,
+                },
+              ],
+            },
+            borrow_policy: {
+              allowed_assets: ['USDC'],
+            },
+            risk_policy: {
+              max_ltv_bps: 7000,
+              min_health_factor: '1.25',
+            },
           },
         },
       },

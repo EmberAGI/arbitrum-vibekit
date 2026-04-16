@@ -26,17 +26,27 @@ function createManagedMandateEditorProjection(overrides: Record<string, unknown>
       targetAgentKey: 'ember-lending-primary',
       targetAgentTitle: 'Ember Lending',
       mandateRef: 'mandate-ember-lending-001',
-      mandateSummary: 'lend USDC and WETH through the managed lending lane',
       managedMandate: {
-        allocation_basis: 'allocable_idle',
-        allowed_assets: ['USDC', 'WETH'],
-        asset_intent: {
-          root_asset: 'USDC',
-          protocol_system: 'aave',
-          network: 'arbitrum',
-          benchmark_asset: 'USD',
-          intent: 'position.enter',
-          control_path: 'lending.supply',
+        lending_policy: {
+          collateral_policy: {
+            assets: [
+              {
+                asset: 'USDC',
+                max_allocation_pct: 35,
+              },
+              {
+                asset: 'WETH',
+                max_allocation_pct: 20,
+              },
+            ],
+          },
+          borrow_policy: {
+            allowed_assets: ['USDC', 'WETH'],
+          },
+          risk_policy: {
+            max_ltv_bps: 7000,
+            min_health_factor: '1.25',
+          },
         },
       },
       agentWallet: '0x00000000000000000000000000000000000000b1',
@@ -134,7 +144,16 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).toContain('0x0000...00b1');
     expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain('Mandate');
-    expect(html).toContain('lend USDC and WETH through the managed lending lane');
+    expect(html).toContain('lending_policy.collateral_policy.assets.0.asset');
+    expect(html).toContain('lending_policy.collateral_policy.assets.0.max_allocation_pct');
+    expect(html).toContain('lending_policy.borrow_policy.allowed_assets');
+    expect(html).toContain('USDC, WETH');
+    expect(html).toContain('lending_policy.risk_policy.max_ltv_bps');
+    expect(html).toContain('lending_policy.risk_policy.min_health_factor');
+    expect(html).toContain('max_allocation_pct');
+    expect(html).toContain('1.25');
+    expect(html).not.toContain('allocation_basis');
+    expect(html).not.toContain('asset_intent');
     expect(html).toContain('Reservation');
     expect(html).toContain(
       'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
@@ -176,17 +195,23 @@ describe('AgentDetailPage managed-agent affordances', () => {
         phase: 'active',
       } as never,
       domainProjection: createManagedMandateEditorProjection({
-        mandateSummary: 'lend WETH through the managed lending lane',
         managedMandate: {
-          allocation_basis: 'allocable_idle',
-          allowed_assets: ['WETH'],
-          asset_intent: {
-            root_asset: 'WETH',
-            protocol_system: 'aave',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            intent: 'position.enter',
-            control_path: 'lending.supply',
+          lending_policy: {
+            collateral_policy: {
+              assets: [
+                {
+                  asset: 'WETH',
+                  max_allocation_pct: 35,
+                },
+              ],
+            },
+            borrow_policy: {
+              allowed_assets: [],
+            },
+            risk_policy: {
+              max_ltv_bps: 7000,
+              min_health_factor: '1.25',
+            },
           },
         },
         reservation: {

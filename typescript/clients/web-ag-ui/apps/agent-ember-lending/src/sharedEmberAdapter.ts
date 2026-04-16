@@ -41,7 +41,6 @@ const CREATE_TRANSACTION_INPUT_BLOCKED_MESSAGE =
 export type EmberLendingLifecycleState = {
   phase: 'prehire' | 'onboarding' | 'active' | 'firing' | 'inactive';
   mandateRef: string | null;
-  mandateSummary: string | null;
   mandateContext: Record<string, unknown> | null;
   walletAddress: `0x${string}` | null;
   rootUserWalletAddress: `0x${string}` | null;
@@ -85,7 +84,6 @@ type SharedEmberExecutionContext = {
   generated_at?: string;
   network?: string;
   mandate_ref?: string;
-  mandate_summary?: string;
   mandate_context?: Record<string, unknown> | null;
   subagent_wallet_address?: string;
   root_user_wallet_address?: string;
@@ -194,7 +192,6 @@ type SharedEmberCommittedEvent = {
 type PortfolioProjection = Pick<
   EmberLendingLifecycleState,
   | 'mandateRef'
-  | 'mandateSummary'
   | 'mandateContext'
   | 'walletAddress'
   | 'rootUserWalletAddress'
@@ -209,16 +206,23 @@ type ManagedMandateEditorProjection = {
   targetAgentKey: typeof EMBER_LENDING_ROUTE_AGENT_KEY;
   targetAgentTitle: typeof EMBER_LENDING_ROUTE_AGENT_TITLE;
   mandateRef: string;
-  mandateSummary: string;
-  managedMandate: {
-    allocation_basis: string;
-    allowed_assets: string[];
-    asset_intent: {
-      root_asset: string;
-      network: string;
-      benchmark_asset: string;
-      intent: string;
-      control_path: string;
+  managedMandate: Record<string, unknown> & {
+    lending_policy: Record<string, unknown> & {
+      collateral_policy: Record<string, unknown> & {
+        assets: Array<
+          Record<string, unknown> & {
+            asset: string;
+            max_allocation_pct: number;
+          }
+        >;
+      };
+      borrow_policy: Record<string, unknown> & {
+        allowed_assets: string[];
+      };
+      risk_policy: Record<string, unknown> & {
+        max_ltv_bps: number;
+        min_health_factor: string;
+      };
     };
   };
   agentWallet: `0x${string}` | null;
@@ -270,7 +274,6 @@ function buildDefaultLifecycleState(): EmberLendingLifecycleState {
   return {
     phase: 'prehire',
     mandateRef: null,
-    mandateSummary: null,
     mandateContext: null,
     walletAddress: null,
     rootUserWalletAddress: null,
@@ -671,8 +674,6 @@ function readMandateProjection(portfolioState: Record<string, unknown>): Portfol
 
   const mandateRef =
     readString(portfolioState['mandate_ref']) ?? readString(mandateRecord?.['mandate_ref']);
-  const mandateSummary =
-    readString(portfolioState['mandate_summary']) ?? readString(mandateRecord?.['summary']);
   const mandateContext =
     ('mandate_context' in portfolioState && isRecord(portfolioState['mandate_context'])
       ? portfolioState['mandate_context']
@@ -682,7 +683,6 @@ function readMandateProjection(portfolioState: Record<string, unknown>): Portfol
 
   return {
     mandateRef,
-    mandateSummary,
     mandateContext,
     walletAddress: readHexAddress(portfolioState['agent_wallet']),
     rootUserWalletAddress: readHexAddress(portfolioState['root_user_wallet']),
@@ -697,7 +697,6 @@ function mergePortfolioProjection(
 ): Pick<
   EmberLendingLifecycleState,
   | 'mandateRef'
-  | 'mandateSummary'
   | 'mandateContext'
   | 'walletAddress'
   | 'rootUserWalletAddress'
@@ -707,7 +706,6 @@ function mergePortfolioProjection(
   if (!isRecord(portfolioState)) {
     return {
       mandateRef: state.mandateRef,
-      mandateSummary: state.mandateSummary,
       mandateContext: state.mandateContext,
       walletAddress: state.walletAddress,
       rootUserWalletAddress: state.rootUserWalletAddress,
@@ -720,7 +718,6 @@ function mergePortfolioProjection(
 
   return {
     mandateRef: projection.mandateRef,
-    mandateSummary: projection.mandateSummary,
     mandateContext: projection.mandateContext,
     walletAddress: projection.walletAddress,
     rootUserWalletAddress: projection.rootUserWalletAddress,
@@ -734,7 +731,6 @@ function readExecutionContextProjection(
 ): Pick<
   EmberLendingLifecycleState,
   | 'mandateRef'
-  | 'mandateSummary'
   | 'mandateContext'
   | 'walletAddress'
   | 'rootUserWalletAddress'
@@ -750,7 +746,6 @@ function readExecutionContextProjection(
 
   return {
     mandateRef: readString(executionContext.mandate_ref),
-    mandateSummary: readString(executionContext.mandate_summary),
     mandateContext,
     walletAddress: readHexAddress(executionContext.subagent_wallet_address),
     rootUserWalletAddress: readHexAddress(executionContext.root_user_wallet_address),
@@ -765,7 +760,6 @@ function mergeExecutionContextProjection(
 ): Pick<
   EmberLendingLifecycleState,
   | 'mandateRef'
-  | 'mandateSummary'
   | 'mandateContext'
   | 'walletAddress'
   | 'rootUserWalletAddress'
@@ -775,7 +769,6 @@ function mergeExecutionContextProjection(
   if (!executionContext || !isRecord(executionContext)) {
     return {
       mandateRef: state.mandateRef,
-      mandateSummary: state.mandateSummary,
       mandateContext: state.mandateContext,
       walletAddress: state.walletAddress,
       rootUserWalletAddress: state.rootUserWalletAddress,
@@ -788,7 +781,6 @@ function mergeExecutionContextProjection(
 
   return {
     mandateRef: projection.mandateRef ?? state.mandateRef,
-    mandateSummary: projection.mandateSummary ?? state.mandateSummary,
     mandateContext: projection.mandateContext ?? state.mandateContext,
     walletAddress: projection.walletAddress ?? state.walletAddress,
     rootUserWalletAddress: projection.rootUserWalletAddress ?? state.rootUserWalletAddress,
@@ -804,37 +796,60 @@ function readManagedMandate(
     return null;
   }
 
-  const allocationBasis = readString(mandateContext['allocation_basis']);
-  const allowedAssets = mandateContext['allowed_assets'];
-  const assetIntent = isRecord(mandateContext['asset_intent']) ? mandateContext['asset_intent'] : null;
-  const rootAsset = readString(assetIntent?.['root_asset']);
-  const network = readString(assetIntent?.['network']);
-  const benchmarkAsset = readString(assetIntent?.['benchmark_asset']);
-  const intent = readString(assetIntent?.['intent']);
-  const controlPath = readString(assetIntent?.['control_path']);
+  const lendingPolicy = isRecord(mandateContext['lending_policy']) ? mandateContext['lending_policy'] : null;
+  const collateralPolicy = isRecord(lendingPolicy?.['collateral_policy'])
+    ? lendingPolicy['collateral_policy']
+    : null;
+  const borrowPolicy = isRecord(lendingPolicy?.['borrow_policy'])
+    ? lendingPolicy['borrow_policy']
+    : null;
+  const riskPolicy = isRecord(lendingPolicy?.['risk_policy']) ? lendingPolicy['risk_policy'] : null;
+  const collateralAssets = Array.isArray(collateralPolicy?.['assets']) ? collateralPolicy['assets'] : null;
+  const allowedBorrowAssets = Array.isArray(borrowPolicy?.['allowed_assets'])
+    ? borrowPolicy['allowed_assets']
+    : null;
+  const maxLtvBps = readFiniteNumber(riskPolicy?.['max_ltv_bps']);
+  const minHealthFactor = readString(riskPolicy?.['min_health_factor']);
 
   if (
-    allocationBasis === null ||
-    !Array.isArray(allowedAssets) ||
-    !allowedAssets.every((value) => typeof value === 'string' && value.trim().length > 0) ||
-    rootAsset === null ||
-    network === null ||
-    benchmarkAsset === null ||
-    intent === null ||
-    controlPath === null
+    !collateralAssets ||
+    collateralAssets.length === 0 ||
+    !collateralAssets.every(
+      (value) =>
+        isRecord(value) &&
+        readString(value['asset']) !== null &&
+        readFiniteNumber(value['max_allocation_pct']) !== null,
+    ) ||
+    !Array.isArray(allowedBorrowAssets) ||
+    !allowedBorrowAssets.every((value) => readString(value) !== null) ||
+    maxLtvBps === null ||
+    minHealthFactor === null
   ) {
     return null;
   }
 
   return {
-    allocation_basis: allocationBasis,
-    allowed_assets: allowedAssets,
-    asset_intent: {
-      root_asset: rootAsset,
-      network,
-      benchmark_asset: benchmarkAsset,
-      intent,
-      control_path: controlPath,
+    lending_policy: {
+      collateral_policy: {
+        ...(collateralPolicy ?? {}),
+        assets: collateralAssets.map((value) => ({
+          ...(isRecord(value) ? value : {}),
+          asset: readString(isRecord(value) ? value['asset'] : null) ?? '',
+          max_allocation_pct:
+            readFiniteNumber(isRecord(value) ? value['max_allocation_pct'] : null) ?? 0,
+        })),
+      },
+      borrow_policy: {
+        ...(borrowPolicy ?? {}),
+        allowed_assets: allowedBorrowAssets
+          .map((value) => readString(value))
+          .filter((value): value is string => value !== null),
+      },
+      risk_policy: {
+        ...(riskPolicy ?? {}),
+        max_ltv_bps: maxLtvBps,
+        min_health_factor: minHealthFactor,
+      },
     },
   };
 }
@@ -843,7 +858,7 @@ function buildManagedMandateEditorProjection(
   state: EmberLendingLifecycleState,
 ): ManagedMandateEditorProjection | null {
   const managedMandate = isRecord(state.mandateContext) ? readManagedMandate(state.mandateContext) : null;
-  if (!state.mandateRef || !state.mandateSummary || !managedMandate) {
+  if (!state.mandateRef || !managedMandate) {
     return null;
   }
 
@@ -864,7 +879,6 @@ function buildManagedMandateEditorProjection(
     targetAgentKey: EMBER_LENDING_ROUTE_AGENT_KEY,
     targetAgentTitle: EMBER_LENDING_ROUTE_AGENT_TITLE,
     mandateRef: state.mandateRef,
-    mandateSummary: state.mandateSummary,
     managedMandate,
     agentWallet: state.walletAddress,
     rootUserWallet: state.rootUserWalletAddress,
@@ -1031,7 +1045,6 @@ async function hydrateManagedProjectionFromSharedEmber(input: {
   const stateWithPortfolioProjection: EmberLendingLifecycleState = {
     ...input.state,
     mandateRef: portfolioProjection.mandateRef ?? input.state.mandateRef,
-    mandateSummary: portfolioProjection.mandateSummary ?? input.state.mandateSummary,
     mandateContext: portfolioProjection.mandateContext ?? input.state.mandateContext,
     walletAddress: portfolioProjection.walletAddress ?? input.state.walletAddress,
     rootUserWalletAddress:
@@ -1104,7 +1117,7 @@ function hasManagedExecutionContextProjection(executionContext: SharedEmberExecu
 
   return (
     readString(executionContext.mandate_ref) !== null ||
-    readString(executionContext.mandate_summary) !== null ||
+    isRecord(executionContext.mandate_context) ||
     (Array.isArray(executionContext.wallet_contents) && executionContext.wallet_contents.length > 0) ||
     (Array.isArray(executionContext.active_position_scopes) &&
       executionContext.active_position_scopes.length > 0) ||
@@ -1135,7 +1148,7 @@ function readStateNetwork(state: EmberLendingLifecycleState): string | null {
     ? readManagedMandate(state.mandateContext)
     : null;
   if (managedMandate) {
-    return managedMandate.asset_intent.network;
+    return SHARED_EMBER_NETWORK;
   }
 
   return isRecord(state.mandateContext) ? readString(state.mandateContext['network']) : null;
@@ -1446,6 +1459,86 @@ function appendWalletOwnershipGuidanceXml(lines: string[]): void {
   );
 }
 
+function appendStructuredXmlNode(input: {
+  lines: string[];
+  indent: string;
+  tag: string;
+  value: unknown;
+}): void {
+  if (input.value === null || input.value === undefined) {
+    return;
+  }
+
+  if (Array.isArray(input.value)) {
+    if (input.value.length === 0) {
+      return;
+    }
+
+    input.lines.push(`${input.indent}<${input.tag}>`);
+    for (const entry of input.value) {
+      appendStructuredXmlNode({
+        lines: input.lines,
+        indent: `${input.indent}  `,
+        tag: 'item',
+        value: entry,
+      });
+    }
+    input.lines.push(`${input.indent}</${input.tag}>`);
+    return;
+  }
+
+  if (isRecord(input.value)) {
+    const entries = Object.entries(input.value).filter(
+      ([, nestedValue]) => nestedValue !== null && nestedValue !== undefined,
+    );
+    if (entries.length === 0) {
+      return;
+    }
+
+    input.lines.push(`${input.indent}<${input.tag}>`);
+    for (const [key, nestedValue] of entries) {
+      appendStructuredXmlNode({
+        lines: input.lines,
+        indent: `${input.indent}  `,
+        tag: key,
+        value: nestedValue,
+      });
+    }
+    input.lines.push(`${input.indent}</${input.tag}>`);
+    return;
+  }
+
+  if (
+    typeof input.value === 'string' ||
+    typeof input.value === 'number' ||
+    typeof input.value === 'boolean' ||
+    typeof input.value === 'bigint'
+  ) {
+    input.lines.push(
+      `${input.indent}<${input.tag}>${escapeXml(String(input.value))}</${input.tag}>`,
+    );
+  }
+}
+
+function appendMandateContextXml(
+  lines: string[],
+  mandateContext: Record<string, unknown> | null,
+): void {
+  if (!mandateContext) {
+    return;
+  }
+
+  appendStructuredXmlNode({
+    lines,
+    indent: '  ',
+    tag: 'mandate_context',
+    value: mandateContext,
+  });
+  lines.push(
+    '  <mandate_quantity_guidance>mandate_context is policy-only. Use wallet_contents, active_position_scopes, reservation summaries, and current_candidate_plan for live quantities and values.</mandate_quantity_guidance>',
+  );
+}
+
 function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): string[] {
   const lines = ['<ember_lending_execution_context freshness="cached">'];
   lines.push(`  <generated_at>${escapeXml(new Date().toISOString())}</generated_at>`);
@@ -1460,9 +1553,7 @@ function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): st
     lines.push(`  <mandate_ref>${escapeXml(state.mandateRef)}</mandate_ref>`);
   }
 
-  if (state.mandateSummary) {
-    lines.push(`  <mandate_summary>${escapeXml(state.mandateSummary)}</mandate_summary>`);
-  }
+  appendMandateContextXml(lines, state.mandateContext);
 
   if (state.walletAddress) {
     lines.push(`  <subagent_wallet_address>${state.walletAddress}</subagent_wallet_address>`);
@@ -1530,10 +1621,12 @@ function buildSharedEmberExecutionContextXml(
     lines.push(`  <mandate_ref>${escapeXml(mandateRef)}</mandate_ref>`);
   }
 
-  const mandateSummary = readString(input.executionContext.mandate_summary);
-  if (mandateSummary) {
-    lines.push(`  <mandate_summary>${escapeXml(mandateSummary)}</mandate_summary>`);
-  }
+  appendMandateContextXml(
+    lines,
+    (isRecord(input.executionContext.mandate_context)
+      ? input.executionContext.mandate_context
+      : null) ?? input.state.mandateContext,
+  );
 
   const subagentWalletAddress = readHexAddress(input.executionContext.subagent_wallet_address);
   if (subagentWalletAddress) {
@@ -2564,7 +2657,7 @@ function readManagedMandateCollateralAsset(state: EmberLendingLifecycleState): s
   const managedMandate = isRecord(state.mandateContext)
     ? readManagedMandate(state.mandateContext)
     : null;
-  return managedMandate?.asset_intent.root_asset ?? managedMandate?.allowed_assets[0] ?? null;
+  return managedMandate?.lending_policy.collateral_policy.assets[0]?.asset ?? null;
 }
 
 async function readManagedOnboardingState(input: {
@@ -2843,7 +2936,6 @@ function buildFallbackObjectiveSummary(intent: string): string {
 function buildManagedSubagentDecisionContext(input: {
   source: Record<string, unknown>;
   state: EmberLendingLifecycleState;
-  mandateSummary: string | null;
   intent: string;
 }): Record<string, unknown> {
   const sourceDecisionContext =
@@ -2852,9 +2944,6 @@ function buildManagedSubagentDecisionContext(input: {
       : null;
 
   return {
-    mandate_summary:
-      input.mandateSummary ??
-      'operate within the current managed lending mandate and bounded guardrails',
     objective_summary:
       readString(sourceDecisionContext?.['objective_summary']) ??
       buildFallbackObjectiveSummary(input.intent),
@@ -2897,32 +2986,20 @@ function buildStableCommandSuffix(value: unknown): string {
     .slice(0, 12);
 }
 
-function resolveOperationIdempotencyKey(input: {
-  provided: string | null;
-  fallback: string;
-  expectedPrefix: string;
-  stableBinding?: string | null;
+function buildCreateTransactionIdempotencyKey(input: {
+  threadId: string;
+  semanticRequest: SemanticTransactionRequest;
 }): string {
-  if (!input.provided) {
-    return input.fallback;
-  }
+  return `idem-create-transaction-${input.threadId}-${buildStableCommandSuffix(input.semanticRequest)}:${crypto.randomUUID()}`;
+}
 
-  const normalized = input.provided.trim();
-  if (normalized.length === 0) {
-    return input.fallback;
-  }
-
-  if (!normalized.startsWith(input.expectedPrefix)) {
-    return `${input.fallback}:caller:${normalized}`;
-  }
-
-  const stableBinding = input.stableBinding?.trim();
-  if (!stableBinding) {
-    return normalized;
-  }
-
-  const bindingSuffix = `:binding:${stableBinding}`;
-  return normalized.endsWith(bindingSuffix) ? normalized : `${normalized}${bindingSuffix}`;
+function buildRequestExecutionIdempotencyKey(input: {
+  threadId: string;
+  transactionPlanId: string;
+}): string {
+  return `idem-request-execution-${input.threadId}-${buildStableCommandSuffix({
+    transactionPlanId: input.transactionPlanId,
+  })}`;
 }
 
 function buildCreateTransactionRequest(input: {
@@ -2980,7 +3057,6 @@ function buildEscalationHandoff(input: {
   handoff['decision_context'] = buildManagedSubagentDecisionContext({
     source,
     state: input.state,
-    mandateSummary: input.state.mandateSummary,
     intent,
   });
 
@@ -2993,7 +3069,6 @@ function mergePortfolioProjectionPreservingKnownContext(
 ): Pick<
   EmberLendingLifecycleState,
   | 'mandateRef'
-  | 'mandateSummary'
   | 'mandateContext'
   | 'walletAddress'
   | 'rootUserWalletAddress'
@@ -3004,7 +3079,6 @@ function mergePortfolioProjectionPreservingKnownContext(
 
   return {
     mandateRef: projection.mandateRef ?? state.mandateRef,
-    mandateSummary: projection.mandateSummary ?? state.mandateSummary,
     mandateContext: projection.mandateContext ?? state.mandateContext,
     walletAddress: projection.walletAddress ?? state.walletAddress,
     rootUserWalletAddress: projection.rootUserWalletAddress ?? state.rootUserWalletAddress,
@@ -3465,7 +3539,7 @@ export function createEmberLendingDomain(
         {
           name: 'create_transaction',
           description:
-            'Create or refresh a candidate transaction plan for the managed lending position. Reason from mandate_summary, wallet_contents, active_position_scopes, and the current candidate plan. wallet_contents and active_position_scopes describe rooted user wallet context, not balances held in subagent_wallet_address. subagent_wallet_address is the dedicated execution wallet and only reflects balances explicitly surfaced for that wallet. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with control_path, asset, protocol_system, network, and quantity. quantity must be either { "kind": "exact", "value": "1.25" } using asset-unit decimal strings or { "kind": "percent", "value": 50 } using percent of the relevant base for that action. asset is the actionable observed asset; active_position_scopes expose economic_exposures when the asset is a wrapper or synthetic token.',
+            'Create or refresh a candidate transaction plan for the managed lending position. Reason from mandate_context, wallet_contents, active_position_scopes, and the current candidate plan. mandate_context is the exact managed mandate policy envelope; use wallet_contents, active_position_scopes, and the current candidate plan for live quantities and values. wallet_contents and active_position_scopes describe rooted user wallet context, not balances held in subagent_wallet_address. subagent_wallet_address is the dedicated execution wallet and only reflects balances explicitly surfaced for that wallet. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with control_path, asset, protocol_system, network, and quantity. quantity must be either { "kind": "exact", "value": "1.25" } using asset-unit decimal strings or { "kind": "percent", "value": 50 } using percent of the relevant base for that action. asset is the actionable observed asset; active_position_scopes expose economic_exposures when the asset is a wrapper or synthetic token.',
         },
         {
           name: 'request_execution',
@@ -3641,13 +3715,9 @@ export function createEmberLendingDomain(
             };
           }
 
-          const fallbackIdempotencyKey =
-            `idem-create-transaction-${threadId}-${buildStableCommandSuffix(semanticRequest)}`;
-          const idempotencyKey = resolveOperationIdempotencyKey({
-            provided: readStringKey(operation.input, 'idempotencyKey'),
-            fallback: fallbackIdempotencyKey,
-            expectedPrefix: 'idem-create-transaction-',
-            stableBinding: buildStableCommandSuffix(semanticRequest),
+          const idempotencyKey = buildCreateTransactionIdempotencyKey({
+            threadId,
+            semanticRequest,
           });
           let response: {
             result?: {
@@ -3817,15 +3887,9 @@ export function createEmberLendingDomain(
             };
           }
 
-          const fallbackIdempotencyKey =
-            `idem-request-execution-${threadId}-${buildStableCommandSuffix({
-              transactionPlanId,
-            })}`;
-          const idempotencyKey = resolveOperationIdempotencyKey({
-            provided: readStringKey(operation.input, 'idempotencyKey'),
-            fallback: fallbackIdempotencyKey,
-            expectedPrefix: 'idem-request-execution-',
-            stableBinding: buildStableCommandSuffix({ transactionPlanId }),
+          const idempotencyKey = buildRequestExecutionIdempotencyKey({
+            threadId,
+            transactionPlanId,
           });
           let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>>;
           try {

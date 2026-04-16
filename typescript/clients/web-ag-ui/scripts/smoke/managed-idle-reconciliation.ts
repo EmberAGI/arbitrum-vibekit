@@ -897,7 +897,6 @@ function buildPortfolioManagerSetupInput(walletAddress: `0x${string}`) {
     firstManagedMandate: {
       targetAgentId: 'ember-lending',
       targetAgentKey: 'ember-lending-primary',
-      mandateSummary: 'lend WETH through the managed lending lane',
       managedMandate: {
         allocation_basis: 'allocable_idle',
         allowed_assets: ['WETH'],

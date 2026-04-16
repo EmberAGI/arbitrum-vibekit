@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -51,9 +53,6 @@ const TEST_TRANSACTION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 const ALT_TEST_TRANSACTION_SIGNATURE =
   '0x564a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
-const DEFAULT_THIN_PLAN_HANDOFF_ID = 'handoff-thread-1-dc37565ed97c';
-const DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY = 'idem-create-transaction-thread-1-a73a6a235b09';
-const DEFAULT_RICH_PLAN_HANDOFF_ID = 'handoff-thread-1-05c10d6a10a6';
 const DEFAULT_EXECUTION_IDEMPOTENCY_KEY =
   'idem-request-execution-thread-1-07b74ae67cd9';
 
@@ -108,7 +107,6 @@ function createManagedLifecycleState() {
   return {
     phase: 'active' as const,
     mandateRef: 'mandate-ember-lending-001',
-    mandateSummary: 'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
     mandateContext: {
       network: 'arbitrum',
       protocol: 'aave',
@@ -219,6 +217,28 @@ function createManagedLifecycleState() {
     lastExecutionTxHash: null,
     lastEscalationRequest: null,
     lastEscalationSummary: null,
+  };
+}
+
+function createManagedMandateContext() {
+  return {
+    lending_policy: {
+      collateral_policy: {
+        assets: [
+          {
+            asset: 'USDC',
+            max_allocation_pct: 35,
+          },
+        ],
+      },
+      borrow_policy: {
+        allowed_assets: ['USDC'],
+      },
+      risk_policy: {
+        max_ltv_bps: 7000,
+        min_health_factor: '1.25',
+      },
+    },
   };
 }
 
@@ -432,17 +452,7 @@ function createExecutionContextResponse() {
         generated_at: '2026-04-01T06:00:00.000Z',
         network: 'arbitrum',
         mandate_ref: 'mandate-ember-lending-001',
-        mandate_summary:
-          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-        mandate_context: {
-          network: 'arbitrum',
-          protocol: 'aave',
-          allowedCollateralAssets: ['USDC'],
-          allowedBorrowAssets: ['USDC'],
-          maxAllocationPct: 35,
-          maxLtvBps: 7000,
-          minHealthFactor: '1.25',
-        },
+        mandate_context: createManagedMandateContext(),
         subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
         root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
         active_position_scopes: [
@@ -532,17 +542,7 @@ function createExecutionContextResponseWithoutReservations() {
         generated_at: '2026-04-01T06:00:00.000Z',
         network: 'arbitrum',
         mandate_ref: 'mandate-ember-lending-001',
-        mandate_summary:
-          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
-        mandate_context: {
-          network: 'arbitrum',
-          protocol: 'aave',
-          allowedCollateralAssets: ['USDC'],
-          allowedBorrowAssets: ['USDC'],
-          maxAllocationPct: 35,
-          maxLtvBps: 7000,
-          minHealthFactor: '1.25',
-        },
+        mandate_context: createManagedMandateContext(),
         subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
         root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
         active_position_scopes: [],
@@ -570,8 +570,6 @@ function createMandatedExecutionContextResponse() {
         generated_at: '2026-04-01T06:30:00.000Z',
         network: 'arbitrum',
         mandate_ref: 'mandate-ember-lending-001',
-        mandate_summary:
-          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
         mandate_context: null,
         subagent_wallet_address: null,
         root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
@@ -593,7 +591,6 @@ function createEmptyExecutionContextResponse() {
         generated_at: '2026-04-01T06:45:00.000Z',
         network: 'arbitrum',
         mandate_ref: null,
-        mandate_summary: null,
         mandate_context: null,
         subagent_wallet_address: null,
         root_user_wallet_address: null,
@@ -963,7 +960,6 @@ describe('createEmberLendingDomain', () => {
         state: {
           phase: 'prehire',
           mandateRef: null,
-          mandateSummary: null,
           mandateContext: null,
           walletAddress: null,
           rootUserWalletAddress: null,
@@ -1049,7 +1045,6 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'prehire',
         mandateRef: null,
-        mandateSummary: null,
         mandateContext: null,
         walletAddress: null,
         rootUserWalletAddress: null,
@@ -1074,8 +1069,6 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'active',
         mandateRef: 'mandate-ember-lending-001',
-        mandateSummary:
-          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
         walletAddress: '0x00000000000000000000000000000000000000b1',
         rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
         rootedWalletContextId: 'rwc-ember-lending-thread-001',
@@ -1127,10 +1120,30 @@ describe('createEmberLendingDomain', () => {
         '  <generated_at>2026-04-01T06:00:00.000Z</generated_at>',
         '  <shared_ember_revision>11</shared_ember_revision>',
         '  <mandate_ref>mandate-ember-lending-001</mandate_ref>',
-        '  <mandate_summary>lend USDC on Aave within medium-risk allocation and health-factor guardrails</mandate_summary>',
+        '  <mandate_context>',
+        '    <lending_policy>',
+        '      <collateral_policy>',
+        '        <assets>',
+        '          <item>',
+        '            <asset>USDC</asset>',
+        '            <max_allocation_pct>35</max_allocation_pct>',
+        '          </item>',
+        '        </assets>',
+        '      </collateral_policy>',
+        '      <borrow_policy>',
+        '        <allowed_assets>',
+        '          <item>USDC</item>',
+        '        </allowed_assets>',
+        '      </borrow_policy>',
+        '      <risk_policy>',
+        '        <max_ltv_bps>7000</max_ltv_bps>',
+        '        <min_health_factor>1.25</min_health_factor>',
+        '      </risk_policy>',
+        '    </lending_policy>',
         '  <subagent_wallet_address>0x00000000000000000000000000000000000000b1</subagent_wallet_address>',
         '  <root_user_wallet_address>0x00000000000000000000000000000000000000a1</root_user_wallet_address>',
         '  <portfolio_scope_guidance>wallet_contents and active_position_scopes describe rooted user wallet context, not balances held in subagent_wallet_address.</portfolio_scope_guidance>',
+        '  <mandate_quantity_guidance>mandate_context is policy-only. Use wallet_contents, active_position_scopes, reservation summaries, and current_candidate_plan for live quantities and values.</mandate_quantity_guidance>',
         '  <subagent_wallet_guidance>subagent_wallet_address is the dedicated execution wallet and only reflects balances explicitly surfaced for that wallet.</subagent_wallet_guidance>',
         '  <network>arbitrum</network>',
         '  <active_position_scopes>',
@@ -1181,7 +1194,6 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'prehire',
         mandateRef: null,
-        mandateSummary: null,
         mandateContext: null,
         walletAddress: null,
         rootUserWalletAddress: null,
@@ -1206,7 +1218,6 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'active',
         mandateRef: null,
-        mandateSummary: null,
         mandateContext: {
           network: 'arbitrum',
           protocol: 'lending',
@@ -1268,9 +1279,29 @@ describe('createEmberLendingDomain', () => {
         '  <generated_at>2026-04-01T06:00:00.000Z</generated_at>',
         '  <shared_ember_revision>7</shared_ember_revision>',
         '  <mandate_ref>mandate-ember-lending-001</mandate_ref>',
-        '  <mandate_summary>lend USDC on Aave within medium-risk allocation and health-factor guardrails</mandate_summary>',
+        '  <mandate_context>',
+        '    <lending_policy>',
+        '      <collateral_policy>',
+        '        <assets>',
+        '          <item>',
+        '            <asset>USDC</asset>',
+        '            <max_allocation_pct>35</max_allocation_pct>',
+        '          </item>',
+        '        </assets>',
+        '      </collateral_policy>',
+        '      <borrow_policy>',
+        '        <allowed_assets>',
+        '          <item>USDC</item>',
+        '        </allowed_assets>',
+        '      </borrow_policy>',
+        '      <risk_policy>',
+        '        <max_ltv_bps>7000</max_ltv_bps>',
+        '        <min_health_factor>1.25</min_health_factor>',
+        '      </risk_policy>',
+        '    </lending_policy>',
         '  <subagent_wallet_address>0x00000000000000000000000000000000000000b1</subagent_wallet_address>',
         '  <root_user_wallet_address>0x00000000000000000000000000000000000000a1</root_user_wallet_address>',
+        '  <mandate_quantity_guidance>mandate_context is policy-only. Use wallet_contents, active_position_scopes, reservation summaries, and current_candidate_plan for live quantities and values.</mandate_quantity_guidance>',
         '  <network>arbitrum</network>',
         '  <active_position_scopes>',
         '      <protocol_system>aave</protocol_system>',
@@ -1366,7 +1397,6 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'prehire',
         mandateRef: null,
-        mandateSummary: null,
         mandateContext: null,
         walletAddress: null,
         rootUserWalletAddress: null,
@@ -1435,7 +1465,6 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'prehire',
         mandateRef: null,
-        mandateSummary: null,
         mandateContext: null,
         walletAddress: null,
         rootUserWalletAddress: null,
@@ -1460,8 +1489,6 @@ describe('createEmberLendingDomain', () => {
       state: {
         phase: 'active',
         mandateRef: 'mandate-ember-lending-001',
-        mandateSummary:
-          'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
         mandateContext: {
           network: 'arbitrum',
         },
@@ -1540,7 +1567,6 @@ describe('createEmberLendingDomain', () => {
       state: {
         ...createManagedLifecycleState(),
         mandateRef: null,
-        mandateSummary: null,
         mandateContext: {
           network: 'arbitrum',
           protocol: 'lending',
@@ -1811,7 +1837,9 @@ describe('createEmberLendingDomain', () => {
         id: 'shared-ember-thread-1-create-transaction',
         method: 'subagent.createTransaction.v1',
         params: expect.objectContaining({
-          idempotency_key: DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY,
+          idempotency_key: expect.stringMatching(
+            /^idem-create-transaction-thread-1-a73a6a235b09:[0-9a-f-]{36}$/,
+          ),
           expected_revision: 7,
           agent_id: 'ember-lending',
           request: createSemanticRequest(),
@@ -2080,10 +2108,126 @@ describe('createEmberLendingDomain', () => {
     expect(createPlanRequests[0]?.params?.['idempotency_key']).not.toBe(
       createPlanRequests[1]?.params?.['idempotency_key'],
     );
-    expect(createPlanRequests[0]?.params?.['request']).not.toEqual(
+  expect(createPlanRequests[0]?.params?.['request']).not.toEqual(
       createPlanRequests[1]?.params?.['request'],
     );
     expect(firstResult?.state.lastCandidatePlan).not.toEqual(secondResult?.state.lastCandidatePlan);
+  });
+
+  it('mints a fresh internal create-transaction idempotency key for each invocation of the same semantic request', async () => {
+    const randomUuid = vi
+      .spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000001')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000002');
+    const createPlanRequests: Array<{ params?: Record<string, unknown> }> = [];
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as {
+          method?: string;
+          id?: string;
+          params?: Record<string, unknown>;
+        };
+
+        if (request.method !== 'subagent.createTransaction.v1') {
+          throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(request.method)}`);
+        }
+
+        createPlanRequests.push(request);
+        const invocationNumber = createPlanRequests.length;
+
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            protocol_version: 'v1',
+            revision: 7 + invocationNumber,
+            committed_event_ids: [`evt-candidate-plan-${invocationNumber}`],
+            candidate_plan: {
+              planning_kind: 'subagent_handoff',
+              transaction_plan_id: `txplan-ember-lending-00${invocationNumber}`,
+              payload_builder_output: {
+                transaction_payload_ref: `txpayload-ember-lending-00${invocationNumber}`,
+                required_control_path: 'lending.supply',
+                network: 'arbitrum',
+              },
+              compact_plan_summary: {
+                control_path: 'lending.supply',
+                asset: 'USDC',
+                amount: '10',
+                summary: `supply reserved USDC on Aave (${invocationNumber})`,
+              },
+            },
+          },
+        };
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const anchoredPayloadResolver = createAnchoredPayloadResolverStub();
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver,
+    });
+
+    try {
+      const firstResult = await domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: createManagedLifecycleState(),
+        operation: {
+          source: 'tool',
+          name: 'create_transaction',
+          input: createCandidatePlanInput(),
+        },
+      });
+
+      const secondResult = await domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: firstResult?.state ?? createManagedLifecycleState(),
+        operation: {
+          source: 'tool',
+          name: 'create_transaction',
+          input: createCandidatePlanInput(),
+        },
+      });
+
+      expect(firstResult).toMatchObject({
+        outputs: {
+          status: {
+            executionStatus: 'completed',
+          },
+        },
+      });
+      expect(secondResult).toMatchObject({
+        outputs: {
+          status: {
+            executionStatus: 'completed',
+          },
+        },
+      });
+
+      expect(createPlanRequests).toHaveLength(2);
+      expect(createPlanRequests[0]?.params?.['idempotency_key']).toBe(
+        'idem-create-transaction-thread-1-a73a6a235b09:00000000-0000-4000-8000-000000000001',
+      );
+      expect(createPlanRequests[1]?.params?.['idempotency_key']).toBe(
+        'idem-create-transaction-thread-1-a73a6a235b09:00000000-0000-4000-8000-000000000002',
+      );
+      expect(createPlanRequests[0]?.params?.['idempotency_key']).not.toBe(
+        createPlanRequests[1]?.params?.['idempotency_key'],
+      );
+    } finally {
+      randomUuid.mockRestore();
+    }
   });
 
   it('forwards an explicit semantic withdraw request unchanged even when follow-up reservations are active', async () => {
@@ -2637,17 +2781,23 @@ describe('createEmberLendingDomain', () => {
                 generated_at: '2026-04-01T06:00:00.000Z',
                 network: 'arbitrum',
                 mandate_ref: 'mandate-ember-lending-001',
-                mandate_summary:
-                  'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
                 mandate_context: {
-                  allocation_basis: 'allocable_idle',
-                  allowed_assets: ['WETH'],
-                  asset_intent: {
-                    root_asset: 'WETH',
-                    network: 'arbitrum',
-                    benchmark_asset: 'USD',
-                    intent: 'position.enter',
-                    control_path: 'lending.supply',
+                  lending_policy: {
+                    collateral_policy: {
+                      assets: [
+                        {
+                          asset: 'WETH',
+                          max_allocation_pct: 35,
+                        },
+                      ],
+                    },
+                    borrow_policy: {
+                      allowed_assets: [],
+                    },
+                    risk_policy: {
+                      max_ltv_bps: 7000,
+                      min_health_factor: '1.25',
+                    },
                   },
                 },
                 subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
@@ -2722,16 +2872,23 @@ describe('createEmberLendingDomain', () => {
       threadId: 'thread-1',
       state: {
         ...createManagedLifecycleState(),
-        mandateSummary: 'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
         mandateContext: {
-          allocation_basis: 'allocable_idle',
-          allowed_assets: ['WETH'],
-          asset_intent: {
-            root_asset: 'WETH',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            intent: 'position.enter',
-            control_path: 'lending.supply',
+          lending_policy: {
+            collateral_policy: {
+              assets: [
+                {
+                  asset: 'WETH',
+                  max_allocation_pct: 35,
+                },
+              ],
+            },
+            borrow_policy: {
+              allowed_assets: [],
+            },
+            risk_policy: {
+              max_ltv_bps: 7000,
+              min_health_factor: '1.25',
+            },
           },
         },
         rootedWalletContextId: null,
@@ -3135,7 +3292,6 @@ describe('createEmberLendingDomain', () => {
       threadId: 'thread-1',
       state: {
         ...createManagedLifecycleState(),
-        mandateSummary: 'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
         mandateContext: {
           network: 'arbitrum',
           protocol: 'aave',
@@ -3340,7 +3496,6 @@ describe('createEmberLendingDomain', () => {
       threadId: 'thread-1',
       state: {
         ...createManagedLifecycleState(),
-        mandateSummary: 'lend WETH on Aave within medium-risk allocation and health-factor guardrails',
         mandateContext: {
           network: 'arbitrum',
           protocol: 'aave',
@@ -3533,7 +3688,9 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-create-transaction',
       method: 'subagent.createTransaction.v1',
       params: {
-        idempotency_key: 'idem-create-transaction-thread-1-19c1eac8f4b9',
+        idempotency_key: expect.stringMatching(
+          /^idem-create-transaction-thread-1-19c1eac8f4b9:[0-9a-f-]{36}$/,
+        ),
         expected_revision: 7,
         agent_id: 'ember-lending',
         request: createSemanticRequest({
@@ -3744,7 +3901,9 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-create-transaction',
       method: 'subagent.createTransaction.v1',
       params: {
-        idempotency_key: expect.stringContaining(':caller:idem-candidate-plan-001'),
+        idempotency_key: expect.stringMatching(
+          /^idem-create-transaction-thread-1-a73a6a235b09:[0-9a-f-]{36}$/,
+        ),
         expected_revision: 7,
         agent_id: 'ember-lending',
         request: expect.objectContaining({
@@ -3761,7 +3920,7 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
-  it('namespaces caller-supplied idempotency keys per command so planning and execution do not collide', async () => {
+  it('ignores caller-supplied idempotency keys and keeps create and execute tools internally scoped', async () => {
     const jsonRpcRequests: Array<Record<string, unknown>> = [];
     const protocolHost = {
       handleJsonRpc: vi.fn(async (input: unknown) => {
@@ -3861,18 +4020,20 @@ describe('createEmberLendingDomain', () => {
       (request) => request['method'] === 'subagent.requestExecution.v1',
     ) as { params?: Record<string, unknown> } | undefined;
 
-    expect(createPlanRequest?.params?.['idempotency_key']).toContain(
-      ':caller:shared-key',
+    expect(createPlanRequest?.params?.['idempotency_key']).toMatch(
+      /^idem-create-transaction-thread-1-a73a6a235b09:[0-9a-f-]{36}$/,
     );
-    expect(requestExecution?.params?.['idempotency_key']).toContain(
-      ':caller:shared-key',
+    expect(requestExecution?.params?.['idempotency_key']).toBe(
+      DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
     );
+    expect(createPlanRequest?.params?.['idempotency_key']).not.toContain('shared-key');
+    expect(requestExecution?.params?.['idempotency_key']).not.toContain('shared-key');
     expect(createPlanRequest?.params?.['idempotency_key']).not.toBe(
       requestExecution?.params?.['idempotency_key'],
     );
   });
 
-  it('binds prefixed execution idempotency keys to the active transaction plan', async () => {
+  it('derives execution idempotency from the active transaction plan instead of caller input', async () => {
     const jsonRpcRequests: Array<Record<string, unknown>> = [];
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: Record<string, unknown>) => {
@@ -3968,10 +4129,16 @@ describe('createEmberLendingDomain', () => {
 
     expect(requestExecutions).toHaveLength(2);
     expect(requestExecutions[0]?.params?.['idempotency_key']).toBe(
-      'idem-request-execution-thread-1-manual:binding:07b74ae67cd9',
+      DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
     );
     expect(requestExecutions[1]?.params?.['idempotency_key']).toBe(
-      'idem-request-execution-thread-1-manual:binding:272e9b650e73',
+      'idem-request-execution-thread-1-272e9b650e73',
+    );
+    expect(requestExecutions[0]?.params?.['idempotency_key']).not.toContain(
+      'idem-request-execution-thread-1-manual',
+    );
+    expect(requestExecutions[1]?.params?.['idempotency_key']).not.toContain(
+      'idem-request-execution-thread-1-manual',
     );
     expect(requestExecutions[0]?.params?.['idempotency_key']).not.toBe(
       requestExecutions[1]?.params?.['idempotency_key'],
@@ -4128,7 +4295,9 @@ describe('createEmberLendingDomain', () => {
       id: 'shared-ember-thread-1-create-transaction',
       method: 'subagent.createTransaction.v1',
       params: {
-        idempotency_key: DEFAULT_THIN_PLAN_IDEMPOTENCY_KEY,
+        idempotency_key: expect.stringMatching(
+          /^idem-create-transaction-thread-1-a73a6a235b09:[0-9a-f-]{36}$/,
+        ),
         expected_revision: 7,
         agent_id: 'ember-lending',
         request: {
@@ -6557,10 +6726,10 @@ describe('createEmberLendingDomain', () => {
     };
 
     expect(firstSubmitParams.params?.idempotency_key).toMatch(
-      /^idem-request-execution-thread-1:binding:07b74ae67cd9:submit-transaction:req-ember-lending-execution-001:execprep-ember-lending-001:[0-9a-f]{12}$/,
+      /^idem-request-execution-thread-1-07b74ae67cd9:submit-transaction:req-ember-lending-execution-001:execprep-ember-lending-001:[0-9a-f]{12}$/,
     );
     expect(secondSubmitParams.params?.idempotency_key).toMatch(
-      /^idem-request-execution-thread-1:binding:07b74ae67cd9:submit-transaction:req-ember-lending-execution-001:execprep-ember-lending-001:[0-9a-f]{12}$/,
+      /^idem-request-execution-thread-1-07b74ae67cd9:submit-transaction:req-ember-lending-execution-001:execprep-ember-lending-001:[0-9a-f]{12}$/,
     );
     expect(secondSubmitParams.params?.idempotency_key).not.toBe(
       firstSubmitParams.params?.idempotency_key,
@@ -7090,8 +7259,6 @@ describe('createEmberLendingDomain', () => {
             },
           ],
           decision_context: {
-            mandate_summary:
-              'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
             objective_summary: 'supply reserved capital into the approved lending position',
             accounting_state_summary: 'reserved capital is still claimed by another agent',
             why_this_path_is_best:
@@ -7180,7 +7347,6 @@ describe('createEmberLendingDomain', () => {
       state: {
         ...createManagedLifecycleState(),
         mandateRef: null,
-        mandateSummary: null,
         mandateContext: {
           network: 'arbitrum',
           protocol: 'lending',
@@ -7302,8 +7468,6 @@ describe('createEmberLendingDomain', () => {
                 generated_at: '2026-04-01T06:00:00.000Z',
                 network: 'arbitrum',
                 mandate_ref: 'mandate-ember-lending-001',
-                mandate_summary:
-                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
                 mandate_context: null,
                 subagent_wallet_address: '0x00000000000000000000000000000000000000a1',
                 root_user_wallet_address: '0x00000000000000000000000000000000000000a1',

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildPortfolioManagerSetupInput } from './portfolioManagerSetup';
 
 describe('buildPortfolioManagerSetupInput', () => {
-  it('preloads the approved portfolio mandate and first lending mandate for onboarding', () => {
+  it('preloads the approved portfolio mandate and a supply-only lending policy for onboarding', () => {
     expect(
       buildPortfolioManagerSetupInput('0x00000000000000000000000000000000000000a1'),
     ).toEqual({
@@ -15,28 +15,36 @@ describe('buildPortfolioManagerSetupInput', () => {
       firstManagedMandate: {
         targetAgentId: 'ember-lending',
         targetAgentKey: 'ember-lending-primary',
-        mandateSummary: 'lend USDC through the managed lending lane',
         managedMandate: {
-          allocation_basis: 'allocable_idle',
-          allowed_assets: ['USDC'],
-          asset_intent: {
-            root_asset: 'USDC',
-            protocol_system: 'aave',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            intent: 'position.enter',
-            control_path: 'lending.supply',
+          lending_policy: {
+            collateral_policy: {
+              assets: [
+                {
+                  asset: 'USDC',
+                  max_allocation_pct: 35,
+                },
+              ],
+            },
+            borrow_policy: {
+              allowed_assets: [],
+            },
+            risk_policy: {
+              max_ltv_bps: 7000,
+              min_health_factor: '1.25',
+            },
           },
         },
       },
     });
   });
 
-  it('canonicalizes the first managed mandate with the root asset first', () => {
+  it('builds a policy-only first managed mandate from per-collateral inputs', () => {
     expect(
       buildPortfolioManagerSetupInput('0x00000000000000000000000000000000000000a1', {
-        rootAsset: 'weth',
-        allowedAssetsInput: 'usdc, weth',
+        collateralPoliciesInput: 'weth:60, usdc:25',
+        allowedBorrowAssetsInput: 'usdc',
+        maxLtvBps: 6500,
+        minHealthFactor: '1.4',
       }),
     ).toEqual({
       walletAddress: '0x00000000000000000000000000000000000000a1',
@@ -47,17 +55,27 @@ describe('buildPortfolioManagerSetupInput', () => {
       firstManagedMandate: {
         targetAgentId: 'ember-lending',
         targetAgentKey: 'ember-lending-primary',
-        mandateSummary: 'lend WETH and USDC through the managed lending lane',
         managedMandate: {
-          allocation_basis: 'allocable_idle',
-          allowed_assets: ['WETH', 'USDC'],
-          asset_intent: {
-            root_asset: 'WETH',
-            protocol_system: 'aave',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            intent: 'position.enter',
-            control_path: 'lending.supply',
+          lending_policy: {
+            collateral_policy: {
+              assets: [
+                {
+                  asset: 'WETH',
+                  max_allocation_pct: 60,
+                },
+                {
+                  asset: 'USDC',
+                  max_allocation_pct: 25,
+                },
+              ],
+            },
+            borrow_policy: {
+              allowed_assets: ['USDC'],
+            },
+            risk_policy: {
+              max_ltv_bps: 6500,
+              min_health_factor: '1.4',
+            },
           },
         },
       },

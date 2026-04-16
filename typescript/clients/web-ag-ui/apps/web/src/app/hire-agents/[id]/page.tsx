@@ -89,17 +89,23 @@ function buildUiPreviewDomainProjection(args: {
       targetAgentKey: 'ember-lending-primary',
       targetAgentTitle: 'Ember Lending',
       mandateRef: 'mandate-ember-lending-001',
-      mandateSummary: 'lend USDC on Aave through the managed lending lane',
       managedMandate: {
-        allocation_basis: 'allocable_idle',
-        allowed_assets: ['USDC'],
-        asset_intent: {
-          root_asset: 'USDC',
-          protocol_system: 'aave',
-          network: 'arbitrum',
-          benchmark_asset: 'USD',
-          intent: 'position.enter',
-          control_path: 'lending.supply',
+        lending_policy: {
+          collateral_policy: {
+            assets: [
+              {
+                asset: 'USDC',
+                max_allocation_pct: 35,
+              },
+            ],
+          },
+          borrow_policy: {
+            allowed_assets: ['USDC'],
+          },
+          risk_policy: {
+            max_ltv_bps: 7000,
+            min_health_factor: '1.25',
+          },
         },
       },
       agentWallet: '0x00000000000000000000000000000000000000b1',
@@ -198,7 +204,6 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
           name: 'update_managed_mandate',
           input: {
             targetAgentId: input.targetAgentId,
-            mandateSummary: input.mandateSummary,
             managedMandate: input.managedMandate,
           },
         },

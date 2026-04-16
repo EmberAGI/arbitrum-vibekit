@@ -97,7 +97,6 @@ function createManagedLifecycleState() {
   return {
     phase: 'active' as const,
     mandateRef: 'mandate-ember-lending-001',
-    mandateSummary: 'unwind the managed lending position and return capital',
     mandateContext: {
       network: 'arbitrum',
       protocol: 'aave',

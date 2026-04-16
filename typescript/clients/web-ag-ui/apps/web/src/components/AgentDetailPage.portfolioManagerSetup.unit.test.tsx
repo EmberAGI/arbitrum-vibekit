@@ -100,27 +100,37 @@ describe('AgentDetailPage portfolio-manager setup', () => {
     container.remove();
   });
 
-  it('submits editable structured mandate inputs through the setup interrupt', () => {
+  it('submits editable policy-only mandate inputs and allows supply-only setup', () => {
     const onInterruptSubmit = vi.fn();
     const root = renderPortfolioManagerSetupPage(container, onInterruptSubmit);
 
-    const rootAssetInput = container.querySelector(
-      'input[name="portfolio-manager-root-asset"]',
+    const collateralPoliciesInput = container.querySelector(
+      'input[name="portfolio-manager-collateral-policies"]',
     ) as HTMLInputElement | null;
-    const allowedAssetsInput = container.querySelector(
-      'input[name="portfolio-manager-allowed-assets"]',
+    const allowedBorrowAssetsInput = container.querySelector(
+      'input[name="portfolio-manager-allowed-borrow-assets"]',
+    ) as HTMLInputElement | null;
+    const maxLtvBpsInput = container.querySelector(
+      'input[name="portfolio-manager-max-ltv-bps"]',
+    ) as HTMLInputElement | null;
+    const minHealthFactorInput = container.querySelector(
+      'input[name="portfolio-manager-min-health-factor"]',
     ) as HTMLInputElement | null;
     const submitButton = [...container.querySelectorAll('button')].find(
       (button) => button.textContent?.includes('Approve'),
     ) as HTMLButtonElement | undefined;
 
-    expect(rootAssetInput).not.toBeNull();
-    expect(allowedAssetsInput).not.toBeNull();
+    expect(collateralPoliciesInput).not.toBeNull();
+    expect(allowedBorrowAssetsInput).not.toBeNull();
+    expect(maxLtvBpsInput).not.toBeNull();
+    expect(minHealthFactorInput).not.toBeNull();
     expect(submitButton).toBeDefined();
 
     act(() => {
-      setTextInputValue(rootAssetInput!, 'weth');
-      setTextInputValue(allowedAssetsInput!, 'usdc, weth');
+      setTextInputValue(collateralPoliciesInput!, 'weth:60, usdc:25');
+      setTextInputValue(allowedBorrowAssetsInput!, '');
+      setTextInputValue(maxLtvBpsInput!, '6500');
+      setTextInputValue(minHealthFactorInput!, '1.4');
     });
 
     act(() => {
@@ -136,17 +146,27 @@ describe('AgentDetailPage portfolio-manager setup', () => {
       firstManagedMandate: {
         targetAgentId: 'ember-lending',
         targetAgentKey: 'ember-lending-primary',
-        mandateSummary: 'lend WETH and USDC through the managed lending lane',
         managedMandate: {
-          allocation_basis: 'allocable_idle',
-          allowed_assets: ['WETH', 'USDC'],
-          asset_intent: {
-            root_asset: 'WETH',
-            protocol_system: 'aave',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            intent: 'position.enter',
-            control_path: 'lending.supply',
+          lending_policy: {
+            collateral_policy: {
+              assets: [
+                {
+                  asset: 'WETH',
+                  max_allocation_pct: 60,
+                },
+                {
+                  asset: 'USDC',
+                  max_allocation_pct: 25,
+                },
+              ],
+            },
+            borrow_policy: {
+              allowed_assets: [],
+            },
+            risk_policy: {
+              max_ltv_bps: 6500,
+              min_health_factor: '1.4',
+            },
           },
         },
       },

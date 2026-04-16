@@ -341,7 +341,6 @@ function createBaseSharedEmberExecutionSeed() {
       {
         mandate_ref: 'mandate-ember-lending-001',
         agent_id: TEST_EMBER_LENDING_AGENT_ID,
-        mandate_summary: 'unwind the managed lending position and return capital',
       },
     ],
     user_reserve_policies: [],

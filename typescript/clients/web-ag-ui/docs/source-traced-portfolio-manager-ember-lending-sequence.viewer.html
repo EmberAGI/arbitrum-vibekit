@@ -440,6 +440,7 @@ sequenceDiagram
     SE-->>PM: current revision
     PM->>SE: orchestrator.completeRootedBootstrapFromUserSigning.v1(idempotency_key, expected_revision, onboarding, handoff)
     Note right of SE: onboarding seeds rootedWalletContext,<br/>mandates[portfolio-manager, ember-lending],<br/>capitalObservation, userReservePolicies[],<br/>ownedUnits, reservations, and policySnapshots
+    Note right of SE: the ember-lending managed_mandate stores only<br/>durable lending_policy collateral, borrow, and risk fields;<br/>protocol/network/control-path routing is derived by the managed lane
     Note right of SE: handoff seeds handoff_id, root_delegation_id,<br/>user_id, user_wallet, orchestrator_wallet,<br/>network, artifact_ref, and metadata
     opt protocol_conflict(expected_revision)
       SE-->>PM: protocol_conflict
@@ -497,7 +498,7 @@ sequenceDiagram
       end
     end
     EL->>Model: invoke inference with systemPrompt + Ember Lending systemContext
-    Note over EL,Model: systemContext includes lifecycle phase, mandateRef, mandateSummary,<br/>mandateContext JSON, subagent/root wallets, reservation summary,<br/>last candidate plan summary, last execution tx hash,<br/>last escalation summary, and optional Shared Ember accounting context
+    Note over EL,Model: systemContext includes lifecycle phase, mandateRef,<br/>exact policy-only mandateContext JSON, subagent/root wallets,<br/>reservation summary, last candidate plan summary,<br/>last execution tx hash, last escalation summary,<br/>and optional Shared Ember accounting context
 
     opt model refreshes lending-lane state first
       Model->>EL: agent_runtime_domain_command(name="read_portfolio_state", inputJson)

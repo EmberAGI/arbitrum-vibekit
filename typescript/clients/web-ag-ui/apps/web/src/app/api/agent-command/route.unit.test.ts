@@ -67,7 +67,6 @@ describe('POST /api/agent-command', () => {
             },
             projected: {
               managedMandateEditor: {
-                mandateSummary: 'lend USDC and DAI through the managed lending lane',
               },
             },
           },
@@ -96,7 +95,6 @@ describe('POST /api/agent-command', () => {
       statusMessage: 'Managed mandate updated.',
       domainProjection: {
         managedMandateEditor: {
-          mandateSummary: 'lend USDC and DAI through the managed lending lane',
         },
       },
     });
@@ -120,7 +118,6 @@ describe('POST /api/agent-command', () => {
               },
               domainProjection: {
                 managedMandateEditor: {
-                  mandateSummary: 'legacy fallback should be ignored',
                 },
               },
             },

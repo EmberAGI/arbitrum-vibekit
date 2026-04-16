@@ -94,17 +94,21 @@ type PortfolioManagerSetupInputFixture = {
   firstManagedMandate: {
     targetAgentId: 'ember-lending';
     targetAgentKey: string;
-    mandateSummary: string;
     managedMandate: {
-      allocation_basis: 'allocable_idle';
-      allowed_assets: string[];
-      asset_intent: {
-        root_asset: string;
-        protocol_system: 'aave';
-        network: 'arbitrum';
-        benchmark_asset: string;
-        intent: 'position.enter';
-        control_path: 'lending.supply';
+      lending_policy: {
+        collateral_policy: {
+          assets: Array<{
+            asset: string;
+            max_allocation_pct: number;
+          }>;
+        };
+        borrow_policy: {
+          allowed_assets: string[];
+        };
+        risk_policy: {
+          max_ltv_bps: number;
+          min_health_factor: string;
+        };
       };
     };
   };
@@ -112,6 +116,27 @@ type PortfolioManagerSetupInputFixture = {
 
 type ManagedMandateFixture =
   PortfolioManagerSetupInputFixture['firstManagedMandate']['managedMandate'];
+
+function createManagedLendingPolicy(overrides: Partial<ManagedMandateFixture['lending_policy']> = {}) {
+  return {
+    collateral_policy: {
+      assets: [
+        {
+          asset: 'USDC',
+          max_allocation_pct: 35,
+        },
+      ],
+    },
+    borrow_policy: {
+      allowed_assets: ['USDC'],
+    },
+    risk_policy: {
+      max_ltv_bps: 7000,
+      min_health_factor: '1.25',
+    },
+    ...overrides,
+  };
+}
 
 function createPortfolioManagerSetupInput(): PortfolioManagerSetupInputFixture {
   return {
@@ -123,18 +148,8 @@ function createPortfolioManagerSetupInput(): PortfolioManagerSetupInputFixture {
     firstManagedMandate: {
       targetAgentId: 'ember-lending' as const,
       targetAgentKey: 'ember-lending-primary',
-      mandateSummary: 'lend USDC through the managed lending lane',
       managedMandate: {
-        allocation_basis: 'allocable_idle' as const,
-        allowed_assets: ['USDC'],
-        asset_intent: {
-          root_asset: 'USDC',
-          protocol_system: 'aave' as const,
-          network: 'arbitrum' as const,
-          benchmark_asset: 'USD',
-          intent: 'position.enter' as const,
-          control_path: 'lending.supply' as const,
-        },
+        lending_policy: createManagedLendingPolicy(),
       },
     },
   };
@@ -159,18 +174,8 @@ function createOnboardingBootstrap() {
           firstManagedMandate: {
             targetAgentId: 'ember-lending',
             targetAgentKey: 'ember-lending-primary',
-            mandateSummary: 'lend USDC through the managed lending lane',
             managedMandate: {
-              allocation_basis: 'allocable_idle',
-              allowed_assets: ['USDC'],
-              asset_intent: {
-                root_asset: 'USDC',
-                protocol_system: 'aave',
-                network: 'arbitrum',
-                benchmark_asset: 'USD',
-                intent: 'position.enter',
-                control_path: 'lending.supply',
-              },
+              lending_policy: createManagedLendingPolicy(),
             },
           },
         },
@@ -180,24 +185,13 @@ function createOnboardingBootstrap() {
       {
         mandate_ref: 'mandate-portfolio-protocol-001',
         agent_id: 'portfolio-manager',
-        mandate_summary: 'preserve direct-user liquidity',
         managed_mandate: null,
       },
       {
         mandate_ref: 'mandate-ember-lending-protocol-001',
         agent_id: 'ember-lending',
-        mandate_summary: 'lend USDC through the managed lending lane',
         managed_mandate: {
-          allocation_basis: 'allocable_idle',
-          allowed_assets: ['USDC'],
-          asset_intent: {
-            root_asset: 'USDC',
-            protocol_system: 'aave',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            intent: 'position.enter',
-            control_path: 'lending.supply',
-          },
+          lending_policy: createManagedLendingPolicy(),
         },
       },
     ],
@@ -226,18 +220,28 @@ function createLiveManagedAgentPortfolioState() {
   return {
     agent_id: 'ember-lending',
     mandate_ref: 'mandate-ember-lending-live-001',
-    mandate_summary: 'lend USDC and USDT through the managed lending lane',
     mandate_context: {
-      allocation_basis: 'allocable_idle',
-      allowed_assets: ['USDC', 'USDT'],
-      asset_intent: {
-        root_asset: 'USDC',
-        protocol_system: 'aave',
-        network: 'arbitrum',
-        benchmark_asset: 'USD',
-        intent: 'position.enter',
-        control_path: 'lending.supply',
-      },
+      lending_policy: createManagedLendingPolicy({
+        collateral_policy: {
+          assets: [
+            {
+              asset: 'USDC',
+              max_allocation_pct: 60,
+            },
+            {
+              asset: 'USDT',
+              max_allocation_pct: 25,
+            },
+          ],
+        },
+        borrow_policy: {
+          allowed_assets: ['USDC', 'USDT'],
+        },
+        risk_policy: {
+          max_ltv_bps: 6500,
+          min_health_factor: '1.4',
+        },
+      }),
     },
     agent_wallet: '0x00000000000000000000000000000000000000e1',
     root_user_wallet: '0x00000000000000000000000000000000000000a1',
@@ -263,16 +267,27 @@ function createLiveManagedAgentPortfolioState() {
 
 function createUpdatedManagedMandate() {
   return {
-    allocation_basis: 'allocable_idle',
-    allowed_assets: ['USDC', 'DAI'],
-    asset_intent: {
-      root_asset: 'USDC',
-      protocol_system: 'aave' as const,
-      network: 'arbitrum',
-      benchmark_asset: 'USD',
-      intent: 'position.enter',
-      control_path: 'lending.supply',
-    },
+    lending_policy: createManagedLendingPolicy({
+      collateral_policy: {
+        assets: [
+          {
+            asset: 'USDC',
+            max_allocation_pct: 50,
+          },
+          {
+            asset: 'DAI',
+            max_allocation_pct: 20,
+          },
+        ],
+      },
+      borrow_policy: {
+        allowed_assets: ['USDC', 'DAI'],
+      },
+      risk_policy: {
+        max_ltv_bps: 6800,
+        min_health_factor: '1.3',
+      },
+    }),
   } satisfies ManagedMandateFixture;
 }
 
@@ -461,8 +476,6 @@ describe('createPortfolioManagerDomain', () => {
                 generated_at: '2026-04-02T15:00:00.000Z',
                 network: 'arbitrum',
                 mandate_ref: 'mandate-ember-lending-001',
-                mandate_summary:
-                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
                 mandate_context: null,
                 subagent_wallet_address: '0x00000000000000000000000000000000000000e1',
                 root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
@@ -646,18 +659,8 @@ describe('createPortfolioManagerDomain', () => {
                   firstManagedMandate: {
                     targetAgentId: 'ember-lending',
                     targetAgentKey: 'ember-lending-primary',
-                    mandateSummary: 'lend USDC through the managed lending lane',
                     managedMandate: {
-                      allocation_basis: 'allocable_idle',
-                      allowed_assets: ['USDC'],
-                      asset_intent: {
-                        root_asset: 'USDC',
-                        protocol_system: 'aave',
-                        network: 'arbitrum',
-                        benchmark_asset: 'USD',
-                        intent: 'position.enter',
-                        control_path: 'lending.supply',
-                      },
+                      lending_policy: createManagedLendingPolicy(),
                     },
                   },
                 },
@@ -682,24 +685,13 @@ describe('createPortfolioManagerDomain', () => {
               {
                 mandate_ref: expect.stringContaining('mandate-'),
                 agent_id: 'portfolio-manager',
-                mandate_summary: 'preserve direct-user liquidity at medium risk while coordinating managed subagents',
                 managed_mandate: null,
               },
               {
                 mandate_ref: expect.stringContaining('mandate-'),
                 agent_id: 'ember-lending',
-                mandate_summary: 'lend USDC through the managed lending lane',
                 managed_mandate: {
-                  allocation_basis: 'allocable_idle',
-                  allowed_assets: ['USDC'],
-                  asset_intent: {
-                    root_asset: 'USDC',
-                    protocol_system: 'aave',
-                    network: 'arbitrum',
-                    benchmark_asset: 'USD',
-                    intent: 'position.enter',
-                    control_path: 'lending.supply',
-                  },
+                  lending_policy: createManagedLendingPolicy(),
                 },
               },
             ],
@@ -827,8 +819,6 @@ describe('createPortfolioManagerDomain', () => {
                 generated_at: '2026-04-02T15:00:00.000Z',
                 network: 'arbitrum',
                 mandate_ref: 'mandate-ember-lending-001',
-                mandate_summary:
-                  'lend WETH on Aave within medium-risk allocation, LTV, and health-factor guardrails',
                 mandate_context: null,
                 subagent_wallet_address: '0x00000000000000000000000000000000000000e1',
                 root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
@@ -943,14 +933,18 @@ describe('createPortfolioManagerDomain', () => {
             portfolioMandate: createPortfolioManagerSetupInput().portfolioMandate,
             firstManagedMandate: {
               ...createPortfolioManagerSetupInput().firstManagedMandate,
-              mandateSummary: 'lend WETH through the managed lending lane',
               managedMandate: {
                 ...createPortfolioManagerSetupInput().firstManagedMandate.managedMandate,
-                allowed_assets: ['WETH'],
-                asset_intent: {
-                  ...createPortfolioManagerSetupInput().firstManagedMandate.managedMandate.asset_intent,
-                  root_asset: 'WETH',
-                },
+                lending_policy: createManagedLendingPolicy({
+                  collateral_policy: {
+                    assets: [
+                      {
+                        asset: 'WETH',
+                        max_allocation_pct: 35,
+                      },
+                    ],
+                  },
+                }),
               },
             },
           },
@@ -1185,7 +1179,6 @@ describe('createPortfolioManagerDomain', () => {
                 generated_at: '2026-04-02T15:00:00.000Z',
                 network: 'arbitrum',
                 mandate_ref: 'mandate-ember-lending-001',
-                mandate_summary: 'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
                 mandate_context: null,
                 subagent_wallet_address: '0x00000000000000000000000000000000000000e1',
                 root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
@@ -1713,8 +1706,6 @@ describe('createPortfolioManagerDomain', () => {
                 generated_at: '2026-04-02T15:15:00.000Z',
                 network: 'arbitrum',
                 mandate_ref: 'mandate-ember-lending-001',
-                mandate_summary:
-                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
                 mandate_context: null,
                 subagent_wallet_address: null,
                 root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
@@ -2080,8 +2071,6 @@ describe('createPortfolioManagerDomain', () => {
                 generated_at: '2026-04-02T15:10:00.000Z',
                 network: 'arbitrum',
                 mandate_ref: 'mandate-ember-lending-001',
-                mandate_summary:
-                  'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
                 mandate_context: null,
                 subagent_wallet_address: '0x00000000000000000000000000000000000000e1',
                 root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
@@ -3056,16 +3045,27 @@ describe('createPortfolioManagerDomain', () => {
           targetAgentKey: 'ember-lending-primary',
           targetAgentTitle: 'Ember Lending',
           mandateRef: 'mandate-ember-lending-live-001',
-          mandateSummary: 'lend USDC and USDT through the managed lending lane',
           managedMandate: {
-            allocation_basis: 'allocable_idle',
-            allowed_assets: ['USDC', 'USDT'],
-            asset_intent: {
-              root_asset: 'USDC',
-              network: 'arbitrum',
-              benchmark_asset: 'USD',
-              intent: 'position.enter',
-              control_path: 'lending.supply',
+            lending_policy: {
+              collateral_policy: {
+                assets: [
+                  {
+                    asset: 'USDC',
+                    max_allocation_pct: 60,
+                  },
+                  {
+                    asset: 'USDT',
+                    max_allocation_pct: 25,
+                  },
+                ],
+              },
+              borrow_policy: {
+                allowed_assets: ['USDC', 'USDT'],
+              },
+              risk_policy: {
+                max_ltv_bps: 6500,
+                min_health_factor: '1.4',
+              },
             },
           },
           agentWallet: '0x00000000000000000000000000000000000000e1',
@@ -3121,7 +3121,6 @@ describe('createPortfolioManagerDomain', () => {
                   ? createLiveManagedAgentPortfolioState()
                   : {
                       ...createLiveManagedAgentPortfolioState(),
-                      mandate_summary: 'lend USDC and DAI through the managed lending lane',
                       mandate_context: createUpdatedManagedMandate(),
                     },
             },
@@ -3139,7 +3138,6 @@ describe('createPortfolioManagerDomain', () => {
               mandate: {
                 mandate_ref: 'mandate-ember-lending-live-001',
                 agent_id: 'ember-lending',
-                mandate_summary: 'lend USDC and DAI through the managed lending lane',
                 managed_mandate: createUpdatedManagedMandate(),
               },
             },
@@ -3186,7 +3184,6 @@ describe('createPortfolioManagerDomain', () => {
           name: 'update_managed_mandate',
           input: {
             targetAgentId: 'ember-lending',
-            mandateSummary: 'lend USDC and DAI through the managed lending lane',
             managedMandate: createUpdatedManagedMandate(),
           },
         },
@@ -3198,7 +3195,6 @@ describe('createPortfolioManagerDomain', () => {
       },
       domainProjectionUpdate: {
         managedMandateEditor: {
-          mandateSummary: 'lend USDC and DAI through the managed lending lane',
           managedMandate: createUpdatedManagedMandate(),
         },
       },
@@ -3229,7 +3225,6 @@ describe('createPortfolioManagerDomain', () => {
         occurred_at: expect.any(String),
         agent_id: 'ember-lending',
         mandate_ref: 'mandate-ember-lending-live-001',
-        mandate_summary: 'lend USDC and DAI through the managed lending lane',
         managed_mandate: createUpdatedManagedMandate(),
       },
     });
@@ -3610,6 +3605,42 @@ describe('createPortfolioManagerDomain', () => {
           };
         }
 
+        if (method === 'orchestrator.readOnboardingState.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-wallet-accounting-ember-lending-0x00000000000000000000000000000000000000a1',
+            result: {
+              revision: 4,
+              onboarding_state: {
+                wallet_address: '0x00000000000000000000000000000000000000a1',
+                network: 'arbitrum',
+                phase: 'active',
+                proofs: {
+                  rooted_wallet_context_registered: true,
+                  root_delegation_registered: true,
+                  root_authority_active: true,
+                  wallet_baseline_observed: true,
+                  accounting_units_seeded: true,
+                  mandate_inputs_configured: true,
+                  reserve_policy_configured: true,
+                  capital_reserved_for_agent: true,
+                  policy_snapshot_recorded: true,
+                  initial_subagent_delegation_issued: true,
+                  agent_active: true,
+                },
+                rooted_wallet_context: {
+                  rooted_wallet_context_id: 'rwc-user-protocol-001',
+                },
+                root_delegation: {
+                  root_delegation_id: 'root-a1',
+                },
+                owned_units: [],
+                reservations: [],
+              },
+            },
+          };
+        }
+
         throw new Error(`unexpected method: ${String(method ?? 'missing')}`);
       }),
       readCommittedEventOutbox: vi.fn(),
@@ -3640,11 +3671,32 @@ describe('createPortfolioManagerDomain', () => {
       expect.arrayContaining([
         '  <managed_agent_mandates>',
         '    <managed_agent agent_key="ember-lending-primary" agent_type="ember-lending" approved="true" mandate_ref="mandate-ember-lending-live-001">',
-        '      <summary>lend USDC and USDT through the managed lending lane</summary>',
-        '      <network>arbitrum</network>',
-        '      <control_path>lending.supply</control_path>',
-        '      <root_asset>USDC</root_asset>',
-        '      <allowed_assets>USDC,USDT</allowed_assets>',
+        '      <managed_mandate>',
+        '        <lending_policy>',
+        '          <collateral_policy>',
+        '            <assets>',
+        '              <item>',
+        '                <asset>USDC</asset>',
+        '                <max_allocation_pct>60</max_allocation_pct>',
+        '              </item>',
+        '              <item>',
+        '                <asset>USDT</asset>',
+        '                <max_allocation_pct>25</max_allocation_pct>',
+        '              </item>',
+        '            </assets>',
+        '          </collateral_policy>',
+        '          <borrow_policy>',
+        '            <allowed_assets>',
+        '              <item>USDC</item>',
+        '              <item>USDT</item>',
+        '            </allowed_assets>',
+        '          </borrow_policy>',
+        '          <risk_policy>',
+        '            <max_ltv_bps>6500</max_ltv_bps>',
+        '            <min_health_factor>1.4</min_health_factor>',
+        '          </risk_policy>',
+        '        </lending_policy>',
+        '      </managed_mandate>',
         '    </managed_agent>',
         '  </managed_agent_mandates>',
       ]),

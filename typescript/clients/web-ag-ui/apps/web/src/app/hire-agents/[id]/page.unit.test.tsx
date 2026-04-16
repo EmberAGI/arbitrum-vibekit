@@ -294,7 +294,6 @@ describe('AgentDetailRoute managed mandate wiring', () => {
       onManagedMandateSave?: (input: {
         targetAgentId: string;
         targetAgentRouteId: string;
-        mandateSummary: string;
         managedMandate: Record<string, unknown>;
       }) => Promise<void>;
     };
@@ -303,17 +302,27 @@ describe('AgentDetailRoute managed mandate wiring', () => {
       await props.onManagedMandateSave?.({
         targetAgentId: 'ember-lending',
         targetAgentRouteId: 'agent-ember-lending',
-        mandateSummary: 'lend USDC and WETH through the managed lending lane',
         managedMandate: {
-          allocation_basis: 'allocable_idle',
-          allowed_assets: ['USDC', 'WETH'],
-          asset_intent: {
-            root_asset: 'USDC',
-            protocol_system: 'aave',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            intent: 'position.enter',
-            control_path: 'lending.supply',
+          lending_policy: {
+            collateral_policy: {
+              assets: [
+                {
+                  asset: 'USDC',
+                  max_allocation_pct: 35,
+                },
+                {
+                  asset: 'WETH',
+                  max_allocation_pct: 20,
+                },
+              ],
+            },
+            borrow_policy: {
+              allowed_assets: ['USDC'],
+            },
+            risk_policy: {
+              max_ltv_bps: 7000,
+              min_health_factor: '1.25',
+            },
           },
         },
       });
@@ -326,17 +335,27 @@ describe('AgentDetailRoute managed mandate wiring', () => {
         name: 'update_managed_mandate',
         input: {
           targetAgentId: 'ember-lending',
-          mandateSummary: 'lend USDC and WETH through the managed lending lane',
           managedMandate: {
-            allocation_basis: 'allocable_idle',
-            allowed_assets: ['USDC', 'WETH'],
-            asset_intent: {
-              root_asset: 'USDC',
-              protocol_system: 'aave',
-              network: 'arbitrum',
-              benchmark_asset: 'USD',
-              intent: 'position.enter',
-              control_path: 'lending.supply',
+            lending_policy: {
+              collateral_policy: {
+                assets: [
+                  {
+                    asset: 'USDC',
+                    max_allocation_pct: 35,
+                  },
+                  {
+                    asset: 'WETH',
+                    max_allocation_pct: 20,
+                  },
+                ],
+              },
+              borrow_policy: {
+                allowed_assets: ['USDC'],
+              },
+              risk_policy: {
+                max_ltv_bps: 7000,
+                min_health_factor: '1.25',
+              },
             },
           },
         },
@@ -383,7 +402,6 @@ describe('AgentDetailRoute managed mandate wiring', () => {
       onManagedMandateSave?: (input: {
         targetAgentId: string;
         targetAgentRouteId: string;
-        mandateSummary: string;
         managedMandate: Record<string, unknown>;
       }) => Promise<void>;
     };
@@ -392,17 +410,23 @@ describe('AgentDetailRoute managed mandate wiring', () => {
       await props.onManagedMandateSave?.({
         targetAgentId: 'ember-lending',
         targetAgentRouteId: 'agent-ember-lending',
-        mandateSummary: 'lend USDC through the managed lending lane',
         managedMandate: {
-          allocation_basis: 'allocable_idle',
-          allowed_assets: ['USDC'],
-          asset_intent: {
-            root_asset: 'USDC',
-            protocol_system: 'aave',
-            network: 'arbitrum',
-            benchmark_asset: 'USD',
-            intent: 'position.enter',
-            control_path: 'lending.supply',
+          lending_policy: {
+            collateral_policy: {
+              assets: [
+                {
+                  asset: 'USDC',
+                  max_allocation_pct: 35,
+                },
+              ],
+            },
+            borrow_policy: {
+              allowed_assets: ['USDC'],
+            },
+            risk_policy: {
+              max_ltv_bps: 7000,
+              min_health_factor: '1.25',
+            },
           },
         },
       });
@@ -416,17 +440,23 @@ describe('AgentDetailRoute managed mandate wiring', () => {
         name: 'update_managed_mandate',
         input: {
           targetAgentId: 'ember-lending',
-          mandateSummary: 'lend USDC through the managed lending lane',
           managedMandate: {
-            allocation_basis: 'allocable_idle',
-            allowed_assets: ['USDC'],
-            asset_intent: {
-              root_asset: 'USDC',
-              protocol_system: 'aave',
-              network: 'arbitrum',
-              benchmark_asset: 'USD',
-              intent: 'position.enter',
-              control_path: 'lending.supply',
+            lending_policy: {
+              collateral_policy: {
+                assets: [
+                  {
+                    asset: 'USDC',
+                    max_allocation_pct: 35,
+                  },
+                ],
+              },
+              borrow_policy: {
+                allowed_assets: ['USDC'],
+              },
+              risk_policy: {
+                max_ltv_bps: 7000,
+                min_health_factor: '1.25',
+              },
             },
           },
         },

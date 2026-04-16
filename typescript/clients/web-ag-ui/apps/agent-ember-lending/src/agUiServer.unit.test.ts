@@ -33,7 +33,6 @@ function createManagedLifecycleState() {
   return {
     phase: 'active' as const,
     mandateRef: 'mandate-ember-lending-001',
-    mandateSummary: 'lend USDC on Aave within medium-risk allocation and health-factor guardrails',
     mandateContext: {
       network: 'arbitrum',
       protocol: 'aave',

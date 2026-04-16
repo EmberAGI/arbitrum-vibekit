@@ -24,7 +24,13 @@ describe('createEmberLendingAgentConfig', () => {
     );
 
     expect(config.systemPrompt).toContain(
-      'Reason from mandate_summary, wallet_contents, active_position_scopes, market_state, and current_candidate_plan',
+      'Reason from mandate_context, wallet_contents, active_position_scopes, market_state, and current_candidate_plan',
+    );
+    expect(config.systemPrompt).toContain(
+      'mandate_context is the exact current managed mandate policy envelope',
+    );
+    expect(config.systemPrompt).toContain(
+      'Use wallet_contents, active_position_scopes, and current_candidate_plan for live quantities and values',
     );
     expect(config.systemPrompt).toContain(
       'wallet_contents and active_position_scopes describe the rooted user wallet context',
