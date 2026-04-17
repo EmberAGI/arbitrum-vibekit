@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { defaultApplyEvents, verifyEvents } from '@ag-ui/client';
 import { EventType, type BaseEvent } from '@ag-ui/core';
-import { lastValueFrom, from, toArray } from 'rxjs';
+import { filter, firstValueFrom, from, lastValueFrom, map, take, toArray } from 'rxjs';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -107,6 +107,33 @@ async function readAuthoritativeStateDocument(params: {
   };
 }
 
+async function readFirstConnectSnapshot(params: {
+  agent: ReturnType<typeof createAgentRuntimeHttpAgent>;
+  threadId: string;
+}): Promise<Record<string, unknown> | null> {
+  try {
+    const snapshot = await firstValueFrom(
+      params.agent.connect({ threadId: params.threadId }).pipe(
+        verifyEvents(false),
+        filter(
+          (
+            event,
+          ): event is BaseEvent & {
+            type: typeof EventType.STATE_SNAPSHOT;
+            snapshot: unknown;
+          } => event.type === EventType.STATE_SNAPSHOT && isRecord((event as { snapshot?: unknown }).snapshot),
+        ),
+        map((event) => event.snapshot as Record<string, unknown>),
+        take(1),
+      ),
+    );
+
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest): Promise<Response> {
   let payload: unknown;
   try {
@@ -171,13 +198,10 @@ export async function POST(req: NextRequest): Promise<Response> {
   let snapshot = runState.state;
 
   if (!snapshot && runState.sawDelta && !runState.sawSnapshot) {
-    const connectEvents = await lastValueFrom(agent.connect({ threadId }).pipe(verifyEvents(false), toArray()));
-    snapshot = (
-      await readAuthoritativeStateDocument({
-        threadId,
-        events: connectEvents,
-      })
-    ).state;
+    snapshot = await readFirstConnectSnapshot({
+      agent,
+      threadId,
+    });
   }
 
   const thread = isRecord(snapshot?.['thread']) ? snapshot['thread'] : null;

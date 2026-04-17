@@ -1,4 +1,4 @@
-import { from } from 'rxjs';
+import { concat, from, NEVER } from 'rxjs';
 import { EventType } from '@ag-ui/core';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -375,6 +375,92 @@ describe('POST /api/agent-command', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Shared Ember could not admit any USDC for lending.',
+    });
+  });
+
+  it('uses the first authoritative connect snapshot when the fallback connect stream stays open', async () => {
+    runMock.mockReturnValue(
+      from([
+        { type: EventType.RUN_STARTED, threadId: 'thread-1', runId: 'run-1' },
+        {
+          type: EventType.STATE_DELTA,
+          threadId: 'thread-1',
+          runId: 'run-1',
+          delta: [
+            {
+              op: 'replace',
+              path: '/thread/task/taskStatus/state',
+              value: 'completed',
+            },
+          ],
+        },
+        { type: EventType.RUN_FINISHED, threadId: 'thread-1', runId: 'run-1' },
+      ]),
+    );
+    connectMock.mockReturnValue(
+      concat(
+        from([
+          { type: EventType.RUN_STARTED, threadId: 'thread-1', runId: 'connect-1' },
+          {
+            type: EventType.STATE_SNAPSHOT,
+            threadId: 'thread-1',
+            runId: 'connect-1',
+            snapshot: {
+              thread: {
+                id: 'thread-1',
+                task: {
+                  taskStatus: {
+                    state: 'completed',
+                    message: {
+                      content: 'Lending runtime projection hydrated from Shared Ember Domain Service.',
+                    },
+                  },
+                },
+              },
+              projected: {
+                managedMandateEditor: {
+                  mandateRef: 'mandate-ember-lending-001',
+                },
+              },
+            },
+          },
+        ]),
+        NEVER,
+      ),
+    );
+
+    const result = await Promise.race([
+      POST(
+        buildRequest({
+          agentId: 'agent-ember-lending',
+          threadId: 'thread-1',
+          command: {
+            name: 'hydrate_runtime_projection',
+          },
+        }),
+      ).then(async (response) => ({
+        kind: 'response' as const,
+        status: response.status,
+        body: await response.json(),
+      })),
+      new Promise<{ kind: 'timeout' }>((resolve) => {
+        setTimeout(() => resolve({ kind: 'timeout' }), 100);
+      }),
+    ]);
+
+    expect(result).toEqual({
+      kind: 'response',
+      status: 200,
+      body: {
+        ok: true,
+        taskState: 'completed',
+        statusMessage: 'Lending runtime projection hydrated from Shared Ember Domain Service.',
+        domainProjection: {
+          managedMandateEditor: {
+            mandateRef: 'mandate-ember-lending-001',
+          },
+        },
+      },
     });
   });
 });
