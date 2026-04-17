@@ -30,6 +30,10 @@ Adopt one explicit three-plane AG-UI contract for the public web-facing payload:
      - `/thread`
      - `/shared`
      - `/projected`
+   - `STATE_SNAPSHOT` and `STATE_DELTA` are co-authoritative state-plane events:
+     - snapshots establish or reset the current baseline
+     - deltas apply incremental changes against that baseline
+     - consumers must support delta-only `run` streams and must not assume every run emits a snapshot
 
 2. Message plane
    - transcript data lives only on AG-UI message events such as:
@@ -109,6 +113,7 @@ Adopt one explicit three-plane AG-UI contract for the public web-facing payload:
   - `/thread` for shared cross-runtime workflow/execution contract
   - `/shared` for domain-owned writable state
   - `/projected` for domain-owned read model
+- Makes the state-plane contract explicit for stateless helpers and one-shot command consumers: authority comes from both snapshots and deltas, while snapshots remain the preferred resynchronization mechanism.
 - Prevents `agent-runtime` from turning historical web conveniences into permanent protocol surface area.
 - Preserves ADR 0012's runtime-family-neutral render contract without forcing every domain-specific read model into the reserved `thread` envelope.
 - Keeps transcript authority on the AG-UI message plane instead of duplicating it into state.

@@ -33,6 +33,7 @@ The rules are:
 - malformed `command.update` requests that omit `clientMutationId` are boundary-invalid and must be rejected before the `update-ack` lane rather than synthesizing an uncorrelatable acknowledgment
 - accepted `command.update` writes must update the visible client model from the authoritative `STATE_DELTA` before the matching `shared-state.control` `update-ack` clears optimistic pending state
 - if a forwarded `command.update` run fails locally before any matching `shared-state.control` acknowledgment arrives, the web must roll back the optimistic writable-state view and clear the pending mutation instead of leaving optimistic settings stranded
+- direct-command consumers must reconcile authoritative public state from either `STATE_SNAPSHOT` or `STATE_DELTA` and must not assume that every AG-UI `run` will emit a fresh snapshot
 - conversational turns remain message-driven and may use inference normally
 - if a direct command is present, the runtime must not require the model to rediscover that intent via `agent_runtime_domain_command`
 - no registered agent runtime may rely on parsing the last chat message to recover explicit client control intent

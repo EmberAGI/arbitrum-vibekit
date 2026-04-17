@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-import { verifyEvents } from '@ag-ui/client';
+import { defaultApplyEvents, verifyEvents } from '@ag-ui/client';
 import { EventType, type BaseEvent } from '@ag-ui/core';
-import { lastValueFrom, toArray } from 'rxjs';
+import { lastValueFrom, from, toArray } from 'rxjs';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -16,18 +16,30 @@ import {
 
 export const runtime = 'nodejs';
 
-const agentCommandPayloadSchema = z.object({
+const agentCommandPayloadBaseSchema = z.object({
   agentId: z.enum([
     PI_EXAMPLE_AGENT_NAME,
     PORTFOLIO_MANAGER_AGENT_NAME,
     EMBER_LENDING_AGENT_NAME,
   ]),
   threadId: z.string().min(1),
+});
+
+const agentNamedCommandPayloadSchema = agentCommandPayloadBaseSchema.extend({
   command: z.object({
     name: z.string().min(1),
     input: z.unknown().optional(),
   }),
 });
+
+const agentResumePayloadSchema = agentCommandPayloadBaseSchema.extend({
+  resume: z.unknown(),
+});
+
+const agentCommandPayloadSchema = z.union([
+  agentNamedCommandPayloadSchema,
+  agentResumePayloadSchema,
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -49,17 +61,50 @@ function readTaskStatusMessage(value: unknown): string | null {
   return readString(value['content']);
 }
 
-function readLatestStateSnapshot(events: readonly BaseEvent[]): Record<string, unknown> | null {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event.type !== EventType.STATE_SNAPSHOT || !isRecord(event.snapshot)) {
-      continue;
-    }
-
-    return event.snapshot;
+async function readAuthoritativeStateDocument(params: {
+  threadId: string;
+  events: readonly BaseEvent[];
+}): Promise<{
+  state: Record<string, unknown> | null;
+  sawDelta: boolean;
+  sawSnapshot: boolean;
+}> {
+  const sawDelta = params.events.some((event) => event.type === EventType.STATE_DELTA);
+  const sawSnapshot = params.events.some((event) => event.type === EventType.STATE_SNAPSHOT);
+  if (!sawSnapshot) {
+    return {
+      state: null,
+      sawDelta,
+      sawSnapshot,
+    };
   }
 
-  return null;
+  const mutations = await lastValueFrom(
+    defaultApplyEvents(
+      {
+        threadId: params.threadId,
+        runId: 'route-state-reconcile',
+        messages: [],
+        state: {},
+        tools: [],
+        context: [],
+        forwardedProps: {},
+      },
+      from(params.events),
+      {} as never,
+      [],
+    ).pipe(toArray()),
+  );
+  const state = mutations.reduce<Record<string, unknown> | null>(
+    (latestState, mutation) => (isRecord(mutation.state) ? mutation.state : latestState),
+    null,
+  );
+
+  return {
+    state,
+    sawDelta,
+    sawSnapshot,
+  };
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -87,11 +132,22 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
-  const { agentId, threadId, command } = parsedPayload.data;
+  const { agentId, threadId } = parsedPayload.data;
   const agent = createAgentRuntimeHttpAgent({
     agentId,
     runtimeUrl: resolveAgentRuntimeUrl(process.env, agentId),
   });
+  const forwardedCommand =
+    'command' in parsedPayload.data
+      ? {
+          name: parsedPayload.data.command.name,
+          ...(Object.prototype.hasOwnProperty.call(parsedPayload.data.command, 'input')
+            ? { input: parsedPayload.data.command.input }
+            : {}),
+        }
+      : {
+          resume: parsedPayload.data.resume,
+        };
   const runEvents = await lastValueFrom(
     agent
       .run({
@@ -102,36 +158,59 @@ export async function POST(req: NextRequest): Promise<Response> {
         tools: [],
         context: [],
         forwardedProps: {
-          command: {
-            name: command.name,
-            ...(Object.prototype.hasOwnProperty.call(command, 'input')
-              ? { input: command.input }
-              : {}),
-          },
+          command: forwardedCommand,
         },
       })
       .pipe(verifyEvents(false), toArray()),
   );
 
-  const snapshot = readLatestStateSnapshot(runEvents);
+  const runState = await readAuthoritativeStateDocument({
+    threadId,
+    events: runEvents,
+  });
+  let snapshot = runState.state;
+
+  if (!snapshot && runState.sawDelta && !runState.sawSnapshot) {
+    const connectEvents = await lastValueFrom(agent.connect({ threadId }).pipe(verifyEvents(false), toArray()));
+    snapshot = (
+      await readAuthoritativeStateDocument({
+        threadId,
+        events: connectEvents,
+      })
+    ).state;
+  }
+
   const thread = isRecord(snapshot?.['thread']) ? snapshot['thread'] : null;
   const projected = isRecord(snapshot?.['projected']) ? snapshot['projected'] : null;
   const task = isRecord(thread?.['task']) ? thread['task'] : null;
   const taskStatus = isRecord(task?.['taskStatus']) ? task['taskStatus'] : null;
+  const execution = isRecord(thread?.['execution']) ? thread['execution'] : null;
   const taskState = readString(taskStatus?.['state']);
   const statusMessage = readTaskStatusMessage(taskStatus?.['message']);
+  const executionStatus = readString(execution?.['status']);
+  const executionStatusMessage = readString(execution?.['statusMessage']);
   const executionError = readString(thread?.['executionError']);
   const haltReason = readString(thread?.['haltReason']);
 
-  if (taskState === 'failed' || taskState === 'canceled' || executionError || haltReason) {
+  if (
+    taskState === 'failed' ||
+    taskState === 'canceled' ||
+    executionStatus === 'failed' ||
+    executionStatus === 'canceled' ||
+    executionError ||
+    haltReason
+  ) {
     return Response.json(
       {
         ok: false,
         error:
           executionError ??
           haltReason ??
+          executionStatusMessage ??
           statusMessage ??
-          `Agent command '${command.name}' failed.`,
+          ('command' in parsedPayload.data
+            ? `Agent command '${parsedPayload.data.command.name}' failed.`
+            : 'Agent resume failed.'),
       },
       { status: 409 },
     );

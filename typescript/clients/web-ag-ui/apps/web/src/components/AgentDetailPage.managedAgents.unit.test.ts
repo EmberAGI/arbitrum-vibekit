@@ -357,4 +357,82 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Managed lending lane'));
     expect(html.indexOf('Managed lending lane')).toBeLessThan(html.indexOf('Send message'));
   });
+
+  it('keeps managed lending lane details hidden while portfolio-manager onboarding is in progress', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: ['Arbitrum'],
+          protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+          tokens: ['USDC'],
+        },
+        metrics: {},
+        isHired: true,
+        isHiring: false,
+        hasLoadedView: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+        lifecycleState: {
+          phase: 'onboarding',
+        } as never,
+        onboardingFlow: {
+          status: 'in_progress',
+          revision: 2,
+          steps: [],
+        } as never,
+        domainProjection: createManagedMandateEditorProjection(),
+      }),
+    );
+
+    expect(html).not.toContain('Managed lending lane');
+    expect(html).not.toContain('Save managed mandate');
+    expect(html).not.toContain('/hire-agents/agent-ember-lending');
+  });
+
+  it('keeps managed lending lane details hidden until portfolio-manager onboarding completes even after activation', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: ['Arbitrum'],
+          protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+          tokens: ['USDC'],
+        },
+        metrics: {},
+        isHired: true,
+        isHiring: false,
+        hasLoadedView: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+        lifecycleState: {
+          phase: 'active',
+        } as never,
+        onboardingFlow: {
+          status: 'in_progress',
+          revision: 3,
+          steps: [],
+        } as never,
+        domainProjection: createManagedMandateEditorProjection(),
+      }),
+    );
+
+    expect(html).not.toContain('Managed lending lane');
+    expect(html).not.toContain('Save managed mandate');
+    expect(html).not.toContain('/hire-agents/agent-ember-lending');
+  });
 });

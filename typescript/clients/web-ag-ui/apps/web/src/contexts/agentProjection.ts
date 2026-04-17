@@ -78,6 +78,8 @@ function mergeStatePayload(
 ): ThreadSnapshot {
   type IncomingThreadEnvelope = Partial<ThreadSnapshot> & {
     thread?: Partial<ThreadState>;
+    threadPatch?: Partial<ThreadState>;
+    activityEvents?: ThreadState['activity']['events'];
     shared?: {
       settings?: Partial<ThreadSnapshot['settings']>;
     };
@@ -85,8 +87,14 @@ function mergeStatePayload(
   };
   const incomingEnvelope = incoming as IncomingThreadEnvelope;
   const incomingThreadRaw = isRecord(incomingEnvelope.thread) ? incomingEnvelope.thread : {};
+  const incomingThreadPatchRaw = isRecord(incomingEnvelope.threadPatch)
+    ? incomingEnvelope.threadPatch
+    : {};
   const incomingSharedRaw = isRecord(incomingEnvelope.shared) ? incomingEnvelope.shared : {};
-  const incomingThreadCandidate = { ...incomingThreadRaw } as Partial<ThreadState> & {
+  const incomingThreadCandidate = {
+    ...incomingThreadPatchRaw,
+    ...incomingThreadRaw,
+  } as Partial<ThreadState> & {
     command?: unknown;
     messages?: unknown;
     domainProjection?: unknown;
@@ -109,6 +117,9 @@ function mergeStatePayload(
   const incomingActivity = isRecord(incomingThread.activity)
     ? incomingThread.activity
     : ({} as Partial<ThreadState['activity']>);
+  const incomingActivityEvents = Array.isArray(incomingEnvelope.activityEvents)
+    ? incomingEnvelope.activityEvents
+    : null;
   const incomingMetrics = isRecord(incomingThread.metrics)
     ? incomingThread.metrics
     : ({} as Partial<ThreadState['metrics']>);
@@ -191,7 +202,7 @@ function mergeStatePayload(
         : projected.thread.activity.telemetry,
       events: Array.isArray(incomingActivity.events)
         ? incomingActivity.events
-        : projected.thread.activity.events,
+        : incomingActivityEvents ?? projected.thread.activity.events,
     },
     metrics: {
       ...projected.thread.metrics,

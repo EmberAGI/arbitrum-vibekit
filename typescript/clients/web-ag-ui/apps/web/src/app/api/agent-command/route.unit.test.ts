@@ -4,10 +4,12 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const runMock = vi.fn();
+const connectMock = vi.fn();
 
 vi.mock('../copilotkit/piRuntimeHttpAgent', () => ({
   createAgentRuntimeHttpAgent: vi.fn(() => ({
     run: runMock,
+    connect: connectMock,
   })),
 }));
 
@@ -33,6 +35,7 @@ function buildRequest(body: unknown): NextRequest {
 describe('POST /api/agent-command', () => {
   beforeEach(() => {
     runMock.mockReset();
+    connectMock.mockReset();
   });
 
   it('rejects invalid payloads', async () => {
@@ -95,6 +98,76 @@ describe('POST /api/agent-command', () => {
       statusMessage: 'Managed mandate updated.',
       domainProjection: {
         managedMandateEditor: {
+        },
+      },
+    });
+  });
+
+  it('forwards resume payloads through the runtime route without wrapping them as named commands', async () => {
+    runMock.mockReturnValue(
+      from([
+        { type: EventType.RUN_STARTED, threadId: 'thread-1', runId: 'run-1' },
+        {
+          type: EventType.STATE_SNAPSHOT,
+          threadId: 'thread-1',
+          runId: 'run-1',
+          snapshot: {
+            thread: {
+              id: 'thread-1',
+              task: {
+                taskStatus: {
+                  state: 'completed',
+                  message: {
+                    content: 'Onboarding resumed.',
+                  },
+                },
+              },
+            },
+            projected: {
+              workflow: {
+                phase: 'active',
+              },
+            },
+          },
+        },
+        { type: EventType.RUN_FINISHED, threadId: 'thread-1', runId: 'run-1' },
+      ]),
+    );
+
+    const resumePayload = {
+      walletAddress: '0x00000000000000000000000000000000000000a1',
+      portfolioMandate: {
+        approved: true,
+        riskLevel: 'medium',
+      },
+    };
+
+    const response = await POST(
+      buildRequest({
+        agentId: 'agent-portfolio-manager',
+        threadId: 'thread-1',
+        resume: resumePayload,
+      }),
+    );
+
+    expect(runMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: 'thread-1',
+        forwardedProps: {
+          command: {
+            resume: resumePayload,
+          },
+        },
+      }),
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      taskState: 'completed',
+      statusMessage: 'Onboarding resumed.',
+      domainProjection: {
+        workflow: {
+          phase: 'active',
         },
       },
     });
@@ -186,6 +259,122 @@ describe('POST /api/agent-command', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Managed mandate updates require a live Shared Ember projection.',
+    });
+  });
+
+  it('treats thread.execution failure as an authoritative command failure', async () => {
+    runMock.mockReturnValue(
+      from([
+        { type: EventType.RUN_STARTED, threadId: 'thread-1', runId: 'run-1' },
+        {
+          type: EventType.STATE_SNAPSHOT,
+          threadId: 'thread-1',
+          runId: 'run-1',
+          snapshot: {
+            thread: {
+              id: 'thread-1',
+              execution: {
+                status: 'failed',
+                statusMessage: 'Portfolio manager signing input is incomplete. Restart onboarding and try again.',
+              },
+            },
+          },
+        },
+        { type: EventType.RUN_FINISHED, threadId: 'thread-1', runId: 'run-1' },
+      ]),
+    );
+
+    const response = await POST(
+      buildRequest({
+        agentId: 'agent-portfolio-manager',
+        threadId: 'thread-1',
+        resume: {
+          outcome: 'signed',
+          signedDelegations: [],
+        },
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Portfolio manager signing input is incomplete. Restart onboarding and try again.',
+    });
+  });
+
+  it('treats delta-only failed command runs as authoritative state updates', async () => {
+    runMock.mockReturnValue(
+      from([
+        { type: EventType.RUN_STARTED, threadId: 'thread-1', runId: 'run-1' },
+        {
+          type: EventType.STATE_DELTA,
+          threadId: 'thread-1',
+          runId: 'run-1',
+          delta: [
+            {
+              op: 'replace',
+              path: '/thread/task/taskStatus/state',
+              value: 'failed',
+            },
+            {
+              op: 'replace',
+              path: '/thread/task/taskStatus/message',
+              value: {
+                content: 'Shared Ember could not admit any USDC for lending.',
+              },
+            },
+          ],
+        },
+        { type: EventType.RUN_FINISHED, threadId: 'thread-1', runId: 'run-1' },
+      ]),
+    );
+    connectMock.mockReturnValue(
+      from([
+        { type: EventType.RUN_STARTED, threadId: 'thread-1', runId: 'connect-1' },
+        {
+          type: EventType.STATE_SNAPSHOT,
+          threadId: 'thread-1',
+          runId: 'connect-1',
+          snapshot: {
+            thread: {
+              id: 'thread-1',
+              task: {
+                taskStatus: {
+                  state: 'failed',
+                  message: {
+                    content: 'Shared Ember could not admit any USDC for lending.',
+                  },
+                },
+              },
+            },
+            projected: {
+              workflow: {
+                phase: 'onboarding',
+              },
+            },
+          },
+        },
+        { type: EventType.RUN_FINISHED, threadId: 'thread-1', runId: 'connect-1' },
+      ]),
+    );
+
+    const response = await POST(
+      buildRequest({
+        agentId: 'agent-portfolio-manager',
+        threadId: 'thread-1',
+        resume: {
+          approved: true,
+        },
+      }),
+    );
+
+    expect(connectMock).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+    });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Shared Ember could not admit any USDC for lending.',
     });
   });
 });

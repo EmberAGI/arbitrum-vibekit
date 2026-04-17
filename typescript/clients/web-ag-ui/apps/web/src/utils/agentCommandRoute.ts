@@ -1,11 +1,18 @@
-type AgentCommandRouteInput = {
+type AgentCommandRouteBase = {
   agentId: string;
   threadId: string;
-  command: {
-    name: string;
-    input?: unknown;
-  };
 };
+
+type AgentCommandRouteInput =
+  | (AgentCommandRouteBase & {
+      command: {
+        name: string;
+        input?: unknown;
+      };
+    })
+  | (AgentCommandRouteBase & {
+      resume: unknown;
+    });
 
 type AgentCommandRouteResponse = {
   ok: boolean;

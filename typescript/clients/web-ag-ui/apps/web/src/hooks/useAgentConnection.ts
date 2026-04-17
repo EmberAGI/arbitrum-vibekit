@@ -37,6 +37,7 @@ import {
 } from '../types/agent';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { createAgentCommandScheduler } from '../utils/agentCommandScheduler';
+import { invokeAgentCommandRoute } from '../utils/agentCommandRoute';
 import {
   acquireAgentStreamOwner,
   registerAgentStreamOwner,
@@ -74,10 +75,56 @@ function messagesEqual(left: Message[], right: Message[]): boolean {
   return true;
 }
 
+function readPendingInterruptCheckpoint(events: ThreadState['activity']['events']): {
+  interruptType: string | null;
+  message: string;
+} | null {
+  for (let eventIndex = events.length - 1; eventIndex >= 0; eventIndex -= 1) {
+    const event = events[eventIndex];
+    if (event?.type !== 'artifact') {
+      continue;
+    }
+
+    const artifactData =
+      typeof event.artifact?.data === 'object' && event.artifact.data !== null
+        ? (event.artifact.data as {
+            type?: unknown;
+            status?: unknown;
+            message?: unknown;
+            interruptType?: unknown;
+          })
+        : null;
+
+    if (artifactData?.type !== 'interrupt-status') {
+      continue;
+    }
+
+    if (artifactData.status !== 'pending') {
+      return null;
+    }
+
+    return {
+      interruptType:
+        typeof artifactData.interruptType === 'string' ? artifactData.interruptType : null,
+      message:
+        typeof artifactData.message === 'string'
+          ? artifactData.message
+          : 'Awaiting operator input.',
+    };
+  }
+
+  return null;
+}
+
 function deriveSyncedInterrupt(state: ThreadSnapshot): AgentInterrupt | null {
   const threadState = state.thread;
+  const events = threadState.activity?.events ?? [];
+  const pendingInterruptCheckpoint = readPendingInterruptCheckpoint(events);
 
-  if (threadState?.task?.taskStatus?.state !== 'input-required') {
+  if (
+    threadState?.task?.taskStatus?.state !== 'input-required' &&
+    pendingInterruptCheckpoint === null
+  ) {
     return null;
   }
 
@@ -99,8 +146,6 @@ function deriveSyncedInterrupt(state: ThreadSnapshot): AgentInterrupt | null {
       }
     }
   }
-
-  const events = threadState.activity?.events ?? [];
 
   for (let eventIndex = events.length - 1; eventIndex >= 0; eventIndex -= 1) {
     const event = events[eventIndex];
@@ -129,6 +174,13 @@ function deriveSyncedInterrupt(state: ThreadSnapshot): AgentInterrupt | null {
 
       return normalizeAgentInterrupt(payloadEnvelope.payload);
     }
+  }
+
+  if (pendingInterruptCheckpoint) {
+    return normalizeAgentInterrupt({
+      type: pendingInterruptCheckpoint.interruptType,
+      message: pendingInterruptCheckpoint.message,
+    });
   }
 
   return null;
@@ -291,7 +343,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const authoritativeSnapshotCacheKey = threadId ? `${agentId}:${threadId}` : null;
   const runtimeStatus = copilotkit.runtimeConnectionStatus;
 
-  const { activeInterrupt } = useLangGraphInterruptCustomUI<AgentInterrupt>({
+  const {
+    activeInterrupt,
+    canResolve: canResolveInterrupt,
+    resolve: resolveStreamInterrupt,
+    dismiss: dismissStreamInterrupt,
+  } = useLangGraphInterruptCustomUI<AgentInterrupt>({
     enabled: isAgentInterrupt,
   });
   const interruptRenderer = null;
@@ -962,7 +1019,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       commandSchedulerRef.current?.handleRunTerminal();
     };
 
-    const applyProjectedState = (statePayload: unknown) => {
+    const applyProjectedState = (
+      statePayload: unknown,
+      mode: 'merge' | 'replace' = 'merge',
+    ) => {
       emitConnectTrace('state-apply-attempt', {
         currentThreadId: threadIdRef.current ?? null,
         stateKeys:
@@ -981,8 +1041,15 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             : null,
       });
       const previousState = readRetainedThreadSnapshot(agent.state);
-      const projectedState = projectDetailStateFromPayload(statePayload, previousState);
+      const projectedState =
+        mode === 'replace'
+          ? projectDetailStateFromPayload(statePayload)
+          : projectDetailStateFromPayload(statePayload, previousState);
       if (projectedState) {
+        if (mode === 'replace' && previousState) {
+          projectedState.messages = previousState.messages;
+          projectedState.settings = previousState.settings;
+        }
         const previousThread = previousState?.thread;
         const projectedThread = projectedState.thread;
 
@@ -1094,7 +1161,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           });
           return;
         }
-        applyProjectedState(snapshotState);
+        applyProjectedState(snapshotState, 'replace');
       },
       onStateDeltaEvent: (payload) => {
         const accepted = shouldApplyRunScopedState(payload);
@@ -1745,8 +1812,19 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         interruptType: interruptType ?? null,
         runInFlight: runInFlightRef.current,
         hasScheduler: commandSchedulerRef.current !== null,
+        canResolveStreamInterrupt: canResolveInterrupt(),
         payloadLength: serializedInput.length,
       });
+
+      if (!threadIdRef.current && canResolveInterrupt()) {
+        resolveStreamInterrupt(serializedInput);
+        emitConnectTrace('interrupt-submit-stream-resolve', {
+          interruptType: interruptType ?? null,
+          payloadLength: serializedInput.length,
+        });
+        return;
+      }
+
       const scheduler = commandSchedulerRef.current;
       if (!scheduler) {
         emitConnectTrace('interrupt-submit-missing-scheduler', {
@@ -1759,11 +1837,40 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
       const accepted = scheduler.dispatchCustom({
         command: 'resume',
+        allowPreemptive: true,
         run: async (currentAgent) => {
           emitConnectTrace('interrupt-submit-run-start', {
             interruptType: interruptType ?? null,
             runInFlight: runInFlightRef.current,
           });
+          const currentThreadId = threadIdRef.current;
+          if (currentThreadId) {
+            await invokeAgentCommandRoute({
+              agentId,
+              threadId: currentThreadId,
+              resume: input,
+            });
+            if (canResolveInterrupt()) {
+              dismissStreamInterrupt();
+            }
+            emitConnectTrace('interrupt-submit-run-complete', {
+              interruptType: interruptType ?? null,
+              transport: 'agent-command-route',
+            });
+            scheduleCycleAfterInterruptResolution({
+              interruptType,
+              runCommand,
+            });
+            return;
+          }
+          if (canResolveInterrupt()) {
+            resolveStreamInterrupt(serializedInput);
+            emitConnectTrace('interrupt-submit-run-complete', {
+              interruptType: interruptType ?? null,
+              transport: 'copilotkit-stream',
+            });
+            return;
+          }
           const resumed = await resumeInterruptViaAgent({
             agent: currentAgent,
             resumePayload: input,
@@ -1780,6 +1887,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           }
           emitConnectTrace('interrupt-submit-run-complete', {
             interruptType: interruptType ?? null,
+            transport: 'copilotkit-run',
           });
           scheduleCycleAfterInterruptResolution({
             interruptType,
@@ -1802,7 +1910,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         runInFlight: runInFlightRef.current,
       });
     },
-    [effectiveActiveInterrupt?.type, emitConnectTrace, runAgentOnCurrentThread, runCommand],
+    [
+      agentId,
+      canResolveInterrupt,
+      dismissStreamInterrupt,
+      effectiveActiveInterrupt?.type,
+      emitConnectTrace,
+      resolveStreamInterrupt,
+      runAgentOnCurrentThread,
+      runCommand,
+    ],
   );
 
   // Local settings mutation helper; caller decides whether to enqueue a refresh run.

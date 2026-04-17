@@ -624,6 +624,17 @@ describe('createPortfolioManagerDomain', () => {
         activeWalletAddress: '0x00000000000000000000000000000000000000a1',
         pendingOnboardingWalletAddress: null,
       },
+      domainProjectionUpdate: {
+        managedMandateEditor: {
+          mandateRef: expect.stringMatching(/^mandate-/),
+          managedMandate: {
+            lending_policy: createManagedLendingPolicy(),
+          },
+          rootUserWallet: '0x00000000000000000000000000000000000000a1',
+          rootedWalletContextId: expect.stringMatching(/^rwc-/),
+          reservation: null,
+        },
+      },
       outputs: {
         status: {
           executionStatus: 'completed',
@@ -3092,6 +3103,121 @@ describe('createPortfolioManagerDomain', () => {
     });
   });
 
+  it('promotes a stale onboarding PM thread to active when refresh finds a live managed mandate projection', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null ? (request as { params?: unknown }) : null;
+        const params =
+          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+            ? (jsonRpcRequest.params as { agent_id?: unknown })
+            : null;
+
+        if (params?.agent_id === 'portfolio-manager') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: 8,
+              portfolio_state: {
+                agent_id: 'portfolio-manager',
+              },
+            },
+          };
+        }
+
+        if (params?.agent_id === 'ember-lending') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-read-managed-agent-portfolio-state',
+            result: {
+              protocol_version: 'v1',
+              revision: 8,
+              portfolio_state: createLiveManagedAgentPortfolioState(),
+            },
+          };
+        }
+
+        throw new Error(`unexpected refresh agent_id: ${String(params?.agent_id ?? 'missing')}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 8,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'onboarding',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 7,
+          lastRootDelegation: {
+            root_delegation_id: 'root-a1',
+          },
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingApprovedSetup: {
+            portfolioMandate: {
+              approved: true,
+              riskLevel: 'medium',
+            },
+            firstManagedMandate: {
+              targetAgentId: 'ember-lending',
+              targetAgentKey: 'ember-lending-primary',
+              managedMandate: {
+                lending_policy: createManagedLendingPolicy(),
+              },
+            },
+          },
+        },
+        operation: {
+          source: 'tool',
+          name: 'refresh_portfolio_state',
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 8,
+        lastRootedWalletContextId: 'rwc-user-protocol-001',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: null,
+        pendingApprovedSetup: null,
+      },
+      domainProjectionUpdate: {
+        managedMandateEditor: {
+          mandateRef: 'mandate-ember-lending-live-001',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-read-managed-agent-portfolio-state',
+      method: 'subagent.readPortfolioState.v1',
+      params: {
+        agent_id: 'ember-lending',
+      },
+    });
+  });
+
   it('routes post-activation managed-mandate edits through the PM-owned protocol command and rehydrates live state', async () => {
     let managedAgentReadCount = 0;
     const protocolHost = {
@@ -3666,6 +3792,164 @@ describe('createPortfolioManagerDomain', () => {
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: null,
         },
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        '  <managed_agent_mandates>',
+        '    <managed_agent agent_key="ember-lending-primary" agent_type="ember-lending" approved="true" mandate_ref="mandate-ember-lending-live-001">',
+        '      <managed_mandate>',
+        '        <lending_policy>',
+        '          <collateral_policy>',
+        '            <assets>',
+        '              <item>',
+        '                <asset>USDC</asset>',
+        '                <max_allocation_pct>60</max_allocation_pct>',
+        '              </item>',
+        '              <item>',
+        '                <asset>USDT</asset>',
+        '                <max_allocation_pct>25</max_allocation_pct>',
+        '              </item>',
+        '            </assets>',
+        '          </collateral_policy>',
+        '          <borrow_policy>',
+        '            <allowed_assets>',
+        '              <item>USDC</item>',
+        '              <item>USDT</item>',
+        '            </allowed_assets>',
+        '          </borrow_policy>',
+        '          <risk_policy>',
+        '            <max_ltv_bps>6500</max_ltv_bps>',
+        '            <min_health_factor>1.4</min_health_factor>',
+        '          </risk_policy>',
+        '        </lending_policy>',
+        '      </managed_mandate>',
+        '    </managed_agent>',
+        '  </managed_agent_mandates>',
+      ]),
+    );
+  });
+
+  it('falls back to the projected managed mandate when active-phase live portfolio reads are unavailable', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null
+            ? (request as { method?: unknown; params?: unknown })
+            : null;
+        const method = jsonRpcRequest?.method;
+        const params =
+          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+            ? (jsonRpcRequest.params as { agent_id?: unknown })
+            : null;
+
+        if (method === 'subagent.readPortfolioState.v1' && params?.agent_id === 'ember-lending') {
+          throw new Error('managed-agent portfolio state unavailable');
+        }
+
+        if (method === 'orchestrator.readOnboardingState.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-wallet-accounting-ember-lending-0x00000000000000000000000000000000000000a1',
+            result: {
+              revision: 4,
+              onboarding_state: {
+                wallet_address: '0x00000000000000000000000000000000000000a1',
+                network: 'arbitrum',
+                phase: 'active',
+                proofs: {
+                  rooted_wallet_context_registered: true,
+                  root_delegation_registered: true,
+                  root_authority_active: true,
+                  wallet_baseline_observed: true,
+                  accounting_units_seeded: true,
+                  mandate_inputs_configured: true,
+                  reserve_policy_configured: true,
+                  capital_reserved_for_agent: true,
+                  policy_snapshot_recorded: true,
+                  initial_subagent_delegation_issued: true,
+                  agent_active: true,
+                },
+                rooted_wallet_context: {
+                  rooted_wallet_context_id: 'rwc-user-protocol-001',
+                },
+                root_delegation: {
+                  root_delegation_id: 'root-a1',
+                },
+                owned_units: [],
+                reservations: [],
+              },
+            },
+          };
+        }
+
+        throw new Error(`unexpected method: ${String(method ?? 'missing')}`);
+      }),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      protocolHost,
+    });
+
+    await expect(
+      domain.systemContext?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 4,
+          lastRootDelegation: {
+            root_delegation_id: 'root-a1',
+          },
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        currentProjection: {
+          managedMandateEditor: {
+            ownerAgentId: 'agent-portfolio-manager',
+            targetAgentId: 'ember-lending',
+            targetAgentRouteId: 'agent-ember-lending',
+            targetAgentKey: 'ember-lending-primary',
+            targetAgentTitle: 'Ember Lending',
+            mandateRef: 'mandate-ember-lending-live-001',
+            managedMandate: {
+              lending_policy: createManagedLendingPolicy({
+                collateral_policy: {
+                  assets: [
+                    {
+                      asset: 'USDC',
+                      max_allocation_pct: 60,
+                    },
+                    {
+                      asset: 'USDT',
+                      max_allocation_pct: 25,
+                    },
+                  ],
+                },
+                borrow_policy: {
+                  allowed_assets: ['USDC', 'USDT'],
+                },
+                risk_policy: {
+                  max_ltv_bps: 6500,
+                  min_health_factor: '1.4',
+                },
+              }),
+            },
+            agentWallet: '0x00000000000000000000000000000000000000e1',
+            rootUserWallet: '0x00000000000000000000000000000000000000a1',
+            rootedWalletContextId: 'rwc-user-protocol-001',
+            reservation: {
+              reservationId: 'reservation-ember-lending-001',
+              purpose: 'position.enter',
+              controlPath: 'lending.supply',
+              rootAsset: 'USDC',
+              quantity: '25',
+            },
+          },
+        } as Record<string, unknown>,
       }),
     ).resolves.toEqual(
       expect.arrayContaining([

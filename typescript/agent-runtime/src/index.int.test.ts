@@ -567,6 +567,7 @@ function createLifecycleDomain(options?: {
       commands: [
         { name: 'hire', description: 'Start onboarding.' },
         { name: 'continue_onboarding', description: 'Capture onboarding input.' },
+        { name: 'refresh_status', description: 'Refresh status without clearing the interrupt.' },
         { name: 'complete_onboarding', description: 'Finish onboarding.' },
         { name: 'fire', description: 'End the lifecycle.' },
       ],
@@ -672,6 +673,25 @@ function createLifecycleDomain(options?: {
                     phase: nextState.phase,
                     onboardingStep: nextState.onboardingStep,
                     operatorNote: nextState.operatorNote,
+                  },
+                },
+              ],
+            },
+          };
+        }
+        case 'refresh_status': {
+          phases.set(threadId, current);
+          return {
+            state: current,
+            domainProjectionUpdate: buildLifecycleDomainProjection(current),
+            outputs: {
+              artifacts: [
+                {
+                  data: {
+                    type: 'lifecycle-status',
+                    phase: current.phase,
+                    onboardingStep: current.onboardingStep,
+                    operatorNote: current.operatorNote,
                   },
                 },
               ],
@@ -863,6 +883,7 @@ describe('agent-runtime integration', () => {
     expect(observedDomainCommandNames).toEqual([
       'hire',
       'continue_onboarding',
+      'refresh_status',
       'complete_onboarding',
       'fire',
     ]);
@@ -1172,6 +1193,91 @@ describe('agent-runtime integration', () => {
         },
       },
     });
+  });
+
+  it('passes persisted projected state into systemContext when rebuilding the model prompt', async () => {
+    const { hooks: internalPostgres } = createPersistingInternalPostgres();
+    const runtimeA = await createAgentRuntime({
+      model: createModel('int-model-projected-system-context'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused for direct command.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeA.service.run({
+        threadId: 'thread-projected-system-context',
+        runId: 'run-projected-system-context-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const observedSystemPrompts: string[] = [];
+    const runtimeB = await createAgentRuntime({
+      model: createModel('int-model-projected-system-context'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: {
+        ...createLifecycleDomain(),
+        systemContext: (params) => {
+          const { threadId, state, currentProjection } = params as LifecycleContext & {
+            currentProjection?: Record<string, unknown>;
+          };
+          const currentState =
+            state ?? {
+              phase: 'prehire',
+              onboardingStep: null,
+              operatorNote: null,
+            };
+          const projectedPhase =
+            typeof currentProjection?.managedLifecycle === 'object' &&
+            currentProjection.managedLifecycle !== null &&
+            'phase' in currentProjection.managedLifecycle &&
+            typeof currentProjection.managedLifecycle.phase === 'string'
+              ? currentProjection.managedLifecycle.phase
+              : 'missing';
+
+          return [
+            `Lifecycle phase: ${currentState.phase}.`,
+            `Projected phase: ${projectedPhase}.`,
+            `Thread: ${threadId}.`,
+          ];
+        },
+      },
+      agentOptions: {
+        streamFn: (_model, context) => {
+          observedSystemPrompts.push(context.systemPrompt ?? '');
+          return createTextStream('Prompt rebuilt from projected state.');
+        },
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeB.service.run({
+        threadId: 'thread-projected-system-context',
+        runId: 'run-projected-system-context-prompt',
+        messages: [
+          {
+            id: 'user-projected-system-context',
+            role: 'user',
+            content: 'show me the current managed lifecycle',
+          },
+        ],
+      }),
+    );
+
+    expect(hasSystemPromptFragments(observedSystemPrompts, [
+      'Lifecycle phase: onboarding.',
+      'Projected phase: onboarding.',
+      'Thread: thread-projected-system-context.',
+    ])).toBe(true);
   });
 
   it('logs the final system prompt when DEBUG_AGENT_RUNTIME_SYSTEM_PROMPT is enabled', async () => {
@@ -1701,6 +1807,276 @@ describe('agent-runtime integration', () => {
     expect(
       [...persistedInterrupts.values()].filter((interrupt) => interrupt.status === 'pending'),
     ).toHaveLength(0);
+  });
+
+  it('routes resume through the declared interrupt even after a later non-interrupt artifact overwrites artifacts.current', async () => {
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Model fallback should not run for interrupt resume.'),
+      },
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-resume-after-artifact-overwrite',
+        runId: 'run-hire-after-artifact-overwrite',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-resume-after-artifact-overwrite',
+        runId: 'run-refresh-after-artifact-overwrite',
+        forwardedProps: {
+          command: {
+            name: 'refresh_status',
+          },
+        },
+      }),
+    );
+
+    const connectSnapshot = await readFirstMatchingEvent(
+      await runtime.service.connect({
+        threadId: 'thread-resume-after-artifact-overwrite',
+        runId: 'connect-resume-after-artifact-overwrite',
+      }),
+      isStateSnapshotEvent,
+    );
+
+    expect(connectSnapshot).toBeDefined();
+    expect(connectSnapshot!.snapshot.thread).toMatchObject({
+      artifacts: {
+        current: {
+          data: {
+            type: 'lifecycle-status',
+          },
+        },
+      },
+      activity: {
+        events: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'artifact',
+          artifact: expect.objectContaining({
+            data: expect.objectContaining({
+              type: 'interrupt-status',
+              status: 'pending',
+              interruptType: 'operator-config',
+            }),
+          }),
+        }),
+        ]),
+      },
+    });
+
+    const resumeEvents = await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-resume-after-artifact-overwrite',
+        runId: 'run-resume-after-artifact-overwrite',
+        forwardedProps: {
+          command: {
+            resume: {
+              operatorNote: 'safe window approved',
+            },
+          },
+        },
+      }),
+    );
+
+    const resumeDeltas = resumeEvents.filter(isStateDeltaEvent);
+    const resolvedInterruptDelta = resumeDeltas.find((event) =>
+      event.delta.some(
+        (operation) =>
+          operation.op === 'add' &&
+          operation.path === '/thread/artifacts/current/data/status' &&
+          operation.value === 'resolved',
+      ),
+    );
+    const domainResumeDelta = resumeDeltas.find((event) =>
+      event.delta.some(
+        (operation) =>
+          operation.op === 'replace' &&
+          operation.path === '/thread/lifecycle/onboardingStep' &&
+          operation.value === 'delegation-note',
+      ),
+    );
+
+    expect(resolvedInterruptDelta).toBeDefined();
+    expect(domainResumeDelta).toBeDefined();
+    expect(domainResumeDelta!.delta).toContainEqual({
+      op: 'replace',
+      path: '/thread/lifecycle/onboardingStep',
+      value: 'delegation-note',
+    });
+    expect(domainResumeDelta!.delta).toContainEqual({
+      op: 'replace',
+      path: '/thread/lifecycle/operatorNote',
+      value: 'safe window approved',
+    });
+    expect(resolvedInterruptDelta!.delta).toContainEqual({
+      op: 'replace',
+      path: '/thread/task/taskStatus/state',
+      value: 'working',
+    });
+    expect(
+      resolvedInterruptDelta!.delta.some(
+        (operation) =>
+          operation.op === 'add' &&
+          operation.path.startsWith('/thread/activity/events/') &&
+          operation.value &&
+          typeof operation.value === 'object' &&
+          'type' in operation.value &&
+          operation.value.type === 'artifact' &&
+          'artifact' in operation.value &&
+          typeof operation.value.artifact === 'object' &&
+          operation.value.artifact !== null &&
+          'data' in operation.value.artifact &&
+          typeof operation.value.artifact.data === 'object' &&
+          operation.value.artifact.data !== null &&
+          'type' in operation.value.artifact.data &&
+          operation.value.artifact.data.type === 'interrupt-status' &&
+          'status' in operation.value.artifact.data &&
+          operation.value.artifact.data.status === 'resolved' &&
+          'interruptType' in operation.value.artifact.data &&
+          operation.value.artifact.data.interruptType === 'operator-config',
+      ),
+    ).toBe(true);
+    expect(domainResumeDelta!.delta).toContainEqual({
+      op: 'replace',
+      path: '/thread/task/taskStatus/message/content',
+      value: 'Operator note captured. Ready to complete onboarding.',
+    });
+
+    const postResumeSnapshot = await readFirstMatchingEvent(
+      await runtime.service.connect({
+        threadId: 'thread-resume-after-artifact-overwrite',
+        runId: 'connect-after-resume-after-artifact-overwrite',
+      }),
+      isStateSnapshotEvent,
+    );
+
+    expect(postResumeSnapshot).toBeDefined();
+    expect(postResumeSnapshot!.snapshot.thread.activity.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'artifact',
+          artifact: expect.objectContaining({
+            data: expect.objectContaining({
+              type: 'interrupt-status',
+              status: 'resolved',
+              interruptType: 'operator-config',
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('repairs stale pending interrupt artifacts during reconnect hydration when execution is no longer interrupted', async () => {
+    const { persistedThreads, hooks: internalPostgres } = createPersistingInternalPostgres();
+
+    const runtimeA = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused after direct commands.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeA.service.run({
+        threadId: 'thread-hydrate-stale-pending-interrupt',
+        runId: 'run-hydrate-stale-pending-interrupt-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const persistedThread = persistedThreads.get('thread-hydrate-stale-pending-interrupt');
+    expect(persistedThread).toBeDefined();
+    if (!persistedThread) {
+      return;
+    }
+
+    persistedThreads.set('thread-hydrate-stale-pending-interrupt', {
+      ...persistedThread,
+      threadState: {
+        ...persistedThread.threadState,
+        execution: {
+          ...(persistedThread.threadState.execution as Record<string, unknown>),
+          status: 'failed',
+          statusMessage: 'Reconnect should repair the stale pending interrupt.',
+        },
+      },
+      updatedAt: new Date('2026-03-20T17:00:00.000Z'),
+    });
+
+    const runtimeB = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused after reconnect.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    const reconnectSnapshot = await readFirstMatchingEvent(
+      await runtimeB.service.connect({
+        threadId: 'thread-hydrate-stale-pending-interrupt',
+        runId: 'run-hydrate-stale-pending-interrupt-reconnect',
+      }),
+      isStateSnapshotEvent,
+    );
+
+    expect(reconnectSnapshot).toBeDefined();
+    expect(reconnectSnapshot!.snapshot.thread.activity.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'artifact',
+          artifact: expect.objectContaining({
+            data: expect.objectContaining({
+              type: 'interrupt-status',
+              status: 'resolved',
+              interruptType: 'operator-config',
+            }),
+          }),
+        }),
+      ]),
+    );
+    expect(persistedThreads.get('thread-hydrate-stale-pending-interrupt')?.threadState).toMatchObject({
+      execution: {
+        status: 'failed',
+        statusMessage: 'Reconnect should repair the stale pending interrupt.',
+      },
+      activityEvents: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'artifact',
+          artifact: expect.objectContaining({
+            data: expect.objectContaining({
+              type: 'interrupt-status',
+              status: 'resolved',
+              interruptType: 'operator-config',
+            }),
+          }),
+        }),
+      ]),
+    });
+    expect(
+      persistedThreads.get('thread-hydrate-stale-pending-interrupt')?.threadState,
+    ).not.toHaveProperty('a2ui');
   });
 
   it('repairs drifted execution and interrupt checkpoints when reconnect hydrates persisted thread state after restart', async () => {

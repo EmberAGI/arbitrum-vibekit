@@ -1109,6 +1109,20 @@ export function AgentDetailPage({
     () => (isPortfolioAgent ? buildPortfolioManagerManagedAgentView(domainProjection) : null),
     [domainProjection, isPortfolioAgent],
   );
+  const isOnboardingActive = resolveOnboardingActive({
+    activeInterruptPresent: Boolean(activeInterrupt),
+    taskStatus,
+    onboardingStatus: onboardingFlow?.status,
+  });
+  const managedRuntimePhaseIsActive = lifecycleState?.phase === 'active';
+  const portfolioManagedContextVisible =
+    managedRuntimePhaseIsActive && (!isPortfolioAgent || !isOnboardingActive);
+  const visibleManagedMandateEditorView = portfolioManagedContextVisible
+    ? managedMandateEditorView
+    : null;
+  const visiblePortfolioManagerManagedAgentView = portfolioManagedContextVisible
+    ? portfolioManagerManagedAgentView
+    : null;
   const emberLendingChatEnabled =
     agentId === 'agent-ember-lending' &&
     emberLendingRuntimeView?.phase === 'active';
@@ -1132,11 +1146,6 @@ export function AgentDetailPage({
   >('idle');
   const subagentWalletPopoverRef = useRef<HTMLDivElement | null>(null);
   const subagentWalletCopyResetTimeoutRef = useRef<number | null>(null);
-  const isOnboardingActive = resolveOnboardingActive({
-    activeInterruptPresent: Boolean(activeInterrupt),
-    taskStatus,
-    onboardingStatus: onboardingFlow?.status,
-  });
   const forceBlockersTab = isOnboardingActive && !inlineOnboardingChatEnabled;
   const defaultPostHireTab: TabType = isFiring
     ? 'transactions'
@@ -1461,13 +1470,14 @@ export function AgentDetailPage({
     />
   ) : null;
   const showManagedLendingRuntimeCards = Boolean(
-    emberLendingRuntimeView &&
+    managedRuntimePhaseIsActive &&
+      emberLendingRuntimeView &&
       (emberLendingRuntimeView.managedMandate || emberLendingRuntimeView.reservationSummary),
   );
   const managedAgentContextCards =
-    portfolioManagerManagedAgentView || showManagedLendingRuntimeCards || managedMandateEditorView ? (
+    visiblePortfolioManagerManagedAgentView || showManagedLendingRuntimeCards || visibleManagedMandateEditorView ? (
       <div className="mt-6 space-y-5">
-        {portfolioManagerManagedAgentView ? (
+        {visiblePortfolioManagerManagedAgentView ? (
           <div className="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
             <div className="flex items-start justify-between gap-4">
               <button
@@ -1489,11 +1499,11 @@ export function AgentDetailPage({
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       <div className="text-base font-semibold text-white">
-                        {portfolioManagerManagedAgentView.title}
+                        {visiblePortfolioManagerManagedAgentView.title}
                       </div>
-                      {portfolioManagerManagedAgentView.laneLabel ? (
+                      {visiblePortfolioManagerManagedAgentView.laneLabel ? (
                         <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-gray-300">
-                          {portfolioManagerManagedAgentView.laneLabel}
+                          {visiblePortfolioManagerManagedAgentView.laneLabel}
                         </span>
                       ) : null}
                     </div>
@@ -1501,7 +1511,7 @@ export function AgentDetailPage({
                 </div>
               </button>
               <a
-                href={portfolioManagerManagedAgentView.detailHref}
+                href={visiblePortfolioManagerManagedAgentView.detailHref}
                 className="shrink-0 text-xs font-medium text-[#fd6731] hover:text-[#ff8a5c] transition-colors"
               >
                 View lending agent
@@ -1509,21 +1519,21 @@ export function AgentDetailPage({
             </div>
             {isManagedLaneExpanded ? (
               <div id={managedLaneContentId}>
-                {portfolioManagerManagedAgentView.managedMandate ? (
+                {visiblePortfolioManagerManagedAgentView.managedMandate ? (
                   <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
                     <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
                       Mandate
                     </div>
-                    <ManagedMandateDetails managedMandate={portfolioManagerManagedAgentView.managedMandate} />
+                    <ManagedMandateDetails managedMandate={visiblePortfolioManagerManagedAgentView.managedMandate} />
                   </div>
                 ) : null}
-                {portfolioManagerManagedAgentView.reservationSummary ? (
+                {visiblePortfolioManagerManagedAgentView.reservationSummary ? (
                   <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
                     <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
                       Reservation
                     </div>
                     <div className="mt-2 text-sm leading-relaxed text-gray-300">
-                      {portfolioManagerManagedAgentView.reservationSummary}
+                      {visiblePortfolioManagerManagedAgentView.reservationSummary}
                     </div>
                   </div>
                 ) : null}
@@ -1555,9 +1565,9 @@ export function AgentDetailPage({
           </div>
         ) : null}
 
-        {managedMandateEditorView ? (
+        {visibleManagedMandateEditorView ? (
           <ManagedMandateEditorCard
-            view={managedMandateEditorView}
+            view={visibleManagedMandateEditorView}
             onSave={onManagedMandateSave}
           />
         ) : null}

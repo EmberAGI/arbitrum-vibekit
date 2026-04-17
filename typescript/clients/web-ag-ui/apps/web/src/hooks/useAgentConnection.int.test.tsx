@@ -70,6 +70,7 @@ const mocks = vi.hoisted(() => {
       activeInterrupt: null as AgentInterrupt | null,
       canResolve: false,
       resolve: vi.fn(),
+      dismiss: vi.fn(),
     },
     reset() {
       this.runtimeStatus = this.runtimeStatuses.Connected;
@@ -96,6 +97,7 @@ const mocks = vi.hoisted(() => {
       this.interruptState.activeInterrupt = null;
       this.interruptState.canResolve = false;
       this.interruptState.resolve.mockReset();
+      this.interruptState.dismiss.mockReset();
     },
   };
 });
@@ -125,6 +127,7 @@ vi.mock('../app/hooks/useLangGraphInterruptCustomUI', () => ({
     activeInterrupt: mocks.interruptState.activeInterrupt,
     canResolve: () => mocks.interruptState.canResolve,
     resolve: mocks.interruptState.resolve,
+    dismiss: mocks.interruptState.dismiss,
   }),
 }));
 
@@ -1632,6 +1635,98 @@ describe('useAgentConnection integration', () => {
     expect(latestState?.thread?.task?.taskStatus?.state).toBe('input-required');
   });
 
+  it('clears stale onboarding flow when a reconnect snapshot replaces it with active lifecycle state', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(subscriber).toBeDefined();
+
+    subscriber?.onRunInitialized?.({
+      state: {
+        thread: {
+          lifecycle: {
+            phase: 'onboarding',
+          },
+          onboardingFlow: {
+            status: 'in_progress',
+            revision: 3,
+            activeStepId: 'delegation-signing',
+            steps: [{ id: 'delegation-signing', title: 'Delegation Signing', status: 'active' }],
+          },
+          task: {
+            id: 'task-onboarding',
+            taskStatus: {
+              state: 'input-required',
+              message: { content: 'Review and sign the delegation needed to activate your portfolio manager.' },
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1', runId: 'run-onboarding' },
+    });
+    await flushEffects();
+
+    expect(latestValue?.uiState.onboardingFlow?.status).toBe('in_progress');
+    expect(latestValue?.uiState.selectors.isOnboardingActive).toBe(true);
+
+    subscriber?.onStateSnapshotEvent?.({
+      event: {
+        snapshot: {
+          projected: {
+            managedMandateEditor: {
+              mandateRef: 'mandate-1',
+            },
+          },
+          thread: {
+            lifecycle: {
+              phase: 'active',
+            },
+            task: {
+              id: 'task-onboarding',
+              taskStatus: {
+                state: 'failed',
+                message: {
+                  content:
+                    'Portfolio manager signing input is incomplete. Restart onboarding and try again.',
+                },
+              },
+            },
+            activity: {
+              telemetry: [],
+              events: [],
+            },
+          },
+        },
+      },
+      input: { threadId: 'thread-1' },
+    });
+    await flushEffects();
+
+    expect(latestValue?.uiState.lifecycle?.phase).toBe('active');
+    expect(latestValue?.uiState.onboardingFlow).toBeUndefined();
+    expect(latestValue?.uiState.selectors.isOnboardingActive).toBe(false);
+    expect(latestValue?.activeInterrupt).toBeNull();
+  });
+
   it('reflects an empty Pi reconnect transcript instead of preserving stale local messages', async () => {
     let subscriber: AgentSubscriber | undefined;
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
@@ -2867,8 +2962,13 @@ describe('useAgentConnection integration', () => {
     }
   });
 
-  it('resolves interrupt fallback through CopilotKit runAgent when stream resolver is unavailable', async () => {
+  it('resolves interrupt fallback through the direct agent command route when stream resolver is unavailable', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    const payload = {
+      poolAddress: '0x0000000000000000000000000000000000000001' as const,
+      walletAddress: '0x0000000000000000000000000000000000000002' as const,
+      baseContributionUsd: 100,
+    };
 
     mocks.interruptState.activeInterrupt = {
       type: 'operator-config-request',
@@ -2890,29 +2990,25 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
 
-    latestValue?.resolveInterrupt({
-      poolAddress: '0x0000000000000000000000000000000000000001',
-      walletAddress: '0x0000000000000000000000000000000000000002',
-      baseContributionUsd: 100,
-    });
+    latestValue?.resolveInterrupt(payload);
     await flushEffects();
 
-    expect(mocks.runAgent).toHaveBeenCalledWith(
+    expect(mocks.disconnectFetch).toHaveBeenCalledWith(
+      '/api/agent-command',
       expect.objectContaining({
-        agent: mocks.agent,
-        threadId: 'thread-1',
-        forwardedProps: {
-          command: {
-            resume: {
-              poolAddress: '0x0000000000000000000000000000000000000001',
-              walletAddress: '0x0000000000000000000000000000000000000002',
-              baseContributionUsd: 100,
-            },
-          },
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
         },
+        body: JSON.stringify({
+          agentId: 'agent-clmm',
+          threadId: 'thread-1',
+          resume: payload,
+        }),
       }),
     );
     expect(rawAgentRun).not.toHaveBeenCalled();
+    expect(mocks.runAgent).not.toHaveBeenCalled();
     expect(latestValue?.uiError).toBeNull();
   });
 
@@ -2990,6 +3086,76 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.activeInterrupt).toEqual({
       type: 'operator-config-request',
       message: 'Provide a short operator note to continue.',
+    });
+  });
+
+  it('rehydrates onboarding from raw persisted runtime state without a mirrored task status', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        id: 'thread-1',
+      },
+      threadPatch: {
+        lifecycle: {
+          phase: 'onboarding',
+        },
+      },
+      activityEvents: [
+        {
+          type: 'artifact',
+          append: true,
+          artifact: {
+            data: {
+              type: 'interrupt-status',
+              status: 'pending',
+              message: 'Connect the wallet you want the portfolio manager to onboard.',
+              interruptType: 'portfolio-manager-setup-request',
+            },
+            artifactId: 'domain-interrupt:thread-1:hire:1',
+          },
+        },
+        {
+          type: 'dispatch-response',
+          parts: [
+            {
+              kind: 'a2ui',
+              data: {
+                payload: {
+                  kind: 'interrupt',
+                  payload: {
+                    type: 'portfolio-manager-setup-request',
+                    message: 'Connect the wallet you want the portfolio manager to onboard.',
+                    artifactId: 'domain-interrupt:thread-1:hire:1',
+                    inputLabel: 'Provide input',
+                    submitLabel: 'Continue',
+                  },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.hasAuthoritativeState).toBe(true);
+    expect(latestValue?.isHired).toBe(true);
+    expect(latestValue?.uiState.lifecycle?.phase).toBe('onboarding');
+    expect(latestValue?.activeInterrupt).toMatchObject({
+      type: 'portfolio-manager-setup-request',
+      message: 'Connect the wallet you want the portfolio manager to onboard.',
     });
   });
 
@@ -3081,8 +3247,11 @@ describe('useAgentConnection integration', () => {
     });
   });
 
-  it('routes Pi operator-note interrupt resolution through CopilotKit run orchestration with explicit resume payloads', async () => {
+  it('routes Pi operator-note interrupt resolution through the direct agent command route when no stream resolver is available', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    const payload = {
+      operatorNote: 'Use the safe automation window',
+    };
 
     mocks.interruptState.activeInterrupt = {
       type: 'operator-config-request',
@@ -3104,30 +3273,126 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
 
-    latestValue?.resolveInterrupt({
-      operatorNote: 'Use the safe automation window',
-    });
+    latestValue?.resolveInterrupt(payload);
     await flushEffects();
 
-    expect(mocks.runAgent).toHaveBeenCalledWith(
+    expect(mocks.disconnectFetch).toHaveBeenCalledWith(
+      '/api/agent-command',
       expect.objectContaining({
-        agent: mocks.agent,
-        threadId: 'thread-1',
-        forwardedProps: {
-          command: {
-            resume: {
-              operatorNote: 'Use the safe automation window',
-            },
-          },
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
         },
+        body: JSON.stringify({
+          agentId: 'agent-pi-example',
+          threadId: 'thread-1',
+          resume: payload,
+        }),
       }),
     );
     expect(rawAgentRun).not.toHaveBeenCalled();
+    expect(mocks.runAgent).not.toHaveBeenCalled();
     expect(latestValue?.uiError).toBeNull();
   });
 
-  it('routes stream-backed interrupt resolution through scheduled CopilotKit run orchestration', async () => {
+  it('allows onboarding resume submission while local run ownership is still set from the input-required run', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    let subscriber: AgentSubscriber | undefined;
+    const payload = {
+      walletAddress: '0x0000000000000000000000000000000000000002' as const,
+      portfolioMandate: {
+        approved: true as const,
+        riskLevel: 'medium' as const,
+      },
+      firstManagedMandate: {
+        targetAgentId: 'ember-lending' as const,
+        targetAgentKey: 'ember-lending' as const,
+        managedMandate: {
+          lending_policy: {
+            collateral_policy: {
+              assets: [
+                {
+                  asset: 'WETH',
+                  max_allocation_pct: 100,
+                },
+              ],
+            },
+            borrow_policy: {
+              allowed_assets: ['USDC'],
+            },
+            risk_policy: {
+              max_ltv_bps: 7000,
+              min_health_factor: '1.25',
+            },
+          },
+        },
+      },
+    };
+
+    mocks.interruptState.activeInterrupt = {
+      type: 'portfolio-manager-setup-request',
+      message: 'Connect the wallet you want the portfolio manager to onboard.',
+    };
+    mocks.interruptState.canResolve = false;
+    mocks.agent.subscribe.mockImplementation((nextSubscriber) => {
+      subscriber = nextSubscriber as AgentSubscriber;
+      return {
+        unsubscribe: vi.fn(),
+      };
+    });
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    subscriber?.onRunStartedEvent?.({ input: { threadId: 'thread-1' } });
+    await flushEffects();
+
+    latestValue?.resolveInterrupt(payload);
+    await flushEffects();
+
+    expect(mocks.disconnectFetch).toHaveBeenCalledWith(
+      '/api/agent-command',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          agentId: 'agent-portfolio-manager',
+          threadId: 'thread-1',
+          resume: payload,
+        }),
+      }),
+    );
+    expect(mocks.interruptState.resolve).not.toHaveBeenCalled();
+    expect(mocks.runAgent).not.toHaveBeenCalled();
+    expect(latestValue?.uiError).toBeNull();
+  });
+
+  it('prefers the direct agent command route over stream resolution when a thread-backed interrupt is available', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    const payload = {
+      outcome: 'signed' as const,
+      signedDelegations: [
+        {
+          delegate: '0x0000000000000000000000000000000000000003' as const,
+          delegator: '0x0000000000000000000000000000000000000002' as const,
+          authority: '0x' as const,
+          caveats: [],
+          salt: '0x01' as const,
+          signature: '0x1234' as const,
+        },
+      ],
+    };
 
     mocks.interruptState.activeInterrupt = {
       type: 'gmx-delegation-signing-request',
@@ -3162,47 +3427,68 @@ describe('useAgentConnection integration', () => {
     });
     await flushEffects();
 
-    latestValue?.resolveInterrupt({
-      outcome: 'signed',
-      signedDelegations: [
-        {
-          delegate: '0x0000000000000000000000000000000000000003',
-          delegator: '0x0000000000000000000000000000000000000002',
-          authority: '0x',
-          caveats: [],
-          salt: '0x01',
-          signature: '0x1234',
-        },
-      ],
-    });
+    latestValue?.resolveInterrupt(payload);
     await flushEffects();
 
-    expect(mocks.runAgent).toHaveBeenCalledWith({
-      agent: mocks.agent,
-      threadId: 'thread-1',
-      forwardedProps: {
-        command: {
-          resume: {
-            outcome: 'signed',
-            signedDelegations: [
-              {
-                delegate: '0x0000000000000000000000000000000000000003',
-                delegator: '0x0000000000000000000000000000000000000002',
-                authority: '0x',
-                caveats: [],
-                salt: '0x01',
-                signature: '0x1234',
-              },
-            ],
-          },
+    expect(mocks.disconnectFetch).toHaveBeenCalledWith(
+      '/api/agent-command',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
         },
-      },
-    });
+        body: JSON.stringify({
+          agentId: 'agent-gmx-allora',
+          threadId: 'thread-1',
+          resume: payload,
+        }),
+      }),
+    );
+    expect(mocks.interruptState.dismiss).toHaveBeenCalledTimes(1);
     expect(mocks.interruptState.resolve).not.toHaveBeenCalled();
+    expect(mocks.runAgent).not.toHaveBeenCalled();
     expect(latestValue?.uiError).toBeNull();
   });
 
-  it('surfaces an error when interrupt fallback cannot resume through CopilotKit runAgent', async () => {
+  it('falls back to CopilotKit interrupt resolution when no thread id is available', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    const payload = {
+      operatorNote: 'Continue with the latest safe execution window.',
+    };
+
+    mocks.threadId = undefined;
+    mocks.interruptState.activeInterrupt = {
+      type: 'operator-config-request',
+      message: 'Provide a short operator note to continue.',
+    };
+    mocks.interruptState.canResolve = true;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-pi-example"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.resolveInterrupt(payload);
+    await flushEffects();
+
+    expect(mocks.interruptState.resolve).toHaveBeenCalledWith(JSON.stringify(payload));
+    expect(mocks.interruptState.dismiss).not.toHaveBeenCalled();
+    expect(mocks.disconnectFetch).not.toHaveBeenCalledWith(
+      '/api/agent-command',
+      expect.anything(),
+    );
+    expect(mocks.runAgent).not.toHaveBeenCalled();
+    expect(latestValue?.uiError).toBeNull();
+  });
+
+  it('surfaces an error when interrupt fallback cannot resume through the direct agent command route', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
     mocks.interruptState.activeInterrupt = {
@@ -3210,7 +3496,20 @@ describe('useAgentConnection integration', () => {
       message: 'Provide setup',
     };
     mocks.interruptState.canResolve = false;
-    mocks.runAgent.mockRejectedValueOnce(new Error('resume failed'));
+    mocks.disconnectFetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: false,
+          error: 'resume failed',
+        }),
+        {
+          status: 409,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      ),
+    );
 
     await act(async () => {
       root.render(

@@ -207,6 +207,51 @@ describe('AgentDetailRoute managed mandate wiring', () => {
     });
   });
 
+  it('hydrates the PM page from refresh even when the hired PM thread is still marked onboarding', async () => {
+    mocks.agentValue = createAgentValue({
+      config: {
+        id: 'agent-portfolio-manager',
+      },
+      threadId: 'pm-thread',
+      domainProjection: {},
+      uiState: {
+        lifecycle: {
+          phase: 'onboarding',
+        },
+        task: undefined,
+        haltReason: undefined,
+        executionError: undefined,
+        delegationsBypassActive: false,
+        onboardingFlow: undefined,
+      },
+      isHired: true,
+      isActive: false,
+    });
+    mocks.invokeAgentCommandRoute.mockResolvedValue({
+      ok: true,
+      domainProjection: {
+        managedMandateEditor: {
+          mandateRef: 'mandate-ember-lending-001',
+        },
+      },
+    });
+
+    await renderRoute('agent-portfolio-manager');
+
+    expect(mocks.invokeAgentCommandRoute).toHaveBeenCalledWith({
+      agentId: 'agent-portfolio-manager',
+      threadId: 'pm-thread',
+      command: {
+        name: 'refresh_portfolio_state',
+      },
+    });
+    expect(mocks.applyDomainProjection).toHaveBeenCalledWith({
+      managedMandateEditor: {
+        mandateRef: 'mandate-ember-lending-001',
+      },
+    });
+  });
+
   it('keeps the route in reconnecting mode until an authoritative thread snapshot lands', async () => {
     mocks.agentValue = createAgentValue({
       hasLoadedView: false,

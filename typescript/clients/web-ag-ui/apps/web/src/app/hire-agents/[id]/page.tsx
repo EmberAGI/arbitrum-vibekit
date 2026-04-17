@@ -230,7 +230,10 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   );
 
   useEffect(() => {
-    if (!agent.threadId || !selectedIsHired || selectedLifecyclePhase !== 'active' || hasManagedProjection) {
+    if (!agent.threadId || !selectedIsHired || hasManagedProjection) {
+      return;
+    }
+    if (selectedAgentId !== 'agent-portfolio-manager' && selectedLifecyclePhase !== 'active') {
       return;
     }
 

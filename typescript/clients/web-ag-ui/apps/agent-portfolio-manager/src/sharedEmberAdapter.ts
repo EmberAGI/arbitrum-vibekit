@@ -130,6 +130,23 @@ function readOnboardingBootstrapWalletAddress(value: unknown): `0x${string}` | n
     : null;
 }
 
+function readOnboardingBootstrapRootedWalletContextId(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || !('rootedWalletContext' in value)) {
+    return null;
+  }
+
+  const rootedWalletContext = value.rootedWalletContext;
+  if (
+    typeof rootedWalletContext !== 'object' ||
+    rootedWalletContext === null ||
+    !('rooted_wallet_context_id' in rootedWalletContext)
+  ) {
+    return null;
+  }
+
+  return readString(rootedWalletContext.rooted_wallet_context_id);
+}
+
 function readPortfolioManagerContextWalletAddress(
   state: PortfolioManagerLifecycleState,
 ): `0x${string}` | null {
@@ -1041,6 +1058,87 @@ function buildManagedMandateEditorProjection(
   };
 }
 
+function readManagedMandateEditorProjection(value: unknown): ManagedMandateEditorProjection | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const editor = isRecord(value['managedMandateEditor']) ? value['managedMandateEditor'] : null;
+  if (!editor) {
+    return null;
+  }
+
+  const targetAgentId = readString(editor['targetAgentId']);
+  const targetAgentKey = readString(editor['targetAgentKey']);
+  const mandateRef = readString(editor['mandateRef']);
+  const managedMandate = readManagedMandate(editor['managedMandate']);
+  if (
+    targetAgentId !== FIRST_MANAGED_AGENT_TYPE ||
+    targetAgentKey === null ||
+    mandateRef === null ||
+    managedMandate === null
+  ) {
+    return null;
+  }
+
+  const reservation = isRecord(editor['reservation']) ? editor['reservation'] : null;
+  const reservationId = readString(reservation?.['reservationId']);
+
+  return {
+    ownerAgentId: PORTFOLIO_MANAGER_ROUTE_AGENT_ID,
+    targetAgentId: FIRST_MANAGED_AGENT_TYPE,
+    targetAgentRouteId: FIRST_MANAGED_AGENT_ROUTE_ID,
+    targetAgentKey,
+    targetAgentTitle: FIRST_MANAGED_AGENT_TITLE,
+    mandateRef,
+    managedMandate,
+    agentWallet: readHexAddress(editor['agentWallet']),
+    rootUserWallet: readHexAddress(editor['rootUserWallet']),
+    rootedWalletContextId: readString(editor['rootedWalletContextId']),
+    reservation:
+      reservationId === null
+        ? null
+        : {
+            reservationId,
+            purpose: readString(reservation?.['purpose']),
+            controlPath: readString(reservation?.['controlPath']),
+            rootAsset: readString(reservation?.['rootAsset']),
+            quantity: readString(reservation?.['quantity']),
+          },
+  };
+}
+
+function buildManagedMandateEditorProjectionFromOnboardingBootstrap(
+  value: unknown,
+): ManagedMandateEditorProjection | null {
+  const approvedSetup = readApprovedSetupFromOnboardingBootstrap(value);
+  if (!approvedSetup) {
+    return null;
+  }
+
+  const firstManagedMandateSource =
+    readOnboardingMandateSources(value).find(
+      (mandate) => mandate.agent_id === approvedSetup.firstManagedMandate.targetAgentId,
+    ) ?? null;
+  if (!firstManagedMandateSource) {
+    return null;
+  }
+
+  return {
+    ownerAgentId: PORTFOLIO_MANAGER_ROUTE_AGENT_ID,
+    targetAgentId: FIRST_MANAGED_AGENT_TYPE,
+    targetAgentRouteId: FIRST_MANAGED_AGENT_ROUTE_ID,
+    targetAgentKey: approvedSetup.firstManagedMandate.targetAgentKey,
+    targetAgentTitle: FIRST_MANAGED_AGENT_TITLE,
+    mandateRef: firstManagedMandateSource.mandate_ref,
+    managedMandate: approvedSetup.firstManagedMandate.managedMandate,
+    agentWallet: null,
+    rootUserWallet: readOnboardingBootstrapWalletAddress(value),
+    rootedWalletContextId: readOnboardingBootstrapRootedWalletContextId(value),
+    reservation: null,
+  };
+}
+
 function parsePortfolioManagerSignedDelegations(input: unknown): PortfolioManagerSignedDelegation[] | null {
   if (typeof input !== 'object' || input === null) {
     return null;
@@ -1415,10 +1513,11 @@ export function createPortfolioManagerDomain(
         },
       ],
     },
-    systemContext: async ({ state }) => {
+    systemContext: async ({ state, currentProjection }) => {
       const currentState = state ?? buildDefaultLifecycleState();
       const context = ['<portfolio_manager_context>'];
       const protocolHost = options.protocolHost;
+      const projectedManagedMandateProjection = readManagedMandateEditorProjection(currentProjection);
       const liveManagedMandateProjection =
         currentState.phase === 'active' && protocolHost
           ? await (async () => {
@@ -1434,6 +1533,8 @@ export function createPortfolioManagerDomain(
               }
             })()
           : null;
+      const visibleManagedMandateProjection =
+        liveManagedMandateProjection ?? (currentState.phase === 'active' ? projectedManagedMandateProjection : null);
 
       context.push(`  <lifecycle_phase>${currentState.phase}</lifecycle_phase>`);
 
@@ -1453,7 +1554,7 @@ export function createPortfolioManagerDomain(
 
       const rootedWalletAddress =
         currentState.phase === 'active'
-          ? liveManagedMandateProjection?.rootUserWallet ?? currentState.activeWalletAddress
+          ? visibleManagedMandateProjection?.rootUserWallet ?? currentState.activeWalletAddress
           : readOnboardingBootstrapWalletAddress(currentState.lastOnboardingBootstrap);
       if (rootedWalletAddress) {
         context.push(
@@ -1479,19 +1580,16 @@ export function createPortfolioManagerDomain(
         );
       }
 
-      const approvedSetup =
-        currentState.phase === 'active'
-          ? null
-          : readApprovedSetupFromOnboardingBootstrap(currentState.lastOnboardingBootstrap);
-      if (liveManagedMandateProjection) {
-        const managedMandate = liveManagedMandateProjection.managedMandate;
+      const approvedSetup = readApprovedSetupFromOnboardingBootstrap(currentState.lastOnboardingBootstrap);
+      if (visibleManagedMandateProjection) {
+        const managedMandate = visibleManagedMandateProjection.managedMandate;
         context.push('  <managed_agent_mandates>');
         context.push(
           `    <managed_agent agent_key="${escapeXml(
-            liveManagedMandateProjection.targetAgentKey,
+            visibleManagedMandateProjection.targetAgentKey,
           )}" agent_type="${escapeXml(
-            liveManagedMandateProjection.targetAgentId,
-          )}" approved="true" mandate_ref="${escapeXml(liveManagedMandateProjection.mandateRef)}">`,
+            visibleManagedMandateProjection.targetAgentId,
+          )}" approved="true" mandate_ref="${escapeXml(visibleManagedMandateProjection.mandateRef)}">`,
         );
         appendStructuredXmlNode({
           lines: context,
@@ -1501,7 +1599,7 @@ export function createPortfolioManagerDomain(
         });
         context.push('    </managed_agent>');
         context.push('  </managed_agent_mandates>');
-      } else if (approvedSetup) {
+      } else if (currentState.phase !== 'active' && approvedSetup) {
         const mandateSources = readOnboardingMandateSources(currentState.lastOnboardingBootstrap);
         const firstManagedMandateSource =
           mandateSources.find(
@@ -1534,7 +1632,7 @@ export function createPortfolioManagerDomain(
 
       const walletAddress =
         currentState.phase === 'active'
-          ? liveManagedMandateProjection?.rootUserWallet ?? currentState.activeWalletAddress
+          ? visibleManagedMandateProjection?.rootUserWallet ?? currentState.activeWalletAddress
           : readPortfolioManagerContextWalletAddress(currentState);
       if (walletAddress && options.protocolHost) {
         try {
@@ -1972,9 +2070,18 @@ export function createPortfolioManagerDomain(
             pendingOnboardingWalletAddress: null,
             pendingApprovedSetup: null,
           };
+          const onboardingManagedMandateProjection =
+            buildManagedMandateEditorProjectionFromOnboardingBootstrap(onboarding);
 
           return {
             state: nextState,
+            ...(onboardingManagedMandateProjection
+              ? {
+                  domainProjectionUpdate: {
+                    managedMandateEditor: onboardingManagedMandateProjection,
+                  },
+                }
+              : {}),
             outputs: {
               status: {
                 executionStatus: 'completed',
@@ -2088,18 +2195,24 @@ export function createPortfolioManagerDomain(
             threadId,
             agentId,
           });
-          const managedPortfolioStateRead =
-            currentState.phase === 'active'
-              ? await readSharedEmberPortfolioState({
-                  protocolHost: options.protocolHost,
-                  threadId,
-                  agentId: FIRST_MANAGED_AGENT_TYPE,
-                })
-              : null;
+          let managedPortfolioStateRead: Awaited<ReturnType<typeof readSharedEmberPortfolioState>> | null =
+            null;
+          if (currentState.phase !== 'prehire') {
+            try {
+              managedPortfolioStateRead = await readSharedEmberPortfolioState({
+                protocolHost: options.protocolHost,
+                threadId,
+                agentId: FIRST_MANAGED_AGENT_TYPE,
+              });
+            } catch {
+              managedPortfolioStateRead = null;
+            }
+          }
           const managedMandateProjection =
             managedPortfolioStateRead
               ? buildManagedMandateEditorProjection(managedPortfolioStateRead.portfolioState)
               : null;
+          const nextPhase = managedMandateProjection ? 'active' : currentState.phase;
           const nextRevision =
             managedMandateProjection === null
               ? portfolioStateRead.revision
@@ -2109,15 +2222,19 @@ export function createPortfolioManagerDomain(
                 );
 
           const nextState: PortfolioManagerLifecycleState = {
-            phase: currentState.phase,
+            phase: nextPhase,
             lastPortfolioState: portfolioStateRead.portfolioState,
             lastSharedEmberRevision: nextRevision,
             lastRootDelegation: currentState.lastRootDelegation,
             lastOnboardingBootstrap: currentState.lastOnboardingBootstrap,
-            lastRootedWalletContextId: currentState.lastRootedWalletContextId,
-            activeWalletAddress: currentState.activeWalletAddress,
-            pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
-            pendingApprovedSetup: currentState.pendingApprovedSetup ?? null,
+            lastRootedWalletContextId:
+              managedMandateProjection?.rootedWalletContextId ?? currentState.lastRootedWalletContextId,
+            activeWalletAddress:
+              managedMandateProjection?.rootUserWallet ?? currentState.activeWalletAddress,
+            pendingOnboardingWalletAddress:
+              managedMandateProjection === null ? currentState.pendingOnboardingWalletAddress : null,
+            pendingApprovedSetup:
+              managedMandateProjection === null ? currentState.pendingApprovedSetup ?? null : null,
           };
 
           return {
