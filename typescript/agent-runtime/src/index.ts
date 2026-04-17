@@ -2578,6 +2578,15 @@ export async function createAgentRuntime<TState = unknown>(
     run: async (request) => {
       const session = await ensureThread(request.threadId);
       let leadingEvents: AgentRuntimeConnectEvent[] = [];
+      const resumeOperation =
+        Object.prototype.hasOwnProperty.call(request.forwardedProps?.command ?? {}, 'resume') &&
+        domain?.handleOperation
+          ? readInterruptOperation({
+              command: request.forwardedProps?.command,
+              session,
+              domain,
+            })
+          : null;
 
       const hasResume = Object.prototype.hasOwnProperty.call(
         request.forwardedProps?.command ?? {},
@@ -2595,6 +2604,43 @@ export async function createAgentRuntime<TState = unknown>(
       }
 
       attachedRuns.startRun(request.threadId, request.runId);
+
+      if (resumeOperation && domain?.handleOperation) {
+        const previousSession = getSession(request.threadId);
+        const nextSession = await runDomainOperation(request.threadId, resumeOperation);
+        const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
+          previousSession,
+          session: nextSession,
+        });
+
+        return tapAttachedEventSource(
+          injectAttachedEventsAfterFirstEvent(
+            [
+              {
+                type: EventType.RUN_STARTED,
+                threadId: request.threadId,
+                runId: request.runId,
+              },
+              ...(stateDeltaEvent ? [stateDeltaEvent] : []),
+              {
+                type: EventType.RUN_FINISHED,
+                threadId: request.threadId,
+                runId: request.runId,
+                result: {
+                  executionId: nextSession.execution.id,
+                  status: nextSession.execution.status,
+                },
+              },
+            ],
+            leadingEvents,
+          ),
+          (events) => attachedRuns.appendRunEvents(request.threadId, request.runId, events),
+          () => attachedRuns.finishRun(request.threadId, request.runId),
+          async (error) => {
+            await persistFailedRun(request.threadId, error);
+          },
+        );
+      }
 
       return tapAttachedEventSource(
         injectAttachedEventsAfterFirstEvent(

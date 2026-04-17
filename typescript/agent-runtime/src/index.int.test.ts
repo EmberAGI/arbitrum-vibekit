@@ -944,10 +944,32 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const resumeDelta = resumeEvents.find(isStateDeltaEvent);
+    const resumeDeltas = resumeEvents.filter(isStateDeltaEvent);
+    const resolvedInterruptDelta = resumeDeltas.find((event) =>
+      event.delta.some(
+        (operation) =>
+          operation.op === 'replace' &&
+          operation.path === '/thread/artifacts/current/data/status' &&
+          operation.value === 'resolved',
+      ),
+    );
+    const domainResumeDelta = resumeDeltas.find((event) =>
+      event.delta.some(
+        (operation) =>
+          operation.op === 'replace' &&
+          operation.path === '/thread/lifecycle/onboardingStep' &&
+          operation.value === 'delegation-note',
+      ),
+    );
 
-    expect(resumeDelta).toBeDefined();
-    expect(resumeDelta!.delta).toEqual(
+    expect(resolvedInterruptDelta).toBeDefined();
+    expect(resolvedInterruptDelta!.delta).toContainEqual({
+      op: 'replace',
+      path: '/thread/task/taskStatus/state',
+      value: 'working',
+    });
+    expect(domainResumeDelta).toBeDefined();
+    expect(domainResumeDelta!.delta).toEqual(
       expect.arrayContaining([
         {
           op: 'replace',
@@ -958,11 +980,6 @@ describe('agent-runtime integration', () => {
           op: 'replace',
           path: '/thread/lifecycle/operatorNote',
           value: 'safe window approved',
-        },
-        {
-          op: 'replace',
-          path: '/thread/task/taskStatus/state',
-          value: 'working',
         },
         {
           op: 'add',
@@ -1977,6 +1994,69 @@ describe('agent-runtime integration', () => {
         }),
       ]),
     );
+  });
+
+  it('routes resume through the declared interrupt when the AG-UI client sends empty request scaffolding', async () => {
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Model fallback should not run for interrupt resume.'),
+      },
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-resume-with-client-scaffolding',
+        runId: 'run-hire-with-client-scaffolding',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const resumeEvents = await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-resume-with-client-scaffolding',
+        runId: 'run-resume-with-client-scaffolding',
+        messages: [],
+        state: {},
+        tools: [],
+        context: [],
+        forwardedProps: {
+          command: {
+            resume: {
+              operatorNote: 'safe window approved',
+            },
+          },
+        },
+      }),
+    );
+
+    const resumeDeltas = resumeEvents.filter(isStateDeltaEvent);
+    const domainResumeDelta = resumeDeltas.find((event) =>
+      event.delta.some(
+        (operation) =>
+          operation.op === 'replace' &&
+          operation.path === '/thread/lifecycle/onboardingStep' &&
+          operation.value === 'delegation-note',
+      ),
+    );
+
+    expect(domainResumeDelta).toBeDefined();
+    expect(domainResumeDelta!.delta).toContainEqual({
+      op: 'replace',
+      path: '/thread/lifecycle/operatorNote',
+      value: 'safe window approved',
+    });
+    expect(domainResumeDelta!.delta).toContainEqual({
+      op: 'replace',
+      path: '/thread/task/taskStatus/message/content',
+      value: 'Operator note captured. Ready to complete onboarding.',
+    });
   });
 
   it('repairs stale pending interrupt artifacts during reconnect hydration when execution is no longer interrupted', async () => {
