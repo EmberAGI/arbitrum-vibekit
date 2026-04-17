@@ -70,6 +70,51 @@ class ScriptedPiAgent {
   }
 }
 
+const buildAssistantEventMessage = (timestamp: number) =>
+  ({
+    role: 'assistant',
+    content: [],
+    api: 'responses',
+    provider: 'openai',
+    model: 'gpt-5.4-mini',
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: 'stop',
+    timestamp,
+  }) as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+const getAssistantPromptText = (promptMessages: unknown): string | undefined => {
+  if (!Array.isArray(promptMessages)) {
+    return undefined;
+  }
+
+  const assistantMessages = promptMessages.filter((message): message is { role: string; content: unknown } => {
+    return typeof message === 'object' && message !== null && 'role' in message && 'content' in message;
+  });
+
+  const lastAssistantMessage = [...assistantMessages].reverse().find((message) => message.role === 'assistant');
+  if (!lastAssistantMessage || !Array.isArray(lastAssistantMessage.content)) {
+    return undefined;
+  }
+
+  const textParts = lastAssistantMessage.content.flatMap((part) => {
+    if (typeof part !== 'object' || part === null || !('type' in part) || part.type !== 'text' || !('text' in part)) {
+      return [];
+    }
+
+    return [typeof part.text === 'string' ? part.text : ''];
+  });
+
+  const text = textParts.join('');
+  return text.length > 0 ? text : undefined;
+};
+
 async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): Promise<T[]> {
   if (Array.isArray(source)) {
     return [...source];
@@ -564,6 +609,232 @@ describe('pi gateway service integration', () => {
         role: 'assistant',
         content: 'I created a borrow plan for USDC.',
       },
+    ]);
+  });
+
+  it('does not duplicate persisted assistant transcript content when one run replays the same assistant stream', async () => {
+    const replayedAssistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: 2,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const assistantDelta = [
+      'Created the collateral supply plan per mandate.',
+      '',
+      '- Action: lending.supply',
+      '- Asset: WETH',
+      '- Protocol: Aave V3',
+      '- Network: Arbitrum',
+      '- Amount: 0.008179235772205978 WETH',
+      '',
+      'If you want, I can now attempt execution of this current plan.',
+    ].join('\n');
+
+    const agent = new ScriptedPiAgent([
+      { type: 'agent_start' },
+      { type: 'turn_start' },
+      { type: 'message_start', message: replayedAssistantMessage },
+      {
+        type: 'message_update',
+        message: replayedAssistantMessage,
+        assistantMessageEvent: {
+          type: 'text_delta',
+          contentIndex: 0,
+          delta: assistantDelta,
+          partial: replayedAssistantMessage,
+        },
+      },
+      { type: 'message_end', message: replayedAssistantMessage },
+      { type: 'message_start', message: replayedAssistantMessage },
+      {
+        type: 'message_update',
+        message: replayedAssistantMessage,
+        assistantMessageEvent: {
+          type: 'text_delta',
+          contentIndex: 0,
+          delta: assistantDelta,
+          partial: replayedAssistantMessage,
+        },
+      },
+      { type: 'message_end', message: replayedAssistantMessage },
+      { type: 'turn_end', message: replayedAssistantMessage, toolResults: [] },
+      { type: 'agent_end', messages: [replayedAssistantMessage] },
+    ]);
+
+    let session = {
+      thread: { id: 'thread-replayed-assistant-stream' },
+      execution: { id: 'exec-replayed-assistant-stream', status: 'working' as const },
+      messages: [],
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-replayed-assistant-stream',
+        runId: 'run-replayed-assistant-stream',
+        messages: [
+          {
+            id: 'request-plan',
+            role: 'user',
+            content: 'create collateral lending plan according to mandate using human values',
+          },
+        ],
+      }),
+    );
+
+    expect(session.messages).toEqual([
+      {
+        id: 'request-plan',
+        role: 'user',
+        content: 'create collateral lending plan according to mandate using human values',
+      },
+      {
+        id: 'pi:exec-replayed-assistant-stream:run-replayed-assistant-stream:assistant:2',
+        role: 'assistant',
+        content: assistantDelta,
+      },
+    ]);
+  });
+
+  it('does not replay the previous assistant turn when a later run resends full transcript history', async () => {
+    class ReplayPriorAssistantFromPromptAgent extends ScriptedPiAgent {
+      private promptCount = 0;
+
+      constructor() {
+        super([]);
+      }
+
+      override async prompt(messages: unknown): Promise<void> {
+        this.promptCalls.push(messages);
+        this.promptCount += 1;
+
+        const previousAssistantText = getAssistantPromptText(messages);
+        const nextAssistantText =
+          this.promptCount === 1
+            ? 'Hi — how can I help with the lending position?'
+            : 'I only see the current lending mandate and wallet snapshot.';
+
+        const emitAssistantTurn = (text: string, timestamp: number): void => {
+          const assistantMessage = buildAssistantEventMessage(timestamp);
+          this.emit({ type: 'message_start', message: assistantMessage });
+          this.emit({
+            type: 'message_update',
+            message: assistantMessage,
+            assistantMessageEvent: {
+              type: 'text_delta',
+              contentIndex: 0,
+              delta: text,
+              partial: assistantMessage,
+            },
+          });
+          this.emit({ type: 'message_end', message: assistantMessage });
+        };
+
+        this.emit({ type: 'agent_start' });
+        this.emit({ type: 'turn_start' });
+        if (previousAssistantText) {
+          emitAssistantTurn(previousAssistantText, this.promptCount * 10 + 1);
+        }
+        emitAssistantTurn(nextAssistantText, this.promptCount * 10 + 2);
+        this.emit({
+          type: 'turn_end',
+          message: buildAssistantEventMessage(this.promptCount * 10 + 3),
+          toolResults: [],
+        });
+        this.emit({
+          type: 'agent_end',
+          messages: [buildAssistantEventMessage(this.promptCount * 10 + 4)],
+        });
+      }
+    }
+
+    const agent = new ReplayPriorAssistantFromPromptAgent();
+
+    let session = {
+      thread: { id: 'thread-full-transcript-history' },
+      execution: { id: 'exec-full-transcript-history', status: 'working' as const },
+      messages: [],
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-full-transcript-history',
+        runId: 'run-greeting',
+        messages: [{ id: 'user-hi', role: 'user', content: 'hi' }],
+      }),
+    );
+
+    const persistedGreetingAssistantMessageId = session.messages.find((message) => message.role === 'assistant')?.id;
+    expect(persistedGreetingAssistantMessageId).toBeDefined();
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-full-transcript-history',
+        runId: 'run-position',
+        messages: [
+          { id: 'user-hi', role: 'user', content: 'hi' },
+          {
+            id: persistedGreetingAssistantMessageId!,
+            role: 'assistant',
+            content: 'Hi — how can I help with the lending position?',
+          },
+          { id: 'user-position', role: 'user', content: 'what do you know about it?' },
+        ],
+      }),
+    );
+
+    expect(agent.promptCalls).toEqual([
+      [
+        {
+          role: 'user',
+          content: 'hi',
+          timestamp: expect.any(Number),
+        },
+      ],
+      [
+        {
+          role: 'user',
+          content: 'what do you know about it?',
+          timestamp: expect.any(Number),
+        },
+      ],
+    ]);
+
+    expect(session.messages.map(({ role, content }) => ({ role, content }))).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'Hi — how can I help with the lending position?' },
+      { role: 'user', content: 'what do you know about it?' },
+      { role: 'assistant', content: 'I only see the current lending mandate and wallet snapshot.' },
     ]);
   });
 

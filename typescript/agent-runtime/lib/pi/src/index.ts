@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 import {
   EventType,
   type BaseEvent,
@@ -8,7 +10,6 @@ import {
   type StateDeltaEvent,
   type StateSnapshotEvent,
 } from '@ag-ui/core';
-import { createRequire } from 'node:module';
 import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
 import {
   createAssistantMessageEventStream,
@@ -796,6 +797,22 @@ const mergeAgUiMessages = (baseMessages: readonly AgUiMessage[], incomingMessage
   return merged;
 };
 
+const selectAgUiPromptDeltaMessages = (
+  persistedMessages: readonly AgUiMessage[],
+  requestMessages: readonly AgUiMessage[],
+): AgUiMessage[] => {
+  const persistedMessagesById = new Map<string, string>();
+
+  for (const message of persistedMessages) {
+    persistedMessagesById.set(message.id, JSON.stringify(message));
+  }
+
+  return requestMessages.filter((message) => {
+    const persistedMessage = persistedMessagesById.get(message.id);
+    return persistedMessage === undefined || persistedMessage !== JSON.stringify(message);
+  });
+};
+
 type PersistedTextMessageStartEvent = {
   type: EventType.TEXT_MESSAGE_START;
   messageId: string;
@@ -1002,7 +1019,7 @@ const applyProjectedRunEventsToMessages = (
               ? {
                   id: event.messageId,
                   role: 'assistant',
-                  content: typeof message.content === 'string' ? message.content : '',
+                  content: '',
                   ...(message.role === 'assistant' && Array.isArray(message.toolCalls)
                     ? { toolCalls: message.toolCalls }
                     : {}),
@@ -1010,7 +1027,7 @@ const applyProjectedRunEventsToMessages = (
               : {
                   id: event.messageId,
                   role: 'user',
-                  content: typeof message.content === 'string' ? message.content : '',
+                  content: '',
                 },
         );
       }
@@ -1949,6 +1966,7 @@ export const createPiRuntimeGatewayRuntime = (params: {
       });
       const projectedRunEvents: BaseEvent[] = [];
       const requestMessages = request.messages ?? [];
+      const promptRequestMessages = selectAgUiPromptDeltaMessages(initialSession.messages ?? [], requestMessages);
       const resumePayload = request.forwardedProps?.command?.resume;
       const requestHasResumePayload = hasResumePayload(request.forwardedProps?.command);
       const sharedStateUpdate = readSharedStateUpdateCommand(request);
@@ -2129,11 +2147,11 @@ export const createPiRuntimeGatewayRuntime = (params: {
         });
 
         try {
-          if ((request.messages && request.messages.length > 0) || requestHasResumePayload) {
+          if (promptRequestMessages.length > 0 || requestHasResumePayload) {
             const promptMessages =
               requestHasResumePayload
                 ? buildResumePromptMessages(resumePayload, now)
-                : convertAgUiMessagesToPiMessages(request.messages ?? [], now);
+                : convertAgUiMessagesToPiMessages(promptRequestMessages, now);
             if (params.agent.state.isStreaming) {
               if (params.agent.steer) {
                 for (const message of promptMessages) {
