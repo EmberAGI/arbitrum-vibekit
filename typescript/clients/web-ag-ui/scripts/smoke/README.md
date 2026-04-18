@@ -5,6 +5,16 @@ local dev processes. The managed-identity smoke is different: it self-boots the
 repo-local Shared Ember harness plus the real runtime-owned gateway services for
 the managed pair.
 
+For manual QA and any long-lived local service bring-up, Shared Ember should be
+postgres-backed by default. Set
+`SHARED_EMBER_PROTOCOL_REFERENCE_BOOTSTRAP_JSON='{"persistence":{"kind":"postgres","connectionString":"postgresql://ember:ember@127.0.0.1:55433/ember"}}'`
+before starting the Shared Ember harness or reference server.
+
+The harness's in-memory fallback is only appropriate for intentionally
+short-lived smoke isolation. Do not use that fallback as the default QA stack,
+because Shared Ember service identities and onboarding state will disappear on
+restart.
+
 ## Assumptions
 
 - `pnpm dev:delegations-bypass` is running from `typescript/clients/web-ag-ui/`.
@@ -26,6 +36,9 @@ the managed pair.
   - Boots the repo-local Shared Ember HTTP harness plus the real
     `agent-portfolio-manager` and `agent-ember-lending` runtime gateway
     services.
+  - If you want the smoke's Shared Ember state to survive restarts, export
+    `SHARED_EMBER_PROTOCOL_REFERENCE_BOOTSTRAP_JSON` with postgres persistence
+    before running it.
   - Confirms `portfolio-manager` / `orchestrator` and `ember-lending` / `subagent` are both non-null.
   - Drives the portfolio-manager rooted-bootstrap path and verifies post-bootstrap
     `subagent.readExecutionContext.v1` returns a non-null `subagent_wallet_address`.

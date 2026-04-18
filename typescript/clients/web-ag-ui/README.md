@@ -29,6 +29,16 @@ It includes:
 - Use app-specific READMEs for local startup details.
 - Use the docs in `docs/` and `docs/adr/` for the authoritative architecture direction.
 - Treat older LangGraph starter language as historical context, not the current architecture contract.
+- Local managed-agent QA should be started with durable Postgres persistence for
+  both runtime layers:
+  - `agent-portfolio-manager` and `agent-ember-lending` already use
+    `DATABASE_URL` for `pi_runtime`
+  - Shared Ember must also be started with
+    `SHARED_EMBER_PROTOCOL_REFERENCE_BOOTSTRAP_JSON` carrying a postgres
+    persistence block for the `ember` database
+  - do not rely on the repo-local Shared Ember harness's in-memory fallback for
+    multi-step QA, because service identities, onboarding state, and other
+    Shared Ember truth will be lost on restart
 - Use `pnpm smoke:managed-identities` to prove the current downstream Shared Ember + OWS-facing identity boundary:
   - `portfolio-manager` / `orchestrator` is non-null
   - `ember-lending` / `subagent` is non-null
@@ -58,6 +68,24 @@ It includes:
   `pi-runtime-postgres` service and injects `DATABASE_URL` into the managed
   agent containers so they do not rely on the runtime's host-process Docker
   bootstrap path from inside Docker.
+- Manual local service bring-up should mirror that durability contract for
+  Shared Ember as well. Example from `typescript/clients/web-ag-ui/`:
+
+```bash
+EMBER_ORCHESTRATION_V1_SPEC_ROOT=/abs/path/to/ember-orchestration-v1-spec \
+SHARED_EMBER_HOST=127.0.0.1 \
+SHARED_EMBER_PORT=4010 \
+SHARED_EMBER_MANAGED_AGENT_ID=ember-lending \
+SHARED_EMBER_ONCHAIN_ACTIONS_PLANNER_AGENT_IDS=ember-lending \
+SHARED_EMBER_PROTOCOL_REFERENCE_BOOTSTRAP_JSON='{"persistence":{"kind":"postgres","connectionString":"postgresql://ember:ember@127.0.0.1:55433/ember"}}' \
+PORTFOLIO_MANAGER_OWS_VAULT_PATH=/abs/path/to/ows/portfolio-manager \
+EMBER_LENDING_OWS_VAULT_PATH=/abs/path/to/ows/ember-lending \
+./apps/agent-portfolio-manager/node_modules/.bin/tsx ./scripts/smoke/start-managed-shared-ember.ts
+```
+
+- That startup contract is the default expectation for local QA. Use the
+  in-memory Shared Ember fallback only for intentionally short-lived smoke
+  isolation.
 - The managed compose overlay also mounts the OWS vault directories read-only
   into the managed containers. By default it expects host paths:
   - `/opt/web-ag-ui/runtime/ows/portfolio-manager`
