@@ -1535,7 +1535,69 @@ function appendMandateContextXml(
     value: mandateContext,
   });
   lines.push(
-    '  <mandate_quantity_guidance>mandate_context is policy-only. Use wallet_contents, active_position_scopes, reservation summaries, and current_candidate_plan for live quantities and values.</mandate_quantity_guidance>',
+    '  <mandate_quantity_guidance>mandate_context is policy-only. Use wallet_contents, active_position_scopes, active_reservations, reservation summaries, and current_candidate_plan for live quantities and values.</mandate_quantity_guidance>',
+  );
+}
+
+function readReservationOwnedUnit(input: {
+  portfolioState: unknown;
+  reservationId: string | null;
+}): Record<string, unknown> | null {
+  if (!isRecord(input.portfolioState) || !Array.isArray(input.portfolioState['owned_units'])) {
+    return null;
+  }
+
+  const ownedUnits = input.portfolioState['owned_units'];
+  return (
+    ownedUnits.find(
+      (candidate) =>
+        isRecord(candidate) &&
+        input.reservationId !== null &&
+        readString(candidate['reservation_id']) === input.reservationId,
+    ) ?? readFirstRecordFromArray(ownedUnits)
+  );
+}
+
+function appendActiveReservationsXml(input: {
+  lines: string[];
+  portfolioState: unknown;
+}): void {
+  const reservations = readPortfolioReservations(input.portfolioState);
+  if (reservations.length === 0) {
+    return;
+  }
+
+  input.lines.push('  <active_reservations>');
+  for (const reservation of reservations) {
+    const reservationId = readString(reservation['reservation_id']);
+    const ownedUnit = readReservationOwnedUnit({
+      portfolioState: input.portfolioState,
+      reservationId,
+    });
+    input.lines.push(
+      `    <reservation${reservationId ? ` reservation_id="${escapeXml(reservationId)}"` : ''}>`,
+    );
+    const purpose = readString(reservation['purpose']);
+    if (purpose) {
+      input.lines.push(`      <purpose>${escapeXml(purpose)}</purpose>`);
+    }
+    const controlPath = readString(reservation['control_path']);
+    if (controlPath) {
+      input.lines.push(`      <control_path>${escapeXml(controlPath)}</control_path>`);
+    }
+    const rootAsset = isRecord(ownedUnit) ? readString(ownedUnit['root_asset']) : null;
+    if (rootAsset) {
+      input.lines.push(`      <root_asset>${escapeXml(rootAsset)}</root_asset>`);
+    }
+    const quantity = isRecord(ownedUnit) ? readString(ownedUnit['quantity']) : null;
+    if (quantity) {
+      input.lines.push(`      <quantity>${escapeXml(quantity)}</quantity>`);
+    }
+    input.lines.push('    </reservation>');
+  }
+  input.lines.push('  </active_reservations>');
+  input.lines.push(
+    '  <reservation_planning_guidance>When active_reservations are surfaced for lending.supply, they define the maximum reservation-backed supply quantity even if wallet_contents is larger.</reservation_planning_guidance>',
   );
 }
 
@@ -1565,6 +1627,10 @@ function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): st
     );
   }
   appendWalletOwnershipGuidanceXml(lines);
+  appendActiveReservationsXml({
+    lines,
+    portfolioState: state.lastPortfolioState,
+  });
 
   appendCurrentCandidatePlanXml({
     lines,
@@ -1608,6 +1674,11 @@ function buildSharedEmberExecutionContextXml(
 
   const generatedAt = readString(input.executionContext.generated_at) ?? new Date().toISOString();
   const network = readString(input.executionContext.network) ?? SHARED_EMBER_NETWORK;
+  const mergedExecutionPortfolioState = mergePortfolioStateWithExecutionContext({
+    portfolioState: input.executionContext,
+    executionContext: input.executionContext,
+    fallbackPortfolioState: input.state.lastPortfolioState,
+  });
   const lines = ['<ember_lending_execution_context freshness="live">'];
   lines.push(`  <generated_at>${escapeXml(generatedAt)}</generated_at>`);
   if (input.state.lastSharedEmberRevision !== null) {
@@ -1642,6 +1713,10 @@ function buildSharedEmberExecutionContextXml(
   appendWalletOwnershipGuidanceXml(lines);
 
   lines.push(`  <network>${escapeXml(network)}</network>`);
+  appendActiveReservationsXml({
+    lines,
+    portfolioState: mergedExecutionPortfolioState,
+  });
   appendCurrentCandidatePlanXml({
     lines,
     state: input.state,
@@ -3539,7 +3614,7 @@ export function createEmberLendingDomain(
         {
           name: 'create_transaction',
           description:
-            'Create or refresh a candidate transaction plan for the managed lending position. Reason from mandate_context, wallet_contents, active_position_scopes, and the current candidate plan. mandate_context is the exact managed mandate policy envelope; use wallet_contents, active_position_scopes, and the current candidate plan for live quantities and values. wallet_contents and active_position_scopes describe rooted user wallet context, not balances held in subagent_wallet_address. subagent_wallet_address is the dedicated execution wallet and only reflects balances explicitly surfaced for that wallet. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with control_path, asset, protocol_system, network, and quantity. quantity must be either { "kind": "exact", "value": "1.25" } using asset-unit decimal strings or { "kind": "percent", "value": 50 } using percent of the relevant base for that action. asset is the actionable observed asset; active_position_scopes expose economic_exposures when the asset is a wrapper or synthetic token.',
+            'Create or refresh a candidate transaction plan for the managed lending position. Reason from mandate_context, wallet_contents, active_position_scopes, active_reservations, and the current candidate plan. mandate_context is the exact managed mandate policy envelope; use wallet_contents, active_position_scopes, active_reservations, and the current candidate plan for live quantities and values. wallet_contents and active_position_scopes describe rooted user wallet context, not balances held in subagent_wallet_address. active_reservations surface the current reservation-backed execution envelope. When active_reservations are surfaced for lending.supply, use that reservation-backed quantity instead of the full idle wallet amount. subagent_wallet_address is the dedicated execution wallet and only reflects balances explicitly surfaced for that wallet. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with control_path, asset, protocol_system, network, and quantity. quantity must be either { "kind": "exact", "value": "1.25" } using asset-unit decimal strings or { "kind": "percent", "value": 50 } using percent of the relevant base for that action. asset is the actionable observed asset; active_position_scopes expose economic_exposures when the asset is a wrapper or synthetic token.',
         },
         {
           name: 'request_execution',

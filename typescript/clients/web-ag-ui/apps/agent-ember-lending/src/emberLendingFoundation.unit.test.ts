@@ -24,13 +24,13 @@ describe('createEmberLendingAgentConfig', () => {
     );
 
     expect(config.systemPrompt).toContain(
-      'Reason from mandate_context, wallet_contents, active_position_scopes, market_state, and current_candidate_plan',
+      'Reason from mandate_context, wallet_contents, active_position_scopes, active_reservations, market_state, and current_candidate_plan',
     );
     expect(config.systemPrompt).toContain(
       'mandate_context is the exact current managed mandate policy envelope',
     );
     expect(config.systemPrompt).toContain(
-      'Use wallet_contents, active_position_scopes, and current_candidate_plan for live quantities and values',
+      'Use wallet_contents, active_position_scopes, active_reservations, and current_candidate_plan for live quantities and values',
     );
     expect(config.systemPrompt).toContain(
       'wallet_contents and active_position_scopes describe the rooted user wallet context',
@@ -52,12 +52,12 @@ describe('createEmberLendingAgentConfig', () => {
       'Do not self-censor because execution authority may be insufficient',
     );
     expect(config.systemPrompt).toContain(
-      'Do not reason from owned units, reservations, or other internal execution machinery',
+      'active_reservations surface the current reservation-backed execution envelope',
     );
     expect(config.systemPrompt).toContain('control_path, asset, protocol_system, network, and quantity');
     expect(config.systemPrompt).toContain('{ "kind": "exact", "value": "1.25" }');
     expect(config.systemPrompt).toContain('{ "kind": "percent", "value": 50 }');
-    expect(config.systemPrompt).toContain('supply uses idle wallet amount');
+    expect(config.systemPrompt).toContain('supply uses the active reservation-backed supply amount when active_reservations are surfaced');
     expect(config.systemPrompt).toContain('repay uses total debt');
     expect(config.systemPrompt).toContain(
       'instead of routing back through the portfolio manager for delegation refresh',
