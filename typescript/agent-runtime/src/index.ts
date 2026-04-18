@@ -1157,6 +1157,12 @@ function applyDomainOperationResult(params: {
           lifecycle: params.lifecycle,
           state: params.result.state,
         });
+  const nextLifecyclePhase =
+    lifecycleThreadPatch &&
+    isRecord(lifecycleThreadPatch['lifecycle']) &&
+    typeof lifecycleThreadPatch['lifecycle']['phase'] === 'string'
+      ? (lifecycleThreadPatch['lifecycle']['phase'])
+      : null;
   if (!outputs && !lifecycleThreadPatch && !hasDomainProjectionUpdate) {
     return params.session;
   }
@@ -1239,6 +1245,16 @@ function applyDomainOperationResult(params: {
   } else if (domainOutputs.status && domainOutputs.status.executionStatus !== 'interrupted') {
     nextA2Ui = undefined;
     shouldWriteA2Ui = true;
+  }
+
+  if (
+    nextLifecyclePhase === 'prehire' &&
+    !domainOutputs.interrupt &&
+    (!domainOutputs.artifacts || domainOutputs.artifacts.length === 0) &&
+    nextArtifacts?.current
+  ) {
+    const { current: _current, ...remainingArtifacts } = nextArtifacts;
+    nextArtifacts = Object.keys(remainingArtifacts).length > 0 ? remainingArtifacts : undefined;
   }
 
   return {

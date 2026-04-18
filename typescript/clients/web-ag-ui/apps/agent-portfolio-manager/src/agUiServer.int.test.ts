@@ -1212,6 +1212,17 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         },
       },
     });
+    expect(
+      (fireSnapshot as {
+        snapshot?: {
+          thread?: {
+            artifacts?: {
+              current?: unknown;
+            };
+          };
+        };
+      }).snapshot?.thread?.artifacts?.current,
+    ).toBeUndefined();
 
     const rehireResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
       method: 'POST',
@@ -1263,5 +1274,241 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         },
       }),
     );
+  });
+
+  it('allows a fresh setup and signer completion after fire on the same thread', async () => {
+    const firstSetup = createPortfolioManagerSetupInput();
+    const secondSetup = {
+      ...createPortfolioManagerSetupInput(),
+      firstManagedMandate: {
+        ...createPortfolioManagerSetupInput().firstManagedMandate,
+        managedMandate: {
+          lending_policy: {
+            collateral_policy: {
+              assets: [
+                {
+                  asset: 'USDC',
+                  max_allocation_pct: 35,
+                },
+              ],
+            },
+            borrow_policy: {
+              allowed_assets: ['WETH'],
+            },
+            risk_policy: {
+              max_ltv_bps: 7000,
+              min_health_factor: '1.25',
+            },
+          },
+        },
+      },
+    };
+    const signedDelegation = {
+      delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
+      delegator: '0x00000000000000000000000000000000000000a1',
+      authority: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      caveats: [],
+      salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      signature: '0x1234',
+    };
+
+    const hireResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire-signing',
+        runId: 'run-hire-1',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    });
+    expect(hireResponse.ok).toBe(true);
+
+    const firstSetupResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire-signing',
+        runId: 'run-setup-1',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify(firstSetup),
+          },
+        },
+      }),
+    });
+    expect(firstSetupResponse.ok).toBe(true);
+
+    const firstSigningResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire-signing',
+        runId: 'run-signing-1',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify({
+              outcome: 'signed',
+              signedDelegations: [signedDelegation],
+            }),
+          },
+        },
+      }),
+    });
+    expect(firstSigningResponse.ok).toBe(true);
+
+    const fireResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire-signing',
+        runId: 'run-fire',
+        forwardedProps: {
+          command: {
+            name: 'fire',
+          },
+        },
+      }),
+    });
+    expect(fireResponse.ok).toBe(true);
+
+    const rehireResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire-signing',
+        runId: 'run-hire-2',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    });
+    expect(rehireResponse.ok).toBe(true);
+
+    const secondSetupResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire-signing',
+        runId: 'run-setup-2',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify(secondSetup),
+          },
+        },
+      }),
+    });
+    expect(secondSetupResponse.ok).toBe(true);
+
+    const secondSigningResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-rehire-signing',
+        runId: 'run-signing-2',
+        forwardedProps: {
+          command: {
+            resume: JSON.stringify({
+              outcome: 'signed',
+              signedDelegations: [signedDelegation],
+            }),
+          },
+        },
+      }),
+    });
+
+    expect(secondSigningResponse.ok).toBe(true);
+    const secondSigningEvents = parseEventStreamBody(await secondSigningResponse.text());
+    expectStateDeltaOperation(
+      secondSigningEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/task/taskStatus/state' &&
+        operation.value === 'completed',
+    );
+    expectStateDeltaOperation(
+      secondSigningEvents,
+      (operation) =>
+        operation.op === 'replace' &&
+        operation.path === '/thread/task/taskStatus/message/content' &&
+        operation.value === 'Portfolio manager onboarding complete. Agent is active.',
+    );
+
+    const finalSnapshot = await readThreadSnapshot({
+      baseUrl,
+      agentId: PORTFOLIO_MANAGER_AGENT_ID,
+      threadId: 'thread-rehire-signing',
+    });
+
+    expect(finalSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        thread: {
+          lifecycle: {
+            phase: 'active',
+            activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+            pendingOnboardingWalletAddress: null,
+          },
+          task: {
+            taskStatus: {
+              state: 'completed',
+              message: {
+                content: 'Portfolio manager onboarding complete. Agent is active.',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const rootedBootstrapCalls = (
+      protocolHost.handleJsonRpc.mock.calls as unknown as Array<[{
+        method?: string;
+        params?: {
+          onboarding?: {
+            rootedWalletContext?: {
+              metadata?: {
+                approvedOnboardingSetup?: unknown;
+              };
+            };
+          };
+        };
+      }]>
+    ).filter(([request]) => request.method === 'orchestrator.completeRootedBootstrapFromUserSigning.v1');
+
+    expect(rootedBootstrapCalls).toHaveLength(2);
+    expect(rootedBootstrapCalls.at(-1)?.[0]).toMatchObject({
+      params: {
+        onboarding: {
+          rootedWalletContext: {
+            metadata: {
+              approvedOnboardingSetup: expect.objectContaining({
+                portfolioMandate: secondSetup.portfolioMandate,
+                firstManagedMandate: secondSetup.firstManagedMandate,
+              }),
+            },
+          },
+        },
+      },
+    });
   });
 });
