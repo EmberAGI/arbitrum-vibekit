@@ -222,6 +222,7 @@ export type PiRuntimeGatewayAgent = Pick<Agent, 'subscribe' | 'prompt' | 'contin
   sessionId?: string;
   steer?: (message: AgentMessage) => void;
   followUp?: (message: AgentMessage) => void;
+  replaceMessages?: (messages: AgentMessage[]) => void;
 };
 
 export type PiRuntimeGatewayFoundation = {
@@ -1265,7 +1266,41 @@ export const convertPiRuntimeGatewayMessagesToLlm = (
   return delegate ? delegate(preprocessedMessages) : preprocessedMessages.filter(isLlmCompatibleMessage);
 };
 
-const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => number): AgentMessage[] =>
+const readReplayAssistantModelIdentity = (
+  model: unknown,
+): {
+  api: string;
+  provider: string;
+  model: string;
+} | null => {
+  if (!isRecord(model)) {
+    return null;
+  }
+
+  const api = typeof model.api === 'string' ? model.api : null;
+  const provider = typeof model.provider === 'string' ? model.provider : null;
+  const modelId = typeof model.id === 'string' ? model.id : null;
+
+  if (!api || !provider || !modelId) {
+    return null;
+  }
+
+  return {
+    api,
+    provider,
+    model: modelId,
+  };
+};
+
+const convertAgUiMessagesToPiMessages = (
+  messages: AgUiMessage[],
+  now: () => number,
+  assistantModelIdentity?: {
+    api: string;
+    provider: string;
+    model: string;
+  } | null,
+): AgentMessage[] =>
   messages.flatMap((message): AgentMessage[] => {
     switch (message.role) {
       case 'user': {
@@ -1313,9 +1348,9 @@ const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => num
           {
             role: 'assistant',
             content,
-            api: 'responses' as never,
-            provider: 'openai' as never,
-            model: 'ag-ui-projected',
+            api: (assistantModelIdentity?.api ?? 'responses') as never,
+            provider: (assistantModelIdentity?.provider ?? 'openai') as never,
+            model: assistantModelIdentity?.model ?? 'ag-ui-projected',
             usage: EMPTY_USAGE,
             stopReason: 'stop',
             timestamp: now(),
@@ -1891,6 +1926,22 @@ export const createPiRuntimeGatewayRuntime = (params: {
   const syncAgentSessionId = (threadId: string): void => {
     params.agent.sessionId = threadId;
   };
+  const syncAgentMessagesFromSession = (session: PiRuntimeGatewaySession): void => {
+    if (typeof params.agent.replaceMessages !== 'function') {
+      return;
+    }
+
+    const replayAssistantModelIdentity = readReplayAssistantModelIdentity(
+      (params.agent.state as { model?: unknown } | undefined)?.model,
+    );
+    params.agent.replaceMessages(
+      convertAgUiMessagesToPiMessages(
+        session.messages ?? [],
+        now,
+        replayAssistantModelIdentity,
+      ),
+    );
+  };
 
   const buildMessagesSnapshotEvent = (session: PiRuntimeGatewaySession): MessagesSnapshotEvent | null =>
     session.messages
@@ -2147,11 +2198,20 @@ export const createPiRuntimeGatewayRuntime = (params: {
         });
 
         try {
+          syncAgentMessagesFromSession(initialSession);
+
           if (promptRequestMessages.length > 0 || requestHasResumePayload) {
+            const replayAssistantModelIdentity = readReplayAssistantModelIdentity(
+              (params.agent.state as { model?: unknown } | undefined)?.model,
+            );
             const promptMessages =
               requestHasResumePayload
                 ? buildResumePromptMessages(resumePayload, now)
-                : convertAgUiMessagesToPiMessages(promptRequestMessages, now);
+                : convertAgUiMessagesToPiMessages(
+                    promptRequestMessages,
+                    now,
+                    replayAssistantModelIdentity,
+                  );
             if (params.agent.state.isStreaming) {
               if (params.agent.steer) {
                 for (const message of promptMessages) {
