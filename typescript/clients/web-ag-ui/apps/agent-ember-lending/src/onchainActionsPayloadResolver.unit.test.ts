@@ -394,7 +394,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         compactPlanSummary: {
           control_path: 'lending.withdraw',
           asset: 'aArbWETH',
-          amount: '1500000000000',
+          amount: '0.0000015',
           summary: 'withdraw WETH collateral from Aave back to idle WETH',
         },
       }),
@@ -501,7 +501,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         compactPlanSummary: {
           control_path: 'lending.withdraw',
           asset: 'aArbUSDCn',
-          amount: '1500000',
+          amount: '1.5',
           summary: 'withdraw USDC collateral from Aave back to idle USDC',
         },
       }),
@@ -529,6 +529,113 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
             address: '0x00000000000000000000000000000000000000c9',
           },
           amount: '1500000',
+        }),
+      }),
+    );
+  });
+
+  it('converts exact integer human quantities into token base units using OCA token decimals', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000c9',
+                },
+                name: 'USD Coin',
+                symbol: 'USDC',
+                isNative: false,
+                decimals: 6,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000da',
+                value: '0',
+                data: '0xa415bcad',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+    });
+
+    await expect(
+      resolver.anchorCandidatePlanPayload({
+        agentId: 'ember-lending',
+        threadId: 'thread-1',
+        transactionPlanId: 'txplan-ember-lending-wrapper-alias-usdcn-integer-001',
+        walletAddress: '0x00000000000000000000000000000000000000ba',
+        rootUserWalletAddress: '0x00000000000000000000000000000000000000ba',
+        payloadBuilderOutput: {
+          transaction_payload_ref: 'txpayload-ember-lending-wrapper-alias-usdcn-integer-001',
+          required_control_path: 'lending.withdraw',
+          network: 'arbitrum',
+        },
+        compactPlanSummary: {
+          control_path: 'lending.withdraw',
+          asset: 'aArbUSDCn',
+          amount: '1',
+          summary: 'withdraw 1 USDC collateral from Aave back to idle USDC',
+        },
+      }),
+    ).resolves.toMatchObject({
+      transactionRequests: [
+        {
+          type: 'EVM_TX',
+          to: '0x00000000000000000000000000000000000000da',
+          value: '0',
+          data: '0xa415bcad',
+          chainId: '42161',
+        },
+      ],
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://api.emberai.xyz/lending/withdraw',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          walletAddress: '0x00000000000000000000000000000000000000ba',
+          tokenUidToWidthraw: {
+            chainId: '42161',
+            address: '0x00000000000000000000000000000000000000c9',
+          },
+          amount: '1000000',
         }),
       }),
     );
@@ -901,7 +1008,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         compactPlanSummary: {
           control_path: 'lending.supply',
           asset: 'USDC',
-          amount: '10000000',
+          amount: '10',
           summary: 'supply reserved USDC on Aave',
         },
       }),
@@ -1212,7 +1319,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       compactPlanSummary: {
         control_path: 'lending.repay',
         asset: 'variableDebtArbUSDCn',
-        amount: '2500000',
+        amount: '2.5',
         summary: 'repay an exact partial USDC debt amount on Aave',
       },
     });
@@ -1311,7 +1418,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       compactPlanSummary: {
         control_path: 'lending.repay',
         asset: 'WETH',
-        amount: '20000000000000000',
+        amount: '0.02',
         summary: 'repay an exact partial WETH debt amount on Aave',
       },
     });
@@ -1409,7 +1516,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       compactPlanSummary: {
         control_path: 'lending.supply',
         asset: 'WETH',
-        amount: '5000000000000000',
+        amount: '0.005',
         summary: 'supply reserved WETH on Aave',
       },
     });
@@ -1646,7 +1753,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       compactPlanSummary: {
         control_path: 'lending.supply',
         asset: 'USDC',
-        amount: '10000000',
+        amount: '10',
         summary: 'supply reserved USDC on Aave',
       },
     });

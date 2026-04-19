@@ -406,10 +406,6 @@ function resolveAmountForOnchainActions(input: {
   }
 
   const normalizedAmount = input.amount.trim();
-  if (/^\d+$/u.test(normalizedAmount)) {
-    return normalizedAmount;
-  }
-
   return parseUnits(normalizedAmount, input.decimals).toString();
 }
 
