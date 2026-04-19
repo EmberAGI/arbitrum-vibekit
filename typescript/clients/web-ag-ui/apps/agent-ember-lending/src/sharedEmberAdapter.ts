@@ -66,6 +66,12 @@ type CreateEmberLendingDomainOptions = {
   anchoredPayloadResolver?: EmberLendingAnchoredPayloadResolver;
   runtimeSignerRef?: string;
   agentId?: string;
+  requestRedelegationRefresh?: (input: {
+    rootWalletAddress: string;
+    threadId: string;
+    transactionPlanId: string;
+    requestId: string;
+  }) => Promise<void>;
 };
 
 type RequestTransactionExecutionResponse = {
@@ -3309,6 +3315,12 @@ async function runPreparedExecutionFlow(input: {
   runtimeSigning?: AgentRuntimeSigningService;
   anchoredPayloadResolver?: EmberLendingAnchoredPayloadResolver;
   runtimeSignerRef?: string;
+  requestRedelegationRefresh?: (input: {
+    rootWalletAddress: string;
+    threadId: string;
+    transactionPlanId: string;
+    requestId: string;
+  }) => Promise<void>;
   threadId: string;
   agentId: string;
   currentState: EmberLendingLifecycleState;
@@ -3388,6 +3400,18 @@ async function runPreparedExecutionFlow(input: {
         agentId: input.agentId,
         requestId,
       });
+      if (currentProgress !== null && input.currentState.rootUserWalletAddress) {
+        try {
+          await input.requestRedelegationRefresh?.({
+            rootWalletAddress: input.currentState.rootUserWalletAddress,
+            threadId: input.threadId,
+            transactionPlanId: input.transactionPlanId,
+            requestId,
+          });
+        } catch {
+          // Best-effort PM-side redelegation should not block the existing wait path.
+        }
+      }
       const latestProgress =
         currentProgress === null
           ? null
@@ -4038,6 +4062,7 @@ export function createEmberLendingDomain(
                     runtimeSigning: options.runtimeSigning,
                     anchoredPayloadResolver: options.anchoredPayloadResolver,
                     runtimeSignerRef: options.runtimeSignerRef,
+                    requestRedelegationRefresh: options.requestRedelegationRefresh,
                     threadId,
                     agentId,
                     currentState,

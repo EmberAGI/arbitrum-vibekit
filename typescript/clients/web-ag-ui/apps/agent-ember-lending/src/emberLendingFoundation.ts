@@ -16,6 +16,10 @@ import {
   createEmberLendingSharedEmberHttpHost,
   resolveEmberLendingSharedEmberBaseUrl,
 } from './sharedEmberHttpHost.js';
+import {
+  createPortfolioManagerRedelegationRefresher,
+  resolvePortfolioManagerAgentDeploymentUrl,
+} from './redelegationCoordinator.js';
 
 const DEFAULT_EMBER_LENDING_MODEL = 'openai/gpt-5.4';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -27,6 +31,7 @@ export type EmberLendingGatewayEnv = NodeJS.ProcessEnv & {
   EMBER_LENDING_MODEL?: string;
   DATABASE_URL?: string;
   SHARED_EMBER_BASE_URL?: string;
+  PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL?: string;
   ONCHAIN_ACTIONS_API_URL?: string;
   ARBITRUM_RPC_URL?: string;
   ETHEREUM_RPC_URL?: string;
@@ -47,6 +52,7 @@ type EmberLendingGatewayModel = EmberLendingAgentConfig['model'];
 export type EmberLendingGatewayDependencies = {
   protocolHost: ReturnType<typeof createEmberLendingSharedEmberHttpHost> | undefined;
   anchoredPayloadResolver: EmberLendingAnchoredPayloadResolver;
+  requestRedelegationRefresh: (input: { rootWalletAddress: string }) => Promise<void>;
 };
 
 type CreateEmberLendingAgentConfigOptions = {
@@ -93,7 +99,7 @@ export function createEmberLendingAgentConfig(
 ): EmberLendingAgentConfig {
   const apiKey = requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.EMBER_LENDING_MODEL?.trim() || DEFAULT_EMBER_LENDING_MODEL;
-  const { protocolHost, anchoredPayloadResolver } =
+  const { protocolHost, anchoredPayloadResolver, requestRedelegationRefresh } =
     options.dependencies ?? resolveEmberLendingGatewayDependencies(env);
 
   return {
@@ -106,6 +112,7 @@ export function createEmberLendingAgentConfig(
       runtimeSigning: options.runtimeSigning,
       anchoredPayloadResolver,
       runtimeSignerRef: options.runtimeSignerRef,
+      requestRedelegationRefresh,
     }),
     agentOptions: {
       initialState: {
@@ -131,6 +138,9 @@ export function resolveEmberLendingGatewayDependencies(
     anchoredPayloadResolver: createEmberLendingOnchainActionsAnchoredPayloadResolver({
       baseUrl: onchainActionsApiUrl,
       env,
+    }),
+    requestRedelegationRefresh: createPortfolioManagerRedelegationRefresher({
+      runtimeUrl: resolvePortfolioManagerAgentDeploymentUrl(env),
     }),
   };
 }

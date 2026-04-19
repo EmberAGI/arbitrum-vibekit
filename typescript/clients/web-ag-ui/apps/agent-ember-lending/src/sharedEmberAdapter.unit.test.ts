@@ -5807,11 +5807,13 @@ describe('createEmberLendingDomain', () => {
         },
       })),
     );
+    const requestRedelegationRefresh = vi.fn(async () => undefined);
     const domain = createEmberLendingDomain({
       protocolHost,
       runtimeSigning,
       runtimeSignerRef: 'service-wallet',
       agentId: 'ember-lending',
+      requestRedelegationRefresh,
     });
 
     const result = await domain.handleOperation?.({
@@ -5849,6 +5851,12 @@ describe('createEmberLendingDomain', () => {
         limit: 100,
         timeout_ms: 1000,
       },
+    });
+    expect(requestRedelegationRefresh).toHaveBeenCalledWith({
+      rootWalletAddress: '0x00000000000000000000000000000000000000a1',
+      threadId: 'thread-1',
+      transactionPlanId: 'txplan-ember-lending-001',
+      requestId: 'req-ember-lending-execution-001',
     });
     expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(3, {
       jsonrpc: '2.0',
