@@ -3008,6 +3008,186 @@ describe('createEmberLendingDomain', () => {
     );
   });
 
+  it('accepts stringified JSON when create_transaction is called with a wrapper-backed withdraw request', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown; params?: { request?: unknown } };
+
+        switch (request.method) {
+          case 'subagent.readPortfolioState.v1':
+            return createPortfolioStateResponse();
+          case 'subagent.readExecutionContext.v1':
+            return createExecutionContextResponse();
+          case 'subagent.createTransaction.v1':
+            expect(request.params?.request).toMatchObject({
+              control_path: 'lending.withdraw',
+              asset: 'aArbUSDCn',
+              protocol_system: 'aave',
+              network: 'arbitrum',
+              quantity: {
+                kind: 'exact',
+                value: '3',
+              },
+            });
+
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-create-transaction',
+              result: {
+                protocol_version: 'v1',
+                revision: 8,
+                committed_event_ids: ['event-ember-lending-plan-created-001'],
+                candidate_plan: {
+                  planning_kind: 'subagent_handoff',
+                  transaction_plan_id: 'txplan-ember-lending-001',
+                  payload_builder_output: {
+                    transaction_payload_ref: 'txpayload-ember-lending-001',
+                    required_control_path: 'lending.withdraw',
+                    network: 'arbitrum',
+                  },
+                  compact_plan_summary: {
+                    control_path: 'lending.withdraw',
+                    asset: 'aArbUSDCn',
+                    amount: '3',
+                    summary: 'withdraw reserved aArbUSDCn on Aave',
+                  },
+                },
+              },
+            };
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+      anchoredPayloadResolver: createAnchoredPayloadResolverStub(),
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction',
+        input: JSON.stringify(
+          createSemanticRequest({
+            control_path: 'lending.withdraw',
+            asset: 'aArbUSDCn',
+            quantity: {
+              kind: 'exact',
+              value: '3',
+            },
+          }),
+        ),
+      },
+    });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Candidate lending plan created through the Shared Ember planner.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransaction.v1',
+      }),
+    );
+  });
+
+  it('reports invalid control_path values without blaming exact quantity strings', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: unknown };
+
+        switch (request.method) {
+          case 'subagent.readPortfolioState.v1':
+            return createPortfolioStateResponse();
+          case 'subagent.readExecutionContext.v1':
+            return createExecutionContextResponse();
+          case 'orchestrator.readOnboardingState.v1':
+            return {
+              jsonrpc: '2.0',
+              id: 'shared-ember-thread-1-read-onboarding-state',
+              result: {
+                protocol_version: 'v1',
+                revision: 8,
+                state: {
+                  status: 'completed',
+                },
+              },
+            };
+          default:
+            throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+        }
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: createManagedLifecycleState(),
+      operation: {
+        source: 'tool',
+        name: 'create_transaction',
+        input: {
+          ...createSemanticRequest(),
+          control_path: 'position-scope-aave-arbitrum-0xad53ec51a70e9a17df6752fda80cd465457c258d',
+          quantity: {
+            kind: 'exact',
+            value: '3',
+          },
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'create_transaction control_path must be one of "lending.supply", "lending.withdraw", "lending.borrow", or "lending.repay". Do not pass a position-scope id like "position-scope-aave-arbitrum-...". Exact quantity strings like {"kind":"exact","value":"3"} are valid.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createTransaction.v1',
+      }),
+    );
+  });
+
   it('fails closed when semantic percent quantity is malformed', async () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (input: unknown) => {
@@ -7302,6 +7482,96 @@ describe('createEmberLendingDomain', () => {
         },
       },
     });
+  });
+
+  it('accepts stringified JSON when create_escalation_request is called with a blocked execution result', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (input: unknown) => {
+        const request = input as { method?: string };
+        if (request.method === 'subagent.readPortfolioState.v1') {
+          return createPortfolioStateResponse();
+        }
+
+        if (request.method === 'subagent.readExecutionContext.v1') {
+          return createExecutionContextResponse();
+        }
+
+        if (request.method === 'subagent.createEscalationRequest.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-create-escalation-request',
+            result: {
+              protocol_version: 'v1',
+              revision: 9,
+              escalation_request: {
+                request_kind: 'release_or_transfer_request',
+                request_id: 'req-ember-lending-escalation-001',
+                status: 'pending',
+              },
+            },
+          };
+        }
+
+        throw new Error(`Unexpected JSON-RPC method: ${String(request.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlanSummary: 'supply reserved USDC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'create_escalation_request',
+        input: JSON.stringify(createEscalationRequestInput()),
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastEscalationSummary:
+          'release_or_transfer_request escalation req-ember-lending-escalation-001 created from blocked lending execution.',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending escalation request created through Shared Ember.',
+        },
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.createEscalationRequest.v1',
+        params: expect.objectContaining({
+          handoff: expect.objectContaining({
+            handoff_id: 'handoff-ember-lending-escalation-001',
+          }),
+          result: expect.objectContaining({
+            phase: 'blocked',
+            request_id: 'req-ember-lending-blocked-001',
+          }),
+        }),
+      }),
+    );
   });
 
   it('fails escalation when lean runtime state omits authoritative handoff fields', async () => {

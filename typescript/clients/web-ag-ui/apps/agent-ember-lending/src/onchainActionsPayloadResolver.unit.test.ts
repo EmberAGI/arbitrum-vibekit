@@ -427,6 +427,113 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
     );
   });
 
+  it('maps Arbitrum native-USDC wrapper symbols back to canonical USDC when anchoring payloads', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000c9',
+                },
+                name: 'USD Coin',
+                symbol: 'USDC',
+                isNative: false,
+                decimals: 6,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d9',
+                value: '0',
+                data: '0xa415bcad',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+    });
+
+    await expect(
+      resolver.anchorCandidatePlanPayload({
+        agentId: 'ember-lending',
+        threadId: 'thread-1',
+        transactionPlanId: 'txplan-ember-lending-wrapper-alias-usdcn-001',
+        walletAddress: '0x00000000000000000000000000000000000000b9',
+        rootUserWalletAddress: '0x00000000000000000000000000000000000000b9',
+        payloadBuilderOutput: {
+          transaction_payload_ref: 'txpayload-ember-lending-wrapper-alias-usdcn-001',
+          required_control_path: 'lending.withdraw',
+          network: 'arbitrum',
+        },
+        compactPlanSummary: {
+          control_path: 'lending.withdraw',
+          asset: 'aArbUSDCn',
+          amount: '1500000',
+          summary: 'withdraw USDC collateral from Aave back to idle USDC',
+        },
+      }),
+    ).resolves.toMatchObject({
+      transactionRequests: [
+        {
+          type: 'EVM_TX',
+          to: '0x00000000000000000000000000000000000000d9',
+          value: '0',
+          data: '0xa415bcad',
+          chainId: '42161',
+        },
+      ],
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://api.emberai.xyz/lending/withdraw',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          walletAddress: '0x00000000000000000000000000000000000000b9',
+          tokenUidToWidthraw: {
+            chainId: '42161',
+            address: '0x00000000000000000000000000000000000000c9',
+          },
+          amount: '1500000',
+        }),
+      }),
+    );
+  });
+
   it('wraps the anchored request in a delegated redeemDelegations transaction using the canonical signing package', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -1026,6 +1133,105 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
             address: '0x00000000000000000000000000000000000000a1',
           },
           amount: MAX_UINT256,
+        }),
+      },
+    );
+  });
+
+  it('maps Arbitrum native-USDC debt wrapper symbols back to canonical USDC when anchoring repay payloads', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000c9',
+                },
+                name: 'USD Coin',
+                symbol: 'USDC',
+                isNative: false,
+                decimals: 6,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d2',
+                value: '0',
+                data: '0x573ade81',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+    });
+
+    await resolver.anchorCandidatePlanPayload({
+      agentId: 'ember-lending',
+      threadId: 'thread-rooted-repay-usdcn-1',
+      transactionPlanId: 'txplan-ember-lending-rooted-repay-usdcn-001',
+      walletAddress: '0x00000000000000000000000000000000000000b9',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000b9',
+      useMaxRepayAmount: false,
+      payloadBuilderOutput: {
+        transaction_payload_ref: 'txpayload-ember-lending-rooted-repay-usdcn-001',
+        required_control_path: 'lending.repay',
+        network: 'arbitrum',
+      },
+      compactPlanSummary: {
+        control_path: 'lending.repay',
+        asset: 'variableDebtArbUSDCn',
+        amount: '2500000',
+        summary: 'repay an exact partial USDC debt amount on Aave',
+      },
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://api.emberai.xyz/lending/repay',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress: '0x00000000000000000000000000000000000000b9',
+          repayTokenUid: {
+            chainId: '42161',
+            address: '0x00000000000000000000000000000000000000c9',
+          },
+          amount: '2500000',
         }),
       },
     );
