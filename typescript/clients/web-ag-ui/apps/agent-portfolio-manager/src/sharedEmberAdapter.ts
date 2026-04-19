@@ -347,6 +347,8 @@ function readNextReadyForRedelegationWork(
   events: unknown[],
   acknowledgedThroughSequence: number,
 ): SharedEmberRedelegationWork | null {
+  let latestWork: SharedEmberRedelegationWork | null = null;
+
   for (const rawEvent of events) {
     const event = readCommittedEvent(rawEvent);
     if (
@@ -374,7 +376,7 @@ function readNextReadyForRedelegationWork(
       continue;
     }
 
-    return {
+    latestWork = {
       eventId: event.event_id,
       sequence: event.sequence,
       requestId,
@@ -384,7 +386,7 @@ function readNextReadyForRedelegationWork(
     };
   }
 
-  return null;
+  return latestWork;
 }
 
 function isSharedEmberRevisionConflict(error: unknown): boolean {
