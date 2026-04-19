@@ -43,10 +43,15 @@ import {
   type ClmmEvent,
   type GmxLatestSnapshot,
   type ClmmState,
+  type Task,
   type ClmmUpdate,
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';
-import { executePerpetualPlan, executePreparedTransactions } from '../execution.js';
+import {
+  executePerpetualPlan,
+  executePreparedTransactions,
+  type ExecutionResult,
+} from '../execution.js';
 import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 import { resolvePlanBuilderWalletAddress } from '../planBuilderWallet.js';
 
@@ -72,6 +77,11 @@ const EXECUTION_FEE_TOP_UP_MIN_USD = 1;
 const EXECUTION_FEE_TOP_UP_MAX_USD = 25;
 const EXECUTION_FEE_TOP_UP_SLIPPAGE_TOLERANCE_SEQUENCE = ['0.25', '0.5', '1'] as const;
 const ERROR_LOG_STRING_MAX_CHARS = 1_000;
+const DEFAULT_FLIP_CLOSE_VERIFY_ATTEMPTS = 15;
+const DEFAULT_FLIP_CLOSE_VERIFY_INTERVAL_MS = 2_000;
+const DEFAULT_LIFECYCLE_WATCH_ATTEMPTS = 12;
+const DEFAULT_LIFECYCLE_WATCH_INTERVAL_MS = 5_000;
+const DEFAULT_PENDING_LIFECYCLE_RECONCILE_POLL_INTERVAL_MS = 15_000;
 
 type PositionSyncGuard = NonNullable<ClmmState['thread']['metrics']['pendingPositionSync']>;
 
@@ -101,6 +111,88 @@ function isTradePlanAction(action: 'none' | 'long' | 'short' | 'close' | 'reduce
 
 function resolveFlipSide(positionSide: 'long' | 'short' | undefined): 'long' | 'short' {
   return positionSide === 'short' ? 'long' : 'short';
+}
+
+function resolveFlipCloseVerifyAttempts(): number {
+  const raw = process.env['GMX_FIRE_CLOSE_VERIFY_ATTEMPTS'];
+  if (!raw) {
+    return DEFAULT_FLIP_CLOSE_VERIFY_ATTEMPTS;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_FLIP_CLOSE_VERIFY_ATTEMPTS;
+  }
+  return Math.max(1, Math.trunc(parsed));
+}
+
+function resolveFlipCloseVerifyIntervalMs(): number {
+  const raw = process.env['GMX_FIRE_CLOSE_VERIFY_INTERVAL_MS'];
+  if (!raw) {
+    return DEFAULT_FLIP_CLOSE_VERIFY_INTERVAL_MS;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_FLIP_CLOSE_VERIFY_INTERVAL_MS;
+  }
+  return Math.max(0, Math.trunc(parsed));
+}
+
+function resolveLifecycleWatchAttempts(): number {
+  const raw = process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'];
+  if (!raw) {
+    return DEFAULT_LIFECYCLE_WATCH_ATTEMPTS;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_LIFECYCLE_WATCH_ATTEMPTS;
+  }
+  return Math.max(1, Math.trunc(parsed));
+}
+
+function resolveLifecycleWatchIntervalMs(): number {
+  const raw = process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'];
+  if (!raw) {
+    return DEFAULT_LIFECYCLE_WATCH_INTERVAL_MS;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_LIFECYCLE_WATCH_INTERVAL_MS;
+  }
+  return Math.max(0, Math.trunc(parsed));
+}
+
+function resolvePendingLifecycleReconcilePollIntervalMs(defaultPollIntervalMs: number): number {
+  const raw = process.env['GMX_ALLORA_PENDING_LIFECYCLE_RECONCILE_POLL_INTERVAL_MS'];
+  if (!raw) {
+    return Math.min(defaultPollIntervalMs, DEFAULT_PENDING_LIFECYCLE_RECONCILE_POLL_INTERVAL_MS);
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return Math.min(defaultPollIntervalMs, DEFAULT_PENDING_LIFECYCLE_RECONCILE_POLL_INTERVAL_MS);
+  }
+  return Math.min(defaultPollIntervalMs, Math.trunc(parsed));
+}
+
+function hasOpenPosition(position: PerpetualPosition | undefined): position is PerpetualPosition {
+  if (!position) {
+    return false;
+  }
+  const size = position.sizeInUsd.trim();
+  if (size.length === 0) {
+    return false;
+  }
+
+  const parsed = Number(size);
+  if (Number.isFinite(parsed)) {
+    return Math.abs(parsed) > 0;
+  }
+
+  return size !== '0';
 }
 
 function parseUsdMetric(raw: string | undefined): number | undefined {
@@ -271,6 +363,255 @@ function appendOnchainErrorDiagnostics(error: unknown, baseMessage: string): str
     .filter((value): value is string => value !== undefined)
     .join(' ');
   return diagnostics.length > 0 ? `${baseMessage} (${diagnostics})` : baseMessage;
+}
+
+async function executeConfirmedFlipPlan(params: {
+  onchainActionsClient: Pick<
+    OnchainActionsClient,
+    | 'listPerpetualPositions'
+    | 'getPerpetualLifecycle'
+    | 'createPerpetualLong'
+    | 'createPerpetualShort'
+    | 'createPerpetualClose'
+    | 'createPerpetualReduce'
+  >;
+  plan: Extract<ExecutionPlan, { action: 'flip' }>;
+  txExecutionMode: 'plan' | 'execute';
+  clients: ReturnType<typeof getOnchainClients> | undefined;
+  delegationsBypassActive: boolean;
+  delegationBundle: ClmmState['thread']['delegationBundle'];
+  delegatorWalletAddress: `0x${string}`;
+  delegateeWalletAddress: `0x${string}`;
+  runtimeThreadId: string | undefined;
+  runtimeCheckpointId: string | undefined;
+  runtimeCheckpointNamespace: string | undefined;
+  iteration: number;
+}): Promise<ExecutionResult> {
+  if (params.txExecutionMode !== 'execute') {
+    return executePerpetualPlan({
+      client: params.onchainActionsClient,
+      clients: params.clients,
+      plan: params.plan,
+      txExecutionMode: params.txExecutionMode,
+      delegationsBypassActive: params.delegationsBypassActive,
+      delegationBundle: params.delegationBundle,
+      delegatorWalletAddress: params.delegatorWalletAddress,
+      delegateeWalletAddress: params.delegateeWalletAddress,
+    });
+  }
+
+  const closePlan: ExecutionPlan = {
+    action: 'close',
+    request: params.plan.closeRequest,
+  };
+  const closeExecution = await executePerpetualPlan({
+    client: params.onchainActionsClient,
+    clients: params.clients,
+    plan: closePlan,
+    txExecutionMode: params.txExecutionMode,
+    delegationsBypassActive: params.delegationsBypassActive,
+    delegationBundle: params.delegationBundle,
+    delegatorWalletAddress: params.delegatorWalletAddress,
+    delegateeWalletAddress: params.delegateeWalletAddress,
+  });
+
+  if (!closeExecution.ok) {
+    return { ...closeExecution, action: 'flip' };
+  }
+
+  const maxVerificationAttempts = resolveFlipCloseVerifyAttempts();
+  const verificationIntervalMs = resolveFlipCloseVerifyIntervalMs();
+  const normalizedTargetMarket = params.plan.closeRequest.marketAddress.toLowerCase();
+  let closeConfirmationError: string | undefined;
+  let closeCancelledError: string | undefined;
+  let closeConfirmed = false;
+
+  for (let attempt = 1; attempt <= maxVerificationAttempts; attempt += 1) {
+    try {
+      const postClosePositions = await params.onchainActionsClient.listPerpetualPositions({
+        walletAddress: params.plan.closeRequest.walletAddress,
+        chainIds: [ARBITRUM_CHAIN_ID.toString()],
+      });
+      const postClosePosition = postClosePositions.find(
+        (position) => position.marketAddress.toLowerCase() === normalizedTargetMarket,
+      );
+      closeConfirmed = !hasOpenPosition(postClosePosition);
+      logWarn('pollCycle: flip close verification snapshot', {
+        threadId: params.runtimeThreadId,
+        checkpointId: params.runtimeCheckpointId,
+        checkpointNamespace: params.runtimeCheckpointNamespace,
+        iteration: params.iteration,
+        attempt,
+        maxVerificationAttempts,
+        targetMarketAddress: normalizedTargetMarket,
+        closeConfirmed,
+        matchedMarketPosition: Boolean(postClosePosition),
+        matchedPositionSide: postClosePosition?.positionSide,
+        matchedPositionSizeUsd: postClosePosition?.sizeInUsd,
+      });
+    } catch (error: unknown) {
+      closeConfirmationError = error instanceof Error ? error.message : String(error);
+      logWarn('pollCycle: flip close verification positions query failed', {
+        threadId: params.runtimeThreadId,
+        checkpointId: params.runtimeCheckpointId,
+        checkpointNamespace: params.runtimeCheckpointNamespace,
+        iteration: params.iteration,
+        attempt,
+        maxVerificationAttempts,
+        error: closeConfirmationError,
+      });
+      break;
+    }
+
+    if (params.plan.closeRequest.walletAddress && closeExecution.lastTxHash) {
+      try {
+        const lifecycle = await params.onchainActionsClient.getPerpetualLifecycle({
+          providerName: GMX_PERPETUALS_PROVIDER_NAME,
+          chainId: ARBITRUM_CHAIN_ID.toString(),
+          txHash: closeExecution.lastTxHash,
+          walletAddress: params.plan.closeRequest.walletAddress,
+        });
+        if (
+          lifecycle.needsDisambiguation !== true &&
+          (lifecycle.status === 'cancelled' || lifecycle.status === 'failed')
+        ) {
+          closeCancelledError = formatLifecycleFailureDetail({
+            status: lifecycle.status,
+            reason: lifecycle.reason,
+            reasonBytes: lifecycle.reasonBytes,
+            requestedPrice: lifecycle.requestedPrice,
+            observedPrice: lifecycle.observedPrice,
+          });
+          break;
+        }
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        logWarn('pollCycle: flip close lifecycle query failed', {
+          threadId: params.runtimeThreadId,
+          checkpointId: params.runtimeCheckpointId,
+          checkpointNamespace: params.runtimeCheckpointNamespace,
+          iteration: params.iteration,
+          attempt,
+          txHash: closeExecution.lastTxHash,
+          error: message,
+        });
+      }
+    }
+
+    if (closeConfirmed) {
+      break;
+    }
+
+    if (attempt < maxVerificationAttempts) {
+      await delay(verificationIntervalMs);
+    }
+  }
+
+  if (!closeConfirmed) {
+    return {
+      action: 'flip',
+      ok: false,
+      transactions: closeExecution.transactions,
+      txHashes: closeExecution.txHashes,
+      lastTxHash: closeExecution.lastTxHash,
+      error:
+        closeCancelledError ??
+        closeConfirmationError ??
+        'Unable to confirm GMX close before reopening the opposite side.',
+    };
+  }
+
+  const openSide = resolveFlipSide(params.plan.closeRequest.positionSide);
+  const openPlan: ExecutionPlan =
+    openSide === 'long'
+      ? { action: 'long', request: params.plan.openRequest }
+      : { action: 'short', request: params.plan.openRequest };
+  const openExecution = await executePerpetualPlan({
+    client: params.onchainActionsClient,
+    clients: params.clients,
+    plan: openPlan,
+    txExecutionMode: params.txExecutionMode,
+    delegationsBypassActive: params.delegationsBypassActive,
+    delegationBundle: params.delegationBundle,
+    delegatorWalletAddress: params.delegatorWalletAddress,
+    delegateeWalletAddress: params.delegateeWalletAddress,
+  });
+
+  return {
+    action: 'flip',
+    ok: openExecution.ok,
+    transactions: [...(closeExecution.transactions ?? []), ...(openExecution.transactions ?? [])],
+    txHashes: [...(closeExecution.txHashes ?? []), ...(openExecution.txHashes ?? [])],
+    lastTxHash: openExecution.lastTxHash ?? closeExecution.lastTxHash,
+    error: openExecution.ok
+      ? undefined
+      : `GMX close succeeded but reopening the opposite side failed: ${openExecution.error ?? 'unknown error'}`,
+  };
+}
+
+async function confirmFlipReopenedPosition(params: {
+  onchainActionsClient: Pick<OnchainActionsClient, 'listPerpetualPositions'>;
+  walletAddress: `0x${string}`;
+  marketAddress: `0x${string}`;
+  expectedSide: 'long' | 'short';
+  runtimeThreadId: string | undefined;
+  runtimeCheckpointId: string | undefined;
+  runtimeCheckpointNamespace: string | undefined;
+  iteration: number;
+}): Promise<PerpetualPosition | undefined> {
+  const maxVerificationAttempts = resolveFlipCloseVerifyAttempts();
+  const verificationIntervalMs = resolveFlipCloseVerifyIntervalMs();
+  const normalizedTargetMarket = params.marketAddress.toLowerCase();
+  let reopenedPosition: PerpetualPosition | undefined;
+
+  for (let attempt = 1; attempt <= maxVerificationAttempts; attempt += 1) {
+    if (attempt > 1) {
+      await delay(verificationIntervalMs);
+    }
+
+    try {
+      const refreshedPositions = await params.onchainActionsClient.listPerpetualPositions({
+        walletAddress: params.walletAddress,
+        chainIds: [ARBITRUM_CHAIN_ID.toString()],
+      });
+      reopenedPosition = refreshedPositions.find(
+        (position) => position.marketAddress.toLowerCase() === normalizedTargetMarket,
+      );
+      const reopenedConfirmed =
+        hasOpenPosition(reopenedPosition) && reopenedPosition.positionSide === params.expectedSide;
+      logWarn('pollCycle: flip reopen verification snapshot', {
+        threadId: params.runtimeThreadId,
+        checkpointId: params.runtimeCheckpointId,
+        checkpointNamespace: params.runtimeCheckpointNamespace,
+        iteration: params.iteration,
+        attempt,
+        maxVerificationAttempts,
+        targetMarketAddress: normalizedTargetMarket,
+        expectedSide: params.expectedSide,
+        reopenedConfirmed,
+        matchedMarketPosition: Boolean(reopenedPosition),
+        matchedPositionSide: reopenedPosition?.positionSide,
+        matchedPositionSizeUsd: reopenedPosition?.sizeInUsd,
+      });
+      if (reopenedConfirmed) {
+        return reopenedPosition;
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarn('pollCycle: flip reopen verification positions query failed', {
+        threadId: params.runtimeThreadId,
+        checkpointId: params.runtimeCheckpointId,
+        checkpointNamespace: params.runtimeCheckpointNamespace,
+        iteration: params.iteration,
+        attempt,
+        maxVerificationAttempts,
+        error: message,
+      });
+      break;
+    }
+  }
+
+  return reopenedPosition;
 }
 
 async function maybeAutoFundExecutionFee(params: {
@@ -570,6 +911,193 @@ function isResolvedLifecycle(
   lifecycle: PerpetualLifecycleResponse,
 ): lifecycle is Extract<PerpetualLifecycleResponse, { orderKey: string }> {
   return lifecycle.needsDisambiguation !== true;
+}
+
+function asLifecycleTxHash(value: string | undefined): `0x${string}` | undefined {
+  if (!value || !value.startsWith('0x')) {
+    return undefined;
+  }
+  return value as `0x${string}`;
+}
+
+type LifecycleWatchResult = {
+  task: Task;
+  statusEvent: ClmmEvent;
+  lifecycleFailure?: ExecutionFailureSummary;
+  lifecycleStatus?: 'pending' | 'executed' | 'cancelled' | 'failed' | 'unknown';
+  finalTxHash?: `0x${string}`;
+  pendingAfterWatch: boolean;
+};
+
+async function watchLifecycleForExecutionHash(params: {
+  client: OnchainActionsClient;
+  config: CopilotKitConfig;
+  task: Task;
+  statusEvent: ClmmEvent;
+  activityTelemetry: ClmmState['thread']['activity']['telemetry'];
+  latestCycle: ClmmState['thread']['metrics']['latestCycle'];
+  iteration: number;
+  walletAddress: `0x${string}`;
+  submissionTxHash: `0x${string}`;
+  runtimeThreadId?: string;
+  runtimeCheckpointId?: string;
+  runtimeCheckpointNamespace?: string;
+}): Promise<LifecycleWatchResult> {
+  const maxAttempts = resolveLifecycleWatchAttempts();
+  const intervalMs = resolveLifecycleWatchIntervalMs();
+  let task = params.task;
+  let statusEvent = params.statusEvent;
+  let lifecycleStatus: LifecycleWatchResult['lifecycleStatus'];
+  let lifecycleFailure: ExecutionFailureSummary | undefined;
+  let finalTxHash: `0x${string}` | undefined;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const lifecycle = await params.client.getPerpetualLifecycle({
+        providerName: GMX_PERPETUALS_PROVIDER_NAME,
+        chainId: ARBITRUM_CHAIN_ID.toString(),
+        txHash: params.submissionTxHash,
+        walletAddress: params.walletAddress,
+      });
+
+      if (!isResolvedLifecycle(lifecycle)) {
+        continue;
+      }
+
+      lifecycleStatus = lifecycle.status;
+      const lifecycleTxHash = asLifecycleTxHash(
+        lifecycle.executionTxHash ??
+          lifecycle.cancellationTxHash ??
+          lifecycle.createTxHash ??
+          lifecycle.txHash,
+      );
+      logWarn('pollCycle: perpetual lifecycle status resolved', {
+        threadId: params.runtimeThreadId,
+        checkpointId: params.runtimeCheckpointId,
+        checkpointNamespace: params.runtimeCheckpointNamespace,
+        iteration: params.iteration,
+        attempt,
+        maxAttempts,
+        lifecycleStatus: lifecycle.status,
+        lifecycleOrderKey: lifecycle.orderKey,
+        lifecycleTxHash,
+        lifecycleReason: lifecycle.reason,
+      });
+
+      if (lifecycle.status === 'executed') {
+        finalTxHash = asLifecycleTxHash(lifecycle.executionTxHash) ?? lifecycleTxHash;
+        if (attempt > 1) {
+          const confirmedStatus = buildTaskStatus(
+            task,
+            'working',
+            `[Cycle ${params.iteration}] GMX order executed; reconciled final execution hash ${finalTxHash?.slice(0, 10) ?? params.submissionTxHash.slice(0, 10)}...`,
+          );
+          task = confirmedStatus.task;
+          statusEvent = confirmedStatus.statusEvent;
+          await copilotkitEmitState(params.config, {
+            thread: {
+              task,
+              activity: { events: [statusEvent], telemetry: params.activityTelemetry },
+              metrics: {
+                latestCycle: params.latestCycle
+                  ? { ...params.latestCycle, txHash: finalTxHash ?? params.submissionTxHash }
+                  : undefined,
+              },
+            },
+          });
+        }
+        return {
+          task,
+          statusEvent,
+          lifecycleStatus,
+          finalTxHash,
+          pendingAfterWatch: false,
+        };
+      }
+
+      if (lifecycle.status === 'cancelled' || lifecycle.status === 'failed') {
+        lifecycleFailure = summarizeExecutionFailure({
+          iteration: params.iteration,
+          error: formatLifecycleFailureDetail({
+            status: lifecycle.status,
+            reason: lifecycle.reason,
+            reasonBytes: lifecycle.reasonBytes,
+            requestedPrice: lifecycle.requestedPrice,
+            observedPrice: lifecycle.observedPrice,
+          }),
+        });
+        return {
+          task,
+          statusEvent,
+          lifecycleFailure,
+          lifecycleStatus,
+          finalTxHash: lifecycleTxHash,
+          pendingAfterWatch: false,
+        };
+      }
+
+      if (lifecycle.status !== 'pending' || attempt === maxAttempts) {
+        return {
+          task,
+          statusEvent,
+          lifecycleStatus,
+          finalTxHash: lifecycleTxHash,
+          pendingAfterWatch: lifecycle.status === 'pending',
+        };
+      }
+
+      const waitingStatus = buildTaskStatus(
+        task,
+        'working',
+        `[Cycle ${params.iteration}] GMX order pending; waiting for final execution hash (${attempt}/${maxAttempts}).`,
+      );
+      task = waitingStatus.task;
+      statusEvent = waitingStatus.statusEvent;
+      await copilotkitEmitState(params.config, {
+        thread: {
+          task,
+          activity: { events: [statusEvent], telemetry: params.activityTelemetry },
+          metrics: {
+            latestCycle: params.latestCycle
+              ? { ...params.latestCycle, txHash: params.submissionTxHash }
+              : undefined,
+          },
+        },
+      });
+      if (intervalMs > 0) {
+        await delay(intervalMs);
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarn('pollCycle: perpetual lifecycle status query failed', {
+        threadId: params.runtimeThreadId,
+        checkpointId: params.runtimeCheckpointId,
+        checkpointNamespace: params.runtimeCheckpointNamespace,
+        iteration: params.iteration,
+        txHash: params.submissionTxHash,
+        error: message,
+      });
+      lifecycleFailure = summarizeExecutionFailure({
+        iteration: params.iteration,
+        error: `Unable to verify onchain order lifecycle status: ${message}`,
+      });
+      return {
+        task,
+        statusEvent,
+        lifecycleFailure,
+        lifecycleStatus,
+        pendingAfterWatch: false,
+      };
+    }
+  }
+
+  return {
+    task,
+    statusEvent,
+    lifecycleStatus,
+    finalTxHash,
+    pendingAfterWatch: lifecycleStatus === 'pending',
+  };
 }
 
 function formatLifecycleFailureDetail(params: {
@@ -1090,15 +1618,18 @@ export const pollCycleNode = async (
             position.positionSide === exposureAdjusted.side,
         )
       : undefined;
+  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
 
   const plannedExecutionPlan = buildPerpetualExecutionPlan({
     telemetry: exposureAdjusted,
+    txExecutionMode,
     chainId: ARBITRUM_CHAIN_ID.toString(),
     marketAddress: gmxMarketAddress as `0x${string}`,
     walletAddress: planBuilderWalletAddress,
     payTokenAddress: operatorConfig.fundingTokenAddress,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
-    currentPositionSide: decisionPreviousSide,
+    actualPositionSide: currentPositionSide,
+    assumedPositionSide: reconciledAssumedPositionSide ?? activePositionSyncGuard?.expectedSide,
     positionContractKey: positionForReduce?.contractKey,
     positionSizeInUsd: positionForReduce?.sizeInUsd,
   });
@@ -1124,6 +1655,7 @@ export const pollCycleNode = async (
     ? ({ action: 'none' } as const)
     : plannedExecutionPlan;
   const shouldDeferTradeForPositionSync =
+    txExecutionMode === 'execute' &&
     Boolean(activePositionSyncGuard) &&
     !currentMarketPosition &&
     executionPlan.action !== 'none';
@@ -1199,7 +1731,6 @@ export const pollCycleNode = async (
     }
   }
 
-  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
   const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
   if (executionPlan.action === 'none') {
     logWarn('pollCycle: execution plan is none; no order simulation/execution will be attempted', {
@@ -1226,16 +1757,32 @@ export const pollCycleNode = async (
       delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
     });
   }
-  let executionResult = await executePerpetualPlan({
-    client: onchainActionsClient,
-    clients,
-    plan: executionPlan,
-    txExecutionMode,
-    delegationsBypassActive,
-    delegationBundle: state.thread.delegationBundle,
-    delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
-    delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
-  });
+  let executionResult =
+    executionPlan.action === 'flip'
+      ? await executeConfirmedFlipPlan({
+          onchainActionsClient,
+          plan: executionPlan,
+          txExecutionMode,
+          clients,
+          delegationsBypassActive,
+          delegationBundle: state.thread.delegationBundle,
+          delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+          delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+          runtimeThreadId,
+          runtimeCheckpointId,
+          runtimeCheckpointNamespace,
+          iteration,
+        })
+      : await executePerpetualPlan({
+          client: onchainActionsClient,
+          clients,
+          plan: executionPlan,
+          txExecutionMode,
+          delegationsBypassActive,
+          delegationBundle: state.thread.delegationBundle,
+          delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+          delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+        });
   logWarn('pollCycle: executePerpetualPlan resolved', {
     threadId: runtimeThreadId,
     checkpointId: runtimeCheckpointId,
@@ -1311,16 +1858,32 @@ export const pollCycleNode = async (
           metrics: { latestCycle: adjustedTelemetry },
         },
       });
-      executionResult = await executePerpetualPlan({
-        client: onchainActionsClient,
-        clients,
-        plan: executionPlan,
-        txExecutionMode,
-        delegationsBypassActive,
-        delegationBundle: state.thread.delegationBundle,
-        delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
-        delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
-      });
+      executionResult =
+        executionPlan.action === 'flip'
+          ? await executeConfirmedFlipPlan({
+              onchainActionsClient,
+              plan: executionPlan,
+              txExecutionMode,
+              clients,
+              delegationsBypassActive,
+              delegationBundle: state.thread.delegationBundle,
+              delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+              delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+              runtimeThreadId,
+              runtimeCheckpointId,
+              runtimeCheckpointNamespace,
+              iteration,
+            })
+          : await executePerpetualPlan({
+              client: onchainActionsClient,
+              clients,
+              plan: executionPlan,
+              txExecutionMode,
+              delegationsBypassActive,
+              delegationBundle: state.thread.delegationBundle,
+              delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+              delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
+            });
       logWarn('pollCycle: retry after execution-fee top-up resolved', {
         threadId: runtimeThreadId,
         checkpointId: runtimeCheckpointId,
@@ -1367,6 +1930,8 @@ export const pollCycleNode = async (
     isApprovalOnlyTransactions(executionResult.transactions);
   let lifecycleFailure: ExecutionFailureSummary | undefined;
   let lifecycleStatus: 'pending' | 'executed' | 'cancelled' | 'failed' | 'unknown' | undefined;
+  let reconciledLifecycleTxHash: `0x${string}` | undefined;
+  let lifecyclePendingAfterWatch = false;
   if (
     executionResult.ok &&
     txExecutionMode === 'execute' &&
@@ -1374,59 +1939,36 @@ export const pollCycleNode = async (
     !approvalOnlyExecution &&
     executionResult.lastTxHash
   ) {
-    try {
-      const lifecycle = await onchainActionsClient.getPerpetualLifecycle({
-        providerName: GMX_PERPETUALS_PROVIDER_NAME,
-        chainId: ARBITRUM_CHAIN_ID.toString(),
-        txHash: executionResult.lastTxHash,
-        walletAddress: planBuilderWalletAddress,
-      });
-
-      if (isResolvedLifecycle(lifecycle)) {
-        lifecycleStatus = lifecycle.status;
-        logWarn('pollCycle: perpetual lifecycle status resolved', {
-          threadId: runtimeThreadId,
-          checkpointId: runtimeCheckpointId,
-          checkpointNamespace: runtimeCheckpointNamespace,
-          iteration,
-          lifecycleStatus: lifecycle.status,
-          lifecycleOrderKey: lifecycle.orderKey,
-          lifecycleTxHash:
-            lifecycle.executionTxHash ??
-            lifecycle.cancellationTxHash ??
-            lifecycle.createTxHash ??
-            lifecycle.txHash,
-          lifecycleReason: lifecycle.reason,
-        });
-        if (lifecycle.status === 'cancelled' || lifecycle.status === 'failed') {
-          lifecycleFailure = summarizeExecutionFailure({
-            iteration,
-            error: formatLifecycleFailureDetail({
-              status: lifecycle.status,
-              reason: lifecycle.reason,
-              reasonBytes: lifecycle.reasonBytes,
-              requestedPrice: lifecycle.requestedPrice,
-              observedPrice: lifecycle.observedPrice,
-            }),
-          });
-        }
-      }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      logWarn('pollCycle: perpetual lifecycle status query failed', {
-        threadId: runtimeThreadId,
-        checkpointId: runtimeCheckpointId,
-        checkpointNamespace: runtimeCheckpointNamespace,
-        iteration,
-        txHash: executionResult.lastTxHash,
-        error: message,
-      });
-      lifecycleFailure = summarizeExecutionFailure({
-        iteration,
-        error: `Unable to verify onchain order lifecycle status: ${message}`,
-      });
-    }
+    const watchedLifecycle = await watchLifecycleForExecutionHash({
+      client: onchainActionsClient,
+      config,
+      task,
+      statusEvent,
+      activityTelemetry: state.thread.activity.telemetry,
+      latestCycle: adjustedTelemetry,
+      iteration,
+      walletAddress: planBuilderWalletAddress,
+      submissionTxHash: executionResult.lastTxHash,
+      runtimeThreadId,
+      runtimeCheckpointId,
+      runtimeCheckpointNamespace,
+    });
+    task = watchedLifecycle.task;
+    statusEvent = watchedLifecycle.statusEvent;
+    lifecycleFailure = watchedLifecycle.lifecycleFailure;
+    lifecycleStatus = watchedLifecycle.lifecycleStatus;
+    reconciledLifecycleTxHash = watchedLifecycle.finalTxHash;
+    lifecyclePendingAfterWatch = watchedLifecycle.pendingAfterWatch;
   }
+
+  const userFacingTxHash = reconciledLifecycleTxHash ?? executionResult.lastTxHash;
+  const userFacingTxHashes = (() => {
+    const txHashes = [...(executionResult.txHashes ?? [])];
+    if (userFacingTxHash && !txHashes.includes(userFacingTxHash)) {
+      txHashes.push(userFacingTxHash);
+    }
+    return txHashes;
+  })();
 
   const executionFailure =
     lifecycleFailure ??
@@ -1461,19 +2003,6 @@ export const pollCycleNode = async (
     statusEvent = approvalStatus.statusEvent;
   }
 
-  const latestCycle =
-    approvalOnlyExecution
-      ? {
-          ...adjustedTelemetry,
-          action: 'hold' as const,
-          side: undefined,
-          leverage: undefined,
-          sizeUsd: undefined,
-          txHash: undefined,
-          reason: `${adjustedTelemetry.reason} Approval completed; waiting for executable GMX trade transaction.`,
-        }
-      : adjustedTelemetry;
-
   let positionAfterExecution = currentMarketPosition;
   if (executionCompletedSuccessfully && executionPlan.action !== 'none') {
     try {
@@ -1490,6 +2019,61 @@ export const pollCycleNode = async (
     }
   }
 
+  if (
+    executionCompletedSuccessfully &&
+    executionPlan.action === 'flip' &&
+    positionAfterExecution?.positionSide !== resolveFlipSide(executionPlan.closeRequest.positionSide)
+  ) {
+    positionAfterExecution = await confirmFlipReopenedPosition({
+      onchainActionsClient,
+      walletAddress: planBuilderWalletAddress,
+      marketAddress: normalizeHexAddress(gmxMarketAddress, 'market address'),
+      expectedSide: resolveFlipSide(executionPlan.closeRequest.positionSide),
+      runtimeThreadId,
+      runtimeCheckpointId,
+      runtimeCheckpointNamespace,
+      iteration,
+    });
+  }
+
+  const hasCompletedTradeEffect =
+    executionCompletedSuccessfully && executionPlan.action !== 'none' && !approvalOnlyExecution;
+  const executionAwaitingPositionConfirmation =
+    hasCompletedTradeEffect && lifecycleStatus === 'pending' && !positionAfterExecution;
+  const hasConfirmedTradeEffect = hasCompletedTradeEffect && !executionAwaitingPositionConfirmation;
+  const latestCycle = (() => {
+    if (approvalOnlyExecution) {
+      return {
+        ...adjustedTelemetry,
+        action: 'hold' as const,
+        side: undefined,
+        leverage: undefined,
+        sizeUsd: undefined,
+        txHash: undefined,
+        reason: `${adjustedTelemetry.reason} Approval completed; waiting for executable GMX trade transaction.`,
+      };
+    }
+
+    const txLinkedCycle = userFacingTxHash
+      ? {
+          ...adjustedTelemetry,
+          txHash: userFacingTxHash,
+        }
+      : adjustedTelemetry;
+
+    if (!hasConfirmedTradeEffect || executionPlan.action !== 'flip') {
+      return txLinkedCycle;
+    }
+
+    const previousSide = executionPlan.closeRequest.positionSide;
+    const nextSide = resolveFlipSide(previousSide);
+    return {
+      ...txLinkedCycle,
+      action: 'open' as const,
+      side: nextSide,
+      reason: `Signal direction flipped to ${nextSide}; closed ${previousSide} and reopened ${nextSide}.`,
+    };
+  })();
   const fallbackSizeUsd =
     approvalOnlyExecution
       ? undefined
@@ -1522,12 +2106,6 @@ export const pollCycleNode = async (
         : undefined,
     previous: state.thread.metrics.latestSnapshot,
   });
-
-  const hasCompletedTradeEffect =
-    executionCompletedSuccessfully && executionPlan.action !== 'none' && !approvalOnlyExecution;
-  const executionAwaitingPositionConfirmation =
-    hasCompletedTradeEffect && lifecycleStatus === 'pending' && !positionAfterExecution;
-  const hasConfirmedTradeEffect = hasCompletedTradeEffect && !executionAwaitingPositionConfirmation;
   const lifetimePnlUsd = positionAfterExecution
     ? parseUsdMetric(positionAfterExecution.pnl)
     : executionCompletedSuccessfully && executionPlan.action === 'close'
@@ -1537,6 +2115,10 @@ export const pollCycleNode = async (
   const nextPendingPositionSync: PositionSyncGuard | undefined = (():
     | PositionSyncGuard
     | undefined => {
+    if (txExecutionMode !== 'execute') {
+      return undefined;
+    }
+
     const activeGuardWithoutPosition = activePositionSyncGuard && !positionAfterExecution;
     if (!executionCompletedSuccessfully || executionPlan.action === 'none' || approvalOnlyExecution) {
       return activeGuardWithoutPosition ? activePositionSyncGuard : undefined;
@@ -1679,8 +2261,10 @@ export const pollCycleNode = async (
               : executionFailure?.detail ?? executionResult.error,
             telemetry: latestCycle,
             transactions: executionResult.transactions,
-            txHashes: executionResult.txHashes,
-            lastTxHash: executionResult.lastTxHash,
+            txHashes: userFacingTxHashes,
+            submissionTxHash: executionResult.lastTxHash,
+            finalTxHash: reconciledLifecycleTxHash,
+            lastTxHash: userFacingTxHash,
           }),
         append: true,
       };
@@ -1690,21 +2274,26 @@ export const pollCycleNode = async (
     append: true,
   };
 
+  const currentPollIntervalMs = state.private.pollIntervalMs ?? resolvePollIntervalMs();
+  const nextPollIntervalMs = lifecyclePendingAfterWatch
+    ? resolvePendingLifecycleReconcilePollIntervalMs(currentPollIntervalMs)
+    : currentPollIntervalMs;
   let cronScheduled = state.private.cronScheduled;
-  if (runtimeThreadId && !cronScheduled) {
-    const intervalMs = state.private.pollIntervalMs ?? resolvePollIntervalMs();
-    ensureCronForThread(runtimeThreadId, intervalMs);
-    logInfo('Cron scheduled after first GMX cycle', {
-      threadId: runtimeThreadId,
-      checkpointId: runtimeCheckpointId,
-      checkpointNamespace: runtimeCheckpointNamespace,
-    });
-    cronScheduled = true;
+  if (runtimeThreadId) {
+    ensureCronForThread(runtimeThreadId, nextPollIntervalMs);
+    if (!cronScheduled) {
+      logInfo('Cron scheduled after first GMX cycle', {
+        threadId: runtimeThreadId,
+        checkpointId: runtimeCheckpointId,
+        checkpointNamespace: runtimeCheckpointNamespace,
+      });
+      cronScheduled = true;
+    }
   }
 
   const finalAction = latestCycle.action;
   const finalReason = latestCycle.reason;
-  const resolvedTxHash = executionResult.lastTxHash ?? latestCycle.txHash;
+  const resolvedTxHash = userFacingTxHash ?? latestCycle.txHash;
   const transactionEntry =
     executionPlan.action !== 'none' &&
     !requiresFundingAcknowledgement &&
@@ -1775,6 +2364,7 @@ export const pollCycleNode = async (
     },
     private: {
       cronScheduled,
+      pollIntervalMs: nextPollIntervalMs,
     },
   };
 };

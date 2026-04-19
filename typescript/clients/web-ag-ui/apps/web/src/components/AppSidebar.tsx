@@ -27,6 +27,7 @@ import type { TaskState } from '@/types/agent';
 import { resolveSidebarTaskState } from '@/utils/resolveSidebarTaskState';
 import { selectRuntimeTaskState } from '@/utils/selectRuntimeTaskState';
 import { collectUniqueChainNames, collectUniqueTokenSymbols } from '@/utils/agentCollections';
+import { extractTaskStatusMessage } from '@/utils/extractTaskStatusMessage';
 import { PROTOCOL_TOKEN_FALLBACK } from '@/constants/protocolTokenFallback';
 import {
   normalizeNameKey,
@@ -94,13 +95,7 @@ export function AppSidebar() {
   const runtimeHaltReason = agent.uiState.haltReason;
   const runtimeExecutionError = agent.uiState.executionError;
   const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
-  const runtimeTaskMessage = (() => {
-    const message = agent.uiState.task?.taskStatus?.message;
-    if (typeof message !== 'object' || message === null) return undefined;
-    if (!('content' in message)) return undefined;
-    const content = (message as { content?: unknown }).content;
-    return typeof content === 'string' ? content : undefined;
-  })();
+  const runtimeTaskMessage = extractTaskStatusMessage(agent.uiState.task?.taskStatus?.message);
   const runtimeTaskState = selectRuntimeTaskState({
     effectiveTaskState: agent.uiState.selectors?.effectiveTaskState,
     lifecyclePhase: runtimeLifecyclePhase,
@@ -121,8 +116,11 @@ export function AppSidebar() {
           taskId: runtimeTaskId,
           taskState: resolveSidebarTaskState({
             listTaskState: listEntry?.taskState,
+            listLifecyclePhase: listEntry?.lifecyclePhase,
+            listOnboardingStatus: listEntry?.onboardingStatus,
             runtimeTaskState,
             runtimeLifecyclePhase,
+            runtimeOnboardingStatus: agent.uiState.onboardingFlow?.status,
             runtimeTaskMessage,
             fallbackToListWhenRuntimeMissing: false,
           }),

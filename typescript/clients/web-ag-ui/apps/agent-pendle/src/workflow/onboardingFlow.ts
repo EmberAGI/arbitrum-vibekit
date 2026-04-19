@@ -2,14 +2,10 @@ import {
   buildOnboardingContractFromLegacyStep,
   finalizeOnboardingContract,
   type OnboardingContract,
+  type LegacyOnboardingState,
   type OnboardingStepDefinition,
   type TaskState,
 } from 'agent-workflow-core';
-
-type LegacyOnboardingState = {
-  step: number;
-  key?: string;
-};
 
 const FULL_STEPS: readonly OnboardingStepDefinition[] = [
   { id: 'funding-amount', title: 'Funding Amount' },

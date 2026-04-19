@@ -25,6 +25,7 @@ function extractPollCycleUpdate(result: unknown): PollCycleUpdate {
 
 const {
   copilotkitEmitStateMock,
+  ensureCronForThreadMock,
   fetchAlloraInferenceMock,
   listPerpetualMarketsMock,
   listPerpetualPositionsMock,
@@ -40,6 +41,7 @@ const {
   getOnchainClientsMock,
 } = vi.hoisted(() => ({
   copilotkitEmitStateMock: vi.fn(async () => undefined),
+  ensureCronForThreadMock: vi.fn(),
   fetchAlloraInferenceMock: vi.fn<[], Promise<AlloraInference>>(),
   listPerpetualMarketsMock: vi.fn<[], Promise<PerpetualMarket[]>>(),
   listPerpetualPositionsMock: vi.fn<[], Promise<PerpetualPosition[]>>(),
@@ -87,7 +89,7 @@ vi.mock('../src/workflow/clientFactory.js', () => ({
 }));
 
 vi.mock('../src/workflow/cronScheduler.js', () => ({
-  ensureCronForThread: vi.fn(),
+  ensureCronForThread: ensureCronForThreadMock,
 }));
 
 function buildBaseState(): ClmmState {
@@ -222,6 +224,30 @@ describe('pollCycleNode (integration)', () => {
     getPerpetualLifecycleMock.mockReset();
     getOnchainClientsMock.mockReset();
     copilotkitEmitStateMock.mockReset();
+    ensureCronForThreadMock.mockReset();
+  });
+
+  it('re-arms cron scheduling after restart even when persisted state says cron was scheduled', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+    });
+    listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValue([]);
+    createPerpetualLongMock.mockResolvedValue({ transactions: [] });
+
+    const state = buildBaseState();
+    state.private.cronScheduled = true;
+    state.thread.metrics.previousPrice = 46000;
+
+    await pollCycleNode(state, {
+      configurable: {
+        thread_id: 'thread-1',
+      },
+    } as never);
+
+    expect(ensureCronForThreadMock).toHaveBeenCalledWith('thread-1', 5000);
   });
 
   it('falls back to cached state when Allora fetch fails transiently', async () => {
@@ -1105,8 +1131,12 @@ describe('pollCycleNode (integration)', () => {
 
   it('does not mark submitted open order as confirmed when lifecycle is still pending', async () => {
     const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    const originalLifecycleWatchAttempts = process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'];
+    const originalLifecycleWatchInterval = process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'];
     try {
       process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+      process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'] = '1';
+      process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'] = '0';
 
       fetchAlloraInferenceMock.mockResolvedValueOnce({
         topicId: 14,
@@ -1158,14 +1188,563 @@ describe('pollCycleNode (integration)', () => {
       expect(update.thread?.metrics.lastTradedInferenceSnapshotKey).toBeUndefined();
       expect(update.thread?.transactionHistory).toHaveLength(0);
     } finally {
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+      if (originalLifecycleWatchAttempts) {
+        process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'] = originalLifecycleWatchAttempts;
+      } else {
+        delete process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'];
+      }
+      if (originalLifecycleWatchInterval) {
+        process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'] = originalLifecycleWatchInterval;
+      } else {
+        delete process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'];
+      }
+    }
+  });
+
+  it('reconciles delayed execute-order hashes inside the same originating cycle', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    const originalLifecycleWatchAttempts = process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'];
+    const originalLifecycleWatchInterval = process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+      process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'] = '2';
+      process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'] = '0';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValue([]);
+      createPerpetualLongMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0x1', data: '0x2', value: '0', chainId: '42161' }],
+      });
+      getPerpetualLifecycleMock
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          status: 'pending',
+          createTxHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:00.000Z',
+        })
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          status: 'executed',
+          createTxHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          executionTxHash: '0x9999999999999999999999999999999999999999999999999999999999999999',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:20.000Z',
+        });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValue('0x1111111111111111111111111111111111111111111111111111111111111111'),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn().mockResolvedValue({
+            status: 'success',
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(getPerpetualLifecycleMock).toHaveBeenCalledTimes(2);
+      expect(update.thread?.metrics.latestCycle).toMatchObject({
+        action: 'open',
+        side: 'long',
+        txHash: '0x9999999999999999999999999999999999999999999999999999999999999999',
+      });
+      expect(update.thread?.transactionHistory).toEqual([
+        expect.objectContaining({
+          cycle: 1,
+          action: 'open',
+          txHash: '0x9999999999999999999999999999999999999999999999999999999999999999',
+          status: 'success',
+        }),
+      ]);
+
+      const emittedMessages = copilotkitEmitStateMock.mock.calls
+        .map((call) => call[1] as { thread?: { task?: { taskStatus?: { message?: { content?: string } } } } })
+        .map((updateCall) => updateCall.thread?.task?.taskStatus?.message?.content)
+        .filter((message): message is string => Boolean(message));
+      expect(
+        emittedMessages.some((message) => message.toLowerCase().includes('waiting for final execution hash')),
+      ).toBe(true);
+    } finally {
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+      if (originalLifecycleWatchAttempts) {
+        process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'] = originalLifecycleWatchAttempts;
+      } else {
+        delete process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'];
+      }
+      if (originalLifecycleWatchInterval) {
+        process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'] = originalLifecycleWatchInterval;
+      } else {
+        delete process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'];
+      }
+    }
+  });
+
+  it('switches to a near-term reconcile interval when the lifecycle watch window expires pending', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    const originalLifecycleWatchAttempts = process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'];
+    const originalLifecycleWatchInterval = process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'];
+    const originalPendingReconcileInterval =
+      process.env['GMX_ALLORA_PENDING_LIFECYCLE_RECONCILE_POLL_INTERVAL_MS'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+      process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'] = '1';
+      process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'] = '0';
+      process.env['GMX_ALLORA_PENDING_LIFECYCLE_RECONCILE_POLL_INTERVAL_MS'] = '15000';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValue([]);
+      createPerpetualLongMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0x1', data: '0x2', value: '0', chainId: '42161' }],
+      });
+      getPerpetualLifecycleMock.mockResolvedValueOnce({
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+        status: 'pending',
+        createTxHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+        asOf: '2026-01-01T00:00:00.000Z',
+      });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValue('0x1111111111111111111111111111111111111111111111111111111111111111'),
+        },
+        public: {
+          waitForTransactionReceipt: vi.fn().mockResolvedValue({
+            status: 'success',
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.private.pollIntervalMs = 1_800_000;
+      state.thread.metrics.previousPrice = 46000;
+      const result = await pollCycleNode(state, {
+        configurable: {
+          thread_id: 'thread-1',
+        },
+      } as never);
+      const update = extractPollCycleUpdate(result);
+
+      expect(update.private?.pollIntervalMs).toBe(15_000);
+      expect(ensureCronForThreadMock).toHaveBeenCalledWith('thread-1', 15_000);
+      expect(update.thread?.metrics.pendingPositionSync).toMatchObject({
+        expectedSide: 'long',
+        sourceAction: 'long',
+        sourceTxHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      });
+    } finally {
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+      if (originalLifecycleWatchAttempts) {
+        process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'] = originalLifecycleWatchAttempts;
+      } else {
+        delete process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'];
+      }
+      if (originalLifecycleWatchInterval) {
+        process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'] = originalLifecycleWatchInterval;
+      } else {
+        delete process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'];
+      }
+      if (originalPendingReconcileInterval) {
+        process.env['GMX_ALLORA_PENDING_LIFECYCLE_RECONCILE_POLL_INTERVAL_MS'] =
+          originalPendingReconcileInterval;
+      } else {
+        delete process.env['GMX_ALLORA_PENDING_LIFECYCLE_RECONCILE_POLL_INTERVAL_MS'];
+      }
+    }
+  });
+
+  it('confirms the close before reopening during execute-mode flips', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            chainId: '42161',
+            key: '0xpos-short',
+            contractKey: '0xposition-short',
+            account: '0xwallet',
+            marketAddress: '0xmarket',
+            sizeInUsd: '16000000000000000000000000000000',
+            sizeInTokens: '0.01',
+            collateralAmount: '50',
+            pendingBorrowingFeesUsd: '0',
+            increasedAtTime: '0',
+            decreasedAtTime: '0',
+            positionSide: 'short',
+            isLong: false,
+            fundingFeeAmount: '0',
+            claimableLongTokenAmount: '0',
+            claimableShortTokenAmount: '0',
+            isOpening: false,
+            pnl: '0',
+            positionFeeAmount: '0',
+            traderDiscountAmount: '0',
+            uiFeeAmount: '0',
+            collateralToken: {
+              tokenUid: { chainId: '42161', address: '0xusdc' },
+              name: 'USD Coin',
+              symbol: 'USDC',
+              isNative: false,
+              decimals: 6,
+              iconUri: null,
+              isVetted: true,
+            },
+          },
+        ]);
+      createPerpetualCloseMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0xclose', data: '0xclose01', value: '0', chainId: '42161' }],
+      });
+      createPerpetualShortMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0xopen', data: '0xopen01', value: '0', chainId: '42161' }],
+      });
+      getPerpetualLifecycleMock
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          status: 'executed',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:00.000Z',
+        })
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+          orderKey: '0x4444444444444444444444444444444444444444444444444444444444444444',
+          status: 'executed',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:05.000Z',
+        });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValueOnce(
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+            )
+            .mockResolvedValueOnce(
+              '0x3333333333333333333333333333333333333333333333333333333333333333',
+            ),
+        },
+        public: {
+          waitForTransactionReceipt: vi
+            .fn()
+            .mockResolvedValueOnce({
+              status: 'success',
+              transactionHash:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
+            })
+            .mockResolvedValueOnce({
+              status: 'success',
+              transactionHash:
+                '0x3333333333333333333333333333333333333333333333333333333333333333',
+            }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 48000;
+      state.thread.metrics.assumedPositionSide = 'long';
+
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+      expect(getPerpetualLifecycleMock).toHaveBeenNthCalledWith(1, {
+        providerName: 'GMX Perpetuals',
+        chainId: '42161',
+        txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      });
+      expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
+      expect(createPerpetualCloseMock).toHaveBeenCalledBefore(createPerpetualShortMock);
+      expect(update.thread?.metrics.latestCycle).toMatchObject({
+        action: 'open',
+        side: 'short',
+        txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+      });
+      expect(update.thread?.metrics.latestCycle?.reason).toContain('reopened short');
+      expect(update.thread?.transactionHistory).toEqual([
+        expect.objectContaining({
+          cycle: 1,
+          action: 'open',
+          txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+          status: 'success',
+        }),
+      ]);
+      expect(update.thread?.metrics.assumedPositionSide).toBe('short');
+      expect(update.thread?.metrics.pendingPositionSync).toBeUndefined();
+    } finally {
       process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
+
+  it('waits for the reopened flip side before leaving execute-mode state reconciliation pending', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    const originalVerifyAttempts = process.env['GMX_FIRE_CLOSE_VERIFY_ATTEMPTS'];
+    const originalVerifyInterval = process.env['GMX_FIRE_CLOSE_VERIFY_INTERVAL_MS'];
+    const originalLifecycleWatchAttempts = process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'];
+    const originalLifecycleWatchInterval = process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+      process.env['GMX_FIRE_CLOSE_VERIFY_ATTEMPTS'] = '3';
+      process.env['GMX_FIRE_CLOSE_VERIFY_INTERVAL_MS'] = '0';
+      process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'] = '1';
+      process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'] = '0';
+
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 49000,
+        confidenceIntervalValues: [48000, 48500, 49000, 49500, 50000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock
+        .mockResolvedValueOnce([
+          {
+            chainId: '42161',
+            key: '0xpos-short',
+            contractKey: '0xposition-short',
+            account: '0xwallet',
+            marketAddress: '0xmarket',
+            sizeInUsd: '16000000000000000000000000000000',
+            sizeInTokens: '0.01',
+            collateralAmount: '50',
+            pendingBorrowingFeesUsd: '0',
+            increasedAtTime: '0',
+            decreasedAtTime: '0',
+            positionSide: 'short',
+            isLong: false,
+            fundingFeeAmount: '0',
+            claimableLongTokenAmount: '0',
+            claimableShortTokenAmount: '0',
+            isOpening: false,
+            pnl: '0',
+            positionFeeAmount: '0',
+            traderDiscountAmount: '0',
+            uiFeeAmount: '0',
+            collateralToken: {
+              tokenUid: { chainId: '42161', address: '0xusdc' },
+              name: 'USD Coin',
+              symbol: 'USDC',
+              isNative: false,
+              decimals: 6,
+              iconUri: null,
+              isVetted: true,
+            },
+          },
+        ])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            chainId: '42161',
+            key: '0xpos-long',
+            contractKey: '0xposition-long',
+            account: '0xwallet',
+            marketAddress: '0xmarket',
+            sizeInUsd: '16000000000000000000000000000000',
+            sizeInTokens: '0.01',
+            collateralAmount: '50',
+            pendingBorrowingFeesUsd: '0',
+            increasedAtTime: '0',
+            decreasedAtTime: '0',
+            positionSide: 'long',
+            isLong: true,
+            fundingFeeAmount: '0',
+            claimableLongTokenAmount: '0',
+            claimableShortTokenAmount: '0',
+            isOpening: false,
+            pnl: '0',
+            positionFeeAmount: '0',
+            traderDiscountAmount: '0',
+            uiFeeAmount: '0',
+            collateralToken: {
+              tokenUid: { chainId: '42161', address: '0xusdc' },
+              name: 'USD Coin',
+              symbol: 'USDC',
+              isNative: false,
+              decimals: 6,
+              iconUri: null,
+              isVetted: true,
+            },
+          },
+        ]);
+      createPerpetualCloseMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0xclose', data: '0xclose01', value: '0', chainId: '42161' }],
+      });
+      createPerpetualLongMock.mockResolvedValueOnce({
+        transactions: [{ type: 'evm', to: '0xopen', data: '0xopen01', value: '0', chainId: '42161' }],
+      });
+      getPerpetualLifecycleMock
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          orderKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          status: 'executed',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:00.000Z',
+        })
+        .mockResolvedValueOnce({
+          providerName: 'GMX Perpetuals',
+          chainId: '42161',
+          txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+          orderKey: '0x4444444444444444444444444444444444444444444444444444444444444444',
+          status: 'pending',
+          precision: { tokenDecimals: 30, priceDecimals: 30, usdDecimals: 30 },
+          asOf: '2026-01-01T00:00:05.000Z',
+        });
+      getOnchainClientsMock.mockReturnValue({
+        wallet: {
+          account: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          chain: { id: 42161 },
+          sendTransaction: vi
+            .fn()
+            .mockResolvedValueOnce(
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+            )
+            .mockResolvedValueOnce(
+              '0x3333333333333333333333333333333333333333333333333333333333333333',
+            ),
+        },
+        public: {
+          waitForTransactionReceipt: vi
+            .fn()
+            .mockResolvedValueOnce({
+              status: 'success',
+              transactionHash:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
+            })
+            .mockResolvedValueOnce({
+              status: 'success',
+              transactionHash:
+                '0x3333333333333333333333333333333333333333333333333333333333333333',
+            }),
+        },
+      });
+
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      state.thread.metrics.assumedPositionSide = 'short';
+
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(update.thread?.metrics.latestCycle).toMatchObject({
+        action: 'open',
+        side: 'long',
+        txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+      });
+      expect(update.thread?.metrics.latestCycle?.reason).toContain('reopened long');
+      expect(update.thread?.metrics.assumedPositionSide).toBe('long');
+      expect(update.thread?.metrics.pendingPositionSync).toBeUndefined();
+      expect(update.thread?.transactionHistory).toEqual([
+        expect.objectContaining({
+          cycle: 1,
+          action: 'open',
+          txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+          status: 'success',
+        }),
+      ]);
+    } finally {
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+      if (originalVerifyAttempts) {
+        process.env['GMX_FIRE_CLOSE_VERIFY_ATTEMPTS'] = originalVerifyAttempts;
+      } else {
+        delete process.env['GMX_FIRE_CLOSE_VERIFY_ATTEMPTS'];
+      }
+      if (originalVerifyInterval) {
+        process.env['GMX_FIRE_CLOSE_VERIFY_INTERVAL_MS'] = originalVerifyInterval;
+      } else {
+        delete process.env['GMX_FIRE_CLOSE_VERIFY_INTERVAL_MS'];
+      }
+      if (originalLifecycleWatchAttempts) {
+        process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'] = originalLifecycleWatchAttempts;
+      } else {
+        delete process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'];
+      }
+      if (originalLifecycleWatchInterval) {
+        process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'] = originalLifecycleWatchInterval;
+      } else {
+        delete process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'];
+      }
     }
   });
 
   it('retries open trade immediately after pending sync guard resolves as cancelled', async () => {
     const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    const originalLifecycleWatchAttempts = process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'];
+    const originalLifecycleWatchInterval = process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'];
     try {
       process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'execute';
+      process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'] = '1';
+      process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'] = '0';
 
       fetchAlloraInferenceMock
         .mockResolvedValueOnce({
@@ -1274,7 +1853,21 @@ describe('pollCycleNode (integration)', () => {
         '0x3333333333333333333333333333333333333333333333333333333333333333',
       );
     } finally {
-      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      if (originalTxExecutionMode) {
+        process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+      } else {
+        delete process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+      }
+      if (originalLifecycleWatchAttempts) {
+        process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'] = originalLifecycleWatchAttempts;
+      } else {
+        delete process.env['GMX_ALLORA_LIFECYCLE_WATCH_ATTEMPTS'];
+      }
+      if (originalLifecycleWatchInterval) {
+        process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'] = originalLifecycleWatchInterval;
+      } else {
+        delete process.env['GMX_ALLORA_LIFECYCLE_WATCH_INTERVAL_MS'];
+      }
     }
   });
 
@@ -1351,124 +1944,185 @@ describe('pollCycleNode (integration)', () => {
   });
 
   it('closes and reopens within the same cycle when direction flips', async () => {
-    fetchAlloraInferenceMock.mockResolvedValueOnce({
-      topicId: 14,
-      combinedValue: 47000,
-      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
-    });
-    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
-    listPerpetualPositionsMock
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
-    createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
-    createPerpetualShortMock.mockResolvedValueOnce({ transactions: [] });
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'plan';
 
-    const state = buildBaseState();
-    state.thread.metrics.previousPrice = 48000;
-    state.thread.metrics.assumedPositionSide = 'long';
-    const result = await pollCycleNode(state, {});
-    const update = extractPollCycleUpdate(result);
-
-    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
-    expect(createPerpetualCloseMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        marketAddress: '0xmarket',
-        positionSide: 'long',
-      }),
-    );
-    expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
-    expect(createPerpetualShortMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        marketAddress: '0xmarket',
-        leverage: '2',
-      }),
-    );
-    expect(createPerpetualLongMock).not.toHaveBeenCalled();
-    expect(createPerpetualReduceMock).not.toHaveBeenCalled();
-    expect(update.thread?.metrics.pendingPositionSync).toMatchObject({
-      expectedSide: 'short',
-      sourceAction: 'flip',
-    });
-    expect(update.thread?.metrics.assumedPositionSide).toBe('short');
-  });
-
-  it('closes short and reopens long within the same cycle when direction flips bullish', async () => {
-    fetchAlloraInferenceMock.mockResolvedValueOnce({
-      topicId: 14,
-      combinedValue: 49000,
-      confidenceIntervalValues: [48000, 48500, 49000, 49500, 50000],
-    });
-    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
-    listPerpetualPositionsMock
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
-    createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
-    createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
-
-    const state = buildBaseState();
-    state.thread.metrics.previousPrice = 46000;
-    state.thread.metrics.assumedPositionSide = 'short';
-    const result = await pollCycleNode(state, {});
-    const update = extractPollCycleUpdate(result);
-
-    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
-    expect(createPerpetualCloseMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        marketAddress: '0xmarket',
-        positionSide: 'short',
-      }),
-    );
-    expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
-    expect(createPerpetualLongMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        marketAddress: '0xmarket',
-        leverage: '2',
-      }),
-    );
-    expect(createPerpetualShortMock).not.toHaveBeenCalled();
-    expect(createPerpetualReduceMock).not.toHaveBeenCalled();
-    expect(update.thread?.metrics.pendingPositionSync).toMatchObject({
-      expectedSide: 'long',
-      sourceAction: 'flip',
-    });
-    expect(update.thread?.metrics.assumedPositionSide).toBe('long');
-  });
-
-  it('skips a second trade when inference metrics are unchanged', async () => {
-    fetchAlloraInferenceMock
-      .mockResolvedValueOnce({
-        topicId: 14,
-        combinedValue: 47000,
-        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
-      })
-      .mockResolvedValueOnce({
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
         topicId: 14,
         combinedValue: 47000,
         confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
       });
-    listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
-    listPerpetualPositionsMock.mockResolvedValue([]);
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
+      createPerpetualShortMock.mockResolvedValueOnce({ transactions: [] });
 
-    const firstState = buildBaseState();
-    firstState.thread.metrics.previousPrice = 48000;
-    firstState.thread.metrics.assumedPositionSide = 'long';
-    const firstResult = await pollCycleNode(firstState, {});
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 48000;
+      state.thread.metrics.assumedPositionSide = 'long';
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
 
-    const firstUpdate = extractPollCycleUpdate(firstResult);
+      expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
+      expect(createPerpetualShortMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          marketAddress: '0xmarket',
+          leverage: '2',
+        }),
+      );
+      expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+      expect(createPerpetualLongMock).not.toHaveBeenCalled();
+      expect(createPerpetualReduceMock).not.toHaveBeenCalled();
+      expect(update.thread?.metrics.pendingPositionSync).toBeUndefined();
+      expect(update.thread?.metrics.assumedPositionSide).toBe('short');
+      expect(update.thread?.metrics.latestCycle?.reason).not.toContain(
+        'Awaiting GMX position index sync',
+      );
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
 
-    const secondState = buildBaseState();
-    secondState.thread.metrics = {
-      ...secondState.thread.metrics,
-      ...(firstUpdate.thread?.metrics ?? {}),
-    };
-    secondState.thread.metrics.assumedPositionSide = firstUpdate.thread?.metrics?.assumedPositionSide;
-    secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
-    secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
-    secondState.thread.metrics.cyclesSinceRebalance = 3;
+  it('closes short and reopens long within the same cycle when direction flips bullish', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'plan';
 
-    await pollCycleNode(secondState, {});
+      fetchAlloraInferenceMock.mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 49000,
+        confidenceIntervalValues: [48000, 48500, 49000, 49500, 50000],
+      });
+      listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+      listPerpetualPositionsMock
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
+      createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
 
-    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+      const state = buildBaseState();
+      state.thread.metrics.previousPrice = 46000;
+      state.thread.metrics.assumedPositionSide = 'short';
+      const result = await pollCycleNode(state, {});
+      const update = extractPollCycleUpdate(result);
+
+      expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
+      expect(createPerpetualLongMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          marketAddress: '0xmarket',
+          leverage: '2',
+        }),
+      );
+      expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+      expect(createPerpetualShortMock).not.toHaveBeenCalled();
+      expect(createPerpetualReduceMock).not.toHaveBeenCalled();
+      expect(update.thread?.metrics.pendingPositionSync).toBeUndefined();
+      expect(update.thread?.metrics.assumedPositionSide).toBe('long');
+      expect(update.thread?.metrics.latestCycle?.reason).not.toContain(
+        'Awaiting GMX position index sync',
+      );
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
+
+  it('does not defer opposite-side flips behind position-sync guards in plan mode', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    try {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'plan';
+
+      fetchAlloraInferenceMock
+        .mockResolvedValueOnce({
+          topicId: 14,
+          combinedValue: 47000,
+          confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+        })
+        .mockResolvedValueOnce({
+          topicId: 14,
+          combinedValue: 45000,
+          confidenceIntervalValues: [44000, 44500, 45000, 45500, 46000],
+        });
+      listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValue([]);
+      createPerpetualLongMock.mockResolvedValueOnce({ transactions: [] });
+      createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
+      createPerpetualShortMock.mockResolvedValueOnce({ transactions: [] });
+
+      const firstState = buildBaseState();
+      firstState.thread.metrics.previousPrice = 46000;
+      const firstResult = await pollCycleNode(firstState, {});
+      const firstUpdate = extractPollCycleUpdate(firstResult);
+
+      const secondState = buildBaseState();
+      secondState.thread.metrics = {
+        ...secondState.thread.metrics,
+        ...(firstUpdate.thread?.metrics ?? {}),
+      };
+      secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
+      secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
+
+      const secondResult = await pollCycleNode(secondState, {});
+      const secondUpdate = extractPollCycleUpdate(secondResult);
+
+      expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
+      expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+      expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
+      expect(secondUpdate.thread?.metrics.latestCycle?.reason).not.toContain(
+        'Awaiting GMX position index sync',
+      );
+      expect(secondUpdate.thread?.metrics.assumedPositionSide).toBe('short');
+      expect(secondUpdate.thread?.metrics.pendingPositionSync).toBeUndefined();
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
+  });
+
+  it('skips a second trade when inference metrics are unchanged', async () => {
+    const originalTxExecutionMode = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+    process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = 'plan';
+
+    try {
+      fetchAlloraInferenceMock
+        .mockResolvedValueOnce({
+          topicId: 14,
+          combinedValue: 47000,
+          confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+        })
+        .mockResolvedValueOnce({
+          topicId: 14,
+          combinedValue: 47000,
+          confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+        });
+      listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
+      listPerpetualPositionsMock.mockResolvedValue([]);
+
+      const firstState = buildBaseState();
+      firstState.thread.metrics.previousPrice = 48000;
+      firstState.thread.metrics.assumedPositionSide = 'long';
+      const firstResult = await pollCycleNode(firstState, {});
+
+      const firstUpdate = extractPollCycleUpdate(firstResult);
+
+      const secondState = buildBaseState();
+      secondState.thread.metrics = {
+        ...secondState.thread.metrics,
+        ...(firstUpdate.thread?.metrics ?? {}),
+      };
+      secondState.thread.metrics.assumedPositionSide = firstUpdate.thread?.metrics?.assumedPositionSide;
+      secondState.thread.metrics.latestCycle = firstUpdate.thread?.metrics?.latestCycle;
+      secondState.thread.metrics.previousPrice = firstUpdate.thread?.metrics?.previousPrice;
+      secondState.thread.metrics.cyclesSinceRebalance = 3;
+
+      await pollCycleNode(secondState, {});
+
+      expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+      expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
+    } finally {
+      process.env['GMX_ALLORA_TX_SUBMISSION_MODE'] = originalTxExecutionMode;
+    }
   });
 
   it('allows a second trade when inference metrics change', async () => {

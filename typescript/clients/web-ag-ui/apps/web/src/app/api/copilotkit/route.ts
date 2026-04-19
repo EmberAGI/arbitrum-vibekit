@@ -1,21 +1,19 @@
 import {
-  CopilotRuntime,
   ExperimentalEmptyAdapter,
   copilotRuntimeNextJSAppRouterEndpoint,
 } from '@copilotkit/runtime';
-import { LangGraphAgent } from '@copilotkit/runtime/langgraph';
 import { randomUUID } from 'node:crypto';
+import { appendFile, mkdir } from 'node:fs/promises';
+import path from 'node:path';
 import { NextRequest } from 'next/server';
 import { installCopilotRuntimeDebugFilter } from '../../../utils/copilotRuntimeDebugFilter';
+
+export const runtime = 'nodejs';
 
 // 1. You can use any service adapter here for multi-agent support. We use
 //    the empty adapter since we're only using one agent.
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
-const CLMM_AGENT_NAME = 'agent-clmm';
-const PENDLE_AGENT_NAME = 'agent-pendle';
-const GMX_ALLORA_AGENT_NAME = 'agent-gmx-allora';
-const STARTER_AGENT_NAME = 'starterAgent';
 const shouldLogCopilotRuntimeDebug =
   process.env.COPILOTKIT_RUNTIME_DEBUG === 'true' || process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
 const shouldTraceCopilotRouteConnect =
@@ -23,38 +21,14 @@ const shouldTraceCopilotRouteConnect =
 
 installCopilotRuntimeDebugFilter({ enabled: shouldLogCopilotRuntimeDebug });
 
-// 2. Create the CopilotRuntime instance and utilize the LangGraph AG-UI
-//    integration to setup the connection.
-const runtime = new CopilotRuntime({
-  agents: {
-    [CLMM_AGENT_NAME]: new LangGraphAgent({
-      deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || 'http://localhost:8124',
-      graphId: CLMM_AGENT_NAME,
-      langsmithApiKey: process.env.LANGSMITH_API_KEY || '',
-    }),
-    [PENDLE_AGENT_NAME]: new LangGraphAgent({
-      deploymentUrl: process.env.LANGGRAPH_PENDLE_DEPLOYMENT_URL || 'http://localhost:8125',
-      graphId: PENDLE_AGENT_NAME,
-      langsmithApiKey: process.env.LANGSMITH_API_KEY || '',
-    }),
-    [GMX_ALLORA_AGENT_NAME]: new LangGraphAgent({
-      deploymentUrl: process.env.LANGGRAPH_GMX_ALLORA_DEPLOYMENT_URL || 'http://localhost:8126',
-      graphId: GMX_ALLORA_AGENT_NAME,
-      langsmithApiKey: process.env.LANGSMITH_API_KEY || '',
-    }),
-    [STARTER_AGENT_NAME]: new LangGraphAgent({
-      deploymentUrl: 'http://localhost:8123',
-      graphId: STARTER_AGENT_NAME,
-      langsmithApiKey: process.env.LANGSMITH_API_KEY || '',
-    }),
-  },
-});
-
 type CopilotRouteRequestMetadata = {
   method?: string;
   agentId?: string;
   threadId?: string;
   command?: string;
+  hasResumePayload?: boolean;
+  resumePayloadLength?: number;
+  resumePayloadPreview?: string;
   source?: string;
   clientMutationId?: string;
   parseError?: string;
@@ -110,6 +84,33 @@ function extractLastMessageContent(payloadBody: Record<string, unknown>): string
   return readString(last.content);
 }
 
+function readResumeMetadata(payloadBody: Record<string, unknown>): {
+  hasResumePayload: boolean;
+  resumePayloadLength?: number;
+  resumePayloadPreview?: string;
+} {
+  const forwardedProps = payloadBody.forwardedProps;
+  if (!isRecord(forwardedProps)) {
+    return {
+      hasResumePayload: false,
+    };
+  }
+
+  const command = forwardedProps.command;
+  if (!isRecord(command)) {
+    return {
+      hasResumePayload: false,
+    };
+  }
+
+  const resume = readString(command.resume);
+  return {
+    hasResumePayload: typeof resume === 'string',
+    resumePayloadLength: typeof resume === 'string' ? resume.length : undefined,
+    resumePayloadPreview: typeof resume === 'string' ? resume.slice(0, 240) : undefined,
+  };
+}
+
 function readCommandMetadata(lastMessageContent: string | undefined): {
   command?: string;
   source?: string;
@@ -135,9 +136,10 @@ function parseCopilotRouteMetadataFromObject(payload: Record<string, unknown>): 
   const payloadBody = isRecord(payload.body) ? payload.body : undefined;
   const lastMessageContent = payloadBody ? extractLastMessageContent(payloadBody) : undefined;
   const commandMetadata = readCommandMetadata(lastMessageContent);
+  const resumeMetadata = payloadBody ? readResumeMetadata(payloadBody) : { hasResumePayload: false };
   const threadId = payloadBody ? extractThreadId(payloadBody) : undefined;
   const agentId = readString(params?.agentId);
-  const command = commandMetadata.command;
+  const command = commandMetadata.command ?? (resumeMetadata.hasResumePayload ? 'resume' : undefined);
   const source = commandMetadata.source;
   const clientMutationId = commandMetadata.clientMutationId;
 
@@ -146,11 +148,21 @@ function parseCopilotRouteMetadataFromObject(payload: Record<string, unknown>): 
     agentId,
     threadId,
     command,
+    hasResumePayload: resumeMetadata.hasResumePayload,
+    resumePayloadLength: resumeMetadata.resumePayloadLength,
     source,
     clientMutationId,
     payloadKind: 'object',
     topLevelKeys: Object.keys(payload).slice(0, 20),
-    metadataMatched: Boolean(method || agentId || threadId || command || source || clientMutationId),
+    metadataMatched: Boolean(
+      method ||
+        agentId ||
+        threadId ||
+        command ||
+        resumeMetadata.hasResumePayload ||
+        source ||
+        clientMutationId,
+    ),
   };
 }
 
@@ -188,6 +200,13 @@ function cloneResponse(response: Response, body: ReadableStream<Uint8Array>): Re
     statusText: response.statusText,
     headers: response.headers,
   });
+}
+
+const copilotRouteLogPath = path.join(process.cwd(), 'apps/web/.logs/copilotkit-route.log');
+
+async function appendCopilotRouteTrace(entry: Record<string, unknown>): Promise<void> {
+  await mkdir(path.dirname(copilotRouteLogPath), { recursive: true });
+  await appendFile(copilotRouteLogPath, `${JSON.stringify(entry)}\n`, 'utf8');
 }
 
 function monitorCopilotResponseStream(params: {
@@ -310,8 +329,28 @@ export const POST = async (req: NextRequest) => {
     });
   }
 
+  if (requestMetadata.method === 'agent/run' && requestMetadata.hasResumePayload) {
+    console.warn('[copilotkit-route] resume request', {
+      requestId,
+      agentId: requestMetadata.agentId,
+      threadId: requestMetadata.threadId,
+      command: requestMetadata.command,
+      resumePayloadLength: requestMetadata.resumePayloadLength,
+      resumePayloadPreview: requestMetadata.resumePayloadPreview,
+    });
+    void appendCopilotRouteTrace({
+      ts: new Date().toISOString(),
+      event: 'copilotkit-route-resume-request',
+      requestId,
+      ...requestMetadata,
+    }).catch(() => {
+      // best-effort local trace only
+    });
+  }
+
+  const { buildCopilotRuntime } = await import('./copilotRuntimeRegistry');
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime,
+    runtime: buildCopilotRuntime(process.env),
     serviceAdapter,
     endpoint: '/api/copilotkit',
   });
@@ -353,6 +392,33 @@ export const POST = async (req: NextRequest) => {
         handlerInit: handlerInitDurationMs,
         handleRequest: handleRequestDurationMs,
       },
+    });
+  }
+  if (requestMetadata.method === 'agent/run' && requestMetadata.hasResumePayload) {
+    console.warn('[copilotkit-route] resume response', {
+      requestId,
+      agentId: requestMetadata.agentId,
+      threadId: requestMetadata.threadId,
+      command: requestMetadata.command,
+      status: response.status,
+      durationMs,
+      resumePayloadLength: requestMetadata.resumePayloadLength,
+      resumePayloadPreview: requestMetadata.resumePayloadPreview,
+    });
+    void appendCopilotRouteTrace({
+      ts: new Date().toISOString(),
+      event: 'copilotkit-route-resume-response',
+      requestId,
+      ...requestMetadata,
+      status: response.status,
+      durationMs,
+      phaseDurationsMs: {
+        metadataParse: metadataParseDurationMs,
+        handlerInit: handlerInitDurationMs,
+        handleRequest: handleRequestDurationMs,
+      },
+    }).catch(() => {
+      // best-effort local trace only
     });
   }
 

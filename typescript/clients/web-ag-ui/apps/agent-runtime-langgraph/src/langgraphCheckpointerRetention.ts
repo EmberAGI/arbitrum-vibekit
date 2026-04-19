@@ -13,7 +13,8 @@ export type CheckpointConfig = {
   };
 };
 
-type ThreadStorage = MemorySaver['storage'][string];
+type CheckpointBucket = Record<string, unknown>;
+type ThreadStorage = Record<string, CheckpointBucket>;
 type CheckpointerModule = {
   checkpointer?: unknown;
 };
@@ -51,6 +52,18 @@ function parseOuterKey(key: string): ParsedOuterKey | null {
   } catch {
     return null;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isThreadStorage(value: unknown): value is ThreadStorage {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return Object.values(value).every(isRecord);
 }
 
 function pruneThreadStorage(params: {
@@ -149,7 +162,7 @@ export function pruneCheckpointerState(params: {
   }
 
   const threadStorage = storage[threadId];
-  if (threadStorage) {
+  if (isThreadStorage(threadStorage)) {
     pruneThreadStorage({
       threadStorage,
       checkpointId,
@@ -158,6 +171,8 @@ export function pruneCheckpointerState(params: {
     if (Object.keys(threadStorage).length === 0) {
       delete storage[threadId];
     }
+  } else if (threadStorage) {
+    delete storage[threadId];
   }
 
   const normalizedNamespace = checkpointNamespace ?? null;

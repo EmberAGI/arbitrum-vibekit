@@ -1,4 +1,5 @@
-import type { ThreadState, TaskState } from '../types/agent';
+import type { OnboardingFlow, ThreadLifecycle, ThreadState, TaskState } from '../types/agent';
+import { extractTaskStatusMessage } from '../utils/extractTaskStatusMessage';
 import type { AgentListEntry } from './agentListTypes';
 
 type TaskLike = {
@@ -10,14 +11,12 @@ type TaskLike = {
 };
 
 function extractTaskMessage(task: TaskLike | null | undefined): string | undefined {
-  const message = task?.taskStatus?.message;
-  if (typeof message !== 'object' || message === null) return undefined;
-  if (!('content' in message)) return undefined;
-  const content = (message as { content?: unknown }).content;
-  return typeof content === 'string' ? content : undefined;
+  return extractTaskStatusMessage(task?.taskStatus?.message);
 }
 
 export function projectAgentListUpdate(params: {
+  lifecycle?: ThreadLifecycle | null;
+  onboardingFlow?: OnboardingFlow | null;
   profile?: ThreadState['profile'] | null;
   metrics?: ThreadState['metrics'] | null;
   task?: TaskLike;
@@ -34,6 +33,8 @@ export function projectAgentListUpdate(params: {
     taskId: hasTask ? params.task?.id : undefined,
     taskState,
     taskMessage: hasTask ? extractTaskMessage(params.task) : undefined,
+    lifecyclePhase: params.lifecycle?.phase ?? null,
+    onboardingStatus: params.onboardingFlow?.status ?? undefined,
     haltReason: hasTask ? (params.haltReason ?? undefined) : undefined,
     executionError: hasTask ? (params.executionError ?? undefined) : undefined,
   };

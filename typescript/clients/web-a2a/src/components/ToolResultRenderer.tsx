@@ -1,12 +1,12 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { JsonViewer } from '@/components/tools/JsonViewer';
 import { getToolConfig, getCategoryConfig } from '@/config/tools';
-import { getToolComponent } from '@/lib/toolComponentLoader';
+import { isValidToolComponent, toolComponents } from '@/lib/toolComponentLoader';
 import { getTransformer } from '@/lib/dataTransformers';
 import { Eye, Code, Loader2 } from 'lucide-react';
 
@@ -15,12 +15,23 @@ interface ErrorBoundaryProps {
   fallback: React.ReactNode;
 }
 
-function ErrorBoundary({ children, fallback }: ErrorBoundaryProps) {
-  try {
-    return <>{children}</>;
-  } catch (error) {
+class ToolRenderErrorBoundary extends React.Component<ErrorBoundaryProps, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
+  }
+
+  override componentDidCatch(error: unknown): void {
     console.error('Component error:', error);
-    return <>{fallback}</>;
+  }
+
+  override render(): React.ReactNode {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+
+    return this.props.children;
   }
 }
 
@@ -58,7 +69,9 @@ export function ToolResultRenderer({
 
   // Get the appropriate component
   const componentName = toolConfig?.component || 'JsonViewer';
-  const ToolComponent = getToolComponent(componentName);
+  const ToolComponent = isValidToolComponent(componentName)
+    ? toolComponents[componentName]
+    : toolComponents.JsonViewer;
 
   // Transform data for specific tools
   let componentProps = result;
@@ -153,7 +166,7 @@ export function ToolResultRenderer({
           </div>
         }
       >
-        <ErrorBoundary
+        <ToolRenderErrorBoundary
           fallback={
             <div className="p-4 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
               <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-300 mb-2">
@@ -171,7 +184,7 @@ export function ToolResultRenderer({
           }
         >
           <ToolComponent {...componentProps} />
-        </ErrorBoundary>
+        </ToolRenderErrorBoundary>
       </Suspense>
     );
   }
@@ -233,7 +246,7 @@ export function ToolResultRenderer({
               </div>
             }
           >
-            <ErrorBoundary
+            <ToolRenderErrorBoundary
               fallback={
                 <div className="p-4 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
                   <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-300 mb-2">
@@ -253,7 +266,7 @@ export function ToolResultRenderer({
               <ToolComponent
                 {...(componentName === 'JsonViewer' ? { data: result } : componentProps)}
               />
-            </ErrorBoundary>
+            </ToolRenderErrorBoundary>
           </Suspense>
         )}
       </CardContent>

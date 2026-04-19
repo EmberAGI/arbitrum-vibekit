@@ -9,8 +9,22 @@ function resolvePort(): number {
 
 const port = resolvePort();
 
-const counters: Record<string, number> = {};
-const STABLE_WINDOW_REQUESTS = 3;
+const CYCLE_MS = 30_000;
+const firstRequestAtByTopic: Record<string, number> = {};
+
+function resolveCombinedValue(topicId: string): string {
+  if (topicId !== '14' && topicId !== '2') {
+    return '100';
+  }
+
+  const firstRequestAt = firstRequestAtByTopic[topicId] ?? Date.now();
+  firstRequestAtByTopic[topicId] = firstRequestAt;
+
+  const cycleIndex = Math.floor((Date.now() - firstRequestAt) / CYCLE_MS);
+  const bucket = Math.floor(cycleIndex / 2);
+  const phase = cycleIndex % 2;
+  return phase === 0 ? String(1 + bucket) : String(100000 + bucket);
+}
 
 const server = http.createServer((req, res) => {
   if (!req.url) {
@@ -28,18 +42,7 @@ const server = http.createServer((req, res) => {
   }
 
   const topicId = url.searchParams.get('allora_topic_id') ?? '0';
-  // Alternate between two extremes so UIs/tests can easily detect when they're
-  // using the mock vs a static/stale value.
-  // BTC=14, ETH=2 (8h feed); any other topic returns a stable default.
-  const combined = (() => {
-    if (topicId !== '14' && topicId !== '2') {
-      return '100';
-    }
-    const next = (counters[topicId] ?? 0) + 1;
-    counters[topicId] = next;
-    const phase = Math.floor((next - 1) / STABLE_WINDOW_REQUESTS) % 2;
-    return phase === 0 ? '1' : '100000';
-  })();
+  const combined = resolveCombinedValue(topicId);
 
   res.setHeader('content-type', 'application/json');
   res.statusCode = 200;

@@ -1,4 +1,4 @@
 export {
   pruneCheckpointerState,
   type CheckpointConfig,
-} from 'agent-workflow-core';
+} from 'agent-runtime-langgraph';

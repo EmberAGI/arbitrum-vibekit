@@ -12,22 +12,54 @@ describe('resumeInterruptViaAgent', () => {
     ).resolves.toBe(false);
   });
 
-  it('calls agent.runAgent with resume command payload', async () => {
-    const runAgent = vi.fn().mockResolvedValue(undefined);
+  it('calls the injected resume runner with resume command payload', async () => {
+    const runResume = vi.fn().mockResolvedValue(undefined);
+    const agent = {};
 
     await expect(
       resumeInterruptViaAgent({
-        agent: { runAgent },
+        agent,
         resumePayload: '{"outcome":"signed"}',
+        runResume,
       }),
     ).resolves.toBe(true);
 
-    expect(runAgent).toHaveBeenCalledWith({
-      forwardedProps: {
-        command: {
-          resume: '{"outcome":"signed"}',
+    expect(runResume).toHaveBeenCalledWith({
+      agent,
+      payload: {
+        forwardedProps: {
+          command: {
+            resume: '{"outcome":"signed"}',
+          },
         },
       },
     });
+  });
+
+  it('retries transient busy resume failures before succeeding', async () => {
+    vi.useFakeTimers();
+
+    const runResume = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Thread already running'))
+      .mockResolvedValueOnce(undefined);
+    const agent = {};
+
+    try {
+      const promise = resumeInterruptViaAgent({
+        agent,
+        resumePayload: '{"outcome":"signed"}',
+        runResume,
+        retryDelayMs: 10,
+      });
+
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(10);
+
+      await expect(promise).resolves.toBe(true);
+      expect(runResume).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

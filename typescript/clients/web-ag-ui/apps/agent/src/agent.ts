@@ -4,8 +4,8 @@ import { END, START, StateGraph } from '@langchain/langgraph';
 import {
   configureLangGraphApiCheckpointer,
   isLangGraphBusyStatus,
-  projectCycleCommandThread,
-} from 'agent-workflow-core';
+} from 'agent-runtime-langgraph';
+import { projectCycleCommandThread } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
@@ -239,7 +239,7 @@ async function createRun(params: {
       },
       metadata: { source: 'cron' },
       stream_mode: ['events', 'values', 'messages'],
-      stream_resumable: true,
+      stream_resumable: false,
     }),
   });
 

@@ -1,4 +1,10 @@
-import type { ThreadMetrics, ThreadProfile, TaskState } from '../types/agent';
+import type {
+  OnboardingStatus,
+  ThreadLifecyclePhase,
+  ThreadMetrics,
+  ThreadProfile,
+  TaskState,
+} from '../types/agent';
 
 export type AgentListEntry = {
   profile?: ThreadProfile;
@@ -6,6 +12,8 @@ export type AgentListEntry = {
   taskId?: string;
   taskState?: TaskState;
   taskMessage?: string;
+  lifecyclePhase?: ThreadLifecyclePhase | null;
+  onboardingStatus?: OnboardingStatus;
   haltReason?: string;
   executionError?: string;
   synced: boolean;

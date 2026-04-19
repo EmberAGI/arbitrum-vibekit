@@ -2,12 +2,15 @@
 
 import { use } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import type { Message } from '@ag-ui/core';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
 import { getAgentConfig, isRegisteredAgentId } from '@/config/agents';
 import { useAgent } from '@/contexts/AgentContext';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
 type UiPreviewTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
+
+const EMPTY_MESSAGES: Message[] = [];
 
 function parseUiPreviewState(value: string | null): UiPreviewState | null {
   if (value === 'prehire' || value === 'onboarding' || value === 'active') return value;
@@ -123,7 +126,10 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         transactions={[]}
         telemetry={[]}
         events={[]}
+        messages={EMPTY_MESSAGES}
+        messageSnapshotEpoch={0}
         settings={agent.settings}
+        onSendChatMessage={() => undefined}
         onSettingsChange={() => undefined}
         onSettingsSave={() => undefined}
       />
@@ -182,7 +188,10 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       transactions={agent.transactionHistory}
       telemetry={agent.activity.telemetry}
       events={agent.events}
+      messages={agent.messages}
+      messageSnapshotEpoch={agent.messageSnapshotEpoch}
       settings={agent.settings}
+      onSendChatMessage={agent.sendChatMessage}
       onSettingsChange={agent.updateSettings}
       onSettingsSave={agent.saveSettings}
     />

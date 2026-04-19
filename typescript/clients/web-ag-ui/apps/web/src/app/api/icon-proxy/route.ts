@@ -10,6 +10,7 @@ const ALLOWED_HOSTS = new Set([
   // Coingecko may return token images from this CDN.
   'ugc.production.linktr.ee',
 ]);
+const ICON_PROXY_TIMEOUT_MS = 2_000;
 
 function parseUpstreamUrl(requestUrl: string): URL | null {
   const url = new URL(requestUrl);
@@ -38,14 +39,23 @@ export async function GET(request: Request) {
     );
   }
 
-  const response = await fetch(upstream.toString(), {
-    headers: {
-      // Some CDNs are picky about empty/unknown UAs.
-      'User-Agent': 'forge-web-ag-ui (icon proxy)',
-    },
-    // Cache the proxy response for a day; icons don't need to be real-time.
-    next: { revalidate: 60 * 60 * 24 },
-  });
+  let response: Response;
+  try {
+    response = await fetch(upstream.toString(), {
+      headers: {
+        // Some CDNs are picky about empty/unknown UAs.
+        'User-Agent': 'forge-web-ag-ui (icon proxy)',
+      },
+      // Cache the proxy response for a day; icons don't need to be real-time.
+      next: { revalidate: 60 * 60 * 24 },
+      signal: AbortSignal.timeout(ICON_PROXY_TIMEOUT_MS),
+    });
+  } catch {
+    return NextResponse.json(
+      { error: 'Upstream timeout' },
+      { status: 504, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
 
   if (!response.ok) {
     return NextResponse.json(

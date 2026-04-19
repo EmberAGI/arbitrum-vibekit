@@ -10,18 +10,15 @@ interface StreamingMessageProps {
 
 export function StreamingMessage({ content, isStreaming, sender }: StreamingMessageProps) {
   const [displayedContent, setDisplayedContent] = useState('');
-  const [_words, setWords] = useState<string[]>([]);
   const currentIndexRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
+  const renderedContent = isStreaming ? displayedContent : content;
 
   useEffect(() => {
     // Split content into words
     const newWords = content.split(/(\s+)/);
-    setWords(newWords);
 
     if (!isStreaming) {
-      // If not streaming, show all content immediately
-      setDisplayedContent(content);
       currentIndexRef.current = newWords.length;
       return;
     }
@@ -70,7 +67,7 @@ export function StreamingMessage({ content, isStreaming, sender }: StreamingMess
       style={{ backgroundColor: backgroundStyles[sender] }}
     >
       <div className="whitespace-pre-wrap break-words smooth-transition">
-        {displayedContent}
+        {renderedContent}
         {isStreaming && <span className="inline-block w-2 h-4 ml-1 bg-white animate-pulse" />}
       </div>
     </div>

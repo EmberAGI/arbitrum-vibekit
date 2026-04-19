@@ -5,6 +5,8 @@ import { projectAgentListUpdate } from './agentListProjection';
 describe('agentListProjection', () => {
   it('projects task-backed runtime view state into sidebar list update', () => {
     const update = projectAgentListUpdate({
+      lifecycle: { phase: 'active' },
+      onboardingFlow: { status: 'completed', revision: 3, steps: [] },
       profile: { chains: ['Arbitrum'], protocols: [], tokens: [], pools: [], allowedPools: [] },
       metrics: { iteration: 12, cyclesSinceRebalance: 1, staleCycles: 0 },
       task: {
@@ -22,10 +24,30 @@ describe('agentListProjection', () => {
     expect(update.taskId).toBe('task-1');
     expect(update.taskState).toBe('working');
     expect(update.taskMessage).toBe('Rebalancing');
+    expect(update.lifecyclePhase).toBe('active');
+    expect(update.onboardingStatus).toBe('completed');
     expect(update.haltReason).toBe('none');
     expect(update.executionError).toBe('none');
     expect(update.profile?.chains).toEqual(['Arbitrum']);
     expect(update.metrics?.iteration).toBe(12);
+  });
+
+  it('projects string-shaped task status messages from runtime payloads', () => {
+    const update = projectAgentListUpdate({
+      lifecycle: { phase: 'prehire' },
+      task: {
+        id: 'task-ready',
+        taskStatus: {
+          state: 'working',
+          message: 'Ready for a live runtime conversation.',
+        },
+      },
+    });
+
+    expect(update.taskId).toBe('task-ready');
+    expect(update.taskState).toBe('working');
+    expect(update.taskMessage).toBe('Ready for a live runtime conversation.');
+    expect(update.lifecyclePhase).toBe('prehire');
   });
 
   it('clears task fields when runtime view has no task', () => {
@@ -41,6 +63,8 @@ describe('agentListProjection', () => {
     expect(update.taskId).toBeUndefined();
     expect(update.taskState).toBeUndefined();
     expect(update.taskMessage).toBeUndefined();
+    expect(update.lifecyclePhase).toBeNull();
+    expect(update.onboardingStatus).toBeUndefined();
     expect(update.haltReason).toBeUndefined();
     expect(update.executionError).toBeUndefined();
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveThreadLifecyclePhase } from './index';
+import { resolveThreadLifecyclePhase } from './index.js';
 
 describe('threadLifecycle', () => {
   it('defaults to prehire when no lifecycle signals are present', () => {

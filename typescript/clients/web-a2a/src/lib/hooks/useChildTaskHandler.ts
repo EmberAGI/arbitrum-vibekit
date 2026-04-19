@@ -4,7 +4,7 @@
  * Handles detection and creation of child workflow sessions
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Session, TaskState } from '@/lib/types/session';
 import { A2AHandlerCallbacks } from '@/lib/handlers/BaseA2AHandler';
 
@@ -41,6 +41,10 @@ export function useChildTaskHandler({
 }: UseChildTaskHandlerProps) {
   const processedChildTasksRef = useRef<Set<string>>(new Set());
   const lastMessageIdRefs = useRef<Map<string, string | null>>(new Map());
+  const handleChildTaskRef = useRef<
+    | ((parentSessionId: string, childTaskId: string, contextId: string, metadata?: any) => void)
+    | null
+  >(null);
 
   const handleChildTask = useCallback(
     (parentSessionId: string, childTaskId: string, contextId: string, metadata?: any) => {
@@ -237,7 +241,19 @@ export function useChildTaskHandler({
             updateSessionStatus(sessionId, 'error');
           }
         },
-        onChildTaskDetected: handleChildTask,
+        onChildTaskDetected: (
+          detectedParentSessionId,
+          detectedChildTaskId,
+          detectedContextId,
+          metadata,
+        ) => {
+          handleChildTaskRef.current?.(
+            detectedParentSessionId,
+            detectedChildTaskId,
+            detectedContextId,
+            metadata,
+          );
+        },
         onToolInvocation: (sessionId, toolData) => {
           addDebugLog('info', 'Tool invocation in child task', {
             sessionId,
@@ -267,6 +283,10 @@ export function useChildTaskHandler({
       addDebugLog,
     ],
   );
+
+  useEffect(() => {
+    handleChildTaskRef.current = handleChildTask;
+  }, [handleChildTask]);
 
   return { handleChildTask };
 }

@@ -1,0 +1,253 @@
+diff --git a/dist/handlers/handle-connect.cjs b/dist/handlers/handle-connect.cjs
+index ef11891457c3b4ffcd68c3d0e08bf3f991a84a88..d7a83551a8ce6e10cbedb2a026933df9dd36f00f 100644
+--- a/dist/handlers/handle-connect.cjs
++++ b/dist/handlers/handle-connect.cjs
+@@ -6,7 +6,9 @@ let _ag_ui_encoder = require("@ag-ui/encoder");
+ //#region src/handlers/handle-connect.ts
+ async function handleConnectAgent({ runtime, request, agentId }) {
+ 	try {
+-		if (!(await runtime.agents)[agentId]) return new Response(JSON.stringify({
++		const agents = await runtime.agents;
++		const registeredAgent = agents[agentId];
++		if (!registeredAgent) return new Response(JSON.stringify({
+ 			error: "Agent not found",
+ 			message: `Agent '${agentId}' does not exist`
+ 		}), {
+@@ -33,31 +35,56 @@ async function handleConnectAgent({ runtime, request, agentId }) {
+ 		let streamClosed = false;
+ 		(async () => {
+ 			const forwardableHeaders = require_header_utils.extractForwardableHeaders(request);
+-			runtime.runner.connect({
++			const agent = typeof registeredAgent.clone === "function" ? registeredAgent.clone() : registeredAgent;
++			if (agent) {
++				if (typeof agent.setMessages === "function") agent.setMessages(input.messages);
++				if (typeof agent.setState === "function") agent.setState(input.state);
++				agent.threadId = input.threadId;
++			}
++			const events$ = runtime.runner.connect({
+ 				threadId: input.threadId,
++				agent,
++				input,
+ 				headers: forwardableHeaders
+-			}).subscribe({
++			});
++			let subscription;
++			const abortHandler = () => {
++				if (subscription) try {
++					subscription.unsubscribe();
++				} catch {}
++				if (!streamClosed) try {
++					streamClosed = true;
++					writer.close();
++				} catch {}
++			};
++			subscription = events$.subscribe({
+ 				next: async (event) => {
+ 					if (!request.signal.aborted && !streamClosed) try {
+ 						await writer.write(encoder.encode(event));
+ 					} catch (error) {
+-						if (error instanceof Error && error.name === "AbortError") streamClosed = true;
++						if (error instanceof Error && error.name === "AbortError") abortHandler();
+ 					}
+ 				},
+ 				error: async (error) => {
+ 					console.error("Error running agent:", error);
++					if (request.signal) request.signal.removeEventListener("abort", abortHandler);
+ 					if (!streamClosed) try {
+ 						await writer.close();
+ 						streamClosed = true;
+ 					} catch {}
+ 				},
+ 				complete: async () => {
++					if (request.signal) request.signal.removeEventListener("abort", abortHandler);
+ 					if (!streamClosed) try {
+ 						await writer.close();
+ 						streamClosed = true;
+ 					} catch {}
+ 				}
+ 			});
++			if (request.signal) {
++				request.signal.addEventListener("abort", abortHandler);
++				if (request.signal.aborted) abortHandler();
++			}
+ 		})().catch((error) => {
+ 			console.error("Error running agent:", error);
+ 			console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
+diff --git a/dist/handlers/handle-connect.mjs b/dist/handlers/handle-connect.mjs
+index 22340cf294c20d249aaae62d7b94f3e3025465b9..a1438814d5059915a874929e5ff0a9de43ffadf2 100644
+--- a/dist/handlers/handle-connect.mjs
++++ b/dist/handlers/handle-connect.mjs
+@@ -5,7 +5,9 @@ import { EventEncoder } from "@ag-ui/encoder";
+ //#region src/handlers/handle-connect.ts
+ async function handleConnectAgent({ runtime, request, agentId }) {
+ 	try {
+-		if (!(await runtime.agents)[agentId]) return new Response(JSON.stringify({
++		const agents = await runtime.agents;
++		const registeredAgent = agents[agentId];
++		if (!registeredAgent) return new Response(JSON.stringify({
+ 			error: "Agent not found",
+ 			message: `Agent '${agentId}' does not exist`
+ 		}), {
+@@ -32,31 +34,56 @@ async function handleConnectAgent({ runtime, request, agentId }) {
+ 		let streamClosed = false;
+ 		(async () => {
+ 			const forwardableHeaders = extractForwardableHeaders(request);
+-			runtime.runner.connect({
++			const agent = typeof registeredAgent.clone === "function" ? registeredAgent.clone() : registeredAgent;
++			if (agent) {
++				if (typeof agent.setMessages === "function") agent.setMessages(input.messages);
++				if (typeof agent.setState === "function") agent.setState(input.state);
++				agent.threadId = input.threadId;
++			}
++			const events$ = runtime.runner.connect({
+ 				threadId: input.threadId,
++				agent,
++				input,
+ 				headers: forwardableHeaders
+-			}).subscribe({
++			});
++			let subscription;
++			const abortHandler = () => {
++				if (subscription) try {
++					subscription.unsubscribe();
++				} catch {}
++				if (!streamClosed) try {
++					streamClosed = true;
++					writer.close();
++				} catch {}
++			};
++			subscription = events$.subscribe({
+ 				next: async (event) => {
+ 					if (!request.signal.aborted && !streamClosed) try {
+ 						await writer.write(encoder.encode(event));
+ 					} catch (error) {
+-						if (error instanceof Error && error.name === "AbortError") streamClosed = true;
++						if (error instanceof Error && error.name === "AbortError") abortHandler();
+ 					}
+ 				},
+ 				error: async (error) => {
+ 					console.error("Error running agent:", error);
++					if (request.signal) request.signal.removeEventListener("abort", abortHandler);
+ 					if (!streamClosed) try {
+ 						await writer.close();
+ 						streamClosed = true;
+ 					} catch {}
+ 				},
+ 				complete: async () => {
++					if (request.signal) request.signal.removeEventListener("abort", abortHandler);
+ 					if (!streamClosed) try {
+ 						await writer.close();
+ 						streamClosed = true;
+ 					} catch {}
+ 				}
+ 			});
++			if (request.signal) {
++				request.signal.addEventListener("abort", abortHandler);
++				if (request.signal.aborted) abortHandler();
++			}
+ 		})().catch((error) => {
+ 			console.error("Error running agent:", error);
+ 			console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
+diff --git a/dist/runner/agent-runner.d.cts b/dist/runner/agent-runner.d.cts
+index f63dedb9fe67cf4c8f50fb18e6bd8f6219ef31e9..27e792dd0e4c9b9776f88f34f8bfecbb3b8c0f9f 100644
+--- a/dist/runner/agent-runner.d.cts
++++ b/dist/runner/agent-runner.d.cts
+@@ -9,6 +9,8 @@ interface AgentRunnerRunRequest {
+ }
+ interface AgentRunnerConnectRequest {
+   threadId: string;
++  agent?: AbstractAgent;
++  input?: RunAgentInput;
+   headers?: Record<string, string>;
+ }
+ interface AgentRunnerIsRunningRequest {
+diff --git a/dist/runner/agent-runner.d.mts b/dist/runner/agent-runner.d.mts
+index 27c25ff69c2d529a3d32e9208511216bdc36d5c9..7721b2fa1fa89002da1dbef2b23444066abf378a 100644
+--- a/dist/runner/agent-runner.d.mts
++++ b/dist/runner/agent-runner.d.mts
+@@ -9,6 +9,8 @@ interface AgentRunnerRunRequest {
+ }
+ interface AgentRunnerConnectRequest {
+   threadId: string;
++  agent?: AbstractAgent;
++  input?: RunAgentInput;
+   headers?: Record<string, string>;
+ }
+ interface AgentRunnerIsRunningRequest {
+diff --git a/dist/runner/in-memory.cjs b/dist/runner/in-memory.cjs
+index 575a480dbd4c2fecf6fe645f8db09108cb07d30e..4da29e4e18a877b7d1d44032b4d3c32d0b7ce6e1 100644
+--- a/dist/runner/in-memory.cjs
++++ b/dist/runner/in-memory.cjs
+@@ -172,6 +172,30 @@ var InMemoryAgentRunner = class extends require_agent_runner.AgentRunner {
+ 		return runSubject.asObservable();
+ 	}
+ 	connect(request) {
++		if (request.agent && request.input) {
++			if (typeof request.agent.setMessages === "function") request.agent.setMessages(request.input.messages);
++			if (typeof request.agent.setState === "function") request.agent.setState(request.input.state);
++			request.agent.threadId = request.input.threadId;
++			return new rxjs.Observable((subscriber) => {
++				void request.agent.connectAgent({
++					runId: request.input.runId,
++					tools: request.input.tools,
++					context: request.input.context,
++					forwardedProps: request.input.forwardedProps
++				}, {
++					onEvent: ({ event }) => {
++						if (!subscriber.closed) subscriber.next(event);
++					}
++				}).then(() => {
++					if (!subscriber.closed) subscriber.complete();
++				}).catch((error) => {
++					if (!subscriber.closed) subscriber.error(error instanceof Error ? error : new Error(String(error)));
++				});
++				return () => {
++					void request.agent?.detachActiveRun();
++				};
++			});
++		}
+ 		const store = GLOBAL_STORE.get(request.threadId);
+ 		const connectionSubject = new rxjs.ReplaySubject(Infinity);
+ 		if (!store) {
+diff --git a/dist/runner/in-memory.mjs b/dist/runner/in-memory.mjs
+index fe72e7c82854262c37cad6c05289862ce7829599..661313cb497c2397e4bf6ccc133bf33e623223e1 100644
+--- a/dist/runner/in-memory.mjs
++++ b/dist/runner/in-memory.mjs
+@@ -1,5 +1,5 @@
+ import { AgentRunner } from "./agent-runner.mjs";
+-import { ReplaySubject } from "rxjs";
++import { Observable, ReplaySubject } from "rxjs";
+ import { EventType, compactEvents } from "@ag-ui/client";
+ import { finalizeRunEvents } from "@copilotkitnext/shared";
+ 
+@@ -171,6 +171,30 @@ var InMemoryAgentRunner = class extends AgentRunner {
+ 		return runSubject.asObservable();
+ 	}
+ 	connect(request) {
++		if (request.agent && request.input) {
++			if (typeof request.agent.setMessages === "function") request.agent.setMessages(request.input.messages);
++			if (typeof request.agent.setState === "function") request.agent.setState(request.input.state);
++			request.agent.threadId = request.input.threadId;
++			return new Observable((subscriber) => {
++				void request.agent.connectAgent({
++					runId: request.input.runId,
++					tools: request.input.tools,
++					context: request.input.context,
++					forwardedProps: request.input.forwardedProps
++				}, {
++					onEvent: ({ event }) => {
++						if (!subscriber.closed) subscriber.next(event);
++					}
++				}).then(() => {
++					if (!subscriber.closed) subscriber.complete();
++				}).catch((error) => {
++					if (!subscriber.closed) subscriber.error(error instanceof Error ? error : new Error(String(error)));
++				});
++				return () => {
++					void request.agent?.detachActiveRun();
++				};
++			});
++		}
+ 		const store = GLOBAL_STORE.get(request.threadId);
+ 		const connectionSubject = new ReplaySubject(Infinity);
+ 		if (!store) {

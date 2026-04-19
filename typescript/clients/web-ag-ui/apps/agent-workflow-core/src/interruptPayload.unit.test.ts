@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { decodeInterruptPayload, requestInterruptPayload } from './index';
+import { decodeInterruptPayload, requestInterruptPayload } from './index.js';
 
 describe('interruptPayload', () => {
   it('parses JSON string payloads returned by interrupt()', () => {
@@ -30,11 +30,13 @@ describe('interruptPayload', () => {
   it('requests interrupt payloads and returns both raw and decoded values', async () => {
     const result = await requestInterruptPayload({
       request: { type: 'input-request' },
-      interrupt: async () =>
-        JSON.stringify({
-          outcome: 'signed',
-          approvals: 2,
-        }),
+      interrupt: () =>
+        Promise.resolve(
+          JSON.stringify({
+            outcome: 'signed',
+            approvals: 2,
+          }),
+        ),
     });
 
     expect(result.raw).toBe('{"outcome":"signed","approvals":2}');

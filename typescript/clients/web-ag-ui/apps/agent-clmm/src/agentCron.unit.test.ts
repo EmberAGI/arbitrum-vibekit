@@ -57,4 +57,32 @@ describe('runGraphOnce cron state update payload', () => {
     expect(calledUrls).toEqual([`http://localhost:8124/threads/${threadId}/state`]);
   });
 
+  it('creates cron runs with non-resumable streams', async () => {
+    const threadId = 'thread-1';
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ thread_id: threadId }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ thread_id: threadId }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ checkpoint_id: 'cp-1' }));
+
+    let runCreateBody: Record<string, unknown> | undefined;
+    fetchMock.mockImplementationOnce((_url: string | URL | globalThis.Request, init?: RequestInit) => {
+      const requestBody = typeof init?.body === 'string' ? init.body : '{}';
+      runCreateBody = JSON.parse(requestBody) as Record<string, unknown>;
+      return jsonResponse({ run_id: 'run-1', status: 'running' });
+    });
+
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ run_id: 'run-1', status: 'success' }));
+
+    await runGraphOnce(threadId);
+
+    expect(runCreateBody).toBeDefined();
+    expect(runCreateBody).toMatchObject({
+      stream_mode: ['events', 'values', 'messages'],
+      stream_resumable: false,
+    });
+  });
+
 });

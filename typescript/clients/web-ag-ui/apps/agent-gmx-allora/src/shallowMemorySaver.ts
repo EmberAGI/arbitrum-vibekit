@@ -1,6 +1,6 @@
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { MemorySaver } from '@langchain/langgraph';
-import { pruneCheckpointerState } from 'agent-workflow-core';
+import { pruneCheckpointerState } from 'agent-runtime-langgraph';
 
 type CheckpointConfig = RunnableConfig<Record<string, unknown>> & {
   configurable?: {

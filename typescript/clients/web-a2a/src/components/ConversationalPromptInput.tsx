@@ -61,12 +61,9 @@ const ConversationalPromptInput = React.forwardRef<
     ref,
   ) => {
     const [inputValue, setInputValue] = useState('');
-    const [ghostText, setGhostText] = useState('');
     const [selectedTemplate, setSelectedTemplate] = useState<PromptTemplate | null>(null);
     const [parameterValues, setParameterValues] = useState<ParameterValue>({});
     const [activeParameterIndex, setActiveParameterIndex] = useState(-1);
-    const [showSuggestions, setShowSuggestions] = useState(false);
-    const [suggestions, setSuggestions] = useState<PromptTemplate[]>([]);
     const [isPromptDropdownOpen, setIsPromptDropdownOpen] = useState(false);
     const [promptSearchText, setPromptSearchText] = useState('');
     const [completionSearchText, setCompletionSearchText] = useState<Record<string, string>>({});
@@ -209,6 +206,33 @@ const ConversationalPromptInput = React.forwardRef<
       );
     };
 
+    const suggestions =
+      inputValue.length > 0 && !selectedTemplate ? getPromptSuggestions(inputValue) : [];
+    const showSuggestions = suggestions.length > 0;
+    const ghostText = (() => {
+      if (inputValue.length === 0 || selectedTemplate) {
+        return '';
+      }
+
+      const matchedTemplate = findPromptByTrigger(inputValue);
+      if (!matchedTemplate) {
+        return '';
+      }
+
+      const triggerWord = matchedTemplate.triggerWords[0];
+      const userInputAfterTrigger = inputValue.substring(triggerWord.length);
+      const templateAfterTrigger = matchedTemplate.template.substring(triggerWord.length);
+
+      if (
+        templateAfterTrigger.startsWith(userInputAfterTrigger) &&
+        userInputAfterTrigger !== templateAfterTrigger
+      ) {
+        return templateAfterTrigger.substring(userInputAfterTrigger.length);
+      }
+
+      return '';
+    })();
+
     // Handle click outside to close prompt dropdown
     useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
@@ -228,36 +252,6 @@ const ConversationalPromptInput = React.forwardRef<
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }, [isPromptDropdownOpen]);
-
-    // Update suggestions based on input
-    useEffect(() => {
-      if (inputValue.length > 0 && !selectedTemplate) {
-        const newSuggestions = getPromptSuggestions(inputValue);
-        setSuggestions(newSuggestions);
-        setShowSuggestions(newSuggestions.length > 0);
-
-        const matchedTemplate = findPromptByTrigger(inputValue);
-        if (matchedTemplate) {
-          const triggerWord = matchedTemplate.triggerWords[0];
-          const userInputAfterTrigger = inputValue.substring(triggerWord.length);
-          const templateAfterTrigger = matchedTemplate.template.substring(triggerWord.length);
-
-          if (
-            templateAfterTrigger.startsWith(userInputAfterTrigger) &&
-            userInputAfterTrigger !== templateAfterTrigger
-          ) {
-            setGhostText(templateAfterTrigger.substring(userInputAfterTrigger.length));
-          } else {
-            setGhostText('');
-          }
-        } else {
-          setGhostText('');
-        }
-      } else {
-        setShowSuggestions(false);
-        setGhostText('');
-      }
-    }, [inputValue, selectedTemplate]);
 
     const handleInputChange = (value: string) => {
       if (selectedTemplate) return;
@@ -281,8 +275,6 @@ const ConversationalPromptInput = React.forwardRef<
       if (matchedTemplate) {
         // Use selectTemplate to ensure proper parameter setup
         selectTemplate(matchedTemplate);
-        setGhostText('');
-        setShowSuggestions(false);
       }
     };
 
@@ -317,7 +309,6 @@ const ConversationalPromptInput = React.forwardRef<
       setInputValue('');
       setParameterValues({});
       setActiveParameterIndex(0);
-      setShowSuggestions(false);
       setIsPromptDropdownOpen(false);
 
       // Notify parent about template selection

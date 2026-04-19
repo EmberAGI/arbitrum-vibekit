@@ -11,6 +11,7 @@ import {
   type WalletClient,
 } from 'viem';
 import { defaultEvmChain, getEvmChainOrDefault } from '@/config/evmChains';
+import { emitAgentConnectDebug } from '@/utils/agentConnectDebug';
 
 type Eip1193Provider = {
   request: (args: { method: string; params?: unknown }) => Promise<unknown>;
@@ -67,6 +68,33 @@ export function usePrivyWalletClient(preferredWalletAddress?: string): UsePrivyW
       preferredWalletAddress,
     });
   }, [wallets, preferredWalletAddress]);
+
+  useEffect(() => {
+    emitAgentConnectDebug({
+      event: 'wallet-selection',
+      agentId: 'wallet-client',
+      payload: {
+        preferredWalletAddress: preferredWalletAddress ?? null,
+        walletCount: wallets.length,
+        wallets: wallets.map((wallet) => ({
+          address: wallet.address,
+          walletClientType:
+            'walletClientType' in wallet && typeof wallet.walletClientType === 'string'
+              ? wallet.walletClientType
+              : null,
+          connectorType:
+            'connectorType' in wallet && typeof wallet.connectorType === 'string'
+              ? wallet.connectorType
+              : null,
+        })),
+        selectedWalletAddress: privyWallet?.address ?? null,
+        selectedWalletClientType:
+          privyWallet && 'walletClientType' in privyWallet && typeof privyWallet.walletClientType === 'string'
+            ? privyWallet.walletClientType
+            : null,
+      },
+    });
+  }, [preferredWalletAddress, privyWallet, wallets]);
 
   useEffect(() => {
     if (!privyWallet) return;
@@ -133,6 +161,31 @@ export function usePrivyWalletClient(preferredWalletAddress?: string): UsePrivyW
     chainIdError: chainIdQuery.error as Error | null,
     walletClientError: walletClientQuery.error as Error | null,
   });
+
+  useEffect(() => {
+    emitAgentConnectDebug({
+      event: 'wallet-client-state',
+      agentId: 'wallet-client',
+      payload: {
+        selectedWalletAddress: privyWallet?.address ?? null,
+        chainId: chainIdQuery.data ?? null,
+        hasProvider: providerQuery.data !== null && providerQuery.data !== undefined,
+        hasWalletClient: walletClientQuery.data !== null && walletClientQuery.data !== undefined,
+        isLoading:
+          providerQuery.isLoading || chainIdQuery.isLoading || walletClientQuery.isLoading,
+        error: error?.message ?? null,
+      },
+    });
+  }, [
+    chainIdQuery.data,
+    chainIdQuery.isLoading,
+    error,
+    privyWallet,
+    providerQuery.data,
+    providerQuery.isLoading,
+    walletClientQuery.data,
+    walletClientQuery.isLoading,
+  ]);
 
   return {
     walletClient: walletClientQuery.data ?? null,

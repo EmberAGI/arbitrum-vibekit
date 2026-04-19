@@ -175,4 +175,113 @@ describe('GMX thread lifecycle invariants', () => {
     expect(next.delegationBundle).toBeUndefined();
     expect(next.metrics.iteration).toBe(0);
   });
+
+  it('does not duplicate cloned history snapshots when applying a full-prefix thread patch', () => {
+    const state = {
+      thread: {
+        lifecycle: { phase: 'active' },
+        activity: {
+          telemetry: [
+            {
+              cycle: 1,
+              action: 'open',
+              reason: 'Opened long position.',
+              marketSymbol: 'BTC/USDC',
+              side: 'long',
+              leverage: 2,
+              sizeUsd: 10,
+              timestamp: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          events: [
+            {
+              type: 'status',
+              message: 'Cycle complete.',
+              task: {
+                id: 'task-1',
+                taskStatus: { state: 'working' },
+              },
+            },
+          ],
+        },
+        transactionHistory: [
+          {
+            cycle: 1,
+            action: 'open',
+            txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+            status: 'success',
+            reason: 'Opened long position.',
+            timestamp: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    } as unknown as ClmmState;
+
+    const next = applyThreadPatch(state, {
+      activity: {
+        telemetry: [
+          {
+            cycle: 1,
+            action: 'open',
+            reason: 'Opened long position.',
+            marketSymbol: 'BTC/USDC',
+            side: 'long',
+            leverage: 2,
+            sizeUsd: 10,
+            timestamp: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            cycle: 2,
+            action: 'hold',
+            reason: 'Signal persists in long; holding open position.',
+            marketSymbol: 'BTC/USDC',
+            timestamp: '2026-01-01T00:00:30.000Z',
+          },
+        ],
+        events: [
+          {
+            type: 'status',
+            message: 'Cycle complete.',
+            task: {
+              id: 'task-1',
+              taskStatus: { state: 'working' },
+            },
+          },
+          {
+            type: 'status',
+            message: 'Second cycle complete.',
+            task: {
+              id: 'task-2',
+              taskStatus: { state: 'working' },
+            },
+          },
+        ],
+      },
+      transactionHistory: [
+        {
+          cycle: 1,
+          action: 'open',
+          txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          status: 'success',
+          reason: 'Opened long position.',
+          timestamp: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          cycle: 2,
+          action: 'hold',
+          status: 'success',
+          reason: 'Signal persists in long; holding open position.',
+          timestamp: '2026-01-01T00:00:30.000Z',
+        },
+      ],
+    });
+
+    expect(next.activity.telemetry).toHaveLength(2);
+    expect(next.activity.telemetry[0]?.cycle).toBe(1);
+    expect(next.activity.telemetry[1]?.cycle).toBe(2);
+    expect(next.activity.events).toHaveLength(2);
+    expect(next.transactionHistory).toHaveLength(2);
+    expect(next.transactionHistory[0]?.cycle).toBe(1);
+    expect(next.transactionHistory[1]?.cycle).toBe(2);
+  });
 });

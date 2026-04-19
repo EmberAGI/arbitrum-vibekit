@@ -20,6 +20,7 @@ This contract extends:
 
 - `docs/c4-target-architecture-web-ag-ui-agents.md`
 - `docs/ag-ui-client-runtime-invariants.md`
+- `docs/c4-pi-runtime-architecture-and-boundaries.md` for Pi-backed runtime specialization
 
 It stays AG-UI-only at the web boundary and focuses on making render state monotonic and explicit.
 

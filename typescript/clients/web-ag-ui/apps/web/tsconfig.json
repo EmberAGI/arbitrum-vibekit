@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "agent-runtime": [
+        "../../../../agent-runtime/dist/index"
       ]
     }
   },
