@@ -64,7 +64,13 @@ describe('resolveManagedSharedEmberBootstrap', () => {
       {
         resolveReferenceBootstrap,
         createManagedOnboardingIssuers: vi.fn().mockResolvedValue(undefined),
-        createSubagentRuntimes: vi.fn().mockResolvedValue(undefined),
+        createSubagentRuntimes: vi.fn().mockResolvedValue({
+          'ember-lending': {
+            submissionBackend: {
+              submitSignedTransaction: vi.fn(),
+            },
+          },
+        }),
       },
     );
 

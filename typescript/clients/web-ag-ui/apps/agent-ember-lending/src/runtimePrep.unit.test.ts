@@ -34,7 +34,15 @@ describe('managed Shared Ember harness bootstrap', () => {
             };
           },
           createManagedOnboardingIssuers: async () => undefined,
-          createSubagentRuntimes: async () => undefined,
+          createSubagentRuntimes: async () => ({
+            'ember-lending': {
+              submissionBackend: {
+                submitSignedTransaction: async () => ({
+                  execution: { status: 'submitted' },
+                }),
+              },
+            },
+          }),
           startServer: async ({ bootstrap }) => {
             capturedBootstrap = bootstrap;
             return {
@@ -59,5 +67,37 @@ describe('managed Shared Ember harness bootstrap', () => {
         process.env.SHARED_EMBER_ONCHAIN_ACTIONS_PLANNER_AGENT_IDS = previousPlannerAgentIds;
       }
     }
+  });
+
+  it('fails fast when the managed subagent runtime binding is missing', async () => {
+    await expect(
+      startManagedSharedEmberHarness(
+        {
+          specRoot: '/spec-root',
+          vibekitRoot: '/vibekit-root',
+          managedAgentId: 'ember-lending',
+          host: '127.0.0.1',
+          port: 4010,
+        },
+        {
+          resolveReferenceBootstrap: async () => ({
+            emberSkillPlanners: {
+              'ember-lending': {
+                planLendingSupply: async () => ({
+                  transaction_plan_id: 'txplan-test',
+                }),
+              },
+            },
+          }),
+          createManagedOnboardingIssuers: async () => undefined,
+          createSubagentRuntimes: async () => undefined,
+          startServer: async () => {
+            throw new Error('startServer should not be called without a runtime binding');
+          },
+        },
+      ),
+    ).rejects.toThrow(
+      'Managed Shared Ember bootstrap requires a seeded subagent runtime binding for ember-lending.',
+    );
   });
 });

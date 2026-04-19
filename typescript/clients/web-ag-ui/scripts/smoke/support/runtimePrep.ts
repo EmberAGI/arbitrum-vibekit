@@ -76,6 +76,23 @@ function withDefaultManagedPlannerAgentId(input: {
   };
 }
 
+function hasManagedSubmissionBinding(input: {
+  bootstrap: SharedEmberReferenceBootstrap;
+  managedAgentId: string;
+}): boolean {
+  const subagentRuntimes = input.bootstrap.subagentRuntimes as
+    | Record<string, unknown>
+    | undefined;
+  if (subagentRuntimes?.[input.managedAgentId] !== undefined) {
+    return true;
+  }
+
+  const submissionBackends = input.bootstrap.signedTransactionSubmissionBackends as
+    | Record<string, unknown>
+    | undefined;
+  return submissionBackends?.[input.managedAgentId] !== undefined;
+}
+
 export function parseDotEnvFile(filePath: string): Record<string, string> {
   if (!fs.existsSync(filePath)) {
     return {};
@@ -807,7 +824,7 @@ export async function resolveManagedSharedEmberBootstrap(
     managedAgentId,
   });
 
-  return {
+  const mergedBootstrap = {
     ...bootstrap,
     ...(managedOnboardingIssuers === undefined
       ? {}
@@ -827,6 +844,19 @@ export async function resolveManagedSharedEmberBootstrap(
           },
         }),
   };
+
+  if (
+    !hasManagedSubmissionBinding({
+      bootstrap: mergedBootstrap,
+      managedAgentId,
+    })
+  ) {
+    throw new Error(
+      `Managed Shared Ember bootstrap requires a seeded subagent runtime binding for ${managedAgentId}.`,
+    );
+  }
+
+  return mergedBootstrap;
 }
 
 async function readRequestBody(request: http.IncomingMessage): Promise<Buffer> {
