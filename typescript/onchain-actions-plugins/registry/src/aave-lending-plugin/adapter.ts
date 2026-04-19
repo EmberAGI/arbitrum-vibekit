@@ -90,15 +90,20 @@ export class AAVEAdapter {
   ): Promise<WithdrawTokensResponse> {
     const { tokenToWithdraw, amount, walletAddress } = params;
 
-    // Find aToken he wants to withdraw from
-    const alphaTokenAddress = (await this.getReserves()).reservesData.find(
-      (reserve) => reserve.underlyingAsset === tokenToWithdraw.tokenUid.address,
-    )?.aTokenAddress;
-    if (!alphaTokenAddress) {
+    const reserve = (await this.getReserves()).reservesData.find(
+      (candidate) =>
+        candidate.underlyingAsset.toLowerCase() === tokenToWithdraw.tokenUid.address.toLowerCase(),
+    );
+    if (!reserve) {
       throw new Error('No position can generate the token to withdraw');
     }
 
-    const txs = await this.withdraw(alphaTokenAddress, amount, walletAddress, walletAddress);
+    const txs = await this.withdraw(
+      reserve.underlyingAsset,
+      utils.formatUnits(amount, tokenToWithdraw.decimals),
+      walletAddress,
+      walletAddress,
+    );
     return {
       transactions: txs.map((t) => transactionPlanFromEthers(this.chain.id.toString(), t)),
     };
@@ -444,7 +449,7 @@ export class AAVEAdapter {
 
   private async withdraw(
     asset: string,
-    amount: bigint,
+    amount_formatted: string,
     to: string,
     from: string,
   ): Promise<AAVEAction> {
@@ -456,7 +461,7 @@ export class AAVEAdapter {
     const txs = await pool.withdraw({
       user: from,
       reserve: asset,
-      amount: amount.toString(),
+      amount: amount_formatted,
     });
 
     if (txs.length !== 1) {
