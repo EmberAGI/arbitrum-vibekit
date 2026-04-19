@@ -29,6 +29,7 @@ import { selectRuntimeTaskState } from '@/utils/selectRuntimeTaskState';
 import { collectUniqueChainNames, collectUniqueTokenSymbols } from '@/utils/agentCollections';
 import { extractTaskStatusMessage } from '@/utils/extractTaskStatusMessage';
 import { PROTOCOL_TOKEN_FALLBACK } from '@/constants/protocolTokenFallback';
+import { isPrivyConfigured } from '@/utils/privyConfig';
 import {
   normalizeNameKey,
   proxyIconUri,
@@ -70,6 +71,7 @@ export function AppSidebar() {
   const addressPopoverRef = useRef<HTMLDivElement | null>(null);
   const copyResetTimeoutRef = useRef<number | null>(null);
   const addressPopoverId = useId();
+  const privyConfigured = isPrivyConfigured();
 
   const { ready, authenticated } = usePrivy();
   const { login } = useLogin();
@@ -334,7 +336,8 @@ export function AppSidebar() {
     router.push(getSidebarAgentHref(agentId));
   };
 
-  const canSelectChain = ready && authenticated && Boolean(privyWallet) && !isWalletLoading;
+  const canSelectChain =
+    privyConfigured && ready && authenticated && Boolean(privyWallet) && !isWalletLoading;
 
   const isPortfolioAgentActive = pathname?.startsWith(`/hire-agents/${PORTFOLIO_AGENT_ID}`);
   const isHireAgentsActive =
@@ -549,7 +552,7 @@ export function AppSidebar() {
         </button>
 
         {/* Smart Account Upgrade */}
-        {authenticated && privyWallet && !walletError && (
+        {privyConfigured && authenticated && privyWallet && !walletError && (
           <>
             {isSmartAccountLoading ? (
               <div className="w-full px-3 py-2 rounded-lg bg-[#252525] text-xs text-gray-300">
@@ -673,6 +676,10 @@ export function AppSidebar() {
                 )}
               </div>
             )}
+          </div>
+        ) : !privyConfigured ? (
+          <div className="w-full px-3 py-2 rounded-lg bg-[#252525] text-xs text-gray-400">
+            Privy auth unavailable
           </div>
         ) : (
           <button

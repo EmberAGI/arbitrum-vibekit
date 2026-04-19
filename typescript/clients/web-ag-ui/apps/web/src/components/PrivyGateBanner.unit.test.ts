@@ -31,6 +31,7 @@ describe('PrivyGateBanner', () => {
     mocks.pathname = '/hire-agents/agent-clmm';
     mocks.privyWalletAddress = null;
     mocks.login.mockReset();
+    process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-privy-app-id';
   });
 
   it('hides the sign-in banner for the Pi example hire route without a wallet', () => {
@@ -45,5 +46,13 @@ describe('PrivyGateBanner', () => {
     const html = renderToStaticMarkup(React.createElement(PrivyGateBanner));
 
     expect(html).toContain('Sign in with Privy to create a thread and interact with agents.');
+  });
+
+  it('hides the sign-in banner when Privy is not configured', () => {
+    process.env.NEXT_PUBLIC_PRIVY_APP_ID = '';
+
+    const html = renderToStaticMarkup(React.createElement(PrivyGateBanner));
+
+    expect(html).toBe('');
   });
 });
