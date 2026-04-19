@@ -404,16 +404,18 @@ function parseTypedDataSigningPayload(
   signerRef: AgentRuntimeSignerRef,
   payload: Record<string, unknown>,
 ): TypedDataSigningPayload {
+  const serializeTypedDataBigInt = (value: bigint): string =>
+    value >= MAX_DECIMAL_TYPED_DATA_BIGINT
+      ? `0x${value
+          .toString(16)
+          .padStart(value.toString(16).length + (value.toString(16).length % 2), '0')}`
+      : value.toString();
   const chain = readString(payload['chain']);
   const typedDataJson =
     readString(payload['typedDataJson']) ??
     (isRecord(payload['typedData'])
       ? JSON.stringify(payload['typedData'], (_key, value: unknown) =>
-          typeof value === 'bigint'
-            ? value >= MAX_DECIMAL_TYPED_DATA_BIGINT
-              ? `0x${value.toString(16)}`
-              : value.toString()
-            : value,
+          typeof value === 'bigint' ? serializeTypedDataBigInt(value) : value,
         )
       : null);
 
