@@ -28,6 +28,14 @@ type ResolveManagedSharedEmberBootstrapDependencies = {
   createManagedOnboardingIssuers?: typeof maybeCreateManagedOnboardingIssuers;
   createSubagentRuntimes?: typeof maybeCreateSubagentRuntimes;
 };
+type StartManagedSharedEmberHarnessDependencies =
+  ResolveManagedSharedEmberBootstrapDependencies & {
+    startServer?: (input: {
+      bootstrap: Record<string, unknown>;
+      host?: string;
+      port?: number;
+    }) => Promise<StartedServer>;
+  };
 
 const DEFAULT_MANAGED_AGENT_ID = 'ember-lending';
 const DEFAULT_OWS_CHAIN = 'evm';
@@ -698,30 +706,41 @@ export async function startManagedSharedEmberHarness(input: {
   managedAgentId?: string;
   host?: string;
   port?: number;
-}): Promise<StartedServer> {
+}, dependencies: StartManagedSharedEmberHarnessDependencies = {}): Promise<StartedServer> {
   const managedAgentId = input.managedAgentId ?? DEFAULT_MANAGED_AGENT_ID;
   const host = input.host ?? '127.0.0.1';
   const port = input.port ?? 0;
 
-  const harnessModule = (await import(
-    pathToFileURL(path.join(input.specRoot, 'scripts/shared-domain-service-repo-harness.ts')).href
-  )) as {
-    startRepoLocalSharedEmberDomainProtocolHttpServer: (input: {
-      bootstrap: Record<string, unknown>;
-      host?: string;
-      port?: number;
-    }) => Promise<StartedServer>;
-  };
-  const bootstrapModule = (await import(
-    pathToFileURL(
-      path.join(
-        input.specRoot,
-        'packages/orchestration-domain-integration/src/reference-server-bootstrap.ts',
-      ),
-    ).href
-  )) as {
-    resolveSharedEmberReferenceBootstrapFromEnv: () => Promise<SharedEmberReferenceBootstrap>;
-  };
+  const startServer =
+    dependencies.startServer ??
+    (
+      (await import(
+        pathToFileURL(path.join(input.specRoot, 'scripts/shared-domain-service-repo-harness.ts'))
+          .href
+      )) as {
+        startRepoLocalSharedEmberDomainProtocolHttpServer: (input: {
+          bootstrap: Record<string, unknown>;
+          host?: string;
+          port?: number;
+        }) => Promise<StartedServer>;
+      }
+    ).startRepoLocalSharedEmberDomainProtocolHttpServer;
+  const resolveReferenceBootstrap =
+    dependencies.resolveReferenceBootstrap ??
+    (
+      (await import(
+        pathToFileURL(
+          path.join(
+            input.specRoot,
+            'packages/orchestration-domain-integration/src/reference-server-bootstrap.ts',
+          ),
+        ).href
+      )) as {
+        resolveSharedEmberReferenceBootstrapFromEnv: (
+          env?: NodeJS.ProcessEnv,
+        ) => Promise<SharedEmberReferenceBootstrap>;
+      }
+    ).resolveSharedEmberReferenceBootstrapFromEnv;
 
   const bootstrap = await resolveManagedSharedEmberBootstrap(
     {
@@ -730,12 +749,12 @@ export async function startManagedSharedEmberHarness(input: {
       managedAgentId,
     },
     {
-      resolveReferenceBootstrap: () =>
-        bootstrapModule.resolveSharedEmberReferenceBootstrapFromEnv(),
+      ...dependencies,
+      resolveReferenceBootstrap,
     },
   );
 
-  return harnessModule.startRepoLocalSharedEmberDomainProtocolHttpServer({
+  return startServer({
     bootstrap,
     host,
     port,
