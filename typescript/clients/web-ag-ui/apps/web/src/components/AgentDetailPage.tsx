@@ -1142,13 +1142,9 @@ export function AgentDetailPage({
   const emberLendingChatEnabled =
     agentId === 'agent-ember-lending' &&
     emberLendingRuntimeView?.phase === 'active';
-  const chatEnabled =
-    agentId === 'agent-pi-example' ||
-    isPortfolioAgent ||
-    emberLendingChatEnabled;
+  const chatEnabled = isPortfolioAgent || emberLendingChatEnabled;
   const isEmberLendingAgent = agentId === 'agent-ember-lending';
-  const inlineOnboardingChatEnabled =
-    agentId === 'agent-pi-example' || agentId === 'agent-ember-lending';
+  const inlineOnboardingChatEnabled = isEmberLendingAgent;
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (showPostHireLayout ? 'blockers' : 'metrics'),
   );

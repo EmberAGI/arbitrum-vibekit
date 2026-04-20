@@ -23,8 +23,8 @@ vi.mock('../hooks/usePrivyWalletClient', () => {
 
 function renderPage(messages: Message[], overrides: Partial<React.ComponentProps<typeof AgentDetailPage>> = {}) {
   return React.createElement(AgentDetailPage, {
-    agentId: 'agent-pi-example',
-    agentName: 'Pi Example Agent',
+    agentId: 'agent-portfolio-manager',
+    agentName: 'Ember Portfolio Agent',
     agentDescription: 'desc',
     creatorName: 'Ember AI Team',
     creatorVerified: true,

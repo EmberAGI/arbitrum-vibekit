@@ -173,11 +173,8 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
     ? () => handleManagedOwnerNavigation(onboardingOwnerAgentId)
     : agent.runFire;
 
-  // Dev-only UI preview for screenshot-driven design work.
-  // This is guarded by NODE_ENV by default so it cannot affect production behavior.
-  // For local QA runs, it can be explicitly enabled via NEXT_PUBLIC_UI_PREVIEW=true.
-  const uiPreviewEnabled =
-    process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_UI_PREVIEW === 'true';
+  // Preview-only detail states must stay explicitly disabled unless the host opts in.
+  const uiPreviewEnabled = process.env.NEXT_PUBLIC_UI_PREVIEW === 'true';
   const uiPreviewState =
     uiPreviewEnabled ? parseUiPreviewState(searchParams.get('__uiState')) : null;
   const requestedTab = parseAgentRouteTab(searchParams.get('tab'));

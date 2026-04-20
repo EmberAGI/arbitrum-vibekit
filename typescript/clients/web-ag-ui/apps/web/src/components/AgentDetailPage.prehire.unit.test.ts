@@ -113,7 +113,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).not.toContain('bg-[#1e1e1e]');
   });
 
-  it('keeps pre-hire chat disabled for non-Pi agents', () => {
+  it('keeps pre-hire chat disabled for non-chat-first agents', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-clmm',
@@ -172,7 +172,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).not.toContain('>Hire<');
   });
 
-  it('enables pre-hire chat for the Pi example agent', () => {
+  it('keeps chat disabled for agents removed from the host surface', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-pi-example',
@@ -198,16 +198,15 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
       }),
     );
 
-    expect(html).toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
-    expect(html).not.toMatch(new RegExp('<button[^>]*disabled[^>]*>\\s*Chat\\s*</button>'));
-    expect(html).toContain('Send message');
+    expect(html).toMatch(new RegExp('<button[^>]*disabled[^>]*>\\s*Chat\\s*</button>'));
+    expect(html).not.toContain('Send message');
   });
 
-  it('renders reasoning messages in the Pi example chat transcript', () => {
+  it('renders reasoning messages in the Ember Portfolio Agent pre-hire chat transcript', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -257,8 +256,8 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
 
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -288,11 +287,11 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     );
   });
 
-  it('renders Pi automation status artifacts and A2UI cards in the chat transcript', () => {
+  it('renders automation status artifacts and A2UI cards in the Ember Portfolio Agent chat transcript', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -351,11 +350,11 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('pi-example-a2ui-view');
   });
 
-  it('renders Pi interrupt A2UI controls in the chat transcript', () => {
+  it('renders interrupt A2UI controls in the Ember Portfolio Agent chat transcript', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -401,11 +400,11 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('pi-example-a2ui-view');
   });
 
-  it('keeps the Pi chat tab visible while the thread is input-required', () => {
+  it('keeps the Ember Lending chat tab visible while the thread is input-required', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-ember-lending',
+        agentName: 'Ember Lending',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -416,9 +415,12 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
         },
         metrics: {},
         initialTab: 'chat',
-        isHired: false,
+        isHired: true,
         isHiring: false,
         hasLoadedView: true,
+        lifecycleState: {
+          phase: 'active',
+        } as never,
         taskStatus: 'input-required',
         activeInterrupt: {
           type: 'operator-config-request',

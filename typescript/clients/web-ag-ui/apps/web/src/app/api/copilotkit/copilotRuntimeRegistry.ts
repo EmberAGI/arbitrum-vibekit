@@ -5,23 +5,34 @@ import { createAgentRuntimeHttpAgent } from './piRuntimeHttpAgent';
 export const CLMM_AGENT_NAME = 'agent-clmm';
 export const PENDLE_AGENT_NAME = 'agent-pendle';
 export const GMX_ALLORA_AGENT_NAME = 'agent-gmx-allora';
-export const STARTER_AGENT_NAME = 'starterAgent';
 export const PORTFOLIO_MANAGER_AGENT_NAME = 'agent-portfolio-manager';
 export const EMBER_LENDING_AGENT_NAME = 'agent-ember-lending';
-const DEFAULT_PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL = 'http://127.0.0.1:3420/ag-ui';
-const DEFAULT_EMBER_LENDING_AGENT_DEPLOYMENT_URL = 'http://127.0.0.1:3430/ag-ui';
 
 type RuntimeEnv = Record<string, string | undefined>;
+
+function requireRuntimeUrl(env: RuntimeEnv, envVarName: string, agentId: string): string {
+  const runtimeUrl = env[envVarName]?.trim();
+  if (runtimeUrl) {
+    return runtimeUrl;
+  }
+
+  throw new Error(`Missing required runtime URL env var ${envVarName} for ${agentId}.`);
+}
 
 export function resolveAgentRuntimeUrl(env: RuntimeEnv, agentId: string): string {
   switch (agentId) {
     case PORTFOLIO_MANAGER_AGENT_NAME:
-      return (
-        env.PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL ||
-        DEFAULT_PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL
+      return requireRuntimeUrl(
+        env,
+        'PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL',
+        PORTFOLIO_MANAGER_AGENT_NAME,
       );
     case EMBER_LENDING_AGENT_NAME:
-      return env.EMBER_LENDING_AGENT_DEPLOYMENT_URL || DEFAULT_EMBER_LENDING_AGENT_DEPLOYMENT_URL;
+      return requireRuntimeUrl(
+        env,
+        'EMBER_LENDING_AGENT_DEPLOYMENT_URL',
+        EMBER_LENDING_AGENT_NAME,
+      );
     default:
       throw new Error(`Unsupported AG-UI runtime agent "${agentId}".`);
   }
@@ -32,23 +43,26 @@ export function buildCopilotRuntimeAgents(env: RuntimeEnv) {
   const emberLendingRuntimeUrl = resolveAgentRuntimeUrl(env, EMBER_LENDING_AGENT_NAME);
   const agents = {
     [CLMM_AGENT_NAME]: new LangGraphInterruptSnapshotAgent({
-      deploymentUrl: env.LANGGRAPH_DEPLOYMENT_URL || 'http://localhost:8124',
+      deploymentUrl: requireRuntimeUrl(env, 'LANGGRAPH_DEPLOYMENT_URL', CLMM_AGENT_NAME),
       graphId: CLMM_AGENT_NAME,
       langsmithApiKey: env.LANGSMITH_API_KEY || '',
     }),
     [PENDLE_AGENT_NAME]: new LangGraphInterruptSnapshotAgent({
-      deploymentUrl: env.LANGGRAPH_PENDLE_DEPLOYMENT_URL || 'http://localhost:8125',
+      deploymentUrl: requireRuntimeUrl(
+        env,
+        'LANGGRAPH_PENDLE_DEPLOYMENT_URL',
+        PENDLE_AGENT_NAME,
+      ),
       graphId: PENDLE_AGENT_NAME,
       langsmithApiKey: env.LANGSMITH_API_KEY || '',
     }),
     [GMX_ALLORA_AGENT_NAME]: new LangGraphInterruptSnapshotAgent({
-      deploymentUrl: env.LANGGRAPH_GMX_ALLORA_DEPLOYMENT_URL || 'http://localhost:8126',
+      deploymentUrl: requireRuntimeUrl(
+        env,
+        'LANGGRAPH_GMX_ALLORA_DEPLOYMENT_URL',
+        GMX_ALLORA_AGENT_NAME,
+      ),
       graphId: GMX_ALLORA_AGENT_NAME,
-      langsmithApiKey: env.LANGSMITH_API_KEY || '',
-    }),
-    [STARTER_AGENT_NAME]: new LangGraphInterruptSnapshotAgent({
-      deploymentUrl: 'http://localhost:8123',
-      graphId: STARTER_AGENT_NAME,
       langsmithApiKey: env.LANGSMITH_API_KEY || '',
     }),
     [PORTFOLIO_MANAGER_AGENT_NAME]: createAgentRuntimeHttpAgent({
