@@ -1844,6 +1844,7 @@ describe('agent-runtime integration', () => {
   });
 
   it('routes resume through the declared interrupt even after a later non-interrupt artifact overwrites artifacts.current', async () => {
+    const { persistedThreads, hooks: internalPostgres } = createPersistingInternalPostgres();
     const runtime = await createAgentRuntime({
       model: createModel('int-model'),
       systemPrompt: 'You are a lifecycle agent.',
@@ -1851,6 +1852,7 @@ describe('agent-runtime integration', () => {
       agentOptions: {
         streamFn: () => createTextStream('Model fallback should not run for interrupt resume.'),
       },
+      __internalPostgres: internalPostgres,
     } as any);
 
     await collectEventSource(
@@ -1877,16 +1879,9 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const connectSnapshot = await readFirstMatchingEvent(
-      await runtime.service.connect({
-        threadId: 'thread-resume-after-artifact-overwrite',
-        runId: 'connect-resume-after-artifact-overwrite',
-      }),
-      isStateSnapshotEvent,
-    );
-
-    expect(connectSnapshot).toBeDefined();
-    expect(connectSnapshot!.snapshot.thread).toMatchObject({
+    expect(
+      persistedThreads.get('thread-resume-after-artifact-overwrite')?.threadState,
+    ).toMatchObject({
       artifacts: {
         current: {
           data: {
@@ -1894,8 +1889,7 @@ describe('agent-runtime integration', () => {
           },
         },
       },
-      activity: {
-        events: expect.arrayContaining([
+      activityEvents: expect.arrayContaining([
         expect.objectContaining({
           type: 'artifact',
           artifact: expect.objectContaining({
@@ -1906,8 +1900,7 @@ describe('agent-runtime integration', () => {
             }),
           }),
         }),
-        ]),
-      },
+      ]),
     });
 
     const resumeEvents = await collectQueuedEvents(
@@ -1988,17 +1981,10 @@ describe('agent-runtime integration', () => {
       value: 'Operator note captured. Ready to complete onboarding.',
     });
 
-    const postResumeSnapshot = await readFirstMatchingEvent(
-      await runtime.service.connect({
-        threadId: 'thread-resume-after-artifact-overwrite',
-        runId: 'connect-after-resume-after-artifact-overwrite',
-      }),
-      isStateSnapshotEvent,
-    );
-
-    expect(postResumeSnapshot).toBeDefined();
-    expect(postResumeSnapshot!.snapshot.thread.activity.events).toEqual(
-      expect.arrayContaining([
+    expect(
+      persistedThreads.get('thread-resume-after-artifact-overwrite')?.threadState,
+    ).toMatchObject({
+      activityEvents: expect.arrayContaining([
         expect.objectContaining({
           type: 'artifact',
           artifact: expect.objectContaining({
@@ -2010,7 +1996,7 @@ describe('agent-runtime integration', () => {
           }),
         }),
       ]),
-    );
+    });
   });
 
   it('routes resume through the declared interrupt when the AG-UI client sends empty request scaffolding', async () => {
