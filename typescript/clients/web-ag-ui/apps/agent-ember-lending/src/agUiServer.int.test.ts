@@ -1400,14 +1400,23 @@ describe('agent-ember-lending AG-UI integration', () => {
       },
     });
 
-    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      3,
       expect.objectContaining({
         method: 'subagent.createTransaction.v1',
         params: expect.objectContaining({
-          handoff: expect.objectContaining({
-            agent_id: 'ember-lending',
-            mandate_ref: 'mandate-ember-lending-001',
-          }),
+          agent_id: 'ember-lending',
+          expected_revision: 11,
+          request: {
+            control_path: 'lending.supply',
+            asset: 'USDC',
+            protocol_system: 'aave',
+            network: 'arbitrum',
+            quantity: {
+              kind: 'exact',
+              value: '10',
+            },
+          },
         }),
       }),
     );
@@ -1434,9 +1443,7 @@ describe('agent-ember-lending AG-UI integration', () => {
       expect.objectContaining({
         method: 'subagent.createTransaction.v1',
         params: expect.objectContaining({
-          handoff: expect.objectContaining({
-            payload_builder_output: expect.anything(),
-          }),
+          handoff: expect.anything(),
         }),
       }),
     );
