@@ -368,9 +368,15 @@ describe('POST /api/agent-command', () => {
       }),
     );
 
-    expect(connectMock).toHaveBeenCalledWith({
-      threadId: 'thread-1',
-    });
+    expect(connectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: 'thread-1',
+        messages: [],
+        state: {},
+        tools: [],
+        context: [],
+      }),
+    );
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
       ok: false,
