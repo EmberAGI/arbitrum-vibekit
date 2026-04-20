@@ -28,6 +28,14 @@ type ResolveManagedSharedEmberBootstrapDependencies = {
   createManagedOnboardingIssuers?: typeof maybeCreateManagedOnboardingIssuers;
   createSubagentRuntimes?: typeof maybeCreateSubagentRuntimes;
 };
+type StartManagedSharedEmberHarnessDependencies =
+  ResolveManagedSharedEmberBootstrapDependencies & {
+    startServer?: (input: {
+      bootstrap: Record<string, unknown>;
+      host?: string;
+      port?: number;
+    }) => Promise<StartedServer>;
+  };
 
 const DEFAULT_MANAGED_AGENT_ID = 'ember-lending';
 const DEFAULT_OWS_CHAIN = 'evm';
@@ -66,6 +74,23 @@ function withDefaultManagedPlannerAgentId(input: {
     ...env,
     SHARED_EMBER_ONCHAIN_ACTIONS_PLANNER_AGENT_IDS: Array.from(configuredAgentIds).join(','),
   };
+}
+
+function hasManagedSubmissionBinding(input: {
+  bootstrap: SharedEmberReferenceBootstrap;
+  managedAgentId: string;
+}): boolean {
+  const subagentRuntimes = input.bootstrap.subagentRuntimes as
+    | Record<string, unknown>
+    | undefined;
+  if (subagentRuntimes?.[input.managedAgentId] !== undefined) {
+    return true;
+  }
+
+  const submissionBackends = input.bootstrap.signedTransactionSubmissionBackends as
+    | Record<string, unknown>
+    | undefined;
+  return submissionBackends?.[input.managedAgentId] !== undefined;
 }
 
 export function parseDotEnvFile(filePath: string): Record<string, string> {
@@ -698,30 +723,41 @@ export async function startManagedSharedEmberHarness(input: {
   managedAgentId?: string;
   host?: string;
   port?: number;
-}): Promise<StartedServer> {
+}, dependencies: StartManagedSharedEmberHarnessDependencies = {}): Promise<StartedServer> {
   const managedAgentId = input.managedAgentId ?? DEFAULT_MANAGED_AGENT_ID;
   const host = input.host ?? '127.0.0.1';
   const port = input.port ?? 0;
 
-  const harnessModule = (await import(
-    pathToFileURL(path.join(input.specRoot, 'scripts/shared-domain-service-repo-harness.ts')).href
-  )) as {
-    startRepoLocalSharedEmberDomainProtocolHttpServer: (input: {
-      bootstrap: Record<string, unknown>;
-      host?: string;
-      port?: number;
-    }) => Promise<StartedServer>;
-  };
-  const bootstrapModule = (await import(
-    pathToFileURL(
-      path.join(
-        input.specRoot,
-        'packages/orchestration-domain-integration/src/reference-server-bootstrap.ts',
-      ),
-    ).href
-  )) as {
-    resolveSharedEmberReferenceBootstrapFromEnv: () => Promise<SharedEmberReferenceBootstrap>;
-  };
+  const startServer =
+    dependencies.startServer ??
+    (
+      (await import(
+        pathToFileURL(path.join(input.specRoot, 'scripts/shared-domain-service-repo-harness.ts'))
+          .href
+      )) as {
+        startRepoLocalSharedEmberDomainProtocolHttpServer: (input: {
+          bootstrap: Record<string, unknown>;
+          host?: string;
+          port?: number;
+        }) => Promise<StartedServer>;
+      }
+    ).startRepoLocalSharedEmberDomainProtocolHttpServer;
+  const resolveReferenceBootstrap =
+    dependencies.resolveReferenceBootstrap ??
+    (
+      (await import(
+        pathToFileURL(
+          path.join(
+            input.specRoot,
+            'packages/orchestration-domain-integration/src/reference-server-bootstrap.ts',
+          ),
+        ).href
+      )) as {
+        resolveSharedEmberReferenceBootstrapFromEnv: (
+          env?: NodeJS.ProcessEnv,
+        ) => Promise<SharedEmberReferenceBootstrap>;
+      }
+    ).resolveSharedEmberReferenceBootstrapFromEnv;
 
   const bootstrap = await resolveManagedSharedEmberBootstrap(
     {
@@ -730,12 +766,12 @@ export async function startManagedSharedEmberHarness(input: {
       managedAgentId,
     },
     {
-      resolveReferenceBootstrap: () =>
-        bootstrapModule.resolveSharedEmberReferenceBootstrapFromEnv(),
+      ...dependencies,
+      resolveReferenceBootstrap,
     },
   );
 
-  return harnessModule.startRepoLocalSharedEmberDomainProtocolHttpServer({
+  return startServer({
     bootstrap,
     host,
     port,
@@ -788,7 +824,7 @@ export async function resolveManagedSharedEmberBootstrap(
     managedAgentId,
   });
 
-  return {
+  const mergedBootstrap = {
     ...bootstrap,
     ...(managedOnboardingIssuers === undefined
       ? {}
@@ -808,6 +844,19 @@ export async function resolveManagedSharedEmberBootstrap(
           },
         }),
   };
+
+  if (
+    !hasManagedSubmissionBinding({
+      bootstrap: mergedBootstrap,
+      managedAgentId,
+    })
+  ) {
+    throw new Error(
+      `Managed Shared Ember bootstrap requires a seeded subagent runtime binding for ${managedAgentId}.`,
+    );
+  }
+
+  return mergedBootstrap;
 }
 
 async function readRequestBody(request: http.IncomingMessage): Promise<Buffer> {

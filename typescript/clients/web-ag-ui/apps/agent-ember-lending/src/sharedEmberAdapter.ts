@@ -37,6 +37,8 @@ const PLANNING_PM_ONBOARDING_BLOCKED_MESSAGE =
   'Portfolio Manager onboarding must complete before lending can plan transactions for this thread.';
 const CREATE_TRANSACTION_INPUT_BLOCKED_MESSAGE =
   'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}.';
+const CREATE_TRANSACTION_CONTROL_PATH_BLOCKED_MESSAGE =
+  'create_transaction control_path must be one of "lending.supply", "lending.withdraw", "lending.borrow", or "lending.repay". Do not pass a position-scope id like "position-scope-aave-arbitrum-...". Exact quantity strings like {"kind":"exact","value":"3"} are valid.';
 
 export type EmberLendingLifecycleState = {
   phase: 'prehire' | 'onboarding' | 'active' | 'firing' | 'inactive';
@@ -64,6 +66,12 @@ type CreateEmberLendingDomainOptions = {
   anchoredPayloadResolver?: EmberLendingAnchoredPayloadResolver;
   runtimeSignerRef?: string;
   agentId?: string;
+  requestRedelegationRefresh?: (input: {
+    rootWalletAddress: string;
+    threadId: string;
+    transactionPlanId: string;
+    requestId: string;
+  }) => Promise<void>;
 };
 
 type RequestTransactionExecutionResponse = {
@@ -2872,22 +2880,76 @@ function readSemanticQuantityInput(value: unknown): SemanticQuantity | null {
   return null;
 }
 
-function readSemanticTransactionRequestInput(value: unknown): SemanticTransactionRequest | null {
-  if (!isRecord(value)) {
+function readJsonObjectInput(value: unknown): Record<string, unknown> | null {
+  if (isRecord(value)) {
+    return value;
+  }
+
+  const serialized = readString(value)?.trim();
+  if (!serialized) {
     return null;
   }
 
-  const controlPath = readString(value['control_path']);
-  const asset = readString(value['asset']);
-  const protocolSystem = readString(value['protocol_system']);
-  const network = readString(value['network']);
-  const quantity = readSemanticQuantityInput(value['quantity']);
+  const parseCandidates = [serialized];
+  const fencedJsonMatch = serialized.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  if (fencedJsonMatch?.[1]) {
+    parseCandidates.unshift(fencedJsonMatch[1].trim());
+  }
+
+  for (const candidate of parseCandidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (isRecord(parsed)) {
+        return parsed;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function isSemanticTransactionControlPath(
+  value: string,
+): value is SemanticTransactionRequest['control_path'] {
+  return (
+    value === 'lending.supply' ||
+    value === 'lending.withdraw' ||
+    value === 'lending.borrow' ||
+    value === 'lending.repay'
+  );
+}
+
+function readSemanticTransactionRequestBlockedMessage(value: unknown): string {
+  const input = readJsonObjectInput(value);
+  if (!input) {
+    return CREATE_TRANSACTION_INPUT_BLOCKED_MESSAGE;
+  }
+
+  const controlPath = readString(input['control_path']);
+  if (controlPath && !isSemanticTransactionControlPath(controlPath)) {
+    return CREATE_TRANSACTION_CONTROL_PATH_BLOCKED_MESSAGE;
+  }
+
+  return CREATE_TRANSACTION_INPUT_BLOCKED_MESSAGE;
+}
+
+function readSemanticTransactionRequestInput(value: unknown): SemanticTransactionRequest | null {
+  const input = readJsonObjectInput(value);
+  if (!input) {
+    return null;
+  }
+
+  const controlPath = readString(input['control_path']);
+  const asset = readString(input['asset']);
+  const protocolSystem = readString(input['protocol_system']);
+  const network = readString(input['network']);
+  const quantity = readSemanticQuantityInput(input['quantity']);
 
   if (
-    (controlPath !== 'lending.supply' &&
-      controlPath !== 'lending.withdraw' &&
-      controlPath !== 'lending.borrow' &&
-      controlPath !== 'lending.repay') ||
+    !controlPath ||
+    !isSemanticTransactionControlPath(controlPath) ||
     !asset ||
     !protocolSystem ||
     !network ||
@@ -2920,12 +2982,11 @@ function resolveManagedPlanningReadiness(input: {
     };
   }
 
-  const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
-  const request = readSemanticTransactionRequestInput(commandInput);
+  const request = readSemanticTransactionRequestInput(input.operationInput);
   if (!request) {
     return {
       status: 'blocked',
-      statusMessage: CREATE_TRANSACTION_INPUT_BLOCKED_MESSAGE,
+      statusMessage: readSemanticTransactionRequestBlockedMessage(input.operationInput),
       reason: 'invalid_request',
     };
   }
@@ -3100,7 +3161,7 @@ function buildEscalationHandoff(input: {
     return null;
   }
 
-  const commandInput = isRecord(input.operationInput) ? input.operationInput : {};
+  const commandInput = readJsonObjectInput(input.operationInput) ?? {};
   const source =
     'handoff' in commandInput && isRecord(commandInput['handoff']) ? commandInput['handoff'] : commandInput;
   const intent = resolveManagedPlanningIntent(source, input.state.lastPortfolioState);
@@ -3254,6 +3315,12 @@ async function runPreparedExecutionFlow(input: {
   runtimeSigning?: AgentRuntimeSigningService;
   anchoredPayloadResolver?: EmberLendingAnchoredPayloadResolver;
   runtimeSignerRef?: string;
+  requestRedelegationRefresh?: (input: {
+    rootWalletAddress: string;
+    threadId: string;
+    transactionPlanId: string;
+    requestId: string;
+  }) => Promise<void>;
   threadId: string;
   agentId: string;
   currentState: EmberLendingLifecycleState;
@@ -3333,6 +3400,18 @@ async function runPreparedExecutionFlow(input: {
         agentId: input.agentId,
         requestId,
       });
+      if (currentProgress !== null && input.currentState.rootUserWalletAddress) {
+        try {
+          await input.requestRedelegationRefresh?.({
+            rootWalletAddress: input.currentState.rootUserWalletAddress,
+            threadId: input.threadId,
+            transactionPlanId: input.transactionPlanId,
+            requestId,
+          });
+        } catch {
+          // Best-effort PM-side redelegation should not block the existing wait path.
+        }
+      }
       const latestProgress =
         currentProgress === null
           ? null
@@ -3585,11 +3664,12 @@ async function resumePendingExecutionSubmission(input: {
 }
 
 function readEscalationResult(operationInput: unknown): unknown {
-  if (isRecord(operationInput) && 'result' in operationInput) {
-    return operationInput['result'];
+  const commandInput = readJsonObjectInput(operationInput);
+  if (commandInput && 'result' in commandInput) {
+    return commandInput['result'];
   }
 
-  return operationInput;
+  return commandInput ?? operationInput;
 }
 
 export function createEmberLendingDomain(
@@ -3614,7 +3694,7 @@ export function createEmberLendingDomain(
         {
           name: 'create_transaction',
           description:
-            'Create or refresh a candidate transaction plan for the managed lending position. Reason from mandate_context, wallet_contents, active_position_scopes, active_reservations, and the current candidate plan. mandate_context is the exact managed mandate policy envelope; use wallet_contents, active_position_scopes, active_reservations, and the current candidate plan for live quantities and values. wallet_contents and active_position_scopes describe rooted user wallet context, not balances held in subagent_wallet_address. active_reservations surface the current reservation-backed execution envelope. When active_reservations are surfaced for lending.supply, use that reservation-backed quantity instead of the full idle wallet amount. subagent_wallet_address is the dedicated execution wallet and only reflects balances explicitly surfaced for that wallet. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with control_path, asset, protocol_system, network, and quantity. quantity must be either { "kind": "exact", "value": "1.25" } using asset-unit decimal strings or { "kind": "percent", "value": 50 } using percent of the relevant base for that action. asset is the actionable observed asset; active_position_scopes expose economic_exposures when the asset is a wrapper or synthetic token.',
+            'Create or refresh a candidate transaction plan for the managed lending position. Reason from mandate_context, wallet_contents, active_position_scopes, active_reservations, and the current candidate plan. mandate_context is the exact managed mandate policy envelope; use wallet_contents, active_position_scopes, active_reservations, and the current candidate plan for live quantities and values. wallet_contents and active_position_scopes describe rooted user wallet context, not balances held in subagent_wallet_address. active_reservations surface the current reservation-backed execution envelope. When active_reservations are surfaced for lending.supply, use that reservation-backed quantity instead of the full idle wallet amount. subagent_wallet_address is the dedicated execution wallet and only reflects balances explicitly surfaced for that wallet. Keep the action families distinct: lending.supply adds collateral, lending.withdraw removes collateral, lending.borrow increases debt, and lending.repay pays down debt. Do not answer a repay request with a supply plan, do not answer a withdraw request with a repay or supply plan, and do not answer a borrow request with a collateral-add plan. When the user asks to create, refresh, or retry a plan, call this tool in the current turn instead of only describing the last plan. Pass JSON with control_path, asset, protocol_system, network, and quantity. control_path must be one of lending.supply, lending.withdraw, lending.borrow, or lending.repay; never pass a position-scope id there. quantity must be either { "kind": "exact", "value": "3" } or { "kind": "exact", "value": "1.25" } using asset-unit decimal strings, or { "kind": "percent", "value": 50 } using percent of the relevant base for that action. asset is the actionable observed asset; active_position_scopes expose economic_exposures when the asset is a wrapper or synthetic token.',
         },
         {
           name: 'request_execution',
@@ -3784,7 +3864,7 @@ export function createEmberLendingDomain(
                 status: {
                   executionStatus: 'failed',
                   statusMessage:
-                    CREATE_TRANSACTION_INPUT_BLOCKED_MESSAGE,
+                    readSemanticTransactionRequestBlockedMessage(operation.input),
                 },
               },
             };
@@ -3982,6 +4062,7 @@ export function createEmberLendingDomain(
                     runtimeSigning: options.runtimeSigning,
                     anchoredPayloadResolver: options.anchoredPayloadResolver,
                     runtimeSignerRef: options.runtimeSignerRef,
+                    requestRedelegationRefresh: options.requestRedelegationRefresh,
                     threadId,
                     agentId,
                     currentState,

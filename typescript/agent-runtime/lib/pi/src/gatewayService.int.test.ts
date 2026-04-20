@@ -941,6 +941,326 @@ describe('pi gateway service integration', () => {
     ]);
   });
 
+  it('rebuilds assistant tool-call history against the active responses model for replay', async () => {
+    const agent = new ScriptedPiAgent([
+      { type: 'agent_start' },
+      { type: 'turn_start' },
+      { type: 'agent_end', messages: [] },
+    ]);
+    (agent.state as { model?: unknown }).model = {
+      id: 'openai/gpt-5.4-mini',
+      name: 'openai/gpt-5.4-mini',
+      api: 'openai-responses',
+      provider: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      reasoning: true,
+      input: ['text'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 8192,
+      maxTokens: 2048,
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      now: () => 123,
+      getSession: () => ({
+        thread: { id: 'thread-openrouter-tool-history' },
+        execution: { id: 'exec-openrouter-tool-history', status: 'working' },
+        messages: [],
+      }),
+      updateSession: (_threadId, update) =>
+        update({
+          thread: { id: 'thread-openrouter-tool-history' },
+          execution: { id: 'exec-openrouter-tool-history', status: 'working' },
+          messages: [],
+        }),
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-openrouter-tool-history',
+        runId: 'run-openrouter-tool-history',
+        messages: [
+          {
+            id: 'user-msg',
+            role: 'user',
+            content: 'withdraw all aArbUSDCn',
+          },
+          {
+            id: 'assistant-msg',
+            role: 'assistant',
+            content: '',
+            toolCalls: [
+              {
+                id: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+                type: 'function',
+                function: {
+                  name: 'agent_runtime_domain_command',
+                  arguments:
+                    '{"name":"create_transaction","inputJson":"{\\"control_path\\":\\"lending.withdraw\\",\\"asset\\":\\"aArbUSDCn\\",\\"protocol_system\\":\\"aave\\",\\"network\\":\\"arbitrum\\",\\"quantity\\":{\\"kind\\":\\"exact\\",\\"value\\":\\"3\\"}}"}',
+                },
+              },
+            ],
+          },
+          {
+            id: 'tool-msg',
+            role: 'tool',
+            toolCallId: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+            content:
+              '{"content":[{"type":"text","text":"create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity."}]}',
+          },
+        ],
+      }),
+    );
+
+    expect(agent.promptCalls).toEqual([
+      [
+        {
+          role: 'user',
+          content: 'withdraw all aArbUSDCn',
+          timestamp: 123,
+        },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'toolCall',
+              id: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+              name: 'agent_runtime_domain_command',
+              arguments: {
+                name: 'create_transaction',
+                inputJson:
+                  '{"control_path":"lending.withdraw","asset":"aArbUSDCn","protocol_system":"aave","network":"arbitrum","quantity":{"kind":"exact","value":"3"}}',
+              },
+            },
+          ],
+          api: 'openai-responses',
+          provider: 'openrouter',
+          model: 'openai/gpt-5.4-mini',
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: 'stop',
+          timestamp: 123,
+        },
+        {
+          role: 'toolResult',
+          toolCallId: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+          toolName: 'ag-ui-tool',
+          content: [
+            {
+              type: 'text',
+              text:
+                '{"content":[{"type":"text","text":"create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity."}]}',
+            },
+          ],
+          isError: false,
+          timestamp: 123,
+        },
+      ],
+    ]);
+  });
+
+  it('rehydrates persisted tool-call history into the agent state before replaying the next turn', async () => {
+    class StatefulReplayPiAgent extends ScriptedPiAgent {
+      public replaceMessagesCalls: unknown[] = [];
+
+      replaceMessages(messages: unknown): void {
+        this.replaceMessagesCalls.push(messages);
+        this.state.messages = Array.isArray(messages) ? [...messages] : [];
+      }
+
+      override async prompt(messages: unknown): Promise<void> {
+        this.promptCalls.push(messages);
+
+        const stateMessages = this.state.messages;
+        const replayedAssistantMessage = stateMessages.find(
+          (message): message is {
+            role: string;
+            api?: string;
+            provider?: string;
+            model?: string;
+            content?: Array<{ type?: string; id?: string }>;
+          } =>
+            typeof message === 'object' &&
+            message !== null &&
+            'role' in message &&
+            message.role === 'assistant',
+        );
+        const replayedToolResultMessage = stateMessages.find(
+          (message): message is { role: string; toolCallId?: string } =>
+            typeof message === 'object' &&
+            message !== null &&
+            'role' in message &&
+            message.role === 'toolResult',
+        );
+
+        const hasReplayedToolCall = replayedAssistantMessage?.content?.some(
+          (part) =>
+            part.type === 'toolCall' &&
+            part.id === 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+        );
+        const hasReplayedToolResult =
+          replayedToolResultMessage?.toolCallId ===
+          'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85';
+        const hasActiveModelIdentity =
+          replayedAssistantMessage?.api === 'openai-responses' &&
+          replayedAssistantMessage?.provider === 'openrouter' &&
+          replayedAssistantMessage?.model === 'openai/gpt-5.4-mini';
+
+        if (!hasReplayedToolCall || !hasReplayedToolResult || !hasActiveModelIdentity) {
+          throw new Error('missing rehydrated tool-call replay state');
+        }
+
+        this.emit({ type: 'agent_start' });
+        this.emit({ type: 'turn_start' });
+        this.emit({ type: 'agent_end', messages: [] });
+      }
+    }
+
+    const agent = new StatefulReplayPiAgent([]);
+    (agent.state as { model?: unknown }).model = {
+      id: 'openai/gpt-5.4-mini',
+      name: 'openai/gpt-5.4-mini',
+      api: 'openai-responses',
+      provider: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      reasoning: true,
+      input: ['text'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 8192,
+      maxTokens: 2048,
+    };
+
+    const persistedMessages = [
+      {
+        id: 'user-msg',
+        role: 'user' as const,
+        content: 'withdraw all aArbUSDCn',
+      },
+      {
+        id: 'assistant-msg',
+        role: 'assistant' as const,
+        content: '',
+        toolCalls: [
+          {
+            id: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+            type: 'function' as const,
+            function: {
+              name: 'agent_runtime_domain_command',
+              arguments:
+                '{"name":"create_transaction","inputJson":"{\\"control_path\\":\\"lending.withdraw\\",\\"asset\\":\\"aArbUSDCn\\",\\"protocol_system\\":\\"aave\\",\\"network\\":\\"arbitrum\\",\\"quantity\\":{\\"kind\\":\\"exact\\",\\"value\\":\\"3\\"}}"}',
+            },
+          },
+        ],
+      },
+      {
+        id: 'tool-msg',
+        role: 'tool' as const,
+        toolCallId: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+        content:
+          '{"content":[{"type":"text","text":"create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity."}]}',
+      },
+    ];
+
+    let session = {
+      thread: { id: 'thread-openrouter-rehydration' },
+      execution: { id: 'exec-openrouter-rehydration', status: 'working' as const },
+      messages: persistedMessages,
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      now: () => 123,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-openrouter-rehydration',
+        runId: 'run-openrouter-rehydration',
+        messages: [
+          ...persistedMessages,
+          {
+            id: 'user-retry',
+            role: 'user',
+            content: 'one more time',
+          },
+        ],
+      }),
+    );
+
+    expect(agent.replaceMessagesCalls).toEqual([
+      [
+        {
+          role: 'user',
+          content: 'withdraw all aArbUSDCn',
+          timestamp: 123,
+        },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'toolCall',
+              id: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+              name: 'agent_runtime_domain_command',
+              arguments: {
+                name: 'create_transaction',
+                inputJson:
+                  '{"control_path":"lending.withdraw","asset":"aArbUSDCn","protocol_system":"aave","network":"arbitrum","quantity":{"kind":"exact","value":"3"}}',
+              },
+            },
+          ],
+          api: 'openai-responses',
+          provider: 'openrouter',
+          model: 'openai/gpt-5.4-mini',
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: 'stop',
+          timestamp: 123,
+        },
+        {
+          role: 'toolResult',
+          toolCallId: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+          toolName: 'ag-ui-tool',
+          content: [
+            {
+              type: 'text',
+              text:
+                '{"content":[{"type":"text","text":"create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity."}]}',
+            },
+          ],
+          isError: false,
+          timestamp: 123,
+        },
+      ],
+    ]);
+    expect(agent.promptCalls).toEqual([
+      [
+        {
+          role: 'user',
+          content: 'one more time',
+          timestamp: 123,
+        },
+      ],
+    ]);
+  });
+
   it('emits a canonical request-message snapshot before streamed assistant output on run', async () => {
     const assistantMessage = {
       role: 'assistant',

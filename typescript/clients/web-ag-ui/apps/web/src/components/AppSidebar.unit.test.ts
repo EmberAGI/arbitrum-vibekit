@@ -5,6 +5,16 @@ import { arbitrum, mainnet, polygon } from 'viem/chains';
 
 import { AppSidebar, getSidebarAgentHref, getWalletSelectorChains } from './AppSidebar';
 
+const privyMocks = vi.hoisted(() => ({
+  ready: true,
+  authenticated: true,
+  login: vi.fn(),
+  logout: vi.fn(),
+  walletAddress: '0x1111111111111111111111111111111111111111' as string | null,
+  chainId: 42161 as number | null,
+  switchChain: vi.fn(),
+}));
+
 const pushMock = vi.fn();
 const useAgentListMock = vi.fn();
 const getAllAgentsMock = vi.fn();
@@ -33,20 +43,18 @@ vi.mock('next/image', () => {
 
 vi.mock('@privy-io/react-auth', () => {
   return {
-    usePrivy: () => ({ ready: true, authenticated: true }),
-    useLogin: () => ({ login: vi.fn() }),
-    useLogout: () => ({ logout: vi.fn() }),
+    usePrivy: () => ({ ready: privyMocks.ready, authenticated: privyMocks.authenticated }),
+    useLogin: () => ({ login: privyMocks.login }),
+    useLogout: () => ({ logout: privyMocks.logout }),
   };
 });
 
 vi.mock('@/hooks/usePrivyWalletClient', () => {
   return {
     usePrivyWalletClient: () => ({
-      privyWallet: {
-        address: '0x1111111111111111111111111111111111111111',
-      },
-      chainId: 42161,
-      switchChain: vi.fn(),
+      privyWallet: privyMocks.walletAddress ? { address: privyMocks.walletAddress } : null,
+      chainId: privyMocks.chainId,
+      switchChain: privyMocks.switchChain,
       isLoading: false,
       error: null,
     }),
@@ -110,6 +118,14 @@ describe('AppSidebar wallet actions', () => {
     getAllAgentsMock.mockReset();
     getVisibleAgentsMock.mockReset();
     pathnameMock = '/hire-agents';
+    privyMocks.ready = true;
+    privyMocks.authenticated = true;
+    privyMocks.walletAddress = '0x1111111111111111111111111111111111111111';
+    privyMocks.chainId = 42161;
+    privyMocks.login.mockReset();
+    privyMocks.logout.mockReset();
+    privyMocks.switchChain.mockReset();
+    process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-privy-app-id';
 
     useAgentListMock.mockReturnValue({ agents: {} });
     getAllAgentsMock.mockReturnValue([]);
@@ -216,5 +232,18 @@ describe('AppSidebar wallet actions', () => {
       '/hire-agents/agent-portfolio-manager?tab=chat',
     );
     expect(getSidebarAgentHref('agent-ember-lending')).toBe('/hire-agents/agent-ember-lending');
+  });
+
+  it('shows a non-interactive fallback instead of a broken login CTA when Privy is not configured', () => {
+    process.env.NEXT_PUBLIC_PRIVY_APP_ID = '';
+    privyMocks.ready = false;
+    privyMocks.authenticated = false;
+    privyMocks.walletAddress = null;
+    privyMocks.chainId = null;
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('Privy auth unavailable');
+    expect(html).not.toContain('Login / Connect');
   });
 });

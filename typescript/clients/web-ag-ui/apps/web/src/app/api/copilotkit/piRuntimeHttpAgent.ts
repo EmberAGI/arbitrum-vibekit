@@ -6,6 +6,7 @@ export type AgentRuntimeHttpAgentConfig = Omit<HttpAgentConfig, 'url'> & {
 };
 
 export type AgentRuntimeHttpAgent = HttpAgent & {
+  connect: (input: RunAgentInput) => ReturnType<HttpAgent['connect']>;
   runtimeUrl: string;
   clone: () => AgentRuntimeHttpAgent;
 };

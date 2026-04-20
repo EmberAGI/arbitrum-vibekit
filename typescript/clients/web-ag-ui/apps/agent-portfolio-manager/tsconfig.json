@@ -9,6 +9,9 @@
     "src/**/*.ts"
   ],
   "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
     "src/managedOnboardingIdentitySmoke.ts",
     "src/managedOnboardingIdentitySmokeSupport.ts",
     "src/managedIdentitySmokeSupport.unit.test.ts"

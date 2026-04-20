@@ -237,6 +237,7 @@ describe('portfolio-manager startup identity preflight integration', () => {
       __internalDeriveControllerSmartAccountAddress: vi.fn(
         async () => TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
       ),
+      __internalEnsureControllerSmartAccountDeployed: vi.fn(async () => undefined),
       __internalPostgres: createInternalPostgresHooks(),
     } as never);
 
@@ -333,6 +334,7 @@ describe('portfolio-manager startup identity preflight integration', () => {
         __internalDeriveControllerSmartAccountAddress: vi.fn(
           async () => TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
         ),
+        __internalEnsureControllerSmartAccountDeployed: vi.fn(async () => undefined),
         __internalPostgres: createInternalPostgresHooks(),
       } as never),
     ).rejects.toThrow(

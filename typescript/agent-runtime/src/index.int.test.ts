@@ -1893,7 +1893,7 @@ describe('agent-runtime integration', () => {
       },
     });
 
-    const resumeEvents = await collectEventSource(
+    const resumeEvents = await collectQueuedEvents(
       await runtime.service.run({
         threadId: 'thread-resume-after-artifact-overwrite',
         runId: 'run-resume-after-artifact-overwrite',
@@ -2018,7 +2018,7 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const resumeEvents = await collectEventSource(
+    const resumeEvents = await collectQueuedEvents(
       await runtime.service.run({
         threadId: 'thread-resume-with-client-scaffolding',
         runId: 'run-resume-with-client-scaffolding',

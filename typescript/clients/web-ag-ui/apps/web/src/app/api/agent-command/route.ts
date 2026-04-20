@@ -113,7 +113,16 @@ async function readFirstConnectSnapshot(params: {
 }): Promise<Record<string, unknown> | null> {
   try {
     const snapshot = await firstValueFrom(
-      params.agent.connect({ threadId: params.threadId }).pipe(
+      params.agent
+        .connect({
+          threadId: params.threadId,
+          runId: randomUUID(),
+          messages: [],
+          state: {},
+          tools: [],
+          context: [],
+        })
+        .pipe(
         verifyEvents(false),
         filter(
           (
@@ -124,8 +133,8 @@ async function readFirstConnectSnapshot(params: {
           } => event.type === EventType.STATE_SNAPSHOT && isRecord((event as { snapshot?: unknown }).snapshot),
         ),
         map((event) => event.snapshot as Record<string, unknown>),
-        take(1),
-      ),
+          take(1),
+        ),
     );
 
     return snapshot;

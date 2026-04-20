@@ -234,16 +234,27 @@ function resolvePlannerAssetAlias(input: {
 
   switch (input.network.trim().toLowerCase()) {
     case 'arbitrum':
-      if (normalizedAsset.startsWith('variabledebtarb')) {
-        return normalizedAsset.slice('variabledebtarb'.length) || null;
-      }
-      if (normalizedAsset.startsWith('aarb')) {
-        return normalizedAsset.slice('aarb'.length) || null;
-      }
-      return null;
+      return resolveArbitrumAaveAssetAlias(normalizedAsset);
     default:
       return null;
   }
+}
+
+function resolveArbitrumAaveAssetAlias(normalizedAsset: string): string | null {
+  for (const prefix of ['variabledebtarb', 'aarb']) {
+    if (!normalizedAsset.startsWith(prefix)) {
+      continue;
+    }
+
+    const suffix = normalizedAsset.slice(prefix.length);
+    if (suffix.length === 0) {
+      return null;
+    }
+
+    return suffix.endsWith('n') && suffix.length > 1 ? suffix.slice(0, -1) : suffix;
+  }
+
+  return null;
 }
 
 function resolveRpcUrl(
@@ -395,10 +406,6 @@ function resolveAmountForOnchainActions(input: {
   }
 
   const normalizedAmount = input.amount.trim();
-  if (/^\d+$/u.test(normalizedAmount)) {
-    return normalizedAmount;
-  }
-
   return parseUnits(normalizedAmount, input.decimals).toString();
 }
 
