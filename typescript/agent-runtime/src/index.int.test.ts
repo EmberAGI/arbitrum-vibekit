@@ -448,6 +448,7 @@ async function collectEventSourceUntilFailure<T>(source: readonly T[] | AsyncIte
 async function collectQueuedEvents<T>(
   source: readonly T[] | AsyncIterable<T>,
   timeoutMs = 25,
+  initialTimeoutMs = 250,
 ): Promise<T[]> {
   if (Array.isArray(source)) {
     return Array.from(source);
@@ -455,13 +456,15 @@ async function collectQueuedEvents<T>(
 
   const events: T[] = [];
   const iterator = source[Symbol.asyncIterator]();
+  let hasSeenEvent = false;
 
   try {
     while (true) {
+      const activeTimeoutMs = hasSeenEvent ? timeoutMs : Math.max(timeoutMs, initialTimeoutMs);
       const result = await Promise.race([
         iterator.next(),
         new Promise<'timeout'>((resolve) => {
-          setTimeout(() => resolve('timeout'), timeoutMs);
+          setTimeout(() => resolve('timeout'), activeTimeoutMs);
         }),
       ]);
 
@@ -469,6 +472,7 @@ async function collectQueuedEvents<T>(
         break;
       }
 
+      hasSeenEvent = true;
       events.push(result.value);
     }
   } finally {
@@ -760,6 +764,19 @@ function createLifecycleDomain(options?: {
 }
 
 describe('agent-runtime integration', () => {
+  it('waits longer for the first queued event before switching to idle drain timing', async () => {
+    const delayedSource = {
+      async *[Symbol.asyncIterator]() {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        yield { type: 'delayed-event' as const };
+      },
+    };
+
+    const events = await collectQueuedEvents(delayedSource, 25, 100);
+
+    expect(events).toEqual([{ type: 'delayed-event' }]);
+  });
+
   it('normalizes tool-driven lifecycle commands and interrupt resumes through the full runtime-owned lifecycle', async () => {
     let latestUserText = '';
     const observedSystemPrompts: string[] = [];
