@@ -120,6 +120,24 @@ const DEFAULT_MANAGED_LENDING_COLLATERAL_POLICIES_INPUT = formatManagedLendingCo
     max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
   },
 ]);
+const DETAIL_PAGE_SHELL_CLASS =
+  'flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.78),rgba(248,241,232,0.96)_38%,#efe3d2_100%)] p-8 text-[#261a12]';
+const DETAIL_CARD_CLASS =
+  'rounded-2xl border border-[#eadac7] bg-[linear-gradient(180deg,#fffdf9_0%,#f7efe4_100%)] shadow-[0_18px_45px_rgba(115,78,48,0.08)]';
+const DETAIL_PANEL_CLASS =
+  'rounded-2xl border border-[#eadac7] bg-white/80 shadow-[0_16px_32px_rgba(148,111,79,0.10)]';
+const DETAIL_INSET_CLASS =
+  'rounded-xl border border-[#eadac7] bg-[#fffaf2] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]';
+const DETAIL_INPUT_CLASS =
+  'w-full rounded-lg border border-[#d8c3ad] bg-[#fffdf8] px-4 py-3 text-[#261a12] outline-none transition-colors placeholder:text-[#9b826f] focus:border-[#fd6731]';
+const DETAIL_ACTION_BUTTON_CLASS =
+  'flex items-center gap-2 rounded-lg border border-[#eadac7] bg-white/80 px-3 py-1.5 text-sm text-[#503826] shadow-[0_10px_28px_rgba(115,78,48,0.08)] transition-colors hover:bg-[#fff7ed] disabled:opacity-60';
+const DETAIL_NEUTRAL_BUTTON_CLASS =
+  'rounded-lg border border-[#eadac7] bg-white/80 text-[#503826] font-medium transition-colors hover:bg-[#fff7ed] disabled:opacity-60';
+const DETAIL_ICON_BUTTON_CLASS =
+  'rounded-lg p-2 text-[#6f5a4c] transition-colors hover:bg-[#fff3e7] hover:text-[#2f2118]';
+const DETAIL_LABEL_CLASS = 'text-[11px] uppercase tracking-[0.18em] text-[#907764]';
+const DETAIL_STATS_LABEL_CLASS = 'text-[10px] uppercase tracking-[0.2em] text-[#907764]';
 
 interface AgentDetailPageProps {
   agentId: string;
@@ -255,7 +273,7 @@ function Sparkline(props: {
   const area = `0,${height} ${points} ${width},${height}`;
 
   return (
-    <div className="mt-5 h-[160px] rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden">
+    <div className="mt-5 h-[160px] overflow-hidden rounded-xl border border-[#eadac7] bg-[#fffaf2]">
       <svg
         width="100%"
         height="100%"
@@ -512,10 +530,10 @@ function ManagedMandateDetails(props: { managedMandate: Record<string, unknown> 
       {fields.map((field) => (
         <div
           key={field.key}
-          className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5"
+          className={`${DETAIL_INSET_CLASS} px-3 py-2.5`}
         >
-          <div className="text-[11px] font-mono tracking-[0.04em] text-white/40">{field.key}</div>
-          <div className="mt-1 break-words text-sm leading-relaxed text-gray-200">{field.value}</div>
+          <div className="text-[11px] font-mono tracking-[0.04em] text-[#907764]">{field.key}</div>
+          <div className="mt-1 break-words text-sm leading-relaxed text-[#3b2a1f]">{field.value}</div>
         </div>
       ))}
     </div>
@@ -773,24 +791,22 @@ function ManagedMandateEditorCard(props: {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#1a1a1a] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
+    <div className={`${DETAIL_PANEL_CLASS} p-5`}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Managed mandate
-          </div>
-          <div className="mt-2 text-base font-semibold text-white">{props.view.title}</div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-400">
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+          <div className={DETAIL_LABEL_CLASS}>Managed mandate</div>
+          <div className="mt-2 text-base font-semibold text-[#261a12]">{props.view.title}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#7c6757]">
+            <span className="rounded-full border border-[#eadac7] bg-[#fffaf2] px-2.5 py-1">
               {network}
             </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+            <span className="rounded-full border border-[#eadac7] bg-[#fffaf2] px-2.5 py-1">
               {controlPath}
             </span>
           </div>
         </div>
         {props.view.mandateRef ? (
-          <div className="text-right text-[11px] uppercase tracking-[0.18em] text-white/35">
+          <div className="text-right text-[11px] uppercase tracking-[0.18em] text-[#9b826f]">
             {props.view.mandateRef}
           </div>
         ) : null}
@@ -798,65 +814,65 @@ function ManagedMandateEditorCard(props: {
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <div>
-          <label className="block text-sm text-gray-400 mb-2">Collateral policy</label>
+          <label className="mb-2 block text-sm text-[#7c6757]">Collateral policy</label>
           <input
             id="managed-mandate-collateral-policies"
             name="managed-mandate-collateral-policies"
             type="text"
             value={collateralPoliciesInput}
             onChange={(event) => setCollateralPoliciesInput(event.target.value)}
-            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+            className={DETAIL_INPUT_CLASS}
           />
-          <div className="mt-2 text-xs text-gray-500">
+          <div className="mt-2 text-xs text-[#937c69]">
             Use <span className="font-mono">ASSET:PCT</span> entries, for example{' '}
             <span className="font-mono">USDC:70, WETH:50</span>.
           </div>
         </div>
         <div>
-          <label className="block text-sm text-gray-400 mb-2">Allowed borrow assets</label>
+          <label className="mb-2 block text-sm text-[#7c6757]">Allowed borrow assets</label>
           <input
             id="managed-mandate-allowed-borrow-assets"
             name="managed-mandate-allowed-borrow-assets"
             type="text"
             value={allowedBorrowAssetsInput}
             onChange={(event) => setAllowedBorrowAssetsInput(event.target.value)}
-            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+            className={DETAIL_INPUT_CLASS}
           />
-          <div className="mt-2 text-xs text-gray-500">
+          <div className="mt-2 text-xs text-[#937c69]">
             Leave blank for a supply-only mandate.
           </div>
         </div>
         <div>
-          <label className="block text-sm text-gray-400 mb-2">Max LTV bps</label>
+          <label className="mb-2 block text-sm text-[#7c6757]">Max LTV bps</label>
           <input
             id="managed-mandate-max-ltv-bps"
             name="managed-mandate-max-ltv-bps"
             type="number"
             value={maxLtvBpsInput}
             onChange={(event) => setMaxLtvBpsInput(event.target.value)}
-            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+            className={DETAIL_INPUT_CLASS}
           />
         </div>
         <div>
-          <label className="block text-sm text-gray-400 mb-2">Minimum health factor</label>
+          <label className="mb-2 block text-sm text-[#7c6757]">Minimum health factor</label>
           <input
             id="managed-mandate-min-health-factor"
             name="managed-mandate-min-health-factor"
             type="text"
             value={minHealthFactorInput}
             onChange={(event) => setMinHealthFactorInput(event.target.value)}
-            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+            className={DETAIL_INPUT_CLASS}
           />
         </div>
       </div>
 
-      <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">Exact mandate preview</div>
+      <div className={`${DETAIL_INSET_CLASS} mt-4 p-4`}>
+        <div className={DETAIL_LABEL_CLASS}>Exact mandate preview</div>
         <ManagedMandateDetails managedMandate={previewManagedMandate as Record<string, unknown>} />
       </div>
 
       {submitError ? (
-        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="mt-4 rounded-xl border border-red-500/20 bg-[#fff0eb] px-4 py-3 text-sm text-[#b84f2c]">
           {submitError}
         </div>
       ) : null}
@@ -1016,18 +1032,18 @@ function FloatingErrorToast(props: {
 }) {
   return (
     <div className="fixed top-5 right-5 z-[60] w-[360px] max-w-[calc(100vw-2.5rem)]">
-      <div className="rounded-2xl border border-red-500/30 bg-[#141414]/95 backdrop-blur px-4 py-3 shadow-[0_18px_60px_rgba(0,0,0,0.55)]">
+      <div className="rounded-2xl border border-red-500/20 bg-[#fff3ee]/95 px-4 py-3 shadow-[0_18px_48px_rgba(115,78,48,0.12)] backdrop-blur">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-red-200">{props.title}</div>
-            <div className="mt-1 text-xs text-red-100/80 leading-relaxed break-words">
+            <div className="text-sm font-semibold text-[#b84f2c]">{props.title}</div>
+            <div className="mt-1 break-words text-xs leading-relaxed text-[#9c5b3f]">
               {props.message}
             </div>
           </div>
           <button
             type="button"
             onClick={props.onClose}
-            className="shrink-0 rounded-lg p-2 text-red-100/70 hover:text-red-100 hover:bg-white/5 transition-colors"
+            className="shrink-0 rounded-lg p-2 text-[#9c5b3f] transition-colors hover:bg-white/70 hover:text-[#7b3d20]"
             aria-label="Dismiss"
           >
             <span aria-hidden="true">✕</span>
@@ -1447,7 +1463,7 @@ export function AgentDetailPage({
       } else if (i === fullStars && hasHalfStar) {
         stars.push(<Star key={i} className="w-4 h-4 fill-yellow-400/50 text-yellow-400" />);
       } else {
-        stars.push(<Star key={i} className="w-4 h-4 text-gray-600" />);
+        stars.push(<Star key={i} className="w-4 h-4 text-[#937c69]" />);
       }
     }
     return stars;
@@ -1478,7 +1494,7 @@ export function AgentDetailPage({
     visiblePortfolioManagerManagedAgentView || showManagedLendingRuntimeCards || visibleManagedMandateEditorView ? (
       <div className="mt-6 space-y-5">
         {visiblePortfolioManagerManagedAgentView ? (
-          <div className="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
+          <div className={`${DETAIL_PANEL_CLASS} p-5`}>
             <div className="flex items-start justify-between gap-4">
               <button
                 type="button"
@@ -1489,20 +1505,20 @@ export function AgentDetailPage({
               >
                 <div className="flex items-start gap-3">
                   <ChevronDown
-                    className={`mt-0.5 h-4 w-4 shrink-0 text-white/45 transition-transform ${
+                    className={`mt-0.5 h-4 w-4 shrink-0 text-[#907764] transition-transform ${
                       isManagedLaneExpanded ? 'rotate-180' : '-rotate-90'
                     }`}
                   />
                   <div className="min-w-0">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                    <div className={DETAIL_LABEL_CLASS}>
                       Managed lending lane
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <div className="text-base font-semibold text-white">
+                      <div className="text-base font-semibold text-[#261a12]">
                         {visiblePortfolioManagerManagedAgentView.title}
                       </div>
                       {visiblePortfolioManagerManagedAgentView.laneLabel ? (
-                        <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-gray-300">
+                        <span className="inline-flex items-center rounded-full border border-[#eadac7] bg-[#fffaf2] px-2.5 py-1 text-[11px] font-medium text-[#6f5a4c]">
                           {visiblePortfolioManagerManagedAgentView.laneLabel}
                         </span>
                       ) : null}
@@ -1520,19 +1536,15 @@ export function AgentDetailPage({
             {isManagedLaneExpanded ? (
               <div id={managedLaneContentId}>
                 {visiblePortfolioManagerManagedAgentView.managedMandate ? (
-                  <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                      Mandate
-                    </div>
+                  <div className={`${DETAIL_INSET_CLASS} mt-4 p-4`}>
+                    <div className={DETAIL_LABEL_CLASS}>Mandate</div>
                     <ManagedMandateDetails managedMandate={visiblePortfolioManagerManagedAgentView.managedMandate} />
                   </div>
                 ) : null}
                 {visiblePortfolioManagerManagedAgentView.reservationSummary ? (
-                  <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                      Reservation
-                    </div>
-                    <div className="mt-2 text-sm leading-relaxed text-gray-300">
+                  <div className={`${DETAIL_INSET_CLASS} mt-4 p-4`}>
+                    <div className={DETAIL_LABEL_CLASS}>Reservation</div>
+                    <div className="mt-2 text-sm leading-relaxed text-[#6f5a4c]">
                       {visiblePortfolioManagerManagedAgentView.reservationSummary}
                     </div>
                   </div>
@@ -1545,19 +1557,15 @@ export function AgentDetailPage({
         {showManagedLendingRuntimeCards && emberLendingRuntimeView ? (
           <div className="grid gap-3 lg:grid-cols-2">
             {emberLendingRuntimeView.managedMandate ? (
-              <div className="min-w-0 rounded-xl border border-white/10 bg-[#151515] p-4">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                  Mandate
-                </div>
+              <div className={`${DETAIL_INSET_CLASS} min-w-0 p-4`}>
+                <div className={DETAIL_LABEL_CLASS}>Mandate</div>
                 <ManagedMandateDetails managedMandate={emberLendingRuntimeView.managedMandate} />
               </div>
             ) : null}
             {emberLendingRuntimeView.reservationSummary ? (
-              <div className="min-w-0 rounded-xl border border-white/10 bg-[#151515] p-4">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                  Reservation
-                </div>
-                <div className="mt-2 text-sm leading-relaxed text-gray-300">
+              <div className={`${DETAIL_INSET_CLASS} min-w-0 p-4`}>
+                <div className={DETAIL_LABEL_CLASS}>Reservation</div>
+                <div className="mt-2 text-sm leading-relaxed text-[#6f5a4c]">
                   {emberLendingRuntimeView.reservationSummary}
                 </div>
               </div>
@@ -1575,14 +1583,14 @@ export function AgentDetailPage({
     ) : null;
   const subagentWalletBar = emberLendingRuntimeView?.walletAddress ? (
     <div className="mt-6">
-      <div className="relative border-t border-[#2a2a2a] pt-4" ref={subagentWalletPopoverRef}>
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">Subagent wallet</div>
+      <div className="relative border-t border-[#eadac7] pt-4" ref={subagentWalletPopoverRef}>
+        <div className={DETAIL_LABEL_CLASS}>Subagent wallet</div>
         <div className="mt-3 flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-green-500" />
           <button
             type="button"
             onClick={() => setIsSubagentWalletPopoverOpen((current) => !current)}
-            className="flex-1 min-w-0 text-left text-sm font-mono truncate text-gray-200 hover:text-white"
+            className="min-w-0 flex-1 truncate text-left text-sm font-mono text-[#503826] transition-colors hover:text-[#2f2118]"
             aria-haspopup="dialog"
             aria-expanded={isSubagentWalletPopoverOpen}
             aria-controls={subagentWalletPopoverId}
@@ -1592,7 +1600,7 @@ export function AgentDetailPage({
           <button
             type="button"
             onClick={() => setIsSubagentWalletPopoverOpen((current) => !current)}
-            className="text-xs text-gray-300 hover:text-white"
+            className="text-xs text-[#6f5a4c] transition-colors hover:text-[#2f2118]"
             aria-label={
               isSubagentWalletPopoverOpen
                 ? 'Hide full subagent wallet address'
@@ -1611,9 +1619,9 @@ export function AgentDetailPage({
             id={subagentWalletPopoverId}
             role="dialog"
             aria-label="Subagent wallet address"
-            className="absolute left-0 top-full mt-2 z-30 w-max rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] p-3 shadow-lg"
+            className="absolute left-0 top-full z-30 mt-2 w-max rounded-lg border border-[#eadac7] bg-[#fffdf8] p-3 shadow-[0_18px_38px_rgba(115,78,48,0.14)]"
           >
-            <div className="text-xs text-gray-400">Subagent wallet address</div>
+            <div className="text-xs text-[#7c6757]">Subagent wallet address</div>
             <div className="mt-2 flex items-center gap-2">
               <input
                 type="text"
@@ -1621,7 +1629,7 @@ export function AgentDetailPage({
                 value={emberLendingRuntimeView.walletAddress}
                 onFocus={handleWalletFieldFocus}
                 onClick={handleWalletFieldClick}
-                className="shrink-0 w-auto rounded-md border border-[#2a2a2a] bg-[#151515] px-2 py-1 text-xs font-mono text-gray-200"
+                className="shrink-0 w-auto rounded-md border border-[#eadac7] bg-[#fff7ef] px-2 py-1 text-xs font-mono text-[#503826]"
                 style={{
                   width: `calc(${Math.max(emberLendingRuntimeView.walletAddress.length, 20)}ch + 1rem)`,
                 }}
@@ -1630,18 +1638,18 @@ export function AgentDetailPage({
               <button
                 type="button"
                 onClick={() => void handleCopySubagentWalletAddress()}
-                className="shrink-0 rounded-md border border-[#2a2a2a] bg-[#2a2a2a] px-2 py-1 text-xs text-white hover:bg-[#333]"
+                className={`${DETAIL_NEUTRAL_BUTTON_CLASS} shrink-0 px-2 py-1 text-xs`}
               >
                 {subagentWalletCopyStatus === 'success' ? 'Copied' : 'Copy'}
               </button>
             </div>
             {subagentWalletCopyStatus === 'error' ? (
-              <div className="mt-2 text-xs text-red-300" role="status" aria-live="polite">
+              <div className="mt-2 text-xs text-[#c85b3c]" role="status" aria-live="polite">
                 Clipboard unavailable. Select and copy manually.
               </div>
             ) : null}
             {subagentWalletCopyStatus === 'success' ? (
-              <div className="mt-2 text-xs text-green-300" role="status" aria-live="polite">
+              <div className="mt-2 text-xs text-[#2f7a57]" role="status" aria-live="polite">
                 Copied to clipboard.
               </div>
             ) : null}
@@ -1655,7 +1663,7 @@ export function AgentDetailPage({
   // while detail refresh is still loading, otherwise the Hire CTA can disappear.
   if (showPostHireLayout) {
     const tabs = (
-      <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
+      <div className="mb-6 flex items-center gap-1 border-b border-[#eadac7]">
         {isEmberLendingAgent ? (
           <>
             <TabButton
@@ -1791,23 +1799,23 @@ export function AgentDetailPage({
     const postHireContent = useEmbeddedPortfolioChat ? chatTab : tabContent;
 
     return (
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className={DETAIL_PAGE_SHELL_CLASS}>
         <div className="max-w-[1200px] mx-auto">
           {popups}
           {/* Breadcrumb */}
           <nav className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <button onClick={onBack} className="hover:text-white transition-colors">
+            <div className="flex items-center gap-2 text-sm text-[#7c6757]">
+              <button onClick={onBack} className="transition-colors hover:text-[#2f2118]">
                 Agents
               </button>
               <ChevronRight className="w-4 h-4" />
-              <span className="text-white">{agentName}</span>
+              <span className="text-[#261a12]">{agentName}</span>
             </div>
             {/* Refresh button */}
             <button
               onClick={onSync}
               disabled={isSyncing}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white text-sm transition-colors disabled:opacity-60"
+              className={DETAIL_ACTION_BUTTON_CLASS}
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
               {isSyncing ? 'Syncing...' : 'Refresh'}
@@ -1817,9 +1825,9 @@ export function AgentDetailPage({
           <>
             <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-start">
                 {/* Left summary card (Figma onboarding) */}
-                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                <div className={`${DETAIL_CARD_CLASS} p-6`}>
                   <div
-                    className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto"
+                    className="mx-auto mb-6 flex h-[220px] w-[220px] items-center justify-center overflow-hidden rounded-full bg-[#f1e4d3] ring-1 ring-[#eadac7]"
                     style={
                       agentConfig.imageUrl && agentConfig.avatarBg
                         ? { background: agentConfig.avatarBg }
@@ -1836,7 +1844,7 @@ export function AgentDetailPage({
                         }`}
                       />
                     ) : (
-                      <span className="text-4xl font-semibold text-white/75" aria-hidden="true">
+                      <span className="text-4xl font-semibold text-[#6f5a4c]" aria-hidden="true">
                         {iconMonogram(agentName)}
                       </span>
                     )}
@@ -1845,13 +1853,13 @@ export function AgentDetailPage({
                   <div className="flex justify-center">
                     {isHired ? (
                       <div
-                        className={`group relative w-full inline-flex h-10 items-stretch overflow-hidden rounded-[999px] bg-[#2a2a2a] ring-1 ring-white/10 transition-[background-color,box-shadow,border-color] duration-300 ease-out hover:ring-white/20 hover:shadow-[0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.06)] group-hover:bg-gradient-to-r group-hover:from-[#ff2a00] group-hover:to-[#fd6731] group-hover:ring-[#fd6731]/30 group-hover:shadow-[0_16px_55px_rgba(255,42,0,0.28),0_10px_30px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.10)] ${
+                        className={`group relative inline-flex h-10 w-full items-stretch overflow-hidden rounded-[999px] bg-[#f4eadb] ring-1 ring-[#eadac7] transition-[background-color,box-shadow,border-color] duration-300 ease-out hover:ring-[#fd6731]/30 hover:shadow-[0_12px_30px_rgba(115,78,48,0.12)] group-hover:bg-gradient-to-r group-hover:from-[#ffeddc] group-hover:to-[#ffe2cf] ${
                           isFiring ? 'opacity-90' : ''
                         }`}
                       >
-                        <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 bg-[radial-gradient(1200px_circle_at_50%_0%,rgba(255,255,255,0.10),transparent_40%)]" />
+                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_circle_at_50%_0%,rgba(255,255,255,0.55),transparent_40%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-                        <div className="relative z-10 flex flex-1 min-w-0 items-center gap-2 px-3 text-[13px] font-medium text-gray-100 transition-[opacity,flex-basis,padding] duration-200 ease-out group-hover:opacity-0 group-hover:flex-[0_0_0%] group-hover:px-0 overflow-hidden">
+                        <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-3 text-[13px] font-medium text-[#5f4939] transition-[opacity,flex-basis,padding] duration-200 ease-out group-hover:flex-[0_0_0%] group-hover:px-0 group-hover:opacity-0">
                           <span
                             className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)] transition-transform duration-200 group-hover:scale-110"
                             aria-hidden="true"
@@ -1867,9 +1875,9 @@ export function AgentDetailPage({
                           type="button"
                           onClick={onFire}
                           disabled={managedOnboardingOwner ? false : isFiring}
-                          className={`relative z-10 flex flex-[0_0_92px] items-center justify-center px-3 h-full text-[13px] font-medium text-white border-l border-white/10 transition-[flex-basis,background-color,border-color,color,box-shadow] duration-300 ease-out group-hover:flex-1 group-hover:bg-transparent group-hover:border-white/0 ${
+                          className={`relative z-10 flex h-full flex-[0_0_92px] items-center justify-center border-l border-[#eadac7] px-3 text-[13px] font-medium text-white transition-[flex-basis,background-color,border-color,color,box-shadow] duration-300 ease-out group-hover:flex-1 group-hover:border-transparent group-hover:bg-transparent ${
                             !managedOnboardingOwner && isFiring
-                              ? 'bg-gray-600 cursor-wait'
+                              ? 'bg-[#d3c4b4] text-[#6f5a4c] cursor-wait'
                               : 'bg-gradient-to-b from-[#ff4d1a] to-[#fd6731] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
                           }`}
                         >
@@ -1883,8 +1891,8 @@ export function AgentDetailPage({
                         className={[
                           CTA_SIZE_MD_FULL,
                           isHiring
-                            ? 'bg-purple-500/50 text-white cursor-wait'
-                            : 'bg-purple-500 hover:bg-purple-600 text-white shadow-[0_10px_30px_rgba(168,85,247,0.25)]',
+                            ? 'bg-[#fd6731]/60 text-white cursor-wait'
+                            : 'bg-[#fd6731] hover:bg-[#e55a28] text-white shadow-[0_14px_30px_rgba(253,103,49,0.24)]',
                           'transition-[background-color,box-shadow] duration-200',
                         ].join(' ')}
                       >
@@ -1896,42 +1904,34 @@ export function AgentDetailPage({
                   {showLeftRailStats ? (
                     <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                          Agent Income
-                        </div>
+                        <div className={DETAIL_STATS_LABEL_CLASS}>Agent Income</div>
                         <LoadingValue
                           isLoaded={hasLoadedView}
                           skeletonClassName="h-6 w-24"
-                          loadedClassName="text-lg font-semibold text-white"
+                          loadedClassName="text-lg font-semibold text-[#261a12]"
                           value={formatCurrency(profile.agentIncome)}
                         />
                       </div>
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                          AUM
-                        </div>
+                        <div className={DETAIL_STATS_LABEL_CLASS}>AUM</div>
                         <LoadingValue
                           isLoaded={hasLoadedView}
                           skeletonClassName="h-6 w-24"
-                          loadedClassName="text-lg font-semibold text-white"
+                          loadedClassName="text-lg font-semibold text-[#261a12]"
                           value={formatCurrency(profile.aum)}
                         />
                       </div>
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                          Total Users
-                        </div>
+                        <div className={DETAIL_STATS_LABEL_CLASS}>Total Users</div>
                         <LoadingValue
                           isLoaded={hasLoadedView}
                           skeletonClassName="h-6 w-20"
-                          loadedClassName="text-lg font-semibold text-white"
+                          loadedClassName="text-lg font-semibold text-[#261a12]"
                           value={formatNumber(profile.totalUsers)}
                         />
                       </div>
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                          APY
-                        </div>
+                        <div className={DETAIL_STATS_LABEL_CLASS}>APY</div>
                         <LoadingValue
                           isLoaded={hasLoadedView}
                           skeletonClassName="h-6 w-16"
@@ -1940,20 +1940,16 @@ export function AgentDetailPage({
                         />
                       </div>
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                          Your Assets
-                        </div>
+                        <div className={DETAIL_STATS_LABEL_CLASS}>Your Assets</div>
                         <LoadingValue
                           isLoaded={hasLoadedView}
                           skeletonClassName="h-6 w-24"
-                          loadedClassName="text-lg font-semibold text-white"
+                          loadedClassName="text-lg font-semibold text-[#261a12]"
                           value={formatCurrency(fullMetrics?.latestSnapshot?.totalUsd)}
                         />
                       </div>
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                          Your PnL
-                        </div>
+                        <div className={DETAIL_STATS_LABEL_CLASS}>Your PnL</div>
                         <LoadingValue
                           isLoaded={hasLoadedView}
                           skeletonClassName="h-6 w-24"
@@ -1973,9 +1969,9 @@ export function AgentDetailPage({
                 <div className="pt-2 flex flex-col">
                   <div className="flex items-start justify-between gap-6 mb-6">
                     <div className="min-w-0">
-                      <h1 className="text-2xl font-bold text-white mb-2">{agentName}</h1>
+                      <h1 className="mb-2 text-2xl font-bold text-[#261a12]">{agentName}</h1>
                       <div className="mt-4 flex items-center gap-3">
-                        {rank !== undefined && <span className="text-gray-400 text-sm">#{rank}</span>}
+                        {rank !== undefined && <span className="text-sm text-[#7c6757]">#{rank}</span>}
                         {rating !== undefined && (
                           <div className="flex items-center gap-1">{renderStars(rating)}</div>
                         )}
@@ -1987,12 +1983,12 @@ export function AgentDetailPage({
                             name={creatorName}
                             verified={creatorVerified}
                             size="md"
-                            nameClassName="text-sm text-white"
+                            nameClassName="text-sm text-[#2f2118]"
                           />
                         )}
                         {ownerAddress && (
-                          <div className="text-sm text-gray-400">
-                            Owned by <span className="text-white">{formatAddress(ownerAddress)}</span>
+                          <div className="text-sm text-[#7c6757]">
+                            Owned by <span className="text-[#2f2118]">{formatAddress(ownerAddress)}</span>
                           </div>
                         )}
                       </div>
@@ -2000,11 +1996,11 @@ export function AgentDetailPage({
                         <AgentSurfaceTag tag={agentConfig.surfaceTag} className="mt-3" />
                       ) : null}
                       {agentDescription ? (
-                        <p className="mt-4 text-gray-400 text-sm leading-relaxed">
+                        <p className="mt-4 text-sm leading-relaxed text-[#7c6757]">
                           {agentDescription}
                         </p>
                       ) : (
-                        <p className="mt-4 text-gray-500 text-sm italic">No description available</p>
+                        <p className="mt-4 text-sm italic text-[#937c69]">No description available</p>
                       )}
                     </div>
 
@@ -2014,7 +2010,7 @@ export function AgentDetailPage({
                         target="_blank"
                         rel="noreferrer"
                         aria-label="X"
-                        className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                        className={DETAIL_ICON_BUTTON_CLASS}
                       >
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -2025,7 +2021,7 @@ export function AgentDetailPage({
                         target="_blank"
                         rel="noreferrer"
                         aria-label="Website"
-                        className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                        className={DETAIL_ICON_BUTTON_CLASS}
                       >
                         <Globe className="w-4 h-4" />
                       </a>
@@ -2034,7 +2030,7 @@ export function AgentDetailPage({
                         target="_blank"
                         rel="noreferrer"
                         aria-label="GitHub"
-                        className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                        className={DETAIL_ICON_BUTTON_CLASS}
                       >
                         <Github className="w-4 h-4" />
                       </a>
@@ -2043,7 +2039,7 @@ export function AgentDetailPage({
                   {managedAgentContextCards}
 
                   {showAgentMetadataGrid ? (
-                    <div className="grid grid-cols-4 gap-4 mt-8 pt-6 border-t border-white/10">
+                    <div className="mt-8 grid grid-cols-4 gap-4 border-t border-[#eadac7] pt-6">
                       <TagColumn
                         title="Chains"
                         items={displayChains}
@@ -2082,25 +2078,25 @@ export function AgentDetailPage({
 
   // Render pre-hire state layout (original)
   return (
-    <div className="flex-1 overflow-y-auto p-8">
+    <div className={DETAIL_PAGE_SHELL_CLASS}>
       <div className="max-w-[1200px] mx-auto">
         {popups}
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-sm text-gray-400 mb-6">
-          <button onClick={onBack} className="hover:text-white transition-colors">
+        <nav className="mb-6 flex items-center gap-2 text-sm text-[#7c6757]">
+          <button onClick={onBack} className="transition-colors hover:text-[#2f2118]">
             Agents
           </button>
           <ChevronRight className="w-4 h-4" />
-          <span className="text-white">{agentName}</span>
+          <span className="text-[#261a12]">{agentName}</span>
         </nav>
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-start">
           {/* Left Column - Agent Card */}
           <div>
-            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+            <div className={`${DETAIL_CARD_CLASS} p-6`}>
               <div
-                className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto"
+                className="mx-auto mb-6 flex h-[220px] w-[220px] items-center justify-center overflow-hidden rounded-full bg-[#f1e4d3] ring-1 ring-[#eadac7]"
                 style={
                   agentConfig.imageUrl && agentConfig.avatarBg
                     ? { background: agentConfig.avatarBg }
@@ -2117,7 +2113,7 @@ export function AgentDetailPage({
                     }`}
                   />
                 ) : (
-                  <span className="text-4xl font-semibold text-white/75" aria-hidden="true">
+                  <span className="text-4xl font-semibold text-[#6f5a4c]" aria-hidden="true">
                     {iconMonogram(agentName)}
                   </span>
                 )}
@@ -2129,8 +2125,8 @@ export function AgentDetailPage({
                 className={[
                   CTA_SIZE_MD_FULL,
                   isHiring || isRestoringState
-                    ? 'bg-purple-500/50 text-white cursor-wait'
-                    : 'bg-purple-500 hover:bg-purple-600 text-white shadow-[0_10px_30px_rgba(168,85,247,0.25)]',
+                    ? 'bg-[#fd6731]/60 text-white cursor-wait'
+                    : 'bg-[#fd6731] hover:bg-[#e55a28] text-white shadow-[0_14px_30px_rgba(253,103,49,0.24)]',
                   'transition-[background-color,box-shadow] duration-200',
                 ].join(' ')}
               >
@@ -2144,18 +2140,18 @@ export function AgentDetailPage({
               </button>
 
               {isRestoringState ? (
-                <div className="mt-4 rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                  <div className="text-gray-300 text-sm font-medium mb-2">Restoring state</div>
-                  <p className="text-gray-400 text-xs leading-relaxed">
+                <div className={`${DETAIL_INSET_CLASS} mt-4 p-4`}>
+                  <div className="mb-2 text-sm font-medium text-[#503826]">Restoring state</div>
+                  <p className="text-xs leading-relaxed text-[#7c6757]">
                     Waiting for the latest runtime snapshot before rendering agent controls.
                   </p>
                 </div>
               ) : null}
 
               {managedOnboardingOwner && !isRestoringState ? (
-                <div className="mt-4 rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                  <div className="text-gray-300 text-sm font-medium mb-2">Managed onboarding</div>
-                  <p className="text-gray-400 text-xs leading-relaxed">
+                <div className={`${DETAIL_INSET_CLASS} mt-4 p-4`}>
+                  <div className="mb-2 text-sm font-medium text-[#503826]">Managed onboarding</div>
+                  <p className="text-xs leading-relaxed text-[#7c6757]">
                     Managed onboarding happens through {managedOnboardingOwner.name}.
                   </p>
                 </div>
@@ -2164,45 +2160,37 @@ export function AgentDetailPage({
               {showLeftRailStats ? (
                 <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
                   <div>
-                    <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                      Agent Income
-                    </div>
+                    <div className={DETAIL_STATS_LABEL_CLASS}>Agent Income</div>
                     {!hasLoadedView ? (
                       <Skeleton className="h-6 w-24" />
                     ) : (
-                      <div className="text-lg font-semibold text-white">
+                      <div className="text-lg font-semibold text-[#261a12]">
                         {formatCurrency(profile.agentIncome) ?? '-'}
                       </div>
                     )}
                   </div>
                   <div>
-                    <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                      AUM
-                    </div>
+                    <div className={DETAIL_STATS_LABEL_CLASS}>AUM</div>
                     {!hasLoadedView ? (
                       <Skeleton className="h-6 w-24" />
                     ) : (
-                      <div className="text-lg font-semibold text-white">
+                      <div className="text-lg font-semibold text-[#261a12]">
                         {formatCurrency(profile.aum) ?? '-'}
                       </div>
                     )}
                   </div>
                   <div>
-                    <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                      Total Users
-                    </div>
+                    <div className={DETAIL_STATS_LABEL_CLASS}>Total Users</div>
                     {!hasLoadedView ? (
                       <Skeleton className="h-6 w-20" />
                     ) : (
-                      <div className="text-lg font-semibold text-white">
+                      <div className="text-lg font-semibold text-[#261a12]">
                         {formatNumber(profile.totalUsers) ?? '-'}
                       </div>
                     )}
                   </div>
                   <div>
-                    <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                      APY
-                    </div>
+                    <div className={DETAIL_STATS_LABEL_CLASS}>APY</div>
                     {!hasLoadedView ? (
                       <Skeleton className="h-6 w-16" />
                     ) : (
@@ -2222,9 +2210,9 @@ export function AgentDetailPage({
             <div className="pt-2 flex flex-col">
               <div className="flex items-start justify-between gap-6 mb-6">
                 <div className="min-w-0">
-                  <h1 className="text-2xl font-bold text-white mb-2">{agentName}</h1>
+                  <h1 className="mb-2 text-2xl font-bold text-[#261a12]">{agentName}</h1>
                   <div className="mt-4 flex items-center gap-3">
-                    {rank !== undefined && <span className="text-gray-400 text-sm">#{rank}</span>}
+                    {rank !== undefined && <span className="text-sm text-[#7c6757]">#{rank}</span>}
                     {rating !== undefined && (
                       <div className="flex items-center gap-1">{renderStars(rating)}</div>
                     )}
@@ -2236,12 +2224,12 @@ export function AgentDetailPage({
                         name={creatorName}
                         verified={creatorVerified}
                         size="md"
-                        nameClassName="text-sm text-white"
+                        nameClassName="text-sm text-[#2f2118]"
                       />
                     )}
                     {ownerAddress && (
-                      <div className="text-sm text-gray-400">
-                        Owned by <span className="text-white">{formatAddress(ownerAddress)}</span>
+                      <div className="text-sm text-[#7c6757]">
+                        Owned by <span className="text-[#2f2118]">{formatAddress(ownerAddress)}</span>
                       </div>
                     )}
                   </div>
@@ -2249,9 +2237,9 @@ export function AgentDetailPage({
                     <AgentSurfaceTag tag={agentConfig.surfaceTag} className="mt-3" />
                   ) : null}
                   {agentDescription ? (
-                    <p className="mt-4 text-gray-400 text-sm leading-relaxed">{agentDescription}</p>
+                    <p className="mt-4 text-sm leading-relaxed text-[#7c6757]">{agentDescription}</p>
                   ) : (
-                    <p className="mt-4 text-gray-500 text-sm italic">No description available</p>
+                    <p className="mt-4 text-sm italic text-[#937c69]">No description available</p>
                   )}
                 </div>
 
@@ -2261,7 +2249,7 @@ export function AgentDetailPage({
                     target="_blank"
                     rel="noreferrer"
                     aria-label="X"
-                    className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                    className={DETAIL_ICON_BUTTON_CLASS}
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -2272,7 +2260,7 @@ export function AgentDetailPage({
                     target="_blank"
                     rel="noreferrer"
                     aria-label="Website"
-                    className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                    className={DETAIL_ICON_BUTTON_CLASS}
                   >
                     <Globe className="w-4 h-4" />
                   </a>
@@ -2281,7 +2269,7 @@ export function AgentDetailPage({
                     target="_blank"
                     rel="noreferrer"
                     aria-label="GitHub"
-                    className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                    className={DETAIL_ICON_BUTTON_CLASS}
                   >
                     <Github className="w-4 h-4" />
                   </a>
@@ -2289,7 +2277,7 @@ export function AgentDetailPage({
               </div>
 
               {showAgentMetadataGrid ? (
-                <div className="grid grid-cols-4 gap-4 mt-auto pt-6 border-t border-white/10">
+                <div className="mt-auto grid grid-cols-4 gap-4 border-t border-[#eadac7] pt-6">
                   <TagColumn
                     title="Chains"
                     items={displayChains}
@@ -2317,14 +2305,14 @@ export function AgentDetailPage({
         </div>
 
         {useEmbeddedPortfolioChat ? null : (
-          <div className="mt-10 border-b border-white/10 flex items-center gap-6">
+          <div className="mt-10 flex items-center gap-6 border-b border-[#eadac7]">
             <button
               type="button"
               onClick={() => selectTab('metrics')}
               className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
                 resolvedTab === 'metrics'
                   ? 'text-[#fd6731] border-[#fd6731]'
-                  : 'text-gray-500 border-transparent hover:text-white'
+                  : 'text-[#937c69] border-transparent hover:text-[#2f2118]'
               }`}
               aria-current={resolvedTab === 'metrics' ? 'page' : undefined}
             >
@@ -2336,10 +2324,10 @@ export function AgentDetailPage({
               disabled={!chatEnabled}
               className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
                 !chatEnabled
-                  ? 'text-gray-600 border-transparent'
+                  ? 'text-[#b09a8a] border-transparent'
                   : resolvedTab === 'chat'
                     ? 'text-[#fd6731] border-[#fd6731]'
-                    : 'text-gray-400 border-transparent hover:text-white'
+                    : 'text-[#7c6757] border-transparent hover:text-[#2f2118]'
               }`}
             >
               Chat
@@ -2355,11 +2343,11 @@ export function AgentDetailPage({
               {/* Pre-hire should still show the same chart cards across agents (CLMM/Pendle/GMX)
                  so the page doesn't feel "empty" before hire. */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                <div className={`${DETAIL_PANEL_CLASS} p-6`}>
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-sm font-semibold text-white">APY Change</div>
-                      <div className="text-xs text-gray-500 mt-1">Latest vs previous snapshot</div>
+                      <div className="text-sm font-semibold text-[#261a12]">APY Change</div>
+                      <div className="mt-1 text-xs text-[#937c69]">Latest vs previous snapshot</div>
                     </div>
                     <div className="text-right">
                       <div className="text-2xl font-semibold text-teal-400">
@@ -2370,7 +2358,7 @@ export function AgentDetailPage({
                           value={formatPercent(currentApy)}
                         />
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-[#937c69]">
                         {currentApy !== undefined && previousApy !== undefined
                           ? formatPercent(currentApy - previousApy, 1)
                           : '—'}
@@ -2390,22 +2378,22 @@ export function AgentDetailPage({
                   />
                 </div>
 
-                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                <div className={`${DETAIL_PANEL_CLASS} p-6`}>
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-sm font-semibold text-white">Total Users</div>
-                      <div className="text-xs text-gray-500 mt-1">All time</div>
+                      <div className="text-sm font-semibold text-[#261a12]">Total Users</div>
+                      <div className="mt-1 text-xs text-[#937c69]">All time</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-semibold text-white">
+                      <div className="text-2xl font-semibold text-[#261a12]">
                         <LoadingValue
                           isLoaded={hasLoadedView}
                           skeletonClassName="h-7 w-24"
-                          loadedClassName="text-white"
+                          loadedClassName="text-[#261a12]"
                           value={formatNumber(profile.totalUsers)}
                         />
                       </div>
-                      <div className="text-xs text-gray-500">—</div>
+                      <div className="text-xs text-[#937c69]">—</div>
                     </div>
                   </div>
                   <Sparkline
@@ -2446,12 +2434,12 @@ function TabButton({ active, onClick, children, disabled, highlight }: TabButton
       disabled={disabled}
       className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-[2px] ${
         disabled
-          ? 'text-gray-600 cursor-not-allowed border-transparent'
+          ? 'text-[#b09a8a] cursor-not-allowed border-transparent'
           : active
             ? highlight
               ? 'text-[#fd6731] border-[#fd6731]'
-              : 'text-white border-white'
-            : 'text-gray-400 hover:text-white border-transparent'
+              : 'text-[#261a12] border-[#d8c3ad]'
+            : 'text-[#7c6757] hover:text-[#2f2118] border-transparent'
       }`}
     >
       {children}
@@ -2491,10 +2479,10 @@ function AgentChatTab(props: {
     <div className="space-y-4">
       <div className="space-y-3">
         {visibleMessages.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-[#131313] px-4 py-5 text-sm text-gray-400">
+          <div className="rounded-2xl border border-dashed border-[#d8c3ad] bg-[#fffaf2] px-4 py-5 text-sm text-[#7c6757]">
             {props.isHiring
               ? 'Submitting hire request...'
-              : 'Send a message to start a live Pi runtime conversation.'}
+              : `Send a message to start a live conversation with ${props.agentName}.`}
           </div>
         ) : (
           visibleMessages.map((message) => (
@@ -2502,15 +2490,15 @@ function AgentChatTab(props: {
               key={message.id}
               className={`rounded-2xl px-4 py-3 ${
                 message.role === 'assistant'
-                  ? 'bg-[#111827] text-blue-50'
+                  ? 'border border-[#d4dbe9] bg-[#eef4ff] text-[#24406b]'
                   : message.role === 'reasoning'
-                    ? 'border border-violet-400/20 bg-[#1f1630] text-violet-50'
+                    ? 'border border-violet-200 bg-[#f4efff] text-[#5d3d8c]'
                   : message.role === 'user'
-                    ? 'bg-[#1c1917] text-orange-50'
-                    : 'bg-[#161616] text-white'
+                    ? 'border border-[#f0d6c2] bg-[#fff0e6] text-[#7b3d20]'
+                    : 'border border-[#eadac7] bg-[#fffaf2] text-[#261a12]'
               }`}
             >
-              <div className="text-[11px] uppercase tracking-[0.14em] text-white/45">
+              <div className="text-[11px] uppercase tracking-[0.14em] text-[#907764]">
                 {message.label}
               </div>
               <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{message.text}</div>
@@ -2519,8 +2507,8 @@ function AgentChatTab(props: {
         )}
 
         {activityCards.map((card) => (
-          <div key={card.id} className="rounded-2xl border border-white/10 bg-[#171717] px-4 py-4">
-            <div className="text-[11px] uppercase tracking-[0.14em] text-white/45">
+          <div key={card.id} className={`${DETAIL_PANEL_CLASS} px-4 py-4`}>
+            <div className="text-[11px] uppercase tracking-[0.14em] text-[#907764]">
               {card.label}
             </div>
             <div className="mt-2">
@@ -2551,8 +2539,8 @@ function AgentChatTab(props: {
         ))}
       </div>
 
-      <form onSubmit={props.onSubmit} className="border-t border-white/10 pt-4">
-        <label className="block text-[12px] uppercase tracking-[0.14em] text-white/50">
+      <form onSubmit={props.onSubmit} className="border-t border-[#eadac7] pt-4">
+        <label className="block text-[12px] uppercase tracking-[0.14em] text-[#907764]">
           Message
         </label>
         <textarea
@@ -2560,17 +2548,17 @@ function AgentChatTab(props: {
           onChange={(event) => props.onChatDraftChange(event.target.value)}
           onKeyDown={props.onChatKeyDown}
           rows={4}
-          placeholder="Ask the Pi example agent to explain what it can do."
-          className="mt-3 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 py-3 text-sm text-white outline-none transition focus:border-[#fd6731]"
+          placeholder={`Ask ${props.agentName} what it can do.`}
+          className="mt-3 w-full rounded-2xl border border-[#d8c3ad] bg-[#fffdf8] px-4 py-3 text-sm text-[#261a12] outline-none transition placeholder:text-[#9b826f] focus:border-[#fd6731]"
         />
         <div className="mt-3 flex items-center justify-between gap-4">
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-[#937c69]">
             {props.isHired ? 'Live chat stays on the same thread.' : 'Chat works before and after hire.'}
           </div>
           <button
             type="submit"
             disabled={!props.isComposerEnabled || props.chatDraft.trim().length === 0}
-            className="h-10 px-4 rounded-full text-[13px] font-medium inline-flex items-center justify-center bg-[#fd6731] text-white disabled:bg-white/10 disabled:text-white/35"
+            className="inline-flex h-10 items-center justify-center rounded-full bg-[#fd6731] px-4 text-[13px] font-medium text-white disabled:bg-[#eadac7] disabled:text-[#9b826f]"
           >
             Send message
           </button>
@@ -2617,19 +2605,19 @@ function TransactionHistoryTab({
   return (
     <div className="space-y-6">
       {taskId && (
-        <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
+        <div className={`${DETAIL_INSET_CLASS} p-4`}>
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs text-gray-500 uppercase tracking-wide">Current Task</span>
-              <p className="text-white font-medium">{taskId.slice(0, 12)}...</p>
+              <span className="text-xs uppercase tracking-wide text-[#937c69]">Current Task</span>
+              <p className="font-medium text-[#261a12]">{taskId.slice(0, 12)}...</p>
             </div>
             <span
               className={`px-3 py-1 rounded-full text-xs font-medium ${
                 taskStatus === 'working'
-                  ? 'bg-teal-500/20 text-teal-400'
+                  ? 'bg-[#dff4ea] text-[#2f7a57]'
                   : taskStatus === 'completed'
-                    ? 'bg-blue-500/20 text-blue-400'
-                    : 'bg-gray-500/20 text-gray-400'
+                    ? 'bg-[#e3edf8] text-[#496985]'
+                    : 'bg-[#efe4d5] text-[#7c6757]'
               }`}
             >
               {taskStatus || 'pending'}
@@ -2639,8 +2627,8 @@ function TransactionHistoryTab({
       )}
 
       {telemetry.length > 0 && (
-        <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Latest Activity</div>
+        <div className={`${DETAIL_INSET_CLASS} p-4`}>
+          <div className="mb-2 text-xs uppercase tracking-wide text-[#937c69]">Latest Activity</div>
           <div className="space-y-2">
             {telemetry.slice(-3).reverse().map((t, i) => (
               <div
@@ -2648,11 +2636,11 @@ function TransactionHistoryTab({
                 className="flex items-center justify-between text-sm"
               >
                 <div>
-                  <span className="text-white">Cycle {t.cycle}</span>
-                  <span className="text-gray-500 mx-2">•</span>
-                  <span className="text-gray-400">{t.action}</span>
+                  <span className="text-[#261a12]">Cycle {t.cycle}</span>
+                  <span className="mx-2 text-[#937c69]">•</span>
+                  <span className="text-[#7c6757]">{t.action}</span>
                 </div>
-                <span className="text-xs text-gray-500">{formatDate(t.timestamp)}</span>
+                <span className="text-xs text-[#937c69]">{formatDate(t.timestamp)}</span>
               </div>
             ))}
           </div>
@@ -2660,23 +2648,23 @@ function TransactionHistoryTab({
       )}
 
       {transactions.length === 0 ? (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8">
-          <div className="text-[12px] uppercase tracking-[0.14em] text-white/60 mb-2">
+        <div className={`${DETAIL_PANEL_CLASS} p-8`}>
+          <div className="mb-2 text-[12px] uppercase tracking-[0.14em] text-[#907764]">
             Transaction History
           </div>
-          <div className="text-white text-lg font-semibold mb-1">No transactions yet</div>
-          <div className="text-sm text-gray-400">
+          <div className="mb-1 text-lg font-semibold text-[#261a12]">No transactions yet</div>
+          <div className="text-sm text-[#7c6757]">
             Transactions will appear here once the agent starts operating.
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-6">
+        <div className={`${DETAIL_PANEL_CLASS} overflow-hidden`}>
+          <div className="flex items-center justify-between gap-6 border-b border-[#eadac7] px-5 py-4">
             <div>
-              <div className="text-[12px] uppercase tracking-[0.14em] text-white/60">
+              <div className="text-[12px] uppercase tracking-[0.14em] text-[#907764]">
                 Transaction History
               </div>
-              <div className="text-sm text-gray-400 mt-1">
+              <div className="mt-1 text-sm text-[#7c6757]">
                 Showing the latest {Math.min(10, transactions.length)} of {transactions.length}
               </div>
             </div>
@@ -2684,15 +2672,15 @@ function TransactionHistoryTab({
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px]">
-              <thead className="bg-white/[0.02]">
-                <tr className="text-[11px] uppercase tracking-[0.14em] text-white/60 border-b border-white/10">
+              <thead className="bg-[#fff7ef]">
+                <tr className="border-b border-[#eadac7] text-[11px] uppercase tracking-[0.14em] text-[#907764]">
                   <th className="text-left font-medium px-5 py-3">Transaction</th>
                   <th className="text-left font-medium px-5 py-3">Date &amp; time</th>
                   <th className="text-left font-medium px-5 py-3">Protocol</th>
                   <th className="text-right font-medium px-5 py-3">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/10">
+              <tbody className="divide-y divide-[#eadac7]">
                 {transactions
                   .slice(-10)
                   .reverse()
@@ -2710,7 +2698,7 @@ function TransactionHistoryTab({
                     return (
                       <tr
                         key={`${tx.cycle}-${index}`}
-                        className="hover:bg-white/[0.04] transition-colors"
+                        className="transition-colors hover:bg-[#fff7ef]"
                       >
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3 min-w-0">
@@ -2721,10 +2709,10 @@ function TransactionHistoryTab({
                                   alt=""
                                   loading="lazy"
                                   decoding="async"
-                                  className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
+                                  className="h-7 w-7 rounded-full bg-[#f1e4d3] ring-1 ring-[#eadac7] object-contain"
                                 />
                               ) : (
-                                <div className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12]" />
+                                <div className="h-7 w-7 rounded-full bg-[#f1e4d3] ring-1 ring-[#eadac7]" />
                               )}
                               {protocolIconUri ? (
                                 <img
@@ -2732,18 +2720,18 @@ function TransactionHistoryTab({
                                   alt=""
                                   loading="lazy"
                                   decoding="async"
-                                  className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
+                                  className="h-7 w-7 rounded-full bg-[#f1e4d3] ring-1 ring-[#eadac7] object-contain"
                                 />
                               ) : (
-                                <div className="h-7 w-7 rounded-full bg-black/30 ring-1 ring-[#0e0e12]" />
+                                <div className="h-7 w-7 rounded-full bg-[#f1e4d3] ring-1 ring-[#eadac7]" />
                               )}
                             </div>
 
                             <div className="min-w-0">
-                              <div className="text-white font-medium truncate">
+                              <div className="truncate font-medium text-[#261a12]">
                                 Cycle {tx.cycle} · {tx.action}
                               </div>
-                              <div className="text-xs text-gray-400 mt-0.5 truncate">
+                              <div className="mt-0.5 truncate text-xs text-[#7c6757]">
                                 {shortHash}
                                 {tx.reason ? ` · ${tx.reason}` : ''}
                               </div>
@@ -2751,11 +2739,11 @@ function TransactionHistoryTab({
                           </div>
                         </td>
 
-                        <td className="px-5 py-4 text-sm text-gray-300 whitespace-nowrap">
+                        <td className="whitespace-nowrap px-5 py-4 text-sm text-[#6f5a4c]">
                           {formatDate(tx.timestamp)}
                         </td>
 
-                        <td className="px-5 py-4 text-sm text-gray-300 whitespace-nowrap">
+                        <td className="whitespace-nowrap px-5 py-4 text-sm text-[#6f5a4c]">
                           {protocolLabel ?? '—'}
                         </td>
 
@@ -2774,11 +2762,11 @@ function TransactionHistoryTab({
       )}
 
       {events.length > 0 && (
-        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
+        <div className={`${DETAIL_PANEL_CLASS} p-6`}>
+          <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Activity Stream</h3>
           <div className="space-y-3 max-h-64 overflow-y-auto">
             {events.slice(-10).reverse().map((event, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+              <div key={i} className="flex items-start gap-3 rounded-lg bg-[#fff7ef] p-3">
                 <div
                   className={`w-2 h-2 rounded-full mt-2 ${
                     event.type === 'status'
@@ -2789,8 +2777,8 @@ function TransactionHistoryTab({
                   }`}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
-                  <div className="text-sm text-white mt-1">
+                  <div className="text-xs uppercase tracking-wide text-[#937c69]">{event.type}</div>
+                  <div className="mt-1 text-sm text-[#261a12]">
                     {event.type === 'status' && event.message}
                     {event.type === 'artifact' && `Artifact: ${readArtifactEventType(event)}`}
                     {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
@@ -3432,33 +3420,33 @@ function AgentBlockersTab({
       <div>
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
           {/* Form Area */}
-          <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <div className={`${DETAIL_PANEL_CLASS} p-6`}>
             {showPendleSetupForm ? (
               <form onSubmit={handlePendleSetupSubmit}>
-                <h3 className="text-lg font-semibold text-white mb-4">Pendle Setup</h3>
+                <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Pendle Setup</h3>
                 {activeInterrupt?.message && (
-                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                  <p className="mb-6 text-sm text-[#7c6757]">{activeInterrupt.message}</p>
                 )}
 
                 <div className="space-y-4 mb-6">
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">Funding Amount (USD)</label>
+                    <label className="mb-2 block text-sm text-[#7c6757]">Funding Amount (USD)</label>
                     <input
                       type="number"
                       value={baseContributionUsd}
                       onChange={(e) => setBaseContributionUsd(e.target.value)}
                       placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
                       min={MIN_BASE_CONTRIBUTION_USD}
-                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
+                      className={DETAIL_INPUT_CLASS}
                     />
                   </div>
 
-                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">PT position management</div>
-                    <p className="text-gray-400 text-xs">
+                  <div className={`${DETAIL_INSET_CLASS} p-4`}>
+                    <div className="mb-2 text-sm font-medium text-[#503826]">PT position management</div>
+                    <p className="text-xs text-[#7c6757]">
                       The agent configures and rebalances Pendle PT positions using your selected funding amount.
                     </p>
-                    <p className="text-gray-500 text-xs mt-3">
+                    <p className="mt-3 text-xs text-[#937c69]">
                       Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
                     </p>
                   </div>
@@ -3484,7 +3472,7 @@ function AgentBlockersTab({
                         },
                       });
                     }}
-                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                    className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-6 py-2.5`}
                   >
                     Next
                   </button>
@@ -3492,39 +3480,39 @@ function AgentBlockersTab({
               </form>
             ) : showPortfolioManagerSetupForm ? (
               <form onSubmit={handlePortfolioManagerSetupSubmit}>
-                <h3 className="text-lg font-semibold text-white mb-4">Ember Portfolio Agent Setup</h3>
+                <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Ember Portfolio Agent Setup</h3>
                 {activeInterrupt?.message && (
-                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                  <p className="mb-6 text-sm text-[#7c6757]">{activeInterrupt.message}</p>
                 )}
 
                 <div className="space-y-4 mb-6">
-                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">Root delegation setup</div>
-                    <p className="text-gray-400 text-xs">
+                  <div className={`${DETAIL_INSET_CLASS} p-4`}>
+                    <div className="mb-2 text-sm font-medium text-[#503826]">Root delegation setup</div>
+                    <p className="text-xs text-[#7c6757]">
                       Shared Ember will observe your connected wallet directly during onboarding and derive
                       the initial reserve state from that live wallet observation.
                     </p>
-                    <p className="text-gray-500 text-xs mt-3">
+                    <p className="mt-3 text-xs text-[#937c69]">
                       Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
                     </p>
                   </div>
 
-                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">Portfolio mandate</div>
-                    <p className="text-gray-400 text-xs">
+                  <div className={`${DETAIL_INSET_CLASS} p-4`}>
+                    <div className="mb-2 text-sm font-medium text-[#503826]">Portfolio mandate</div>
+                    <p className="text-xs text-[#7c6757]">
                       Approve the preloaded medium-risk portfolio mandate so the portfolio manager can
                       coordinate managed subagents without overriding your rooted wallet controls.
                     </p>
-                    <p className="text-gray-500 text-xs mt-3">Risk level: Medium</p>
+                    <p className="mt-3 text-xs text-[#937c69]">Risk level: Medium</p>
                   </div>
 
-                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">First managed lending lane</div>
+                  <div className={`${DETAIL_INSET_CLASS} p-4`}>
+                    <div className="mb-2 text-sm font-medium text-[#503826]">First managed lending lane</div>
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
                         <label
                           htmlFor="portfolio-manager-collateral-policies"
-                          className="block text-sm text-gray-400 mb-2"
+                          className="mb-2 block text-sm text-[#7c6757]"
                         >
                           Collateral policy
                         </label>
@@ -3536,9 +3524,9 @@ function AgentBlockersTab({
                           onChange={(event) =>
                             setPortfolioManagerCollateralPoliciesInput(event.target.value)
                           }
-                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                          className={DETAIL_INPUT_CLASS}
                         />
-                        <div className="mt-2 text-xs text-gray-500">
+                        <div className="mt-2 text-xs text-[#937c69]">
                           Use <span className="font-mono">ASSET:PCT</span> entries, for example{' '}
                           <span className="font-mono">USDC:70, WETH:50</span>.
                         </div>
@@ -3546,7 +3534,7 @@ function AgentBlockersTab({
                       <div>
                         <label
                           htmlFor="portfolio-manager-allowed-borrow-assets"
-                          className="block text-sm text-gray-400 mb-2"
+                          className="mb-2 block text-sm text-[#7c6757]"
                         >
                           Allowed borrow assets
                         </label>
@@ -3558,16 +3546,16 @@ function AgentBlockersTab({
                           onChange={(event) =>
                             setPortfolioManagerAllowedBorrowAssetsInput(event.target.value)
                           }
-                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                          className={DETAIL_INPUT_CLASS}
                         />
-                        <div className="mt-2 text-xs text-gray-500">
+                        <div className="mt-2 text-xs text-[#937c69]">
                           Leave blank for a supply-only mandate.
                         </div>
                       </div>
                       <div>
                         <label
                           htmlFor="portfolio-manager-max-ltv-bps"
-                          className="block text-sm text-gray-400 mb-2"
+                          className="mb-2 block text-sm text-[#7c6757]"
                         >
                           Max LTV bps
                         </label>
@@ -3579,13 +3567,13 @@ function AgentBlockersTab({
                           onChange={(event) =>
                             setPortfolioManagerMaxLtvBpsInput(event.target.value)
                           }
-                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                          className={DETAIL_INPUT_CLASS}
                         />
                       </div>
                       <div>
                         <label
                           htmlFor="portfolio-manager-min-health-factor"
-                          className="block text-sm text-gray-400 mb-2"
+                          className="mb-2 block text-sm text-[#7c6757]"
                         >
                           Minimum health factor
                         </label>
@@ -3597,14 +3585,12 @@ function AgentBlockersTab({
                           onChange={(event) =>
                             setPortfolioManagerMinHealthFactorInput(event.target.value)
                           }
-                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                          className={DETAIL_INPUT_CLASS}
                         />
                       </div>
                     </div>
-                    <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                        Exact mandate preview
-                      </div>
+                    <div className={`${DETAIL_INSET_CLASS} mt-4 p-4`}>
+                      <div className={DETAIL_LABEL_CLASS}>Exact mandate preview</div>
                       <ManagedMandateDetails
                         managedMandate={portfolioManagerPreviewManagedMandate as Record<string, unknown>}
                       />
@@ -3618,7 +3604,7 @@ function AgentBlockersTab({
                   <button
                     type="submit"
                     disabled={isWalletLoading}
-                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                    className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-6 py-2.5`}
                   >
                     Approve &amp; Continue
                   </button>
@@ -3626,9 +3612,9 @@ function AgentBlockersTab({
               </form>
             ) : showPendleFundWalletForm ? (
               <div>
-                <h3 className="text-lg font-semibold text-white mb-4">Fund Wallet</h3>
+                <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Fund Wallet</h3>
                 {activeInterrupt?.message && (
-                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                  <p className="mb-6 text-sm text-[#7c6757]">{activeInterrupt.message}</p>
                 )}
 
                 <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4 mb-6">
@@ -3650,7 +3636,7 @@ function AgentBlockersTab({
                   <button
                     type="button"
                     onClick={() => onInterruptSubmit?.({ acknowledged: true })}
-                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                    className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-6 py-2.5`}
                   >
                     Continue
                   </button>
@@ -3658,9 +3644,9 @@ function AgentBlockersTab({
               </div>
             ) : showGmxFundWalletForm ? (
               <div>
-                <h3 className="text-lg font-semibold text-white mb-4">Fund Wallet</h3>
+                <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Fund Wallet</h3>
                 {activeInterrupt?.message && (
-                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                  <p className="mb-6 text-sm text-[#7c6757]">{activeInterrupt.message}</p>
                 )}
 
                 <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4 mb-6">
@@ -3686,7 +3672,7 @@ function AgentBlockersTab({
                   <button
                     type="button"
                     onClick={() => onInterruptSubmit?.({ acknowledged: true })}
-                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                    className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-6 py-2.5`}
                   >
                     Continue
                   </button>
@@ -3709,18 +3695,18 @@ function AgentBlockersTab({
                 }}
                 onSubmit={handleGmxSetupSubmit}
               >
-                <h3 className="text-lg font-semibold text-white mb-4">GMX Allora Setup</h3>
+                <h3 className="mb-4 text-lg font-semibold text-[#261a12]">GMX Allora Setup</h3>
                 {activeInterrupt?.message && (
-                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                  <p className="mb-6 text-sm text-[#7c6757]">{activeInterrupt.message}</p>
                 )}
 
                 <div className="space-y-4 mb-6">
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">Target Market</label>
+                    <label className="mb-2 block text-sm text-[#7c6757]">Target Market</label>
                     <select
                       value={targetMarket}
                       onChange={(e) => setTargetMarket(e.target.value as 'BTC' | 'ETH')}
-                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white focus:border-[#fd6731] focus:outline-none transition-colors"
+                      className={DETAIL_INPUT_CLASS}
                     >
                       <option value="BTC">BTC / USDC</option>
                       <option value="ETH">ETH / USDC</option>
@@ -3728,23 +3714,23 @@ function AgentBlockersTab({
                   </div>
 
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">USDC Allocation</label>
+                    <label className="mb-2 block text-sm text-[#7c6757]">USDC Allocation</label>
                     <input
                       type="number"
                       value={baseContributionUsd}
                       onChange={(e) => setBaseContributionUsd(e.target.value)}
                       placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
                       min={MIN_BASE_CONTRIBUTION_USD}
-                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
+                      className={DETAIL_INPUT_CLASS}
                     />
                   </div>
 
-                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">Allora Signal Source</div>
-                    <p className="text-gray-400 text-xs">
+                  <div className={`${DETAIL_INSET_CLASS} p-4`}>
+                    <div className="mb-2 text-sm font-medium text-[#503826]">Allora Signal Source</div>
+                    <p className="text-xs text-[#7c6757]">
                       The agent consumes 8-hour Allora prediction feeds and enforces max 2x leverage.
                     </p>
-                    <p className="text-gray-500 text-xs mt-3">
+                    <p className="mt-3 text-xs text-[#937c69]">
                       Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
                     </p>
                   </div>
@@ -3756,7 +3742,7 @@ function AgentBlockersTab({
                   <button
                     type="submit"
                     disabled={isWalletLoading}
-                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                    className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-6 py-2.5`}
                   >
                     Next
                   </button>
@@ -3764,18 +3750,18 @@ function AgentBlockersTab({
               </form>
             ) : showOperatorConfigForm ? (
               <form onSubmit={handleSubmit}>
-                <h3 className="text-lg font-semibold text-white mb-4">Agent Preferences</h3>
+                <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Agent Preferences</h3>
                 {activeInterrupt?.message && (
-                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                  <p className="mb-6 text-sm text-[#7c6757]">{activeInterrupt.message}</p>
                 )}
 
                 <div className="grid grid-cols-2 gap-6 mb-6">
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">Select Pool</label>
+                    <label className="mb-2 block text-sm text-[#7c6757]">Select Pool</label>
                     <select
                       value={poolAddress}
                       onChange={(e) => setPoolAddress(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white focus:border-[#fd6731] focus:outline-none transition-colors"
+                      className={DETAIL_INPUT_CLASS}
                     >
                       <option value="">Choose a pool...</option>
                       {uniqueAllowedPools.map((pool) => (
@@ -3788,18 +3774,18 @@ function AgentBlockersTab({
                   </div>
 
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">Allocated Funds (USD)</label>
+                    <label className="mb-2 block text-sm text-[#7c6757]">Allocated Funds (USD)</label>
                     <input
                       type="number"
                       value={baseContributionUsd}
                       onChange={(e) => setBaseContributionUsd(e.target.value)}
                       placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
                       min={MIN_BASE_CONTRIBUTION_USD}
-                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
+                      className={DETAIL_INPUT_CLASS}
                     />
                     <button
                       type="button"
-                      className="mt-2 px-4 py-1.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white text-sm transition-colors"
+                      className={`${DETAIL_NEUTRAL_BUTTON_CLASS} mt-2 px-4 py-1.5 text-sm`}
                     >
                       Approve
                     </button>
@@ -3812,7 +3798,7 @@ function AgentBlockersTab({
                   <button
                     type="submit"
                     disabled={isWalletLoading}
-                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                    className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-6 py-2.5`}
                   >
                     Next
                   </button>
@@ -3820,17 +3806,17 @@ function AgentBlockersTab({
               </form>
             ) : showFundingTokenForm ? (
               <form onSubmit={handleFundingTokenSubmit}>
-                <h3 className="text-lg font-semibold text-white mb-4">Select Funding Token</h3>
+                <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Select Funding Token</h3>
                 {activeInterrupt?.message && (
-                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                  <p className="mb-6 text-sm text-[#7c6757]">{activeInterrupt.message}</p>
                 )}
 
                 <div className="mb-6">
-                  <label className="block text-sm text-gray-400 mb-2">Funding Token</label>
+                  <label className="mb-2 block text-sm text-[#7c6757]">Funding Token</label>
                   <select
                     value={fundingTokenAddress}
                     onChange={(e) => setFundingTokenAddress(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white focus:border-[#fd6731] focus:outline-none transition-colors"
+                    className={DETAIL_INPUT_CLASS}
                   >
                     <option value="">Choose a token...</option>
                     {fundingOptions.map((option) => (
@@ -3846,7 +3832,7 @@ function AgentBlockersTab({
                 <div className="flex justify-end">
                   <button
                     type="submit"
-                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                    className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-6 py-2.5`}
                   >
                     Next
                   </button>
@@ -3854,9 +3840,9 @@ function AgentBlockersTab({
               </form>
             ) : showDelegationSigningForm ? (
               <div>
-                <h3 className="text-lg font-semibold text-white mb-4">Review & Sign Delegations</h3>
+                <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Review & Sign Delegations</h3>
                 {activeInterrupt?.message && (
-                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                  <p className="mb-6 text-sm text-[#7c6757]">{activeInterrupt.message}</p>
                 )}
 
                 <div className="space-y-4 mb-6">
@@ -3871,9 +3857,9 @@ function AgentBlockersTab({
                     </div>
                   ) : null}
 
-                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">What you are authorizing</div>
-                    <ul className="space-y-1 text-gray-400 text-xs">
+                  <div className={`${DETAIL_INSET_CLASS} p-4`}>
+                    <div className="mb-2 text-sm font-medium text-[#503826]">What you are authorizing</div>
+                    <ul className="space-y-1 text-xs text-[#7c6757]">
                       {(activeInterrupt as unknown as { descriptions?: string[] }).descriptions?.map((d, index) => (
                         <li key={`${index}-${d}`}>{d}</li>
                       ))}
@@ -3913,7 +3899,7 @@ function AgentBlockersTab({
                               () => void 0,
                             )
                           }
-                          className="px-4 py-2 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white text-sm transition-colors"
+                          className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-4 py-2 text-sm`}
                           disabled={isSigningDelegations}
                         >
                           Switch Chain
@@ -3937,9 +3923,9 @@ function AgentBlockersTab({
               </div>
             ) : (
               <div className="text-center py-12">
-                <div className="text-gray-600 text-4xl mb-4">⏳</div>
-                <h3 className="text-lg font-medium text-white mb-2">Waiting for the next onboarding prompt</h3>
-                <p className="text-gray-500 text-sm">
+                <div className="mb-4 text-4xl text-[#b09a8a]">⏳</div>
+                <h3 className="mb-2 text-lg font-medium text-[#261a12]">Waiting for the next onboarding prompt</h3>
+                <p className="text-sm text-[#937c69]">
                   The agent will request funding token options or signatures when needed.
                 </p>
               </div>
@@ -3952,7 +3938,7 @@ function AgentBlockersTab({
               <div
                 key={step.id}
                 className={`flex items-start gap-3 p-3 rounded-xl transition-colors ${
-                  step.id === currentStep ? 'bg-[#1e1e1e]' : ''
+                  step.id === currentStep ? 'bg-[#fff7ef]' : ''
                 }`}
               >
                 <div
@@ -3961,7 +3947,7 @@ function AgentBlockersTab({
                       ? 'bg-[#fd6731] text-white'
                       : step.id < currentStep
                         ? 'bg-teal-500 text-white'
-                        : 'bg-[#2a2a2a] text-gray-500'
+                        : 'bg-[#eadac7] text-[#937c69]'
                   }`}
                 >
                   {step.id < currentStep ? <Check className="w-3 h-3" /> : step.id}
@@ -3969,13 +3955,13 @@ function AgentBlockersTab({
                 <div>
                   <p
                     className={`text-sm font-medium ${
-                      step.id === currentStep ? 'text-white' : 'text-gray-500'
+                      step.id === currentStep ? 'text-[#261a12]' : 'text-[#937c69]'
                     }`}
                   >
                     {step.name}
                   </p>
                   {step.id === currentStep && (
-                    <p className="text-xs text-gray-500 mt-1">{step.description}</p>
+                    <p className="mt-1 text-xs text-[#937c69]">{step.description}</p>
                   )}
                 </div>
               </div>
@@ -3995,16 +3981,16 @@ interface StatBoxProps {
   isLoaded: boolean;
 }
 
-function StatBox({ label, value, valueColor = 'text-white', isLoaded }: StatBoxProps) {
+function StatBox({ label, value, valueColor = 'text-[#261a12]', isLoaded }: StatBoxProps) {
   return (
     <div>
-      <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</div>
+      <div className="mb-1 text-xs uppercase tracking-wide text-[#937c69]">{label}</div>
       {!isLoaded ? (
         <Skeleton className="h-6 w-20" />
       ) : value !== null ? (
           <div className={`text-xl font-semibold ${valueColor}`}>{value}</div>
         ) : (
-          <div className="text-gray-600 text-sm">-</div>
+          <div className="text-sm text-[#b09a8a]">-</div>
         )}
     </div>
   );
@@ -4020,15 +4006,15 @@ function TagColumn({ title, items, getIconUri }: TagColumnProps) {
   if (items.length === 0) {
     return (
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">{title}</div>
-        <div className="text-gray-600 text-sm">—</div>
+        <div className="mb-2 text-xs uppercase tracking-wide text-[#937c69]">{title}</div>
+        <div className="text-sm text-[#b09a8a]">—</div>
       </div>
     );
   }
 
   return (
     <div>
-      <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">{title}</div>
+      <div className="mb-2 text-xs uppercase tracking-wide text-[#937c69]">{title}</div>
       <div className="space-y-1.5">
         {items.slice(0, 3).map((item) => {
           const iconUri = getIconUri(item);
@@ -4040,17 +4026,17 @@ function TagColumn({ title, items, getIconUri }: TagColumnProps) {
                   alt=""
                   loading="lazy"
                   decoding="async"
-                  className="h-4 w-4 rounded-full bg-[#111] ring-1 ring-[#2a2a2a] object-contain"
+                  className="h-4 w-4 rounded-full bg-[#f1e4d3] ring-1 ring-[#eadac7] object-contain"
                 />
               ) : (
                 <div
-                  className="h-4 w-4 rounded-full bg-white/[0.06] ring-1 ring-white/10 flex items-center justify-center text-[7px] font-semibold text-white/70 select-none"
+                  className="flex h-4 w-4 items-center justify-center rounded-full bg-[#fff7ef] text-[7px] font-semibold text-[#7c6757] ring-1 ring-[#eadac7] select-none"
                   aria-hidden="true"
                 >
                   {iconMonogram(item)}
                 </div>
               )}
-              <span className="text-sm text-white">{item}</span>
+              <span className="text-sm text-[#261a12]">{item}</span>
             </div>
           );
         })}
@@ -4062,8 +4048,8 @@ function TagColumn({ title, items, getIconUri }: TagColumnProps) {
               iconUri: getIconUri(label),
             }))}
           >
-            <div className="inline-flex items-center gap-1.5 text-xs text-gray-400 select-none cursor-default">
-              <span className="h-5 w-6 rounded-md bg-white/[0.04] ring-1 ring-white/10 flex items-center justify-center text-[12px] text-gray-200 font-semibold">
+            <div className="inline-flex cursor-default select-none items-center gap-1.5 text-xs text-[#7c6757]">
+              <span className="flex h-5 w-6 items-center justify-center rounded-md bg-[#fff7ef] text-[12px] font-semibold text-[#6f5a4c] ring-1 ring-[#eadac7]">
                 …
               </span>
               <span>{items.length - 3} more</span>
@@ -4088,32 +4074,32 @@ function PointsColumn({ metrics }: PointsColumnProps) {
   if (!hasAnyMetric) {
     return (
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Points</div>
-        <div className="text-gray-600 text-sm">—</div>
+        <div className="mb-2 text-xs uppercase tracking-wide text-[#937c69]">Points</div>
+        <div className="text-sm text-[#b09a8a]">—</div>
       </div>
     );
   }
 
   return (
     <div>
-      <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Points</div>
+      <div className="mb-2 text-xs uppercase tracking-wide text-[#937c69]">Points</div>
       <div className="space-y-1.5">
         {metrics.iteration !== undefined && (
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-teal-400" />
-            <span className="text-sm text-white">{metrics.iteration}x</span>
+            <span className="text-sm text-[#261a12]">{metrics.iteration}x</span>
           </div>
         )}
         {metrics.cyclesSinceRebalance !== undefined && (
           <div className="flex items-center gap-2">
             <Minus className="w-4 h-4 text-yellow-400" />
-            <span className="text-sm text-white">{metrics.cyclesSinceRebalance}x</span>
+            <span className="text-sm text-[#261a12]">{metrics.cyclesSinceRebalance}x</span>
           </div>
         )}
         {metrics.rebalanceCycles !== undefined && (
           <div className="flex items-center gap-2">
             <RefreshCw className="w-4 h-4 text-blue-400" />
-            <span className="text-sm text-white">{metrics.rebalanceCycles}x</span>
+            <span className="text-sm text-[#261a12]">{metrics.rebalanceCycles}x</span>
           </div>
         )}
       </div>
@@ -4155,14 +4141,14 @@ function SettingsTab({ settings, onSettingsChange, onSettingsSave, isSyncing }: 
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Allocation Settings</h3>
-        <p className="text-gray-400 text-sm mb-6">
+      <div className={`${DETAIL_PANEL_CLASS} p-6`}>
+        <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Allocation Settings</h3>
+        <p className="mb-6 text-sm text-[#7c6757]">
           Configure the amount of funds allocated to this agent for liquidity operations.
         </p>
 
         <div className="max-w-md">
-          <label className="block text-sm text-gray-400 mb-2">Allocated Amount (USD)</label>
+          <label className="mb-2 block text-sm text-[#7c6757]">Allocated Amount (USD)</label>
           <div className="flex gap-3">
             <input
               type="number"
@@ -4170,7 +4156,7 @@ function SettingsTab({ settings, onSettingsChange, onSettingsSave, isSyncing }: 
               onChange={(e) => setLocalAmount(e.target.value)}
               placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
               min={MIN_BASE_CONTRIBUTION_USD}
-              className="flex-1 px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
+              className={`flex-1 ${DETAIL_INPUT_CLASS}`}
             />
             <button
               onClick={handleSave}
@@ -4181,16 +4167,16 @@ function SettingsTab({ settings, onSettingsChange, onSettingsSave, isSyncing }: 
             </button>
           </div>
           {resolvedAllocationAmount !== undefined && (
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="mt-2 text-xs text-[#937c69]">
               Current allocation: ${resolvedAllocationAmount.toLocaleString()}
             </p>
           )}
         </div>
       </div>
 
-      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Policies</h3>
-        <p className="text-gray-500 text-sm">
+      <div className={`${DETAIL_PANEL_CLASS} p-6`}>
+        <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Policies</h3>
+        <p className="text-sm text-[#937c69]">
           Additional policy settings will be available in a future update.
         </p>
       </div>

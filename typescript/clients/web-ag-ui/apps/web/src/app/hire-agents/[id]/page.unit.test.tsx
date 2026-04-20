@@ -9,6 +9,7 @@ import AgentDetailRoute from './page';
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
+  replace: vi.fn(),
   invokeAgentCommandRoute: vi.fn(),
   getAgentThreadId: vi.fn(),
   applyDomainProjection: vi.fn(),
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mocks.push,
+    replace: mocks.replace,
   }),
   useSearchParams: () => ({
     get: () => null,
@@ -141,6 +143,7 @@ describe('AgentDetailRoute managed mandate wiring', () => {
 
   beforeEach(() => {
     mocks.push.mockReset();
+    mocks.replace.mockReset();
     mocks.invokeAgentCommandRoute.mockReset();
     mocks.getAgentThreadId.mockReset();
     mocks.applyDomainProjection.mockReset();
@@ -173,6 +176,13 @@ describe('AgentDetailRoute managed mandate wiring', () => {
     await flushEffects();
     await flushEffects();
   }
+
+  it('redirects unregistered agent routes back to the marketplace instead of rendering a fallback detail view', async () => {
+    await renderRoute('agent-pi-example');
+
+    expect(mocks.replace).toHaveBeenCalledWith('/hire-agents');
+    expect(mocks.capturedProps).toBeNull();
+  });
 
   it('hydrates the PM page from the one-off refresh command and applies returned projection state', async () => {
     mocks.agentValue = createAgentValue({

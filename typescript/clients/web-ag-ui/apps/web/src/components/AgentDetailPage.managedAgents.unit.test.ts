@@ -125,7 +125,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html.indexOf('>Chat<')).toBeLessThan(html.indexOf('>Metrics<'));
     expect(html.indexOf('>Chat<')).toBeLessThan(html.indexOf('>Activity<'));
     expect(html).toMatch(
-      new RegExp('<button[^>]*text-white border-white[^>]*>\\s*Chat\\s*</button>'),
+      new RegExp('<button[^>]*text-\\[#261a12\\] border-\\[#d8c3ad\\][^>]*>\\s*Chat\\s*</button>'),
     );
   });
 

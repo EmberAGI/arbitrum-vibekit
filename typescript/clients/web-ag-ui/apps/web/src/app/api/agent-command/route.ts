@@ -9,7 +9,6 @@ import { z } from 'zod';
 import { createAgentRuntimeHttpAgent } from '../copilotkit/piRuntimeHttpAgent';
 import {
   EMBER_LENDING_AGENT_NAME,
-  PI_EXAMPLE_AGENT_NAME,
   PORTFOLIO_MANAGER_AGENT_NAME,
   resolveAgentRuntimeUrl,
 } from '../copilotkit/copilotRuntimeRegistry';
@@ -17,11 +16,7 @@ import {
 export const runtime = 'nodejs';
 
 const agentCommandPayloadBaseSchema = z.object({
-  agentId: z.enum([
-    PI_EXAMPLE_AGENT_NAME,
-    PORTFOLIO_MANAGER_AGENT_NAME,
-    EMBER_LENDING_AGENT_NAME,
-  ]),
+  agentId: z.enum([PORTFOLIO_MANAGER_AGENT_NAME, EMBER_LENDING_AGENT_NAME]),
   threadId: z.string().min(1),
 });
 

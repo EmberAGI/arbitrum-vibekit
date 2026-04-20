@@ -34,15 +34,15 @@ describe('PrivyGateBanner', () => {
     process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-privy-app-id';
   });
 
-  it('hides the sign-in banner for the Pi example hire route without a wallet', () => {
+  it('keeps the sign-in banner for retired Pi routes without a wallet', () => {
     mocks.pathname = '/hire-agents/agent-pi-example';
 
     const html = renderToStaticMarkup(React.createElement(PrivyGateBanner));
 
-    expect(html).toBe('');
+    expect(html).toContain('Sign in with Privy to create a thread and interact with agents.');
   });
 
-  it('keeps the sign-in banner for non-Pi hire routes without a wallet', () => {
+  it('keeps the sign-in banner for other hire routes without a wallet', () => {
     const html = renderToStaticMarkup(React.createElement(PrivyGateBanner));
 
     expect(html).toContain('Sign in with Privy to create a thread and interact with agents.');

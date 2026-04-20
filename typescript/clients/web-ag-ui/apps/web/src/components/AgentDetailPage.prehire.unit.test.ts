@@ -83,6 +83,36 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('Total Users');
   });
 
+  it('renders pre-hire detail chrome on the light shell palette', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-clmm',
+        agentName: 'Camelot CLMM',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('bg-[linear-gradient(180deg,#fffdf9_0%,#f7efe4_100%)]');
+    expect(html).toContain('border-[#eadac7]');
+    expect(html).not.toContain('bg-[#1e1e1e]');
+  });
+
   it('keeps pre-hire chat disabled for non-Pi agents', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {

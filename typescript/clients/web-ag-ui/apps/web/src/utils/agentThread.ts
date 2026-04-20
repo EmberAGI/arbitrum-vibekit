@@ -41,7 +41,8 @@ export function getAgentThreadId(agentId: string, privyAddress?: string | null):
 }
 
 export function supportsAnonymousAgentThread(agentId: string): boolean {
-  return agentId === 'agent-pi-example';
+  void agentId;
+  return false;
 }
 
 export function ensureAnonymousAgentThreadId(

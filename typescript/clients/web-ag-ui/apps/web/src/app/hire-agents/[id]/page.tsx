@@ -131,7 +131,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const activeAgentId = agent.config.id;
   const routeAgentId = id;
   const routeHasRegisteredAgent = isRegisteredAgentId(routeAgentId);
-  const selectedAgentId = routeHasRegisteredAgent ? routeAgentId : activeAgentId;
+  const selectedAgentId = routeAgentId;
   const selectedConfig = getAgentConfig(selectedAgentId);
   const selectedLifecycleState = agent.uiState.lifecycle;
   const selectedOnboardingFlow = agent.uiState.onboardingFlow;
@@ -191,6 +191,12 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       ? agent.threadId
       : getAgentThreadId('agent-portfolio-manager', privyWallet?.address);
 
+  useEffect(() => {
+    if (!routeHasRegisteredAgent) {
+      router.replace('/hire-agents');
+    }
+  }, [routeHasRegisteredAgent, router]);
+
   const handleManagedMandateSave = useCallback(
     async (input: Parameters<NonNullable<ComponentProps<typeof AgentDetailPage>['onManagedMandateSave']>>[0]) => {
       if (!portfolioManagerThreadId) {
@@ -230,6 +236,9 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   );
 
   useEffect(() => {
+    if (!routeHasRegisteredAgent) {
+      return;
+    }
     if (!agent.threadId || !selectedIsHired || hasManagedProjection) {
       return;
     }
@@ -266,10 +275,22 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         }
       })
       .catch(() => undefined);
-  }, [agent, agent.threadId, hasManagedProjection, selectedAgentId, selectedIsHired, selectedLifecyclePhase]);
+  }, [
+    agent,
+    agent.threadId,
+    hasManagedProjection,
+    routeHasRegisteredAgent,
+    selectedAgentId,
+    selectedIsHired,
+    selectedLifecyclePhase,
+  ]);
+
+  if (!routeHasRegisteredAgent) {
+    return null;
+  }
 
   if (uiPreviewState) {
-    const previewAgentId = routeHasRegisteredAgent ? routeAgentId : selectedAgentId;
+    const previewAgentId = routeAgentId;
     const config = getAgentConfig(previewAgentId);
     const previewOnboardingOwnerAgentId = config.onboardingOwnerAgentId;
 
