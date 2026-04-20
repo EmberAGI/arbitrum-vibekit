@@ -2000,6 +2000,7 @@ describe('agent-runtime integration', () => {
   });
 
   it('routes resume through the declared interrupt when the AG-UI client sends empty request scaffolding', async () => {
+    const { persistedThreads, hooks: internalPostgres } = createPersistingInternalPostgres();
     const runtime = await createAgentRuntime({
       model: createModel('int-model'),
       systemPrompt: 'You are a lifecycle agent.',
@@ -2007,6 +2008,7 @@ describe('agent-runtime integration', () => {
       agentOptions: {
         streamFn: () => createTextStream('Model fallback should not run for interrupt resume.'),
       },
+      __internalPostgres: internalPostgres,
     } as any);
 
     await collectEventSource(
@@ -2059,6 +2061,21 @@ describe('agent-runtime integration', () => {
       op: 'replace',
       path: '/thread/task/taskStatus/message/content',
       value: 'Operator note captured. Ready to complete onboarding.',
+    });
+    expect(
+      persistedThreads.get('thread-resume-with-client-scaffolding')?.threadState,
+    ).toMatchObject({
+      activityEvents: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'artifact',
+          artifact: expect.objectContaining({
+            data: expect.objectContaining({
+              type: 'interrupt-status',
+              status: 'resolved',
+            }),
+          }),
+        }),
+      ]),
     });
   });
 
