@@ -54,7 +54,6 @@ const chainMappings = [
   { id: '42161', name: 'Arbitrum', aliases: [] },
   { id: '10', name: 'Optimism', aliases: [] },
   { id: '137', name: 'Polygon', aliases: ['matic'] },
-  { id: '8453', name: 'Base', aliases: [] },
 ];
 
 function mapChainNameToId(chainName: string): string | undefined {
@@ -130,7 +129,7 @@ function findTokenDetail(
   return tokenDetail;
 }
 
-// Base swap tool that calls Ember MCP server
+// Shared swap tool that calls Ember MCP server
 const baseSwapTokensTool: VibkitToolDefinition<any, any, EmberContext> = {
   name: 'swap-tokens',
   description: 'Execute a token swap between two assets using DEX aggregation',

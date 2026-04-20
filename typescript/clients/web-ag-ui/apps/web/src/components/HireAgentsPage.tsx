@@ -4,6 +4,7 @@
 
 import { SlidersHorizontal, Star, MoreHorizontal, ChevronDown, Flame } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { SearchBar } from './ui/SearchBar';
 import { FilterTabs } from './ui/FilterTabs';
 import { Pagination } from './ui/Pagination';
@@ -11,6 +12,7 @@ import { AgentsTable } from './agents/AgentsTable';
 import { Skeleton } from './ui/Skeleton';
 import { CreatorIdentity } from './ui/CreatorIdentity';
 import { CursorListTooltip } from './ui/CursorListTooltip';
+import { AgentSurfaceTag } from './ui/AgentSurfaceTag';
 import { CTA_SIZE_MD } from './ui/cta';
 import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
 import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
@@ -26,6 +28,7 @@ import {
   normalizeSymbolKey,
   proxyIconUri,
 } from '../utils/iconResolution';
+import { getVisibleSurfaceProtocols } from '../utils/agentSurfaceMetadata';
 
 export interface Agent {
   id: string;
@@ -45,6 +48,11 @@ export interface Agent {
   avatar?: string;
   avatarBg?: string;
   imageUrl?: string;
+  surfaceTag?: 'Swarm' | 'Workflow';
+  marketplaceCardBg?: string;
+  marketplaceCardHoverBg?: string;
+  marketplaceRowBg?: string;
+  marketplaceRowHoverBg?: string;
   chains?: string[];
   protocols?: string[];
   tokens?: string[];
@@ -73,6 +81,11 @@ export interface FeaturedAgent {
   avatar?: string;
   avatarBg?: string;
   imageUrl?: string;
+  surfaceTag?: 'Swarm' | 'Workflow';
+  marketplaceCardBg?: string;
+  marketplaceCardHoverBg?: string;
+  marketplaceRowBg?: string;
+  marketplaceRowHoverBg?: string;
   pointsTrend?: 'up' | 'down';
   trendMultiplier?: string;
   status: 'for_hire' | 'hired' | 'unavailable';
@@ -130,11 +143,19 @@ export function HireAgentsPage({
       return matchesSearch && matchesFilter;
     })
     .sort((a, b) => {
-      if (a.id === 'agent-clmm' && b.id !== 'agent-clmm') {
+      const aFeaturedRank = a.featuredRank ?? Number.POSITIVE_INFINITY;
+      const bFeaturedRank = b.featuredRank ?? Number.POSITIVE_INFINITY;
+      const aIsFeatured = a.featuredRank !== undefined;
+      const bIsFeatured = b.featuredRank !== undefined;
+
+      if (aIsFeatured && !bIsFeatured) {
         return -1;
       }
-      if (b.id === 'agent-clmm' && a.id !== 'agent-clmm') {
+      if (bIsFeatured && !aIsFeatured) {
         return 1;
+      }
+      if (aFeaturedRank !== bFeaturedRank) {
+        return aFeaturedRank - bFeaturedRank;
       }
       switch (sortBy) {
         case 'income':
@@ -252,7 +273,7 @@ export function HireAgentsPage({
                     label,
                     iconUri: chainIconByName[normalizeNameKey(label)] ?? null,
                   }));
-                  const protocolItems = (agent.protocols ?? []).map((label) => {
+                  const protocolItems = getVisibleSurfaceProtocols(agent.protocols ?? []).map((label) => {
                     const fallback = PROTOCOL_TOKEN_FALLBACK[label];
                     const iconUri = fallback
                       ? tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null
@@ -265,6 +286,7 @@ export function HireAgentsPage({
                   }));
                   const avatarUri =
                     resolveAgentAvatarUri({
+                      imageUrl: agent.imageUrl,
                       protocols: agent.protocols ?? [],
                       tokenIconBySymbol,
                     }) ??
@@ -365,8 +387,14 @@ export function HireAgentsPage({
               aum: agent.aum,
               points: agent.points,
               pointsTrend: agent.pointsTrend,
+              avatarBg: agent.avatarBg,
+              usesBrandedImage: Boolean(agent.imageUrl),
+              surfaceTag: agent.surfaceTag,
+              rowBg: agent.marketplaceRowBg,
+              rowHoverBg: agent.marketplaceRowHoverBg,
               iconUri:
                 resolveAgentAvatarUri({
+                  imageUrl: agent.imageUrl,
                   protocols: agent.protocols ?? [],
                   tokenIconBySymbol,
                 }) ??
@@ -418,17 +446,28 @@ function FeaturedAgentCard({
   const hasRating = agent.rating !== undefined && agent.rating > 0;
   const hasCreator = agent.creator !== undefined && agent.creator !== '';
   const hasTrend = agent.trendMultiplier !== undefined && agent.trendMultiplier !== '';
+  const cardStyle = agent.marketplaceCardBg
+    ? ({
+        '--agent-card-bg': agent.marketplaceCardBg,
+        '--agent-card-hover-bg': agent.marketplaceCardHoverBg ?? agent.marketplaceCardBg,
+      } as CSSProperties)
+    : undefined;
 
   return (
     <div
       onClick={onClick}
-      className="min-w-[340px] w-[340px] h-[230px] flex-shrink-0 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15 transition-colors cursor-pointer overflow-hidden flex flex-col"
+      className="min-w-[340px] w-[340px] h-[230px] flex-shrink-0 rounded-2xl border border-white/10 bg-[color:var(--agent-card-bg,rgba(255,255,255,0.05))] hover:bg-[color:var(--agent-card-hover-bg,rgba(255,255,255,0.07))] hover:border-white/15 transition-colors cursor-pointer overflow-hidden flex flex-col"
+      style={cardStyle}
     >
       {/* Header: avatar + title/subtitle on left, rank/menu on right */}
       <div className="px-4 pt-4 pb-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex items-start gap-3">
             <div className="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 bg-black/30 flex items-center justify-center">
+              <div
+                className="h-full w-full flex items-center justify-center bg-black/30"
+                style={agent.imageUrl && agent.avatarBg ? { background: agent.avatarBg } : undefined}
+              >
               {avatarUri ? (
                 <img
                   src={proxyIconUri(avatarUri)}
@@ -441,37 +480,43 @@ function FeaturedAgentCard({
                   {iconMonogram(agent.name)}
                 </span>
               )}
+              </div>
             </div>
 
             <div className="min-w-0">
               <h3 className="font-medium text-white text-[15px] leading-5">{agent.name}</h3>
-              {(hasCreator || hasRating) && (
-                <div className="mt-0.5 flex items-center gap-2">
-                  {hasCreator && (
-                    <span className="inline-flex items-center gap-1">
-                      <span className="text-[12px] text-gray-500">by</span>
-                      <CreatorIdentity
-                        name={agent.creator ?? ''}
-                        verified={agent.creatorVerified}
-                        size="sm"
-                        nameClassName="text-[12px] text-gray-200"
-                      />
-                    </span>
-                  )}
-                  {hasRating && (
-                    <div className="flex items-center">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`w-3 h-3 ${
-                            i < Math.floor(agent.rating ?? 0)
-                              ? 'fill-[color:var(--hire-accent)] text-[color:var(--hire-accent)]'
-                              : 'text-gray-700 fill-gray-700'
-                          }`}
-                        />
-                      ))}
+              {(hasCreator || hasRating || agent.surfaceTag) && (
+                <div className="mt-0.5">
+                  {(hasCreator || hasRating) && (
+                    <div className="flex items-center gap-2">
+                      {hasCreator && (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="text-[12px] text-gray-500">by</span>
+                          <CreatorIdentity
+                            name={agent.creator ?? ''}
+                            verified={agent.creatorVerified}
+                            size="sm"
+                            nameClassName="text-[12px] text-gray-200"
+                          />
+                        </span>
+                      )}
+                      {hasRating && (
+                        <div className="flex items-center">
+                          {[...Array(5)].map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`w-3 h-3 ${
+                                i < Math.floor(agent.rating ?? 0)
+                                  ? 'fill-[color:var(--hire-accent)] text-[color:var(--hire-accent)]'
+                                  : 'text-gray-700 fill-gray-700'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
+                  {agent.surfaceTag ? <AgentSurfaceTag tag={agent.surfaceTag} className="mt-1.5" /> : null}
                 </div>
               )}
             </div>
@@ -585,41 +630,63 @@ function IconGroup({
   const hasOverflow = items.length > MAX_ICONS;
   const displayItems = hasOverflow ? items.slice(0, MAX_ICONS - 1) : items.slice(0, MAX_ICONS);
   const overflowItems = hasOverflow ? items.slice(MAX_ICONS - 1) : [];
+  const rendersAsTextTags = displayItems.length > 0 && displayItems.every((item) => item.iconUri === null);
 
   return (
     <div className="min-w-0">
       <div className="text-[11px] font-mono text-gray-500 tracking-wide mb-1">{title}</div>
       <div className="flex items-center min-h-6">
-        <div className="flex items-center -space-x-2">
-          {displayItems.map((item) =>
-            item.iconUri ? (
-              <img
-                key={`${item.label}-${item.iconUri}`}
-                src={proxyIconUri(item.iconUri)}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
-              />
-            ) : (
-              <div
+        {rendersAsTextTags ? (
+          <div className="flex flex-wrap gap-1.5">
+            {displayItems.map((item) => (
+              <span
                 key={item.label}
-                className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] flex items-center justify-center text-[10px] font-semibold text-white/70 select-none"
-                aria-hidden="true"
+                className="inline-flex max-w-full items-center rounded-full bg-white/[0.06] px-2 py-1 text-[10px] font-medium leading-none text-gray-200 ring-1 ring-white/10"
               >
-                {iconMonogram(item.label)}
-              </div>
-            ),
-          )}
+                {item.label}
+              </span>
+            ))}
 
-          {overflowItems.length > 0 ? (
-            <CursorListTooltip title={`${title} (more)`} items={overflowItems}>
-              <div className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] flex items-center justify-center text-[12px] text-gray-200 font-semibold whitespace-nowrap select-none cursor-default">
-                …
-              </div>
-            </CursorListTooltip>
-          ) : null}
-        </div>
+            {overflowItems.length > 0 ? (
+              <CursorListTooltip title={`${title} (more)`} items={overflowItems}>
+                <span className="inline-flex items-center rounded-full bg-white/[0.06] px-2 py-1 text-[10px] font-medium leading-none text-gray-300 ring-1 ring-white/10 select-none cursor-default">
+                  +{overflowItems.length}
+                </span>
+              </CursorListTooltip>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex items-center -space-x-2">
+            {displayItems.map((item) =>
+              item.iconUri ? (
+                <img
+                  key={`${item.label}-${item.iconUri}`}
+                  src={proxyIconUri(item.iconUri)}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
+                />
+              ) : (
+                <div
+                  key={item.label}
+                  className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] flex items-center justify-center text-[10px] font-semibold text-white/70 select-none"
+                  aria-hidden="true"
+                >
+                  {iconMonogram(item.label)}
+                </div>
+              ),
+            )}
+
+            {overflowItems.length > 0 ? (
+              <CursorListTooltip title={`${title} (more)`} items={overflowItems}>
+                <div className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] flex items-center justify-center text-[12px] text-gray-200 font-semibold whitespace-nowrap select-none cursor-default">
+                  …
+                </div>
+              </CursorListTooltip>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );

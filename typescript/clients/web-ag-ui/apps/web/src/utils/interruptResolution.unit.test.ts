@@ -15,11 +15,19 @@ describe('resumeInterruptViaAgent', () => {
   it('calls the injected resume runner with resume command payload', async () => {
     const runResume = vi.fn().mockResolvedValue(undefined);
     const agent = {};
+    const resumePayload = {
+      outcome: 'signed',
+      signedDelegations: [
+        {
+          signature: '0x1234',
+        },
+      ],
+    };
 
     await expect(
       resumeInterruptViaAgent({
         agent,
-        resumePayload: '{"outcome":"signed"}',
+        resumePayload,
         runResume,
       }),
     ).resolves.toBe(true);
@@ -29,7 +37,7 @@ describe('resumeInterruptViaAgent', () => {
       payload: {
         forwardedProps: {
           command: {
-            resume: '{"outcome":"signed"}',
+            resume: resumePayload,
           },
         },
       },

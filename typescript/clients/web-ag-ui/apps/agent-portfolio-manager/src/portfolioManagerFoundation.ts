@@ -1,4 +1,5 @@
 import type { CreateAgentRuntimeOptions } from 'agent-runtime';
+import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 
 import {
   createPortfolioManagerDomain,
@@ -10,8 +11,9 @@ import {
 } from './sharedEmberHttpHost.js';
 import { createPortfolioManagerDiagnosticTool } from './diagnosticTool.js';
 import { createPortfolioManagerWalletAccountingTool } from './walletAccountingTool.js';
+import { PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID } from './sharedEmberOnboardingState.js';
 
-const DEFAULT_PORTFOLIO_MANAGER_MODEL = 'openai/gpt-5.4-mini';
+const DEFAULT_PORTFOLIO_MANAGER_MODEL = 'openai/gpt-5.4';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const PORTFOLIO_MANAGER_SYSTEM_PROMPT =
   'You are the portfolio manager orchestrator running on agent-runtime. Stay concise, keep onboarding state explicit, and use read_wallet_accounting_state whenever the user asks about wallet contents, reservations, or account status in Shared Ember.';
@@ -22,6 +24,9 @@ export type PortfolioManagerGatewayEnv = NodeJS.ProcessEnv & {
   PORTFOLIO_MANAGER_ENABLE_DIAGNOSTIC_TOOLS?: string;
   DATABASE_URL?: string;
   SHARED_EMBER_BASE_URL?: string;
+  PORTFOLIO_MANAGER_OWS_WALLET_NAME?: string;
+  PORTFOLIO_MANAGER_OWS_PASSPHRASE?: string;
+  PORTFOLIO_MANAGER_OWS_VAULT_PATH?: string;
 };
 
 type PortfolioManagerAgentRuntimeOptions = CreateAgentRuntimeOptions<PortfolioManagerLifecycleState>;
@@ -32,6 +37,17 @@ export type PortfolioManagerAgentConfig = Pick<
 >;
 
 type PortfolioManagerGatewayModel = PortfolioManagerAgentConfig['model'];
+
+export type PortfolioManagerGatewayDependencies = {
+  protocolHost: ReturnType<typeof createPortfolioManagerSharedEmberHttpHost> | null;
+};
+
+type CreatePortfolioManagerAgentConfigOptions = {
+  controllerWalletAddress?: `0x${string}`;
+  controllerSignerAddress?: `0x${string}`;
+  runtimeSigning?: AgentRuntimeSigningService;
+  runtimeSignerRef?: string;
+};
 
 function requireEnvValue(
   value: string | undefined,
@@ -67,16 +83,12 @@ function createOpenRouterModel(modelId: string): PortfolioManagerGatewayModel {
 
 export function createPortfolioManagerAgentConfig(
   env: PortfolioManagerGatewayEnv = process.env,
+  options: CreatePortfolioManagerAgentConfigOptions = {},
 ): PortfolioManagerAgentConfig {
   const apiKey = requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.PORTFOLIO_MANAGER_MODEL?.trim() || DEFAULT_PORTFOLIO_MANAGER_MODEL;
   const enableDiagnosticTools = env.PORTFOLIO_MANAGER_ENABLE_DIAGNOSTIC_TOOLS?.trim() === '1';
-  const sharedEmberBaseUrl = resolvePortfolioManagerSharedEmberBaseUrl(env);
-  const protocolHost = sharedEmberBaseUrl
-    ? createPortfolioManagerSharedEmberHttpHost({
-        baseUrl: sharedEmberBaseUrl,
-      })
-    : null;
+  const { protocolHost } = resolvePortfolioManagerGatewayDependencies(env);
 
   return {
     model: createOpenRouterModel(modelId),
@@ -87,7 +99,7 @@ export function createPortfolioManagerAgentConfig(
         ? [
             createPortfolioManagerWalletAccountingTool({
               protocolHost,
-              agentId: 'portfolio-manager',
+              agentId: PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID,
             }),
           ]
         : []),
@@ -99,6 +111,26 @@ export function createPortfolioManagerAgentConfig(
             protocolHost,
           }
         : {}),
+      ...(options.runtimeSigning
+        ? {
+            runtimeSigning: options.runtimeSigning,
+          }
+        : {}),
+      ...(options.runtimeSignerRef
+        ? {
+            runtimeSignerRef: options.runtimeSignerRef,
+          }
+        : {}),
+      ...(options.controllerWalletAddress
+        ? {
+            controllerWalletAddress: options.controllerWalletAddress,
+          }
+        : {}),
+      ...(options.controllerSignerAddress
+        ? {
+            controllerSignerAddress: options.controllerSignerAddress,
+          }
+        : {}),
     }),
     agentOptions: {
       initialState: {
@@ -106,5 +138,19 @@ export function createPortfolioManagerAgentConfig(
       },
       getApiKey: () => apiKey,
     },
+  };
+}
+
+export function resolvePortfolioManagerGatewayDependencies(
+  env: PortfolioManagerGatewayEnv = process.env,
+): PortfolioManagerGatewayDependencies {
+  const sharedEmberBaseUrl = resolvePortfolioManagerSharedEmberBaseUrl(env);
+
+  return {
+    protocolHost: sharedEmberBaseUrl
+      ? createPortfolioManagerSharedEmberHttpHost({
+          baseUrl: sharedEmberBaseUrl,
+        })
+      : null,
   };
 }

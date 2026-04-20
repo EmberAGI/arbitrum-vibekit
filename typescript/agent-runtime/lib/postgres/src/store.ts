@@ -43,7 +43,6 @@ export type PersistPiRuntimeDirectExecutionOptions = {
   threadKey: string;
   threadState: Record<string, unknown>;
   executionId: string;
-  interruptId: string;
   artifactId: string;
   activityId: string;
   now: Date;
@@ -258,7 +257,6 @@ export async function persistPiRuntimeDirectExecution(
     threadKey: options.threadKey,
     threadState: options.threadState,
     executionId: options.executionId,
-    interruptId: options.interruptId,
     artifactId: options.artifactId,
     activityId: options.activityId,
     now: options.now,

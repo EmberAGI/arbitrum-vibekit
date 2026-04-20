@@ -217,7 +217,7 @@ describe('createPiExampleAgentConfig', () => {
       config.model!,
       {
         systemPrompt: config.systemPrompt,
-        messages: [{ role: 'user', content: 'schedule a sync' }],
+        messages: [{ role: 'user', content: 'schedule a refresh' }],
       } as never,
       {} as never,
     );
@@ -257,5 +257,35 @@ describe('createPiExampleAgentConfig', () => {
       AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL,
       AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL,
     ]).toHaveLength(4);
+  });
+
+  it('does not treat legacy sync JSON chat text as a schedule command', async () => {
+    const config = createPiExampleAgentConfig({
+      E2E_PROFILE: 'mocked',
+    });
+
+    const streamFn = config.agentOptions?.streamFn;
+    expect(streamFn).toBeDefined();
+
+    const legacySyncStream = streamFn!(
+      config.model!,
+      {
+        systemPrompt: config.systemPrompt,
+        messages: [{ role: 'user', content: '{"command":"sync"}' }],
+      } as never,
+      {} as never,
+    );
+
+    const collectToolName = async (stream: AsyncIterable<{ partial?: { content?: Array<{ name?: string }> } }>) => {
+      for await (const event of stream) {
+        const toolName = event.partial?.content?.find((part) => part.name)?.name;
+        if (toolName) {
+          return toolName;
+        }
+      }
+      return null;
+    };
+
+    await expect(collectToolName(legacySyncStream)).resolves.toBeNull();
   });
 });

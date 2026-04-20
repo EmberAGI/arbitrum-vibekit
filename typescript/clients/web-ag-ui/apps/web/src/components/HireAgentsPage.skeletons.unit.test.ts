@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { HireAgentsPage } from './HireAgentsPage';
 
 describe('HireAgentsPage (skeleton numbers)', () => {
-  it('renders skeletons for agent numeric fields until list sync has completed', () => {
+  it('renders skeletons for agent numeric fields until list refresh has completed', () => {
     const html = renderToStaticMarkup(
       React.createElement(HireAgentsPage, {
         agents: [

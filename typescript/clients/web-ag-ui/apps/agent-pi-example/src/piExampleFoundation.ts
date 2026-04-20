@@ -481,14 +481,14 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
       });
     }
 
-    if (latestUserText.includes('schedule') || latestUserText.includes('"command":"sync"')) {
+    if (latestUserText.includes('schedule')) {
       return createMockToolStream({
         model,
         toolName: AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL,
         toolCallId: 'pi-example-tool-schedule',
         args: {
-          title: 'Sync every 5 minutes',
-          instruction: 'sync',
+          title: 'Refresh every 5 minutes',
+          instruction: 'refresh',
           schedule: {
             kind: 'every',
             intervalMinutes: 5,

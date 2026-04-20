@@ -17,8 +17,10 @@ describe('agentProjection', () => {
       thread: {
         setupComplete: true,
       },
-      settings: {
-        amount: 123,
+      shared: {
+        settings: {
+          amount: 123,
+        },
       },
     });
 
@@ -33,8 +35,10 @@ describe('agentProjection', () => {
       thread: {
         setupComplete: true,
       },
-      settings: {
-        amount: 321,
+      shared: {
+        settings: {
+          amount: 321,
+        },
       },
     });
 
@@ -164,5 +168,159 @@ describe('agentProjection', () => {
     expect(projected?.thread.profile.tokens).toEqual(['USDC']);
     expect(projected?.thread.metrics.apy).toBe(8.46);
     expect(projected?.thread.task?.id).toBe('task-2');
+  });
+
+  it('merges partial domain projection payloads onto the previous projected state', () => {
+    const previous = projectDetailStateFromPayload({
+      projected: {
+        managedMandate: {
+          mandateRef: 'mandate-1',
+          summary: {
+            riskLevel: 'medium',
+          },
+        },
+      },
+    });
+
+    const projected = projectDetailStateFromPayload(
+      {
+        projected: {
+          managedMandate: {
+            summary: {
+              status: 'active',
+            },
+          },
+        },
+      },
+      previous,
+    );
+
+    expect(projected?.thread.domainProjection).toEqual({
+      managedMandate: {
+        mandateRef: 'mandate-1',
+        summary: {
+          riskLevel: 'medium',
+          status: 'active',
+        },
+      },
+    });
+  });
+
+  it('ignores legacy top-level settings and thread.domainProjection runtime payload shapes', () => {
+    const previous = projectDetailStateFromPayload({
+      shared: {
+        settings: {
+          amount: 456,
+        },
+      },
+      projected: {
+        managedMandate: {
+          summary: {
+            status: 'active',
+          },
+        },
+      },
+    });
+
+    const projected = projectDetailStateFromPayload(
+      {
+        settings: {
+          amount: 999,
+        },
+        thread: {
+          domainProjection: {
+            managedMandate: {
+              summary: {
+                status: 'stale-legacy-shape',
+              },
+            },
+          },
+        },
+      },
+      previous,
+    );
+
+    expect(projected?.settings.amount).toBe(456);
+    expect(projected?.thread.domainProjection).toEqual({
+      managedMandate: {
+        summary: {
+          status: 'active',
+        },
+      },
+    });
+  });
+
+  it('ignores state-embedded transcript payloads in runtime snapshots and deltas', () => {
+    const previous = projectDetailStateFromPayload({
+      shared: {
+        settings: {
+          amount: 123,
+        },
+      },
+    });
+
+    previous!.messages = [
+      {
+        id: 'message-1',
+        role: 'assistant',
+        content: 'Canonical transcript event',
+      },
+    ];
+
+    const projected = projectDetailStateFromPayload(
+      {
+        messages: [
+          {
+            id: 'legacy-top-level-message',
+            role: 'assistant',
+            content: 'Legacy top-level message payload',
+          },
+        ],
+        thread: {
+          messages: [
+            {
+              id: 'legacy-thread-message',
+              role: 'assistant',
+              content: 'Legacy thread message payload',
+            },
+          ],
+        },
+      },
+      previous,
+    );
+
+    expect(projected?.messages).toEqual(previous?.messages);
+    expect((projected?.thread as Record<string, unknown> | undefined)?.messages).toBeUndefined();
+  });
+
+  it('hydrates legacy web-facing settings and domain projection from canonical shared/projected payloads', () => {
+    const projected = projectDetailStateFromPayload({
+      shared: {
+        settings: {
+          amount: 456,
+        },
+      },
+      projected: {
+        managedMandate: {
+          summary: {
+            status: 'active',
+          },
+        },
+      },
+      thread: {
+        setupComplete: true,
+      },
+    });
+
+    expect(projected).not.toBeNull();
+    expect(projected?.thread.setupComplete).toBe(true);
+    expect(projected?.settings.amount).toBe(456);
+    expect(projected?.thread.domainProjection).toEqual({
+      managedMandate: {
+        summary: {
+          status: 'active',
+        },
+      },
+    });
   });
 });

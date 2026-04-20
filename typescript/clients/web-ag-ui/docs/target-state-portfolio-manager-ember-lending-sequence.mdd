@@ -1,0 +1,103 @@
+# Target-State Portfolio Manager -> Ember Lending Sequence
+
+Status: Target-state contract for issue `#555`
+Scope: managed Portfolio Manager -> Ember Lending coordination over Shared Ember
+
+Follow-on note:
+- Issue `#559` supersedes this file's single-call execution-path assumptions.
+- Keep this file as the durable target-state contract for the `#555` three-tool surface and minimal execution-context boundary.
+- For the multi-call execution-preparation and direct OWS signing follow-up, see `target-state-portfolio-manager-ember-lending-execution-signing-sequence.mdd`.
+
+## Contract summary
+
+- Portfolio Manager remains the owner of onboarding approval, rooted-signing collection, and control-plane interventions.
+- Ember Lending keeps exactly three model-visible tools:
+  - `create_transaction_plan`
+  - `request_transaction_execution`
+  - `create_escalation_request`
+- Runtime-only behavior remains hidden:
+  - startup identity proof / rotation against direct OWS + Shared Ember before the managed path is considered ready
+  - connect-time projection hydration
+  - `subagent.readExecutionContext.v1` during system-context assembly
+  - revision refresh / retry handling after Shared Ember conflicts
+- Planner note:
+  - `subagent.createTransactionPlan.v1` accepts a bounded planning handoff without planner-owned `payload_builder_output`.
+  - Shared Ember routes that request through the `ember-cli` planner path and returns the planner-generated payload output in `candidate_plan.handoff`.
+- Execution-context note:
+  - `owned_units` and `reservations` are agent-scoped to the managed lending lane.
+  - `wallet_contents` is rooted-wallet-wide so every managed agent can see the full wallet inventory in prompt context.
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Web
+  participant Runtime as AG-UI Runtime
+  participant PM as agent-portfolio-manager
+  participant EL as agent-ember-lending
+  participant SE as Shared Ember
+  participant OWS as direct OWS wallet resolution
+  participant Planner as ember-cli planner path
+
+  PM->>OWS: resolve controller wallet
+  PM->>SE: read/write `portfolio-manager` / `orchestrator` service identity
+  Note over PM,SE: each distinct startup identity write uses a fresh identity-scoped idempotency key and must echo a confirmed `agent_service_identity` with the expected `agent_id`, `role`, and wallet or startup fails closed
+  EL->>OWS: resolve signer wallet
+  EL->>SE: read/write `ember-lending` / `subagent` service identity
+  PM->>SE: complete rooted bootstrap with activation.mandateRef targeting the approved lending mandate
+  PM->>SE: read `subagent.readExecutionContext.v1` for `ember-lending`
+  Note over PM,SE: onboarding stays blocked until `subagent_wallet_address` is non-null in the post-bootstrap execution-context read
+  Note over SE: Wallet observation, accounting-unit ingestion, reservation creation, and policy snapshot materialization happen inside Shared Ember
+  PM->>SE: read onboarding/accounting state through the activated managed mandate lane
+  Note over PM,SE: Portfolio-manager accounting context follows the same managed `lending.supply` lane that bootstrap activated
+  User->>Web: Open Ember Lending detail
+  Web->>Runtime: connect(agent-ember-lending, threadId)
+  Runtime->>EL: runtime-owned hydrate + system-context assembly
+  EL->>SE: subagent.readPortfolioState.v1
+  EL->>SE: subagent.readExecutionContext.v1
+  SE-->>EL: lending-lane projection + execution_context(rooted-wallet-wide wallet_contents)
+  EL-->>Runtime: ready snapshot with minimal execution contract
+
+  User->>Web: create_transaction_plan
+  Web->>Runtime: run(create_transaction_plan)
+  Runtime->>EL: handleOperation(create_transaction_plan)
+  EL->>SE: subagent.createTransactionPlan.v1(bounded planning handoff without planner-owned payload output)
+  SE->>Planner: plan from mandate + execution context
+  Planner-->>SE: candidate plan
+  SE-->>EL: candidate_plan + revision
+  Note over EL: Privately anchor the planner-returned payload behind the lending-service Onchain Actions boundary before recording a locally executable candidate plan.
+  alt anchoring succeeds
+    EL-->>Runtime: candidate plan artifact
+  else anchoring prerequisites or resolver are missing
+    EL-->>Runtime: failed status; candidate plan is not recorded as locally executable
+  end
+
+  User->>Web: request_transaction_execution
+  Web->>Runtime: run(request_transaction_execution)
+  Runtime->>EL: handleOperation(request_transaction_execution)
+  EL->>SE: subagent.requestTransactionExecution.v1(transaction_plan_id)
+  alt admit and execute now
+    SE-->>EL: phase=completed + execution + portfolio_state
+    EL-->>Runtime: completed status + tx hash + artifact
+  else block or deny admission
+    SE-->>EL: phase=blocked + request_result + portfolio_state
+    EL-->>Runtime: failed status + blocked artifact
+    User->>Web: create_escalation_request
+    Web->>Runtime: run(create_escalation_request)
+    Runtime->>EL: handleOperation(create_escalation_request)
+    EL->>SE: subagent.createEscalationRequest.v1(bounded escalation handoff, blocked result)
+    SE-->>PM: control-plane resolution request
+    SE-->>EL: escalation_request
+    EL-->>Runtime: escalation artifact + summary
+  end
+```
+
+## Notes
+
+- There is no model-visible `read_portfolio_state` tool.
+- There is no model-visible onboarding-context read or manual refresh/bootstrap step.
+- `request_transaction_execution` must surface admit-and-execute, blocked, and denied admission outcomes explicitly in status and artifacts.
+- Portfolio-manager and Ember Lending startup must both fail closed when Shared Ember does not echo back the confirmed durable service identity for the current OWS-resolved `agent_id`, `role`, and wallet.
+- The managed lending mandate supplied at bootstrap should carry `managed_onboarding` so Shared Ember can derive the initial lane and delegation inputs from structured mandate data.
+- Portfolio-manager wallet accounting should resolve its onboarding-state `agent_id` from the activated managed mandate so operator-visible reservations and policy snapshots match the managed lane Ember Lending sees.
+- When Shared Ember has a durable subagent identity ready during onboarding, the first post-bootstrap execution-context read should already expose a non-null `subagent_wallet_address`, and Ember Lending should project it without any manual reseed step.
+- The current repo-local smoke for this contract is `pnpm smoke:managed-identities`; it intentionally stays on the downstream runtime-owned direct OWS path and does not absorb the separate OWS-internals follow-up.

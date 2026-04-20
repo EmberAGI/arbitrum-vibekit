@@ -7,7 +7,7 @@ type X402Scenario = {
 
 const commonRequirementsBase = {
   scheme: 'exact',
-  network: 'base-sepolia',
+  network: 'arbitrum-sepolia',
   description: 'Test',
   resource: 'https://example.test/resource',
   payTo: '0x850051af81DF37ae20e6Fe2De405be96DC4b3d1f',
@@ -24,7 +24,7 @@ export const verifySuccessScenario: X402Scenario = {
   paymentPayload: {
     x402Version: 1,
     scheme: 'exact',
-    network: 'base-sepolia',
+    network: 'arbitrum-sepolia',
     payload: {
       signature:
         '0x47859970f51ec1a6791f398a3a552a6fa4bc570c6b7a6136f712a694e0e82f4723ce487033978b74a752586208bae83718835c1312751e4563e2176549e551481b',
@@ -48,7 +48,7 @@ export const verifyExpiredScenario: X402Scenario = {
   paymentPayload: {
     x402Version: 1,
     scheme: 'exact',
-    network: 'base-sepolia',
+    network: 'arbitrum-sepolia',
     payload: {
       signature:
         '0xb9c56a423ad45bba6053a00b7920505416dc45efd210c1c579af4219c70026aa00f6c998e37809b8634d8e730d36494d9f73bf6e3a880bbf6e2b1513665b57e61c',
@@ -72,7 +72,7 @@ export const verifyInsufficientValueScenario: X402Scenario = {
   paymentPayload: {
     x402Version: 1,
     scheme: 'exact',
-    network: 'base-sepolia',
+    network: 'arbitrum-sepolia',
     payload: {
       signature:
         '0x77f2788bb3046401d6e7441adf1956bfcc7de0c609916b35afaa860b180b77f72d442eb29af6f09cac00938cee9e65964482c34ad76e02a6827d91200ebcce7c1b',
@@ -96,14 +96,14 @@ export const verifyInvalidRequirementsScenario: X402Scenario = {
   paymentPayload: {
     x402Version: 1,
     scheme: 'exact',
-    network: 'base-sepolia',
+    network: 'arbitrum-sepolia',
     payload: {
       transaction: '0xdeadbeef',
     },
   },
   paymentRequirements: {
     scheme: 'exact',
-    network: 'base-sepolia',
+    network: 'arbitrum-sepolia',
     description: 'Test',
     resource: 'https://example.test/resource',
     payTo: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',

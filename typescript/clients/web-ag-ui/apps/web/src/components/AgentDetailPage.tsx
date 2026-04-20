@@ -4,6 +4,7 @@
 
 import {
   ChevronRight,
+  ChevronDown,
   Star,
   Globe,
   Github,
@@ -14,7 +15,16 @@ import {
 } from 'lucide-react';
 import type { Message } from '@ag-ui/core';
 import { formatUnits } from 'viem';
-import { useCallback, useEffect, useId, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react';
 import type {
   AgentProfile,
   AgentMetrics,
@@ -37,6 +47,8 @@ import type {
   Transaction,
   TelemetryItem,
   ClmmEvent,
+  ThreadLifecycle,
+  ManagedMandateInput,
 } from '../types/agent';
 import { getAgentConfig } from '../config/agents';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
@@ -50,13 +62,18 @@ import {
   resolveTokenIconUri,
   iconMonogram,
 } from '../utils/iconResolution';
+import { getVisibleSurfaceProtocols } from '../utils/agentSurfaceMetadata';
 import { formatPoolPair } from '../utils/poolFormat';
 import { Skeleton } from './ui/Skeleton';
 import { LoadingValue } from './ui/LoadingValue';
+import { AgentSurfaceTag } from './ui/AgentSurfaceTag';
 import { CreatorIdentity } from './ui/CreatorIdentity';
 import { CursorListTooltip } from './ui/CursorListTooltip';
 import { CTA_SIZE_MD, CTA_SIZE_MD_FULL } from './ui/cta';
-import { signDelegationWithFallback } from '../utils/delegationSigning';
+import {
+  formatDelegationSigningError,
+  signDelegationWithFallback,
+} from '../utils/delegationSigning';
 import { GmxAlloraMetricsTab, MetricsTab, PendleMetricsTab } from './AgentMetricsTabs';
 import {
   resolveDelegationContextLabel,
@@ -66,6 +83,21 @@ import { resolveBlockersInterruptView } from './agentBlockersInterrupt';
 import { resolveCurrentSetupStep } from './agentCurrentSetupStep';
 import { resolveSetupSteps } from './agentSetupSteps';
 import { emitAgentConnectDebug } from '../utils/agentConnectDebug';
+import { buildPortfolioManagerSetupInput } from '../utils/portfolioManagerSetup';
+import {
+  buildManagedLendingPolicy,
+  DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
+  formatManagedLendingCollateralPolicies,
+  parseManagedLendingCollateralPolicies,
+  DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
+  DEFAULT_MANAGED_LENDING_MAX_LTV_BPS,
+  DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
+  normalizeManagedMandateAssetSymbol,
+  parseManagedMandateAssetList,
+  readManagedLendingBorrowAssets,
+  readManagedLendingCollateralPolicies,
+  readManagedLendingRiskPolicy,
+} from '../utils/managedMandate';
 import {
   buildPiExampleInterruptA2UiView,
   buildPiExampleStatusA2UiView,
@@ -79,6 +111,15 @@ const MIN_BASE_CONTRIBUTION_USD = 10;
 const AGENT_WEBSITE_URL = 'https://emberai.xyz';
 const AGENT_GITHUB_URL = 'https://github.com/EmberAGI/arbitrum-vibekit';
 const AGENT_X_URL = 'https://x.com/emberagi';
+const MANAGED_LENDING_NETWORK = 'arbitrum';
+const MANAGED_LENDING_PROTOCOL = 'aave';
+const MANAGED_LENDING_CONTROL_PATH = 'lending.supply';
+const DEFAULT_MANAGED_LENDING_COLLATERAL_POLICIES_INPUT = formatManagedLendingCollateralPolicies([
+  {
+    asset: DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
+    max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
+  },
+]);
 
 interface AgentDetailPageProps {
   agentId: string;
@@ -94,6 +135,7 @@ interface AgentDetailPageProps {
   fullMetrics?: ThreadMetrics;
   initialTab?: TabType;
   isHired: boolean;
+  isRestoringState?: boolean;
   isHiring: boolean;
   hasLoadedView: boolean;
   isFiring?: boolean;
@@ -130,12 +172,14 @@ interface AgentDetailPageProps {
   telemetry?: TelemetryItem[];
   events?: ClmmEvent[];
   messages?: Message[];
-  messageSnapshotEpoch?: number;
+  lifecycleState?: ThreadLifecycle;
+  domainProjection?: Record<string, unknown>;
   // Settings
   settings?: AgentSettings;
   onSendChatMessage?: (content: string) => void;
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
   onSettingsSave?: (updates: Partial<AgentSettings>) => void;
+  onManagedMandateSave?: (input: ManagedMandateEditorSubmitInput) => Promise<void> | void;
 }
 
 type TabType = 'blockers' | 'metrics' | 'transactions' | 'chat';
@@ -236,25 +280,9 @@ function asFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function parseCommandMessage(content: string): string | null {
-  try {
-    const parsed = JSON.parse(content) as unknown;
-    if (typeof parsed !== 'object' || parsed === null) return null;
-    if (!('command' in parsed)) return null;
-    const command = (parsed as { command?: unknown }).command;
-    if (command === 'hire') return 'Submitted hire request.';
-    if (command === 'fire') return 'Submitted fire request.';
-    if (command === 'sync') return 'Requested a runtime sync.';
-    if (command === 'resume') return 'Submitted onboarding response.';
-    return typeof command === 'string' ? `Submitted ${command} request.` : null;
-  } catch {
-    return null;
-  }
-}
-
 function getMessageText(message: Message): string {
   if (typeof message.content === 'string') {
-    return parseCommandMessage(message.content) ?? message.content;
+    return message.content;
   }
 
   if (Array.isArray(message.content)) {
@@ -285,134 +313,566 @@ type VisibleChatMessage = {
   label: string;
   text: string;
   role: Message['role'];
-  parentMessageId?: string;
-  originalIndex: number;
-  appearanceOrder: number;
 };
-
-type VisibleMessageOrderEntry = {
-  nextOrder: number;
-  orderById: Map<string, number>;
-  previousVisibleMessages: Array<{
-    id: string;
-    role: Message['role'];
-    text: string;
-    appearanceOrder: number;
-  }>;
-};
-
-const visibleMessageOrderCache = new Map<string, VisibleMessageOrderEntry>();
-
-function getVisibleMessageOrderEntry(cacheKey: string): VisibleMessageOrderEntry {
-  const existing = visibleMessageOrderCache.get(cacheKey);
-  if (existing) {
-    return existing;
-  }
-
-  const created: VisibleMessageOrderEntry = {
-    nextOrder: 0,
-    orderById: new Map<string, number>(),
-    previousVisibleMessages: [],
-  };
-  visibleMessageOrderCache.set(cacheKey, created);
-  return created;
-}
-
-function buildVisibleMessageReplacementKey(message: {
-  role: Message['role'];
-  text: string;
-}): string {
-  return `${message.role}\u0000${message.text}`;
-}
-
-function getIncrementalMessagePriority(role: Message['role']): number {
-  switch (role) {
-    case 'user':
-      return 0;
-    case 'reasoning':
-      return 1;
-    case 'assistant':
-      return 2;
-    default:
-      return 3;
-  }
-}
-
-function getParentMessageId(message: Message): string | undefined {
-  if (!('parentMessageId' in message)) {
-    return undefined;
-  }
-  return typeof message.parentMessageId === 'string' ? message.parentMessageId : undefined;
-}
-
-function orderVisibleChatMessages(
-  messages: Message[],
-  appearanceOrderById: ReadonlyMap<string, number>,
-): VisibleChatMessage[] {
-  const visibleMessages = messages
-    .map(
-      (message, originalIndex): VisibleChatMessage => ({
-        id: message.id,
-        label: getMessageRoleLabel(message),
-        text: getMessageText(message),
-        role: message.role,
-        parentMessageId: getParentMessageId(message),
-        originalIndex,
-        appearanceOrder: appearanceOrderById.get(message.id) ?? Number.MAX_SAFE_INTEGER,
-      }),
-    )
-    .filter((message) => message.text.length > 0);
-
-  const rankedVisibleMessages = [...visibleMessages].sort(
-    (left, right) =>
-      left.appearanceOrder - right.appearanceOrder || left.originalIndex - right.originalIndex,
-  );
-
-  const visibleMessageIds = new Set(rankedVisibleMessages.map((message) => message.id));
-  const reasoningByParentId = new Map<string, VisibleChatMessage[]>();
-
-  for (const message of rankedVisibleMessages) {
-    if (message.role !== 'reasoning' || !message.parentMessageId || !visibleMessageIds.has(message.parentMessageId)) {
-      continue;
-    }
-
-    const groupedMessages = reasoningByParentId.get(message.parentMessageId) ?? [];
-    groupedMessages.push(message);
-    reasoningByParentId.set(message.parentMessageId, groupedMessages);
-  }
-
-  const orderedMessages: VisibleChatMessage[] = [];
-  const appendedMessageIds = new Set<string>();
-
-  for (const message of rankedVisibleMessages) {
-    if (message.parentMessageId && reasoningByParentId.has(message.parentMessageId)) {
-      continue;
-    }
-
-    const reasoningMessages = reasoningByParentId.get(message.id) ?? [];
-    for (const reasoningMessage of reasoningMessages.sort(
-      (left, right) =>
-        left.appearanceOrder - right.appearanceOrder || left.originalIndex - right.originalIndex,
-    )) {
-      if (appendedMessageIds.has(reasoningMessage.id)) {
-        continue;
-      }
-      orderedMessages.push(reasoningMessage);
-      appendedMessageIds.add(reasoningMessage.id);
-    }
-
-    if (appendedMessageIds.has(message.id)) {
-      continue;
-    }
-    orderedMessages.push(message);
-    appendedMessageIds.add(message.id);
-  }
-
-  return orderedMessages;
-}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function formatManagedLanePart(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return value
+    .split(/[\s_-]+/)
+    .filter((part) => part.length > 0)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+}
+
+function formatManagedLaneLabel(network: string | null, protocol: string | null): string | null {
+  if (!network && !protocol) {
+    return null;
+  }
+
+  return [formatManagedLanePart(network), formatManagedLanePart(protocol)]
+    .filter((value): value is string => value !== null)
+    .join(' / ');
+}
+
+function formatReservationIdForDisplay(value: string): string {
+  const reservationId = value.trim();
+  if (reservationId.length <= 40) {
+    return reservationId;
+  }
+
+  const parts = reservationId.split(/[-_]+/).filter((part) => part.length > 0);
+  const prefixSource = parts[0] ?? reservationId;
+  const prefix = prefixSource.slice(0, Math.min(3, prefixSource.length));
+  const context =
+    parts.find((part) => part.toLowerCase().includes('lending')) ??
+    parts[Math.floor(parts.length / 2)] ??
+    reservationId.slice(0, 7);
+  const tail = reservationId.slice(-7);
+
+  return `${prefix}...${context}...${tail}`;
+}
+
+function normalizeReservationSummaryForDisplay(summary: string | null): string | null {
+  if (!summary) {
+    return null;
+  }
+
+  return summary.replace(
+    /^(Reservation\s+)(\S+)(\s.*)$/u,
+    (_match, prefix: string, reservationId: string, suffix: string) =>
+      `${prefix}${formatReservationIdForDisplay(reservationId)}${suffix}`,
+  );
+}
+
+function readFirstRecordFromArray(value: unknown): Record<string, unknown> | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  for (const entry of value) {
+    const record = asRecord(entry);
+    if (record) {
+      return record;
+    }
+  }
+
+  return null;
+}
+
+function readLaneProtocolFromControlPath(controlPath: string | null): string | null {
+  if (!controlPath) {
+    return null;
+  }
+
+  const [laneFamily] = controlPath.split('.', 1);
+  return laneFamily?.trim().length ? laneFamily : null;
+}
+
+function readArtifactEventType(event: ClmmEvent): string {
+  if (event.type !== 'artifact') {
+    return 'unknown';
+  }
+
+  return (
+    readString(event.artifact?.type) ??
+    readString(asRecord(event.artifact?.data)?.['type']) ??
+    'unknown'
+  );
+}
+
+type ManagedMandateEditorView = {
+  ownerAgentId: string;
+  targetAgentId: string;
+  targetAgentRouteId: string;
+  targetAgentKey: string;
+  title: string;
+  laneLabel: string | null;
+  mandateRef: string | null;
+  managedMandate: Record<string, unknown> | null;
+  walletAddress: string | null;
+  rootUserWallet: string | null;
+  rootedWalletContextId: string | null;
+  reservationSummary: string | null;
+};
+
+type ManagedMandateEditorSubmitInput = {
+  ownerAgentId: string;
+  targetAgentId: string;
+  targetAgentRouteId: string;
+  managedMandate: ManagedMandateInput;
+};
+
+type ManagedMandateDisplayField = {
+  key: string;
+  value: string;
+};
+
+function readStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const entries = value
+    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter((entry) => entry.length > 0);
+
+  return entries.length > 0 ? entries : null;
+}
+
+function isManagedMandateDisplayScalar(value: unknown): value is string | number | boolean {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+}
+
+function buildManagedMandateDisplayFields(
+  managedMandate: Record<string, unknown> | null,
+): ManagedMandateDisplayField[] {
+  if (!managedMandate) {
+    return [];
+  }
+
+  const fields: ManagedMandateDisplayField[] = [];
+
+  const visit = (value: unknown, path: string[]) => {
+    if (Array.isArray(value)) {
+      const stringArray = readStringArray(value);
+      if (stringArray) {
+        fields.push({
+          key: path.join('.'),
+          value: stringArray.join(', '),
+        });
+        return;
+      }
+
+      value.forEach((entry, index) => visit(entry, [...path, String(index)]));
+      return;
+    }
+
+    const record = asRecord(value);
+    if (record) {
+      Object.entries(record).forEach(([key, entry]) => visit(entry, [...path, key]));
+      return;
+    }
+
+    if (isManagedMandateDisplayScalar(value)) {
+      fields.push({
+        key: path.join('.'),
+        value: String(value),
+      });
+    }
+  };
+
+  visit(managedMandate, []);
+  return fields;
+}
+
+function ManagedMandateDetails(props: { managedMandate: Record<string, unknown> | null }) {
+  const fields = buildManagedMandateDisplayFields(props.managedMandate);
+
+  if (fields.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2 grid gap-3 sm:grid-cols-2">
+      {fields.map((field) => (
+        <div
+          key={field.key}
+          className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5"
+        >
+          <div className="text-[11px] font-mono tracking-[0.04em] text-white/40">{field.key}</div>
+          <div className="mt-1 break-words text-sm leading-relaxed text-gray-200">{field.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function buildReservationSummaryFromProjection(
+  reservation: Record<string, unknown> | null,
+): string | null {
+  if (!reservation) {
+    return null;
+  }
+
+  const reservationId = readString(reservation['reservationId']);
+  if (!reservationId) {
+    return null;
+  }
+
+  const purpose = readString(reservation['purpose']);
+  const controlPath = readString(reservation['controlPath']);
+  const rootAsset = readString(reservation['rootAsset']);
+  const quantity = readString(reservation['quantity']);
+  const reservationAction =
+    purpose === 'position.enter' ? 'supplies' : purpose ? `${purpose}s` : 'moves';
+  const quantitySummary = quantity && rootAsset ? ` ${quantity} ${rootAsset}` : ' capital';
+  const controlPathSummary = controlPath ? ` via ${controlPath}` : '';
+
+  return normalizeReservationSummaryForDisplay(
+    `Reservation ${reservationId} ${reservationAction}${quantitySummary}${controlPathSummary}.`,
+  );
+}
+
+function readManagedMandateEditorView(
+  domainProjection: Record<string, unknown> | undefined,
+): ManagedMandateEditorView | null {
+  const editor = asRecord(domainProjection?.['managedMandateEditor']);
+  if (!editor) {
+    return null;
+  }
+
+  const targetAgentRouteId = readString(editor['targetAgentRouteId']);
+  if (!targetAgentRouteId) {
+    return null;
+  }
+  const ownerAgentId = readString(editor['ownerAgentId']);
+  const targetAgentId = readString(editor['targetAgentId']);
+  const targetAgentKey = readString(editor['targetAgentKey']);
+  if (!ownerAgentId || !targetAgentId || !targetAgentKey) {
+    return null;
+  }
+
+  const managedMandate = asRecord(editor['managedMandate']);
+  const reservation = asRecord(editor['reservation']);
+  const controlPath = readString(reservation?.['controlPath']) ?? MANAGED_LENDING_CONTROL_PATH;
+
+  return {
+    ownerAgentId,
+    targetAgentId,
+    targetAgentRouteId,
+    targetAgentKey,
+    title: readString(editor['targetAgentTitle']) ?? 'Managed lending lane',
+    laneLabel: formatManagedLaneLabel(
+      MANAGED_LENDING_NETWORK,
+      readLaneProtocolFromControlPath(controlPath) ?? MANAGED_LENDING_PROTOCOL,
+    ),
+    mandateRef: readString(editor['mandateRef']),
+    managedMandate,
+    walletAddress: readString(editor['agentWallet']),
+    rootUserWallet: readString(editor['rootUserWallet']),
+    rootedWalletContextId: readString(editor['rootedWalletContextId']),
+    reservationSummary: buildReservationSummaryFromProjection(asRecord(editor['reservation'])),
+  };
+}
+
+type PortfolioManagerManagedAgentView = {
+  title: string;
+  detailHref: string;
+  laneLabel: string | null;
+  managedMandate: Record<string, unknown> | null;
+  reservationSummary: string | null;
+};
+
+function buildPortfolioManagerManagedAgentView(
+  domainProjection: Record<string, unknown> | undefined,
+): PortfolioManagerManagedAgentView | null {
+  const managedMandateEditorView = readManagedMandateEditorView(domainProjection);
+  if (!managedMandateEditorView) {
+    return null;
+  }
+
+  return {
+    title: managedMandateEditorView.title,
+    detailHref: `/hire-agents/${managedMandateEditorView.targetAgentRouteId}`,
+    laneLabel: managedMandateEditorView.laneLabel,
+    managedMandate: managedMandateEditorView.managedMandate,
+    reservationSummary: managedMandateEditorView.reservationSummary,
+  };
+}
+
+type EmberLendingRuntimeView = {
+  phase: string | null;
+  laneLabel: string | null;
+  walletAddress: string | null;
+  managedMandate: Record<string, unknown> | null;
+  reservationSummary: string | null;
+};
+
+function buildEmberLendingRuntimeView(
+  params: {
+    lifecycleState: ThreadLifecycle | undefined;
+    domainProjection: Record<string, unknown> | undefined;
+  },
+): EmberLendingRuntimeView | null {
+  const lifecycleRecord = asRecord(params.lifecycleState);
+  const managedMandateEditorView = readManagedMandateEditorView(params.domainProjection);
+  const runtimeView: EmberLendingRuntimeView = {
+    phase: readString(lifecycleRecord?.['phase']),
+    laneLabel: managedMandateEditorView?.laneLabel ?? null,
+    walletAddress: managedMandateEditorView?.walletAddress ?? null,
+    managedMandate: managedMandateEditorView?.managedMandate ?? null,
+    reservationSummary: managedMandateEditorView?.reservationSummary ?? null,
+  };
+
+  return runtimeView.phase ||
+    runtimeView.laneLabel ||
+    runtimeView.walletAddress ||
+    runtimeView.managedMandate ||
+    runtimeView.reservationSummary
+    ? runtimeView
+    : null;
+}
+
+function buildUpdatedManagedMandate(params: {
+  existingManagedMandate: Record<string, unknown> | null;
+  collateralPolicies: ManagedMandateInput['lending_policy']['collateral_policy']['assets'];
+  allowedBorrowAssets: string[];
+  maxLtvBps?: number;
+  minHealthFactor?: string;
+}): ManagedMandateInput {
+  return {
+    lending_policy: buildManagedLendingPolicy({
+      existingManagedMandate: params.existingManagedMandate,
+      collateralPolicies: params.collateralPolicies,
+      allowedBorrowAssets: params.allowedBorrowAssets,
+      maxLtvBps: params.maxLtvBps,
+      minHealthFactor: params.minHealthFactor,
+    }),
+  };
+}
+
+function ManagedMandateEditorCard(props: {
+  view: ManagedMandateEditorView;
+  onSave?: (input: ManagedMandateEditorSubmitInput) => Promise<void> | void;
+}) {
+  const initialCollateralPolicies = readManagedLendingCollateralPolicies(props.view.managedMandate);
+  const initialCollateralPoliciesValue = formatManagedLendingCollateralPolicies(
+    initialCollateralPolicies.length > 0
+      ? initialCollateralPolicies
+      : [
+          {
+            asset: DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
+            max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
+          },
+        ],
+  );
+  const initialAllowedBorrowAssets = readManagedLendingBorrowAssets(props.view.managedMandate);
+  const initialAllowedBorrowAssetsValue = initialAllowedBorrowAssets.join(', ');
+  const initialRiskPolicy = readManagedLendingRiskPolicy(props.view.managedMandate);
+  const [collateralPoliciesInput, setCollateralPoliciesInput] = useState(
+    initialCollateralPoliciesValue,
+  );
+  const [allowedBorrowAssetsInput, setAllowedBorrowAssetsInput] = useState(
+    initialAllowedBorrowAssetsValue,
+  );
+  const [maxLtvBpsInput, setMaxLtvBpsInput] = useState(
+    String(initialRiskPolicy.maxLtvBps ?? DEFAULT_MANAGED_LENDING_MAX_LTV_BPS),
+  );
+  const [minHealthFactorInput, setMinHealthFactorInput] = useState(
+    initialRiskPolicy.minHealthFactor ?? DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
+  );
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setCollateralPoliciesInput(initialCollateralPoliciesValue);
+    setAllowedBorrowAssetsInput(initialAllowedBorrowAssetsValue);
+    setMaxLtvBpsInput(String(initialRiskPolicy.maxLtvBps ?? DEFAULT_MANAGED_LENDING_MAX_LTV_BPS));
+    setMinHealthFactorInput(
+      initialRiskPolicy.minHealthFactor ?? DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
+    );
+    setSubmitError(null);
+  }, [
+    initialCollateralPoliciesValue,
+    initialAllowedBorrowAssetsValue,
+    initialRiskPolicy.maxLtvBps,
+    initialRiskPolicy.minHealthFactor,
+    props.view.mandateRef,
+  ]);
+
+  const network = MANAGED_LENDING_NETWORK;
+  const controlPath = MANAGED_LENDING_CONTROL_PATH;
+  const previewCollateralPolicies = parseManagedLendingCollateralPolicies(collateralPoliciesInput);
+  const previewAllowedBorrowAssets = parseManagedMandateAssetList(allowedBorrowAssetsInput);
+  const previewMaxLtvBps = readFiniteNumber(Number(maxLtvBpsInput));
+  const previewManagedMandate = buildUpdatedManagedMandate({
+    existingManagedMandate: props.view.managedMandate,
+    collateralPolicies: previewCollateralPolicies,
+    allowedBorrowAssets: previewAllowedBorrowAssets,
+    maxLtvBps: previewMaxLtvBps ?? undefined,
+    minHealthFactor: minHealthFactorInput.trim() || undefined,
+  });
+
+  const handleSave = async () => {
+    if (!props.onSave) {
+      return;
+    }
+
+    const collateralPolicies = parseManagedLendingCollateralPolicies(collateralPoliciesInput);
+    if (collateralPolicies.length === 0) {
+      setSubmitError('At least one collateral policy is required.');
+      return;
+    }
+    const allowedBorrowAssets = parseManagedMandateAssetList(allowedBorrowAssetsInput);
+    const maxLtvBps = Number(maxLtvBpsInput);
+    if (!Number.isFinite(maxLtvBps)) {
+      setSubmitError('Max LTV bps must be a valid number.');
+      return;
+    }
+    const normalizedMinHealthFactor = minHealthFactorInput.trim();
+    if (normalizedMinHealthFactor.length === 0) {
+      setSubmitError('Minimum health factor is required.');
+      return;
+    }
+
+    setIsSaving(true);
+    setSubmitError(null);
+    try {
+      await props.onSave({
+        ownerAgentId: props.view.ownerAgentId,
+        targetAgentId: props.view.targetAgentId,
+        targetAgentRouteId: props.view.targetAgentRouteId,
+        managedMandate: buildUpdatedManagedMandate({
+          existingManagedMandate: props.view.managedMandate,
+          collateralPolicies,
+          allowedBorrowAssets,
+          maxLtvBps,
+          minHealthFactor: normalizedMinHealthFactor,
+        }),
+      });
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Managed mandate update failed.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#1a1a1a] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Managed mandate
+          </div>
+          <div className="mt-2 text-base font-semibold text-white">{props.view.title}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+              {network}
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+              {controlPath}
+            </span>
+          </div>
+        </div>
+        {props.view.mandateRef ? (
+          <div className="text-right text-[11px] uppercase tracking-[0.18em] text-white/35">
+            {props.view.mandateRef}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">Collateral policy</label>
+          <input
+            id="managed-mandate-collateral-policies"
+            name="managed-mandate-collateral-policies"
+            type="text"
+            value={collateralPoliciesInput}
+            onChange={(event) => setCollateralPoliciesInput(event.target.value)}
+            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+          />
+          <div className="mt-2 text-xs text-gray-500">
+            Use <span className="font-mono">ASSET:PCT</span> entries, for example{' '}
+            <span className="font-mono">USDC:70, WETH:50</span>.
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">Allowed borrow assets</label>
+          <input
+            id="managed-mandate-allowed-borrow-assets"
+            name="managed-mandate-allowed-borrow-assets"
+            type="text"
+            value={allowedBorrowAssetsInput}
+            onChange={(event) => setAllowedBorrowAssetsInput(event.target.value)}
+            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+          />
+          <div className="mt-2 text-xs text-gray-500">
+            Leave blank for a supply-only mandate.
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">Max LTV bps</label>
+          <input
+            id="managed-mandate-max-ltv-bps"
+            name="managed-mandate-max-ltv-bps"
+            type="number"
+            value={maxLtvBpsInput}
+            onChange={(event) => setMaxLtvBpsInput(event.target.value)}
+            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">Minimum health factor</label>
+          <input
+            id="managed-mandate-min-health-factor"
+            name="managed-mandate-min-health-factor"
+            type="text"
+            value={minHealthFactorInput}
+            onChange={(event) => setMinHealthFactorInput(event.target.value)}
+            className="w-full rounded-lg border border-[#2a2a2a] bg-[#121212] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">Exact mandate preview</div>
+        <ManagedMandateDetails managedMandate={previewManagedMandate as Record<string, unknown>} />
+      </div>
+
+      {submitError ? (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {submitError}
+        </div>
+      ) : null}
+
+      <div className="mt-5 flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={!props.onSave || isSaving}
+          className="rounded-lg bg-[#fd6731] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#e55a28] disabled:opacity-60"
+        >
+          {isSaving ? 'Saving...' : 'Save managed mandate'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 type PiExampleChatCard = {
@@ -428,7 +888,7 @@ function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
       const artifactData = asRecord(event.artifact?.data);
       if (artifactData?.type === 'automation-status') {
         const status = typeof artifactData.status === 'string' ? artifactData.status : 'unknown';
-        const command = typeof artifactData.command === 'string' ? artifactData.command : 'sync';
+        const command = typeof artifactData.command === 'string' ? artifactData.command : 'refresh';
         const detail = typeof artifactData.detail === 'string' ? artifactData.detail : 'Automation status updated.';
         return [
           {
@@ -503,7 +963,7 @@ function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
         }
 
         const status = typeof payload.status === 'string' ? payload.status : 'unknown';
-        const command = typeof payload.command === 'string' ? payload.command : 'sync';
+        const command = typeof payload.command === 'string' ? payload.command : 'refresh';
         const detail = typeof payload.detail === 'string' ? payload.detail : 'Automation status updated.';
         return [
           {
@@ -592,6 +1052,7 @@ export function AgentDetailPage({
   fullMetrics,
   initialTab,
   isHired,
+  isRestoringState = false,
   isHiring,
   hasLoadedView,
   isFiring,
@@ -615,29 +1076,82 @@ export function AgentDetailPage({
   telemetry = [],
   events = [],
   messages = [],
-  messageSnapshotEpoch = 0,
+  lifecycleState,
+  domainProjection,
   settings,
   onSendChatMessage,
   onSettingsChange,
   onSettingsSave,
+  onManagedMandateSave,
 }: AgentDetailPageProps) {
   const showPostHireLayout = isHired || Boolean(isFiring);
-  const chatEnabled = agentId === 'agent-pi-example' || agentId === 'agent-portfolio-manager';
-  const inlineOnboardingChatEnabled = agentId === 'agent-pi-example';
+  const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
+  const managedOnboardingOwner = useMemo(
+    () =>
+      agentConfig.onboardingOwnerAgentId
+        ? getAgentConfig(agentConfig.onboardingOwnerAgentId)
+        : null,
+    [agentConfig.onboardingOwnerAgentId],
+  );
+  const managedMandateEditorView = useMemo(
+    () => readManagedMandateEditorView(domainProjection),
+    [domainProjection],
+  );
+  const emberLendingRuntimeView = useMemo(
+    () =>
+      agentId === 'agent-ember-lending'
+        ? buildEmberLendingRuntimeView({ lifecycleState, domainProjection })
+        : null,
+    [agentId, domainProjection, lifecycleState],
+  );
+  const isPortfolioAgent = agentId === 'agent-portfolio-manager';
+  const portfolioManagerManagedAgentView = useMemo(
+    () => (isPortfolioAgent ? buildPortfolioManagerManagedAgentView(domainProjection) : null),
+    [domainProjection, isPortfolioAgent],
+  );
+  const isOnboardingActive = resolveOnboardingActive({
+    activeInterruptPresent: Boolean(activeInterrupt),
+    taskStatus,
+    onboardingStatus: onboardingFlow?.status,
+  });
+  const managedRuntimePhaseIsActive = lifecycleState?.phase === 'active';
+  const portfolioManagedContextVisible =
+    managedRuntimePhaseIsActive && (!isPortfolioAgent || !isOnboardingActive);
+  const visibleManagedMandateEditorView = portfolioManagedContextVisible
+    ? managedMandateEditorView
+    : null;
+  const visiblePortfolioManagerManagedAgentView = portfolioManagedContextVisible
+    ? portfolioManagerManagedAgentView
+    : null;
+  const emberLendingChatEnabled =
+    agentId === 'agent-ember-lending' &&
+    emberLendingRuntimeView?.phase === 'active';
+  const chatEnabled =
+    agentId === 'agent-pi-example' ||
+    isPortfolioAgent ||
+    emberLendingChatEnabled;
+  const isEmberLendingAgent = agentId === 'agent-ember-lending';
+  const inlineOnboardingChatEnabled =
+    agentId === 'agent-pi-example' || agentId === 'agent-ember-lending';
   const [activeTab, setActiveTab] = useState<TabType>(
     initialTab ?? (showPostHireLayout ? 'blockers' : 'metrics'),
   );
   const [hasUserSelectedTab, setHasUserSelectedTab] = useState(Boolean(initialTab));
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState('');
-  const agentConfig = useMemo(() => getAgentConfig(agentId), [agentId]);
-  const isOnboardingActive = resolveOnboardingActive({
-    activeInterruptPresent: Boolean(activeInterrupt),
-    taskStatus,
-    onboardingStatus: onboardingFlow?.status,
-  });
+  const [isManagedLaneExpanded, setIsManagedLaneExpanded] = useState(false);
+  const [isSubagentWalletPopoverOpen, setIsSubagentWalletPopoverOpen] = useState(false);
+  const [subagentWalletCopyStatus, setSubagentWalletCopyStatus] = useState<
+    'idle' | 'success' | 'error'
+  >('idle');
+  const subagentWalletPopoverRef = useRef<HTMLDivElement | null>(null);
+  const subagentWalletCopyResetTimeoutRef = useRef<number | null>(null);
   const forceBlockersTab = isOnboardingActive && !inlineOnboardingChatEnabled;
-  const defaultPostHireTab: TabType = isFiring ? 'transactions' : 'metrics';
+  const defaultPostHireTab: TabType = isFiring
+    ? 'transactions'
+    : isEmberLendingAgent
+      ? 'chat'
+      : 'metrics';
   const selectTab = useCallback((tab: TabType) => {
     setHasUserSelectedTab(true);
     setActiveTab(tab);
@@ -679,6 +1193,11 @@ export function AgentDetailPage({
     : !hasUserSelectedTab && showPostHireLayout
       ? defaultPostHireTab
       : activeTab;
+  const useEmbeddedPortfolioChat = isPortfolioAgent && !forceBlockersTab && !isFiring;
+  const showLeftRailStats = !isPortfolioAgent && !isEmberLendingAgent;
+  const showAgentMetadataGrid = !isPortfolioAgent;
+  const managedLaneContentId = useId();
+  const subagentWalletPopoverId = useId();
 
   const blockingErrorMessage = (haltReason || executionError || null) as string | null;
   const showBlockingErrorPopup =
@@ -739,10 +1258,11 @@ export function AgentDetailPage({
       out.push(trimmed);
     };
 
-    for (const protocol of profile.protocols ?? []) push(protocol);
-    for (const protocol of agentConfig.protocols ?? []) push(protocol);
+    for (const protocol of getVisibleSurfaceProtocols(profile.protocols ?? [])) push(protocol);
+    for (const protocol of getVisibleSurfaceProtocols(agentConfig.protocols ?? [])) push(protocol);
     return out;
   }, [agentConfig.protocols, profile.protocols]);
+  const primaryProtocol = displayProtocols.length > 0 ? displayProtocols[0] : null;
 
   const displayTokens = useMemo(() => {
     const out: string[] = [];
@@ -789,19 +1309,99 @@ export function AgentDetailPage({
   const agentAvatarUri = useMemo(
     () =>
       resolveAgentAvatarUri({
+        imageUrl: agentConfig.imageUrl,
         protocols: profile.protocols ?? [],
         tokenIconBySymbol,
       }) ??
       (profile.chains && profile.chains.length > 0
         ? chainIconByName[normalizeNameKey(profile.chains[0])] ?? null
         : null),
-    [chainIconByName, profile.chains, profile.protocols, tokenIconBySymbol],
+    [agentConfig.imageUrl, chainIconByName, profile.chains, profile.protocols, tokenIconBySymbol],
   );
 
   const formatAddress = (address: string) => {
     if (address.length <= 10) return address;
     return `${address.slice(0, 5)}...${address.slice(-3)}`;
   };
+  const formatWalletRowAddress = (address: string) => {
+    if (address.length <= 10) return address;
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  const clearSubagentWalletCopyResetTimeout = () => {
+    if (subagentWalletCopyResetTimeoutRef.current !== null) {
+      window.clearTimeout(subagentWalletCopyResetTimeoutRef.current);
+      subagentWalletCopyResetTimeoutRef.current = null;
+    }
+  };
+
+  const closeSubagentWalletPopover = () => {
+    setIsSubagentWalletPopoverOpen(false);
+    setSubagentWalletCopyStatus('idle');
+  };
+
+  const handleCopySubagentWalletAddress = async () => {
+    const walletAddress = emberLendingRuntimeView?.walletAddress;
+    if (!walletAddress) return;
+
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error('Clipboard unavailable');
+      }
+      await navigator.clipboard.writeText(walletAddress);
+      setSubagentWalletCopyStatus('success');
+    } catch {
+      setSubagentWalletCopyStatus('error');
+    }
+
+    clearSubagentWalletCopyResetTimeout();
+    subagentWalletCopyResetTimeoutRef.current = window.setTimeout(() => {
+      setSubagentWalletCopyStatus('idle');
+    }, 2000);
+  };
+
+  const handleWalletFieldFocus: React.FocusEventHandler<HTMLInputElement> = (event) => {
+    event.currentTarget.select();
+  };
+
+  const handleWalletFieldClick: React.MouseEventHandler<HTMLInputElement> = (event) => {
+    event.currentTarget.select();
+  };
+
+  useEffect(() => {
+    if (!isSubagentWalletPopoverOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (subagentWalletPopoverRef.current?.contains(target)) return;
+      closeSubagentWalletPopover();
+    };
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeSubagentWalletPopover();
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isSubagentWalletPopoverOpen]);
+
+  useEffect(() => {
+    return () => {
+      clearSubagentWalletCopyResetTimeout();
+    };
+  }, []);
+
+  useEffect(() => {
+    setSubagentWalletCopyStatus('idle');
+  }, [emberLendingRuntimeView?.walletAddress]);
 
   const formatCurrency = (value: number | undefined) => {
     const resolved = asFiniteNumber(value);
@@ -859,51 +1459,266 @@ export function AgentDetailPage({
       isHired={isHired}
       isHiring={isHiring}
       messages={messages}
-      messageSnapshotEpoch={messageSnapshotEpoch}
       activityEvents={events}
       chatDraft={chatDraft}
       onChatDraftChange={setChatDraft}
       onSubmit={handleChatSubmit}
       onChatKeyDown={handleChatKeyDown}
-      isComposerEnabled={typeof onSendChatMessage === 'function'}
+      isComposerEnabled={chatEnabled && typeof onSendChatMessage === 'function'}
       onSendChatMessage={onSendChatMessage}
       onInterruptSubmit={onInterruptSubmit}
     />
   ) : null;
+  const showManagedLendingRuntimeCards = Boolean(
+    managedRuntimePhaseIsActive &&
+      emberLendingRuntimeView &&
+      (emberLendingRuntimeView.managedMandate || emberLendingRuntimeView.reservationSummary),
+  );
+  const managedAgentContextCards =
+    visiblePortfolioManagerManagedAgentView || showManagedLendingRuntimeCards || visibleManagedMandateEditorView ? (
+      <div className="mt-6 space-y-5">
+        {visiblePortfolioManagerManagedAgentView ? (
+          <div className="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
+            <div className="flex items-start justify-between gap-4">
+              <button
+                type="button"
+                aria-expanded={isManagedLaneExpanded}
+                aria-controls={managedLaneContentId}
+                onClick={() => setIsManagedLaneExpanded((current) => !current)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <div className="flex items-start gap-3">
+                  <ChevronDown
+                    className={`mt-0.5 h-4 w-4 shrink-0 text-white/45 transition-transform ${
+                      isManagedLaneExpanded ? 'rotate-180' : '-rotate-90'
+                    }`}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                      Managed lending lane
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <div className="text-base font-semibold text-white">
+                        {visiblePortfolioManagerManagedAgentView.title}
+                      </div>
+                      {visiblePortfolioManagerManagedAgentView.laneLabel ? (
+                        <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-gray-300">
+                          {visiblePortfolioManagerManagedAgentView.laneLabel}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </button>
+              <a
+                href={visiblePortfolioManagerManagedAgentView.detailHref}
+                className="shrink-0 text-xs font-medium text-[#fd6731] hover:text-[#ff8a5c] transition-colors"
+              >
+                View lending agent
+              </a>
+            </div>
+            {isManagedLaneExpanded ? (
+              <div id={managedLaneContentId}>
+                {visiblePortfolioManagerManagedAgentView.managedMandate ? (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                      Mandate
+                    </div>
+                    <ManagedMandateDetails managedMandate={visiblePortfolioManagerManagedAgentView.managedMandate} />
+                  </div>
+                ) : null}
+                {visiblePortfolioManagerManagedAgentView.reservationSummary ? (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                      Reservation
+                    </div>
+                    <div className="mt-2 text-sm leading-relaxed text-gray-300">
+                      {visiblePortfolioManagerManagedAgentView.reservationSummary}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {showManagedLendingRuntimeCards && emberLendingRuntimeView ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {emberLendingRuntimeView.managedMandate ? (
+              <div className="min-w-0 rounded-xl border border-white/10 bg-[#151515] p-4">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                  Mandate
+                </div>
+                <ManagedMandateDetails managedMandate={emberLendingRuntimeView.managedMandate} />
+              </div>
+            ) : null}
+            {emberLendingRuntimeView.reservationSummary ? (
+              <div className="min-w-0 rounded-xl border border-white/10 bg-[#151515] p-4">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                  Reservation
+                </div>
+                <div className="mt-2 text-sm leading-relaxed text-gray-300">
+                  {emberLendingRuntimeView.reservationSummary}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {visibleManagedMandateEditorView ? (
+          <ManagedMandateEditorCard
+            view={visibleManagedMandateEditorView}
+            onSave={onManagedMandateSave}
+          />
+        ) : null}
+      </div>
+    ) : null;
+  const subagentWalletBar = emberLendingRuntimeView?.walletAddress ? (
+    <div className="mt-6">
+      <div className="relative border-t border-[#2a2a2a] pt-4" ref={subagentWalletPopoverRef}>
+        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">Subagent wallet</div>
+        <div className="mt-3 flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-green-500" />
+          <button
+            type="button"
+            onClick={() => setIsSubagentWalletPopoverOpen((current) => !current)}
+            className="flex-1 min-w-0 text-left text-sm font-mono truncate text-gray-200 hover:text-white"
+            aria-haspopup="dialog"
+            aria-expanded={isSubagentWalletPopoverOpen}
+            aria-controls={subagentWalletPopoverId}
+          >
+            {formatWalletRowAddress(emberLendingRuntimeView.walletAddress)}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSubagentWalletPopoverOpen((current) => !current)}
+            className="text-xs text-gray-300 hover:text-white"
+            aria-label={
+              isSubagentWalletPopoverOpen
+                ? 'Hide full subagent wallet address'
+                : 'Show full subagent wallet address'
+            }
+          >
+            {isSubagentWalletPopoverOpen ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4 rotate-180" />
+            )}
+          </button>
+        </div>
+        {isSubagentWalletPopoverOpen ? (
+          <div
+            id={subagentWalletPopoverId}
+            role="dialog"
+            aria-label="Subagent wallet address"
+            className="absolute left-0 top-full mt-2 z-30 w-max rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] p-3 shadow-lg"
+          >
+            <div className="text-xs text-gray-400">Subagent wallet address</div>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={emberLendingRuntimeView.walletAddress}
+                onFocus={handleWalletFieldFocus}
+                onClick={handleWalletFieldClick}
+                className="shrink-0 w-auto rounded-md border border-[#2a2a2a] bg-[#151515] px-2 py-1 text-xs font-mono text-gray-200"
+                style={{
+                  width: `calc(${Math.max(emberLendingRuntimeView.walletAddress.length, 20)}ch + 1rem)`,
+                }}
+                aria-label="Full subagent wallet address"
+              />
+              <button
+                type="button"
+                onClick={() => void handleCopySubagentWalletAddress()}
+                className="shrink-0 rounded-md border border-[#2a2a2a] bg-[#2a2a2a] px-2 py-1 text-xs text-white hover:bg-[#333]"
+              >
+                {subagentWalletCopyStatus === 'success' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            {subagentWalletCopyStatus === 'error' ? (
+              <div className="mt-2 text-xs text-red-300" role="status" aria-live="polite">
+                Clipboard unavailable. Select and copy manually.
+              </div>
+            ) : null}
+            {subagentWalletCopyStatus === 'success' ? (
+              <div className="mt-2 text-xs text-green-300" role="status" aria-live="polite">
+                Copied to clipboard.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  ) : null;
 
   // Use the upgraded layout only for hired agents. Pre-hire must remain stable even
-  // while detail sync is still loading, otherwise the Hire CTA can disappear.
+  // while detail refresh is still loading, otherwise the Hire CTA can disappear.
   if (showPostHireLayout) {
     const tabs = (
       <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
-        <TabButton
-          active={resolvedTab === 'blockers'}
-          onClick={() => selectTab('blockers')}
-          highlight
-        >
-          Settings and policies
-        </TabButton>
-        <TabButton
-          active={resolvedTab === 'metrics'}
-          onClick={() => selectTab('metrics')}
-          disabled={isOnboardingActive}
-        >
-          Metrics
-        </TabButton>
-        <TabButton
-          active={resolvedTab === 'transactions'}
-          onClick={() => selectTab('transactions')}
-          disabled={isOnboardingActive}
-        >
-          Activity
-        </TabButton>
-        <TabButton
-          active={resolvedTab === 'chat'}
-          onClick={() => selectTab('chat')}
-          disabled={!chatEnabled}
-        >
-          Chat
-        </TabButton>
+        {isEmberLendingAgent ? (
+          <>
+            <TabButton
+              active={resolvedTab === 'chat'}
+              onClick={() => selectTab('chat')}
+              disabled={!chatEnabled}
+            >
+              Chat
+            </TabButton>
+            <TabButton
+              active={resolvedTab === 'blockers'}
+              onClick={() => selectTab('blockers')}
+              highlight
+            >
+              Settings and policies
+            </TabButton>
+            <TabButton
+              active={resolvedTab === 'metrics'}
+              onClick={() => selectTab('metrics')}
+              disabled={isOnboardingActive}
+            >
+              Metrics
+            </TabButton>
+            <TabButton
+              active={resolvedTab === 'transactions'}
+              onClick={() => selectTab('transactions')}
+              disabled={isOnboardingActive}
+            >
+              Activity
+            </TabButton>
+          </>
+        ) : (
+          <>
+            <TabButton
+              active={resolvedTab === 'blockers'}
+              onClick={() => selectTab('blockers')}
+              highlight
+            >
+              Settings and policies
+            </TabButton>
+            <TabButton
+              active={resolvedTab === 'metrics'}
+              onClick={() => selectTab('metrics')}
+              disabled={isOnboardingActive}
+            >
+              Metrics
+            </TabButton>
+            <TabButton
+              active={resolvedTab === 'transactions'}
+              onClick={() => selectTab('transactions')}
+              disabled={isOnboardingActive}
+            >
+              Activity
+            </TabButton>
+            <TabButton
+              active={resolvedTab === 'chat'}
+              onClick={() => selectTab('chat')}
+              disabled={!chatEnabled}
+            >
+              Chat
+            </TabButton>
+          </>
+        )}
       </div>
     );
 
@@ -957,13 +1772,11 @@ export function AgentDetailPage({
             telemetry={telemetry}
             events={events}
             chainIconUri={displayChains.length > 0 ? chainIconByName[normalizeNameKey(displayChains[0])] ?? null : null}
-            protocolLabel={
-              profile.protocols && profile.protocols.length > 0 ? profile.protocols[0] : null
-            }
+            protocolLabel={primaryProtocol}
             protocolIconUri={
-              profile.protocols && profile.protocols.length > 0
+              primaryProtocol
                 ? (() => {
-                    const protocol = profile.protocols[0];
+                    const protocol = primaryProtocol;
                     const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
                     return fallback ? tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null : null;
                   })()
@@ -975,6 +1788,7 @@ export function AgentDetailPage({
         {resolvedTab === 'chat' && chatTab}
       </>
     );
+    const postHireContent = useEmbeddedPortfolioChat ? chatTab : tabContent;
 
     return (
       <div className="flex-1 overflow-y-auto p-8">
@@ -989,7 +1803,7 @@ export function AgentDetailPage({
               <ChevronRight className="w-4 h-4" />
               <span className="text-white">{agentName}</span>
             </div>
-            {/* Sync Button */}
+            {/* Refresh button */}
             <button
               onClick={onSync}
               disabled={isSyncing}
@@ -1001,16 +1815,25 @@ export function AgentDetailPage({
           </nav>
 
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-stretch">
+            <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-start">
                 {/* Left summary card (Figma onboarding) */}
-                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
-                  <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
+                <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+                  <div
+                    className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto"
+                    style={
+                      agentConfig.imageUrl && agentConfig.avatarBg
+                        ? { background: agentConfig.avatarBg }
+                        : undefined
+                    }
+                  >
                     {agentAvatarUri ? (
                       <img
                         src={proxyIconUri(agentAvatarUri)}
                         alt=""
                         decoding="async"
-                        className="h-full w-full object-cover"
+                        className={`h-full w-full ${
+                          agentConfig.imageUrl ? 'object-contain p-8' : 'object-cover'
+                        }`}
                       />
                     ) : (
                       <span className="text-4xl font-semibold text-white/75" aria-hidden="true">
@@ -1033,20 +1856,24 @@ export function AgentDetailPage({
                             className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)] transition-transform duration-200 group-hover:scale-110"
                             aria-hidden="true"
                           />
-                          <span>Agent is hired</span>
+                          <span>
+                            {managedOnboardingOwner
+                              ? `Managed by ${managedOnboardingOwner.name}`
+                              : 'Agent is hired'}
+                          </span>
                         </div>
 
                         <button
                           type="button"
                           onClick={onFire}
-                          disabled={isFiring}
+                          disabled={managedOnboardingOwner ? false : isFiring}
                           className={`relative z-10 flex flex-[0_0_92px] items-center justify-center px-3 h-full text-[13px] font-medium text-white border-l border-white/10 transition-[flex-basis,background-color,border-color,color,box-shadow] duration-300 ease-out group-hover:flex-1 group-hover:bg-transparent group-hover:border-white/0 ${
-                            isFiring
+                            !managedOnboardingOwner && isFiring
                               ? 'bg-gray-600 cursor-wait'
                               : 'bg-gradient-to-b from-[#ff4d1a] to-[#fd6731] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
                           }`}
                         >
-                          {isFiring ? 'Firing...' : 'Fire'}
+                          {managedOnboardingOwner ? 'Manage' : isFiring ? 'Firing...' : 'Fire'}
                         </button>
                       </div>
                     ) : (
@@ -1066,90 +1893,95 @@ export function AgentDetailPage({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        Agent Income
+                  {showLeftRailStats ? (
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
+                      <div>
+                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          Agent Income
+                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-24"
+                          loadedClassName="text-lg font-semibold text-white"
+                          value={formatCurrency(profile.agentIncome)}
+                        />
                       </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-24"
-                        loadedClassName="text-lg font-semibold text-white"
-                        value={formatCurrency(profile.agentIncome)}
-                      />
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        AUM
+                      <div>
+                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          AUM
+                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-24"
+                          loadedClassName="text-lg font-semibold text-white"
+                          value={formatCurrency(profile.aum)}
+                        />
                       </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-24"
-                        loadedClassName="text-lg font-semibold text-white"
-                        value={formatCurrency(profile.aum)}
-                      />
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        Total Users
+                      <div>
+                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          Total Users
+                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-20"
+                          loadedClassName="text-lg font-semibold text-white"
+                          value={formatNumber(profile.totalUsers)}
+                        />
                       </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-20"
-                        loadedClassName="text-lg font-semibold text-white"
-                        value={formatNumber(profile.totalUsers)}
-                      />
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        APY
+                      <div>
+                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          APY
+                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-16"
+                          loadedClassName="text-lg font-semibold text-teal-400"
+                          value={formatPercent(profile.apy)}
+                        />
                       </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-16"
-                        loadedClassName="text-lg font-semibold text-teal-400"
-                        value={formatPercent(profile.apy)}
-                      />
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        Your Assets
+                      <div>
+                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          Your Assets
+                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-24"
+                          loadedClassName="text-lg font-semibold text-white"
+                          value={formatCurrency(fullMetrics?.latestSnapshot?.totalUsd)}
+                        />
                       </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-24"
-                        loadedClassName="text-lg font-semibold text-white"
-                        value={formatCurrency(fullMetrics?.latestSnapshot?.totalUsd)}
-                      />
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                        Your PnL
+                      <div>
+                        <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                          Your PnL
+                        </div>
+                        <LoadingValue
+                          isLoaded={hasLoadedView}
+                          skeletonClassName="h-6 w-24"
+                          loadedClassName={`text-lg font-semibold ${
+                            (metrics.lifetimePnlUsd ?? 0) >= 0 ? 'text-teal-400' : 'text-red-400'
+                          }`}
+                          value={formatSignedCurrency(metrics.lifetimePnlUsd)}
+                        />
                       </div>
-                      <LoadingValue
-                        isLoaded={hasLoadedView}
-                        skeletonClassName="h-6 w-24"
-                        loadedClassName={`text-lg font-semibold ${
-                          (metrics.lifetimePnlUsd ?? 0) >= 0 ? 'text-teal-400' : 'text-red-400'
-                        }`}
-                        value={formatSignedCurrency(metrics.lifetimePnlUsd)}
-                      />
                     </div>
-                  </div>
+                  ) : null}
+                  {subagentWalletBar}
+
                 </div>
 
                 {/* Right header (no surrounding card) */}
-                <div className="pt-2 h-full flex flex-col">
+                <div className="pt-2 flex flex-col">
                   <div className="flex items-start justify-between gap-6 mb-6">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-3 mb-3">
+                      <h1 className="text-2xl font-bold text-white mb-2">{agentName}</h1>
+                      <div className="mt-4 flex items-center gap-3">
                         {rank !== undefined && <span className="text-gray-400 text-sm">#{rank}</span>}
                         {rating !== undefined && (
                           <div className="flex items-center gap-1">{renderStars(rating)}</div>
                         )}
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
                         {creatorName && (
                           <CreatorIdentity
                             name={creatorName}
@@ -1164,6 +1996,16 @@ export function AgentDetailPage({
                           </div>
                         )}
                       </div>
+                      {agentConfig.surfaceTag ? (
+                        <AgentSurfaceTag tag={agentConfig.surfaceTag} className="mt-3" />
+                      ) : null}
+                      {agentDescription ? (
+                        <p className="mt-4 text-gray-400 text-sm leading-relaxed">
+                          {agentDescription}
+                        </p>
+                      ) : (
+                        <p className="mt-4 text-gray-500 text-sm italic">No description available</p>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
@@ -1198,42 +2040,40 @@ export function AgentDetailPage({
                       </a>
                     </div>
                   </div>
+                  {managedAgentContextCards}
 
-                  <h1 className="text-2xl font-bold text-white mb-2">{agentName}</h1>
-                  {agentDescription ? (
-                    <p className="text-gray-400 text-sm leading-relaxed">{agentDescription}</p>
-                  ) : (
-                    <p className="text-gray-500 text-sm italic">No description available</p>
-                  )}
-
-                  <div className="grid grid-cols-4 gap-4 mt-auto pt-6 border-t border-white/10">
-                    <TagColumn
-                      title="Chains"
-                      items={displayChains}
-                      getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
-                    />
-                    <TagColumn
-                      title="Protocols"
-                      items={displayProtocols}
-                      getIconUri={(protocol) => {
-                        const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
-                        if (!fallback) return null;
-                        return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
-                      }}
-                    />
-                    <TagColumn
-                      title="Tokens"
-                      items={displayTokens}
-                      getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
-                    />
-                    <PointsColumn metrics={metrics} />
-                  </div>
-                </div>
+                  {showAgentMetadataGrid ? (
+                    <div className="grid grid-cols-4 gap-4 mt-8 pt-6 border-t border-white/10">
+                      <TagColumn
+                        title="Chains"
+                        items={displayChains}
+                        getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
+                      />
+                      <TagColumn
+                        title="Protocols"
+                        items={displayProtocols}
+                        getIconUri={(protocol) => {
+                          const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+                          if (!fallback) return null;
+                          return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
+                        }}
+                      />
+                      <TagColumn
+                        title="Tokens"
+                        items={displayTokens}
+                        getIconUri={(symbol) =>
+                          resolveTokenIconUri({ symbol, tokenIconBySymbol })
+                        }
+                      />
+                      <PointsColumn metrics={metrics} />
+                    </div>
+                  ) : null}
               </div>
+            </div>
 
             {/* Tabs + content span full available width (no empty left column) */}
-            <div className="mt-8">{tabs}</div>
-            <div>{tabContent}</div>
+            {useEmbeddedPortfolioChat ? null : <div className="mt-8">{tabs}</div>}
+            <div className={useEmbeddedPortfolioChat ? 'mt-8' : undefined}>{postHireContent}</div>
           </>
         </div>
       </div>
@@ -1255,17 +2095,26 @@ export function AgentDetailPage({
         </nav>
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-start">
           {/* Left Column - Agent Card */}
-          <div className="h-full">
-            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6 h-full">
-              <div className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto">
+          <div>
+            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+              <div
+                className="h-[220px] w-[220px] rounded-full flex items-center justify-center mb-6 overflow-hidden bg-[#111] ring-1 ring-[#2a2a2a] mx-auto"
+                style={
+                  agentConfig.imageUrl && agentConfig.avatarBg
+                    ? { background: agentConfig.avatarBg }
+                    : undefined
+                }
+              >
                 {agentAvatarUri ? (
                   <img
                     src={proxyIconUri(agentAvatarUri)}
                     alt=""
                     decoding="async"
-                    className="h-full w-full object-cover"
+                    className={`h-full w-full ${
+                      agentConfig.imageUrl ? 'object-contain p-8' : 'object-cover'
+                    }`}
                   />
                 ) : (
                   <span className="text-4xl font-semibold text-white/75" aria-hidden="true">
@@ -1276,84 +2125,112 @@ export function AgentDetailPage({
 
               <button
                 onClick={handleHire}
-                disabled={isHiring}
+                disabled={isHiring || isRestoringState}
                 className={[
                   CTA_SIZE_MD_FULL,
-                  isHiring
+                  isHiring || isRestoringState
                     ? 'bg-purple-500/50 text-white cursor-wait'
                     : 'bg-purple-500 hover:bg-purple-600 text-white shadow-[0_10px_30px_rgba(168,85,247,0.25)]',
                   'transition-[background-color,box-shadow] duration-200',
                 ].join(' ')}
               >
-                {isHiring ? 'Hiring...' : 'Hire'}
+                {managedOnboardingOwner
+                  ? `Open ${managedOnboardingOwner.name}`
+                  : isRestoringState
+                    ? 'Reconnecting...'
+                    : isHiring
+                    ? 'Hiring...'
+                    : 'Hire'}
               </button>
 
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
-                <div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                    Agent Income
-                  </div>
-                  {!hasLoadedView ? (
-                    <Skeleton className="h-6 w-24" />
-                  ) : (
-                    <div className="text-lg font-semibold text-white">
-                      {formatCurrency(profile.agentIncome) ?? '-'}
-                    </div>
-                  )}
+              {isRestoringState ? (
+                <div className="mt-4 rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                  <div className="text-gray-300 text-sm font-medium mb-2">Restoring state</div>
+                  <p className="text-gray-400 text-xs leading-relaxed">
+                    Waiting for the latest runtime snapshot before rendering agent controls.
+                  </p>
                 </div>
-                <div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                    AUM
-                  </div>
-                  {!hasLoadedView ? (
-                    <Skeleton className="h-6 w-24" />
-                  ) : (
-                    <div className="text-lg font-semibold text-white">
-                      {formatCurrency(profile.aum) ?? '-'}
-                    </div>
-                  )}
+              ) : null}
+
+              {managedOnboardingOwner && !isRestoringState ? (
+                <div className="mt-4 rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                  <div className="text-gray-300 text-sm font-medium mb-2">Managed onboarding</div>
+                  <p className="text-gray-400 text-xs leading-relaxed">
+                    Managed onboarding happens through {managedOnboardingOwner.name}.
+                  </p>
                 </div>
-                <div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                    Total Users
-                  </div>
-                  {!hasLoadedView ? (
-                    <Skeleton className="h-6 w-20" />
-                  ) : (
-                    <div className="text-lg font-semibold text-white">
-                      {formatNumber(profile.totalUsers) ?? '-'}
+              ) : null}
+
+              {showLeftRailStats ? (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-6">
+                  <div>
+                    <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                      Agent Income
                     </div>
-                  )}
-                </div>
-                <div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
-                    APY
+                    {!hasLoadedView ? (
+                      <Skeleton className="h-6 w-24" />
+                    ) : (
+                      <div className="text-lg font-semibold text-white">
+                        {formatCurrency(profile.agentIncome) ?? '-'}
+                      </div>
+                    )}
                   </div>
-                  {!hasLoadedView ? (
-                    <Skeleton className="h-6 w-16" />
-                  ) : (
-                    <div className="text-lg font-semibold text-teal-400">
-                      {formatPercent(profile.apy) ?? '-'}
+                  <div>
+                    <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                      AUM
                     </div>
-                  )}
+                    {!hasLoadedView ? (
+                      <Skeleton className="h-6 w-24" />
+                    ) : (
+                      <div className="text-lg font-semibold text-white">
+                        {formatCurrency(profile.aum) ?? '-'}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                      Total Users
+                    </div>
+                    {!hasLoadedView ? (
+                      <Skeleton className="h-6 w-20" />
+                    ) : (
+                      <div className="text-lg font-semibold text-white">
+                        {formatNumber(profile.totalUsers) ?? '-'}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-1">
+                      APY
+                    </div>
+                    {!hasLoadedView ? (
+                      <Skeleton className="h-6 w-16" />
+                    ) : (
+                      <div className="text-lg font-semibold text-teal-400">
+                        {formatPercent(profile.apy) ?? '-'}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : null}
+              {subagentWalletBar}
             </div>
           </div>
 
           {/* Right Column - Details */}
-          <div className="h-full">
-            <div className="pt-2 h-full flex flex-col">
+          <div>
+            <div className="pt-2 flex flex-col">
               <div className="flex items-start justify-between gap-6 mb-6">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-3 mb-3">
+                  <h1 className="text-2xl font-bold text-white mb-2">{agentName}</h1>
+                  <div className="mt-4 flex items-center gap-3">
                     {rank !== undefined && <span className="text-gray-400 text-sm">#{rank}</span>}
                     {rating !== undefined && (
                       <div className="flex items-center gap-1">{renderStars(rating)}</div>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
                     {creatorName && (
                       <CreatorIdentity
                         name={creatorName}
@@ -1368,6 +2245,14 @@ export function AgentDetailPage({
                       </div>
                     )}
                   </div>
+                  {agentConfig.surfaceTag ? (
+                    <AgentSurfaceTag tag={agentConfig.surfaceTag} className="mt-3" />
+                  ) : null}
+                  {agentDescription ? (
+                    <p className="mt-4 text-gray-400 text-sm leading-relaxed">{agentDescription}</p>
+                  ) : (
+                    <p className="mt-4 text-gray-500 text-sm italic">No description available</p>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
@@ -1403,71 +2288,69 @@ export function AgentDetailPage({
                 </div>
               </div>
 
-              <h1 className="text-2xl font-bold text-white mb-2">{agentName}</h1>
-              {agentDescription ? (
-                <p className="text-gray-400 text-sm leading-relaxed">{agentDescription}</p>
-              ) : (
-                <p className="text-gray-500 text-sm italic">No description available</p>
-              )}
-
-              <div className="grid grid-cols-4 gap-4 mt-auto pt-6 border-t border-white/10">
-                <TagColumn
-                  title="Chains"
-                  items={displayChains}
-                  getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
-                />
-                <TagColumn
-                  title="Protocols"
-                  items={displayProtocols}
-                  getIconUri={(protocol) => {
-                    const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
-                    if (!fallback) return null;
-                    return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
-                  }}
-                />
-                <TagColumn
-                  title="Tokens"
-                  items={displayTokens}
-                  getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
-                />
-                <PointsColumn metrics={metrics} />
-              </div>
+              {showAgentMetadataGrid ? (
+                <div className="grid grid-cols-4 gap-4 mt-auto pt-6 border-t border-white/10">
+                  <TagColumn
+                    title="Chains"
+                    items={displayChains}
+                    getIconUri={(chain) => chainIconByName[normalizeNameKey(chain)] ?? null}
+                  />
+                  <TagColumn
+                    title="Protocols"
+                    items={displayProtocols}
+                    getIconUri={(protocol) => {
+                      const fallback = PROTOCOL_TOKEN_FALLBACK[protocol];
+                      if (!fallback) return null;
+                      return tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null;
+                    }}
+                  />
+                  <TagColumn
+                    title="Tokens"
+                    items={displayTokens}
+                    getIconUri={(symbol) => resolveTokenIconUri({ symbol, tokenIconBySymbol })}
+                  />
+                  <PointsColumn metrics={metrics} />
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
 
-        <div className="mt-10 border-b border-white/10 flex items-center gap-6">
-          <button
-            type="button"
-            onClick={() => selectTab('metrics')}
-            className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
-              resolvedTab === 'metrics'
-                ? 'text-[#fd6731] border-[#fd6731]'
-                : 'text-gray-500 border-transparent hover:text-white'
-            }`}
-            aria-current={resolvedTab === 'metrics' ? 'page' : undefined}
-          >
-            Metrics
-          </button>
-          <button
-            type="button"
-            onClick={() => selectTab('chat')}
-            disabled={!chatEnabled}
-            className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
-              !chatEnabled
-                ? 'text-gray-600 border-transparent'
-                : resolvedTab === 'chat'
+        {useEmbeddedPortfolioChat ? null : (
+          <div className="mt-10 border-b border-white/10 flex items-center gap-6">
+            <button
+              type="button"
+              onClick={() => selectTab('metrics')}
+              className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
+                resolvedTab === 'metrics'
                   ? 'text-[#fd6731] border-[#fd6731]'
-                  : 'text-gray-400 border-transparent hover:text-white'
-            }`}
-          >
-            Chat
-          </button>
-        </div>
+                  : 'text-gray-500 border-transparent hover:text-white'
+              }`}
+              aria-current={resolvedTab === 'metrics' ? 'page' : undefined}
+            >
+              Metrics
+            </button>
+            <button
+              type="button"
+              onClick={() => selectTab('chat')}
+              disabled={!chatEnabled}
+              className={`px-1 pb-3 text-sm font-medium -mb-px border-b-2 ${
+                !chatEnabled
+                  ? 'text-gray-600 border-transparent'
+                  : resolvedTab === 'chat'
+                    ? 'text-[#fd6731] border-[#fd6731]'
+                    : 'text-gray-400 border-transparent hover:text-white'
+              }`}
+            >
+              Chat
+            </button>
+          </div>
+        )}
 
         <div className="mt-6">
-          {resolvedTab === 'chat' ? chatTab : null}
-          {resolvedTab === 'metrics' ? (
+          {useEmbeddedPortfolioChat ? chatTab : null}
+          {!useEmbeddedPortfolioChat && resolvedTab === 'chat' ? chatTab : null}
+          {!useEmbeddedPortfolioChat && resolvedTab === 'metrics' ? (
             <>
               {/* Pre-hire should still show the same chart cards across agents (CLMM/Pendle/GMX)
                  so the page doesn't feel "empty" before hire. */}
@@ -1581,7 +2464,6 @@ function AgentChatTab(props: {
   isHired: boolean;
   isHiring: boolean;
   messages: Message[];
-  messageSnapshotEpoch: number;
   activityEvents: ClmmEvent[];
   chatDraft: string;
   onChatDraftChange: (value: string) => void;
@@ -1591,109 +2473,23 @@ function AgentChatTab(props: {
   onSendChatMessage?: (content: string) => void;
   onInterruptSubmit?: (input: PiOperatorNoteInput) => void;
 }) {
-  const visibleMessageOrderCacheKey = useId();
-  useEffect(() => {
-    return () => {
-      visibleMessageOrderCache.delete(visibleMessageOrderCacheKey);
-    };
-  }, [visibleMessageOrderCacheKey]);
-
   const visibleMessages = useMemo(() => {
-    const visibleMessageOrderEntry = getVisibleMessageOrderEntry(visibleMessageOrderCacheKey);
-    const allMessageIds = new Set(props.messages.map((message) => message.id));
-    for (const messageId of [...visibleMessageOrderEntry.orderById.keys()]) {
-      if (!allMessageIds.has(messageId)) {
-        visibleMessageOrderEntry.orderById.delete(messageId);
-      }
-    }
-
-    const nextVisibleMessages = props.messages
-      .map((message) => ({
-        id: message.id,
-        role: message.role,
-        text: getMessageText(message),
-      }))
+    return props.messages
+      .map(
+        (message): VisibleChatMessage => ({
+          id: message.id,
+          label: getMessageRoleLabel(message),
+          role: message.role,
+          text: getMessageText(message),
+        }),
+      )
       .filter((message) => message.text.length > 0);
-
-    if (props.messages.length === 0) {
-      visibleMessageOrderEntry.orderById.clear();
-      visibleMessageOrderEntry.nextOrder = 0;
-      visibleMessageOrderEntry.previousVisibleMessages = [];
-      return [];
-    }
-
-    const nextVisibleMessageIds = new Set(nextVisibleMessages.map((message) => message.id));
-    const reusableOrdersByKey = new Map<string, number[]>();
-
-    for (const previousMessage of visibleMessageOrderEntry.previousVisibleMessages) {
-      if (nextVisibleMessageIds.has(previousMessage.id)) {
-        continue;
-      }
-
-      const replacementKey = buildVisibleMessageReplacementKey(previousMessage);
-      const reusableOrders = reusableOrdersByKey.get(replacementKey) ?? [];
-      reusableOrders.push(previousMessage.appearanceOrder);
-      reusableOrdersByKey.set(replacementKey, reusableOrders);
-    }
-
-    for (const reusableOrders of reusableOrdersByKey.values()) {
-      reusableOrders.sort((left, right) => left - right);
-    }
-
-    const pendingNewMessages: typeof nextVisibleMessages = [];
-
-    for (const message of nextVisibleMessages) {
-      if (visibleMessageOrderEntry.orderById.has(message.id)) {
-        continue;
-      }
-
-      const replacementKey = buildVisibleMessageReplacementKey(message);
-      const reusableOrders = reusableOrdersByKey.get(replacementKey);
-      const reusableOrder = reusableOrders?.shift();
-      if (reusableOrder !== undefined) {
-        visibleMessageOrderEntry.orderById.set(message.id, reusableOrder);
-        continue;
-      }
-
-      pendingNewMessages.push(message);
-    }
-
-    const orderedPendingNewMessages =
-      visibleMessageOrderEntry.previousVisibleMessages.length === 0
-        ? pendingNewMessages
-        : [...pendingNewMessages].sort(
-            (left, right) =>
-              getIncrementalMessagePriority(left.role) - getIncrementalMessagePriority(right.role) ||
-              left.id.localeCompare(right.id),
-          );
-
-    for (const message of orderedPendingNewMessages) {
-      visibleMessageOrderEntry.orderById.set(message.id, visibleMessageOrderEntry.nextOrder);
-      visibleMessageOrderEntry.nextOrder += 1;
-    }
-    const orderedMessages = orderVisibleChatMessages(props.messages, visibleMessageOrderEntry.orderById);
-    visibleMessageOrderEntry.previousVisibleMessages = orderedMessages.map((message) => ({
-      id: message.id,
-      role: message.role,
-      text: message.text,
-      appearanceOrder: message.appearanceOrder,
-    }));
-    return orderedMessages;
-  }, [props.messages, visibleMessageOrderCacheKey]);
+  }, [props.messages]);
   const activityCards = buildPiExampleChatCards(props.activityEvents);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-      <div className="border-b border-white/10 px-5 py-4">
-        <div className="text-[12px] uppercase tracking-[0.14em] text-white/60">Chat</div>
-        <div className="mt-1 text-sm text-gray-400">
-          {props.isHired
-            ? `Talk directly with ${props.agentName}.`
-            : `Talk with ${props.agentName} before hiring.`}
-        </div>
-      </div>
-
-      <div className="space-y-3 px-5 py-5">
+    <div className="space-y-4">
+      <div className="space-y-3">
         {visibleMessages.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-white/10 bg-[#131313] px-4 py-5 text-sm text-gray-400">
             {props.isHiring
@@ -1755,7 +2551,7 @@ function AgentChatTab(props: {
         ))}
       </div>
 
-      <form onSubmit={props.onSubmit} className="border-t border-white/10 px-5 py-4">
+      <form onSubmit={props.onSubmit} className="border-t border-white/10 pt-4">
         <label className="block text-[12px] uppercase tracking-[0.14em] text-white/50">
           Message
         </label>
@@ -1996,7 +2792,7 @@ function TransactionHistoryTab({
                   <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
                   <div className="text-sm text-white mt-1">
                     {event.type === 'status' && event.message}
-                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                    {event.type === 'artifact' && `Artifact: ${readArtifactEventType(event)}`}
                     {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
                   </div>
                 </div>
@@ -2074,6 +2870,16 @@ function AgentBlockersTab({
     settings?.amount?.toString() ?? '',
   );
   const [targetMarket, setTargetMarket] = useState<'BTC' | 'ETH'>('BTC');
+  const [portfolioManagerCollateralPoliciesInput, setPortfolioManagerCollateralPoliciesInput] =
+    useState(DEFAULT_MANAGED_LENDING_COLLATERAL_POLICIES_INPUT);
+  const [portfolioManagerAllowedBorrowAssetsInput, setPortfolioManagerAllowedBorrowAssetsInput] =
+    useState('');
+  const [portfolioManagerMaxLtvBpsInput, setPortfolioManagerMaxLtvBpsInput] = useState(
+    String(DEFAULT_MANAGED_LENDING_MAX_LTV_BPS),
+  );
+  const [portfolioManagerMinHealthFactorInput, setPortfolioManagerMinHealthFactorInput] = useState(
+    DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
+  );
   const [fundingTokenAddress, setFundingTokenAddress] = useState('');
   const [isSigningDelegations, setIsSigningDelegations] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2093,6 +2899,19 @@ function AgentBlockersTab({
     maxSetupStep,
     onboardingFlow,
   });
+  const isPortfolioManagerSetupInterrupt =
+    activeInterrupt?.type === 'portfolio-manager-setup-request';
+
+  useEffect(() => {
+    if (!isPortfolioManagerSetupInterrupt) {
+      return;
+    }
+
+    setPortfolioManagerCollateralPoliciesInput(DEFAULT_MANAGED_LENDING_COLLATERAL_POLICIES_INPUT);
+    setPortfolioManagerAllowedBorrowAssetsInput('');
+    setPortfolioManagerMaxLtvBpsInput(String(DEFAULT_MANAGED_LENDING_MAX_LTV_BPS));
+    setPortfolioManagerMinHealthFactorInput(DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR);
+  }, [isPortfolioManagerSetupInterrupt]);
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
   const uniqueAllowedPools: Pool[] = [];
@@ -2241,10 +3060,47 @@ function AgentBlockersTab({
       return;
     }
 
+    const collateralPolicies = parseManagedLendingCollateralPolicies(
+      portfolioManagerCollateralPoliciesInput,
+    );
+    if (collateralPolicies.length === 0) {
+      setError('At least one collateral policy is required.');
+      return;
+    }
+    const normalizedAllowedBorrowAssets = parseManagedMandateAssetList(
+      portfolioManagerAllowedBorrowAssetsInput,
+    );
+    const maxLtvBps = Number(portfolioManagerMaxLtvBpsInput);
+    if (!Number.isFinite(maxLtvBps)) {
+      setError('Max LTV bps must be a valid number.');
+      return;
+    }
+    const minHealthFactor = portfolioManagerMinHealthFactorInput.trim();
+    if (minHealthFactor.length === 0) {
+      setError('Minimum health factor is required.');
+      return;
+    }
+
     onInterruptSubmit?.({
-      walletAddress: operatorWalletAddress as `0x${string}`,
+      ...buildPortfolioManagerSetupInput(operatorWalletAddress as `0x${string}`, {
+        collateralPoliciesInput: formatManagedLendingCollateralPolicies(collateralPolicies),
+        allowedBorrowAssetsInput: normalizedAllowedBorrowAssets.join(', '),
+        maxLtvBps,
+        minHealthFactor,
+      }),
     });
   };
+
+  const portfolioManagerPreviewCollateralPolicies = parseManagedLendingCollateralPolicies(
+    portfolioManagerCollateralPoliciesInput,
+  );
+  const portfolioManagerPreviewManagedMandate = buildUpdatedManagedMandate({
+    existingManagedMandate: null,
+    collateralPolicies: portfolioManagerPreviewCollateralPolicies,
+    allowedBorrowAssets: parseManagedMandateAssetList(portfolioManagerAllowedBorrowAssetsInput),
+    maxLtvBps: readFiniteNumber(Number(portfolioManagerMaxLtvBpsInput)) ?? undefined,
+    minHealthFactor: portfolioManagerMinHealthFactorInput.trim() || undefined,
+  });
 
   const handleGmxSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2499,8 +3355,40 @@ function AgentBlockersTab({
       });
       onInterruptSubmit?.(response);
     } catch (signError: unknown) {
-      const message =
-        signError instanceof Error ? signError.message : typeof signError === 'string' ? signError : 'Unknown error';
+      const message = formatDelegationSigningError({
+        error: signError,
+        context: {
+          chainId: chainId ?? -1,
+          expectedChainId: interrupt.chainId,
+          requiredDelegatorAddress: interrupt.delegatorAddress,
+          currentSignerAddress: walletClient.account?.address ?? null,
+        },
+      });
+      emitAgentConnectDebug({
+        event: 'gmx-delegation-sign-failed',
+        payload: {
+          interruptType: activeInterrupt?.type ?? null,
+          message,
+          chainId,
+          requiredChainId: interrupt.chainId,
+          signerAddress: walletClient.account?.address ?? null,
+          requiredDelegatorAddress: interrupt.delegatorAddress,
+          rawError:
+            signError instanceof Error
+              ? {
+                  name: signError.name,
+                  message: signError.message,
+                  cause:
+                    signError.cause instanceof Error
+                      ? {
+                          name: signError.cause.name,
+                          message: signError.cause.message,
+                        }
+                      : signError.cause ?? null,
+                }
+              : signError,
+        },
+      });
       setError(`Failed to sign delegations: ${message}`);
     } finally {
       setIsSigningDelegations(false);
@@ -2604,7 +3492,7 @@ function AgentBlockersTab({
               </form>
             ) : showPortfolioManagerSetupForm ? (
               <form onSubmit={handlePortfolioManagerSetupSubmit}>
-                <h3 className="text-lg font-semibold text-white mb-4">Portfolio Manager Setup</h3>
+                <h3 className="text-lg font-semibold text-white mb-4">Ember Portfolio Agent Setup</h3>
                 {activeInterrupt?.message && (
                   <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
                 )}
@@ -2620,6 +3508,108 @@ function AgentBlockersTab({
                       Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
                     </p>
                   </div>
+
+                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                    <div className="text-gray-300 text-sm font-medium mb-2">Portfolio mandate</div>
+                    <p className="text-gray-400 text-xs">
+                      Approve the preloaded medium-risk portfolio mandate so the portfolio manager can
+                      coordinate managed subagents without overriding your rooted wallet controls.
+                    </p>
+                    <p className="text-gray-500 text-xs mt-3">Risk level: Medium</p>
+                  </div>
+
+                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                    <div className="text-gray-300 text-sm font-medium mb-2">First managed lending lane</div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label
+                          htmlFor="portfolio-manager-collateral-policies"
+                          className="block text-sm text-gray-400 mb-2"
+                        >
+                          Collateral policy
+                        </label>
+                        <input
+                          id="portfolio-manager-collateral-policies"
+                          name="portfolio-manager-collateral-policies"
+                          type="text"
+                          value={portfolioManagerCollateralPoliciesInput}
+                          onChange={(event) =>
+                            setPortfolioManagerCollateralPoliciesInput(event.target.value)
+                          }
+                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                        />
+                        <div className="mt-2 text-xs text-gray-500">
+                          Use <span className="font-mono">ASSET:PCT</span> entries, for example{' '}
+                          <span className="font-mono">USDC:70, WETH:50</span>.
+                        </div>
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="portfolio-manager-allowed-borrow-assets"
+                          className="block text-sm text-gray-400 mb-2"
+                        >
+                          Allowed borrow assets
+                        </label>
+                        <input
+                          id="portfolio-manager-allowed-borrow-assets"
+                          name="portfolio-manager-allowed-borrow-assets"
+                          type="text"
+                          value={portfolioManagerAllowedBorrowAssetsInput}
+                          onChange={(event) =>
+                            setPortfolioManagerAllowedBorrowAssetsInput(event.target.value)
+                          }
+                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                        />
+                        <div className="mt-2 text-xs text-gray-500">
+                          Leave blank for a supply-only mandate.
+                        </div>
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="portfolio-manager-max-ltv-bps"
+                          className="block text-sm text-gray-400 mb-2"
+                        >
+                          Max LTV bps
+                        </label>
+                        <input
+                          id="portfolio-manager-max-ltv-bps"
+                          name="portfolio-manager-max-ltv-bps"
+                          type="number"
+                          value={portfolioManagerMaxLtvBpsInput}
+                          onChange={(event) =>
+                            setPortfolioManagerMaxLtvBpsInput(event.target.value)
+                          }
+                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                        />
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="portfolio-manager-min-health-factor"
+                          className="block text-sm text-gray-400 mb-2"
+                        >
+                          Minimum health factor
+                        </label>
+                        <input
+                          id="portfolio-manager-min-health-factor"
+                          name="portfolio-manager-min-health-factor"
+                          type="text"
+                          value={portfolioManagerMinHealthFactorInput}
+                          onChange={(event) =>
+                            setPortfolioManagerMinHealthFactorInput(event.target.value)
+                          }
+                          className="w-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 text-white outline-none transition-colors focus:border-[#fd6731]"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-4 rounded-xl border border-white/10 bg-[#151515] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                        Exact mandate preview
+                      </div>
+                      <ManagedMandateDetails
+                        managedMandate={portfolioManagerPreviewManagedMandate as Record<string, unknown>}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
@@ -2630,7 +3620,7 @@ function AgentBlockersTab({
                     disabled={isWalletLoading}
                     className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
                   >
-                    Next
+                    Approve &amp; Continue
                   </button>
                 </div>
               </form>

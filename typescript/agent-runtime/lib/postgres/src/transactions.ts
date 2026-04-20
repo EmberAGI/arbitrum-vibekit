@@ -4,6 +4,13 @@ export type PostgresStatement = {
   values: readonly unknown[];
 };
 
+export type PiExecutionCheckpointStatus =
+  | 'queued'
+  | 'working'
+  | 'interrupted'
+  | 'completed'
+  | 'failed';
+
 const buildStatement = (
   tableName: string,
   text: string,
@@ -19,7 +26,6 @@ export function buildPersistDirectExecutionStatements(params: {
   threadKey: string;
   threadState: Record<string, unknown>;
   executionId: string;
-  interruptId: string;
   artifactId: string;
   activityId: string;
   now: Date;
@@ -31,16 +37,15 @@ export function buildPersistDirectExecutionStatements(params: {
       threadState: params.threadState,
       now: params.now,
     }),
-    buildStatement(
-      'pi_executions',
-      'insert into pi_executions (id, thread_id, automation_run_id, status, source, current_interrupt_id, created_at, updated_at, completed_at) values ($1, $2, null, $3, $4, $5, $6, $7, null) on conflict (id) do update set status = excluded.status, current_interrupt_id = excluded.current_interrupt_id, updated_at = excluded.updated_at',
-      [params.executionId, params.threadId, 'working', 'user', params.interruptId, params.now, params.now],
-    ),
-    buildStatement(
-      'pi_interrupts',
-      'insert into pi_interrupts (id, thread_id, execution_id, interrupt_type, status, surfaced_in_thread, request_payload, response_payload, created_at, resolved_at) values ($1, $2, $3, $4, $5, $6, $7, null, $8, null) on conflict (id) do update set status = excluded.status, request_payload = excluded.request_payload',
-      [params.interruptId, params.threadId, params.executionId, 'input-required', 'pending', true, '{}', params.now],
-    ),
+    ...buildPersistExecutionCheckpointStatements({
+      executionId: params.executionId,
+      threadId: params.threadId,
+      automationRunId: null,
+      status: 'working',
+      source: 'user',
+      currentInterruptId: null,
+      now: params.now,
+    }),
     buildStatement(
       'pi_artifacts',
       'insert into pi_artifacts (id, thread_id, execution_id, artifact_kind, append_only, payload, created_at, updated_at) values ($1, $2, $3, $4, $5, $6, $7, $8) on conflict (id) do update set payload = excluded.payload, updated_at = excluded.updated_at',
@@ -52,6 +57,76 @@ export function buildPersistDirectExecutionStatements(params: {
       [params.activityId, params.threadId, params.executionId, 'direct-execution', '{}', params.now],
     ),
   ];
+}
+
+export function buildPersistExecutionCheckpointStatements(params: {
+  executionId: string;
+  threadId: string;
+  automationRunId?: string | null;
+  status: PiExecutionCheckpointStatus;
+  source: 'user' | 'automation' | 'system';
+  currentInterruptId: string | null;
+  interruptType?: string;
+  interruptPayload?: Record<string, unknown>;
+  surfacedInThread?: boolean;
+  now: Date;
+}): PostgresStatement[] {
+  const completedAt =
+    params.status === 'completed' || params.status === 'failed'
+      ? params.now
+      : null;
+  const statements: PostgresStatement[] = [
+    buildStatement(
+      'pi_executions',
+      'insert into pi_executions (id, thread_id, automation_run_id, status, source, current_interrupt_id, created_at, updated_at, completed_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) on conflict (id) do update set automation_run_id = coalesce(excluded.automation_run_id, pi_executions.automation_run_id), status = excluded.status, source = excluded.source, current_interrupt_id = excluded.current_interrupt_id, updated_at = excluded.updated_at, completed_at = excluded.completed_at',
+      [
+        params.executionId,
+        params.threadId,
+        params.automationRunId ?? null,
+        params.status,
+        params.source,
+        params.currentInterruptId,
+        params.now,
+        params.now,
+        completedAt,
+      ],
+    ),
+  ];
+
+  if (params.currentInterruptId === null) {
+    statements.push(
+      buildStatement(
+        'pi_interrupts',
+        "update pi_interrupts set status = $1, resolved_at = coalesce(resolved_at, $2), response_payload = coalesce(response_payload, '{}'::jsonb) where execution_id = $3 and status = 'pending'",
+        ['resolved', params.now, params.executionId],
+      ),
+    );
+    return statements;
+  }
+
+  statements.push(
+    buildStatement(
+      'pi_interrupts',
+      "update pi_interrupts set status = $1, resolved_at = coalesce(resolved_at, $2), response_payload = coalesce(response_payload, '{}'::jsonb) where execution_id = $3 and status = 'pending' and id <> $4",
+      ['resolved', params.now, params.executionId, params.currentInterruptId],
+    ),
+    buildStatement(
+      'pi_interrupts',
+      'insert into pi_interrupts (id, thread_id, execution_id, interrupt_type, status, surfaced_in_thread, request_payload, response_payload, created_at, resolved_at) values ($1, $2, $3, $4, $5, $6, $7, null, $8, null) on conflict (id) do update set thread_id = excluded.thread_id, execution_id = excluded.execution_id, interrupt_type = excluded.interrupt_type, status = excluded.status, surfaced_in_thread = excluded.surfaced_in_thread, request_payload = excluded.request_payload, response_payload = null, resolved_at = null',
+      [
+        params.currentInterruptId,
+        params.threadId,
+        params.executionId,
+        params.interruptType ?? 'input-required',
+        'pending',
+        params.surfacedInThread ?? true,
+        JSON.stringify(params.interruptPayload ?? {}),
+        params.now,
+      ],
+    ),
+  );
+
+  return statements;
 }
 
 export function buildPersistThreadStateStatements(params: {
@@ -287,16 +362,18 @@ export function buildPersistInterruptCheckpointStatements(params: {
   now: Date;
 }): PostgresStatement[] {
   return [
-    buildStatement(
-      'pi_executions',
-      'insert into pi_executions (id, thread_id, automation_run_id, status, source, current_interrupt_id, created_at, updated_at, completed_at) values ($1, $2, null, $3, $4, $5, $6, $7, null) on conflict (id) do update set current_interrupt_id = excluded.current_interrupt_id, updated_at = excluded.updated_at',
-      [params.executionId, params.threadId, 'interrupted', 'system', params.interruptId, params.now, params.now],
-    ),
-    buildStatement(
-      'pi_interrupts',
-      'insert into pi_interrupts (id, thread_id, execution_id, interrupt_type, status, surfaced_in_thread, request_payload, response_payload, created_at, resolved_at) values ($1, $2, $3, $4, $5, $6, $7, null, $8, null) on conflict (id) do update set status = excluded.status, request_payload = excluded.request_payload',
-      [params.interruptId, params.threadId, params.executionId, 'input-required', 'pending', true, '{}', params.now],
-    ),
+    ...buildPersistExecutionCheckpointStatements({
+      executionId: params.executionId,
+      threadId: params.threadId,
+      automationRunId: null,
+      status: 'interrupted',
+      source: 'system',
+      currentInterruptId: params.interruptId,
+      interruptType: 'input-required',
+      interruptPayload: {},
+      surfacedInThread: true,
+      now: params.now,
+    }),
     buildStatement(
       'pi_artifacts',
       'insert into pi_artifacts (id, thread_id, execution_id, artifact_kind, append_only, payload, created_at, updated_at) values ($1, $2, $3, $4, $5, $6, $7, $8) on conflict (id) do update set payload = excluded.payload, updated_at = excluded.updated_at',

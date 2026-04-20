@@ -70,6 +70,25 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
         return jsonResponse({ values: { thread: READY_THREAD } });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
+        if (!init || typeof init !== 'object' || !('body' in init)) {
+          throw new Error('Missing request body');
+        }
+        const bodyText = (init as { body?: unknown }).body;
+        if (typeof bodyText !== 'string') {
+          throw new Error('Expected string request body');
+        }
+        const body = JSON.parse(bodyText) as {
+          values?: {
+            messages?: unknown[];
+            private?: {
+              pendingCommand?: {
+                command?: string;
+              };
+            };
+          };
+        };
+        expect(body.values?.private?.pendingCommand?.command).toBe('cycle');
+        expect(body.values?.messages).toBeUndefined();
         return new Response('busy', { status: 409 });
       }
       throw new Error(`Unexpected fetch call: ${method} ${url}`);
@@ -104,6 +123,25 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
         return jsonResponse({ values: { thread: READY_THREAD } });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
+        if (!init || typeof init !== 'object' || !('body' in init)) {
+          throw new Error('Missing request body');
+        }
+        const bodyText = (init as { body?: unknown }).body;
+        if (typeof bodyText !== 'string') {
+          throw new Error('Expected string request body');
+        }
+        const body = JSON.parse(bodyText) as {
+          values?: {
+            messages?: unknown[];
+            private?: {
+              pendingCommand?: {
+                command?: string;
+              };
+            };
+          };
+        };
+        expect(body.values?.private?.pendingCommand?.command).toBe('cycle');
+        expect(body.values?.messages).toBeUndefined();
         return jsonResponse({ checkpoint_id: 'cp-1' });
       }
       if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {
@@ -146,6 +184,25 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
         return jsonResponse({ values: { thread: READY_THREAD } });
       }
       if (url.endsWith('/threads/thread-1/state') && method === 'POST') {
+        if (!init || typeof init !== 'object' || !('body' in init)) {
+          throw new Error('Missing request body');
+        }
+        const bodyText = (init as { body?: unknown }).body;
+        if (typeof bodyText !== 'string') {
+          throw new Error('Expected string request body');
+        }
+        const body = JSON.parse(bodyText) as {
+          values?: {
+            messages?: unknown[];
+            private?: {
+              pendingCommand?: {
+                command?: string;
+              };
+            };
+          };
+        };
+        expect(body.values?.private?.pendingCommand?.command).toBe('cycle');
+        expect(body.values?.messages).toBeUndefined();
         return jsonResponse({ checkpoint_id: 'cp-1' });
       }
       if (url.endsWith('/threads/thread-1/runs') && method === 'POST') {
@@ -231,8 +288,18 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
           throw new Error('Expected string request body');
         }
         const body = JSON.parse(bodyText) as {
-          values?: { thread?: { task?: { taskStatus?: { state?: string } } } };
+          values?: {
+            messages?: unknown[];
+            private?: {
+              pendingCommand?: {
+                command?: string;
+              };
+            };
+            thread?: { task?: { taskStatus?: { state?: string } } };
+          };
         };
+        expect(body.values?.private?.pendingCommand?.command).toBe('cycle');
+        expect(body.values?.messages).toBeUndefined();
         expect(body.values?.thread?.task?.taskStatus?.state).toBe('working');
         return jsonResponse({ checkpoint_id: 'cp-1' });
       }
@@ -294,8 +361,18 @@ describe('runGraphOnce busy handling integration (Pendle)', () => {
           throw new Error('Expected string request body');
         }
         const body = JSON.parse(bodyText) as {
-          values?: { thread?: { lifecycle?: { phase?: string }; task?: { taskStatus?: { state?: string } } } };
+          values?: {
+            messages?: unknown[];
+            private?: {
+              pendingCommand?: {
+                command?: string;
+              };
+            };
+            thread?: { lifecycle?: { phase?: string }; task?: { taskStatus?: { state?: string } } };
+          };
         };
+        expect(body.values?.private?.pendingCommand?.command).toBe('cycle');
+        expect(body.values?.messages).toBeUndefined();
         expect(body.values?.thread?.lifecycle?.phase).toBe('inactive');
         expect(body.values?.thread?.task?.taskStatus?.state).toBe('completed');
         return jsonResponse({ checkpoint_id: 'cp-1' });

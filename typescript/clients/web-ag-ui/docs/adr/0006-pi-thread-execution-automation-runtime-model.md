@@ -42,7 +42,7 @@ These runtime records sit above the concrete Pi package foundation:
 - This initiative adds durable runtime records, persistence, automation, projection, and operator/runtime layers around that core.
 
 The foundational runtime model is intentionally lower-level than any specific agent-family lifecycle system.
-- Opinionated workflows such as hire/setup/sync/fire do not belong in the core runtime model itself.
+- Opinionated workflows such as hire/setup/refresh/fire do not belong in the core runtime model itself.
 - Those higher-level workflows belong in pluggable Pi-owned agent domain modules layered above the core runtime model, as described in ADR 0011.
 
 Additional rules:

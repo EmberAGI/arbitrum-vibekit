@@ -22,13 +22,14 @@ import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
 import { useOnchainActionsIconMaps } from '@/hooks/useOnchainActionsIconMaps';
 import { useAgent } from '@/contexts/AgentContext';
 import { useAgentList } from '@/contexts/AgentListContext';
-import { getAllAgents } from '@/config/agents';
+import { getVisibleAgents } from '@/config/agents';
 import type { TaskState } from '@/types/agent';
 import { resolveSidebarTaskState } from '@/utils/resolveSidebarTaskState';
 import { selectRuntimeTaskState } from '@/utils/selectRuntimeTaskState';
 import { collectUniqueChainNames, collectUniqueTokenSymbols } from '@/utils/agentCollections';
 import { extractTaskStatusMessage } from '@/utils/extractTaskStatusMessage';
 import { PROTOCOL_TOKEN_FALLBACK } from '@/constants/protocolTokenFallback';
+import { isPrivyConfigured } from '@/utils/privyConfig';
 import {
   normalizeNameKey,
   proxyIconUri,
@@ -44,11 +45,17 @@ export interface AgentActivity {
 }
 
 const ETHEREUM_MAINNET_CHAIN_ID = 1;
+const PORTFOLIO_AGENT_ID = 'agent-portfolio-manager';
+const PORTFOLIO_AGENT_CHAT_HREF = `/hire-agents/${PORTFOLIO_AGENT_ID}?tab=chat`;
 
 export function getWalletSelectorChains(chains: readonly Chain[]): Chain[] {
   return chains.filter(
     (chain) => chain.id === defaultEvmChain.id || chain.id === ETHEREUM_MAINNET_CHAIN_ID,
   );
+}
+
+export function getSidebarAgentHref(agentId: string): string {
+  return agentId === PORTFOLIO_AGENT_ID ? PORTFOLIO_AGENT_CHAT_HREF : `/hire-agents/${agentId}`;
 }
 
 export function AppSidebar() {
@@ -64,6 +71,7 @@ export function AppSidebar() {
   const addressPopoverRef = useRef<HTMLDivElement | null>(null);
   const copyResetTimeoutRef = useRef<number | null>(null);
   const addressPopoverId = useId();
+  const privyConfigured = isPrivyConfigured();
 
   const { ready, authenticated } = usePrivy();
   const { login } = useLogin();
@@ -87,7 +95,7 @@ export function AppSidebar() {
   const agent = useAgent();
   const { agents: listAgents } = useAgentList();
 
-  const agentConfigs = useMemo(() => getAllAgents(), []);
+  const agentConfigs = useMemo(() => getVisibleAgents(), []);
   const isInactiveRuntime = agent.config.id === 'inactive-agent';
   const runtimeAgentId = isInactiveRuntime ? null : agent.config.id;
   const runtimeTaskId = agent.uiState.task?.id;
@@ -221,6 +229,14 @@ export function AppSidebar() {
     tokenSymbols: sidebarTokenSymbols,
   });
 
+  const agentAvatarBgById = useMemo(
+    () =>
+      Object.fromEntries(
+        agentConfigs.map((config) => [config.id, config.imageUrl ? config.avatarBg : undefined]),
+      ),
+    [agentConfigs],
+  );
+
   const agentIconById = useMemo(() => {
     const out: Record<string, string | null> = {};
     for (const config of agentConfigs) {
@@ -229,6 +245,7 @@ export function AppSidebar() {
       const chains = profile?.chains?.length ? profile.chains : (config.chains ?? []);
       const avatar =
         resolveAgentAvatarUri({
+          imageUrl: config.imageUrl,
           protocols,
           tokenIconBySymbol,
         }) ??
@@ -316,12 +333,15 @@ export function AppSidebar() {
 
   // Navigate to agent detail page when clicking on an agent in the sidebar
   const handleAgentClick = (agentId: string) => {
-    router.push(`/hire-agents/${agentId}`);
+    router.push(getSidebarAgentHref(agentId));
   };
 
-  const canSelectChain = ready && authenticated && Boolean(privyWallet) && !isWalletLoading;
+  const canSelectChain =
+    privyConfigured && ready && authenticated && Boolean(privyWallet) && !isWalletLoading;
 
-  const isHireAgentsActive = pathname === '/hire-agents' || pathname?.startsWith('/hire-agents/');
+  const isPortfolioAgentActive = pathname?.startsWith(`/hire-agents/${PORTFOLIO_AGENT_ID}`);
+  const isHireAgentsActive =
+    pathname === '/hire-agents' || (pathname?.startsWith('/hire-agents/') && !isPortfolioAgentActive);
   const isAcquireActive = pathname === '/acquire';
   const isLeaderboardActive = pathname === '/leaderboard';
 
@@ -354,14 +374,20 @@ export function AppSidebar() {
             Platform
           </div>
           <div className="space-y-1">
-            {/* Chat - Disabled */}
-            <button
-              disabled
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left opacity-40 cursor-not-allowed"
+            <Link
+              href={PORTFOLIO_AGENT_CHAT_HREF}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
+                isPortfolioAgentActive
+                  ? 'text-white'
+                  : 'text-[#9A9CAA] hover:text-white hover:bg-[#1B1C21]'
+              }`}
             >
+              {isPortfolioAgentActive && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
+              )}
               <MessageSquare className="w-4 h-4 text-gray-500" />
-              <span className="text-sm text-gray-500">Chat</span>
-            </button>
+              <span className="text-sm font-medium text-[#D7D8DE]">Ember Portfolio Agent</span>
+            </Link>
 
             {/* Agents */}
             <div>
@@ -446,6 +472,7 @@ export function AppSidebar() {
             badgeColor="bg-red-500/20 text-red-400"
             icon={<AlertCircle className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
+            agentAvatarBgById={agentAvatarBgById}
             onAgentClick={handleAgentClick}
           />
 
@@ -459,6 +486,7 @@ export function AppSidebar() {
             badgeColor="bg-teal-500/20 text-teal-400"
             icon={<Terminal className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
+            agentAvatarBgById={agentAvatarBgById}
             onAgentClick={handleAgentClick}
           />
 
@@ -472,6 +500,7 @@ export function AppSidebar() {
             badgeColor="bg-blue-500/20 text-blue-400"
             icon={<CheckCircle className="w-4 h-4 text-[#666A77]" />}
             agentIconById={agentIconById}
+            agentAvatarBgById={agentAvatarBgById}
             onAgentClick={handleAgentClick}
           />
         </div>
@@ -523,7 +552,7 @@ export function AppSidebar() {
         </button>
 
         {/* Smart Account Upgrade */}
-        {authenticated && privyWallet && !walletError && (
+        {privyConfigured && authenticated && privyWallet && !walletError && (
           <>
             {isSmartAccountLoading ? (
               <div className="w-full px-3 py-2 rounded-lg bg-[#252525] text-xs text-gray-300">
@@ -648,6 +677,10 @@ export function AppSidebar() {
               </div>
             )}
           </div>
+        ) : !privyConfigured ? (
+          <div className="w-full px-3 py-2 rounded-lg bg-[#252525] text-xs text-gray-400">
+            Privy auth unavailable
+          </div>
         ) : (
           <button
             type="button"
@@ -672,6 +705,7 @@ interface ActivitySectionProps {
   badgeColor: string;
   icon: React.ReactNode;
   agentIconById?: Record<string, string | null>;
+  agentAvatarBgById?: Record<string, string | undefined>;
   onAgentClick?: (agentId: string) => void;
 }
 
@@ -684,6 +718,7 @@ function ActivitySection({
   badgeColor,
   icon,
   agentIconById = {},
+  agentAvatarBgById = {},
   onAgentClick,
 }: ActivitySectionProps) {
   const hasAgents = agents.length > 0;
@@ -734,7 +769,12 @@ function ActivitySection({
                   width={32}
                   height={32}
                   unoptimized
-                  className="w-8 h-8 rounded-full bg-black/30 ring-1 ring-[#2D3140] object-cover"
+                  className="w-8 h-8 rounded-full ring-1 ring-[#2D3140] object-contain"
+                  style={
+                    agentAvatarBgById[agentItem.id]
+                      ? { background: agentAvatarBgById[agentItem.id] }
+                      : { background: 'rgba(0,0,0,0.3)' }
+                  }
                 />
               ) : (
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#5f6bff] to-[#8f47ff] flex items-center justify-center text-xs font-semibold text-white">

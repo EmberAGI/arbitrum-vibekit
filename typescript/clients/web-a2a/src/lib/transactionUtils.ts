@@ -170,7 +170,6 @@ export function getChainName(chainId: number): string {
     56: 'BNB Chain',
     43114: 'Avalanche',
     250: 'Fantom',
-    8453: 'Base',
   };
 
   return chainNames[chainId] || `Chain ${chainId}`;

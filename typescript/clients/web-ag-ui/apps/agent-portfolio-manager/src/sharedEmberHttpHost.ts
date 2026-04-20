@@ -23,6 +23,14 @@ function readJsonRpcErrorMessage(body: unknown): string | null {
   return typeof message === 'string' && message.trim().length > 0 ? message : 'Unknown JSON-RPC error.';
 }
 
+function readJsonRpcResult(body: unknown): unknown {
+  if (!isRecord(body) || !('result' in body)) {
+    throw new Error('Shared Ember Domain Service returned a malformed JSON-RPC success payload.');
+  }
+
+  return body['result'];
+}
+
 async function postJson(input: {
   url: string;
   body: unknown;
@@ -52,6 +60,26 @@ async function postJson(input: {
   return parsedBody;
 }
 
+let nextTransportRequestId = 1;
+
+async function postJsonRpcResult(input: {
+  baseUrl: string;
+  method: string;
+  params: Record<string, unknown>;
+}): Promise<unknown> {
+  const response = await postJson({
+    url: `${input.baseUrl}/jsonrpc`,
+    body: {
+      jsonrpc: '2.0',
+      id: `shared-ember-transport-${input.method}-${nextTransportRequestId++}`,
+      method: input.method,
+      params: input.params,
+    },
+  });
+
+  return readJsonRpcResult(response);
+}
+
 export function resolvePortfolioManagerSharedEmberBaseUrl(
   env: PortfolioManagerSharedEmberHttpHostEnv = process.env,
 ): string | null {
@@ -73,16 +101,25 @@ export function createPortfolioManagerSharedEmberHttpHost(input: {
     },
 
     async readCommittedEventOutbox(request) {
-      return postJson({
-        url: `${baseUrl}/outbox/read`,
-        body: request,
+      return postJsonRpcResult({
+        baseUrl,
+        method: 'readCommittedEventOutbox.v1',
+        params: {
+          consumer_id: (request as Record<string, unknown>)['consumer_id'],
+          after_sequence: (request as Record<string, unknown>)['after_sequence'],
+          limit: (request as Record<string, unknown>)['limit'],
+        },
       });
     },
 
     async acknowledgeCommittedEventOutbox(request) {
-      return postJson({
-        url: `${baseUrl}/outbox/ack`,
-        body: request,
+      return postJsonRpcResult({
+        baseUrl,
+        method: 'ackCommittedEventOutbox.v1',
+        params: {
+          consumer_id: (request as Record<string, unknown>)['consumer_id'],
+          delivered_through_sequence: (request as Record<string, unknown>)['delivered_through_sequence'],
+        },
       });
     },
   };

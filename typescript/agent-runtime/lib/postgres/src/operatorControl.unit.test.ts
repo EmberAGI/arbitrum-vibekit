@@ -173,6 +173,17 @@ describe('operatorControl', () => {
           updatedAt: new Date('2026-03-18T18:00:00.000Z'),
           completedAt: new Date('2026-03-18T18:00:00.000Z'),
         },
+        {
+          executionId: 'exec-interrupted',
+          threadId: 'thread-1',
+          automationRunId: null,
+          status: 'interrupted',
+          source: 'user',
+          currentInterruptId: 'interrupt-1',
+          createdAt: new Date('2026-03-20T17:35:00.000Z'),
+          updatedAt: new Date('2026-03-20T17:50:00.000Z'),
+          completedAt: null,
+        },
       ],
       automations: [
         {
@@ -202,7 +213,7 @@ describe('operatorControl', () => {
       interrupts: [
         {
           interruptId: 'interrupt-1',
-          executionId: 'exec-queued',
+          executionId: 'exec-interrupted',
           threadId: 'thread-1',
           status: 'pending',
           surfacedInThread: true,

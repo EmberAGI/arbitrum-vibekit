@@ -10,6 +10,12 @@ type AgUiEventEnvelope = {
   [key: string]: unknown;
 };
 
+type JsonPatchOperation = {
+  op: string;
+  path: string;
+  value?: unknown;
+};
+
 async function readRequestBody(request: IncomingMessage): Promise<Uint8Array> {
   const chunks: Buffer[] = [];
 
@@ -27,8 +33,25 @@ async function writeNodeResponse(response: Response, target: ServerResponse): Pr
     target.setHeader(key, value);
   });
 
-  const body = new Uint8Array(await response.arrayBuffer());
-  target.end(body);
+  if (!response.body) {
+    target.end();
+    return;
+  }
+
+  const reader = response.body.getReader();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      target.write(Buffer.from(value));
+    }
+  } finally {
+    target.end();
+  }
 }
 
 function parseEventStreamBody(body: string): AgUiEventEnvelope[] {
@@ -38,8 +61,139 @@ function parseEventStreamBody(body: string): AgUiEventEnvelope[] {
     .map((line) => JSON.parse(line.slice('data: '.length)) as AgUiEventEnvelope);
 }
 
+async function readEventStreamUntil(
+  response: Response,
+  predicate: (events: readonly AgUiEventEnvelope[]) => boolean,
+): Promise<AgUiEventEnvelope[]> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return [];
+  }
+
+  const decoder = new TextDecoder();
+  const events: AgUiEventEnvelope[] = [];
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) {
+          continue;
+        }
+
+        events.push(JSON.parse(line.slice('data: '.length)) as AgUiEventEnvelope);
+        if (predicate(events)) {
+          await reader.cancel();
+          return events;
+        }
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+
+  return events;
+}
+
 function findStateSnapshot(events: readonly AgUiEventEnvelope[]) {
   return [...events].reverse().find((event) => event.type === 'STATE_SNAPSHOT');
+}
+
+function findStateDeltas(events: readonly AgUiEventEnvelope[]) {
+  return events.filter(
+    (event): event is AgUiEventEnvelope & { delta: JsonPatchOperation[] } =>
+      event.type === 'STATE_DELTA' && Array.isArray(event.delta),
+  );
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function decodeJsonPointerToken(token: string): string {
+  return token.replaceAll('~1', '/').replaceAll('~0', '~');
+}
+
+function applyJsonPatchOperation(target: unknown, operation: JsonPatchOperation): unknown {
+  const tokens = operation.path
+    .split('/')
+    .slice(1)
+    .map((token) => decodeJsonPointerToken(token));
+
+  if (tokens.length === 0) {
+    return operation.value;
+  }
+
+  let cursor = target as Record<string, unknown> | unknown[];
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const token = tokens[index]!;
+    const nextToken = tokens[index + 1]!;
+    const nextContainer = Number.isInteger(Number(nextToken)) ? [] : {};
+
+    if (Array.isArray(cursor)) {
+      const slot = Number(token);
+      cursor[slot] ??= nextContainer;
+      cursor = cursor[slot] as Record<string, unknown> | unknown[];
+      continue;
+    }
+
+    const objectCursor = cursor as Record<string, unknown>;
+    objectCursor[token] ??= nextContainer;
+    cursor = objectCursor[token] as Record<string, unknown> | unknown[];
+  }
+
+  const finalToken = tokens.at(-1)!;
+  if (Array.isArray(cursor)) {
+    const slot = finalToken === '-' ? cursor.length : Number(finalToken);
+    if (operation.op === 'remove') {
+      cursor.splice(slot, 1);
+      return target;
+    }
+
+    cursor[slot] = operation.value;
+    return target;
+  }
+
+  const objectCursor = cursor as Record<string, unknown>;
+  if (operation.op === 'remove') {
+    delete objectCursor[finalToken];
+    return target;
+  }
+
+  objectCursor[finalToken] = operation.value;
+  return target;
+}
+
+function projectStateSnapshot(input: {
+  baseline?: AgUiEventEnvelope;
+  events: readonly AgUiEventEnvelope[];
+}) {
+  const projectedSnapshot = cloneJson(
+    (input.baseline && 'snapshot' in input.baseline ? input.baseline.snapshot : { thread: {} }) as Record<
+      string,
+      unknown
+    >,
+  );
+
+  for (const event of findStateDeltas(input.events)) {
+    for (const operation of event.delta) {
+      applyJsonPatchOperation(projectedSnapshot, operation);
+    }
+  }
+
+  return {
+    type: 'STATE_SNAPSHOT',
+    snapshot: projectedSnapshot,
+  } satisfies AgUiEventEnvelope;
 }
 
 function createInternalPostgresHooks() {
@@ -157,7 +311,7 @@ describe('agent-pi-example AG-UI integration', () => {
     expect(runResponse.ok).toBe(true);
     expect(runResponse.headers.get('content-type')).toContain('text/event-stream');
     const runEvents = parseEventStreamBody(await runResponse.text());
-    const runSnapshot = findStateSnapshot(runEvents);
+    const runSnapshot = findStateSnapshot(runEvents) ?? projectStateSnapshot({ events: runEvents });
 
     expect(runSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -197,7 +351,9 @@ describe('agent-pi-example AG-UI integration', () => {
 
     expect(resumeResponse.ok).toBe(true);
     const resumeEvents = parseEventStreamBody(await resumeResponse.text());
-    const resumeSnapshot = findStateSnapshot(resumeEvents);
+    const resumeSnapshot =
+      findStateSnapshot(resumeEvents) ??
+      projectStateSnapshot({ baseline: runSnapshot, events: resumeEvents });
 
     expect(resumeSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -247,7 +403,9 @@ describe('agent-pi-example AG-UI integration', () => {
 
     expect(completeResponse.ok).toBe(true);
     const completeEvents = parseEventStreamBody(await completeResponse.text());
-    const completeSnapshot = findStateSnapshot(completeEvents);
+    const completeSnapshot =
+      findStateSnapshot(completeEvents) ??
+      projectStateSnapshot({ baseline: resumeSnapshot, events: completeEvents });
 
     expect(completeSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -296,7 +454,9 @@ describe('agent-pi-example AG-UI integration', () => {
 
     expect(fireResponse.ok).toBe(true);
     const fireEvents = parseEventStreamBody(await fireResponse.text());
-    const fireSnapshot = findStateSnapshot(fireEvents);
+    const fireSnapshot =
+      findStateSnapshot(fireEvents) ??
+      projectStateSnapshot({ baseline: completeSnapshot, events: fireEvents });
 
     expect(fireSnapshot).toMatchObject({
       type: 'STATE_SNAPSHOT',
@@ -322,6 +482,125 @@ describe('agent-pi-example AG-UI integration', () => {
                 operatorNote: 'safe window approved',
               },
             },
+          },
+        },
+      },
+    });
+  });
+
+  it('serves canonical shared-state hydration and update acknowledgments over AG-UI HTTP', async () => {
+    const connectResponse = await fetch(`${baseUrl}/agent/${PI_EXAMPLE_AGENT_ID}/connect`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-shared-state',
+      }),
+    });
+
+    expect(connectResponse.ok).toBe(true);
+    const connectEvents = await readEventStreamUntil(
+      connectResponse,
+      (events) =>
+        events.some(
+          (event) =>
+            event.type === 'CUSTOM' &&
+            event.name === 'shared-state.control' &&
+            typeof event.value === 'object' &&
+            event.value !== null &&
+            'kind' in event.value &&
+            event.value.kind === 'hydration',
+        ),
+    );
+
+    expect(findStateSnapshot(connectEvents)).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        shared: {},
+        projected: {},
+        thread: {
+          id: 'thread-shared-state',
+        },
+      },
+    });
+    expect(connectEvents).toContainEqual({
+      type: 'CUSTOM',
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'bootstrap',
+        revision: 'shared-rev-0',
+      },
+    });
+
+    const updateResponse = await fetch(`${baseUrl}/agent/${PI_EXAMPLE_AGENT_ID}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId: 'thread-shared-state',
+        runId: 'run-shared-state-update',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: 'mutation-1',
+              baseRevision: 'shared-rev-0',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    });
+
+    expect(updateResponse.ok).toBe(true);
+    const updateEvents = parseEventStreamBody(await updateResponse.text());
+    const updateSnapshot = projectStateSnapshot({
+      baseline: findStateSnapshot(connectEvents),
+      events: updateEvents,
+    });
+
+    expect(findStateDeltas(updateEvents)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          delta: expect.arrayContaining([
+            expect.objectContaining({
+              op: 'add',
+              path: '/shared/settings',
+              value: {
+                amount: 250,
+              },
+            }),
+          ]),
+        }),
+      ]),
+    );
+    expect(updateEvents).toContainEqual({
+      type: 'CUSTOM',
+      name: 'shared-state.control',
+      value: {
+        kind: 'update-ack',
+        clientMutationId: 'mutation-1',
+        status: 'accepted',
+        resultingRevision: 'shared-rev-1',
+        baseRevision: 'shared-rev-0',
+      },
+    });
+    expect(updateSnapshot).toMatchObject({
+      type: 'STATE_SNAPSHOT',
+      snapshot: {
+        shared: {
+          settings: {
+            amount: 250,
           },
         },
       },

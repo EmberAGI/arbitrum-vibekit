@@ -36,6 +36,8 @@ Related docs:
 - `docs/adr/0007-sibling-channel-adapters-and-canonical-thread-identity.md`
 - `docs/adr/0008-runtime-agnostic-shared-contract-extraction.md`
 - `docs/adr/0011-blessed-agent-runtime-factory-and-runtime-owned-projection-assembly.md`
+- `docs/adr/0014-fail-closed-service-identity-preflight-for-managed-shared-ember-agents.md`
+- `docs/adr/0015-service-owned-onchain-actions-transaction-resolution-for-managed-lending.md`
 
 ## 2. Boundary rules
 
@@ -74,6 +76,7 @@ flowchart LR
   A2A[A2A Client] --> PA
 
   PA --> PI[Pi Runtime]
+  PI --> SE[Shared Ember Domain Service]
   PI --> EXT[External Tools / APIs / Chains]
 ```
 
@@ -81,6 +84,7 @@ Key point:
 
 - Web, Telegram, and A2A are sibling client surfaces around the same Pi gateway runtime.
 - The gateway runtime itself is an initiative-specific layer built around `@mariozechner/pi-agent-core` + `@mariozechner/pi-ai`, not a claim that all of the durable records in this document already exist as `pi-mono` primitives today.
+- The current concrete managed downstream pair is `agent-portfolio-manager` plus `agent-ember-lending`; both are separate Pi-backed runtimes that consume Shared Ember over thin app-local adapters instead of talking to each other directly.
 
 ## 4. Container view
 
@@ -114,6 +118,8 @@ flowchart TB
     Ops[Operator Control Plane]
   end
 
+  SE[Shared Ember Domain Service]
+
   UI --> Store
   Store --> Stream
   Stream --> CK
@@ -129,6 +135,7 @@ flowchart TB
   Domain --> Runs
   Projection --> Threads
   Projection --> Execs
+  Domain --> SE
   Scheduler --> Autos
   Scheduler --> Runs
   Scheduler --> Execs
@@ -150,6 +157,36 @@ Container responsibilities:
 - Projection layer: maps canonical Pi records into AG-UI, A2A, and future channel-specific views without creating competing durable identities
 - Agent domain module: pluggable layer for agent-family-specific lifecycle, interrupt, command, and semantic A2UI content
 - Operator control plane: scheduler health, maintenance, replay/recreate, inspection, and archival workflows that are not model-facing tools
+- Current managed-runtime example:
+  - `agent-portfolio-manager` owns onboarding approval, rooted-signing collection, and managed-agent control-plane projection, but Shared Ember owns the durable reservation and owned-unit truth created during onboarding completion.
+  - `agent-portfolio-manager` startup must resolve the configured direct OWS controller wallet, confirm or rewrite the durable `portfolio-manager` / `orchestrator` identity with an identity-scoped idempotency key, and fail closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address.
+  - `agent-portfolio-manager` does not mark managed onboarding complete until a follow-up `subagent.readExecutionContext.v1` read for `ember-lending` exposes a non-null `subagent_wallet_address`.
+  - `agent-portfolio-manager` wallet-accounting reads must target the activated managed mandate lane, not the portfolio-manager lane, so reservation and policy-snapshot context comes from the same agent scope that Shared Ember activated during bootstrap.
+  - The current portfolio-manager implementation writes `activation.mandateRef` on new bootstrap completions but still tolerates legacy stored bootstrap payloads that only captured `activation.agentId` until older thread state is replaced.
+  - `agent-ember-lending` owns the bounded subagent read/plan/execute/escalate
+    runtime against Shared Ember and consumes agent-scoped lane data plus
+    rooted-wallet-wide wallet contents from Shared Ember execution context.
+  - `agent-ember-lending` startup must resolve the configured direct OWS signer wallet, confirm or rewrite the durable `ember-lending` / `subagent` identity with an identity-scoped idempotency key, and fail closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address.
+  - After healthy identity preflight plus onboarding, the first healthy `subagent.readExecutionContext.v1` read is expected to expose a non-null `subagent_wallet_address`.
+  - `agent-ember-lending` keeps `request_transaction_execution` as one
+    model-visible tool while internally composing runtime-owned redelegation
+    typed-data signing, service-owned anchored Onchain Actions ordered
+    transaction-request persistence and step resolution in runtime-owned domain
+    state, chain-aware unsigned-transaction preparation with the managed wallet
+    plus RPC state, runtime-owned execution signing, and Shared Ember
+    submission/finalization.
+  - `agent-ember-lending` also fails `create_transaction_plan` closed unless it
+    can persist the planner-returned payload behind that service-owned anchoring
+    boundary; missing planner metadata, missing managed wallet context, or
+    missing resolver wiring must stop plan creation before local state records a
+    candidate plan as executable.
+  - Model-visible managed-lending tools stay free of Shared Ember idempotency
+    controls; the lending runtime owns create-plan and execution idempotency
+    internally at the adapter boundary.
+  - The repo-local validation lane for the managed-identity boundary is
+    `pnpm smoke:managed-identities`, and the repo-backed validation lane for
+    the real redelegation signing seam is
+    `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`.
 
 Important web constraint:
 
@@ -203,7 +240,7 @@ Definitions:
 
 Examples:
 
-- DeFi agents may use domain modules with lifecycle terms such as hire/setup/sync/fire.
+- DeFi agents may use domain modules with lifecycle terms such as hire/setup/refresh/fire.
 - Other agent types may define different lifecycle vocabularies without changing the core runtime model.
 
 ### Domain-Module SPI
@@ -216,6 +253,7 @@ Every Pi-owned domain module should define one explicit SPI surface:
   - domain-aware context appended to the system prompt path
 - normalized operation handling:
   - one domain-facing operation handler that is agnostic to whether the request came from the direct command lane or the LLM tool lane
+  - direct-lane payloads such as structured interrupt `resume` objects should stay structurally intact until the domain handler or a text-only fallback boundary consumes them
 - domain outputs:
   - adapter-neutral outputs such as artifacts, interrupts, and status-bearing domain results
 - automation policy hooks:
@@ -227,11 +265,11 @@ For the first DeFi lifecycle module, the boundary is:
 
 | Owned by DeFi domain module | Owned by core Pi runtime |
 | --- | --- |
-| `hire/setup/sync/fire` command vocabulary | `PiThread`, `PiExecution`, `PiAutomation`, `AutomationRun` |
+| `hire/setup/refresh/fire` command vocabulary | `PiThread`, `PiExecution`, `PiAutomation`, `AutomationRun` |
 | DeFi lifecycle phases and transitions | durable persistence and restart boundaries |
 | DeFi-specific interrupt schemas and policy | interrupt delivery and resurfacing plumbing |
 | dynamic system context and adapter-neutral domain outputs | canonical execution identity and protocol projections |
-| sync automation policy decisions | scheduler, outbox/dedupe, and operator control-plane infrastructure |
+| refresh command / automation policy decisions | scheduler, outbox/dedupe, and operator control-plane infrastructure |
 
 ## 6. Projection model
 

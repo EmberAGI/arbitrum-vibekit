@@ -1,6 +1,19 @@
 # Smoke Scripts
 
-These scripts are intentionally "thin" and rely on already-running local dev processes.
+The shell health scripts below are intentionally thin and rely on already-running
+local dev processes. The managed-identity smoke is different: it self-boots the
+repo-local Shared Ember harness plus the real runtime-owned gateway services for
+the managed pair.
+
+For manual QA and any long-lived local service bring-up, Shared Ember should be
+postgres-backed by default. Set
+`SHARED_EMBER_PROTOCOL_REFERENCE_BOOTSTRAP_JSON='{"persistence":{"kind":"postgres","connectionString":"postgresql://ember:ember@127.0.0.1:55433/ember"}}'`
+before starting the Shared Ember harness or reference server.
+
+The harness's in-memory fallback is only appropriate for intentionally
+short-lived smoke isolation. Do not use that fallback as the default QA stack,
+because Shared Ember service identities and onboarding state will disappear on
+restart.
 
 ## Assumptions
 
@@ -19,6 +32,67 @@ These scripts are intentionally "thin" and rely on already-running local dev pro
   - If you interrupt the script, it attempts to close the Playwright browser. If you still see noisy polling
     afterward, run `pnpm reset:dev-stack` (it also kills stale Playwright headless shells).
 
+- `pnpm smoke:managed-identities`
+  - Boots the repo-local Shared Ember HTTP harness plus the real
+    `agent-portfolio-manager` and `agent-ember-lending` runtime gateway
+    services.
+  - If you want the smoke's Shared Ember state to survive restarts, export
+    `SHARED_EMBER_PROTOCOL_REFERENCE_BOOTSTRAP_JSON` with postgres persistence
+    before running it.
+  - Confirms `portfolio-manager` / `orchestrator` and `ember-lending` / `subagent` are both non-null.
+  - Drives the portfolio-manager rooted-bootstrap path and verifies post-bootstrap
+    `subagent.readExecutionContext.v1` returns a non-null `subagent_wallet_address`.
+  - This smoke intentionally exercises the current downstream runtime-owned
+    direct OWS wallet path rather than `/identity` sidecars or injected
+    wallet-address callback seams.
+
+- `pnpm smoke:redelegation-browser-signing`
+  - Bypasses the web UI and speaks only to the AG-UI agent surfaces.
+  - Self-boots a repo-local Shared Ember HTTP harness plus fresh
+    `agent-portfolio-manager` and `agent-ember-lending` processes on ephemeral
+    ports as part of prep.
+  - Starts the agents through their real `src/server.ts` entrypoints, so
+    service identity registration happens through the same startup preflight
+    path used in QA and production.
+  - Uses the browser-style root delegation signing path:
+    `signDelegationWithFallback(...)` plus an `eth_signTypedData_v4` wallet-provider shim.
+  - Uses a same-address `Stateless7702` root account, then proves the full
+    OWS child-redelegation and OWS execution-signing path through
+    `portfolio-manager` and `ember-lending`.
+  - Extracts the root-delegation signing request from the portfolio-manager
+    interrupt payload and waits for lending hydration via lending snapshots,
+    instead of reading Shared Ember JSON-RPC directly.
+  - Proves the managed lending lifecycle through the agents themselves:
+    onboarding, mandate activation, root delegation signing, child
+    redelegation, an initial `lending.supply`, accounting/delegation refresh
+    onto successor units, active `lending.withdraw` plus `lending.borrow`
+    coverage after supply, then a follow-up unwind planned against
+    `lending.withdraw` and executed through that refreshed delegation, then a
+    third agent-driven plan proves fresh successor coverage exists again after
+    the second execution.
+  - Does not require pre-running `3420`, `3430`, or `4010`, but it still
+    requires Arbitrum funding for the rooted wallet and OWS-controlled
+    execution wallets.
+  - Best run on fresh `pi_runtime` state. It now fails early if lending
+    hydrates a stale mandate context for the same rooted wallet.
+
+- `pnpm smoke:managed-idle-reconciliation`
+  - Self-boots the repo-local Shared Ember harness plus fresh
+    `agent-portfolio-manager` and `agent-ember-lending` processes by default.
+  - Drives real managed onboarding, then uses the lending AG-UI chat surface to
+    read inventory, execute the initial supply, read inventory again, and plan a
+    follow-up borrow on the same thread.
+  - Verifies the post-supply inventory turn mentions the live deployed
+    successor unit instead of a stale predecessor id.
+  - Verifies the follow-up borrow plan stays admitted on the same thread after
+    that post-supply inventory turn.
+  - Continues through a full `lending.withdraw` back to the rooted wallet.
+  - Verifies post-withdraw `lending.supply` re-admission plus onboarding
+    `phase: active` through ordinary Shared Ember read RPCs.
+  - Transfers live WETH into and out of the rooted wallet from an external
+    wallet and verifies ordinary portfolio reads ingest the resulting
+    ingress/egress changes without repeated phantom deltas on follow-up reads.
+
 ## Typical Local Flow
 
 ```bash
@@ -33,4 +107,13 @@ PENDLE_POLL_INTERVAL_MS=5000 pnpm dev:delegations-bypass
 # in another terminal
 bash scripts/smoke/pendle-detail-page-health.sh
 bash scripts/smoke/pendle-cron-ui-updates.sh
+
+# managed Shared Ember identity proof
+pnpm smoke:managed-identities
+
+# browser-signing redelegation proof without the web app
+pnpm smoke:redelegation-browser-signing
+
+# managed idle-capital reconciliation proof without the web app
+pnpm smoke:managed-idle-reconciliation
 ```

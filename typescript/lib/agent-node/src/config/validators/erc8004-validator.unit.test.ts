@@ -334,7 +334,7 @@ describe('ERC-8004 Configuration Validator', () => {
         mirrors: [],
         identityRegistries: {
           '1': '0x0000000000000000000000000000000000000000', // lowercase
-          '8453': '0x0000000000000000000000000000000000000000'.toUpperCase(), // uppercase
+          '42161': '0x0000000000000000000000000000000000000000'.toUpperCase(), // uppercase
         },
         registrations: {},
         supportedTrust: [],
@@ -348,7 +348,7 @@ describe('ERC-8004 Configuration Validator', () => {
       expect(result.warnings).toContainEqual(
         expect.stringContaining('Identity registries use zero-address placeholders'),
       );
-      expect(result.warnings).toContainEqual(expect.stringContaining('chains: 1, 8453'));
+      expect(result.warnings).toContainEqual(expect.stringContaining('chains: 1, 42161'));
     });
   });
 
@@ -389,7 +389,7 @@ describe('ERC-8004 Configuration Validator', () => {
           chainId: 42161,
           operatorAddress: '0x1234567890123456789012345678901234567890',
         },
-        mirrors: [{ chainId: 1 }, { chainId: 8453 }],
+        mirrors: [{ chainId: 1 }],
         identityRegistries: {},
         registrations: {},
         supportedTrust: [],
@@ -485,7 +485,7 @@ describe('ERC-8004 Configuration Validator', () => {
           chainId: 42161,
           operatorAddress: '0x1234567890123456789012345678901234567890',
         },
-        mirrors: [{ chainId: 0 }, { chainId: -1 }, { chainId: 8453 }], // Two invalid, one valid
+        mirrors: [{ chainId: 0 }, { chainId: -1 }, { chainId: 1 }], // Two invalid, one valid
         identityRegistries: {},
         registrations: {},
         supportedTrust: [],
@@ -543,11 +543,10 @@ describe('ERC-8004 Configuration Validator', () => {
           chainId: 42161,
           operatorAddress: '0x1234567890123456789012345678901234567890',
         },
-        mirrors: [{ chainId: 1 }, { chainId: 8453 }],
+        mirrors: [{ chainId: 1 }],
         identityRegistries: {
           '1': '0x1111111111111111111111111111111111111111',
-          '8453': '0x2222222222222222222222222222222222222222',
-          '42161': '0x3333333333333333333333333333333333333333',
+          '42161': '0x2222222222222222222222222222222222222222',
         },
         registrations: {},
         supportedTrust: [],

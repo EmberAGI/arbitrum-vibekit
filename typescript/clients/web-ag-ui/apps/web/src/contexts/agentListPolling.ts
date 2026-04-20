@@ -1,5 +1,4 @@
 import type { AgentSubscriber } from '@ag-ui/client';
-import { v7 as uuidv7 } from 'uuid';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { isBusyRunError } from '../utils/runConcurrency';
 import {
@@ -12,16 +11,17 @@ type RuntimeSubscription = {
   unsubscribe: () => void;
 };
 
-type CommandMessage = {
-  id: string;
-  role: 'user';
-  content: string;
-};
-
 export type AgentListPollingRuntimeAgent = {
   subscribe: (subscriber: AgentSubscriber) => RuntimeSubscription;
-  addMessage: (message: CommandMessage) => void;
-  runAgent: () => Promise<unknown>;
+  setState?: (state: unknown) => void;
+  runAgent: (params?: {
+    forwardedProps?: {
+      source?: string;
+      command?: {
+        name?: string;
+      };
+    };
+  }) => Promise<unknown>;
   detachActiveRun?: () => Promise<void> | void;
 };
 
@@ -31,6 +31,9 @@ export type AgentListPollOutcome = {
 };
 
 const DEFAULT_RUN_COMPLETION_GRACE_MS = 1_000;
+const AGENT_LIST_POLL_SOURCE = 'agent-list-poll';
+const AGENT_LIST_POLL_COMMAND = 'refresh';
+const READY_RUNTIME_TASK_MESSAGE = 'Ready for a live runtime conversation.';
 
 function describeError(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -41,6 +44,26 @@ type PollRuntimeAgentFactory = (params: {
   agentId: string;
   threadId: string;
 }) => AgentListPollingRuntimeAgent;
+
+function createAgentListPollSeedState(threadId: string): unknown {
+  return projectDetailStateFromPayload({
+    thread: {
+      id: threadId,
+      lifecycle: {
+        phase: 'prehire',
+      },
+      task: {
+        id: `agent-runtime:${threadId}`,
+        taskStatus: {
+          state: 'working',
+          message: {
+            content: READY_RUNTIME_TASK_MESSAGE,
+          },
+        },
+      },
+    },
+  });
+}
 
 export function resolveAgentListPollIntervalMs(rawValue: string | undefined): number {
   const parsed = Number(rawValue ?? 15_000);
@@ -115,6 +138,10 @@ export async function pollAgentListUpdateViaAgUi(params: {
     agentId: params.agentId,
     threadId: params.threadId,
   });
+  const seedState = createAgentListPollSeedState(params.threadId);
+  if (seedState) {
+    runtimeAgent.setState?.(seedState);
+  }
 
   let settled = false;
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
@@ -124,6 +151,8 @@ export async function pollAgentListUpdateViaAgUi(params: {
   const runCompletionTimeoutMs = params.runCompletionTimeoutMs ?? DEFAULT_RUN_COMPLETION_GRACE_MS;
   let runCompleted = false;
   let latestProjectedUpdate: Partial<AgentListEntry> | null = null;
+  let latestProjectedState =
+    (seedState ? projectDetailStateFromPayload(seedState) : null) ?? null;
 
   const settle = (value: Partial<AgentListEntry> | null) => {
     if (settled) return;
@@ -135,20 +164,21 @@ export async function pollAgentListUpdateViaAgUi(params: {
   };
 
   const captureProjectedUpdate = (statePayload: unknown) => {
-    const projectedState = projectDetailStateFromPayload(statePayload);
+    const projectedState = projectDetailStateFromPayload(statePayload, latestProjectedState);
     if (!projectedState) {
       return;
     }
+    latestProjectedState = projectedState;
     latestProjectedUpdate = projectAgentListUpdateFromState(projectedState);
     settle(latestProjectedUpdate);
   };
 
   const subscriber: AgentSubscriber = {
-    onRunInitialized: ({ state }) => {
-      captureProjectedUpdate(state);
-    },
     onStateSnapshotEvent: ({ event }) => {
       captureProjectedUpdate(event.snapshot);
+    },
+    onStateChanged: ({ state }) => {
+      captureProjectedUpdate(state);
     },
     onRunErrorEvent: (payload) => {
       const message = payload.event.message;
@@ -173,22 +203,16 @@ export async function pollAgentListUpdateViaAgUi(params: {
     runCompletionTimeoutHandle = setTimeout(() => resolve(false), runCompletionTimeoutMs);
   });
 
-  try {
-    const clientMutationId = uuidv7();
-    runtimeAgent.addMessage({
-      id: uuidv7(),
-      role: 'user',
-      content: JSON.stringify({
-        command: 'sync',
-        source: 'agent-list-poll',
-        clientMutationId,
-      }),
-    });
-  } catch {
-    settle(null);
-  }
-
-  const runPromise = Promise.resolve(runtimeAgent.runAgent())
+  const runPromise = Promise.resolve(
+    runtimeAgent.runAgent({
+      forwardedProps: {
+        source: AGENT_LIST_POLL_SOURCE,
+        command: {
+          name: AGENT_LIST_POLL_COMMAND,
+        },
+      },
+    }),
+  )
     .then(() => {
       runCompleted = true;
       return true;
@@ -197,7 +221,7 @@ export async function pollAgentListUpdateViaAgUi(params: {
       runCompleted = true;
       pollBusy = isBusyRunError(error);
       console.warn('[agent-list-poll] Poll run rejected', {
-        source: 'agent-list-poll',
+        source: AGENT_LIST_POLL_SOURCE,
         agentId: params.agentId,
         threadId: params.threadId,
         busy: pollBusy,
@@ -215,7 +239,7 @@ export async function pollAgentListUpdateViaAgUi(params: {
   if (!runTerminated) {
     pollBusy = true;
     console.warn('[agent-list-poll] Poll run did not terminate before completion timeout', {
-      source: 'agent-list-poll',
+      source: AGENT_LIST_POLL_SOURCE,
       agentId: params.agentId,
       threadId: params.threadId,
       runCompletionTimeoutMs,

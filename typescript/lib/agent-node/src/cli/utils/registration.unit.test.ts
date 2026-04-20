@@ -26,9 +26,9 @@ describe('Registration Utilities', () => {
       expect(result).toBe(true);
     });
 
-    it('should return true for Base', () => {
-      // Given: Base chain ID
-      const chainId = 8453;
+    it('should return true for Ethereum Sepolia', () => {
+      // Given: Sepolia chain ID
+      const chainId = 11155111;
 
       // When: checking if supported
       const result = isSupportedChain(chainId);
@@ -87,7 +87,6 @@ describe('Registration Utilities', () => {
       // Given/When: CHAIN_IDS constant
       // Then: should have all expected chain IDs
       expect(CHAIN_IDS.ETHEREUM).toBe(1);
-      expect(CHAIN_IDS.BASE).toBe(8453);
       expect(CHAIN_IDS.ETHEREUM_SEPOLIA).toBe(11155111);
       expect(CHAIN_IDS.ARBITRUM_ONE).toBe(42161);
     });
@@ -109,12 +108,10 @@ describe('Registration Utilities', () => {
     it('should have zero-address placeholders for undeployed chains', () => {
       // Given: chains without deployed contracts
       const ethereumAddresses = CONTRACT_ADDRESSES[CHAIN_IDS.ETHEREUM];
-      const baseAddresses = CONTRACT_ADDRESSES[CHAIN_IDS.BASE];
       const arbitrumAddresses = CONTRACT_ADDRESSES[CHAIN_IDS.ARBITRUM_ONE];
 
       // When/Then: should have zero-address placeholders
       expect(ethereumAddresses.identity).toBe('0x0000000000000000000000000000000000000000');
-      expect(baseAddresses.identity).toBe('0x0000000000000000000000000000000000000000');
       expect(arbitrumAddresses.identity).toBe('0x0000000000000000000000000000000000000000');
     });
   });
@@ -255,7 +252,7 @@ describe('Registration Utilities', () => {
 
     it('should always have empty supportedTrust array', () => {
       // Given: any agent data
-      const chainId = 8453;
+      const chainId = 42161;
       const agentId = 1;
 
       // When: building registration file
@@ -335,7 +332,7 @@ describe('Registration Utilities', () => {
 
     it('should have correct EIP-8004 registration type', () => {
       // Given: any agent data
-      const chainId = 8453;
+      const chainId = 42161;
 
       // When: building registration file for register
       const result = buildRegistrationFileForRegister(
@@ -390,7 +387,7 @@ describe('Registration Utilities', () => {
 
     it('should not be affected by different chain IDs (no registry in output)', () => {
       // Given: different chain IDs
-      const chains = [1, 8453, 11155111, 42161];
+      const chains = [1, 11155111, 42161];
 
       for (const chainId of chains) {
         // When: building registration file for each chain

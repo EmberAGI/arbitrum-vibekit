@@ -23,10 +23,12 @@ describe('createPortfolioManagerSharedEmberHttpHost', () => {
   let baseUrl: string;
   let responseStatus: number;
   let responseBody: unknown;
+  let lastRequestBody: unknown;
 
   beforeEach(async () => {
     responseStatus = 200;
     responseBody = null;
+    lastRequestBody = null;
     server = createServer((request: IncomingMessage, response: ServerResponse) => {
       void (async () => {
         if (request.url !== '/jsonrpc') {
@@ -35,6 +37,8 @@ describe('createPortfolioManagerSharedEmberHttpHost', () => {
           return;
         }
 
+        lastRequestBody = await readRequestBody(request);
+
         response.writeHead(responseStatus, {
           'content-type': 'application/json; charset=utf-8',
         });
@@ -42,7 +46,7 @@ describe('createPortfolioManagerSharedEmberHttpHost', () => {
           JSON.stringify(
             responseBody ?? {
               ok: true,
-              received: await readRequestBody(request),
+              received: lastRequestBody,
             },
           ),
         );
@@ -129,6 +133,126 @@ describe('createPortfolioManagerSharedEmberHttpHost', () => {
         },
       }),
     ).rejects.toThrow('expected revision mismatch');
+  });
+
+  it('routes committed outbox reads through jsonrpc and unwraps the outbox page', async () => {
+    responseBody = {
+      jsonrpc: '2.0',
+      id: 'rpc-shared-http-outbox-read',
+      result: {
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'portfolio-manager-recovery',
+        acknowledged_through_sequence: 4,
+        next_cursor: 5,
+        has_more: false,
+        events: [
+          {
+            protocol_version: 'v1',
+            event_id: 'evt-redelegation-ready-5',
+            sequence: 5,
+            aggregate: 'request',
+            aggregate_id: 'req-portfolio-manager-001',
+            event_type: 'requestExecution.ready_for_redelegation.v1',
+            committed_at: '2026-03-29T00:00:05Z',
+            payload: {
+              request_id: 'req-portfolio-manager-001',
+              transaction_plan_id: 'txplan-portfolio-manager-001',
+              status: 'ready_for_redelegation',
+            },
+          },
+        ],
+      },
+    };
+
+    const host = createPortfolioManagerSharedEmberHttpHost({
+      baseUrl,
+    });
+
+    await expect(
+      host.readCommittedEventOutbox({
+        protocol_version: 'v1',
+        consumer_id: 'portfolio-manager-recovery',
+        after_sequence: 4,
+        limit: 25,
+      }),
+    ).resolves.toEqual({
+      protocol_version: 'v1',
+      revision: 9,
+      consumer_id: 'portfolio-manager-recovery',
+      acknowledged_through_sequence: 4,
+      next_cursor: 5,
+      has_more: false,
+      events: [
+        {
+          protocol_version: 'v1',
+          event_id: 'evt-redelegation-ready-5',
+          sequence: 5,
+          aggregate: 'request',
+          aggregate_id: 'req-portfolio-manager-001',
+          event_type: 'requestExecution.ready_for_redelegation.v1',
+          committed_at: '2026-03-29T00:00:05Z',
+          payload: {
+            request_id: 'req-portfolio-manager-001',
+            transaction_plan_id: 'txplan-portfolio-manager-001',
+            status: 'ready_for_redelegation',
+          },
+        },
+      ],
+    });
+
+    expect(lastRequestBody).toMatchObject({
+      jsonrpc: '2.0',
+      method: 'readCommittedEventOutbox.v1',
+      params: {
+        consumer_id: 'portfolio-manager-recovery',
+        after_sequence: 4,
+        limit: 25,
+      },
+    });
+  });
+
+  it('routes committed outbox acknowledgements through jsonrpc and preserves outbox-shaped errors', async () => {
+    responseBody = {
+      jsonrpc: '2.0',
+      id: 'rpc-shared-http-outbox-ack',
+      result: {
+        protocol_version: 'v1',
+        revision: 9,
+        error: {
+          code: -32001,
+          message: 'protocol_conflict: outbox acknowledgement cannot move backwards',
+        },
+      },
+    };
+
+    const host = createPortfolioManagerSharedEmberHttpHost({
+      baseUrl,
+    });
+
+    await expect(
+      host.acknowledgeCommittedEventOutbox({
+        protocol_version: 'v1',
+        consumer_id: 'portfolio-manager-recovery',
+        delivered_through_sequence: 5,
+      }),
+    ).resolves.toEqual({
+      protocol_version: 'v1',
+      revision: 9,
+      error: {
+        code: -32001,
+        message: 'protocol_conflict: outbox acknowledgement cannot move backwards',
+      },
+    });
+
+    expect(lastRequestBody).toMatchObject({
+      jsonrpc: '2.0',
+      method: 'ackCommittedEventOutbox.v1',
+      params: {
+        consumer_id: 'portfolio-manager-recovery',
+        delivered_through_sequence: 5,
+      },
+    });
   });
 
   it('normalizes the optional Shared Ember base URL from env', () => {

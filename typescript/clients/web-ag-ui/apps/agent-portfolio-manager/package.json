@@ -34,7 +34,9 @@
     "test:ci": "pnpm test:unit && pnpm test:int"
   },
   "dependencies": {
-    "agent-runtime": "workspace:^"
+    "@metamask/delegation-toolkit": "^0.13.0",
+    "agent-runtime": "workspace:^",
+    "viem": "catalog:"
   },
   "dependenciesMeta": {
     "agent-runtime": {
@@ -42,6 +44,7 @@
     }
   },
   "devDependencies": {
+    "@open-wallet-standard/core": "^1.2.0",
     "@types/node": "^22.19.2",
     "tsx": "catalog:",
     "typescript": "^5.9.3",

@@ -37,7 +37,6 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
  */
 export const CHAIN_IDS = {
   ETHEREUM: 1,
-  BASE: 8453,
   ETHEREUM_SEPOLIA: 11155111,
   ARBITRUM_ONE: 42161,
 } as const;
@@ -48,9 +47,6 @@ export const CHAIN_IDS = {
  */
 export const CONTRACT_ADDRESSES = {
   [CHAIN_IDS.ETHEREUM]: {
-    identity: ZERO_ADDRESS, // Placeholder - not yet deployed
-  },
-  [CHAIN_IDS.BASE]: {
     identity: ZERO_ADDRESS, // Placeholder - not yet deployed
   },
   [CHAIN_IDS.ETHEREUM_SEPOLIA]: {

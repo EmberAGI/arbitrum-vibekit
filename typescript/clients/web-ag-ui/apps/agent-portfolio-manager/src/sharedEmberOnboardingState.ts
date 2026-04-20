@@ -1,6 +1,7 @@
 import type { PortfolioManagerSharedEmberProtocolHost } from './sharedEmberAdapter.js';
 
 export const PORTFOLIO_MANAGER_SHARED_EMBER_NETWORK = 'arbitrum';
+export const PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID = 'ember-lending';
 
 export type OnboardingProofs = {
   rooted_wallet_context_registered: boolean;
@@ -12,6 +13,7 @@ export type OnboardingProofs = {
   reserve_policy_configured: boolean;
   capital_reserved_for_agent: boolean;
   policy_snapshot_recorded: boolean;
+  initial_subagent_delegation_issued?: boolean;
   agent_active: boolean;
 };
 
@@ -58,6 +60,12 @@ type OnboardingStateResponse = {
   };
 };
 
+type OnboardingBootstrapMandate = {
+  mandate_ref?: string;
+  agent_id?: string;
+  managed_mandate?: unknown;
+};
+
 export type PortfolioManagerWalletAccountingDetails = {
   wallet: {
     address: string;
@@ -100,6 +108,42 @@ function escapeXml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;');
+}
+
+export function resolvePortfolioManagerAccountingAgentId(onboardingBootstrap: unknown): string {
+  if (typeof onboardingBootstrap !== 'object' || onboardingBootstrap === null) {
+    return PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID;
+  }
+
+  const onboardingBootstrapRecord = onboardingBootstrap as Record<string, unknown>;
+  const mandates = Array.isArray(onboardingBootstrapRecord['mandates'])
+    ? (onboardingBootstrapRecord['mandates'] as OnboardingBootstrapMandate[])
+    : [];
+  const activation =
+    typeof onboardingBootstrapRecord['activation'] === 'object' &&
+    onboardingBootstrapRecord['activation'] !== null
+      ? onboardingBootstrapRecord['activation']
+      : null;
+  const activatedMandateRef =
+    activation && 'mandateRef' in activation && typeof activation.mandateRef === 'string'
+      ? activation.mandateRef
+      : null;
+
+  const managedMandates = mandates.filter(
+    (mandate) =>
+      typeof mandate.agent_id === 'string' &&
+      'managed_mandate' in mandate &&
+      mandate.managed_mandate !== null,
+  );
+  const activatedManagedMandate = managedMandates.find(
+    (mandate) => mandate.mandate_ref === activatedMandateRef,
+  );
+
+  return (
+    activatedManagedMandate?.agent_id ??
+    managedMandates[0]?.agent_id ??
+    PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID
+  );
 }
 
 export async function readPortfolioManagerOnboardingState(input: {

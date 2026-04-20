@@ -59,9 +59,20 @@ describe('runGraphOnce busy handling integration (CLMM)', () => {
           throw new Error('Expected string request body');
         }
         const body = JSON.parse(bodyText) as {
-          values?: { thread?: unknown; messages?: unknown[] };
+          values?: {
+            thread?: unknown;
+            messages?: unknown[];
+            private?: {
+              pendingCommand?: {
+                command?: string;
+                clientMutationId?: string;
+              };
+            };
+          };
         };
-        expect(body.values?.messages).toBeDefined();
+        expect(body.values?.private?.pendingCommand?.command).toBe('cycle');
+        expect(body.values?.private?.pendingCommand?.clientMutationId).toEqual(expect.any(String));
+        expect(body.values?.messages).toBeUndefined();
         expect(body.values?.thread).toBeUndefined();
         return jsonResponse({ checkpoint_id: 'cp-1' });
       }

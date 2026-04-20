@@ -35,7 +35,6 @@ describe('useOnchainActionsIconMaps internals', () => {
     fetchOnchainActionsChainsPageMock.mockResolvedValue({
       chains: [
         { name: 'Arbitrum One', iconUri: 'https://cdn.example/arbitrum.png' },
-        { name: 'Base Mainnet', iconUri: 'https://cdn.example/base.png' },
         { name: 'Chain Without Icon', iconUri: null },
       ],
     });
@@ -47,7 +46,6 @@ describe('useOnchainActionsIconMaps internals', () => {
     expect(first).toBe(second);
     expect(first['arbitrum one']).toBe('https://cdn.example/arbitrum.png');
     expect(first['arbitrum']).toBe('https://cdn.example/arbitrum.png');
-    expect(first['base']).toBe('https://cdn.example/base.png');
   });
 
   it('clears load promise on failure so a later call can retry', async () => {

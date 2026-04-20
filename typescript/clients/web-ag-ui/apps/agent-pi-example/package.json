@@ -28,6 +28,8 @@
     "pretest:unit": "pnpm build:runtime-deps",
     "start": "bash -lc 'ENV_FILE=.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.example; exec node --env-file=\"$ENV_FILE\" ./node_modules/tsx/dist/cli.mjs src/server.ts \"$@\"' --",
     "build": "tsc --project tsconfig.json",
+    "lint": "eslint \"src\" \"tests\" --ext .ts",
+    "lint:fix": "eslint \"src\" \"tests\" --ext .ts --fix",
     "test": "pnpm test:unit && pnpm test:int",
     "test:int": "vitest run --config vitest.config.int.ts",
     "test:unit": "vitest run",

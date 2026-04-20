@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1.7
+FROM node:22
+
+WORKDIR /app
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+ENV PNPM_STORE_DIR="/pnpm/store"
+ENV EMBER_ORCHESTRATION_V1_SPEC_ROOT="/opt/ember-orchestration-v1-spec"
+
+RUN corepack enable && corepack prepare pnpm@10.7.0 --activate
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY patches ./patches
+COPY agent-runtime ./agent-runtime
+COPY clients/web-ag-ui ./clients/web-ag-ui
+
+RUN --mount=type=cache,id=shared-ember-vibekit-pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
+
+WORKDIR /opt/ember-orchestration-v1-spec
+
+COPY --from=shared_ember_spec . .
+
+RUN --mount=type=cache,id=shared-ember-spec-pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
+
+WORKDIR /app
+
+CMD ["sh", "-lc", "node ./clients/web-ag-ui/apps/agent-portfolio-manager/node_modules/tsx/dist/cli.mjs ./clients/web-ag-ui/scripts/smoke/start-managed-shared-ember.ts"]

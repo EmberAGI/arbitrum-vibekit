@@ -2,6 +2,8 @@ import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
 import { Annotation } from '@langchain/langgraph';
 import {
+  type AgentCommand,
+  type CommandEnvelope,
   createMessageHistoryReducer,
   isTaskActiveState,
   isTaskTerminalState,
@@ -50,6 +52,8 @@ export type ClmmPrivateState = {
   streamLimit: number;
   cronScheduled: boolean;
   bootstrapped: boolean;
+  pendingCommand?: CommandEnvelope<AgentCommand> | null;
+  activeCommand?: AgentCommand | null;
   suppressDuplicateCommand?: boolean;
   lastAppliedCommandMutationId?: string;
 };
@@ -294,6 +298,8 @@ const defaultPrivateState = (): ClmmPrivateState => ({
   streamLimit: resolveStreamLimit(),
   cronScheduled: false,
   bootstrapped: false,
+  pendingCommand: null,
+  activeCommand: null,
   suppressDuplicateCommand: false,
   lastAppliedCommandMutationId: undefined,
 });
@@ -362,6 +368,14 @@ const mergePrivateState = (
   streamLimit: right?.streamLimit ?? left.streamLimit ?? resolveStreamLimit(),
   cronScheduled: right?.cronScheduled ?? left.cronScheduled ?? false,
   bootstrapped: right?.bootstrapped ?? left.bootstrapped ?? false,
+  pendingCommand:
+    right && Object.prototype.hasOwnProperty.call(right, 'pendingCommand')
+      ? right.pendingCommand ?? null
+      : left.pendingCommand ?? null,
+  activeCommand:
+    right && Object.prototype.hasOwnProperty.call(right, 'activeCommand')
+      ? right.activeCommand ?? null
+      : left.activeCommand ?? null,
   suppressDuplicateCommand: right?.suppressDuplicateCommand ?? left.suppressDuplicateCommand ?? false,
   lastAppliedCommandMutationId:
     right?.lastAppliedCommandMutationId ?? left.lastAppliedCommandMutationId,

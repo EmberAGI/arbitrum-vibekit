@@ -6,13 +6,13 @@ describe('createPortfolioManagerAgentConfig', () => {
   it('builds an OpenRouter-backed agent-runtime config for portfolio-manager startup', async () => {
     const config = createPortfolioManagerAgentConfig({
       OPENROUTER_API_KEY: 'test-openrouter-key',
-      PORTFOLIO_MANAGER_MODEL: 'openai/gpt-5.4-mini',
+      PORTFOLIO_MANAGER_MODEL: 'openai/gpt-5.4',
       DATABASE_URL: 'postgresql://portfolio:secret@db.internal:5432/pi_runtime',
     });
 
     expect(config.model).toMatchObject({
-      id: 'openai/gpt-5.4-mini',
-      name: 'openai/gpt-5.4-mini',
+      id: 'openai/gpt-5.4',
+      name: 'openai/gpt-5.4',
       api: 'openai-responses',
       provider: 'openrouter',
       baseUrl: 'https://openrouter.ai/api/v1',
@@ -46,6 +46,12 @@ describe('createPortfolioManagerAgentConfig', () => {
         },
         {
           name: 'refresh_portfolio_state',
+        },
+        {
+          name: 'update_managed_mandate',
+        },
+        {
+          name: 'refresh_redelegation_work',
         },
         {
           name: 'complete_rooted_bootstrap_from_user_signing',
@@ -139,7 +145,7 @@ describe('createPortfolioManagerAgentConfig', () => {
     });
   });
 
-  it('surfaces the rooted wallet address in system context after onboarding', () => {
+  it('surfaces the active portfolio wallet address in system context after onboarding', () => {
     const config = createPortfolioManagerAgentConfig({
       OPENROUTER_API_KEY: 'test-openrouter-key',
     });
@@ -160,12 +166,12 @@ describe('createPortfolioManagerAgentConfig', () => {
             },
           },
           lastRootedWalletContextId: 'rwc-1',
-          activeWalletAddress: null,
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: null,
         },
       }),
     ).resolves.toContain(
-      '  <user_portfolio_wallet_address source="rooted_wallet_context">0x00000000000000000000000000000000000000a1</user_portfolio_wallet_address>',
+      '  <active_portfolio_wallet_address>0x00000000000000000000000000000000000000a1</active_portfolio_wallet_address>',
     );
   });
 });

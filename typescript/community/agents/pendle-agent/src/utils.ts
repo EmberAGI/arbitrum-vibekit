@@ -1,5 +1,5 @@
 import type { Chain } from 'viem/chains';
-import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
+import { mainnet, arbitrum, optimism, polygon } from 'viem/chains';
 
 export function logError(...args: unknown[]) {
   console.error(...args);
@@ -15,7 +15,6 @@ export const chainIdMap: Record<string, ChainConfig> = {
   '42161': { viemChain: arbitrum, quicknodeSegment: 'arbitrum-mainnet' },
   '10': { viemChain: optimism, quicknodeSegment: 'optimism' },
   '137': { viemChain: polygon, quicknodeSegment: 'matic' },
-  '8453': { viemChain: base, quicknodeSegment: 'base-mainnet' },
 };
 
 export function getChainConfigById(chainId: string): ChainConfig {

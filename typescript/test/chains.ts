@@ -56,18 +56,4 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       "https://curtis.rpc.caldera.xyz/http",
     varName: "APECHAIN_CURTIS",
   },
-  8453: {
-    name: "Base Chain",
-    rpcUrl:
-      process.env.BASE_CHAIN_RPC_URL || "https://base.gateway.tenderly.co",
-    varName: "BASE_CHAIN",
-    wrappedNativeToken: {
-      name: "WETH",
-      address: "0x4200000000000000000000000000000000000006",
-    },
-    anotherToken: {
-      name: "USDC",
-      address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-    },
-  },
 };

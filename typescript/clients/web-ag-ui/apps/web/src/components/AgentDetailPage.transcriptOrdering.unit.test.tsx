@@ -39,7 +39,6 @@ function renderPage(messages: Message[], overrides: Partial<React.ComponentProps
     isHiring: false,
     hasLoadedView: true,
     messages,
-    messageSnapshotEpoch: 0,
     onHire: () => {},
     onFire: () => {},
     onSync: () => {},
@@ -74,7 +73,7 @@ describe('AgentDetailPage transcript ordering', () => {
     container.remove();
   });
 
-  it('keeps reasoning ahead of an assistant reply that becomes visible later', () => {
+  it('renders later transcript order exactly as provided when an assistant reply becomes visible later', () => {
     const root = createRoot(container);
     const initialMessages: Message[] = [
       {
@@ -116,8 +115,8 @@ describe('AgentDetailPage transcript ordering', () => {
     const transcriptText = container.textContent ?? '';
     expect(transcriptText).toContain('Thinking through the request first.');
     expect(transcriptText).toContain('Here is the final answer.');
-    expect(transcriptText.indexOf('Thinking through the request first.')).toBeLessThan(
-      transcriptText.indexOf('Here is the final answer.'),
+    expect(transcriptText.indexOf('Here is the final answer.')).toBeLessThan(
+      transcriptText.indexOf('Thinking through the request first.'),
     );
 
     act(() => {
@@ -125,7 +124,7 @@ describe('AgentDetailPage transcript ordering', () => {
     });
   });
 
-  it('keeps a canonical user message ahead of a new assistant reply when the user message id changes', () => {
+  it('renders canonical replacement message ids in the order supplied by the runtime', () => {
     const root = createRoot(container);
     const initialMessages: Message[] = [
       {
@@ -159,8 +158,8 @@ describe('AgentDetailPage transcript ordering', () => {
     const transcriptText = container.textContent ?? '';
     expect(transcriptText).toContain('Schedule a sync every minute.');
     expect(transcriptText).toContain('Scheduled a sync every minute.');
-    expect(transcriptText.indexOf('Schedule a sync every minute.')).toBeLessThan(
-      transcriptText.indexOf('Scheduled a sync every minute.'),
+    expect(transcriptText.indexOf('Scheduled a sync every minute.')).toBeLessThan(
+      transcriptText.indexOf('Schedule a sync every minute.'),
     );
 
     act(() => {
@@ -168,7 +167,7 @@ describe('AgentDetailPage transcript ordering', () => {
     });
   });
 
-  it('keeps a new user turn ahead of newly-added reasoning and assistant messages on later renders', () => {
+  it('renders new user, reasoning, and assistant turns in the order supplied by the runtime', () => {
     const root = createRoot(container);
     const initialMessages: Message[] = [
       {
@@ -214,11 +213,11 @@ describe('AgentDetailPage transcript ordering', () => {
     expect(transcriptText).toContain('tell me more');
     expect(transcriptText).toContain('Thinking about the follow-up.');
     expect(transcriptText).toContain('Here is the next answer.');
-    expect(transcriptText.indexOf('tell me more')).toBeLessThan(
+    expect(transcriptText.indexOf('Here is the next answer.')).toBeLessThan(
       transcriptText.indexOf('Thinking about the follow-up.'),
     );
-    expect(transcriptText.indexOf('tell me more')).toBeLessThan(
-      transcriptText.indexOf('Here is the next answer.'),
+    expect(transcriptText.indexOf('Thinking about the follow-up.')).toBeLessThan(
+      transcriptText.indexOf('tell me more'),
     );
 
     act(() => {
@@ -226,7 +225,7 @@ describe('AgentDetailPage transcript ordering', () => {
     });
   });
 
-  it('keeps an existing reasoning message ahead of its assistant reply across a later snapshot', () => {
+  it('renders later runtime snapshots in the order supplied even when reasoning follows its assistant', () => {
     const root = createRoot(container);
     const initialMessages: Message[] = [
       {
@@ -271,12 +270,12 @@ describe('AgentDetailPage transcript ordering', () => {
     ];
 
     act(() => {
-      root.render(renderPage(laterSnapshotMessages, { messageSnapshotEpoch: 1 }));
+      root.render(renderPage(laterSnapshotMessages));
     });
 
     transcriptText = container.textContent ?? '';
-    expect(transcriptText.indexOf('Thinking through the first answer.')).toBeLessThan(
-      transcriptText.indexOf('Here is the first answer.'),
+    expect(transcriptText.indexOf('Here is the first answer.')).toBeLessThan(
+      transcriptText.indexOf('Thinking through the first answer.'),
     );
 
     act(() => {
@@ -284,7 +283,7 @@ describe('AgentDetailPage transcript ordering', () => {
     });
   });
 
-  it('preserves existing reasoning-before-assistant order across a later snapshot even without parent linkage', () => {
+  it('renders later runtime snapshots in the order supplied even without reasoning parent linkage', () => {
     const root = createRoot(container);
     const initialMessages: Message[] = [
       {
@@ -327,13 +326,126 @@ describe('AgentDetailPage transcript ordering', () => {
     ];
 
     act(() => {
-      root.render(renderPage(laterSnapshotMessages, { messageSnapshotEpoch: 1 }));
+      root.render(renderPage(laterSnapshotMessages));
     });
 
     transcriptText = container.textContent ?? '';
-    expect(transcriptText.indexOf('Thinking through the first answer.')).toBeLessThan(
-      transcriptText.indexOf('Here is the first answer.'),
+    expect(transcriptText.indexOf('Here is the first answer.')).toBeLessThan(
+      transcriptText.indexOf('Thinking through the first answer.'),
     );
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('does not special-case legacy sync envelope content in the transcript', () => {
+    const root = createRoot(container);
+    const syncAckContent = JSON.stringify({ status: 'synced', clientMutationId: 'sync-1' });
+    const syncCommandContent = JSON.stringify({ command: 'sync', clientMutationId: 'sync-1' });
+    const messages: Message[] = [
+      {
+        id: 'user-sync-1',
+        role: 'user',
+        content: syncCommandContent,
+      },
+      {
+        id: 'assistant-sync-1',
+        role: 'assistant',
+        content: syncAckContent,
+      },
+      {
+        id: 'reasoning-sync-1',
+        role: 'reasoning',
+        parentMessageId: 'assistant-sync-1',
+        content: 'Thinking about how to acknowledge the sync request.',
+      },
+      {
+        id: 'reasoning-visible-1',
+        role: 'reasoning',
+        parentMessageId: 'assistant-visible-1',
+        content: 'Thinking about the actual portfolio update.',
+      },
+      {
+        id: 'assistant-visible-1',
+        role: 'assistant',
+        content: 'Here is the portfolio update you asked for.',
+      },
+    ];
+
+    act(() => {
+      root.render(renderPage(messages));
+    });
+
+    const transcriptText = container.textContent ?? '';
+    expect(transcriptText).toContain(syncCommandContent);
+    expect(transcriptText).toContain(syncAckContent);
+    expect(transcriptText).toContain('Thinking about how to acknowledge the sync request.');
+    expect(transcriptText).toContain('Thinking about the actual portfolio update.');
+    expect(transcriptText).toContain('Here is the portfolio update you asked for.');
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('keeps unlinked reasoning visible alongside a legacy sync acknowledgment', () => {
+    const root = createRoot(container);
+    const syncAckContent = JSON.stringify({ status: 'synced', clientMutationId: 'sync-1' });
+    const messages: Message[] = [
+      {
+        id: 'assistant-sync-1',
+        role: 'assistant',
+        content: syncAckContent,
+      },
+      {
+        id: 'reasoning-unlinked-1',
+        role: 'reasoning',
+        content: 'Thinking about whether the sync completed cleanly.',
+      },
+    ];
+
+    act(() => {
+      root.render(renderPage(messages));
+    });
+
+    const transcriptText = container.textContent ?? '';
+    expect(transcriptText).toContain(syncAckContent);
+    expect(transcriptText).toContain('Thinking about whether the sync completed cleanly.');
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('keeps reasoning visible even when the runtime encodes the linked assistant id inside the reasoning message id', () => {
+    const root = createRoot(container);
+    const linkedAssistantId = 'pi:agent-runtime:thread-1:assistant:1775509885583';
+    const messages: Message[] = [
+      {
+        id: linkedAssistantId,
+        role: 'assistant',
+        content: JSON.stringify({ status: 'synced', clientMutationId: 'sync-1' }),
+      },
+      {
+        id: `pi:agent-runtime:thread-1:reasoning:${linkedAssistantId}:0`,
+        role: 'reasoning',
+        content: '**Considering sync response**\n\nLet me acknowledge the sync.',
+      },
+      {
+        id: 'assistant-visible-1',
+        role: 'assistant',
+        content: 'Visible assistant reply.',
+      },
+    ];
+
+    act(() => {
+      root.render(renderPage(messages));
+    });
+
+    const transcriptText = container.textContent ?? '';
+    expect(transcriptText).toContain('Considering sync response');
+    expect(transcriptText).toContain('Visible assistant reply.');
 
     act(() => {
       root.unmount();

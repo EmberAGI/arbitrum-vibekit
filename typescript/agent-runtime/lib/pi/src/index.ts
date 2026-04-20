@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 import {
   EventType,
   type BaseEvent,
@@ -5,6 +7,7 @@ import {
   type MessagesSnapshotEvent,
   type RunFinishedEvent,
   type RunStartedEvent,
+  type StateDeltaEvent,
   type StateSnapshotEvent,
 } from '@ag-ui/core';
 import { Agent, type AgentEvent, type AgentMessage, type AgentOptions, type AgentTool } from '@mariozechner/pi-agent-core';
@@ -70,7 +73,12 @@ export type PiRuntimeGatewayRunRequest = {
     command?: {
       name?: string;
       input?: unknown;
-      resume?: string;
+      resume?: unknown;
+      update?: {
+        clientMutationId?: string;
+        baseRevision?: string;
+        patch?: unknown;
+      };
     };
   };
 };
@@ -133,6 +141,11 @@ export type PiRuntimeGatewaySession = {
   };
   a2ui?: PiRuntimeGatewayA2UiPayload;
   activityEvents?: PiRuntimeGatewayActivityEvent[];
+  projectedState?: Record<string, unknown>;
+  sharedState?: Record<string, unknown>;
+  sharedStateVersion?: number;
+  sharedStateRevision?: string;
+  sharedStateHydrated?: boolean;
   threadPatch?: Record<string, unknown>;
 };
 
@@ -181,6 +194,10 @@ export type PiRuntimeGatewayRuntime = {
   stop: (request: PiRuntimeGatewayStopRequest) => Promise<PiRuntimeGatewayEventSource> | PiRuntimeGatewayEventSource;
 };
 
+type PiRuntimeGatewayForwardedCommand = NonNullable<
+  NonNullable<PiRuntimeGatewayRunRequest['forwardedProps']>['command']
+>;
+
 export type PiRuntimeGatewayControlPlane = {
   inspectHealth: () => Promise<unknown>;
   listThreads: () => Promise<unknown>;
@@ -205,6 +222,7 @@ export type PiRuntimeGatewayAgent = Pick<Agent, 'subscribe' | 'prompt' | 'contin
   sessionId?: string;
   steer?: (message: AgentMessage) => void;
   followUp?: (message: AgentMessage) => void;
+  replaceMessages?: (messages: AgentMessage[]) => void;
 };
 
 export type PiRuntimeGatewayFoundation = {
@@ -245,6 +263,212 @@ const EMPTY_USAGE = {
     total: 0,
   },
 } as const;
+
+type JsonPatchCompare = (
+  left: object,
+  right: object,
+  invertible?: boolean,
+) => Array<Record<string, unknown>>;
+
+type JsonPatchApply = <T>(
+  document: T,
+  patch: ReadonlyArray<Record<string, unknown>>,
+  validateOperation?: boolean,
+  mutateDocument?: boolean,
+  banPrototypeModifications?: boolean,
+) => {
+  newDocument: T;
+};
+
+type JsonPatchModule = {
+  compare?: JsonPatchCompare;
+  applyPatch?: JsonPatchApply;
+  default?: JsonPatchModule;
+  'module.exports'?: JsonPatchModule;
+};
+
+const require = createRequire(import.meta.url);
+const jsonPatchModule = require('fast-json-patch') as JsonPatchModule;
+
+const resolveJsonPatchCompare = (module: JsonPatchModule | undefined): JsonPatchCompare | undefined =>
+  module?.compare ?? module?.default?.compare ?? module?.['module.exports']?.compare;
+
+const resolveJsonPatchApply = (module: JsonPatchModule | undefined): JsonPatchApply | undefined =>
+  module?.applyPatch ?? module?.default?.applyPatch ?? module?.['module.exports']?.applyPatch;
+
+const jsonPatchCompare = resolveJsonPatchCompare(jsonPatchModule);
+const jsonPatchApply = resolveJsonPatchApply(jsonPatchModule);
+
+type PiRuntimeGatewaySharedStateHydrationReason = 'bootstrap' | 'reconnect';
+type PiRuntimeGatewaySharedStateUpdateAckStatus = 'accepted' | 'noop' | 'rejected';
+type PiRuntimeGatewaySharedStateUpdateAckCode =
+  | 'stale_revision'
+  | 'missing_base_revision'
+  | 'forbidden_path'
+  | 'invalid_patch';
+
+const PI_RUNTIME_SHARED_STATE_CONTROL_EVENT = 'shared-state.control';
+const PI_RUNTIME_SHARED_STATE_REVISION_PREFIX = 'shared-rev-';
+const MISSING_CLIENT_MUTATION_ID_ERROR =
+  'Shared-state update commands require a non-empty clientMutationId.';
+
+const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+const getProjectedState = (session: PiRuntimeGatewaySession): Record<string, unknown> =>
+  isRecord(session.projectedState) ? session.projectedState : {};
+
+const getSharedState = (session: PiRuntimeGatewaySession): Record<string, unknown> =>
+  isRecord(session.sharedState) ? session.sharedState : {};
+
+const getSharedStateVersion = (session: PiRuntimeGatewaySession): number =>
+  typeof session.sharedStateVersion === 'number' &&
+  Number.isInteger(session.sharedStateVersion) &&
+  session.sharedStateVersion >= 0
+    ? session.sharedStateVersion
+    : 0;
+
+const buildSharedStateRevision = (version: number): string =>
+  `${PI_RUNTIME_SHARED_STATE_REVISION_PREFIX}${version}`;
+
+const getSharedStateRevision = (session: PiRuntimeGatewaySession): string => {
+  const revision = session.sharedStateRevision;
+  return typeof revision === 'string' && revision.length > 0
+    ? revision
+    : buildSharedStateRevision(getSharedStateVersion(session));
+};
+
+const normalizeSharedStateSession = (session: PiRuntimeGatewaySession): PiRuntimeGatewaySession => ({
+  ...session,
+  projectedState: getProjectedState(session),
+  sharedState: getSharedState(session),
+  sharedStateVersion: getSharedStateVersion(session),
+  sharedStateRevision: getSharedStateRevision(session),
+  sharedStateHydrated: session.sharedStateHydrated === true,
+});
+
+const buildSharedStateControlHydrationEvent = (params: {
+  reason: PiRuntimeGatewaySharedStateHydrationReason;
+  revision: string;
+}) => ({
+  type: EventType.CUSTOM,
+  name: PI_RUNTIME_SHARED_STATE_CONTROL_EVENT,
+  value: {
+    kind: 'hydration',
+    reason: params.reason,
+    revision: params.revision,
+  },
+} satisfies BaseEvent);
+
+const buildSharedStateControlUpdateAckEvent = (params: {
+  clientMutationId: string;
+  status: PiRuntimeGatewaySharedStateUpdateAckStatus;
+  resultingRevision: string;
+  baseRevision?: string;
+  code?: PiRuntimeGatewaySharedStateUpdateAckCode;
+  message?: string;
+}) => ({
+  type: EventType.CUSTOM,
+  name: PI_RUNTIME_SHARED_STATE_CONTROL_EVENT,
+  value: {
+    kind: 'update-ack',
+    clientMutationId: params.clientMutationId,
+    status: params.status,
+    resultingRevision: params.resultingRevision,
+    ...(params.baseRevision ? { baseRevision: params.baseRevision } : {}),
+    ...(params.code ? { code: params.code } : {}),
+    ...(params.message ? { message: params.message } : {}),
+  },
+} satisfies BaseEvent);
+
+const readSharedStateUpdateCommand = (
+  request: PiRuntimeGatewayRunRequest,
+):
+  | { kind: 'none' }
+  | {
+      kind: 'invalid';
+      error: string;
+    }
+  | {
+      kind: 'update';
+      clientMutationId: string;
+      baseRevision: string | undefined;
+      patch: unknown;
+    } => {
+  const update = request.forwardedProps?.command?.update;
+  if (!isRecord(update)) {
+    return { kind: 'none' };
+  }
+
+  const clientMutationId =
+    typeof update.clientMutationId === 'string' && update.clientMutationId.length > 0
+      ? update.clientMutationId
+      : undefined;
+  if (!clientMutationId) {
+    return {
+      kind: 'invalid',
+      error: MISSING_CLIENT_MUTATION_ID_ERROR,
+    };
+  }
+
+  return {
+    kind: 'update',
+    clientMutationId,
+    baseRevision:
+      typeof update.baseRevision === 'string' && update.baseRevision.length > 0
+        ? update.baseRevision
+        : undefined,
+    patch: Object.prototype.hasOwnProperty.call(update, 'patch') ? update.patch : undefined,
+  };
+};
+
+const validateSharedStatePatch = (
+  patch: unknown,
+):
+  | {
+      ok: true;
+      patch: ReadonlyArray<Record<string, unknown>>;
+    }
+  | {
+      ok: false;
+      code: PiRuntimeGatewaySharedStateUpdateAckCode;
+    } => {
+  if (!Array.isArray(patch)) {
+    return {
+      ok: false,
+      code: 'invalid_patch',
+    };
+  }
+
+  for (const operation of patch) {
+    if (!isRecord(operation)) {
+      return {
+        ok: false,
+        code: 'invalid_patch',
+      };
+    }
+
+    const op = operation.op;
+    const path = operation.path;
+    if ((op !== 'add' && op !== 'replace' && op !== 'remove') || typeof path !== 'string') {
+      return {
+        ok: false,
+        code: 'invalid_patch',
+      };
+    }
+
+    if (path !== '/shared' && !path.startsWith('/shared/')) {
+      return {
+        ok: false,
+        code: 'forbidden_path',
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    patch,
+  };
+};
 
 const shouldDebugPiGateway = process.env.PI_GATEWAY_DEBUG === 'true';
 const PORTABLE_PI_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -363,6 +587,9 @@ const isTextPart = (value: unknown): value is { type: 'text'; text: string } =>
 const isThinkingPart = (value: unknown): value is { type: 'thinking'; thinking: string } =>
   isRecord(value) && value.type === 'thinking' && typeof value.thinking === 'string';
 
+const getMessageErrorText = (message: unknown): string | undefined =>
+  isRecord(message) && typeof message.errorMessage === 'string' ? message.errorMessage : undefined;
+
 const isToolCallPart = (
   value: unknown,
 ): value is { type: 'toolCall'; id: string; name: string; arguments: unknown } =>
@@ -386,7 +613,7 @@ const resolveProjectedReasoningMessageId = (
 
 const getTextContent = (message: AgentMessage): string | undefined => {
   if (typeof message !== 'object' || message === null || !('content' in message)) {
-    return undefined;
+    return getMessageErrorText(message);
   }
 
   const { content } = message as { content?: unknown };
@@ -402,7 +629,11 @@ const getTextContent = (message: AgentMessage): string | undefined => {
     .flatMap((part) => (isTextPart(part) ? [part.text] : []))
     .join('');
 
-  return text.length > 0 ? text : undefined;
+  if (text.length > 0) {
+    return text;
+  }
+
+  return getMessageErrorText(message);
 };
 
 const getAssistantToolCalls = (message: AgentMessage): Array<{
@@ -565,6 +796,22 @@ const mergeAgUiMessages = (baseMessages: readonly AgUiMessage[], incomingMessage
   }
 
   return merged;
+};
+
+const selectAgUiPromptDeltaMessages = (
+  persistedMessages: readonly AgUiMessage[],
+  requestMessages: readonly AgUiMessage[],
+): AgUiMessage[] => {
+  const persistedMessagesById = new Map<string, string>();
+
+  for (const message of persistedMessages) {
+    persistedMessagesById.set(message.id, JSON.stringify(message));
+  }
+
+  return requestMessages.filter((message) => {
+    const persistedMessage = persistedMessagesById.get(message.id);
+    return persistedMessage === undefined || persistedMessage !== JSON.stringify(message);
+  });
 };
 
 type PersistedTextMessageStartEvent = {
@@ -773,7 +1020,7 @@ const applyProjectedRunEventsToMessages = (
               ? {
                   id: event.messageId,
                   role: 'assistant',
-                  content: typeof message.content === 'string' ? message.content : '',
+                  content: '',
                   ...(message.role === 'assistant' && Array.isArray(message.toolCalls)
                     ? { toolCalls: message.toolCalls }
                     : {}),
@@ -781,7 +1028,7 @@ const applyProjectedRunEventsToMessages = (
               : {
                   id: event.messageId,
                   role: 'user',
-                  content: typeof message.content === 'string' ? message.content : '',
+                  content: '',
                 },
         );
       }
@@ -796,14 +1043,18 @@ const applyProjectedRunEventsToMessages = (
           role: 'assistant',
           content: '',
         }),
-        (message) => ({
-          id: event.messageId,
-          role: 'assistant',
-          content: `${typeof message.content === 'string' ? message.content : ''}${event.delta}`,
-          ...(message.role === 'assistant' && Array.isArray(message.toolCalls)
-            ? { toolCalls: message.toolCalls }
-            : {}),
-        }),
+        (message) => {
+          const role = message.role === 'user' ? 'user' : 'assistant';
+
+          return {
+            id: event.messageId,
+            role,
+            content: `${typeof message.content === 'string' ? message.content : ''}${event.delta}`,
+            ...(role === 'assistant' && message.role === 'assistant' && Array.isArray(message.toolCalls)
+              ? { toolCalls: message.toolCalls }
+              : {}),
+          };
+        },
       );
       continue;
     }
@@ -900,6 +1151,26 @@ const buildExecutionStatusText = (session: PiRuntimeGatewaySession): string =>
     .filter((part): part is string => typeof part === 'string' && part.length > 0)
     .join(' ');
 
+const getAgentFailureMessage = (agent: PiRuntimeGatewayAgent): string | undefined => {
+  const { error } = agent.state as { error?: unknown };
+  return typeof error === 'string' && error.trim().length > 0 ? error : undefined;
+};
+
+const applyAgentFailureToSession = (
+  session: PiRuntimeGatewaySession,
+  failureMessage: string | undefined,
+): PiRuntimeGatewaySession =>
+  failureMessage
+    ? {
+        ...session,
+        execution: {
+          ...session.execution,
+          status: 'failed',
+          statusMessage: failureMessage,
+        },
+      }
+    : session;
+
 const buildPiRuntimeGatewaySystemPromptLines = (session: PiRuntimeGatewaySession): string[] => {
   const executionStatusText = buildExecutionStatusText(session);
   return executionStatusText.length > 0 ? [`<pi-runtime-gateway>${executionStatusText}</pi-runtime-gateway>`] : [];
@@ -995,7 +1266,41 @@ export const convertPiRuntimeGatewayMessagesToLlm = (
   return delegate ? delegate(preprocessedMessages) : preprocessedMessages.filter(isLlmCompatibleMessage);
 };
 
-const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => number): AgentMessage[] =>
+const readReplayAssistantModelIdentity = (
+  model: unknown,
+): {
+  api: string;
+  provider: string;
+  model: string;
+} | null => {
+  if (!isRecord(model)) {
+    return null;
+  }
+
+  const api = typeof model.api === 'string' ? model.api : null;
+  const provider = typeof model.provider === 'string' ? model.provider : null;
+  const modelId = typeof model.id === 'string' ? model.id : null;
+
+  if (!api || !provider || !modelId) {
+    return null;
+  }
+
+  return {
+    api,
+    provider,
+    model: modelId,
+  };
+};
+
+const convertAgUiMessagesToPiMessages = (
+  messages: AgUiMessage[],
+  now: () => number,
+  assistantModelIdentity?: {
+    api: string;
+    provider: string;
+    model: string;
+  } | null,
+): AgentMessage[] =>
   messages.flatMap((message): AgentMessage[] => {
     switch (message.role) {
       case 'user': {
@@ -1043,9 +1348,9 @@ const convertAgUiMessagesToPiMessages = (messages: AgUiMessage[], now: () => num
           {
             role: 'assistant',
             content,
-            api: 'responses' as never,
-            provider: 'openai' as never,
-            model: 'ag-ui-projected',
+            api: (assistantModelIdentity?.api ?? 'responses') as never,
+            provider: (assistantModelIdentity?.provider ?? 'openai') as never,
+            model: assistantModelIdentity?.model ?? 'ag-ui-projected',
             usage: EMPTY_USAGE,
             stopReason: 'stop',
             timestamp: now(),
@@ -1076,15 +1381,41 @@ const parseAgUiToolCallArguments = (serializedArguments: string): unknown => {
   }
 };
 
-const buildResumePromptMessages = (resumePayload: string, now: () => number): AgentMessage[] => [
+function hasResumePayload(command: PiRuntimeGatewayForwardedCommand | undefined): boolean {
+  return !!command && Object.prototype.hasOwnProperty.call(command, 'resume');
+}
+
+function serializeResumePayload(resumePayload: unknown): string {
+  if (typeof resumePayload === 'string') {
+    return resumePayload;
+  }
+
+  const serialized = JSON.stringify(resumePayload);
+  return typeof serialized === 'string' ? serialized : String(resumePayload);
+}
+
+const buildResumePromptMessages = (resumePayload: unknown, now: () => number): AgentMessage[] => [
   {
     role: 'user',
-    content: resumePayload,
+    content: serializeResumePayload(resumePayload),
     timestamp: now(),
   },
 ];
 
+const stripLegacyThreadMirrors = <TThread extends Record<string, unknown>>(thread: TThread): TThread => {
+  const {
+    messages: _messages,
+    domainProjection: _domainProjection,
+    ...canonicalThread
+  } = thread as TThread & {
+    messages?: unknown;
+    domainProjection?: unknown;
+  };
+  return canonicalThread as TThread;
+};
+
 export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Record<string, unknown> => {
+  const projectedState = getProjectedState(params);
   const activityEvents: PiRuntimeGatewayActivityEvent[] =
     params.activityEvents && params.activityEvents.length > 0
       ? [...params.activityEvents]
@@ -1149,15 +1480,39 @@ export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Rec
           },
         }
       : {}),
-    ...(params.messages ? { messages: params.messages } : {}),
   };
 
   return {
-    thread: mergeThreadPatchForEmit({
-      currentThread: baseThread,
-      patchThread: params.threadPatch ?? {},
-    }),
+    shared: getSharedState(params),
+    projected: projectedState,
+    thread: stripLegacyThreadMirrors(
+      mergeThreadPatchForEmit({
+        currentThread: baseThread,
+        patchThread: params.threadPatch ?? {},
+      }),
+    ),
   };
+};
+
+export const buildPiRuntimeGatewayStateDeltaEvent = (params: {
+  previousSession: PiRuntimeGatewaySession;
+  session: PiRuntimeGatewaySession;
+}): StateDeltaEvent | null => {
+  const previousSnapshot = buildPiThreadStateSnapshot(params.previousSession);
+  const nextSnapshot = buildPiThreadStateSnapshot(params.session);
+  if (!jsonPatchCompare) {
+    throw new TypeError('fast-json-patch compare export unavailable');
+  }
+  const delta = jsonPatchCompare(previousSnapshot, nextSnapshot, true);
+
+  if (delta.length === 0) {
+    return null;
+  }
+
+  return {
+    type: EventType.STATE_DELTA,
+    delta,
+  } satisfies StateDeltaEvent;
 };
 
 export const buildPiA2UiActivityEvent = (params: {
@@ -1182,6 +1537,7 @@ export const buildPiRuntimeGatewayConnectEvents = (params: {
   threadId: string;
   runId: string;
   session: PiRuntimeGatewaySession;
+  hydrationReason?: PiRuntimeGatewaySharedStateHydrationReason;
 }): BaseEvent[] => {
   const messagesSnapshotEvent: MessagesSnapshotEvent | null = params.session.messages
     ? {
@@ -1200,6 +1556,11 @@ export const buildPiRuntimeGatewayConnectEvents = (params: {
       type: EventType.STATE_SNAPSHOT,
       snapshot: buildPiThreadStateSnapshot(params.session),
     } satisfies StateSnapshotEvent,
+    buildSharedStateControlHydrationEvent({
+      reason:
+        params.hydrationReason ?? (params.session.sharedStateHydrated ? 'reconnect' : 'bootstrap'),
+      revision: getSharedStateRevision(params.session),
+    }),
     ...(messagesSnapshotEvent ? [messagesSnapshotEvent] : []),
     asBaseEvent({
       type: EventType.RUN_FINISHED,
@@ -1221,12 +1582,19 @@ export const mapPiAgentEventsToAgUiEvents = (params: {
   return params.events.flatMap((event) => projector.project(event));
 };
 
-function createPiAgentEventProjector(executionId: string): {
+function createPiAgentEventProjector(
+  executionId: string,
+  options: {
+    projectUserMessages?: boolean;
+  } = {},
+): {
   project: (event: AgentEvent) => BaseEvent[];
 } {
   const mapped: BaseEvent[] = [];
   const seenToolStarts = new Set<string>();
+  const messageIdsWithTextContent = new Set<string>();
   const openReasoningMessageIds = new Set<string>();
+  const projectUserMessages = options.projectUserMessages ?? true;
   let currentMessageId: string | null = null;
   let fallbackIndex = 0;
 
@@ -1248,9 +1616,15 @@ function createPiAgentEventProjector(executionId: string): {
         mapped.push(asBaseEvent({ type: EventType.STEP_FINISHED, stepName: 'turn' }));
         break;
       case 'message_start': {
+        const role = getMessageRole(event.message);
+        const shouldProjectMessage =
+          role === 'assistant' || (role === 'user' && projectUserMessages);
+        if (!shouldProjectMessage) {
+          currentMessageId = null;
+          break;
+        }
         fallbackIndex += 1;
         currentMessageId = resolveProjectedMessageId(executionId, event.message, fallbackIndex);
-        const role = getMessageRole(event.message);
         if (role === 'assistant' || role === 'user') {
           mapped.push(asBaseEvent({
             type: EventType.TEXT_MESSAGE_START,
@@ -1267,6 +1641,7 @@ function createPiAgentEventProjector(executionId: string): {
         const detail = event.assistantMessageEvent;
 
         if (detail.type === 'text_delta') {
+          messageIdsWithTextContent.add(messageId);
           mapped.push(asBaseEvent({
             type: EventType.TEXT_MESSAGE_CONTENT,
             messageId,
@@ -1386,11 +1761,21 @@ function createPiAgentEventProjector(executionId: string): {
         if (currentMessageId) {
           const role = getMessageRole(event.message);
           if (role === 'assistant' || role === 'user') {
+            const content = getTextContent(event.message);
+            if (!messageIdsWithTextContent.has(currentMessageId) && content) {
+              messageIdsWithTextContent.add(currentMessageId);
+              mapped.push(asBaseEvent({
+                type: EventType.TEXT_MESSAGE_CONTENT,
+                messageId: currentMessageId,
+                delta: content,
+              }));
+            }
             mapped.push(asBaseEvent({
               type: EventType.TEXT_MESSAGE_END,
               messageId: currentMessageId,
             }));
           }
+          messageIdsWithTextContent.delete(currentMessageId);
         }
         currentMessageId = null;
         break;
@@ -1541,11 +1926,23 @@ export const createPiRuntimeGatewayRuntime = (params: {
   const syncAgentSessionId = (threadId: string): void => {
     params.agent.sessionId = threadId;
   };
+  const syncAgentMessagesFromSession = (session: PiRuntimeGatewaySession): void => {
+    if (typeof params.agent.replaceMessages !== 'function') {
+      return;
+    }
 
-  const buildSnapshotEvent = (session: PiRuntimeGatewaySession): StateSnapshotEvent => ({
-    type: EventType.STATE_SNAPSHOT,
-    snapshot: buildPiThreadStateSnapshot(session),
-  });
+    const replayAssistantModelIdentity = readReplayAssistantModelIdentity(
+      (params.agent.state as { model?: unknown } | undefined)?.model,
+    );
+    params.agent.replaceMessages(
+      convertAgUiMessagesToPiMessages(
+        session.messages ?? [],
+        now,
+        replayAssistantModelIdentity,
+      ),
+    );
+  };
+
   const buildMessagesSnapshotEvent = (session: PiRuntimeGatewaySession): MessagesSnapshotEvent | null =>
     session.messages
       ? {
@@ -1569,12 +1966,13 @@ export const createPiRuntimeGatewayRuntime = (params: {
     threadId: string,
     requestMessages: readonly AgUiMessage[],
     projectedEvents: readonly BaseEvent[],
+    failureMessage?: string,
   ) => {
     const session =
       !params.updateSession
-        ? params.getSession(threadId)
+        ? applyAgentFailureToSession(params.getSession(threadId), failureMessage)
         : params.updateSession(threadId, (session) => ({
-            ...session,
+            ...applyAgentFailureToSession(session, failureMessage),
             messages: applyProjectedRunEventsToMessages(
               mergeAgUiMessages(session.messages ?? [], requestMessages),
               projectedEvents,
@@ -1586,38 +1984,204 @@ export const createPiRuntimeGatewayRuntime = (params: {
   };
 
   return {
-    connect: (request) => {
+    connect: async (request) => {
       syncAgentSessionId(request.threadId);
-      const session = params.getSession(request.threadId);
+      const currentSession = normalizeSharedStateSession(params.getSession(request.threadId));
+      const hydrationReason: PiRuntimeGatewaySharedStateHydrationReason = currentSession.sharedStateHydrated
+        ? 'reconnect'
+        : 'bootstrap';
+      const session = params.updateSession
+        ? params.updateSession(request.threadId, (session) => ({
+            ...normalizeSharedStateSession(session),
+            sharedStateHydrated: true,
+          }))
+        : {
+            ...currentSession,
+            sharedStateHydrated: true,
+          };
       const runId = request.runId ?? `connect:${request.threadId}`;
-      return Promise.resolve(
-        buildPiRuntimeGatewayConnectEvents({
-          threadId: request.threadId,
-          runId,
-          session,
-        }),
-      );
+      await params.onSessionUpdated?.(request.threadId, session);
+      return buildPiRuntimeGatewayConnectEvents({
+        threadId: request.threadId,
+        runId,
+        session,
+        hydrationReason,
+      });
     },
     run: (request) => {
       syncAgentSessionId(request.threadId);
-      const executionId = params.getSession(request.threadId).execution.id;
-      const projector = createPiAgentEventProjector(executionId);
+      const initialSession = normalizeSharedStateSession(params.getSession(request.threadId));
+      const executionId = initialSession.execution.id;
+      const projector = createPiAgentEventProjector(`${executionId}:${request.runId}`, {
+        projectUserMessages: (request.messages?.length ?? 0) === 0,
+      });
       const projectedRunEvents: BaseEvent[] = [];
       const requestMessages = request.messages ?? [];
+      const promptRequestMessages = selectAgUiPromptDeltaMessages(initialSession.messages ?? [], requestMessages);
       const resumePayload = request.forwardedProps?.command?.resume;
+      const requestHasResumePayload = hasResumePayload(request.forwardedProps?.command);
+      const sharedStateUpdate = readSharedStateUpdateCommand(request);
+      if (sharedStateUpdate.kind === 'invalid') {
+        throw new TypeError(sharedStateUpdate.error);
+      }
 
       return createAsyncEventStream<BaseEvent>(async (controller) => {
         logPiGatewayDebug('run start', {
           threadId: request.threadId,
           runId: request.runId,
           messageCount: request.messages?.length ?? 0,
-          hasResumePayload: typeof resumePayload === 'string',
+          hasResumePayload: requestHasResumePayload,
         });
         controller.push(asBaseEvent({
           type: EventType.RUN_STARTED,
           threadId: request.threadId,
           runId: request.runId,
         } satisfies RunStartedEvent));
+
+        if (sharedStateUpdate.kind === 'update') {
+          const currentSession = initialSession;
+          const currentRevision = getSharedStateRevision(currentSession);
+          const clientMutationId = sharedStateUpdate.clientMutationId;
+          const finishWithAck = (paramsForAck: {
+            status: PiRuntimeGatewaySharedStateUpdateAckStatus;
+            resultingRevision: string;
+            code?: PiRuntimeGatewaySharedStateUpdateAckCode;
+            baseRevision?: string;
+          }) => {
+            controller.push(
+              buildSharedStateControlUpdateAckEvent({
+                clientMutationId,
+                status: paramsForAck.status,
+                resultingRevision: paramsForAck.resultingRevision,
+                ...(paramsForAck.baseRevision ? { baseRevision: paramsForAck.baseRevision } : {}),
+                ...(paramsForAck.code ? { code: paramsForAck.code } : {}),
+              }),
+            );
+            controller.push(asBaseEvent({
+              type: EventType.RUN_FINISHED,
+              threadId: request.threadId,
+              runId: request.runId,
+              result: {
+                executionId: currentSession.execution.id,
+                status: currentSession.execution.status,
+              },
+            } satisfies RunFinishedEvent));
+            controller.close();
+          };
+
+          if (currentSession.sharedStateHydrated && !sharedStateUpdate.baseRevision) {
+            finishWithAck({
+              status: 'rejected',
+              resultingRevision: currentRevision,
+              code: 'missing_base_revision',
+            });
+            return;
+          }
+
+          if (
+            sharedStateUpdate.baseRevision &&
+            sharedStateUpdate.baseRevision !== currentRevision
+          ) {
+            finishWithAck({
+              status: 'rejected',
+              resultingRevision: currentRevision,
+              code: 'stale_revision',
+              baseRevision: sharedStateUpdate.baseRevision,
+            });
+            return;
+          }
+
+          const validatedPatch = validateSharedStatePatch(sharedStateUpdate.patch);
+          if (!validatedPatch.ok) {
+            finishWithAck({
+              status: 'rejected',
+              resultingRevision: currentRevision,
+              code: validatedPatch.code,
+              ...(sharedStateUpdate.baseRevision ? { baseRevision: sharedStateUpdate.baseRevision } : {}),
+            });
+            return;
+          }
+
+          if (!jsonPatchApply || !jsonPatchCompare) {
+            throw new TypeError('fast-json-patch apply/compare export unavailable');
+          }
+
+          let nextSharedState: Record<string, unknown>;
+          try {
+            const nextDocument = jsonPatchApply(
+              {
+                shared: cloneJson(getSharedState(currentSession)),
+              },
+              validatedPatch.patch,
+              true,
+              false,
+            ).newDocument as { shared?: unknown };
+            if (!isRecord(nextDocument.shared)) {
+              finishWithAck({
+                status: 'rejected',
+                resultingRevision: currentRevision,
+                code: 'invalid_patch',
+                ...(sharedStateUpdate.baseRevision ? { baseRevision: sharedStateUpdate.baseRevision } : {}),
+              });
+              return;
+            }
+            nextSharedState = nextDocument.shared;
+          } catch {
+            finishWithAck({
+              status: 'rejected',
+              resultingRevision: currentRevision,
+              code: 'invalid_patch',
+              ...(sharedStateUpdate.baseRevision ? { baseRevision: sharedStateUpdate.baseRevision } : {}),
+            });
+            return;
+          }
+
+          const sharedDelta = jsonPatchCompare(
+            cloneJson(getSharedState(currentSession)),
+            cloneJson(nextSharedState),
+            true,
+          );
+          if (sharedDelta.length === 0) {
+            finishWithAck({
+              status: 'noop',
+              resultingRevision: currentRevision,
+              ...(sharedStateUpdate.baseRevision ? { baseRevision: sharedStateUpdate.baseRevision } : {}),
+            });
+            return;
+          }
+
+          const nextVersion = getSharedStateVersion(currentSession) + 1;
+          const nextRevision = buildSharedStateRevision(nextVersion);
+          const nextSession = params.updateSession
+            ? params.updateSession(request.threadId, (session) => ({
+                ...normalizeSharedStateSession(session),
+                sharedState: nextSharedState,
+                sharedStateVersion: nextVersion,
+                sharedStateRevision: nextRevision,
+              }))
+            : {
+                ...currentSession,
+                sharedState: nextSharedState,
+                sharedStateVersion: nextVersion,
+                sharedStateRevision: nextRevision,
+              };
+          await params.onSessionUpdated?.(request.threadId, nextSession);
+
+          const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEvent({
+            previousSession: currentSession,
+            session: nextSession,
+          });
+          if (stateDeltaEvent) {
+            controller.push(stateDeltaEvent);
+          }
+          finishWithAck({
+            status: 'accepted',
+            resultingRevision: nextRevision,
+            ...(sharedStateUpdate.baseRevision ? { baseRevision: sharedStateUpdate.baseRevision } : {}),
+          });
+          return;
+        }
+
         const requestSession = await persistRequestMessages(request.threadId, requestMessages);
         const requestMessagesSnapshotEvent = buildMessagesSnapshotEvent(requestSession);
         if (requestMessagesSnapshotEvent) {
@@ -1634,11 +2198,20 @@ export const createPiRuntimeGatewayRuntime = (params: {
         });
 
         try {
-          if ((request.messages && request.messages.length > 0) || typeof resumePayload === 'string') {
+          syncAgentMessagesFromSession(initialSession);
+
+          if (promptRequestMessages.length > 0 || requestHasResumePayload) {
+            const replayAssistantModelIdentity = readReplayAssistantModelIdentity(
+              (params.agent.state as { model?: unknown } | undefined)?.model,
+            );
             const promptMessages =
-              typeof resumePayload === 'string'
+              requestHasResumePayload
                 ? buildResumePromptMessages(resumePayload, now)
-                : convertAgUiMessagesToPiMessages(request.messages ?? [], now);
+                : convertAgUiMessagesToPiMessages(
+                    promptRequestMessages,
+                    now,
+                    replayAssistantModelIdentity,
+                  );
             if (params.agent.state.isStreaming) {
               if (params.agent.steer) {
                 for (const message of promptMessages) {
@@ -1658,9 +2231,21 @@ export const createPiRuntimeGatewayRuntime = (params: {
             await params.agent.continue();
           }
 
-          const session = await persistRunTranscript(request.threadId, requestMessages, projectedRunEvents);
+          const failureMessage = getAgentFailureMessage(params.agent);
+          const session = await persistRunTranscript(
+            request.threadId,
+            requestMessages,
+            projectedRunEvents,
+            failureMessage,
+          );
           logPiGatewayDebug('run session after transcript persist', session);
-          controller.push(buildSnapshotEvent(session));
+          const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEvent({
+            previousSession: requestSession,
+            session,
+          });
+          if (stateDeltaEvent) {
+            controller.push(stateDeltaEvent);
+          }
           const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);
           if (messagesSnapshotEvent) {
             controller.push(messagesSnapshotEvent);

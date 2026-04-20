@@ -8,12 +8,12 @@ import {
 } from './commandRouting';
 
 describe('commandRouting', () => {
-  it('returns explicit sync command without falling back to persisted thread command', () => {
+  it('returns explicit refresh command without falling back to persisted thread command', () => {
     expect(
       resolveRunCommandForThread({
-        parsedCommand: 'sync',
+        parsedCommand: 'refresh',
       }),
-    ).toBe('sync');
+    ).toBe('refresh');
   });
 
   it('does not fall back to persisted command when no command is parsed', () => {
@@ -42,10 +42,10 @@ describe('commandRouting', () => {
     expect(resolveCommandTargetForBootstrappedFlow({ resolvedCommand: 'cycle', bootstrapped: false })).toBe(
       'bootstrap',
     );
-    expect(resolveCommandTargetForBootstrappedFlow({ resolvedCommand: 'sync', bootstrapped: false })).toBe(
+    expect(resolveCommandTargetForBootstrappedFlow({ resolvedCommand: 'refresh', bootstrapped: false })).toBe(
       'bootstrap',
     );
-    expect(resolveCommandTargetForBootstrappedFlow({ resolvedCommand: 'sync', bootstrapped: true })).toBe(
+    expect(resolveCommandTargetForBootstrappedFlow({ resolvedCommand: 'refresh', bootstrapped: true })).toBe(
       'syncState',
     );
   });
@@ -82,7 +82,7 @@ describe('commandRouting', () => {
     ).toBe('__end__');
   });
 
-  it('suppresses replayed non-sync command envelopes when clientMutationId is unchanged', () => {
+  it('suppresses replayed non-refresh command envelopes when clientMutationId is unchanged', () => {
     expect(
       resolveCommandReplayGuardState({
         parsedCommand: 'cycle',
@@ -95,7 +95,7 @@ describe('commandRouting', () => {
     });
   });
 
-  it('does not suppress first-seen non-sync command envelopes and records mutation id', () => {
+  it('does not suppress first-seen non-refresh command envelopes and records mutation id', () => {
     expect(
       resolveCommandReplayGuardState({
         parsedCommand: 'hire',
@@ -107,16 +107,16 @@ describe('commandRouting', () => {
     });
   });
 
-  it('ignores replay suppression for sync commands', () => {
+  it('ignores replay suppression for refresh commands', () => {
     expect(
       resolveCommandReplayGuardState({
-        parsedCommand: 'sync',
-        clientMutationId: 'sync-1',
-        lastAppliedCommandMutationId: 'sync-1',
+        parsedCommand: 'refresh',
+        clientMutationId: 'refresh-1',
+        lastAppliedCommandMutationId: 'refresh-1',
       }),
     ).toEqual({
       suppressDuplicateCommand: false,
-      lastAppliedCommandMutationId: 'sync-1',
+      lastAppliedCommandMutationId: 'refresh-1',
     });
   });
 });

@@ -6,8 +6,10 @@ import { usePathname } from 'next/navigation';
 import { CopilotKit } from '@copilotkit/react-core';
 
 import { isRegisteredAgentId } from '../config/agents';
+import { AuthoritativeAgentSnapshotCacheProvider } from '../contexts/AuthoritativeAgentSnapshotCache';
 import { AgentProvider, InactiveAgentProvider, useAgent } from '../contexts/AgentContext';
 import { projectAgentListUpdate } from '../contexts/agentListProjection';
+import type { ThreadSnapshot, ThreadState } from '../types/agent';
 import { useAgentList } from '../contexts/AgentListContext';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import {
@@ -17,6 +19,29 @@ import {
 } from '../utils/agentThread';
 import { emitAgentConnectDebug } from '../utils/agentConnectDebug';
 
+type DetailConnectAgentListUpdateInput = {
+  uiState: Pick<
+    ThreadSnapshot['thread'],
+    'lifecycle' | 'onboardingFlow' | 'task' | 'haltReason' | 'executionError'
+  >;
+  profile: ThreadState['profile'];
+  metrics: ThreadState['metrics'];
+};
+
+export function projectDetailConnectAgentListUpdate(
+  input: DetailConnectAgentListUpdateInput,
+) {
+  return projectAgentListUpdate({
+    lifecycle: input.uiState.lifecycle,
+    onboardingFlow: input.uiState.onboardingFlow,
+    profile: input.profile,
+    metrics: input.metrics,
+    task: input.uiState.task,
+    haltReason: input.uiState.haltReason,
+    executionError: input.uiState.executionError,
+  });
+}
+
 function AgentListRuntimeBridge() {
   const agent = useAgent();
   const { upsertAgent } = useAgentList();
@@ -25,16 +50,21 @@ function AgentListRuntimeBridge() {
 
   const { uiState, config } = agent;
   const agentId = config.id;
+  const { lifecycle, onboardingFlow, task, haltReason, executionError, profile, metrics } = uiState;
 
   useEffect(() => {
     if (!agentId || agentId === 'inactive-agent') return;
 
-    const update = projectAgentListUpdate({
-      profile: uiState.profile,
-      metrics: uiState.metrics,
-      task: uiState.task,
-      haltReason: uiState.haltReason,
-      executionError: uiState.executionError,
+    const update = projectDetailConnectAgentListUpdate({
+      uiState: {
+        lifecycle,
+        onboardingFlow,
+        task,
+        haltReason,
+        executionError,
+      },
+      profile,
+      metrics,
     });
     const snapshotKey = JSON.stringify(update);
     if (snapshotKey === lastSnapshotRef.current) {
@@ -57,12 +87,14 @@ function AgentListRuntimeBridge() {
   }, [
     agentId,
     debugStatus,
+    executionError,
+    haltReason,
+    lifecycle,
+    metrics,
+    onboardingFlow,
+    profile,
+    task,
     upsertAgent,
-    uiState.executionError,
-    uiState.haltReason,
-    uiState.metrics,
-    uiState.profile,
-    uiState.task,
   ]);
 
   return null;
@@ -125,17 +157,10 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
     walletThreadId,
   ]);
 
-  if (!agentId) {
-    return <InactiveAgentProvider>{children}</InactiveAgentProvider>;
-  }
-
   const threadId = walletThreadId ?? anonymousThreadId;
-
-  if (!threadId) {
-    return <InactiveAgentProvider>{children}</InactiveAgentProvider>;
-  }
-
-  return (
+  const content = !agentId || !threadId ? (
+    <InactiveAgentProvider>{children}</InactiveAgentProvider>
+  ) : (
     <CopilotKit
       runtimeUrl="/api/copilotkit"
       useSingleEndpoint
@@ -148,5 +173,11 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
         {children}
       </AgentProvider>
     </CopilotKit>
+  );
+
+  return (
+    <AuthoritativeAgentSnapshotCacheProvider>
+      {content}
+    </AuthoritativeAgentSnapshotCacheProvider>
   );
 }

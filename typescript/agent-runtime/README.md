@@ -108,6 +108,50 @@ The internal package family still separates:
 
 `agent-runtime` no longer depends on any deprecated-workflow-branded package. Those internal/runtime-adjacent packages exist to support the public facade, not to define the normal-consumer integration story.
 
+## Internal OWS Signers
+
+The package also exports `agent-runtime/internal` for host/bootstrap code that
+needs runtime-owned signing or runtime-owned service-identity preflight without
+re-implementing OWS handling in the app.
+
+This is not the normal consumer path. The blessed builder-facing path remains
+the package root. `agent-runtime/internal` exists for advanced host wiring such
+as:
+
+- startup identity confirmation before a service becomes ready
+- runtime-owned transaction, message, or typed-data signing
+- host code that needs the runtime to resolve a configured wallet address
+
+The current internal entrypoint is `createAgentRuntimeKernel(...)`, which:
+
+- accepts declared `owsSigners`
+- builds the runtime service
+- returns both the ready `service` and a runtime-owned `signing` helper
+
+Each declared signer tells the runtime which env vars to read for:
+
+- wallet name or wallet id
+- optional passphrase
+- optional vault path
+
+The runtime then resolves addresses and signs through
+`@open-wallet-standard/core` internally. Concrete agent apps should declare the
+signer env-var names they need, then let `agent-runtime` perform wallet lookup,
+address resolution, and signing.
+
+Important current boundary rule:
+
+- `agent-runtime` does not create, import, or provision wallets for you
+- wallet material must already exist in an OWS vault
+- if a signer-specific vault path is configured, runtime uses that path
+- if no vault path is configured, OWS falls back to its default vault location
+  (currently `~/.ows`)
+
+Fail-closed behavior is intentional here. If the configured signer is missing,
+misconfigured, cannot open the vault, or cannot resolve an address, runtime
+startup/signing should fail rather than silently degrading to an invented or
+fallback wallet.
+
 ## Installed Snapshot Sync
 
 `pnpm build` syncs built `dist` artifacts into installed pnpm snapshots so downstream apps can consume local workspace package shapes without a fresh reinstall.

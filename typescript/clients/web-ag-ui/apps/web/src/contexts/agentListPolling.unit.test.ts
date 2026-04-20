@@ -91,10 +91,9 @@ describe('agentListPolling', () => {
     expect(resolveAgentListPollBusyCooldownMs('60000')).toBe(60_000);
   });
 
-  it('projects state snapshot into list update and detaches the short-lived stream', async () => {
+  it('dispatches workflow-agent poll runs through the direct command lane', async () => {
     const unsubscribe = vi.fn();
     const detachActiveRun = vi.fn().mockResolvedValue(undefined);
-    const addMessage = vi.fn();
 
     let stateSubscriber: AgentSubscriber | null = null;
 
@@ -103,8 +102,8 @@ describe('agentListPolling', () => {
         stateSubscriber = subscriber;
         return { unsubscribe };
       }),
-      addMessage,
-      runAgent: vi.fn(async () => {
+      addMessage: vi.fn(),
+      runAgent: vi.fn(async (_params?: { forwardedProps?: { command?: Record<string, unknown> } }) => {
         const snapshotState: ThreadSnapshot = {
           settings: {},
           thread: {
@@ -154,19 +153,186 @@ describe('agentListPolling', () => {
       taskMessage: 'Cycling',
     });
     expect(outcome.busy).toBe(false);
-    expect(addMessage).toHaveBeenCalledTimes(1);
-    const addMessageArg = addMessage.mock.calls[0]?.[0] as { role?: string; content?: string } | undefined;
-    expect(addMessageArg?.role).toBe('user');
-    const parsedContent =
-      typeof addMessageArg?.content === 'string'
-        ? (JSON.parse(addMessageArg.content) as { command?: string; source?: string })
-        : {};
-    expect(parsedContent).toMatchObject({
-      command: 'sync',
-      source: 'agent-list-poll',
-    });
+    expect(runtimeAgent.addMessage).not.toHaveBeenCalled();
     expect(runtimeAgent.runAgent).toHaveBeenCalledTimes(1);
+    expect(runtimeAgent.runAgent).toHaveBeenCalledWith({
+          forwardedProps: {
+            source: 'agent-list-poll',
+            command: {
+              name: 'refresh',
+            },
+          },
+    });
     expect(runtimeAgent.connectAgent).not.toHaveBeenCalled();
+    expect(detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the canonical direct command lane for Pi-backed poll runs', async () => {
+    const unsubscribe = vi.fn();
+    const detachActiveRun = vi.fn().mockResolvedValue(undefined);
+    let stateSubscriber: AgentSubscriber | null = null;
+
+    const runtimeAgent = {
+      subscribe: vi.fn((subscriber: AgentSubscriber) => {
+        stateSubscriber = subscriber;
+        return { unsubscribe };
+      }),
+      addMessage: vi.fn(),
+      runAgent: vi.fn(async (_params?: { forwardedProps?: { command?: Record<string, unknown> } }) => {
+        stateSubscriber?.onStateSnapshotEvent?.({
+          event: {
+            type: 'STATE_SNAPSHOT',
+            snapshot: {
+              settings: {},
+              thread: {
+                command: 'hire',
+                profile: {
+                  chains: ['Arbitrum'],
+                  protocols: ['Pi Runtime'],
+                  tokens: ['USDC'],
+                  pools: [],
+                  allowedPools: [],
+                },
+                activity: { telemetry: [], events: [] },
+                metrics: { iteration: 0, cyclesSinceRebalance: 0, staleCycles: 0 },
+                task: {
+                  id: 'task-pi',
+                  taskStatus: {
+                    state: 'working',
+                    message: { content: 'Polling live runtime state' },
+                  },
+                },
+                transactionHistory: [],
+              },
+            } as ThreadSnapshot,
+          },
+        } as never);
+      }),
+      detachActiveRun,
+    };
+
+    const outcome = await pollAgentListUpdateViaAgUi({
+      agentId: 'agent-portfolio-manager',
+      threadId: 'thread-pi',
+      timeoutMs: 250,
+      createRuntimeAgent: () => runtimeAgent,
+    });
+
+    expect(outcome.update).toMatchObject({
+      synced: true,
+      taskId: 'task-pi',
+      taskState: 'working',
+      taskMessage: 'Polling live runtime state',
+    });
+    expect(outcome.busy).toBe(false);
+    expect(runtimeAgent.addMessage).not.toHaveBeenCalled();
+    expect(runtimeAgent.runAgent).toHaveBeenCalledWith({
+          forwardedProps: {
+            source: 'agent-list-poll',
+            command: {
+              name: 'refresh',
+            },
+          },
+    });
+    expect(detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('seeds fresh runtime agents so delta-only poll runs can resolve through state changes', async () => {
+    const unsubscribe = vi.fn();
+    const detachActiveRun = vi.fn().mockResolvedValue(undefined);
+    const setState = vi.fn();
+    let stateSubscriber: AgentSubscriber | null = null;
+    let currentState: Record<string, unknown> = {};
+
+    const runtimeAgent = {
+      subscribe: vi.fn((subscriber: AgentSubscriber) => {
+        stateSubscriber = subscriber;
+        return { unsubscribe };
+      }),
+      setState: vi.fn((state: unknown) => {
+        currentState = structuredClone(state as Record<string, unknown>);
+        setState(state);
+      }),
+      runAgent: vi.fn(async () => {
+        currentState = {
+          ...currentState,
+          thread: {
+            ...(currentState.thread as Record<string, unknown>),
+            lifecycle: {
+              ...((currentState.thread as { lifecycle?: Record<string, unknown> }).lifecycle ?? {}),
+              phase: 'active',
+            },
+            task: {
+              ...((currentState.thread as { task?: Record<string, unknown> }).task ?? {}),
+              taskStatus: {
+                state: 'completed',
+                message: {
+                  content: 'Lending runtime projection hydrated from Shared Ember Domain Service.',
+                },
+              },
+            },
+          },
+        };
+
+        await stateSubscriber?.onStateChanged?.({
+          state: currentState as never,
+          messages: [],
+          agent: runtimeAgent as never,
+          input: {
+            threadId: 'thread-lending',
+            runId: 'run-lending',
+            tools: [],
+            context: [],
+            forwardedProps: {
+              source: 'agent-list-poll',
+              command: {
+                name: 'refresh',
+              },
+            },
+            state: currentState as never,
+            messages: [],
+          },
+        });
+      }),
+      detachActiveRun,
+    };
+
+    const outcome = await pollAgentListUpdateViaAgUi({
+      agentId: 'agent-ember-lending',
+      threadId: 'thread-lending',
+      timeoutMs: 250,
+      createRuntimeAgent: () => runtimeAgent,
+    });
+
+    expect(outcome.update).toMatchObject({
+      synced: true,
+      lifecyclePhase: 'active',
+      taskState: 'completed',
+      taskMessage: 'Lending runtime projection hydrated from Shared Ember Domain Service.',
+    });
+    expect(outcome.busy).toBe(false);
+    expect(runtimeAgent.setState).toHaveBeenCalledTimes(1);
+    expect(runtimeAgent.setState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thread: expect.objectContaining({
+          lifecycle: expect.objectContaining({
+            phase: 'prehire',
+          }),
+          task: expect.objectContaining({
+            id: 'agent-runtime:thread-lending',
+            taskStatus: expect.objectContaining({
+              state: 'working',
+              message: expect.objectContaining({
+                content: 'Ready for a live runtime conversation.',
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+    expect(setState).toHaveBeenCalledTimes(1);
     expect(detachActiveRun).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
@@ -217,7 +383,7 @@ describe('agentListPolling', () => {
             snapshot: {
               settings: {},
               thread: {
-                command: 'sync',
+                command: 'refresh',
                 profile: {
                   chains: [],
                   protocols: [],
@@ -280,7 +446,7 @@ describe('agentListPolling', () => {
             snapshot: {
               settings: {},
               thread: {
-                command: 'sync',
+                command: 'refresh',
                 profile: {
                   chains: [],
                   protocols: [],
