@@ -112,20 +112,27 @@ describe('buildCopilotRuntimeAgents', () => {
     );
   });
 
-  it('fails closed when a LangGraph runtime URL is missing', async () => {
+  it('registers only configured LangGraph runtimes while keeping AG-UI runtimes required', async () => {
     const { buildCopilotRuntimeAgents } = await import('./copilotRuntimeRegistry');
 
-    expect(() =>
-      buildCopilotRuntimeAgents({
-        LANGGRAPH_DEPLOYMENT_URL: 'http://langgraph-clmm:8124',
-        LANGGRAPH_GMX_ALLORA_DEPLOYMENT_URL: 'http://langgraph-gmx:8126',
-        LANGSMITH_API_KEY: 'test-langsmith-key',
-        PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL: 'http://portfolio-manager:3420/ag-ui',
-        EMBER_LENDING_AGENT_DEPLOYMENT_URL: 'http://ember-lending:3430/ag-ui',
-      }),
-    ).toThrow(
-      'Missing required runtime URL env var LANGGRAPH_PENDLE_DEPLOYMENT_URL for agent-pendle.',
-    );
+    const agents = buildCopilotRuntimeAgents({
+      LANGSMITH_API_KEY: 'test-langsmith-key',
+      PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL: 'http://portfolio-manager:3420/ag-ui',
+      EMBER_LENDING_AGENT_DEPLOYMENT_URL: 'http://ember-lending:3430/ag-ui',
+    });
+
+    expect(Object.keys(agents)).toEqual(['agent-portfolio-manager', 'agent-ember-lending']);
+    expect(langGraphInterruptSnapshotAgentConfigs).toEqual([]);
+    expect(agentRuntimeHttpAgentConfigs).toEqual([
+      {
+        agentId: 'agent-portfolio-manager',
+        runtimeUrl: 'http://portfolio-manager:3420/ag-ui',
+      },
+      {
+        agentId: 'agent-ember-lending',
+        runtimeUrl: 'http://ember-lending:3430/ag-ui',
+      },
+    ]);
   });
 
   it('rejects agent ids that are no longer part of the production runtime registry', async () => {

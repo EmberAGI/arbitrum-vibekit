@@ -17,6 +17,7 @@ const RPC_TIMEOUT_MS = 8_000;
 const SIGNING_RESOLUTION_ATTEMPTS = 2;
 const SIGNING_RESOLUTION_RETRY_DELAY_MS = 500;
 const MAX_UINT256 = ((1n << 256n) - 1n).toString();
+const AAVE_RESERVE_FROZEN_ERROR_SELECTOR = '0x6d305815';
 
 const HexStringSchema = z.string().regex(/^0x[0-9a-fA-F]+$/u);
 const AddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/u);
@@ -173,6 +174,35 @@ function sleep(milliseconds: number): Promise<void> {
 
 function bufferDelegatedExecutionGas(gasEstimate: bigint): bigint {
   return (gasEstimate * 3n) / 2n;
+}
+
+function extractRpcRevertData(error: unknown): `0x${string}` | null {
+  let current: unknown = error;
+
+  while (current && typeof current === 'object') {
+    const data = (current as { data?: unknown }).data;
+    if (typeof data === 'string' && /^0x[0-9a-fA-F]+$/u.test(data)) {
+      return data.toLowerCase() as `0x${string}`;
+    }
+
+    current = (current as { cause?: unknown }).cause;
+  }
+
+  return null;
+}
+
+function describeKnownProtocolRevert(error: unknown): string | null {
+  const revertData = extractRpcRevertData(error);
+  if (!revertData || revertData.length < 10) {
+    return null;
+  }
+
+  switch (revertData.slice(0, 10)) {
+    case AAVE_RESERVE_FROZEN_ERROR_SELECTOR:
+      return 'Aave rejected the requested borrow because the reserve is frozen. Create a new borrow plan for a different asset.';
+    default:
+      return null;
+  }
 }
 
 function createRpcTransport(url: string): ReturnType<typeof http> {
@@ -585,6 +615,11 @@ async function resolvePreparedUnsignedTransactionSigningInputs(input: {
         gas: bufferDelegatedExecutionGas(gasEstimate),
       };
     } catch (error) {
+      const knownProtocolRevert = describeKnownProtocolRevert(error);
+      if (knownProtocolRevert) {
+        throw new Error(knownProtocolRevert);
+      }
+
       if (attempt === SIGNING_RESOLUTION_ATTEMPTS) {
         throw error;
       }

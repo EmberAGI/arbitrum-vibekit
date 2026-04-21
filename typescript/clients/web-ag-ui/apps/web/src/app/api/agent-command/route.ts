@@ -56,6 +56,34 @@ function readTaskStatusMessage(value: unknown): string | null {
   return readString(value['content']);
 }
 
+function readThrownErrorStatus(error: unknown): number {
+  if (!isRecord(error)) {
+    return 500;
+  }
+
+  const status = error['status'];
+  return typeof status === 'number' && status >= 400 && status <= 599 ? status : 500;
+}
+
+function readThrownErrorMessage(error: unknown): string {
+  if (!isRecord(error)) {
+    return 'Agent command failed.';
+  }
+
+  const payload = isRecord(error['payload']) ? error['payload'] : null;
+  const payloadMessage = readString(payload?.['message']) ?? readString(payload?.['error']);
+  if (payloadMessage) {
+    return payloadMessage;
+  }
+
+  const message = readString(error['message']);
+  if (message && !/^HTTP \d{3}$/.test(message)) {
+    return message;
+  }
+
+  return 'Agent command failed.';
+}
+
 async function readAuthoritativeStateDocument(params: {
   threadId: string;
   events: readonly BaseEvent[];
@@ -164,90 +192,101 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const { agentId, threadId } = parsedPayload.data;
-  const agent = createAgentRuntimeHttpAgent({
-    agentId,
-    runtimeUrl: resolveAgentRuntimeUrl(process.env, agentId),
-  });
-  const forwardedCommand =
-    'command' in parsedPayload.data
-      ? {
-          name: parsedPayload.data.command.name,
-          ...(Object.prototype.hasOwnProperty.call(parsedPayload.data.command, 'input')
-            ? { input: parsedPayload.data.command.input }
-            : {}),
-        }
-      : {
-          resume: parsedPayload.data.resume,
-        };
-  const runEvents = await lastValueFrom(
-    agent
-      .run({
-        threadId,
-        runId: randomUUID(),
-        messages: [],
-        state: {},
-        tools: [],
-        context: [],
-        forwardedProps: {
-          command: forwardedCommand,
-        },
-      })
-      .pipe(verifyEvents(false), toArray()),
-  );
 
-  const runState = await readAuthoritativeStateDocument({
-    threadId,
-    events: runEvents,
-  });
-  let snapshot = runState.state;
-
-  if (!snapshot && runState.sawDelta && !runState.sawSnapshot) {
-    snapshot = await readFirstConnectSnapshot({
-      agent,
-      threadId,
+  try {
+    const agent = createAgentRuntimeHttpAgent({
+      agentId,
+      runtimeUrl: resolveAgentRuntimeUrl(process.env, agentId),
     });
-  }
+    const forwardedCommand =
+      'command' in parsedPayload.data
+        ? {
+            name: parsedPayload.data.command.name,
+            ...(Object.prototype.hasOwnProperty.call(parsedPayload.data.command, 'input')
+              ? { input: parsedPayload.data.command.input }
+              : {}),
+          }
+        : {
+            resume: parsedPayload.data.resume,
+          };
+    const runEvents = await lastValueFrom(
+      agent
+        .run({
+          threadId,
+          runId: randomUUID(),
+          messages: [],
+          state: {},
+          tools: [],
+          context: [],
+          forwardedProps: {
+            command: forwardedCommand,
+          },
+        })
+        .pipe(verifyEvents(false), toArray()),
+    );
 
-  const thread = isRecord(snapshot?.['thread']) ? snapshot['thread'] : null;
-  const projected = isRecord(snapshot?.['projected']) ? snapshot['projected'] : null;
-  const task = isRecord(thread?.['task']) ? thread['task'] : null;
-  const taskStatus = isRecord(task?.['taskStatus']) ? task['taskStatus'] : null;
-  const execution = isRecord(thread?.['execution']) ? thread['execution'] : null;
-  const taskState = readString(taskStatus?.['state']);
-  const statusMessage = readTaskStatusMessage(taskStatus?.['message']);
-  const executionStatus = readString(execution?.['status']);
-  const executionStatusMessage = readString(execution?.['statusMessage']);
-  const executionError = readString(thread?.['executionError']);
-  const haltReason = readString(thread?.['haltReason']);
+    const runState = await readAuthoritativeStateDocument({
+      threadId,
+      events: runEvents,
+    });
+    let snapshot = runState.state;
 
-  if (
-    taskState === 'failed' ||
-    taskState === 'canceled' ||
-    executionStatus === 'failed' ||
-    executionStatus === 'canceled' ||
-    executionError ||
-    haltReason
-  ) {
+    if (!snapshot && runState.sawDelta && !runState.sawSnapshot) {
+      snapshot = await readFirstConnectSnapshot({
+        agent,
+        threadId,
+      });
+    }
+
+    const thread = isRecord(snapshot?.['thread']) ? snapshot['thread'] : null;
+    const projected = isRecord(snapshot?.['projected']) ? snapshot['projected'] : null;
+    const task = isRecord(thread?.['task']) ? thread['task'] : null;
+    const taskStatus = isRecord(task?.['taskStatus']) ? task['taskStatus'] : null;
+    const execution = isRecord(thread?.['execution']) ? thread['execution'] : null;
+    const taskState = readString(taskStatus?.['state']);
+    const statusMessage = readTaskStatusMessage(taskStatus?.['message']);
+    const executionStatus = readString(execution?.['status']);
+    const executionStatusMessage = readString(execution?.['statusMessage']);
+    const executionError = readString(thread?.['executionError']);
+    const haltReason = readString(thread?.['haltReason']);
+
+    if (
+      taskState === 'failed' ||
+      taskState === 'canceled' ||
+      executionStatus === 'failed' ||
+      executionStatus === 'canceled' ||
+      executionError ||
+      haltReason
+    ) {
+      return Response.json(
+        {
+          ok: false,
+          error:
+            executionError ??
+            haltReason ??
+            executionStatusMessage ??
+            statusMessage ??
+            ('command' in parsedPayload.data
+              ? `Agent command '${parsedPayload.data.command.name}' failed.`
+              : 'Agent resume failed.'),
+        },
+        { status: 409 },
+      );
+    }
+
+    return Response.json({
+      ok: true,
+      taskState,
+      statusMessage,
+      domainProjection: projected,
+    });
+  } catch (error) {
     return Response.json(
       {
         ok: false,
-        error:
-          executionError ??
-          haltReason ??
-          executionStatusMessage ??
-          statusMessage ??
-          ('command' in parsedPayload.data
-            ? `Agent command '${parsedPayload.data.command.name}' failed.`
-            : 'Agent resume failed.'),
+        error: readThrownErrorMessage(error),
       },
-      { status: 409 },
+      { status: readThrownErrorStatus(error) },
     );
   }
-
-  return Response.json({
-    ok: true,
-    taskState,
-    statusMessage,
-    domainProjection: projected,
-  });
 }

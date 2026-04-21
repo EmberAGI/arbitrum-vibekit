@@ -19,6 +19,11 @@ function requireRuntimeUrl(env: RuntimeEnv, envVarName: string, agentId: string)
   throw new Error(`Missing required runtime URL env var ${envVarName} for ${agentId}.`);
 }
 
+function resolveOptionalRuntimeUrl(env: RuntimeEnv, envVarName: string): string | null {
+  const runtimeUrl = env[envVarName]?.trim();
+  return runtimeUrl ? runtimeUrl : null;
+}
+
 export function resolveAgentRuntimeUrl(env: RuntimeEnv, agentId: string): string {
   switch (agentId) {
     case PORTFOLIO_MANAGER_AGENT_NAME:
@@ -41,39 +46,43 @@ export function resolveAgentRuntimeUrl(env: RuntimeEnv, agentId: string): string
 export function buildCopilotRuntimeAgents(env: RuntimeEnv) {
   const portfolioManagerRuntimeUrl = resolveAgentRuntimeUrl(env, PORTFOLIO_MANAGER_AGENT_NAME);
   const emberLendingRuntimeUrl = resolveAgentRuntimeUrl(env, EMBER_LENDING_AGENT_NAME);
-  const agents = {
-    [CLMM_AGENT_NAME]: new LangGraphInterruptSnapshotAgent({
-      deploymentUrl: requireRuntimeUrl(env, 'LANGGRAPH_DEPLOYMENT_URL', CLMM_AGENT_NAME),
-      graphId: CLMM_AGENT_NAME,
-      langsmithApiKey: env.LANGSMITH_API_KEY || '',
-    }),
-    [PENDLE_AGENT_NAME]: new LangGraphInterruptSnapshotAgent({
-      deploymentUrl: requireRuntimeUrl(
-        env,
-        'LANGGRAPH_PENDLE_DEPLOYMENT_URL',
-        PENDLE_AGENT_NAME,
-      ),
-      graphId: PENDLE_AGENT_NAME,
-      langsmithApiKey: env.LANGSMITH_API_KEY || '',
-    }),
-    [GMX_ALLORA_AGENT_NAME]: new LangGraphInterruptSnapshotAgent({
-      deploymentUrl: requireRuntimeUrl(
-        env,
-        'LANGGRAPH_GMX_ALLORA_DEPLOYMENT_URL',
-        GMX_ALLORA_AGENT_NAME,
-      ),
-      graphId: GMX_ALLORA_AGENT_NAME,
-      langsmithApiKey: env.LANGSMITH_API_KEY || '',
-    }),
-    [PORTFOLIO_MANAGER_AGENT_NAME]: createAgentRuntimeHttpAgent({
-      agentId: PORTFOLIO_MANAGER_AGENT_NAME,
-      runtimeUrl: portfolioManagerRuntimeUrl,
-    }),
-    [EMBER_LENDING_AGENT_NAME]: createAgentRuntimeHttpAgent({
-      agentId: EMBER_LENDING_AGENT_NAME,
-      runtimeUrl: emberLendingRuntimeUrl,
-    }),
-  };
+  const agents: Record<string, unknown> = {};
+  const langsmithApiKey = env.LANGSMITH_API_KEY || '';
+  const optionalLangGraphAgents = [
+    {
+      agentId: CLMM_AGENT_NAME,
+      envVarName: 'LANGGRAPH_DEPLOYMENT_URL',
+    },
+    {
+      agentId: PENDLE_AGENT_NAME,
+      envVarName: 'LANGGRAPH_PENDLE_DEPLOYMENT_URL',
+    },
+    {
+      agentId: GMX_ALLORA_AGENT_NAME,
+      envVarName: 'LANGGRAPH_GMX_ALLORA_DEPLOYMENT_URL',
+    },
+  ] as const;
+
+  for (const { agentId, envVarName } of optionalLangGraphAgents) {
+    const deploymentUrl = resolveOptionalRuntimeUrl(env, envVarName);
+    if (!deploymentUrl) {
+      continue;
+    }
+    agents[agentId] = new LangGraphInterruptSnapshotAgent({
+      deploymentUrl,
+      graphId: agentId,
+      langsmithApiKey,
+    });
+  }
+
+  agents[PORTFOLIO_MANAGER_AGENT_NAME] = createAgentRuntimeHttpAgent({
+    agentId: PORTFOLIO_MANAGER_AGENT_NAME,
+    runtimeUrl: portfolioManagerRuntimeUrl,
+  });
+  agents[EMBER_LENDING_AGENT_NAME] = createAgentRuntimeHttpAgent({
+    agentId: EMBER_LENDING_AGENT_NAME,
+    runtimeUrl: emberLendingRuntimeUrl,
+  });
 
   return agents;
 }
