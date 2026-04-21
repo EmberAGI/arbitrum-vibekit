@@ -344,7 +344,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
 
     expect(html).toContain('Managed lending lane');
     expect(html).toContain('Ember Lending');
-    expect(html).toContain('/hire-agents/agent-ember-lending');
+    expect(html).not.toContain('/hire-agents/agent-ember-lending');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('Send message');
     expect(html).not.toContain('Settings and policies');
@@ -433,6 +433,39 @@ describe('AgentDetailPage managed-agent affordances', () => {
 
     expect(html).not.toContain('Managed lending lane');
     expect(html).not.toContain('Save managed mandate');
+    expect(html).not.toContain('/hire-agents/agent-ember-lending');
+  });
+
+  it('does not surface a direct detail route for the hidden ember-lending execution worker from the PM page', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: ['Arbitrum'],
+          protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+          tokens: ['USDC'],
+        },
+        metrics: {},
+        isHired: true,
+        isHiring: false,
+        hasLoadedView: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+        lifecycleState: {
+          phase: 'active',
+        } as never,
+        domainProjection: createManagedMandateEditorProjection(),
+      }),
+    );
+
+    expect(html).toContain('Managed lending lane');
     expect(html).not.toContain('/hire-agents/agent-ember-lending');
   });
 });

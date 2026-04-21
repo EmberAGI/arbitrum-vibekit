@@ -6,6 +6,10 @@ import {
   type PortfolioManagerLifecycleState,
 } from './sharedEmberAdapter.js';
 import {
+  createPortfolioManagerAdhocExecutionDispatcher,
+  resolvePortfolioManagerHiddenExecutorRuntimeUrl,
+} from './adhocExecutionDispatcher.js';
+import {
   createPortfolioManagerSharedEmberHttpHost,
   resolvePortfolioManagerSharedEmberBaseUrl,
 } from './sharedEmberHttpHost.js';
@@ -24,6 +28,7 @@ export type PortfolioManagerGatewayEnv = NodeJS.ProcessEnv & {
   PORTFOLIO_MANAGER_ENABLE_DIAGNOSTIC_TOOLS?: string;
   DATABASE_URL?: string;
   SHARED_EMBER_BASE_URL?: string;
+  EMBER_LENDING_AGENT_DEPLOYMENT_URL?: string;
   PORTFOLIO_MANAGER_OWS_WALLET_NAME?: string;
   PORTFOLIO_MANAGER_OWS_PASSPHRASE?: string;
   PORTFOLIO_MANAGER_OWS_VAULT_PATH?: string;
@@ -40,6 +45,7 @@ type PortfolioManagerGatewayModel = PortfolioManagerAgentConfig['model'];
 
 export type PortfolioManagerGatewayDependencies = {
   protocolHost: ReturnType<typeof createPortfolioManagerSharedEmberHttpHost> | null;
+  adhocExecutionDispatcher: ReturnType<typeof createPortfolioManagerAdhocExecutionDispatcher>;
 };
 
 type CreatePortfolioManagerAgentConfigOptions = {
@@ -88,7 +94,7 @@ export function createPortfolioManagerAgentConfig(
   const apiKey = requireEnvValue(env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY');
   const modelId = env.PORTFOLIO_MANAGER_MODEL?.trim() || DEFAULT_PORTFOLIO_MANAGER_MODEL;
   const enableDiagnosticTools = env.PORTFOLIO_MANAGER_ENABLE_DIAGNOSTIC_TOOLS?.trim() === '1';
-  const { protocolHost } = resolvePortfolioManagerGatewayDependencies(env);
+  const { protocolHost, adhocExecutionDispatcher } = resolvePortfolioManagerGatewayDependencies(env);
 
   return {
     model: createOpenRouterModel(modelId),
@@ -106,6 +112,7 @@ export function createPortfolioManagerAgentConfig(
       ...(enableDiagnosticTools ? [createPortfolioManagerDiagnosticTool()] : []),
     ],
     domain: createPortfolioManagerDomain({
+      adhocExecutionDispatcher,
       ...(protocolHost
         ? {
             protocolHost,
@@ -145,6 +152,7 @@ export function resolvePortfolioManagerGatewayDependencies(
   env: PortfolioManagerGatewayEnv = process.env,
 ): PortfolioManagerGatewayDependencies {
   const sharedEmberBaseUrl = resolvePortfolioManagerSharedEmberBaseUrl(env);
+  const hiddenExecutorRuntimeUrl = resolvePortfolioManagerHiddenExecutorRuntimeUrl(env);
 
   return {
     protocolHost: sharedEmberBaseUrl
@@ -152,5 +160,8 @@ export function resolvePortfolioManagerGatewayDependencies(
           baseUrl: sharedEmberBaseUrl,
         })
       : null,
+    adhocExecutionDispatcher: createPortfolioManagerAdhocExecutionDispatcher({
+      runtimeUrl: hiddenExecutorRuntimeUrl,
+    }),
   };
 }

@@ -167,14 +167,13 @@ describe('HireAgentsRoute integration', () => {
     expect(capturedProps).not.toBeNull();
     const props = capturedProps as HireAgentsRoutePropsCapture;
 
-    expect(props.agents).toHaveLength(5);
-    expect(props.featuredAgents).toHaveLength(5);
+    expect(props.agents).toHaveLength(4);
+    expect(props.featuredAgents).toHaveLength(4);
 
     const clmm = props.agents.find((agent) => agent.id === 'agent-clmm');
     const pendle = props.agents.find((agent) => agent.id === 'agent-pendle');
     const piExample = props.agents.find((agent) => agent.id === 'agent-pi-example');
     const portfolioManager = props.agents.find((agent) => agent.id === 'agent-portfolio-manager');
-    const emberLending = props.agents.find((agent) => agent.id === 'agent-ember-lending');
 
     expect(clmm?.chains).toEqual(['Arbitrum']);
     expect(clmm?.tokens).toEqual(['USDC', 'WETH', 'WBTC']);
@@ -205,30 +204,16 @@ describe('HireAgentsRoute integration', () => {
     expect(portfolioManager?.pointsTrend).toBe('up');
     expect(portfolioManager?.trendMultiplier).toBe('5x');
 
-    expect(emberLending?.chains).toEqual(['Arbitrum']);
-    expect(emberLending?.name).toBe('Ember Lending');
-    expect(emberLending?.protocols).toEqual(['Aave']);
-    expect(emberLending?.tokens).toEqual(['USDC']);
-    expect(emberLending?.imageUrl).toBe('/ember-lending-avatar.svg');
-    expect(emberLending?.avatarBg).toBe('#9896FF');
-    expect(emberLending?.surfaceTag).toBe('Swarm');
-    expect(emberLending?.status).toBe('hired');
-    expect(emberLending?.isActive).toBe(true);
-    expect(emberLending?.pointsTrend).toBe('up');
-    expect(emberLending?.trendMultiplier).toBe('2x');
     expect(clmm?.surfaceTag).toBe('Workflow');
 
-    expect(props.featuredAgents.map((agent) => agent.id).slice(0, 3)).toEqual([
+    expect(props.featuredAgents.map((agent) => agent.id).slice(0, 2)).toEqual([
       'agent-portfolio-manager',
-      'agent-ember-lending',
       'agent-clmm',
     ]);
     expect(props.featuredAgents.find((agent) => agent.id === 'agent-portfolio-manager')?.status).toBe(
       'hired',
     );
-    expect(props.featuredAgents.find((agent) => agent.id === 'agent-ember-lending')?.status).toBe(
-      'hired',
-    );
+    expect(props.featuredAgents.find((agent) => agent.id === 'agent-ember-lending')).toBeUndefined();
   });
 
   it('routes hire/view handlers to the correct detail URL', () => {
@@ -251,5 +236,13 @@ describe('HireAgentsRoute integration', () => {
 
     expect(portfolioManager).toBeDefined();
     expect(pendle?.description).toContain('highest-yielding Pendle YT markets');
+  });
+
+  it('omits the hidden ember-lending execution worker from the visible hire-agents route payload', () => {
+    renderToStaticMarkup(React.createElement(HireAgentsRoute));
+
+    const props = capturedProps as HireAgentsRoutePropsCapture;
+    expect(props.agents.find((agent) => agent.id === 'agent-ember-lending')).toBeUndefined();
+    expect(props.featuredAgents.find((agent) => agent.id === 'agent-ember-lending')).toBeUndefined();
   });
 });

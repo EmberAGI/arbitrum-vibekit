@@ -12,6 +12,10 @@ import {
   resolvePortfolioManagerAccountingAgentId,
   readPortfolioManagerOnboardingState,
 } from './sharedEmberOnboardingState.js';
+import type {
+  PortfolioManagerAdhocExecutionDispatcherInput,
+  PortfolioManagerAdhocExecutionRequest,
+} from './adhocExecutionDispatcher.js';
 
 export type PortfolioManagerSharedEmberProtocolHost = {
   handleJsonRpc: (input: unknown) => Promise<unknown>;
@@ -41,6 +45,17 @@ type CreatePortfolioManagerDomainOptions = {
   controllerSignerAddress?: `0x${string}`;
   runtimeSigning?: AgentRuntimeSigningService;
   runtimeSignerRef?: string;
+  adhocExecutionDispatcher?: (
+    input: PortfolioManagerAdhocExecutionDispatcherInput,
+  ) => Promise<{
+    status: {
+      executionStatus: 'completed' | 'failed' | 'canceled' | 'interrupted' | 'working';
+      statusMessage: string;
+    };
+    artifacts?: Array<{
+      data: Record<string, unknown>;
+    }>;
+  }>;
 };
 
 type SharedEmberRevisionResponse = {
@@ -526,6 +541,7 @@ async function readSharedEmberAgentServiceIdentity(input: {
 }): Promise<{
   revision: number;
   identity: AgentServiceIdentity | null;
+  hadIdentityRecord: boolean;
 }> {
   const response = await input.protocolHost.handleJsonRpc({
     jsonrpc: '2.0',
@@ -545,6 +561,7 @@ async function readSharedEmberAgentServiceIdentity(input: {
       input.agentId,
       input.role,
     ),
+    hadIdentityRecord: result?.['agent_service_identity'] !== null,
   };
 }
 
@@ -698,6 +715,12 @@ type PortfolioManagerSetupInput = PortfolioManagerApprovedSetup & {
 type ManagedMandateUpdateInput = {
   targetAgentId: typeof FIRST_MANAGED_AGENT_TYPE;
   managedMandate: ManagedMandate;
+};
+
+type AdhocExecutionDispatchInput = {
+  instruction: string;
+  request: PortfolioManagerAdhocExecutionRequest;
+  reservationConflictHandling: string | null;
 };
 
 type PortfolioManagerUnsignedDelegation = {
@@ -858,6 +881,38 @@ function readManagedMandate(input: unknown): ManagedMandate | null {
   };
 }
 
+function readSemanticQuantityInput(
+  value: unknown,
+): PortfolioManagerAdhocExecutionRequest['quantity'] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const kind = readString(value['kind']);
+  if (kind === 'exact') {
+    const exactValue = readString(value['value']);
+    return exactValue ? { kind, value: exactValue } : null;
+  }
+
+  if (kind === 'percent') {
+    const percentValue = readFiniteNumber(value['value']);
+    return percentValue === null ? null : { kind, value: percentValue };
+  }
+
+  return null;
+}
+
+function isAdhocExecutionControlPath(
+  value: string,
+): value is PortfolioManagerAdhocExecutionRequest['control_path'] {
+  return (
+    value === 'lending.supply' ||
+    value === 'lending.withdraw' ||
+    value === 'lending.borrow' ||
+    value === 'lending.repay'
+  );
+}
+
 function parsePortfolioMandate(input: unknown): PortfolioManagerPortfolioMandate | null {
   if (typeof input !== 'object' || input === null) {
     return null;
@@ -943,6 +998,51 @@ function parseManagedMandateUpdateInput(input: unknown): ManagedMandateUpdateInp
   return {
     targetAgentId: FIRST_MANAGED_AGENT_TYPE,
     managedMandate,
+  };
+}
+
+function parseAdhocExecutionDispatchInput(input: unknown): AdhocExecutionDispatchInput | null {
+  if (!isRecord(input)) {
+    return null;
+  }
+
+  const requestSource = isRecord(input['request']) ? input['request'] : input;
+  const instruction = readString(input['instruction']);
+  const controlPath = readString(requestSource['control_path']);
+  const asset = readString(requestSource['asset']);
+  const protocolSystem = readString(requestSource['protocol_system']);
+  const network = readString(requestSource['network']);
+  const quantity = readSemanticQuantityInput(requestSource['quantity']);
+  const reservationConflictHandling =
+    readString(input['reservationConflictHandling']) ??
+    readString(input['reservation_conflict_handling']) ??
+    (isRecord(input['request'])
+      ? readString(requestSource['reservationConflictHandling']) ??
+        readString(requestSource['reservation_conflict_handling'])
+      : null);
+
+  if (
+    instruction === null ||
+    controlPath === null ||
+    !isAdhocExecutionControlPath(controlPath) ||
+    asset === null ||
+    protocolSystem === null ||
+    network === null ||
+    quantity === null
+  ) {
+    return null;
+  }
+
+  return {
+    instruction,
+    request: {
+      control_path: controlPath,
+      asset,
+      protocol_system: protocolSystem,
+      network,
+      quantity,
+    },
+    reservationConflictHandling,
   };
 }
 
@@ -1502,6 +1602,11 @@ export function createPortfolioManagerDomain(
             'Read committed redelegation work from the Shared Ember outbox for the portfolio-manager orchestrator.',
         },
         {
+          name: 'dispatch_adhoc_execution',
+          description:
+            'Dispatch an adhoc lending execution request through the hidden PM-owned execution worker.',
+        },
+        {
           name: 'complete_rooted_bootstrap_from_user_signing',
           description:
             'Complete the rooted bootstrap in one Shared Ember command using onboarding data and the signing handoff.',
@@ -1894,7 +1999,10 @@ export function createPortfolioManagerDomain(
             hasIdentity: managedSubagentIdentity.identity !== null,
             walletAddress: managedSubagentIdentity.identity?.wallet_address ?? null,
           });
-          if (!managedSubagentIdentity.identity) {
+          if (
+            managedSubagentIdentity.identity === null &&
+            managedSubagentIdentity.hadIdentityRecord
+          ) {
             return {
               state: currentState,
               outputs: {
@@ -1995,42 +2103,6 @@ export function createPortfolioManagerDomain(
             response.result?.revision ??
             null;
 
-          if (!managedSubagentExecutionContext.walletAddress) {
-            const nextState: PortfolioManagerLifecycleState = {
-              phase: 'onboarding',
-              lastPortfolioState: currentState.lastPortfolioState,
-              lastSharedEmberRevision: nextRevision,
-              lastRootDelegation: response.result?.root_delegation ?? currentState.lastRootDelegation,
-              lastOnboardingBootstrap: onboarding,
-              lastRootedWalletContextId: rootedWalletContextId,
-              activeWalletAddress: walletAddress,
-              pendingOnboardingWalletAddress: walletAddress,
-              pendingApprovedSetup: approvedSetup,
-            };
-
-            return {
-              state: nextState,
-              outputs: {
-                status: {
-                  executionStatus: 'failed',
-                  statusMessage:
-                    'Portfolio manager onboarding is blocked because ember-lending did not expose a non-null subagent wallet in Shared Ember execution context after rooted bootstrap.',
-                },
-                artifacts: [
-                  {
-                    data: {
-                      type: 'shared-ember-rooted-bootstrap',
-                      revision: nextState.lastSharedEmberRevision,
-                      committedEventIds: response.result?.committed_event_ids ?? [],
-                      rootedWalletContextId: nextState.lastRootedWalletContextId,
-                      rootDelegation: nextState.lastRootDelegation,
-                    },
-                  },
-                ],
-              },
-            };
-          }
-
           if (!onboardingState.proofs.agent_active) {
             const nextState: PortfolioManagerLifecycleState = {
               phase: 'onboarding',
@@ -2109,6 +2181,66 @@ export function createPortfolioManagerDomain(
                   },
                 },
               ],
+            },
+          };
+        }
+        case 'dispatch_adhoc_execution': {
+          const dispatchInput = parseAdhocExecutionDispatchInput(operation.input);
+          if (!dispatchInput) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Adhoc execution dispatch requires instruction, control_path, asset, protocol_system, network, and quantity.',
+                },
+              },
+            };
+          }
+
+          if (currentState.phase !== 'active') {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio manager must be active before adhoc execution can be dispatched.',
+                },
+              },
+            };
+          }
+
+          if (!options.adhocExecutionDispatcher) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Portfolio manager hidden execution worker is not configured for adhoc dispatch.',
+                },
+              },
+            };
+          }
+
+          const dispatchResult = await options.adhocExecutionDispatcher({
+            pmThreadId: threadId,
+            instruction: dispatchInput.instruction,
+            request: dispatchInput.request,
+            reservationConflictHandling: dispatchInput.reservationConflictHandling,
+          });
+
+          return {
+            state: currentState,
+            outputs: {
+              status: dispatchResult.status,
+              ...(dispatchResult.artifacts
+                ? {
+                    artifacts: dispatchResult.artifacts,
+                  }
+                : {}),
             },
           };
         }

@@ -34,7 +34,6 @@ export function resolveAgentRuntimeUrl(env: RuntimeEnv, agentId: string): string
 export function buildCopilotRuntimeAgents(env: RuntimeEnv) {
   const piAgentRuntimeUrl = resolveAgentRuntimeUrl(env, PI_EXAMPLE_AGENT_NAME);
   const portfolioManagerRuntimeUrl = resolveAgentRuntimeUrl(env, PORTFOLIO_MANAGER_AGENT_NAME);
-  const emberLendingRuntimeUrl = resolveAgentRuntimeUrl(env, EMBER_LENDING_AGENT_NAME);
   const agents = {
     [CLMM_AGENT_NAME]: new LangGraphInterruptSnapshotAgent({
       deploymentUrl: env.LANGGRAPH_DEPLOYMENT_URL || 'http://localhost:8124',
@@ -63,10 +62,6 @@ export function buildCopilotRuntimeAgents(env: RuntimeEnv) {
     [PORTFOLIO_MANAGER_AGENT_NAME]: createAgentRuntimeHttpAgent({
       agentId: PORTFOLIO_MANAGER_AGENT_NAME,
       runtimeUrl: portfolioManagerRuntimeUrl,
-    }),
-    [EMBER_LENDING_AGENT_NAME]: createAgentRuntimeHttpAgent({
-      agentId: EMBER_LENDING_AGENT_NAME,
-      runtimeUrl: emberLendingRuntimeUrl,
     }),
   };
 

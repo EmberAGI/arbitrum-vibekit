@@ -137,6 +137,9 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     isFeatured: true,
     featuredRank: 1,
   },
+};
+
+const INTERNAL_AGENT_CONFIGS: Record<string, AgentConfig> = {
   'agent-ember-lending': {
     id: 'agent-ember-lending',
     name: 'Ember Lending',
@@ -154,14 +157,16 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     chains: ['Arbitrum'],
     protocols: ['Aave'],
     tokens: ['USDC'],
-    isFeatured: true,
-    featuredRank: 2,
   },
 };
 
 export function getAgentConfig(agentId: string): AgentConfig {
   if (AGENT_REGISTRY[agentId]) {
     return AGENT_REGISTRY[agentId];
+  }
+
+  if (INTERNAL_AGENT_CONFIGS[agentId]) {
+    return INTERNAL_AGENT_CONFIGS[agentId];
   }
 
   return {
