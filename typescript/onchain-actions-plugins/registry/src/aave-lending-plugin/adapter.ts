@@ -280,7 +280,9 @@ export class AAVEAdapter {
       variableBorrowsUSD,
       totalBorrows,
       totalBorrowsUSD,
-    } of userReservesData.filter((ur) => ur.underlyingBalanceUSD !== '0')) {
+    } of userReservesData.filter(
+      (ur) => ur.underlyingBalanceUSD !== '0' || ur.totalBorrowsUSD !== '0',
+    )) {
       userReservesFormatted.push({
         tokenUid: {
           address: reserve.underlyingAsset,
