@@ -57,6 +57,7 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://postgres:postgres@pi-runtime-postgres:5432/pi_runtime
       SHARED_EMBER_BASE_URL: http://shared-ember:4010
+      EMBER_LENDING_AGENT_DEPLOYMENT_URL: http://agent-ember-lending:3430/ag-ui
     depends_on:
       pi-runtime-postgres:
         condition: service_healthy

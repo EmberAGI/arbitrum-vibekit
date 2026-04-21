@@ -50,7 +50,7 @@ import type {
   ThreadLifecycle,
   ManagedMandateInput,
 } from '../types/agent';
-import { getAgentConfig } from '../config/agents';
+import { getAgentConfig, isRegisteredAgentId } from '../config/agents';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
 import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
@@ -592,7 +592,7 @@ function readManagedMandateEditorView(
 
 type PortfolioManagerManagedAgentView = {
   title: string;
-  detailHref: string;
+  detailHref: string | null;
   laneLabel: string | null;
   managedMandate: Record<string, unknown> | null;
   reservationSummary: string | null;
@@ -608,7 +608,9 @@ function buildPortfolioManagerManagedAgentView(
 
   return {
     title: managedMandateEditorView.title,
-    detailHref: `/hire-agents/${managedMandateEditorView.targetAgentRouteId}`,
+    detailHref: isRegisteredAgentId(managedMandateEditorView.targetAgentRouteId)
+      ? `/hire-agents/${managedMandateEditorView.targetAgentRouteId}`
+      : null,
     laneLabel: managedMandateEditorView.laneLabel,
     managedMandate: managedMandateEditorView.managedMandate,
     reservationSummary: managedMandateEditorView.reservationSummary,
@@ -1510,12 +1512,14 @@ export function AgentDetailPage({
                   </div>
                 </div>
               </button>
-              <a
-                href={visiblePortfolioManagerManagedAgentView.detailHref}
-                className="shrink-0 text-xs font-medium text-[#fd6731] hover:text-[#ff8a5c] transition-colors"
-              >
-                View lending agent
-              </a>
+              {visiblePortfolioManagerManagedAgentView.detailHref ? (
+                <a
+                  href={visiblePortfolioManagerManagedAgentView.detailHref}
+                  className="shrink-0 text-xs font-medium text-[#fd6731] hover:text-[#ff8a5c] transition-colors"
+                >
+                  View lending agent
+                </a>
+              ) : null}
             </div>
             {isManagedLaneExpanded ? (
               <div id={managedLaneContentId}>

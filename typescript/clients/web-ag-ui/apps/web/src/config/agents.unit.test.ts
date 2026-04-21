@@ -46,12 +46,11 @@ describe('agents config', () => {
     expect(isRegisteredAgentId('agent-clmm')).toBe(true);
     expect(isRegisteredAgentId('agent-pi-example')).toBe(true);
     expect(isRegisteredAgentId('agent-portfolio-manager')).toBe(true);
-    expect(isRegisteredAgentId('agent-ember-lending')).toBe(true);
+    expect(isRegisteredAgentId('agent-ember-lending')).toBe(false);
 
     const featured = getFeaturedAgents();
     expect(featured.map((agent) => agent.id)).toEqual([
       'agent-portfolio-manager',
-      'agent-ember-lending',
       'agent-clmm',
       'agent-pendle',
       'agent-gmx-allora',
@@ -79,6 +78,12 @@ describe('agents config', () => {
     expect(allAgentIds).toContain('agent-pi-example');
     expect(visibleAgentIds).not.toContain('agent-pi-example');
     expect(visibleAgentIds).toContain('agent-portfolio-manager');
-    expect(visibleAgentIds).toContain('agent-ember-lending');
+    expect(visibleAgentIds).not.toContain('agent-ember-lending');
+  });
+
+  it('keeps the hidden managed execution worker out of user-facing visible lists', () => {
+    const visibleAgentIds = getVisibleAgents().map((agent) => agent.id);
+
+    expect(visibleAgentIds).not.toContain('agent-ember-lending');
   });
 });

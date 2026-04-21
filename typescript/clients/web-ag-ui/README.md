@@ -20,9 +20,10 @@ It includes:
 - When a concrete agent app consumes a runtime-agnostic upstream domain service, the app owns the thin adapter between `agent-runtime` domain hooks and that external service protocol.
 - Neither `apps/web` nor `agent-runtime` should absorb service-specific translation logic for downstream domain integrations such as the Shared Ember Domain Service.
 - Agent-family lifecycle behavior belongs in pluggable domain modules above the Pi core runtime.
-- The first concrete managed downstream path is `agent-portfolio-manager` -> `agent-ember-lending` -> Shared Ember Domain Service:
-  - Portfolio Manager owns managed onboarding, mandate approval, reservation creation, activation, and deactivation.
-  - Ember Lending owns the bounded managed-subagent surface for portfolio-state reads, candidate-plan materialization, transaction execution, and escalation requests.
+- The first concrete managed downstream path is `agent-portfolio-manager` -> hidden execution worker (`agent-ember-lending`) -> Shared Ember Domain Service:
+  - Portfolio Manager owns the user-visible managed onboarding, mandate approval, activation, deactivation, and adhoc execution control plane.
+  - `agent-ember-lending` remains a separate runtime, but it is a PM-owned hidden executor rather than a model-visible web/CopilotKit agent.
+  - The hidden execution worker still owns the bounded managed-subagent surface for portfolio-state reads, candidate-plan materialization, transaction execution, and escalation requests.
 
 ## Workspace Notes
 

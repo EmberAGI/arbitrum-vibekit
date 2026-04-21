@@ -54,3 +54,8 @@ export {
   type OnboardingStepState,
   type OnboardingStepStatus,
 } from './onboardingContract.js';
+export {
+  ensureAgentServiceIdentity,
+  type AgentServiceIdentity,
+  type AgentServiceIdentityRole,
+} from './serviceIdentityPreflight.js';

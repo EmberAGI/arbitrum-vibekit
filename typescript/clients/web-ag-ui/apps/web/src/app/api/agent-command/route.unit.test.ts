@@ -48,6 +48,24 @@ describe('POST /api/agent-command', () => {
     });
   });
 
+  it('rejects direct command payloads targeting the hidden ember-lending worker', async () => {
+    const response = await POST(
+      buildRequest({
+        agentId: 'agent-ember-lending',
+        threadId: 'thread-1',
+        command: {
+          name: 'request_execution',
+        },
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Invalid agent command payload.',
+    });
+  });
+
   it('returns the latest thread domain projection after a successful one-off command run', async () => {
     runMock.mockReturnValue(
       from([
@@ -438,10 +456,10 @@ describe('POST /api/agent-command', () => {
     const result = await Promise.race([
       POST(
         buildRequest({
-          agentId: 'agent-ember-lending',
+          agentId: 'agent-portfolio-manager',
           threadId: 'thread-1',
           command: {
-            name: 'hydrate_runtime_projection',
+            name: 'refresh_portfolio_state',
           },
         }),
       ).then(async (response) => ({

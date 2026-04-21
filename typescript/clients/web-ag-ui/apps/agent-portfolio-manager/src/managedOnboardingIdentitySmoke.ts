@@ -207,6 +207,12 @@ export async function runManagedOnboardingIdentitySmoke() {
     if (!signingResult?.state || !('phase' in signingResult.state) || signingResult.state.phase !== 'active') {
       throw new Error('Portfolio-manager rooted bootstrap did not promote the thread to active.');
     }
+    const rootedWalletContextId = signingResult.state.lastRootedWalletContextId;
+    if (typeof rootedWalletContextId !== 'string' || rootedWalletContextId.length === 0) {
+      throw new Error(
+        'Portfolio-manager rooted bootstrap did not return a rooted wallet context id.',
+      );
+    }
 
     const executionContext = await postJsonRpc<{
       revision?: number;
@@ -218,6 +224,7 @@ export async function runManagedOnboardingIdentitySmoke() {
       method: 'subagent.readExecutionContext.v1',
       params: {
         agent_id: 'ember-lending',
+        rooted_wallet_context_id: rootedWalletContextId,
       },
     });
     const hydratedSubagentWallet =

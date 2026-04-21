@@ -54,6 +54,9 @@ describe('createPortfolioManagerAgentConfig', () => {
           name: 'refresh_redelegation_work',
         },
         {
+          name: 'dispatch_adhoc_execution',
+        },
+        {
           name: 'complete_rooted_bootstrap_from_user_signing',
         },
       ],

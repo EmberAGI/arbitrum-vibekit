@@ -55,7 +55,6 @@ describe('buildCopilotRuntimeAgents', () => {
       'starterAgent',
       'agent-pi-example',
       'agent-portfolio-manager',
-      'agent-ember-lending',
     ]);
 
     expect(langGraphInterruptSnapshotAgentConfigs).toEqual([
@@ -90,10 +89,6 @@ describe('buildCopilotRuntimeAgents', () => {
         agentId: 'agent-portfolio-manager',
         runtimeUrl: 'http://portfolio-manager:3420/ag-ui',
       },
-      {
-        agentId: 'agent-ember-lending',
-        runtimeUrl: 'http://ember-lending:3430/ag-ui',
-      },
     ]);
     expect(agents['agent-pi-example']).toMatchObject({
       config: {
@@ -107,12 +102,7 @@ describe('buildCopilotRuntimeAgents', () => {
         runtimeUrl: 'http://portfolio-manager:3420/ag-ui',
       },
     });
-    expect(agents['agent-ember-lending']).toMatchObject({
-      config: {
-        agentId: 'agent-ember-lending',
-        runtimeUrl: 'http://ember-lending:3430/ag-ui',
-      },
-    });
+    expect(agents['agent-ember-lending']).toBeUndefined();
   });
 
   it('defaults the Pi example runtime URL for local development', async () => {
@@ -134,12 +124,6 @@ describe('buildCopilotRuntimeAgents', () => {
         runtimeUrl: 'http://127.0.0.1:3420/ag-ui',
       },
     });
-    expect(agents['agent-ember-lending']).toMatchObject({
-      config: {
-        agentId: 'agent-ember-lending',
-        runtimeUrl: 'http://127.0.0.1:3430/ag-ui',
-      },
-    });
     expect(agentRuntimeHttpAgentConfigs).toContainEqual({
       agentId: 'agent-pi-example',
       runtimeUrl: 'http://127.0.0.1:3410/ag-ui',
@@ -148,9 +132,24 @@ describe('buildCopilotRuntimeAgents', () => {
       agentId: 'agent-portfolio-manager',
       runtimeUrl: 'http://127.0.0.1:3420/ag-ui',
     });
-    expect(agentRuntimeHttpAgentConfigs).toContainEqual({
+    expect(agentRuntimeHttpAgentConfigs).not.toContainEqual({
       agentId: 'agent-ember-lending',
       runtimeUrl: 'http://127.0.0.1:3430/ag-ui',
+    });
+  });
+
+  it('does not expose the hidden ember-lending execution worker through CopilotKit runtime registration', async () => {
+    const { buildCopilotRuntimeAgents } = await import('./copilotRuntimeRegistry');
+
+    const agents = buildCopilotRuntimeAgents({
+      LANGSMITH_API_KEY: 'test-langsmith-key',
+      EMBER_LENDING_AGENT_DEPLOYMENT_URL: 'http://ember-lending:3430/ag-ui',
+    });
+
+    expect(Object.keys(agents)).not.toContain('agent-ember-lending');
+    expect(agentRuntimeHttpAgentConfigs).not.toContainEqual({
+      agentId: 'agent-ember-lending',
+      runtimeUrl: 'http://ember-lending:3430/ag-ui',
     });
   });
 });
