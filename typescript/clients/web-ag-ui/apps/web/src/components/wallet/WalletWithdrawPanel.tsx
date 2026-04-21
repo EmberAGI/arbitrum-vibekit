@@ -186,45 +186,45 @@ export function WalletWithdrawPanel(props: WalletWithdrawPanelProps): React.JSX.
   };
 
   return (
-    <section className="rounded-lg border border-[#2a2a2a] bg-[#121212] p-4">
-      <h2 className="text-lg font-semibold text-white mb-3">Withdraw</h2>
-      <p className="text-sm text-gray-400 mb-4">
+    <section className="rounded-[28px] border border-[#F0D9C7] bg-[#FFF9F2] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.08)]">
+      <h2 className="mb-3 text-lg font-semibold text-[#221A13]">Withdraw</h2>
+      <p className="mb-4 text-sm text-[#6D5B4C]">
         Move funds from your MetaMask smart account to another wallet.
       </p>
 
       {status.kind !== 'idle' && (
-        <div className="mb-4 rounded-xl border border-[#252833] bg-[#111319] px-3 py-2.5">
+        <div className="mb-4 rounded-[18px] border border-[#E7DBD0] bg-[#FCF5EC] px-3 py-2.5">
           {status.kind === 'submitting' && (
-            <div className="flex items-center gap-2 text-sm text-[#E7E7EC]">
-              <Loader2 className="h-4 w-4 animate-spin text-teal-300" />
+            <div className="flex items-center gap-2 text-sm text-[#221A13]">
+              <Loader2 className="h-4 w-4 animate-spin text-[#178B5D]" />
               <span>Submitting transaction...</span>
             </div>
           )}
           {status.kind === 'confirming' && (
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-[#E7E7EC]">
-                <Loader2 className="h-4 w-4 animate-spin text-teal-300" />
+              <div className="flex items-center gap-2 text-sm text-[#221A13]">
+                <Loader2 className="h-4 w-4 animate-spin text-[#178B5D]" />
                 <span>Transaction submitted. Waiting for confirmation...</span>
               </div>
-              <div className="font-mono text-xs text-[#8D8D97] break-all">{status.hash}</div>
+              <div className="break-all font-mono text-xs text-[#8C7F72]">{status.hash}</div>
             </div>
           )}
           {status.kind === 'confirmed' && (
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-[#D6F5E6]">
-                <CheckCircle className="h-4 w-4 text-green-400" />
+              <div className="flex items-center gap-2 text-sm text-[#0F5A38]">
+                <CheckCircle className="h-4 w-4 text-[#178B5D]" />
                 <span>Confirmed: {formatHash(status.hash)}</span>
               </div>
-              <div className="font-mono text-xs text-[#8D8D97] break-all">{status.hash}</div>
+              <div className="break-all font-mono text-xs text-[#8C7F72]">{status.hash}</div>
             </div>
           )}
           {status.kind === 'error' && (
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-red-300">
-                <AlertCircle className="h-4 w-4 text-red-300" />
+              <div className="flex items-center gap-2 text-sm text-[#B23A32]">
+                <AlertCircle className="h-4 w-4 text-[#B23A32]" />
                 <span>{status.message}</span>
               </div>
-              {status.hash && <div className="font-mono text-xs text-[#8D8D97] break-all">{status.hash}</div>}
+              {status.hash && <div className="break-all font-mono text-xs text-[#8C7F72]">{status.hash}</div>}
             </div>
           )}
         </div>
@@ -232,9 +232,9 @@ export function WalletWithdrawPanel(props: WalletWithdrawPanelProps): React.JSX.
 
       <form className="space-y-3" onSubmit={handleSubmit}>
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wide text-gray-400">Destination</label>
-          <div className="flex flex-col gap-2 rounded-md border border-[#2a2a2a] bg-[#0f0f0f] p-3">
-            <label className="flex items-center gap-2 text-sm text-gray-200">
+          <label className="text-xs uppercase tracking-wide text-[#8C7F72]">Destination</label>
+          <div className="flex flex-col gap-2 rounded-[18px] border border-[#E7DBD0] bg-[#FCF5EC] p-3">
+            <label className="flex items-center gap-2 text-sm text-[#221A13]">
               <input
                 type="radio"
                 name="destination-mode"
@@ -252,11 +252,11 @@ export function WalletWithdrawPanel(props: WalletWithdrawPanelProps): React.JSX.
               </span>
             </label>
             {!props.connectedDestinationAddress && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-[#8C7F72]">
                 No connected destination wallet detected. You can still withdraw to a custom address.
               </p>
             )}
-            <label className="flex items-center gap-2 text-sm text-gray-200">
+            <label className="flex items-center gap-2 text-sm text-[#221A13]">
               <input
                 type="radio"
                 name="destination-mode"
@@ -271,21 +271,21 @@ export function WalletWithdrawPanel(props: WalletWithdrawPanelProps): React.JSX.
                 value={customDestination}
                 onChange={(event) => setCustomDestination(event.target.value)}
                 placeholder="0x..."
-                className="w-full rounded-md border border-[#2a2a2a] bg-[#151515] px-3 py-2 text-sm text-gray-200"
+                className="w-full rounded-xl border border-[#E7DBD0] bg-[#FFF9F2] px-3 py-2 text-sm text-[#221A13]"
               />
             )}
           </div>
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wide text-gray-400" htmlFor="withdraw-token-select">
+          <label className="text-xs uppercase tracking-wide text-[#8C7F72]" htmlFor="withdraw-token-select">
             Token
           </label>
           <select
             id="withdraw-token-select"
             value={selectedTokenKey}
             onChange={(event) => setUserSelectedTokenKey(event.target.value)}
-            className="w-full rounded-md border border-[#2a2a2a] bg-[#151515] px-3 py-2 text-sm text-gray-200"
+            className="w-full rounded-xl border border-[#E7DBD0] bg-[#FFF9F2] px-3 py-2 text-sm text-[#221A13]"
           >
             {props.balances.length === 0 && <option value="">No tokens available</option>}
             {props.balances.map((balance) => (
@@ -297,7 +297,7 @@ export function WalletWithdrawPanel(props: WalletWithdrawPanelProps): React.JSX.
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wide text-gray-400" htmlFor="withdraw-amount-input">
+          <label className="text-xs uppercase tracking-wide text-[#8C7F72]" htmlFor="withdraw-amount-input">
             Amount
           </label>
           <input
@@ -307,13 +307,13 @@ export function WalletWithdrawPanel(props: WalletWithdrawPanelProps): React.JSX.
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
             placeholder="0.0"
-            className="w-full rounded-md border border-[#2a2a2a] bg-[#151515] px-3 py-2 text-sm text-gray-200"
+            className="w-full rounded-xl border border-[#E7DBD0] bg-[#FFF9F2] px-3 py-2 text-sm text-[#221A13]"
           />
         </div>
 
         <button
           type="submit"
-          className="w-full rounded-md bg-[#fd6731] px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="w-full rounded-xl bg-[#FD6731] px-3 py-2 text-sm font-medium text-white shadow-[0_12px_24px_rgba(253,103,49,0.24)] disabled:opacity-60"
           disabled={!canSubmit || isWorking}
         >
           {status.kind === 'submitting'

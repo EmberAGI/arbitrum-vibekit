@@ -19,22 +19,22 @@ import type { Chain } from 'viem';
 import { defaultEvmChain, supportedEvmChains } from '@/config/evmChains';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
-import { useOnchainActionsIconMaps } from '@/hooks/useOnchainActionsIconMaps';
 import { useAgent } from '@/contexts/AgentContext';
 import { useAgentList } from '@/contexts/AgentListContext';
+import type { AgentConfig } from '@/config/agents';
 import { getVisibleAgents } from '@/config/agents';
+import type { AgentListEntry } from '@/contexts/agentListTypes';
 import type { TaskState } from '@/types/agent';
 import { resolveSidebarTaskState } from '@/utils/resolveSidebarTaskState';
 import { selectRuntimeTaskState } from '@/utils/selectRuntimeTaskState';
-import { collectUniqueChainNames, collectUniqueTokenSymbols } from '@/utils/agentCollections';
 import { extractTaskStatusMessage } from '@/utils/extractTaskStatusMessage';
-import { PROTOCOL_TOKEN_FALLBACK } from '@/constants/protocolTokenFallback';
 import { isPrivyConfigured } from '@/utils/privyConfig';
 import {
-  normalizeNameKey,
-  proxyIconUri,
-  resolveAgentAvatarUri,
-} from '@/utils/iconResolution';
+  SidebarActivityCard,
+  type SidebarActivityCardControlSlice,
+  type SidebarActivityCardTokenSlice,
+  type SidebarActivityCardView,
+} from '@/components/ui/SidebarActivityCard';
 
 export interface AgentActivity {
   id: string;
@@ -42,11 +42,15 @@ export interface AgentActivity {
   subtitle: string;
   status: 'active' | 'blocked' | 'completed';
   timestamp?: string;
+  config: AgentConfig;
+  entry?: AgentListEntry;
 }
 
 const ETHEREUM_MAINNET_CHAIN_ID = 1;
 const PORTFOLIO_AGENT_ID = 'agent-portfolio-manager';
 const PORTFOLIO_AGENT_CHAT_HREF = `/hire-agents/${PORTFOLIO_AGENT_ID}?tab=chat`;
+const NAV_ACCENT_PALETTE = ['#3566E8', '#7A5AF8', '#0EA5E9', '#D84E8F', '#4F46E5'] as const;
+const UNALLOCATED_ACCENT_HEX = '#CDBFB3';
 
 export function getWalletSelectorChains(chains: readonly Chain[]): Chain[] {
   return chains.filter(
@@ -169,6 +173,8 @@ export function AppSidebar() {
         name: config.name,
         subtitle: needsInput ? 'Set up agent' : 'Blocked',
         status: 'blocked',
+        config,
+        entry,
       });
       return;
     }
@@ -179,6 +185,8 @@ export function AppSidebar() {
         name: config.name,
         subtitle: taskState === 'canceled' ? 'Canceled' : 'Completed',
         status: 'completed',
+        config,
+        entry,
       });
       return;
     }
@@ -186,74 +194,40 @@ export function AppSidebar() {
     activeAgents.push({
       id: config.id,
       name: config.name,
-      subtitle: taskId ? `Task: ${taskId.slice(0, 8)}...` : `Task: ${taskState}`,
+      subtitle: taskState === 'working' ? 'Active' : `Task: ${taskState}`,
       status: 'active',
+      config,
+      entry,
     });
   });
 
   const walletSelectorChains = useMemo(() => getWalletSelectorChains(supportedEvmChains), []);
   const selectedChain = walletSelectorChains.find((chain) => chain.id === chainId) ?? defaultEvmChain;
-  const sidebarIconGroups = useMemo(
-    () =>
-      agentConfigs.map((config) => {
-        const profile = listAgents[config.id]?.profile;
-        return {
-          chains: profile?.chains?.length ? profile.chains : (config.chains ?? []),
-          tokens: profile?.tokens?.length ? profile.tokens : (config.tokens ?? []),
-          protocols: profile?.protocols?.length ? profile.protocols : (config.protocols ?? []),
-        };
-      }),
-    [agentConfigs, listAgents],
+  const allActivityAgents = [...blockedAgents, ...activeAgents, ...completedAgents];
+  const totalKnownExposureUsd = allActivityAgents.reduce((total, activity) => {
+    const nextValue = resolveGrossExposureUsd(activity.entry);
+    return nextValue !== undefined ? total + nextValue : total;
+  }, 0);
+  const accentColorByAgentId = buildAccentColorByAgentId(
+    allActivityAgents
+      .filter((activity) => activity.id !== PORTFOLIO_AGENT_ID)
+      .map((activity) => activity.id),
   );
-
-  const sidebarChainNames = useMemo(
-    () =>
-      collectUniqueChainNames({
-        groups: sidebarIconGroups,
-        keyFn: (value) => normalizeNameKey(value),
-      }),
-    [sidebarIconGroups],
-  );
-
-  const sidebarTokenSymbols = useMemo(
-    () =>
-      collectUniqueTokenSymbols({
-        groups: sidebarIconGroups,
-        protocolTokenFallback: PROTOCOL_TOKEN_FALLBACK,
-      }),
-    [sidebarIconGroups],
-  );
-
-  const { chainIconByName, tokenIconBySymbol } = useOnchainActionsIconMaps({
-    chainNames: sidebarChainNames,
-    tokenSymbols: sidebarTokenSymbols,
+  const specialistControlBreakdown = buildPortfolioControlBreakdown({
+    activities: allActivityAgents,
+    accentColorByAgentId,
   });
-
-  const agentAvatarBgById = useMemo(
-    () =>
-      Object.fromEntries(
-        agentConfigs.map((config) => [config.id, config.imageUrl ? config.avatarBg : undefined]),
-      ),
-    [agentConfigs],
-  );
-
-  const agentIconById = useMemo(() => {
-    const out: Record<string, string | null> = {};
-    for (const config of agentConfigs) {
-      const profile = listAgents[config.id]?.profile;
-      const protocols = profile?.protocols?.length ? profile.protocols : (config.protocols ?? []);
-      const chains = profile?.chains?.length ? profile.chains : (config.chains ?? []);
-      const avatar =
-        resolveAgentAvatarUri({
-          imageUrl: config.imageUrl,
-          protocols,
-          tokenIconBySymbol,
-        }) ??
-        (chains.length > 0 ? chainIconByName[normalizeNameKey(chains[0])] ?? null : null);
-      out[config.id] = avatar ? proxyIconUri(avatar) : null;
-    }
-    return out;
-  }, [agentConfigs, listAgents, chainIconByName, tokenIconBySymbol]);
+  const activityCardViewsById = Object.fromEntries(
+    allActivityAgents.map((activity) => [
+      activity.id,
+      buildSidebarActivityCardView({
+        activity,
+        totalKnownExposureUsd,
+        accentColorByAgentId,
+        portfolioControlBreakdown: specialistControlBreakdown,
+      }),
+    ]),
+  ) as Record<string, SidebarActivityCardView>;
 
   const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
 
@@ -467,12 +441,11 @@ export function AppSidebar() {
             title="Blocked"
             count={blockedAgents.length}
             agents={blockedAgents}
+            cardViews={activityCardViewsById}
             isExpanded={isBlockedExpanded}
             onToggle={() => setIsBlockedExpanded(!isBlockedExpanded)}
             badgeColor="bg-[#FCE6E4] text-[#B84C38]"
             icon={<AlertCircle className="w-4 h-4 text-[#A98C74]" />}
-            agentIconById={agentIconById}
-            agentAvatarBgById={agentAvatarBgById}
             onAgentClick={handleAgentClick}
           />
 
@@ -481,12 +454,11 @@ export function AppSidebar() {
             title="Active"
             count={activeAgents.length}
             agents={activeAgents}
+            cardViews={activityCardViewsById}
             isExpanded={isActiveExpanded}
             onToggle={() => setIsActiveExpanded(!isActiveExpanded)}
             badgeColor="bg-[#E6F1E8] text-[#4E7A58]"
             icon={<Terminal className="w-4 h-4 text-[#A98C74]" />}
-            agentIconById={agentIconById}
-            agentAvatarBgById={agentAvatarBgById}
             onAgentClick={handleAgentClick}
           />
 
@@ -495,12 +467,11 @@ export function AppSidebar() {
             title="Completed"
             count={completedAgents.length}
             agents={completedAgents}
+            cardViews={activityCardViewsById}
             isExpanded={isCompletedExpanded}
             onToggle={() => setIsCompletedExpanded(!isCompletedExpanded)}
             badgeColor="bg-[#E8EDF8] text-[#5D73B5]"
             icon={<CheckCircle className="w-4 h-4 text-[#A98C74]" />}
-            agentIconById={agentIconById}
-            agentAvatarBgById={agentAvatarBgById}
             onAgentClick={handleAgentClick}
           />
         </div>
@@ -704,12 +675,11 @@ interface ActivitySectionProps {
   title: string;
   count: number;
   agents: AgentActivity[];
+  cardViews: Record<string, SidebarActivityCardView>;
   isExpanded: boolean;
   onToggle: () => void;
   badgeColor: string;
   icon: React.ReactNode;
-  agentIconById?: Record<string, string | null>;
-  agentAvatarBgById?: Record<string, string | undefined>;
   onAgentClick?: (agentId: string) => void;
 }
 
@@ -717,12 +687,11 @@ function ActivitySection({
   title,
   count,
   agents,
+  cardViews,
   isExpanded,
   onToggle,
   badgeColor,
   icon,
-  agentIconById = {},
-  agentAvatarBgById = {},
   onAgentClick,
 }: ActivitySectionProps) {
   const hasAgents = agents.length > 0;
@@ -761,41 +730,202 @@ function ActivitySection({
       {isExpanded && hasAgents && (
         <div className="mt-1.5 ml-4 space-y-1.5">
           {agents.map((agentItem) => (
-            <div
+            <SidebarActivityCard
               key={agentItem.id}
+              card={cardViews[agentItem.id] ?? buildFallbackCardView(agentItem)}
               onClick={() => onAgentClick?.(agentItem.id)}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-[#E3D2BF] bg-[#FFF8F0] hover:bg-[#F9EFE2] hover:border-[#D7BFA5] cursor-pointer transition-colors"
-            >
-              {agentIconById[agentItem.id] ? (
-                <Image
-                  src={agentIconById[agentItem.id] ?? ''}
-                  alt=""
-                  width={32}
-                  height={32}
-                  unoptimized
-                  className="w-8 h-8 rounded-full ring-1 ring-[#E7D3BE] object-contain"
-                  style={
-                    agentAvatarBgById[agentItem.id]
-                      ? { background: agentAvatarBgById[agentItem.id] }
-                      : { background: 'rgba(253,103,49,0.12)' }
-                  }
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#FD6731] to-[#E3A04E] flex items-center justify-center text-xs font-semibold text-white">
-                  {agentItem.name.charAt(0)}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="text-[13px] text-[#2C1E17] font-medium truncate">{agentItem.name}</div>
-                <div className="text-[11px] text-[#8A6F58] truncate">{agentItem.subtitle}</div>
-              </div>
-              {agentItem.timestamp && (
-                <span className="text-xs text-[#A98C74]">{agentItem.timestamp}</span>
-              )}
-            </div>
+            />
           ))}
         </div>
       )}
     </div>
   );
+}
+
+function buildFallbackCardView(activity: AgentActivity): SidebarActivityCardView {
+  return {
+    id: activity.id,
+    label: activity.name,
+    statusLabel: activity.subtitle,
+    statusTone: activity.status,
+    tokenBreakdown: [],
+  };
+}
+
+function buildSidebarActivityCardView(params: {
+  activity: AgentActivity;
+  totalKnownExposureUsd: number;
+  accentColorByAgentId: Map<string, string>;
+  portfolioControlBreakdown: SidebarActivityCardControlSlice[];
+}): SidebarActivityCardView {
+  const grossExposureUsd = resolveGrossExposureUsd(params.activity.entry);
+  const allocationShare =
+    grossExposureUsd !== undefined && params.totalKnownExposureUsd > 0
+      ? grossExposureUsd / params.totalKnownExposureUsd
+      : undefined;
+
+  return {
+    id: params.activity.id,
+    label: params.activity.name,
+    statusLabel: params.activity.subtitle,
+    statusTone: params.activity.status,
+    valueUsd: grossExposureUsd,
+    allocationShare,
+    metricBadge: resolveMetricBadge(params.activity.entry, params.activity.status),
+    tokenBreakdown: buildTokenBreakdown({
+      entry: params.activity.entry,
+      config: params.activity.config,
+    }),
+    controlBreakdown:
+      params.activity.id === PORTFOLIO_AGENT_ID && params.portfolioControlBreakdown.length > 0
+        ? params.portfolioControlBreakdown
+        : undefined,
+  };
+}
+
+function resolveGrossExposureUsd(entry: AgentListEntry | undefined): number | undefined {
+  const candidate = entry?.metrics?.aumUsd ?? entry?.profile?.aum;
+  return typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0
+    ? candidate
+    : undefined;
+}
+
+function resolveMetricBadge(
+  entry: AgentListEntry | undefined,
+  status: AgentActivity['status'],
+): string | undefined {
+  const apy = entry?.metrics?.apy ?? entry?.profile?.apy;
+  if (typeof apy === 'number' && Number.isFinite(apy)) {
+    return `${formatMetricNumber(apy)}% APY`;
+  }
+
+  if (status === 'blocked') {
+    return 'Needs input';
+  }
+  if (status === 'completed') {
+    return 'Done';
+  }
+
+  return 'Active';
+}
+
+function buildTokenBreakdown(params: {
+  entry: AgentListEntry | undefined;
+  config: AgentConfig;
+}): SidebarActivityCardTokenSlice[] {
+  const snapshotTokens = params.entry?.metrics?.latestSnapshot?.positionTokens
+    ?.filter(
+      (token): token is typeof token & { symbol: string; valueUsd: number } =>
+        typeof token.symbol === 'string' &&
+        token.symbol.trim().length > 0 &&
+        typeof token.valueUsd === 'number' &&
+        Number.isFinite(token.valueUsd) &&
+        token.valueUsd > 0,
+    )
+    .sort((left, right) => (right.valueUsd ?? 0) - (left.valueUsd ?? 0));
+
+  if (snapshotTokens && snapshotTokens.length > 0) {
+    const total = snapshotTokens.reduce((sum, token) => sum + (token.valueUsd ?? 0), 0);
+    return snapshotTokens.map((token) => ({
+      asset: token.symbol,
+      share: total > 0 ? (token.valueUsd ?? 0) / total : 0,
+    }));
+  }
+
+  const tokens =
+    params.entry?.profile?.tokens && params.entry.profile.tokens.length > 0
+      ? params.entry.profile.tokens
+      : (params.config.tokens ?? []);
+  const uniqueTokens = [...new Set(tokens.filter((token) => token.trim().length > 0))].slice(0, 4);
+  if (uniqueTokens.length === 0) {
+    return [];
+  }
+
+  return uniqueTokens.map((token) => ({
+    asset: token,
+    share: 1 / uniqueTokens.length,
+  }));
+}
+
+function buildPortfolioControlBreakdown(params: {
+  activities: AgentActivity[];
+  accentColorByAgentId: Map<string, string>;
+}): SidebarActivityCardControlSlice[] {
+  const portfolioGrossExposureUsd = params.activities.find((activity) => activity.id === PORTFOLIO_AGENT_ID)
+    ? resolveGrossExposureUsd(params.activities.find((activity) => activity.id === PORTFOLIO_AGENT_ID)?.entry)
+    : undefined;
+  if (!portfolioGrossExposureUsd || portfolioGrossExposureUsd <= 0) {
+    return [];
+  }
+
+  const specialists = params.activities
+    .filter((activity) => activity.id !== PORTFOLIO_AGENT_ID)
+    .map((activity) => ({
+      id: activity.id,
+      label: activity.name,
+      valueUsd: resolveGrossExposureUsd(activity.entry) ?? 0,
+    }))
+    .filter((activity) => activity.valueUsd > 0)
+    .sort((left, right) => right.valueUsd - left.valueUsd);
+
+  if (specialists.length === 0) {
+    return [];
+  }
+
+  const specialistTotalUsd = specialists.reduce((sum, activity) => sum + activity.valueUsd, 0);
+  const slices = specialists.map((activity) => ({
+    id: activity.id,
+    label: activity.label,
+    share: Math.min(1, activity.valueUsd / portfolioGrossExposureUsd),
+    colorHex: params.accentColorByAgentId.get(activity.id) ?? NAV_ACCENT_PALETTE[0],
+  }));
+  const unallocatedUsd = Math.max(0, portfolioGrossExposureUsd - specialistTotalUsd);
+  if (unallocatedUsd > 0) {
+    slices.push({
+      id: 'unallocated',
+      label: 'Unallocated',
+      share: unallocatedUsd / portfolioGrossExposureUsd,
+      colorHex: UNALLOCATED_ACCENT_HEX,
+    });
+  }
+
+  return slices;
+}
+
+function buildAccentColorByAgentId(agentIds: string[]): Map<string, string> {
+  const colorsByAgentId = new Map<string, string>();
+  const usedIndexes = new Set<number>();
+
+  for (const agentId of [...agentIds].sort()) {
+    const baseIndex = hashAgentId(agentId) % NAV_ACCENT_PALETTE.length;
+    let paletteIndex = baseIndex;
+    let attempts = 0;
+
+    while (usedIndexes.has(paletteIndex) && attempts < NAV_ACCENT_PALETTE.length) {
+      paletteIndex = (paletteIndex + 1) % NAV_ACCENT_PALETTE.length;
+      attempts += 1;
+    }
+
+    usedIndexes.add(paletteIndex);
+    colorsByAgentId.set(agentId, NAV_ACCENT_PALETTE[paletteIndex] ?? NAV_ACCENT_PALETTE[0]);
+  }
+
+  return colorsByAgentId;
+}
+
+function hashAgentId(value: string): number {
+  let hash = 0;
+
+  for (const character of value) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+
+  return hash;
+}
+
+function formatMetricNumber(value: number): string {
+  return value
+    .toFixed(1)
+    .replace(/\.0$/, '')
+    .replace(/(\.\d*[1-9])0+$/, '$1');
 }

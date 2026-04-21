@@ -229,6 +229,73 @@ describe('AppSidebar wallet actions', () => {
     expect(html).not.toContain('Pi Example Agent');
   });
 
+  it('renders workbench-style sidebar cards when agent exposure data is available', () => {
+    getVisibleAgentsMock.mockReturnValue([
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Agent',
+        chains: ['Arbitrum'],
+        protocols: ['Shared Ember'],
+        tokens: ['USDC', 'WETH'],
+      },
+      {
+        id: 'agent-ember-lending',
+        name: 'Ember Lending',
+        chains: ['Arbitrum'],
+        protocols: ['Aave'],
+        tokens: ['USDC'],
+      },
+    ]);
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-portfolio-manager': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Shared Ember'],
+            tokens: ['USDC', 'WETH'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 12_000,
+          },
+        },
+        'agent-ember-lending': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Aave'],
+            tokens: ['USDC'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 4_000,
+            apy: 8.2,
+          },
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('rounded-[18px]');
+    expect(html).toContain('px-3 pt-4 pb-3');
+    expect(html).toContain('$12k gross');
+    expect(html).toContain('$4k gross');
+    expect(html).toContain('USDC');
+    expect(html).toContain('WETH');
+  });
+
   it('routes portfolio agent sidebar clicks to the chat tab deep link', () => {
     expect(getSidebarAgentHref('agent-portfolio-manager')).toBe(
       '/hire-agents/agent-portfolio-manager?tab=chat',

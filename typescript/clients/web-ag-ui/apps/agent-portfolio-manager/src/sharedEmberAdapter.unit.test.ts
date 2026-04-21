@@ -219,6 +219,7 @@ function createOnboardingBootstrap() {
 function createLiveManagedAgentPortfolioState() {
   return {
     agent_id: 'ember-lending',
+    benchmark_asset: 'USD',
     mandate_ref: 'mandate-ember-lending-live-001',
     mandate_context: {
       lending_policy: createManagedLendingPolicy({
@@ -252,14 +253,98 @@ function createLiveManagedAgentPortfolioState() {
         network: 'arbitrum',
         root_asset: 'USDC',
         quantity: '25',
+        benchmark_asset: 'USD',
+        benchmark_value_usd: '25',
         reservation_id: 'reservation-ember-lending-001',
+        position_scope_id: 'position-scope-aave-arbitrum-usdc',
       },
     ],
     reservations: [
       {
         reservation_id: 'reservation-ember-lending-001',
+        agent_id: 'ember-lending',
         purpose: 'position.enter',
+        status: 'active',
         control_path: 'lending.supply',
+        created_at: '2026-03-30T00:00:00.000Z',
+        unit_allocations: [
+          {
+            unit_id: 'unit-usdc-portfolio-001',
+            quantity: '25',
+          },
+        ],
+      },
+    ],
+    wallet_contents: [
+      {
+        asset: 'USDC',
+        network: 'arbitrum',
+        quantity: '10',
+        value_usd: '10',
+      },
+      {
+        asset: 'WETH',
+        network: 'arbitrum',
+        quantity: '0.01',
+        value_usd: '20',
+        economic_exposures: [
+          {
+            asset: 'ETH',
+            quantity: '0.01',
+          },
+        ],
+      },
+    ],
+    active_position_scopes: [
+      {
+        scope_id: 'position-scope-aave-arbitrum-usdc',
+        kind: 'lending-position',
+        network: 'arbitrum',
+        protocol_system: 'aave',
+        container_ref: 'aave:position-scope-aave-arbitrum-usdc',
+        status: 'active',
+        market_state: {
+          available_borrows_usd: '18',
+          borrowable_headroom_usd: '12.5',
+          current_ltv_bps: 3200,
+          liquidation_threshold_bps: 7800,
+          health_factor: '2.1',
+        },
+        members: [
+          {
+            member_id: 'collateral-usdc',
+            role: 'collateral',
+            asset: 'USDC',
+            quantity: '25',
+            value_usd: '25',
+            economic_exposures: [
+              {
+                asset: 'USDC',
+                quantity: '25',
+              },
+            ],
+            state: {
+              withdrawable_quantity: '10',
+              supply_apr: '0.03',
+            },
+          },
+          {
+            member_id: 'debt-usdt',
+            role: 'debt',
+            asset: 'USDT',
+            quantity: '5',
+            value_usd: '5',
+            economic_exposures: [
+              {
+                asset: 'USDT',
+                quantity: '5',
+              },
+            ],
+            state: {
+              borrow_apr: '0.06',
+            },
+          },
+        ],
       },
     ],
   };
@@ -3089,6 +3174,86 @@ describe('createPortfolioManagerDomain', () => {
             rootAsset: 'USDC',
             quantity: '25',
           },
+        },
+        portfolioProjectionInput: {
+          benchmarkAsset: 'USD',
+          walletContents: expect.arrayContaining([
+            expect.objectContaining({
+              asset: 'USDC',
+              network: 'arbitrum',
+              quantity: '10',
+              valueUsd: 10,
+            }),
+            expect.objectContaining({
+              asset: 'WETH',
+              valueUsd: 20,
+              economicExposures: [
+                {
+                  asset: 'ETH',
+                  quantity: '0.01',
+                },
+              ],
+            }),
+          ]),
+          reservations: [
+            {
+              reservationId: 'reservation-ember-lending-001',
+              agentId: 'ember-lending',
+              purpose: 'position.enter',
+              controlPath: 'lending.supply',
+              createdAt: '2026-03-30T00:00:00.000Z',
+              status: 'active',
+              unitAllocations: [
+                {
+                  unitId: 'unit-usdc-portfolio-001',
+                  quantity: '25',
+                },
+              ],
+            },
+          ],
+          ownedUnits: [
+            {
+              unitId: 'unit-usdc-portfolio-001',
+              rootAsset: 'USDC',
+              network: 'arbitrum',
+              quantity: '25',
+              benchmarkAsset: 'USD',
+              benchmarkValue: 25,
+              reservationId: 'reservation-ember-lending-001',
+              positionScopeId: 'position-scope-aave-arbitrum-usdc',
+            },
+          ],
+          activePositionScopes: [
+            {
+              scopeId: 'position-scope-aave-arbitrum-usdc',
+              kind: 'lending-position',
+              network: 'arbitrum',
+              protocolSystem: 'aave',
+              containerRef: 'aave:position-scope-aave-arbitrum-usdc',
+              status: 'active',
+              marketState: {
+                availableBorrowsUsd: '18',
+                borrowableHeadroomUsd: '12.5',
+                currentLtvBps: 3200,
+                liquidationThresholdBps: 7800,
+                healthFactor: '2.1',
+              },
+              members: expect.arrayContaining([
+                expect.objectContaining({
+                  memberId: 'collateral-usdc',
+                  role: 'collateral',
+                  asset: 'USDC',
+                  valueUsd: 25,
+                }),
+                expect.objectContaining({
+                  memberId: 'debt-usdt',
+                  role: 'debt',
+                  asset: 'USDT',
+                  valueUsd: 5,
+                }),
+              ]),
+            },
+          ],
         },
       },
     });
