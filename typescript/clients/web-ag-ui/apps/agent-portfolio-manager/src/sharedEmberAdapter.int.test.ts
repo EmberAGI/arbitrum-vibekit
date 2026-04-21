@@ -507,6 +507,8 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
         ],
       },
     });
+    const rootedWalletContextId = signingResult?.state?.lastRootedWalletContextId;
+    expect(rootedWalletContextId).toEqual(expect.any(String));
 
     await expect(
       protocolHost.handleJsonRpc({
@@ -550,6 +552,7 @@ describeSharedEmberIntegration('portfolio-manager Shared Ember sidecar integrati
         method: 'subagent.readExecutionContext.v1',
         params: {
           agent_id: 'ember-lending',
+          rooted_wallet_context_id: rootedWalletContextId,
         },
       }),
     ).resolves.toMatchObject({

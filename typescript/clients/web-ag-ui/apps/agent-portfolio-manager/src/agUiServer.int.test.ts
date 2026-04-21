@@ -744,6 +744,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         method: 'subagent.readExecutionContext.v1',
         params: {
           agent_id: 'ember-lending',
+          rooted_wallet_context_id: 'rwc-thread10x00000000000000000000000000000000000000a1',
         },
       }),
     );
@@ -1271,6 +1272,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         method: 'subagent.readExecutionContext.v1',
         params: {
           agent_id: 'ember-lending',
+          rooted_wallet_context_id: 'rwc-thread10x00000000000000000000000000000000000000a1',
         },
       }),
     );

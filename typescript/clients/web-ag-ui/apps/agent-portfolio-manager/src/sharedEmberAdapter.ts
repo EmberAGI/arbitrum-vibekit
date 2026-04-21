@@ -551,6 +551,7 @@ async function readSharedEmberAgentServiceIdentity(input: {
 async function readSharedEmberSubagentWalletAddress(input: {
   protocolHost: PortfolioManagerSharedEmberProtocolHost;
   agentId: string;
+  rootedWalletContextId?: string | null;
 }): Promise<{
   revision: number | null;
   walletAddress: `0x${string}` | null;
@@ -561,6 +562,11 @@ async function readSharedEmberSubagentWalletAddress(input: {
     method: 'subagent.readExecutionContext.v1',
     params: {
       agent_id: input.agentId,
+      ...(input.rootedWalletContextId
+        ? {
+            rooted_wallet_context_id: input.rootedWalletContextId,
+          }
+        : {}),
     },
   });
   const result = isRecord(response) && isRecord(response['result']) ? response['result'] : null;
@@ -1949,12 +1955,15 @@ export function createPortfolioManagerDomain(
             revision: response.result?.revision ?? null,
             rootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
           });
+          const rootedWalletContextId =
+            response.result?.rooted_wallet_context_id ?? currentState.lastRootedWalletContextId;
           tracePmSigning('reading-managed-subagent-wallet', {
             managedAgentId: FIRST_MANAGED_AGENT_TYPE,
           });
           const managedSubagentExecutionContext = await readSharedEmberSubagentWalletAddress({
             protocolHost: options.protocolHost,
             agentId: FIRST_MANAGED_AGENT_TYPE,
+            rootedWalletContextId,
           });
           tracePmSigning('read-managed-subagent-wallet', {
             revision: managedSubagentExecutionContext.revision ?? null,
@@ -1993,7 +2002,7 @@ export function createPortfolioManagerDomain(
               lastSharedEmberRevision: nextRevision,
               lastRootDelegation: response.result?.root_delegation ?? currentState.lastRootDelegation,
               lastOnboardingBootstrap: onboarding,
-              lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
+              lastRootedWalletContextId: rootedWalletContextId,
               activeWalletAddress: walletAddress,
               pendingOnboardingWalletAddress: walletAddress,
               pendingApprovedSetup: approvedSetup,
@@ -2030,7 +2039,7 @@ export function createPortfolioManagerDomain(
               lastRootDelegation:
                 response.result?.root_delegation ?? currentState.lastRootDelegation,
               lastOnboardingBootstrap: onboarding,
-              lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
+              lastRootedWalletContextId: rootedWalletContextId,
               activeWalletAddress: walletAddress,
               pendingOnboardingWalletAddress: walletAddress,
               pendingApprovedSetup: approvedSetup,
@@ -2067,7 +2076,7 @@ export function createPortfolioManagerDomain(
             lastSharedEmberRevision: nextRevision,
             lastRootDelegation: response.result?.root_delegation ?? currentState.lastRootDelegation,
             lastOnboardingBootstrap: onboarding,
-            lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
+            lastRootedWalletContextId: rootedWalletContextId,
             activeWalletAddress: walletAddress,
             pendingOnboardingWalletAddress: null,
             pendingApprovedSetup: null,

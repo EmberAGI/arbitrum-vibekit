@@ -724,6 +724,7 @@ describe('createPortfolioManagerDomain', () => {
         method: 'subagent.readExecutionContext.v1',
         params: {
           agent_id: 'ember-lending',
+          rooted_wallet_context_id: 'rwc-user-protocol-001',
         },
       }),
     );
@@ -2266,6 +2267,7 @@ describe('createPortfolioManagerDomain', () => {
       method: 'subagent.readExecutionContext.v1',
       params: {
         agent_id: 'ember-lending',
+        rooted_wallet_context_id: 'rwc-user-protocol-001',
       },
     });
     expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(6, {

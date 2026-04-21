@@ -355,6 +355,7 @@ async function readSharedEmberExecutionContext(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
   threadId: string;
   agentId: string;
+  rootedWalletContextId?: string | null;
 }): Promise<SharedEmberExecutionContextEnvelope> {
   const response = (await input.protocolHost.handleJsonRpc({
     jsonrpc: '2.0',
@@ -362,6 +363,11 @@ async function readSharedEmberExecutionContext(input: {
     method: 'subagent.readExecutionContext.v1',
     params: {
       agent_id: input.agentId,
+      ...(input.rootedWalletContextId
+        ? {
+            rooted_wallet_context_id: input.rootedWalletContextId,
+          }
+        : {}),
     },
   })) as ExecutionContextResponse;
 
@@ -1039,6 +1045,7 @@ async function hydrateManagedProjectionFromSharedEmber(input: {
       protocolHost: input.protocolHost,
       threadId: input.threadId,
       agentId: input.agentId,
+      rootedWalletContextId: input.state.rootedWalletContextId,
     });
   } catch {
     executionContextEnvelope = null;
@@ -3720,6 +3727,7 @@ export function createEmberLendingDomain(
           protocolHost: options.protocolHost,
           threadId,
           agentId,
+          rootedWalletContextId: currentState.rootedWalletContextId,
         });
         return buildSharedEmberExecutionContextXml({
           status: 'live',
@@ -3901,6 +3909,11 @@ export function createEmberLendingDomain(
                   idempotency_key: idempotencyKey,
                   expected_revision: expectedRevision,
                   agent_id: agentId,
+                  ...(planningState.rootedWalletContextId
+                    ? {
+                        rooted_wallet_context_id: planningState.rootedWalletContextId,
+                      }
+                    : {}),
                   request: semanticRequest,
                 },
               }),

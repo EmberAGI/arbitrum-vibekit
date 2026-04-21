@@ -1275,6 +1275,7 @@ describe('createEmberLendingDomain', () => {
       method: 'subagent.readExecutionContext.v1',
       params: {
         agent_id: 'ember-lending',
+        rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
       },
     });
 
@@ -3883,6 +3884,7 @@ describe('createEmberLendingDomain', () => {
         ),
         expected_revision: 7,
         agent_id: 'ember-lending',
+        rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
         request: createSemanticRequest({
           control_path: 'lending.borrow',
           asset: 'USDC',
@@ -4096,6 +4098,7 @@ describe('createEmberLendingDomain', () => {
         ),
         expected_revision: 7,
         agent_id: 'ember-lending',
+        rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
         request: expect.objectContaining({
           control_path: 'lending.supply',
           asset: 'USDC',
@@ -4490,6 +4493,7 @@ describe('createEmberLendingDomain', () => {
         ),
         expected_revision: 7,
         agent_id: 'ember-lending',
+        rooted_wallet_context_id: 'rwc-ember-lending-thread-001',
         request: {
           control_path: 'lending.supply',
           asset: 'USDC',

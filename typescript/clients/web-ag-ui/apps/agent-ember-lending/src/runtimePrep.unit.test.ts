@@ -26,7 +26,7 @@ describe('managed Shared Ember harness bootstrap', () => {
             return {
               emberSkillPlanners: {
                 [env?.SHARED_EMBER_ONCHAIN_ACTIONS_PLANNER_AGENT_IDS ?? 'missing']: {
-                  planLendingSupply: async () => ({
+                  planExecutionTransaction: async () => ({
                     transaction_plan_id: 'txplan-test',
                   }),
                 },
@@ -83,7 +83,7 @@ describe('managed Shared Ember harness bootstrap', () => {
           resolveReferenceBootstrap: async () => ({
             emberSkillPlanners: {
               'ember-lending': {
-                planLendingSupply: async () => ({
+                planExecutionTransaction: async () => ({
                   transaction_plan_id: 'txplan-test',
                 }),
               },
