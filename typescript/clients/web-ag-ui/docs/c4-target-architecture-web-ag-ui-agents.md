@@ -42,9 +42,9 @@ flowchart LR
   U[End User] --> W[web-ag-ui Web App]
   W --> R[CopilotKit Runtime Endpoint /api/copilotkit]
   R --> PM[Agent Runtime: agent-portfolio-manager]
-  R --> EL[Agent Runtime: agent-ember-lending]
   R --> O[Other Agent Runtimes]
 
+  PM --> EL[Hidden Execution Worker: agent-ember-lending]
   PM --> SE[Shared Ember Domain Service]
   EL --> SE
   O --> X[External Protocols/APIs]
@@ -54,7 +54,7 @@ Boundary intent:
 
 - User-facing web talks only to CopilotKit runtime over AG-UI-compatible routes.
 - Runtime talks to agent runtimes; web never talks directly to LangGraph thread APIs.
-- The first concrete managed-runtime pair is `agent-portfolio-manager` plus `agent-ember-lending`; they stay as separate runtimes and meet only through the Shared Ember boundary rather than direct runtime-to-runtime calls.
+- The first concrete managed-runtime pair is `agent-portfolio-manager` plus hidden execution worker `agent-ember-lending`; only Portfolio Manager is user-facing in web/CopilotKit, and PM dispatches the hidden worker over an internal AG-UI lane.
 
 ## 4. C4 Level 2: Container View
 
@@ -73,7 +73,7 @@ flowchart TB
 
   subgraph AgentRuntimes[Agent Runtimes]
     PM[agent-portfolio-manager]
-    EL[agent-ember-lending]
+    EL[hidden agent-ember-lending]
     OTHER[other agent runtimes]
   end
 
@@ -84,8 +84,8 @@ flowchart TB
   StreamMgr --> CK
   BFF --> CK
   CK --> PM
-  CK --> EL
   CK --> OTHER
+  PM --> EL
   PM --> SE
   EL --> SE
 ```
@@ -97,7 +97,7 @@ Container responsibilities:
 - Projection Store: derives sidebar/detail state from AG-UI events.
 - CopilotKit endpoint: protocol boundary and routing to agents.
 - Agent runtimes: workflow execution and state emission.
-- Managed downstream note: `agent-portfolio-manager` owns managed onboarding/control-plane flows, while `agent-ember-lending` stays on the bounded subagent read/plan/execute/escalate surface against Shared Ember.
+- Managed downstream note: `agent-portfolio-manager` owns the user-visible managed onboarding/control-plane flows, while hidden `agent-ember-lending` stays on the bounded subagent read/plan/execute/escalate surface against Shared Ember.
   - Shared Ember, not the portfolio-manager runtime, owns the durable wallet observation, managed-lane owned units, reservations, and policy snapshots produced during onboarding completion.
   - Portfolio-manager wallet/accounting context must read `orchestrator.readOnboardingState.v1` through the activated managed mandate lane so the operator sees the same `lending.supply` reservation and policy state that Ember Lending consumes.
   - During migration, portfolio-manager keeps a read-side fallback for older stored bootstrap payloads that only recorded `activation.agentId`; current writes still use `activation.mandateRef`.
@@ -194,19 +194,20 @@ Current concrete managed-path specialization:
   - owns onboarding approval, rooted-signing collection, and managed-agent activation/deactivation intent submission
   - resolves the configured direct OWS controller wallet during startup and confirms or rewrites the durable `portfolio-manager` / `orchestrator` identity before boot
   - treats each distinct startup identity rewrite as a new command with its own identity-scoped idempotency key and fails closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address
-  - only marks onboarding complete after rooted bootstrap once a follow-up `subagent.readExecutionContext.v1` read for `ember-lending` exposes a non-null `subagent_wallet_address`
+  - performs hidden-worker identity and execution-context repair on a best-effort basis and does not block onboarding completion solely because the hidden worker identity record or `subagent_wallet_address` is still missing on first use
+  - exposes the model-visible `dispatch_adhoc_execution` command and uses it to delegate adhoc lending work to the hidden execution worker
   - submits the minimal rooted-bootstrap activation contract that tells Shared Ember which managed mandate should materialize the initial lane
   - consumes Shared Ember through a thin app-local adapter without owning Ember business logic
 
 - `agent-ember-lending`
-  - owns the first bounded managed-subagent runtime
+  - owns the first bounded managed-subagent runtime as a PM-owned hidden execution worker
   - resolves the configured direct OWS signer wallet during startup and confirms or rewrites the durable `ember-lending` / `subagent` identity before boot
   - treats each distinct startup identity rewrite as a new command with its own identity-scoped idempotency key and fails closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address
-  - consumes runtime-internal Shared Ember projection and execution-context reads plus the model-visible `create_transaction_plan`, `request_transaction_execution`, and `create_escalation_request` contract
+  - consumes runtime-internal Shared Ember projection and execution-context reads behind PM-owned dispatch rather than as a model-visible web/CopilotKit contract
   - keeps planning on the bounded Shared Ember planner contract, sending only a bounded planning handoff while receiving planner-generated payload output back in the candidate plan
-  - keeps Shared Ember idempotency internal to the runtime-owned adapter; model-visible planning and execution tools do not accept or require caller-managed idempotency keys
+  - keeps Shared Ember idempotency internal to the runtime-owned adapter; PM delegates into the worker without exposing caller-managed idempotency keys at the public control plane
   - treats candidate-plan creation as complete only after the lending service has privately anchored that planner-returned payload; missing planner metadata, missing managed wallet context, or missing anchored-resolver wiring must fail closed instead of leaving an apparently executable local plan
-  - keeps `request_transaction_execution` as one model-visible tool while
+  - keeps internal `create_transaction` plus `request_execution` worker commands while
     internally composing Shared Ember execution preparation, service-owned
     anchored Onchain Actions ordered transaction-request persistence and step
     resolution in runtime-owned domain state, local OWS signing custody, shared

@@ -84,7 +84,7 @@ Key point:
 
 - Web, Telegram, and A2A are sibling client surfaces around the same Pi gateway runtime.
 - The gateway runtime itself is an initiative-specific layer built around `@mariozechner/pi-agent-core` + `@mariozechner/pi-ai`, not a claim that all of the durable records in this document already exist as `pi-mono` primitives today.
-- The current concrete managed downstream pair is `agent-portfolio-manager` plus `agent-ember-lending`; both are separate Pi-backed runtimes that consume Shared Ember over thin app-local adapters instead of talking to each other directly.
+- The current concrete managed downstream pair is `agent-portfolio-manager` plus hidden execution worker `agent-ember-lending`; only Portfolio Manager is user-facing, and PM dispatches the hidden worker over an internal AG-UI runtime lane while both runtimes still consume Shared Ember over thin app-local adapters.
 
 ## 4. Container view
 
@@ -160,22 +160,24 @@ Container responsibilities:
 - Current managed-runtime example:
   - `agent-portfolio-manager` owns onboarding approval, rooted-signing collection, and managed-agent control-plane projection, but Shared Ember owns the durable reservation and owned-unit truth created during onboarding completion.
   - `agent-portfolio-manager` startup must resolve the configured direct OWS controller wallet, confirm or rewrite the durable `portfolio-manager` / `orchestrator` identity with an identity-scoped idempotency key, and fail closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address.
-  - `agent-portfolio-manager` does not mark managed onboarding complete until a follow-up `subagent.readExecutionContext.v1` read for `ember-lending` exposes a non-null `subagent_wallet_address`.
+  - `agent-portfolio-manager` performs hidden-worker identity plus `subagent.readExecutionContext.v1` repair on a best-effort basis and does not block managed onboarding completion solely because the hidden worker identity or `subagent_wallet_address` is still missing on first use.
   - `agent-portfolio-manager` wallet-accounting reads must target the activated managed mandate lane, not the portfolio-manager lane, so reservation and policy-snapshot context comes from the same agent scope that Shared Ember activated during bootstrap.
   - The current portfolio-manager implementation writes `activation.mandateRef` on new bootstrap completions but still tolerates legacy stored bootstrap payloads that only captured `activation.agentId` until older thread state is replaced.
   - `agent-ember-lending` owns the bounded subagent read/plan/execute/escalate
-    runtime against Shared Ember and consumes agent-scoped lane data plus
-    rooted-wallet-wide wallet contents from Shared Ember execution context.
+    runtime against Shared Ember as a PM-owned hidden execution worker and
+    consumes agent-scoped lane data plus rooted-wallet-wide wallet contents
+    from Shared Ember execution context.
   - `agent-ember-lending` startup must resolve the configured direct OWS signer wallet, confirm or rewrite the durable `ember-lending` / `subagent` identity with an identity-scoped idempotency key, and fail closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address.
   - After healthy identity preflight plus onboarding, the first healthy `subagent.readExecutionContext.v1` read is expected to expose a non-null `subagent_wallet_address`.
-  - `agent-ember-lending` keeps `request_transaction_execution` as one
-    model-visible tool while internally composing runtime-owned redelegation
+  - `agent-portfolio-manager` keeps `dispatch_adhoc_execution` as the
+    model-visible adhoc execution command while hidden `agent-ember-lending`
+    internally composes runtime-owned redelegation
     typed-data signing, service-owned anchored Onchain Actions ordered
     transaction-request persistence and step resolution in runtime-owned domain
     state, chain-aware unsigned-transaction preparation with the managed wallet
     plus RPC state, runtime-owned execution signing, and Shared Ember
     submission/finalization.
-  - `agent-ember-lending` also fails `create_transaction_plan` closed unless it
+  - `agent-ember-lending` also fails internal candidate-plan creation closed unless it
     can persist the planner-returned payload behind that service-owned anchoring
     boundary; missing planner metadata, missing managed wallet context, or
     missing resolver wiring must stop plan creation before local state records a
