@@ -121,8 +121,7 @@ exact max-borrow resolution:
   - `availableLiquidityUsd`
 - When `tokenAddress` is provided, the response also returns
   `requestedReserve` for that reserve even if the wallet has no current
-  exposure in it, and that reserve is also included in `userReserves` when it
-  was not already surfaced there.
+  exposure in it.
 - Aggregate lending fields such as `availableBorrowsUsd` remain unchanged.
 
 ### 3. Action Definitions
