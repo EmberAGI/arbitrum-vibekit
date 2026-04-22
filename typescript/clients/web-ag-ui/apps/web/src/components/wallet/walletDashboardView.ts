@@ -404,6 +404,10 @@ function buildFamilyTreemapItem(
   family: AssetFamilyProjection,
   totalGrossExposureUsd: number,
 ): DashboardTreemapItem | null {
+  if (family.semanticClass === 'liability') {
+    return null;
+  }
+
   const grossValueUsd = family.positiveUsd + family.debtUsd;
   if (grossValueUsd <= 0) {
     return null;
@@ -799,17 +803,21 @@ function buildLegacyTreemapItems(input: {
     }
 
     const isShort = position.positionSide === 'short';
+    if (isShort) {
+      return;
+    }
+
     items.push({
       id: `perp:${position.key}`,
       value: valueUsd,
-      label: `${isShort ? 'Short' : 'Long'} perp`,
+      label: 'Long perp',
       subtitle: formatCompactReference(position.marketAddress),
       valueLabel: formatUsdCompact(valueUsd),
       shareLabel: input.positiveAssetsUsd > 0 ? formatPercent(valueUsd / input.positiveAssetsUsd) : '0%',
       assetClass: 'asset',
-      positionAccent: isShort ? 'liability' : 'dark',
-      toneStyle: isShort ? TREEMAP_BASE_TONE.liability.toneStyle : TREEMAP_BASE_TONE.asset.toneStyle,
-      hoverToneStyle: isShort ? TREEMAP_BASE_TONE.liability.hoverToneStyle : TREEMAP_BASE_TONE.asset.hoverToneStyle,
+      positionAccent: 'dark',
+      toneStyle: TREEMAP_BASE_TONE.asset.toneStyle,
+      hoverToneStyle: TREEMAP_BASE_TONE.asset.hoverToneStyle,
     });
   });
 

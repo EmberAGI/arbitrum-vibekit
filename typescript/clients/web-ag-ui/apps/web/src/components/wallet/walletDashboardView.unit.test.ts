@@ -100,11 +100,8 @@ describe('wallet dashboard view', () => {
       'WETH',
       'Long perp',
       'Camelot ETH/USDC',
-      'Short perp',
     ]);
-    expect(view.treemapItems.find((item) => item.label === 'Short perp')?.positionAccent).toBe(
-      'liability',
-    );
+    expect(view.treemapItems.find((item) => item.label === 'Short perp')).toBeUndefined();
   });
 
   it('interprets very large integer notionals as 18-decimal fixed point values', () => {
@@ -265,6 +262,7 @@ describe('wallet dashboard view', () => {
       deployedUsd: 0,
       owedUsd: 5,
     });
-    expect(view.treemapItems.map((item) => item.label)).toEqual(['USDC', 'ETH', 'USDT']);
+    expect(view.treemapItems.map((item) => item.label)).toEqual(['USDC', 'ETH']);
+    expect(view.treemapItems.find((item) => item.label === 'USDT')).toBeUndefined();
   });
 });

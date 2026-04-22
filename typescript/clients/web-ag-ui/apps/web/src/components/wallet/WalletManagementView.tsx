@@ -138,7 +138,7 @@ function AssetsWidget(props: {
       <div className="mt-3 flex items-center gap-2 font-mono text-[8px] uppercase tracking-[0.14em] text-[#A6927E]">
         <span>Hover the treemap</span>
         <span aria-hidden="true">·</span>
-        <span>cash, deployed, and liability exposure</span>
+        <span>cash and deployed exposure</span>
       </div>
     </section>
   );
