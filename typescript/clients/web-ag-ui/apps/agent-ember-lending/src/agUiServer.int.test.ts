@@ -782,6 +782,51 @@ describe('agent-ember-lending AG-UI integration', () => {
                   control_path: 'lending.supply',
                 },
               ],
+              active_position_scopes: [
+                {
+                  scope_id:
+                    'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
+                  kind: 'lending',
+                  scope_type_id: 'lending.aave.position',
+                  root_user_wallet: '0x00000000000000000000000000000000000000a1',
+                  network: 'arbitrum',
+                  protocol_system: 'aave',
+                  container_ref: 'aave:0x00000000000000000000000000000000000000a1',
+                  status: 'active',
+                  market_state: {
+                    available_borrows_usd: '63.00',
+                    borrowable_headroom_usd: '63.00',
+                    current_ltv_bps: 3000,
+                    liquidation_threshold_bps: 8400,
+                    health_factor: '1.42',
+                    freshness: {
+                      derived_at: '2026-04-01T06:00:00.000Z',
+                      oldest_observed_at: '2026-04-01T05:59:00.000Z',
+                      latest_observed_at: '2026-04-01T06:00:00.000Z',
+                      source_kind: 'valuation_ref',
+                    },
+                  },
+                  action_capacities: [
+                    {
+                      control_path: 'lending.borrow',
+                      capacity_kind: 'usd',
+                      max_capacity: '48.00',
+                      limiting_constraints: ['mandate_min_health_factor'],
+                      observed_state: {
+                        total_supplied_usd: '90.00',
+                        total_borrowed_usd: '27.00',
+                        available_borrows_usd: '63.00',
+                        liquidation_threshold_borrow_capacity_usd: '67.00',
+                        current_ltv_bps: 3000,
+                        liquidation_threshold_bps: 8400,
+                        health_factor: '1.42',
+                        normalized_health_factor: '1.42',
+                        health_factor_status: 'measured',
+                      },
+                    },
+                  ],
+                },
+              ],
               owned_units: [
                 {
                   unit_id: 'unit-ember-lending-001',
@@ -982,6 +1027,29 @@ describe('agent-ember-lending AG-UI integration', () => {
         },
       }),
     );
+
+    expect(
+      readPersistedLifecycleState(persistedPostgres.persistedThreads.values(), 'thread-connect-1'),
+    ).toMatchObject({
+      lastPortfolioState: {
+        active_position_scopes: [
+          expect.objectContaining({
+            scope_id:
+              'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
+            market_state: expect.objectContaining({
+              borrowable_headroom_usd: '63.00',
+            }),
+            action_capacities: [
+              expect.objectContaining({
+                control_path: 'lending.borrow',
+                max_capacity: '48.00',
+                limiting_constraints: ['mandate_min_health_factor'],
+              }),
+            ],
+          }),
+        ],
+      },
+    });
   });
 
   it('does not fabricate handoff identity over AG-UI when the live portfolio payload omits it', async () => {
