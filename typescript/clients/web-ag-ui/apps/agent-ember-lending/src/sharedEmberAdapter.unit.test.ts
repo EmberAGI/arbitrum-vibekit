@@ -130,67 +130,7 @@ function createManagedLifecycleState() {
         },
       ],
       active_position_scopes: [
-        {
-          scope_id:
-            'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
-          kind: 'lending',
-          scope_type_id: 'lending.aave.position',
-          root_user_wallet: '0x00000000000000000000000000000000000000a1',
-          network: 'arbitrum',
-          protocol_system: 'aave',
-          container_ref: 'aave:0x00000000000000000000000000000000000000a1',
-          status: 'active',
-          market_state: {
-            available_borrows_usd: '63.00',
-            borrowable_headroom_usd: '63.00',
-            current_ltv_bps: 3000,
-            liquidation_threshold_bps: 8400,
-            health_factor: '1.42',
-            freshness: {
-              derived_at: '2026-04-01T06:00:00.000Z',
-              oldest_observed_at: '2026-04-01T05:59:00.000Z',
-              latest_observed_at: '2026-04-01T06:00:00.000Z',
-              source_kind: 'valuation_ref',
-            },
-          },
-          members: [
-            {
-              member_id:
-                'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC',
-              role: 'collateral',
-              asset: 'aArbUSDC',
-              quantity: '90',
-              value_usd: '90.00',
-              economic_exposures: [
-                {
-                  asset: 'USDC',
-                  quantity: '90',
-                },
-              ],
-              state: {
-                withdrawable_quantity: '63',
-                supply_apr: '0.03',
-              },
-            },
-            {
-              member_id:
-                'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:debt:USDC',
-              role: 'debt',
-              asset: 'variableDebtArbUSDC',
-              quantity: '27',
-              value_usd: '27.00',
-              economic_exposures: [
-                {
-                  asset: 'USDC',
-                  quantity: '27',
-                },
-              ],
-              state: {
-                borrow_apr: '0.05',
-              },
-            },
-          ],
-        },
+        createActivePositionScope(),
       ],
       owned_units: [
         {
@@ -242,6 +182,89 @@ function createManagedMandateContext() {
   };
 }
 
+function createActivePositionScope() {
+  return {
+    scope_id:
+      'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
+    kind: 'lending',
+    scope_type_id: 'lending.aave.position',
+    root_user_wallet: '0x00000000000000000000000000000000000000a1',
+    network: 'arbitrum',
+    protocol_system: 'aave',
+    container_ref: 'aave:0x00000000000000000000000000000000000000a1',
+    status: 'active',
+    market_state: {
+      available_borrows_usd: '63.00',
+      borrowable_headroom_usd: '63.00',
+      current_ltv_bps: 3000,
+      liquidation_threshold_bps: 8400,
+      health_factor: '1.42',
+      freshness: {
+        derived_at: '2026-04-01T06:00:00.000Z',
+        oldest_observed_at: '2026-04-01T05:59:00.000Z',
+        latest_observed_at: '2026-04-01T06:00:00.000Z',
+        source_kind: 'valuation_ref',
+      },
+    },
+    action_capacities: [
+      {
+        control_path: 'lending.borrow',
+        capacity_kind: 'usd',
+        max_capacity: '48.00',
+        limiting_constraints: ['mandate_max_ltv'],
+        observed_state: {
+          total_supplied_usd: '90.00',
+          total_borrowed_usd: '27.00',
+          available_borrows_usd: '63.00',
+          liquidation_threshold_borrow_capacity_usd: '67.00',
+          current_ltv_bps: 3000,
+          liquidation_threshold_bps: 8400,
+          health_factor: '1.42',
+          normalized_health_factor: '1.42',
+          health_factor_status: 'measured',
+        },
+      },
+    ],
+    members: [
+      {
+        member_id:
+          'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC',
+        role: 'collateral',
+        asset: 'aArbUSDC',
+        quantity: '90',
+        value_usd: '90.00',
+        economic_exposures: [
+          {
+            asset: 'USDC',
+            quantity: '90',
+          },
+        ],
+        state: {
+          withdrawable_quantity: '63',
+          supply_apr: '0.03',
+        },
+      },
+      {
+        member_id:
+          'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:debt:USDC',
+        role: 'debt',
+        asset: 'variableDebtArbUSDC',
+        quantity: '27',
+        value_usd: '27.00',
+        economic_exposures: [
+          {
+            asset: 'USDC',
+            quantity: '27',
+          },
+        ],
+        state: {
+          borrow_apr: '0.05',
+        },
+      },
+    ],
+  };
+}
+
 function createPortfolioStateResponse() {
   return {
     jsonrpc: '2.0',
@@ -277,67 +300,7 @@ function createPortfolioStateResponse() {
           },
         ],
         active_position_scopes: [
-          {
-            scope_id:
-              'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
-            kind: 'lending',
-            scope_type_id: 'lending.aave.position',
-            root_user_wallet: '0x00000000000000000000000000000000000000a1',
-            network: 'arbitrum',
-            protocol_system: 'aave',
-            container_ref: 'aave:0x00000000000000000000000000000000000000a1',
-            status: 'active',
-            market_state: {
-              available_borrows_usd: '63.00',
-              borrowable_headroom_usd: '63.00',
-              current_ltv_bps: 3000,
-              liquidation_threshold_bps: 8400,
-              health_factor: '1.42',
-              freshness: {
-                derived_at: '2026-04-01T06:00:00.000Z',
-                oldest_observed_at: '2026-04-01T05:59:00.000Z',
-                latest_observed_at: '2026-04-01T06:00:00.000Z',
-                source_kind: 'valuation_ref',
-              },
-            },
-            members: [
-              {
-                member_id:
-                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC',
-                role: 'collateral',
-                asset: 'aArbUSDC',
-                quantity: '90',
-                value_usd: '90.00',
-                economic_exposures: [
-                  {
-                    asset: 'USDC',
-                    quantity: '90',
-                  },
-                ],
-                state: {
-                  withdrawable_quantity: '63',
-                  supply_apr: '0.03',
-                },
-              },
-              {
-                member_id:
-                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:debt:USDC',
-                role: 'debt',
-                asset: 'variableDebtArbUSDC',
-                quantity: '27',
-                value_usd: '27.00',
-                economic_exposures: [
-                  {
-                    asset: 'USDC',
-                    quantity: '27',
-                  },
-                ],
-                state: {
-                  borrow_apr: '0.05',
-                },
-              },
-            ],
-          },
+          createActivePositionScope(),
         ],
         owned_units: [
           {
@@ -456,67 +419,7 @@ function createExecutionContextResponse() {
         subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
         root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
         active_position_scopes: [
-          {
-            scope_id:
-              'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
-            kind: 'lending',
-            scope_type_id: 'lending.aave.position',
-            root_user_wallet: '0x00000000000000000000000000000000000000a1',
-            network: 'arbitrum',
-            protocol_system: 'aave',
-            container_ref: 'aave:0x00000000000000000000000000000000000000a1',
-            status: 'active',
-            market_state: {
-              available_borrows_usd: '63.00',
-              borrowable_headroom_usd: '63.00',
-              current_ltv_bps: 3000,
-              liquidation_threshold_bps: 8400,
-              health_factor: '1.42',
-              freshness: {
-                derived_at: '2026-04-01T06:00:00.000Z',
-                oldest_observed_at: '2026-04-01T05:59:00.000Z',
-                latest_observed_at: '2026-04-01T06:00:00.000Z',
-                source_kind: 'valuation_ref',
-              },
-            },
-            members: [
-              {
-                member_id:
-                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC',
-                role: 'collateral',
-                asset: 'aArbUSDC',
-                quantity: '90',
-                value_usd: '90.00',
-                economic_exposures: [
-                  {
-                    asset: 'USDC',
-                    quantity: '90',
-                  },
-                ],
-                state: {
-                  withdrawable_quantity: '63',
-                  supply_apr: '0.03',
-                },
-              },
-              {
-                member_id:
-                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:debt:USDC',
-                role: 'debt',
-                asset: 'variableDebtArbUSDC',
-                quantity: '27',
-                value_usd: '27.00',
-                economic_exposures: [
-                  {
-                    asset: 'USDC',
-                    quantity: '27',
-                  },
-                ],
-                state: {
-                  borrow_apr: '0.05',
-                },
-              },
-            ],
-          },
+          createActivePositionScope(),
         ],
         wallet_contents: [
           {
@@ -1158,6 +1061,9 @@ describe('createEmberLendingDomain', () => {
         '      <protocol_system>aave</protocol_system>',
         '      <market_state>',
         '        <health_factor>1.42</health_factor>',
+        '      <action_capacities>',
+        '        <action_capacity control_path="lending.borrow" capacity_kind="usd">',
+        '          <max_capacity>48.00</max_capacity>',
         '      <members>',
         '        <member member_id="position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC" role="collateral" asset="aArbUSDC">',
         '          <value_usd>90.00</value_usd>',
@@ -1317,6 +1223,9 @@ describe('createEmberLendingDomain', () => {
         '  <active_position_scopes>',
         '      <protocol_system>aave</protocol_system>',
         '        <borrowable_headroom_usd>63.00</borrowable_headroom_usd>',
+        '      <action_capacities>',
+        '        <action_capacity control_path="lending.borrow" capacity_kind="usd">',
+        '          <max_capacity>48.00</max_capacity>',
         '    <wallet_balance asset="USDC" network="arbitrum">',
         '      <value_usd>100.00</value_usd>',
       ]),
@@ -1366,6 +1275,9 @@ describe('createEmberLendingDomain', () => {
         '      <protocol_system>aave</protocol_system>',
         '      <market_state>',
         '        <health_factor>1.42</health_factor>',
+        '      <action_capacities>',
+        '        <action_capacity control_path="lending.borrow" capacity_kind="usd">',
+        '          <max_capacity>48.00</max_capacity>',
       ]),
     );
     expect(context?.join('\n')).toContain('<active_reservations>');
