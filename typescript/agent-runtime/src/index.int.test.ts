@@ -58,7 +58,7 @@ type PersistedInterruptRecord = {
   threadId: string;
   executionId: string;
   status: 'pending' | 'resolved';
-  surfacedInThread: boolean;
+  mirroredToActivity: boolean;
   createdAt: Date;
   resolvedAt: Date | null;
 };
@@ -254,7 +254,7 @@ function createPersistingInternalPostgres() {
               executionId,
               _interruptType,
               status,
-              surfacedInThread,
+              mirroredToActivity,
               _requestPayload,
               createdAt,
             ] = statement.values;
@@ -263,7 +263,7 @@ function createPersistingInternalPostgres() {
               threadId: threadId as string,
               executionId: executionId as string,
               status: status as 'pending' | 'resolved',
-              surfacedInThread: surfacedInThread as boolean,
+              mirroredToActivity: mirroredToActivity as boolean,
               createdAt: createdAt as Date,
               resolvedAt: null,
             });
@@ -542,6 +542,7 @@ function hasSystemPromptFragments(
 }
 
 function createLifecycleDomain(options?: {
+  mirroredToActivity?: boolean;
   projectSharedState?: (params: {
     sharedState: Record<string, unknown>;
     currentProjection?: Record<string, unknown>;
@@ -594,7 +595,7 @@ function createLifecycleDomain(options?: {
         {
           type: 'operator-config',
           description: 'Capture an operator note.',
-          surfacedInThread: true,
+          mirroredToActivity: options?.mirroredToActivity ?? true,
         },
       ],
     },
@@ -637,7 +638,7 @@ function createLifecycleDomain(options?: {
               },
               interrupt: {
                 type: 'operator-config',
-                surfacedInThread: true,
+                mirroredToActivity: options?.mirroredToActivity ?? true,
                 message: 'Please provide a short operator note to continue onboarding.',
                 payload: {
                   promptKind: 'text-note',
@@ -1077,6 +1078,208 @@ describe('agent-runtime integration', () => {
         },
       ]),
     );
+  });
+
+  it('keeps non-thread-surfaced interrupts canonical without mirroring them into transcript activity', async () => {
+    const threadId = 'thread-hidden-interrupt';
+    const { persistedThreads, persistedInterrupts, hooks: internalPostgres } =
+      createPersistingInternalPostgres();
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model-hidden-interrupt'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain({
+        mirroredToActivity: false,
+      }),
+      agentOptions: {
+        streamFn: () => createTextStream('Model fallback should not run for direct commands.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId,
+        runId: 'run-hidden-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    expect(persistedThreads.get(threadId)?.threadState).toMatchObject({
+      execution: {
+        status: 'interrupted',
+      },
+      artifacts: {
+        current: {
+          data: {
+            type: 'interrupt-status',
+            interruptType: 'operator-config',
+            status: 'pending',
+            mirroredToActivity: false,
+          },
+        },
+        activity: {
+          data: {
+            type: 'interrupt-status',
+            interruptType: 'operator-config',
+            status: 'pending',
+            mirroredToActivity: false,
+          },
+        },
+      },
+    });
+    expect(persistedThreads.get(threadId)?.threadState).not.toHaveProperty('a2ui');
+    expect(persistedThreads.get(threadId)?.threadState.activityEvents ?? []).toEqual([]);
+    expect([...persistedInterrupts.values()][0]).toMatchObject({
+      status: 'pending',
+      mirroredToActivity: false,
+    });
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId,
+        runId: 'run-hidden-refresh',
+        forwardedProps: {
+          command: {
+            name: 'refresh_status',
+          },
+        },
+      }),
+    );
+
+    expect(persistedThreads.get(threadId)?.threadState).toMatchObject({
+      artifacts: {
+        current: {
+          data: {
+            type: 'lifecycle-status',
+          },
+        },
+        activity: {
+          data: {
+            type: 'interrupt-status',
+            interruptType: 'operator-config',
+            status: 'pending',
+            mirroredToActivity: false,
+          },
+        },
+      },
+    });
+    expect(persistedThreads.get(threadId)?.threadState.activityEvents ?? []).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'artifact',
+          artifact: expect.objectContaining({
+            data: expect.objectContaining({
+              type: 'lifecycle-status',
+            }),
+          }),
+        }),
+      ]),
+    );
+
+    const reconnectSnapshot = await readFirstMatchingEvent(
+      await runtime.service.connect({
+        threadId,
+        runId: 'run-hidden-reconnect',
+      }),
+      isStateSnapshotEvent,
+    );
+
+    expect(reconnectSnapshot).toBeDefined();
+    expect(
+      (reconnectSnapshot!.snapshot.thread.activity?.events ?? []).some(
+        (event) =>
+          event.type === 'artifact' &&
+          typeof event.artifact?.data === 'object' &&
+          event.artifact.data !== null &&
+          'type' in event.artifact.data &&
+          event.artifact.data.type === 'interrupt-status',
+      ),
+    ).toBe(false);
+    expect(reconnectSnapshot!.snapshot.thread.artifacts).toMatchObject({
+      current: {
+        data: {
+          type: 'lifecycle-status',
+        },
+      },
+      activity: {
+        data: {
+          type: 'interrupt-status',
+          interruptType: 'operator-config',
+          status: 'pending',
+          mirroredToActivity: false,
+        },
+      },
+    });
+
+    const resumeEvents = await collectQueuedEvents(
+      await runtime.service.run({
+        threadId,
+        runId: 'run-hidden-resume',
+        forwardedProps: {
+          command: {
+            resume: {
+              operatorNote: 'safe window approved',
+            },
+          },
+        },
+      }),
+    );
+    const resumeDeltas = resumeEvents.filter(isStateDeltaEvent);
+    const domainResumeDelta = resumeDeltas.find((event) =>
+      event.delta.some(
+        (operation) =>
+          operation.op === 'replace' &&
+          operation.path === '/thread/lifecycle/onboardingStep' &&
+          operation.value === 'delegation-note',
+      ),
+    );
+
+    expect(domainResumeDelta).toBeDefined();
+    expect(domainResumeDelta!.delta).toContainEqual({
+      op: 'replace',
+      path: '/thread/lifecycle/operatorNote',
+      value: 'safe window approved',
+    });
+    expect(
+      resumeDeltas.some((event) =>
+        event.delta.some(
+          (operation) =>
+            operation.path.startsWith('/thread/activity/events/') &&
+            typeof operation.value === 'object' &&
+            operation.value !== null &&
+            'type' in operation.value &&
+            operation.value.type === 'artifact' &&
+            'artifact' in operation.value &&
+            typeof operation.value.artifact === 'object' &&
+            operation.value.artifact !== null &&
+            'data' in operation.value.artifact &&
+            typeof operation.value.artifact.data === 'object' &&
+            operation.value.artifact.data !== null &&
+            'type' in operation.value.artifact.data &&
+            operation.value.artifact.data.type === 'interrupt-status',
+        ),
+      ),
+    ).toBe(false);
+    expect(persistedThreads.get(threadId)?.threadState).not.toHaveProperty('a2ui');
+    expect(
+      (persistedThreads.get(threadId)?.threadState.activityEvents ?? []).some(
+        (event) =>
+          event.type === 'artifact' &&
+          typeof event.artifact?.data === 'object' &&
+          event.artifact.data !== null &&
+          'type' in event.artifact.data &&
+          event.artifact.data.type === 'interrupt-status',
+      ),
+    ).toBe(false);
+    expect([...persistedInterrupts.values()][0]).toMatchObject({
+      status: 'resolved',
+      mirroredToActivity: false,
+      resolvedAt: expect.any(Date),
+    });
   });
 
   it('executes forwardedProps command before inference when both command and messages are present', async () => {
@@ -2179,6 +2382,129 @@ describe('agent-runtime integration', () => {
     ).not.toHaveProperty('a2ui');
   });
 
+  it('normalizes legacy surfacedInThread interrupt artifacts during reconnect repair', async () => {
+    const { persistedThreads, hooks: internalPostgres } = createPersistingInternalPostgres();
+
+    const runtimeA = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused after direct commands.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeA.service.run({
+        threadId: 'thread-hydrate-legacy-surfaced-flag',
+        runId: 'run-hydrate-legacy-surfaced-flag-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const persistedThread = persistedThreads.get('thread-hydrate-legacy-surfaced-flag');
+    expect(persistedThread).toBeDefined();
+    if (!persistedThread) {
+      return;
+    }
+
+    const currentArtifact = persistedThread.threadState.artifacts?.current;
+    expect(currentArtifact).toBeDefined();
+    if (!currentArtifact) {
+      return;
+    }
+
+    const currentData =
+      typeof currentArtifact.data === 'object' && currentArtifact.data !== null
+        ? (currentArtifact.data as Record<string, unknown>)
+        : null;
+    expect(currentData).toBeTruthy();
+    if (!currentData) {
+      return;
+    }
+
+    const legacyInterruptData = {
+      ...currentData,
+      status: 'pending',
+      surfacedInThread: false,
+    } as Record<string, unknown>;
+    delete legacyInterruptData['mirroredToActivity'];
+
+    persistedThreads.set('thread-hydrate-legacy-surfaced-flag', {
+      ...persistedThread,
+      threadState: {
+        ...persistedThread.threadState,
+        execution: {
+          ...(persistedThread.threadState.execution as Record<string, unknown>),
+          status: 'completed',
+          statusMessage: 'Reconnect should normalize the legacy interrupt metadata.',
+        },
+        artifacts: {
+          ...(persistedThread.threadState.artifacts as Record<string, unknown>),
+          current: {
+            ...currentArtifact,
+            data: legacyInterruptData,
+          },
+          activity: {
+            ...currentArtifact,
+            data: legacyInterruptData,
+          },
+        },
+        activityEvents: [],
+        a2ui: undefined,
+      },
+      updatedAt: new Date('2026-03-20T17:05:00.000Z'),
+    });
+
+    const runtimeB = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused after reconnect.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    const reconnectSnapshot = await readFirstMatchingEvent(
+      await runtimeB.service.connect({
+        threadId: 'thread-hydrate-legacy-surfaced-flag',
+        runId: 'run-hydrate-legacy-surfaced-flag-reconnect',
+      }),
+      isStateSnapshotEvent,
+    );
+
+    expect(reconnectSnapshot).toBeDefined();
+    expect(reconnectSnapshot!.snapshot.thread.activity?.events ?? []).toEqual([]);
+
+    const repairedThreadState = persistedThreads.get('thread-hydrate-legacy-surfaced-flag')?.threadState;
+    const repairedActivityData =
+      repairedThreadState &&
+      repairedThreadState.artifacts &&
+      typeof repairedThreadState.artifacts === 'object' &&
+      repairedThreadState.artifacts !== null &&
+      'activity' in repairedThreadState.artifacts &&
+      typeof repairedThreadState.artifacts.activity === 'object' &&
+      repairedThreadState.artifacts.activity !== null &&
+      'data' in repairedThreadState.artifacts.activity &&
+      typeof repairedThreadState.artifacts.activity.data === 'object' &&
+      repairedThreadState.artifacts.activity.data !== null
+        ? (repairedThreadState.artifacts.activity.data as Record<string, unknown>)
+        : null;
+
+    expect(repairedActivityData).toMatchObject({
+      type: 'interrupt-status',
+      status: 'resolved',
+      mirroredToActivity: false,
+    });
+    expect(repairedActivityData).not.toHaveProperty('surfacedInThread');
+  });
+
   it('repairs drifted execution and interrupt checkpoints when reconnect hydrates persisted thread state after restart', async () => {
     const { persistedExecutions, persistedInterrupts, hooks: internalPostgres } =
       createPersistingInternalPostgres();
@@ -2229,7 +2555,7 @@ describe('agent-runtime integration', () => {
       threadId: originalInterrupt.threadId,
       executionId: originalInterrupt.executionId,
       status: 'pending',
-      surfacedInThread: true,
+      mirroredToActivity: true,
       createdAt: new Date('2026-03-20T17:00:00.000Z'),
       resolvedAt: null,
     });

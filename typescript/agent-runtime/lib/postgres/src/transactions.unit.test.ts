@@ -93,7 +93,7 @@ describe('transactions', () => {
         type: 'operator-config-request',
         message: 'Need operator input.',
       },
-      surfacedInThread: true,
+      mirroredToActivity: true,
       now: new Date('2026-03-18T20:05:00.000Z'),
     });
 

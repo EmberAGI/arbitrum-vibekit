@@ -413,7 +413,7 @@ describe('createPortfolioManagerDomain', () => {
         },
         interrupt: {
           type: 'portfolio-manager-setup-request',
-          surfacedInThread: true,
+          mirroredToActivity: false,
           message: 'Connect the wallet you want the portfolio manager to onboard.',
         },
       },
@@ -458,7 +458,7 @@ describe('createPortfolioManagerDomain', () => {
         },
         interrupt: {
           type: 'portfolio-manager-delegation-signing-request',
-          surfacedInThread: true,
+          mirroredToActivity: false,
           message: 'Review and sign the delegation needed to activate your portfolio manager.',
           payload: {
             chainId: 42161,

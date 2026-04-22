@@ -72,7 +72,7 @@ describe('loadPiRuntimeInspectionState', () => {
             thread_id: 'thread-1',
             execution_id: 'exec-1',
             status: 'pending',
-            surfaced_in_thread: true,
+            mirrored_to_activity: true,
           },
         ];
       }
@@ -186,7 +186,7 @@ describe('loadPiRuntimeInspectionState', () => {
           threadId: 'thread-1',
           executionId: 'exec-1',
           status: 'pending',
-          surfacedInThread: true,
+          mirroredToActivity: true,
         },
       ],
       leases: [

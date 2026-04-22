@@ -194,7 +194,7 @@ describe('agent-runtime-pi package contract', () => {
           executionId: 'exec-interrupted',
           threadId: 'thread-1',
           status: 'pending' as const,
-          surfacedInThread: true,
+          mirroredToActivity: true,
         },
       ],
       leases: [],

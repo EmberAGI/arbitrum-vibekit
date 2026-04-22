@@ -164,7 +164,7 @@ export function buildPiRuntimeInspectionSnapshot(params: {
     .filter((execution) => execution.status === 'interrupted')
     .map((execution) => execution.executionId);
   const pendingInterruptIds = params.interrupts
-    .filter((interrupt) => interrupt.status === 'pending' && interrupt.surfacedInThread)
+    .filter((interrupt) => interrupt.status === 'pending' && interrupt.mirroredToActivity)
     .map((interrupt) => interrupt.interruptId);
 
   return {

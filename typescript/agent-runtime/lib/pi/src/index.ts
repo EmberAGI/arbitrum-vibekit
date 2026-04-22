@@ -1414,13 +1414,27 @@ const stripLegacyThreadMirrors = <TThread extends Record<string, unknown>>(threa
   return canonicalThread as TThread;
 };
 
+const shouldEmitArtifactActivityFallback = (
+  artifact: PiRuntimeGatewayArtifact | undefined,
+): artifact is PiRuntimeGatewayArtifact => {
+  if (!artifact) {
+    return false;
+  }
+
+  if (!isRecord(artifact.data) || artifact.data.type !== 'interrupt-status') {
+    return true;
+  }
+
+  return artifact.data.mirroredToActivity !== false;
+};
+
 export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Record<string, unknown> => {
   const projectedState = getProjectedState(params);
   const activityEvents: PiRuntimeGatewayActivityEvent[] =
     params.activityEvents && params.activityEvents.length > 0
       ? [...params.activityEvents]
       : [
-          ...(params.artifacts?.activity
+          ...(shouldEmitArtifactActivityFallback(params.artifacts?.activity)
             ? [
                 {
                   type: 'artifact',

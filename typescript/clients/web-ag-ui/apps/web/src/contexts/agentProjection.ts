@@ -80,6 +80,7 @@ function mergeStatePayload(
     thread?: Partial<ThreadState>;
     threadPatch?: Partial<ThreadState>;
     activityEvents?: ThreadState['activity']['events'];
+    artifacts?: ThreadState['artifacts'];
     shared?: {
       settings?: Partial<ThreadSnapshot['settings']>;
     };
@@ -120,6 +121,9 @@ function mergeStatePayload(
   const incomingActivityEvents = Array.isArray(incomingEnvelope.activityEvents)
     ? incomingEnvelope.activityEvents
     : null;
+  const incomingEnvelopeArtifacts = isRecord(incomingEnvelope.artifacts)
+    ? (incomingEnvelope.artifacts as NonNullable<ThreadState['artifacts']>)
+    : undefined;
   const incomingMetrics = isRecord(incomingThread.metrics)
     ? incomingThread.metrics
     : ({} as Partial<ThreadState['metrics']>);
@@ -173,6 +177,15 @@ function mergeStatePayload(
     ...(incomingThreadDomainProjection || incomingProjectedDomainProjection
       ? {
           domainProjection: nextDomainProjection,
+        }
+      : {}),
+    ...(incomingThread.artifacts || incomingEnvelopeArtifacts
+      ? {
+          artifacts: {
+            ...(projected.thread.artifacts ?? {}),
+            ...(isRecord(incomingThread.artifacts) ? incomingThread.artifacts : {}),
+            ...(incomingEnvelopeArtifacts ?? {}),
+          },
         }
       : {}),
     profile: {

@@ -95,7 +95,7 @@ describe('createPiExampleAgentConfig', () => {
       outputs: {
         interrupt: {
           type: 'operator-config',
-          surfacedInThread: true,
+          mirroredToActivity: true,
         },
         artifacts: [
           {

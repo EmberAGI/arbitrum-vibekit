@@ -68,7 +68,7 @@ export function buildPersistExecutionCheckpointStatements(params: {
   currentInterruptId: string | null;
   interruptType?: string;
   interruptPayload?: Record<string, unknown>;
-  surfacedInThread?: boolean;
+  mirroredToActivity?: boolean;
   now: Date;
 }): PostgresStatement[] {
   const completedAt =
@@ -112,14 +112,14 @@ export function buildPersistExecutionCheckpointStatements(params: {
     ),
     buildStatement(
       'pi_interrupts',
-      'insert into pi_interrupts (id, thread_id, execution_id, interrupt_type, status, surfaced_in_thread, request_payload, response_payload, created_at, resolved_at) values ($1, $2, $3, $4, $5, $6, $7, null, $8, null) on conflict (id) do update set thread_id = excluded.thread_id, execution_id = excluded.execution_id, interrupt_type = excluded.interrupt_type, status = excluded.status, surfaced_in_thread = excluded.surfaced_in_thread, request_payload = excluded.request_payload, response_payload = null, resolved_at = null',
+      'insert into pi_interrupts (id, thread_id, execution_id, interrupt_type, status, mirrored_to_activity, request_payload, response_payload, created_at, resolved_at) values ($1, $2, $3, $4, $5, $6, $7, null, $8, null) on conflict (id) do update set thread_id = excluded.thread_id, execution_id = excluded.execution_id, interrupt_type = excluded.interrupt_type, status = excluded.status, mirrored_to_activity = excluded.mirrored_to_activity, request_payload = excluded.request_payload, response_payload = null, resolved_at = null',
       [
         params.currentInterruptId,
         params.threadId,
         params.executionId,
         params.interruptType ?? 'input-required',
         'pending',
-        params.surfacedInThread ?? true,
+        params.mirroredToActivity ?? true,
         JSON.stringify(params.interruptPayload ?? {}),
         params.now,
       ],
@@ -371,7 +371,7 @@ export function buildPersistInterruptCheckpointStatements(params: {
       currentInterruptId: params.interruptId,
       interruptType: 'input-required',
       interruptPayload: {},
-      surfacedInThread: true,
+      mirroredToActivity: true,
       now: params.now,
     }),
     buildStatement(

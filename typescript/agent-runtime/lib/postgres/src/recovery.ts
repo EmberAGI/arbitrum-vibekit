@@ -10,7 +10,7 @@ export type PiRestartInterruptRecord = {
   executionId: string;
   threadId: string;
   status: 'pending' | 'resolved';
-  surfacedInThread: boolean;
+  mirroredToActivity: boolean;
 };
 
 export type PiRestartExecutionRecord = {
@@ -58,7 +58,7 @@ export function buildRestartRecoveryPlan(params: {
     }).map((intent) => intent.outboxId),
     interruptIdsToResurface: params.interrupts
       .filter((interrupt) => {
-        if (interrupt.status !== 'pending' || !interrupt.surfacedInThread) {
+        if (interrupt.status !== 'pending' || !interrupt.mirroredToActivity) {
           return false;
         }
 

@@ -159,7 +159,7 @@ describe('persistence + restart integration', () => {
             threadId: interruptStatement.values[1] as string,
             executionId: interruptStatement.values[2] as string,
             status: interruptStatement.values[4] as 'pending',
-            surfacedInThread: interruptStatement.values[5] as boolean,
+            mirroredToActivity: interruptStatement.values[5] as boolean,
           },
         ],
       }),

@@ -127,7 +127,7 @@ function createPiExampleDomain(): PiExampleDomainConfig {
         {
           type: 'operator-config',
           description: 'Collect the operator note required during onboarding.',
-          surfacedInThread: true,
+          mirroredToActivity: true,
         },
       ],
     },
@@ -174,7 +174,7 @@ function createPiExampleDomain(): PiExampleDomainConfig {
               artifacts: [buildLifecycleArtifact(nextState)],
               interrupt: {
                 type: 'operator-config',
-                surfacedInThread: true,
+                mirroredToActivity: true,
                 message,
               },
             },

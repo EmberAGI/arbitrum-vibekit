@@ -156,6 +156,79 @@ describe('pi AG-UI projection', () => {
     });
   });
 
+  it('does not surface hidden interrupt checkpoint artifacts into thread activity fallbacks', () => {
+    expect(
+      buildPiThreadStateSnapshot({
+        thread: { id: 'thread-hidden' },
+        execution: {
+          id: 'exec-hidden',
+          status: 'interrupted',
+          statusMessage: 'Connect your wallet.',
+        },
+        artifacts: {
+          current: {
+            artifactId: 'current-artifact',
+            data: {
+              type: 'lifecycle-status',
+              phase: 'onboarding',
+            },
+          },
+          activity: {
+            artifactId: 'hidden-interrupt-artifact',
+            data: {
+              type: 'interrupt-status',
+              interruptType: 'portfolio-manager-setup-request',
+              status: 'pending',
+              mirroredToActivity: false,
+              message: 'Connect your wallet.',
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      shared: {},
+      projected: {},
+      thread: {
+        id: 'thread-hidden',
+        task: {
+          id: 'exec-hidden',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              content: 'Connect your wallet.',
+            },
+          },
+        },
+        projection: {
+          source: 'pi-runtime-gateway',
+          canonicalIds: {
+            piThreadId: 'thread-hidden',
+            piExecutionId: 'exec-hidden',
+          },
+        },
+        artifacts: {
+          current: {
+            artifactId: 'current-artifact',
+            data: {
+              type: 'lifecycle-status',
+              phase: 'onboarding',
+            },
+          },
+          activity: {
+            artifactId: 'hidden-interrupt-artifact',
+            data: {
+              type: 'interrupt-status',
+              interruptType: 'portfolio-manager-setup-request',
+              status: 'pending',
+              mirroredToActivity: false,
+              message: 'Connect your wallet.',
+            },
+          },
+        },
+      },
+    });
+  });
+
   it('maps pi-agent-core stream events into AG-UI run, text, tool, and finish events', () => {
     const assistantMessage = {
       role: 'assistant',

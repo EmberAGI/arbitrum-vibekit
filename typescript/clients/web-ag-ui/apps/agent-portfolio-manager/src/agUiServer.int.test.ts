@@ -602,34 +602,7 @@ describe('agent-portfolio-manager AG-UI integration', () => {
         },
       },
     });
-    expect(setupSnapshot).toMatchObject({
-      snapshot: {
-        thread: {
-          activity: {
-            events: expect.arrayContaining([
-              expect.objectContaining({
-                type: 'dispatch-response',
-                parts: expect.arrayContaining([
-                  expect.objectContaining({
-                    kind: 'a2ui',
-                    data: expect.objectContaining({
-                      payload: expect.objectContaining({
-                        kind: 'interrupt',
-                          payload: expect.objectContaining({
-                            type: 'portfolio-manager-delegation-signing-request',
-                          delegationManager: TEST_DELEGATION_MANAGER,
-                          delegateeAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
-                        }),
-                      }),
-                    }),
-                  }),
-                ]),
-              }),
-            ]),
-          },
-        },
-      },
-    });
+    expect(setupSnapshot.snapshot.thread.activity?.events ?? []).toEqual([]);
 
     const signingResponse = await fetch(`${baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
       method: 'POST',

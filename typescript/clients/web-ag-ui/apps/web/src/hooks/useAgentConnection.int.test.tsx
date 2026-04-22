@@ -3126,7 +3126,7 @@ describe('useAgentConnection integration', () => {
     });
   });
 
-  it('rehydrates onboarding from raw persisted runtime state without a mirrored task status', async () => {
+  it('rehydrates onboarding from raw persisted runtime state without mirrored task or activity events', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
     mocks.agent.state = {
@@ -3138,41 +3138,25 @@ describe('useAgentConnection integration', () => {
           phase: 'onboarding',
         },
       },
-      activityEvents: [
-        {
-          type: 'artifact',
-          append: true,
-          artifact: {
-            data: {
-              type: 'interrupt-status',
-              status: 'pending',
-              message: 'Connect the wallet you want the portfolio manager to onboard.',
-              interruptType: 'portfolio-manager-setup-request',
-            },
-            artifactId: 'domain-interrupt:thread-1:hire:1',
+      artifacts: {
+        current: {
+          data: {
+            type: 'lifecycle-status',
+            phase: 'onboarding',
           },
+          artifactId: 'domain-artifact:thread-1:refresh-status:2',
         },
-        {
-          type: 'dispatch-response',
-          parts: [
-            {
-              kind: 'a2ui',
-              data: {
-                payload: {
-                  kind: 'interrupt',
-                  payload: {
-                    type: 'portfolio-manager-setup-request',
-                    message: 'Connect the wallet you want the portfolio manager to onboard.',
-                    artifactId: 'domain-interrupt:thread-1:hire:1',
-                    inputLabel: 'Provide input',
-                    submitLabel: 'Continue',
-                  },
-                },
-              },
-            },
-          ],
+        activity: {
+          data: {
+            type: 'interrupt-status',
+            status: 'pending',
+            mirroredToActivity: false,
+            message: 'Connect the wallet you want the portfolio manager to onboard.',
+            interruptType: 'portfolio-manager-setup-request',
+          },
+          artifactId: 'domain-interrupt:thread-1:hire:1',
         },
-      ],
+      },
     };
 
     await act(async () => {
@@ -3193,6 +3177,82 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.activeInterrupt).toMatchObject({
       type: 'portfolio-manager-setup-request',
       message: 'Connect the wallet you want the portfolio manager to onboard.',
+    });
+  });
+
+  it('rehydrates hidden delegation-signing interrupts from canonical interrupt artifacts with the full payload', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+
+    mocks.agent.state = {
+      thread: {
+        id: 'thread-1',
+      },
+      threadPatch: {
+        lifecycle: {
+          phase: 'onboarding',
+        },
+      },
+      artifacts: {
+        current: {
+          data: {
+            type: 'interrupt-status',
+            status: 'pending',
+            mirroredToActivity: false,
+            message: 'Review and sign the delegation needed to activate your portfolio manager.',
+            interruptType: 'portfolio-manager-delegation-signing-request',
+            payload: {
+              chainId: 42161,
+              delegationManager: '0x0000000000000000000000000000000000000001',
+              delegatorAddress: '0x0000000000000000000000000000000000000002',
+              delegateeAddress: '0x0000000000000000000000000000000000000003',
+              delegationsToSign: [
+                {
+                  delegate: '0x0000000000000000000000000000000000000003',
+                  delegator: '0x0000000000000000000000000000000000000002',
+                  authority: '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+                  caveats: [],
+                  salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+                },
+              ],
+              descriptions: ['Authorize the portfolio manager to operate through your root delegation.'],
+              warnings: ['Only continue if you trust this portfolio-manager session.'],
+            },
+          },
+          artifactId: 'domain-interrupt:thread-1:portfolio-manager-setup-request:1',
+        },
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(latestValue?.activeInterrupt).toEqual({
+      type: 'portfolio-manager-delegation-signing-request',
+      message: 'Review and sign the delegation needed to activate your portfolio manager.',
+      chainId: 42161,
+      delegationManager: '0x0000000000000000000000000000000000000001',
+      delegatorAddress: '0x0000000000000000000000000000000000000002',
+      delegateeAddress: '0x0000000000000000000000000000000000000003',
+      delegationsToSign: [
+        {
+          delegate: '0x0000000000000000000000000000000000000003',
+          delegator: '0x0000000000000000000000000000000000000002',
+          authority: '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+          caveats: [],
+          salt: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        },
+      ],
+      descriptions: ['Authorize the portfolio manager to operate through your root delegation.'],
+      warnings: ['Only continue if you trust this portfolio-manager session.'],
     });
   });
 

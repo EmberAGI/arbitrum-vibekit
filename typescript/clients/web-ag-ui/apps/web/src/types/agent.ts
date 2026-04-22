@@ -440,6 +440,10 @@ export interface ThreadState {
   lifecycle?: ThreadLifecycle;
   task?: Task;
   domainProjection?: Record<string, unknown>;
+  artifacts?: {
+    current?: Artifact;
+    activity?: Artifact;
+  };
   onboardingFlow?: OnboardingFlow;
   poolArtifact?: Artifact;
   operatorInput?:
