@@ -157,7 +157,7 @@ function ManagedMandateInlineFieldButton(props: {
       aria-expanded={props.active}
       aria-haspopup="dialog"
       onClick={props.onClick}
-      className={`inline-flex items-center gap-2 rounded-[16px] border px-2.5 py-1 align-middle text-left text-[0.95rem] font-medium transition ${
+      className={`inline-flex items-center gap-1.5 rounded-[14px] border px-2.5 py-0.5 align-middle text-left text-[0.88rem] font-medium transition ${
         props.active
           ? 'border-[#fd6731]/40 bg-[#fff0e6] text-[#2f2118] shadow-[0_0_0_1px_rgba(253,103,49,0.10)]'
           : 'border-[#eadac7] bg-[#fffdf8] text-[#503826] hover:border-[#fd6731]/30 hover:bg-[#fff7ed]'
@@ -267,7 +267,7 @@ function ManagedMandateInlinePopoverField(props: {
   }, [props.active, props.onClose]);
 
   return (
-    <div ref={rootRef} className="relative mx-1 inline-flex align-middle">
+    <div ref={rootRef} className="relative mx-0.5 inline-flex align-middle">
       <ManagedMandateInlineFieldButton
         ariaLabel={props.ariaLabel}
         active={props.active}
@@ -288,7 +288,7 @@ function ManagedMandateInlinePopoverField(props: {
                 }
               : undefined
           }
-          className="fixed z-30 w-[min(24rem,calc(100vw-2rem))] rounded-[22px] border border-[#eadac7] bg-[#fffdf8]/98 p-3.5 shadow-[0_18px_44px_rgba(115,78,48,0.16)] backdrop-blur-sm"
+          className="fixed z-30 w-[min(22rem,calc(100vw-1.5rem))] rounded-[20px] border border-[#eadac7] bg-[#fffdf8]/98 p-3 shadow-[0_18px_44px_rgba(115,78,48,0.16)] backdrop-blur-sm"
         >
           {props.popover}
         </div>
@@ -315,12 +315,12 @@ function ManagedMandateTokenStackValue(props: {
           <ManagedMandateTokenIcon
             symbol={symbol}
             tokenIconBySymbol={props.tokenIconBySymbol}
-            sizeClassName="h-6 w-6"
+            sizeClassName="h-5 w-5"
           />
         </span>
       ))}
       {hiddenTokenCount > 0 ? (
-        <span className="-ml-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#fff7ef] px-1.5 text-[9px] font-semibold text-[#7c6757] ring-1 ring-[#eadac7]">
+        <span className="-ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#fff7ef] px-1.5 text-[9px] font-semibold text-[#7c6757] ring-1 ring-[#eadac7]">
           +{hiddenTokenCount}
         </span>
       ) : null}
@@ -416,7 +416,7 @@ function ManagedMandateTokenToggleButton(props: {
       aria-label={`Toggle token ${props.symbol}`}
       aria-pressed={props.selected}
       onClick={props.onToggle}
-      className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1.5 text-sm font-medium transition ${
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] font-medium transition ${
         props.selected
           ? 'border-[#fd6731]/40 bg-[#fff0e6] text-[#2f2118]'
           : 'border-[#eadac7] bg-[#fffdf8] text-[#503826] hover:border-[#fd6731]/30 hover:bg-[#fff7ed]'
@@ -441,9 +441,9 @@ function ManagedMandateSliderControl(props: {
   inputName: string;
 }) {
   return (
-    <label className="block rounded-[18px] border border-[#eadac7] bg-[#fffaf2] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
+    <label className="block rounded-[16px] border border-[#eadac7] bg-[#fffaf2] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-[#503826]">
+        <div className="flex items-center gap-2 text-[13px] font-medium text-[#503826]">
           {props.tokenSymbol && props.tokenIconBySymbol ? (
             <ManagedMandateTokenIcon
               symbol={props.tokenSymbol}
@@ -452,7 +452,7 @@ function ManagedMandateSliderControl(props: {
           ) : null}
           <span>{props.label}</span>
         </div>
-        <span className="rounded-full bg-[#fff0e6] px-2.5 py-1 text-sm text-[#b84f2c] ring-1 ring-[#f3d5c5]">
+        <span className="rounded-full bg-[#fff0e6] px-2 py-0.5 text-[13px] text-[#b84f2c] ring-1 ring-[#f3d5c5]">
           {props.valueLabel}
         </span>
       </div>
@@ -464,7 +464,7 @@ function ManagedMandateSliderControl(props: {
         step={props.step}
         value={props.value}
         onChange={(event) => props.onChange(Number(event.target.value))}
-        className="mt-4 h-2 w-full cursor-pointer appearance-none rounded-full bg-[#eadac7] accent-[#fd6731]"
+        className="mt-3 h-2 w-full cursor-pointer appearance-none rounded-full bg-[#eadac7] accent-[#fd6731]"
       />
     </label>
   );
@@ -476,6 +476,7 @@ export function ManagedMandateWorkbenchCard(props: {
   tokenIconBySymbolOverride?: Record<string, string>;
   onSave?: (input: ManagedMandateWorkbenchSubmitInput) => Promise<void> | void;
   submitLabel?: string;
+  chrome?: 'card' | 'plain';
 }) {
   const initialCollateralPolicies = readManagedLendingCollateralPolicies(props.view.managedMandate);
   const normalizedInitialCollateralPolicies =
@@ -712,9 +713,14 @@ export function ManagedMandateWorkbenchCard(props: {
     }
   };
 
+  const rootClassName =
+    props.chrome === 'plain'
+      ? 'py-1'
+      : 'rounded-[22px] border border-[#eadac7] bg-white/80 px-3.5 py-3 shadow-[0_14px_28px_rgba(148,111,79,0.09)]';
+
   return (
-    <div className="rounded-[24px] border border-[#eadac7] bg-white/80 px-4 py-3.5 shadow-[0_16px_32px_rgba(148,111,79,0.10)]">
-      <div className="text-[1.02rem] leading-8 text-[#503826]">
+    <div className={rootClassName}>
+      <div className="text-[0.95rem] leading-7 text-[#503826]">
         Deposit
         <ManagedMandateInlinePopoverField
           ariaLabel="Edit collateral policy"
@@ -729,7 +735,7 @@ export function ManagedMandateWorkbenchCard(props: {
           }
           popover={
             <div className="space-y-3">
-              <div className="flex flex-wrap gap-2.5">
+              <div className="flex flex-wrap gap-2">
                 {availableTokenSymbols.map((symbol) => (
                   <ManagedMandateTokenToggleButton
                     key={symbol}
@@ -741,7 +747,7 @@ export function ManagedMandateWorkbenchCard(props: {
                 ))}
               </div>
               {collateralAssets.length > 0 ? (
-                <div className="space-y-2.5">
+                <div className="space-y-2">
                   {collateralAssets.map((asset, index) => (
                     <ManagedMandateSliderControl
                       key={asset}
@@ -765,7 +771,7 @@ export function ManagedMandateWorkbenchCard(props: {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-[18px] border border-dashed border-[#d8c3ad] bg-[#fffaf2] px-3 py-4 text-sm text-[#7c6757]">
+                <div className="rounded-[16px] border border-dashed border-[#d8c3ad] bg-[#fffaf2] px-3 py-3 text-[13px] text-[#7c6757]">
                   Select at least one collateral asset.
                 </div>
               )}
@@ -792,7 +798,7 @@ export function ManagedMandateWorkbenchCard(props: {
             setActiveEditor((current) => (current === 'borrow-assets' ? null : current))
           }
           popover={
-            <div className="flex flex-wrap gap-2.5">
+            <div className="flex flex-wrap gap-2">
               {availableTokenSymbols.map((symbol) => (
                 <ManagedMandateTokenToggleButton
                   key={symbol}
@@ -881,17 +887,17 @@ export function ManagedMandateWorkbenchCard(props: {
       </div>
 
       {submitError ? (
-        <div className="mt-4 rounded-xl border border-red-500/20 bg-[#fff0eb] px-4 py-3 text-sm text-[#b84f2c]">
+        <div className="mt-3 rounded-xl border border-red-500/20 bg-[#fff0eb] px-3 py-2.5 text-[13px] text-[#b84f2c]">
           {submitError}
         </div>
       ) : null}
 
-      <div className="mt-4 flex items-center justify-end">
+      <div className="mt-3 flex items-center justify-end">
         <button
           type="button"
           onClick={() => void handleSave()}
           disabled={!props.onSave || isSaving}
-          className="shrink-0 rounded-full bg-[#fd6731] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#e55a28] disabled:opacity-60"
+          className="shrink-0 rounded-full bg-[#fd6731] px-3.5 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-[#e55a28] disabled:opacity-60"
         >
           {isSaving ? 'Saving...' : props.submitLabel ?? 'Save managed mandate'}
         </button>

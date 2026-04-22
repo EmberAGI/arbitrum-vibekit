@@ -59,6 +59,78 @@ describe('AgentDetailPage managed mandate editor', () => {
     container.remove();
   });
 
+  it('shows the lending avatar rail next to the mandate editor on the portfolio manager page', async () => {
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        React.createElement(AgentDetailPage, {
+          agentId: 'agent-portfolio-manager',
+          agentName: 'Ember Portfolio Agent',
+          agentDescription: 'desc',
+          creatorName: 'Ember AI Team',
+          creatorVerified: true,
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+            tokens: ['USDC'],
+          },
+          metrics: {},
+          isHired: true,
+          isHiring: false,
+          hasLoadedView: true,
+          onHire: () => {},
+          onFire: () => {},
+          onSync: () => {},
+          onBack: () => {},
+          allowedPools: [],
+          lifecycleState: {
+            phase: 'active',
+          } as never,
+          domainProjection: {
+            managedMandateEditor: {
+              ownerAgentId: 'agent-portfolio-manager',
+              targetAgentId: 'ember-lending',
+              targetAgentRouteId: 'agent-ember-lending',
+              targetAgentKey: 'ember-lending-primary',
+              targetAgentTitle: 'Ember Lending',
+              mandateRef: 'mandate-ember-lending-001',
+              managedMandate: {
+                lending_policy: {
+                  collateral_policy: {
+                    assets: [
+                      {
+                        asset: 'USDC',
+                        max_allocation_pct: 35,
+                      },
+                    ],
+                  },
+                  borrow_policy: {
+                    allowed_assets: ['WETH'],
+                  },
+                  risk_policy: {
+                    max_ltv_bps: 7000,
+                    min_health_factor: '1.25',
+                  },
+                },
+              },
+            },
+          },
+        }),
+      );
+    });
+
+    const lendingAvatar = container.querySelector('img[alt="Ember Lending"]');
+
+    expect(lendingAvatar).not.toBeNull();
+    expect(lendingAvatar?.getAttribute('src')).toBe('/ember-lending-avatar.svg');
+    expect(container.textContent).toContain('Aave');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it('hides risk controls when borrow is cleared and preserves the existing supply-only risk policy', async () => {
     const onManagedMandateSave = vi.fn(async () => undefined);
     const root = createRoot(container);

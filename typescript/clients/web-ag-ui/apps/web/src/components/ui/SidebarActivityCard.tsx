@@ -26,6 +26,7 @@ export type SidebarActivityCardView = {
   statusTone: 'active' | 'blocked' | 'completed';
   valueUsd?: number;
   allocationShare?: number;
+  allocationShareLabel?: string;
   metricBadge?: string;
   tokenBreakdown: SidebarActivityCardTokenSlice[];
   controlBreakdown?: SidebarActivityCardControlSlice[];
@@ -257,7 +258,10 @@ export function SidebarActivityCard(props: {
             {props.card.allocationShare !== undefined ? (
               <>
                 <span>·</span>
-                <span>{formatPercent(props.card.allocationShare)} of tracked exposure</span>
+                <span>
+                  {formatPercent(props.card.allocationShare)} of{' '}
+                  {props.card.allocationShareLabel ?? 'tracked exposure'}
+                </span>
               </>
             ) : null}
           </div>

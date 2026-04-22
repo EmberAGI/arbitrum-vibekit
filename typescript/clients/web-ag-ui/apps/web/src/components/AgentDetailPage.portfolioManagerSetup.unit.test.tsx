@@ -108,10 +108,14 @@ describe('AgentDetailPage portfolio-manager setup', () => {
     const editCollateralPolicyButton = container.querySelector(
       'button[aria-label="Edit collateral policy"]',
     ) as HTMLButtonElement | null;
+    const lendingAvatar = container.querySelector(
+      'img[alt="Ember Lending"]',
+    ) as HTMLImageElement | null;
     const submitButton = [...container.querySelectorAll('button')].find(
       (button) => button.textContent?.includes('Approve'),
     ) as HTMLButtonElement | undefined;
 
+    expect(lendingAvatar?.getAttribute('src')).toBe('/ember-lending-avatar.svg');
     expect(editCollateralPolicyButton).not.toBeNull();
     expect(container.querySelector('button[aria-label="Edit maximum LTV"]')).toBeNull();
     expect(container.querySelector('button[aria-label="Edit minimum health factor"]')).toBeNull();

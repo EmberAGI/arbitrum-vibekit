@@ -4328,63 +4328,200 @@ describe('createPortfolioManagerDomain', () => {
     );
   });
 
-  it('appends live Shared Ember accounting context to the system prompt context when a wallet is active', async () => {
-    const protocolHost = {
-      handleJsonRpc: vi.fn(async () => ({
-        jsonrpc: '2.0',
-        id: 'shared-ember-wallet-accounting-ember-lending-0x00000000000000000000000000000000000000a1',
-        result: {
-          revision: 4,
-          onboarding_state: {
-            wallet_address: '0x00000000000000000000000000000000000000a1',
-            network: 'arbitrum',
-            phase: 'active',
-            proofs: {
-              rooted_wallet_context_registered: true,
-              root_delegation_registered: true,
-              root_authority_active: true,
-              wallet_baseline_observed: true,
-              accounting_units_seeded: true,
-              mandate_inputs_configured: true,
-              reserve_policy_configured: true,
-              capital_reserved_for_agent: true,
-              policy_snapshot_recorded: true,
-              agent_active: true,
-            },
-            rooted_wallet_context: {
-              rooted_wallet_context_id: 'rwc-a1',
-            },
-            root_delegation: {
-              root_delegation_id: 'root-a1',
-            },
-            owned_units: [
-              {
-                unit_id: 'unit-a1',
-                root_asset: 'USDC',
-                quantity: '10',
-                status: 'reserved',
-                control_path: 'lending.supply',
-                reservation_id: 'reservation-a1',
-              },
-            ],
-            reservations: [
-              {
-                reservation_id: 'reservation-a1',
-                agent_id: 'ember-lending',
-                purpose: 'position.enter',
-                status: 'active',
-                control_path: 'lending.supply',
-                unit_allocations: [
+  it('appends aggregated live Shared Ember accounting context to the system prompt context when a wallet is active', async () => {
+    const onboardingBootstrap = {
+      ...createOnboardingBootstrap(),
+      mandates: [
+        ...createOnboardingBootstrap().mandates,
+        {
+          mandate_ref: 'mandate-ember-rebalance-protocol-001',
+          agent_id: 'ember-rebalance',
+          managed_mandate: {
+            lending_policy: createManagedLendingPolicy({
+              collateral_policy: {
+                assets: [
                   {
-                    unit_id: 'unit-a1',
-                    quantity: '10',
+                    asset: 'WETH',
+                    max_allocation_pct: 20,
                   },
                 ],
               },
-            ],
+              borrow_policy: {
+                allowed_assets: ['USDC'],
+              },
+            }),
           },
         },
-      })),
+      ],
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null
+            ? (request as { method?: unknown; params?: unknown })
+            : null;
+        const method = jsonRpcRequest?.method;
+        const params =
+          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+            ? (jsonRpcRequest.params as { agent_id?: unknown })
+            : null;
+
+        if (method === 'subagent.readPortfolioState.v1') {
+          throw new Error('managed-agent portfolio state unavailable');
+        }
+
+        if (method === 'orchestrator.readOnboardingState.v1' && params?.agent_id === 'ember-lending') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-wallet-accounting-ember-lending-0x00000000000000000000000000000000000000a1',
+            result: {
+              revision: 4,
+              onboarding_state: {
+                wallet_address: '0x00000000000000000000000000000000000000a1',
+                network: 'arbitrum',
+                phase: 'active',
+                proofs: {
+                  rooted_wallet_context_registered: true,
+                  root_delegation_registered: true,
+                  root_authority_active: true,
+                  wallet_baseline_observed: true,
+                  accounting_units_seeded: true,
+                  mandate_inputs_configured: true,
+                  reserve_policy_configured: true,
+                  capital_reserved_for_agent: true,
+                  policy_snapshot_recorded: true,
+                  initial_subagent_delegation_issued: true,
+                  agent_active: true,
+                },
+                rooted_wallet_context: {
+                  rooted_wallet_context_id: 'rwc-a1',
+                },
+                root_delegation: {
+                  root_delegation_id: 'root-a1',
+                },
+                owned_units: [
+                  {
+                    unit_id: 'unit-idle',
+                    root_asset: 'USDC',
+                    quantity: '40',
+                    status: 'available',
+                    control_path: 'wallet.idle',
+                    reservation_id: null,
+                  },
+                  {
+                    unit_id: 'unit-a1',
+                    root_asset: 'USDC',
+                    quantity: '10',
+                    status: 'reserved',
+                    control_path: 'lending.supply',
+                    reservation_id: 'reservation-a1',
+                  },
+                  {
+                    unit_id: 'unit-a2',
+                    root_asset: 'WETH',
+                    quantity: '1.5',
+                    status: 'reserved',
+                    control_path: 'lending.supply',
+                    reservation_id: 'reservation-a2',
+                  },
+                ],
+                reservations: [
+                  {
+                    reservation_id: 'reservation-a1',
+                    agent_id: 'ember-lending',
+                    purpose: 'position.enter',
+                    status: 'active',
+                    control_path: 'lending.supply',
+                    unit_allocations: [
+                      {
+                        unit_id: 'unit-a1',
+                        quantity: '10',
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          };
+        }
+
+        if (method === 'orchestrator.readOnboardingState.v1' && params?.agent_id === 'ember-rebalance') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-wallet-accounting-ember-rebalance-0x00000000000000000000000000000000000000a1',
+            result: {
+              revision: 5,
+              onboarding_state: {
+                wallet_address: '0x00000000000000000000000000000000000000a1',
+                network: 'arbitrum',
+                phase: 'active',
+                proofs: {
+                  rooted_wallet_context_registered: true,
+                  root_delegation_registered: true,
+                  root_authority_active: true,
+                  wallet_baseline_observed: true,
+                  accounting_units_seeded: true,
+                  mandate_inputs_configured: true,
+                  reserve_policy_configured: true,
+                  capital_reserved_for_agent: true,
+                  policy_snapshot_recorded: true,
+                  initial_subagent_delegation_issued: true,
+                  agent_active: true,
+                },
+                rooted_wallet_context: {
+                  rooted_wallet_context_id: 'rwc-a1',
+                },
+                root_delegation: {
+                  root_delegation_id: 'root-a1',
+                },
+                owned_units: [
+                  {
+                    unit_id: 'unit-idle',
+                    root_asset: 'USDC',
+                    quantity: '40',
+                    status: 'available',
+                    control_path: 'wallet.idle',
+                    reservation_id: null,
+                  },
+                  {
+                    unit_id: 'unit-a1',
+                    root_asset: 'USDC',
+                    quantity: '10',
+                    status: 'reserved',
+                    control_path: 'lending.supply',
+                    reservation_id: 'reservation-a1',
+                  },
+                  {
+                    unit_id: 'unit-a2',
+                    root_asset: 'WETH',
+                    quantity: '1.5',
+                    status: 'reserved',
+                    control_path: 'lending.supply',
+                    reservation_id: 'reservation-a2',
+                  },
+                ],
+                reservations: [
+                  {
+                    reservation_id: 'reservation-a2',
+                    agent_id: 'ember-rebalance',
+                    purpose: 'position.enter',
+                    status: 'active',
+                    control_path: 'lending.supply',
+                    unit_allocations: [
+                      {
+                        unit_id: 'unit-a2',
+                        quantity: '1.5',
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          };
+        }
+
+        throw new Error(`unexpected method: ${String(method ?? 'missing')}`);
+      }),
       readCommittedEventOutbox: vi.fn(),
       acknowledgeCommittedEventOutbox: vi.fn(),
     };
@@ -4401,11 +4538,7 @@ describe('createPortfolioManagerDomain', () => {
           lastPortfolioState: null,
           lastSharedEmberRevision: 4,
           lastRootDelegation: null,
-          lastOnboardingBootstrap: {
-            rootedWalletContext: {
-              wallet_address: '0x00000000000000000000000000000000000000a1',
-            },
-          },
+          lastOnboardingBootstrap: onboardingBootstrap,
           lastRootedWalletContextId: 'rwc-a1',
           activeWalletAddress: '0x00000000000000000000000000000000000000a1',
           pendingOnboardingWalletAddress: null,
@@ -4416,11 +4549,51 @@ describe('createPortfolioManagerDomain', () => {
         '<shared_ember_accounting_context freshness="live">',
         expect.stringMatching(/^  <generated_at>.+<\/generated_at>$/),
         '  <wallet_address>0x00000000000000000000000000000000000000a1</wallet_address>',
-        '  <revision>4</revision>',
+        '  <revision>5</revision>',
         '  <phase>active</phase>',
+        '    <asset unit_id="unit-idle">',
         '    <asset unit_id="unit-a1" reservation_id="reservation-a1">',
+        '    <asset unit_id="unit-a2" reservation_id="reservation-a2">',
         '    <reservation reservation_id="reservation-a1" agent_id="ember-lending">',
+        '    <reservation reservation_id="reservation-a2" agent_id="ember-rebalance">',
       ]),
+    );
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.readPortfolioState.v1',
+        params: {
+          agent_id: 'ember-lending',
+        },
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'subagent.readPortfolioState.v1',
+        params: {
+          agent_id: 'ember-rebalance',
+        },
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.readOnboardingState.v1',
+        params: {
+          agent_id: 'ember-lending',
+          wallet_address: '0x00000000000000000000000000000000000000a1',
+          network: 'arbitrum',
+        },
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'orchestrator.readOnboardingState.v1',
+        params: {
+          agent_id: 'ember-rebalance',
+          wallet_address: '0x00000000000000000000000000000000000000a1',
+          network: 'arbitrum',
+        },
+      }),
     );
   });
 

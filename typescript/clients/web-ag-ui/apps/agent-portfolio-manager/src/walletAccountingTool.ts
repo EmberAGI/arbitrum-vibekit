@@ -5,7 +5,7 @@ import {
   buildPortfolioManagerWalletAccountingDetails,
   PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID,
   PORTFOLIO_MANAGER_SHARED_EMBER_NETWORK,
-  readPortfolioManagerOnboardingState,
+  readManagedAgentAccountingState,
   type PortfolioManagerWalletAccountingDetails,
 } from './sharedEmberOnboardingState.js';
 
@@ -80,7 +80,7 @@ export function createPortfolioManagerWalletAccountingTool(input: {
     } as unknown as PortfolioManagerAgentTool['parameters'],
     execute: async (_toolCallId, args) => {
       const toolArgs = parseWalletAccountingToolArgs(args);
-      const { revision, onboardingState } = await readPortfolioManagerOnboardingState({
+      const { revision, onboardingState } = await readManagedAgentAccountingState({
         protocolHost: input.protocolHost,
         agentId: input.agentId || PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID,
         walletAddress: toolArgs.walletAddress,

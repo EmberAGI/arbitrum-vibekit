@@ -20,15 +20,24 @@ import { defaultEvmChain, supportedEvmChains } from '@/config/evmChains';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
 import { useAgent } from '@/contexts/AgentContext';
+import { useAuthoritativeAgentSnapshotCache } from '@/contexts/AuthoritativeAgentSnapshotCache';
 import { useAgentList } from '@/contexts/AgentListContext';
 import type { AgentConfig } from '@/config/agents';
 import { getVisibleAgents } from '@/config/agents';
 import type { AgentListEntry } from '@/contexts/agentListTypes';
+import { buildPortfolioProjection } from '@/projections/portfolio/buildPortfolioProjection';
+import { portfolioProjectionInputSchema } from '@/projections/portfolio/schema';
+import type {
+  PortfolioProjectionInput,
+  PortfolioProjectionPacket,
+} from '@/projections/portfolio/types';
 import type { TaskState } from '@/types/agent';
 import { resolveSidebarTaskState } from '@/utils/resolveSidebarTaskState';
 import { selectRuntimeTaskState } from '@/utils/selectRuntimeTaskState';
 import { extractTaskStatusMessage } from '@/utils/extractTaskStatusMessage';
 import { isPrivyConfigured } from '@/utils/privyConfig';
+import { invokeAgentCommandRoute } from '@/utils/agentCommandRoute';
+import { getAgentThreadId } from '@/utils/agentThread';
 import {
   SidebarActivityCard,
   type SidebarActivityCardControlSlice,
@@ -51,6 +60,13 @@ const PORTFOLIO_AGENT_ID = 'agent-portfolio-manager';
 const PORTFOLIO_AGENT_CHAT_HREF = `/hire-agents/${PORTFOLIO_AGENT_ID}?tab=chat`;
 const NAV_ACCENT_PALETTE = ['#3566E8', '#7A5AF8', '#0EA5E9', '#D84E8F', '#4F46E5'] as const;
 const UNALLOCATED_ACCENT_HEX = '#CDBFB3';
+
+type SidebarProjectionCardData = {
+  valueUsd: number;
+  allocationShare: number;
+  tokenBreakdown: SidebarActivityCardTokenSlice[];
+  controlBreakdown?: SidebarActivityCardControlSlice[];
+};
 
 export function getWalletSelectorChains(chains: readonly Chain[]): Chain[] {
   return chains.filter(
@@ -97,6 +113,7 @@ export function AppSidebar() {
 
   // Get agent activity data from shared context
   const agent = useAgent();
+  const authoritativeSnapshotCache = useAuthoritativeAgentSnapshotCache();
   const { agents: listAgents } = useAgentList();
 
   const agentConfigs = useMemo(() => getVisibleAgents(), []);
@@ -106,6 +123,13 @@ export function AppSidebar() {
   const runtimeLifecyclePhase = agent.uiState.lifecycle?.phase;
   const runtimeHaltReason = agent.uiState.haltReason;
   const runtimeExecutionError = agent.uiState.executionError;
+  const portfolioManagerThreadId = getAgentThreadId(PORTFOLIO_AGENT_ID, privyWallet?.address);
+  const portfolioManagerSnapshotCacheKey = portfolioManagerThreadId
+    ? `${PORTFOLIO_AGENT_ID}:${portfolioManagerThreadId}`
+    : null;
+  const [fetchedPortfolioProjectionInput, setFetchedPortfolioProjectionInput] =
+    useState<PortfolioProjectionInput | null>(null);
+  const requestedPortfolioProjectionKeyRef = useRef<string | null>(null);
   const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
   const runtimeTaskMessage = extractTaskStatusMessage(agent.uiState.task?.taskStatus?.message);
   const runtimeTaskState = selectRuntimeTaskState({
@@ -201,9 +225,85 @@ export function AppSidebar() {
     });
   });
 
+  const cachedPortfolioProjectionInput = useMemo(() => {
+    const currentAgentProjectionInput =
+      agent.config.id === PORTFOLIO_AGENT_ID
+        ? readPortfolioProjectionInput(agent.domainProjection)
+        : null;
+    if (currentAgentProjectionInput) {
+      return currentAgentProjectionInput;
+    }
+
+    if (!portfolioManagerSnapshotCacheKey) {
+      return null;
+    }
+
+    const snapshot = authoritativeSnapshotCache.getSnapshot(portfolioManagerSnapshotCacheKey);
+    return readPortfolioProjectionInput(snapshot?.thread?.domainProjection);
+  }, [
+    agent.config.id,
+    agent.domainProjection,
+    authoritativeSnapshotCache,
+    portfolioManagerSnapshotCacheKey,
+  ]);
+
+  useEffect(() => {
+    requestedPortfolioProjectionKeyRef.current = null;
+    setFetchedPortfolioProjectionInput(null);
+  }, [privyWallet?.address]);
+
+  useEffect(() => {
+    if (cachedPortfolioProjectionInput || !portfolioManagerThreadId) {
+      return;
+    }
+
+    const requestKey = `${PORTFOLIO_AGENT_ID}:${portfolioManagerThreadId}`;
+    if (requestedPortfolioProjectionKeyRef.current === requestKey) {
+      return;
+    }
+    requestedPortfolioProjectionKeyRef.current = requestKey;
+
+    let canceled = false;
+
+    void (async () => {
+      try {
+        const response = await invokeAgentCommandRoute({
+          agentId: PORTFOLIO_AGENT_ID,
+          threadId: portfolioManagerThreadId,
+          command: {
+            name: 'refresh_portfolio_state',
+          },
+        });
+
+        if (canceled) {
+          return;
+        }
+
+        const projectionInput = readPortfolioProjectionInput(response.domainProjection ?? null);
+        if (projectionInput) {
+          setFetchedPortfolioProjectionInput(projectionInput);
+        }
+      } catch {
+        // Keep the existing metric-based fallback when the shared projection is unavailable.
+      }
+    })();
+
+    return () => {
+      canceled = true;
+    };
+  }, [cachedPortfolioProjectionInput, portfolioManagerThreadId]);
+
   const walletSelectorChains = useMemo(() => getWalletSelectorChains(supportedEvmChains), []);
   const selectedChain = walletSelectorChains.find((chain) => chain.id === chainId) ?? defaultEvmChain;
   const allActivityAgents = [...blockedAgents, ...activeAgents, ...completedAgents];
+  const portfolioProjectionInput = cachedPortfolioProjectionInput ?? fetchedPortfolioProjectionInput;
+  const portfolioProjection = useMemo<PortfolioProjectionPacket | null>(() => {
+    if (!portfolioProjectionInput) {
+      return null;
+    }
+
+    return buildPortfolioProjection(portfolioProjectionInput);
+  }, [portfolioProjectionInput]);
   const totalKnownExposureUsd = allActivityAgents.reduce((total, activity) => {
     const nextValue = resolveGrossExposureUsd(activity.entry);
     return nextValue !== undefined ? total + nextValue : total;
@@ -217,14 +317,23 @@ export function AppSidebar() {
     activities: allActivityAgents,
     accentColorByAgentId,
   });
+  const projectionCardDataByAgentId = useMemo(
+    () =>
+      buildSidebarProjectionCardDataByAgentId({
+        portfolio: portfolioProjection,
+        activities: allActivityAgents,
+        accentColorByAgentId,
+      }),
+    [accentColorByAgentId, allActivityAgents, portfolioProjection],
+  );
   const activityCardViewsById = Object.fromEntries(
     allActivityAgents.map((activity) => [
       activity.id,
       buildSidebarActivityCardView({
         activity,
         totalKnownExposureUsd,
-        accentColorByAgentId,
         portfolioControlBreakdown: specialistControlBreakdown,
+        projectionCardData: projectionCardDataByAgentId.get(activity.id),
       }),
     ]),
   ) as Record<string, SidebarActivityCardView>;
@@ -755,14 +864,15 @@ function buildFallbackCardView(activity: AgentActivity): SidebarActivityCardView
 function buildSidebarActivityCardView(params: {
   activity: AgentActivity;
   totalKnownExposureUsd: number;
-  accentColorByAgentId: Map<string, string>;
   portfolioControlBreakdown: SidebarActivityCardControlSlice[];
+  projectionCardData?: SidebarProjectionCardData;
 }): SidebarActivityCardView {
-  const grossExposureUsd = resolveGrossExposureUsd(params.activity.entry);
+  const grossExposureUsd = params.projectionCardData?.valueUsd ?? resolveGrossExposureUsd(params.activity.entry);
   const allocationShare =
-    grossExposureUsd !== undefined && params.totalKnownExposureUsd > 0
+    params.projectionCardData?.allocationShare ??
+    (grossExposureUsd !== undefined && params.totalKnownExposureUsd > 0
       ? grossExposureUsd / params.totalKnownExposureUsd
-      : undefined;
+      : undefined);
 
   return {
     id: params.activity.id,
@@ -772,14 +882,18 @@ function buildSidebarActivityCardView(params: {
     valueUsd: grossExposureUsd,
     allocationShare,
     metricBadge: resolveMetricBadge(params.activity.entry, params.activity.status),
-    tokenBreakdown: buildTokenBreakdown({
-      entry: params.activity.entry,
-      config: params.activity.config,
-    }),
+    allocationShareLabel: params.projectionCardData ? 'portfolio' : 'tracked exposure',
+    tokenBreakdown:
+      params.projectionCardData?.tokenBreakdown ??
+      buildTokenBreakdown({
+        entry: params.activity.entry,
+        config: params.activity.config,
+      }),
     controlBreakdown:
-      params.activity.id === PORTFOLIO_AGENT_ID && params.portfolioControlBreakdown.length > 0
+      params.projectionCardData?.controlBreakdown ??
+      (params.activity.id === PORTFOLIO_AGENT_ID && params.portfolioControlBreakdown.length > 0
         ? params.portfolioControlBreakdown
-        : undefined,
+        : undefined),
   };
 }
 
@@ -921,6 +1035,91 @@ function hashAgentId(value: string): number {
   }
 
   return hash;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readPortfolioProjectionInput(
+  domainProjection: Record<string, unknown> | null | undefined,
+): PortfolioProjectionInput | null {
+  if (!isRecord(domainProjection)) {
+    return null;
+  }
+
+  const parsed = portfolioProjectionInputSchema.safeParse(domainProjection['portfolioProjectionInput']);
+  return parsed.success ? parsed.data : null;
+}
+
+function buildSidebarProjectionCardDataByAgentId(params: {
+  portfolio: PortfolioProjectionPacket | null;
+  activities: AgentActivity[];
+  accentColorByAgentId: Map<string, string>;
+}): Map<string, SidebarProjectionCardData> {
+  if (!params.portfolio) {
+    return new Map();
+  }
+
+  const activityNameByAgentId = new Map(
+    params.activities.map((activity) => [activity.id, activity.name] as const),
+  );
+  const portfolioGrossExposureUsd = params.portfolio.agents.portfolio.grossExposureUsd;
+  const specialistControlledUsd = params.portfolio.agents.specialists.reduce(
+    (sum, allocation) => sum + allocation.grossExposureUsd,
+    0,
+  );
+  const specialistSlices = params.portfolio.agents.specialists.map((allocation) => ({
+    id: allocation.agentId,
+    label: activityNameByAgentId.get(allocation.agentId) ?? formatAgentIdLabel(allocation.agentId),
+    share: portfolioGrossExposureUsd > 0 ? allocation.grossExposureUsd / portfolioGrossExposureUsd : 0,
+    colorHex: params.accentColorByAgentId.get(allocation.agentId) ?? NAV_ACCENT_PALETTE[0],
+  }));
+  const unallocatedUsd = Math.max(0, portfolioGrossExposureUsd - specialistControlledUsd);
+  const dataByAgentId = new Map<string, SidebarProjectionCardData>();
+
+  dataByAgentId.set(PORTFOLIO_AGENT_ID, {
+    valueUsd: portfolioGrossExposureUsd,
+    allocationShare: 1,
+    tokenBreakdown: buildProjectionTokenBreakdown(params.portfolio.agents.portfolio.tokenExposures),
+    controlBreakdown: [
+      ...specialistSlices,
+      {
+        id: 'unallocated',
+        label: 'Unallocated',
+        share: portfolioGrossExposureUsd > 0 ? unallocatedUsd / portfolioGrossExposureUsd : 0,
+        colorHex: UNALLOCATED_ACCENT_HEX,
+      },
+    ],
+  });
+
+  params.portfolio.agents.specialists.forEach((allocation) => {
+    dataByAgentId.set(allocation.agentId, {
+      valueUsd: allocation.grossExposureUsd,
+      allocationShare: allocation.allocationShare,
+      tokenBreakdown: buildProjectionTokenBreakdown(allocation.tokenExposures),
+    });
+  });
+
+  return dataByAgentId;
+}
+
+function buildProjectionTokenBreakdown(
+  tokenExposures: PortfolioProjectionPacket['agents']['portfolio']['tokenExposures'],
+): SidebarActivityCardTokenSlice[] {
+  return tokenExposures.map((tokenExposure) => ({
+    asset: tokenExposure.asset,
+    share: tokenExposure.share,
+  }));
+}
+
+function formatAgentIdLabel(agentId: string): string {
+  return agentId
+    .replace(/^agent-/, '')
+    .split(/[\s._-]+/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function formatMetricNumber(value: number): string {

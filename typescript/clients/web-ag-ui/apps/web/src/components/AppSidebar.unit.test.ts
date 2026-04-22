@@ -19,6 +19,7 @@ const pushMock = vi.fn();
 const useAgentListMock = vi.fn();
 const getAllAgentsMock = vi.fn();
 const getVisibleAgentsMock = vi.fn();
+const getAuthoritativeSnapshotMock = vi.fn();
 let pathnameMock = '/hire-agents';
 
 vi.mock('next/navigation', () => {
@@ -86,6 +87,7 @@ vi.mock('@/contexts/AgentContext', () => {
   return {
     useAgent: () => ({
       config: { id: 'inactive-agent' },
+      domainProjection: {},
       uiState: {
         task: null,
         haltReason: null,
@@ -94,6 +96,15 @@ vi.mock('@/contexts/AgentContext', () => {
         operatorConfig: null,
         delegationBundle: null,
       },
+    }),
+  };
+});
+
+vi.mock('@/contexts/AuthoritativeAgentSnapshotCache', () => {
+  return {
+    useAuthoritativeAgentSnapshotCache: () => ({
+      getSnapshot: getAuthoritativeSnapshotMock,
+      setSnapshot: vi.fn(),
     }),
   };
 });
@@ -117,6 +128,7 @@ describe('AppSidebar wallet actions', () => {
     useAgentListMock.mockReset();
     getAllAgentsMock.mockReset();
     getVisibleAgentsMock.mockReset();
+    getAuthoritativeSnapshotMock.mockReset();
     pathnameMock = '/hire-agents';
     privyMocks.ready = true;
     privyMocks.authenticated = true;
@@ -130,6 +142,7 @@ describe('AppSidebar wallet actions', () => {
     useAgentListMock.mockReturnValue({ agents: {} });
     getAllAgentsMock.mockReturnValue([]);
     getVisibleAgentsMock.mockReturnValue([]);
+    getAuthoritativeSnapshotMock.mockReturnValue(null);
   });
 
   it('limits wallet selector chain options to Arbitrum and Ethereum', () => {
@@ -293,7 +306,186 @@ describe('AppSidebar wallet actions', () => {
     expect(html).toContain('$12k gross');
     expect(html).toContain('$4k gross');
     expect(html).toContain('USDC');
-    expect(html).toContain('WETH');
+    expect(html).toContain('ETH');
+  });
+
+  it('uses the portfolio projection for portfolio and lending allocation bars when cached state is available', () => {
+    getVisibleAgentsMock.mockReturnValue([
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Agent',
+        chains: ['Arbitrum'],
+        protocols: ['Shared Ember'],
+        tokens: ['USDC'],
+      },
+      {
+        id: 'agent-ember-lending',
+        name: 'Ember Lending',
+        chains: ['Arbitrum'],
+        protocols: ['Aave'],
+        tokens: ['USDC'],
+      },
+    ]);
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-portfolio-manager': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Shared Ember'],
+            tokens: ['USDC'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 12_000,
+          },
+        },
+        'agent-ember-lending': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Aave'],
+            tokens: ['USDC'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 4_000,
+            apy: 8.2,
+          },
+        },
+      },
+    });
+    getAuthoritativeSnapshotMock.mockReturnValue({
+      thread: {
+        domainProjection: {
+          portfolioProjectionInput: {
+            benchmarkAsset: 'USD',
+            walletContents: [
+              {
+                asset: 'USDC',
+                network: 'arbitrum',
+                quantity: '40',
+                valueUsd: 40,
+              },
+              {
+                asset: 'WETH',
+                network: 'arbitrum',
+                quantity: '0.01',
+                valueUsd: 20,
+                economicExposures: [
+                  {
+                    asset: 'ETH',
+                    quantity: '0.01',
+                  },
+                ],
+              },
+            ],
+            reservations: [
+              {
+                reservationId: 'reservation-1',
+                agentId: 'agent-ember-lending',
+                purpose: 'position.enter',
+                controlPath: 'lending.supply',
+                createdAt: '2026-03-30T00:00:00.000Z',
+                status: 'active',
+                unitAllocations: [
+                  {
+                    unitId: 'unit-usdc-1',
+                    quantity: '25',
+                  },
+                ],
+              },
+            ],
+            ownedUnits: [
+              {
+                unitId: 'unit-usdc-1',
+                rootAsset: 'USDC',
+                network: 'arbitrum',
+                quantity: '25',
+                benchmarkAsset: 'USD',
+                benchmarkValue: 25,
+                reservationId: 'reservation-1',
+                positionScopeId: 'scope-1',
+              },
+            ],
+            activePositionScopes: [
+              {
+                scopeId: 'scope-1',
+                kind: 'lending-position',
+                network: 'arbitrum',
+                protocolSystem: 'aave',
+                containerRef: 'aave:scope-1',
+                status: 'active',
+                marketState: {
+                  availableBorrowsUsd: '18',
+                  borrowableHeadroomUsd: '12.5',
+                  currentLtvBps: 3200,
+                  liquidationThresholdBps: 7800,
+                  healthFactor: '2.1',
+                },
+                members: [
+                  {
+                    memberId: 'collateral-usdc',
+                    role: 'collateral',
+                    asset: 'USDC',
+                    quantity: '25',
+                    valueUsd: 25,
+                    economicExposures: [
+                      {
+                        asset: 'USDC',
+                        quantity: '25',
+                      },
+                    ],
+                    state: {
+                      withdrawableQuantity: '10',
+                      supplyApr: '0.03',
+                    },
+                  },
+                  {
+                    memberId: 'debt-usdt',
+                    role: 'debt',
+                    asset: 'USDT',
+                    quantity: '5',
+                    valueUsd: 5,
+                    economicExposures: [
+                      {
+                        asset: 'USDT',
+                        quantity: '5',
+                      },
+                    ],
+                    state: {
+                      borrowApr: '0.06',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('$90 gross');
+    expect(html).toContain('$30 gross');
+    expect(html).toContain('100% of portfolio');
+    expect(html).toContain('33% of portfolio');
+    expect(html).toContain('ETH');
+    expect(html).toContain('USDT');
+    expect(html).toContain('Unallocated');
+    expect(html).not.toContain('$12k gross');
+    expect(html).not.toContain('$4k gross');
   });
 
   it('routes portfolio agent sidebar clicks to the chat tab deep link', () => {

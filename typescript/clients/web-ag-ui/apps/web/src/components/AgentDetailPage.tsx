@@ -24,6 +24,7 @@ import {
   useState,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 import type {
   AgentProfile,
@@ -546,6 +547,7 @@ function ManagedMandateEditorCard(props: {
   availableTokenSymbols?: string[];
   tokenIconBySymbol: Record<string, string>;
   onSave?: (input: ManagedMandateEditorSubmitInput) => Promise<void> | void;
+  chrome?: 'card' | 'plain';
 }) {
   return (
     <ManagedMandateWorkbenchCard
@@ -558,6 +560,7 @@ function ManagedMandateEditorCard(props: {
       }}
       availableTokenSymbols={props.availableTokenSymbols}
       tokenIconBySymbolOverride={props.tokenIconBySymbol}
+      chrome={props.chrome}
       onSave={(input) =>
         props.onSave?.({
           ownerAgentId: input.ownerAgentId,
@@ -567,6 +570,44 @@ function ManagedMandateEditorCard(props: {
         })
       }
     />
+  );
+}
+
+function PortfolioManagerMandateWorkbenchShell(props: {
+  children: ReactNode;
+}) {
+  const lendingAgentConfig = getAgentConfig('agent-ember-lending');
+
+  return (
+    <div className="flex items-stretch gap-4">
+      <div className="flex w-[92px] shrink-0 flex-col items-center justify-center gap-2 self-stretch border-r border-[#eadac7] pr-4 text-center">
+        <div
+          className="mx-auto flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-[#f4ece1]"
+          style={lendingAgentConfig.imageUrl && lendingAgentConfig.avatarBg
+            ? { background: lendingAgentConfig.avatarBg }
+            : undefined}
+        >
+          {lendingAgentConfig.imageUrl ? (
+            <img
+              src={lendingAgentConfig.imageUrl}
+              alt="Ember Lending"
+              className="h-8 w-8 object-contain"
+            />
+          ) : (
+            <span className="text-lg" aria-hidden="true">
+              {lendingAgentConfig.avatar}
+            </span>
+          )}
+        </div>
+        <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#9b826f]">
+          Aave
+        </div>
+        <div className="text-[11px] font-medium leading-[1.1] text-[#503826]">
+          Lending
+        </div>
+      </div>
+      <div className="min-w-0 flex-1 self-stretch">{props.children}</div>
+    </div>
   );
 }
 
@@ -1163,13 +1204,26 @@ export function AgentDetailPage({
     />
   ) : null;
   const managedAgentContextCards = visibleManagedMandateEditorView ? (
-    <div className="mt-6">
-      <ManagedMandateEditorCard
-        view={visibleManagedMandateEditorView}
-        availableTokenSymbols={managedMandateAvailableTokenSymbols}
-        tokenIconBySymbol={tokenIconBySymbol}
-        onSave={onManagedMandateSave}
-      />
+    <div className={isPortfolioAgent ? 'mt-6 border-t border-[#eadac7] pt-5' : 'mt-6'}>
+      {isPortfolioAgent ? (
+        <PortfolioManagerMandateWorkbenchShell>
+          <ManagedMandateEditorCard
+            view={visibleManagedMandateEditorView}
+            availableTokenSymbols={managedMandateAvailableTokenSymbols}
+            tokenIconBySymbol={tokenIconBySymbol}
+            onSave={onManagedMandateSave}
+            chrome="plain"
+          />
+        </PortfolioManagerMandateWorkbenchShell>
+      ) : (
+        <ManagedMandateEditorCard
+          view={visibleManagedMandateEditorView}
+          availableTokenSymbols={managedMandateAvailableTokenSymbols}
+          tokenIconBySymbol={tokenIconBySymbol}
+          onSave={onManagedMandateSave}
+          chrome="plain"
+        />
+      )}
     </div>
   ) : null;
   const subagentWalletBar = emberLendingRuntimeView?.walletAddress ? (
@@ -3082,19 +3136,22 @@ function AgentBlockersTab({
                     <p className="mb-4 text-xs text-[#7c6757]">
                       Configure the first lending mandate inline before handing control to the portfolio manager.
                     </p>
-                    <ManagedMandateWorkbenchCard
-                      view={{
-                        ownerAgentId: agentId,
-                        targetAgentId: 'ember-lending',
-                        targetAgentRouteId: 'agent-ember-lending',
-                        mandateRef: null,
-                        managedMandate: portfolioManagerSetupManagedMandate,
-                      }}
-                      availableTokenSymbols={availableTokenSymbols}
-                      tokenIconBySymbolOverride={tokenIconBySymbol}
-                      submitLabel="Approve & Continue"
-                      onSave={(input) => submitPortfolioManagerSetupMandate(input.managedMandate)}
-                    />
+                    <PortfolioManagerMandateWorkbenchShell>
+                      <ManagedMandateWorkbenchCard
+                        view={{
+                          ownerAgentId: agentId,
+                          targetAgentId: 'ember-lending',
+                          targetAgentRouteId: 'agent-ember-lending',
+                          mandateRef: null,
+                          managedMandate: portfolioManagerSetupManagedMandate,
+                        }}
+                        availableTokenSymbols={availableTokenSymbols}
+                        tokenIconBySymbolOverride={tokenIconBySymbol}
+                        chrome="plain"
+                        submitLabel="Approve & Continue"
+                        onSave={(input) => submitPortfolioManagerSetupMandate(input.managedMandate)}
+                      />
+                    </PortfolioManagerMandateWorkbenchShell>
                   </div>
                 </div>
               </div>
