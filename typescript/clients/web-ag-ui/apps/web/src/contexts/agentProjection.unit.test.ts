@@ -79,7 +79,7 @@ describe('agentProjection', () => {
           data: {
             type: 'interrupt-status',
             status: 'pending',
-            surfacedInThread: false,
+            mirroredToActivity: false,
             interruptType: 'portfolio-manager-setup-request',
           },
         },
@@ -99,7 +99,7 @@ describe('agentProjection', () => {
         data: {
           type: 'interrupt-status',
           status: 'pending',
-          surfacedInThread: false,
+          mirroredToActivity: false,
           interruptType: 'portfolio-manager-setup-request',
         },
       },

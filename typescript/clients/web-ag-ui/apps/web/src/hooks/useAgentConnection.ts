@@ -80,6 +80,7 @@ function readPendingInterruptCheckpointFromArtifact(
 ): {
   interruptType: string | null;
   message: string;
+  payload: Record<string, unknown> | null;
 } | null {
   const artifactData =
     typeof artifact?.data === 'object' && artifact.data !== null
@@ -88,6 +89,7 @@ function readPendingInterruptCheckpointFromArtifact(
           status?: unknown;
           message?: unknown;
           interruptType?: unknown;
+          payload?: unknown;
         })
       : null;
 
@@ -105,6 +107,12 @@ function readPendingInterruptCheckpointFromArtifact(
       typeof artifactData.message === 'string'
         ? artifactData.message
         : 'Awaiting operator input.',
+    payload:
+      typeof artifactData.payload === 'object' &&
+      artifactData.payload !== null &&
+      !Array.isArray(artifactData.payload)
+        ? artifactData.payload
+        : null,
   };
 }
 
@@ -114,6 +122,7 @@ function readPendingInterruptCheckpoint(
 ): {
   interruptType: string | null;
   message: string;
+  payload: Record<string, unknown> | null;
 } | null {
   const artifactCheckpoint =
     readPendingInterruptCheckpointFromArtifact(artifacts?.current) ??
@@ -208,6 +217,7 @@ function deriveSyncedInterrupt(state: ThreadSnapshot): AgentInterrupt | null {
 
   if (pendingInterruptCheckpoint) {
     return normalizeAgentInterrupt({
+      ...(pendingInterruptCheckpoint.payload ?? {}),
       type: pendingInterruptCheckpoint.interruptType,
       message: pendingInterruptCheckpoint.message,
     });

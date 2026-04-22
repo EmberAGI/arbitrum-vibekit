@@ -88,7 +88,7 @@ export const piRuntimeTableSchemas: readonly PiRuntimeTableSchema[] = [
       { name: 'execution_id', type: 'uuid' },
       { name: 'interrupt_type', type: 'text' },
       { name: 'status', type: 'text' },
-      { name: 'surfaced_in_thread', type: 'boolean' },
+      { name: 'mirrored_to_activity', type: 'boolean' },
       { name: 'request_payload', type: 'jsonb' },
       { name: 'response_payload', type: 'jsonb', nullable: true },
       { name: 'created_at', type: 'timestamptz' },

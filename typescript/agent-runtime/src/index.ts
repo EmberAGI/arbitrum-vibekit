@@ -79,7 +79,7 @@ type AgentRuntimeDomainLifecycleTransition<
 type AgentRuntimeDomainInterrupt<TInterrupt extends string = string> = {
   type: TInterrupt;
   description: string;
-  surfacedInThread: boolean;
+  mirroredToActivity: boolean;
 };
 
 type AgentRuntimeDomainLifecycle<
@@ -122,7 +122,7 @@ export type AgentRuntimeDomainArtifactOutput = {
 
 export type AgentRuntimeDomainInterruptOutput = {
   type: string;
-  surfacedInThread: boolean;
+  mirroredToActivity: boolean;
   message: string;
   payload?: Record<string, unknown>;
 };
@@ -843,9 +843,9 @@ function readInterruptPayload(data: unknown): Record<string, unknown> | undefine
   return isRecord(data) && isRecord(data.payload) ? data.payload : undefined;
 }
 
-function readInterruptSurfacedInThread(data: unknown): boolean {
-  return isRecord(data) && typeof data.surfacedInThread === 'boolean'
-    ? data.surfacedInThread
+function readInterruptMirroredToActivity(data: unknown): boolean {
+  return isRecord(data) && typeof data.mirroredToActivity === 'boolean'
+    ? data.mirroredToActivity
     : true;
 }
 
@@ -859,7 +859,7 @@ function isHiddenPendingInterruptArtifact(
   return (
     isInterruptStatusArtifact(artifact) &&
     readInterruptStatus(artifact.data) === 'pending' &&
-    !readInterruptSurfacedInThread(artifact.data)
+    !readInterruptMirroredToActivity(artifact.data)
   );
 }
 
@@ -937,7 +937,7 @@ function buildInterruptArtifact(params: {
       type: 'interrupt-status',
       interruptType: params.interrupt.type,
       status: 'pending',
-      surfacedInThread: params.interrupt.surfacedInThread,
+      mirroredToActivity: params.interrupt.mirroredToActivity,
       message: params.interrupt.message,
       ...(params.interrupt.payload ? { payload: params.interrupt.payload } : {}),
     },
@@ -1243,14 +1243,14 @@ function applyDomainOperationResult(params: {
       operationName: params.operation.name,
       now: params.now,
     });
-    const surfacedInThread = domainOutputs.interrupt.surfacedInThread;
+    const mirroredToActivity = domainOutputs.interrupt.mirroredToActivity;
     const artifacts = nextArtifacts ?? {};
     artifacts.current = interruptArtifact;
-    if (!surfacedInThread) {
+    if (!mirroredToActivity) {
       artifacts.activity = interruptArtifact;
     }
     nextArtifacts = artifacts;
-    if (surfacedInThread) {
+    if (mirroredToActivity) {
       nextActivityEvents.push({
         type: 'artifact',
         artifact: interruptArtifact,
@@ -1344,7 +1344,7 @@ function resolveInterruptedSessionForUserInput(
     : undefined;
   const shouldSurfaceResolvedArtifact =
     pendingInterruptArtifact !== null &&
-    readInterruptSurfacedInThread(pendingInterruptArtifact.data);
+    readInterruptMirroredToActivity(pendingInterruptArtifact.data);
 
   const nextActivityEvents = resolvedArtifact
     ? shouldSurfaceResolvedArtifact
@@ -1410,7 +1410,7 @@ function repairHydratedPendingInterruptDrift(
           },
   };
 
-  const nextActivityEvents = readInterruptSurfacedInThread(pendingInterruptArtifact.data)
+  const nextActivityEvents = readInterruptMirroredToActivity(pendingInterruptArtifact.data)
     ? [
         ...(session.activityEvents ?? []),
         {
@@ -1888,7 +1888,7 @@ export async function createAgentRuntime<TState = unknown>(
     | {
         type: string;
         payload: Record<string, unknown>;
-        surfacedInThread: boolean;
+        mirroredToActivity: boolean;
       }
     | undefined => {
     if (session.execution.status !== 'interrupted') {
@@ -1902,7 +1902,7 @@ export async function createAgentRuntime<TState = unknown>(
         return {
           type: interruptType,
           payload: session.a2ui.payload,
-          surfacedInThread: true,
+          mirroredToActivity: true,
         };
       }
     }
@@ -1916,7 +1916,7 @@ export async function createAgentRuntime<TState = unknown>(
     return {
       type: interruptType,
       payload: readInterruptPayload(pendingInterruptArtifact.data) ?? {},
-      surfacedInThread: readInterruptSurfacedInThread(pendingInterruptArtifact.data),
+      mirroredToActivity: readInterruptMirroredToActivity(pendingInterruptArtifact.data),
     };
   };
   const persistSessionSnapshot = async (
@@ -1953,7 +1953,7 @@ export async function createAgentRuntime<TState = unknown>(
           currentInterruptId,
           interruptType: currentInterrupt?.type,
           interruptPayload: currentInterrupt?.payload,
-          surfacedInThread: currentInterrupt?.surfacedInThread,
+          mirroredToActivity: currentInterrupt?.mirroredToActivity,
           now: currentNow,
         }),
       ],
@@ -2012,7 +2012,7 @@ export async function createAgentRuntime<TState = unknown>(
 
     return (
       currentInterrupt.status !== 'pending' ||
-      currentInterrupt.surfacedInThread !== expectedInterrupt?.surfacedInThread ||
+      currentInterrupt.mirroredToActivity !== expectedInterrupt?.mirroredToActivity ||
       pendingInterrupts.some((candidate) => candidate.interruptId !== expectedCurrentInterruptId)
     );
   };

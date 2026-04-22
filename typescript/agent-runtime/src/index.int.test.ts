@@ -58,7 +58,7 @@ type PersistedInterruptRecord = {
   threadId: string;
   executionId: string;
   status: 'pending' | 'resolved';
-  surfacedInThread: boolean;
+  mirroredToActivity: boolean;
   createdAt: Date;
   resolvedAt: Date | null;
 };
@@ -254,7 +254,7 @@ function createPersistingInternalPostgres() {
               executionId,
               _interruptType,
               status,
-              surfacedInThread,
+              mirroredToActivity,
               _requestPayload,
               createdAt,
             ] = statement.values;
@@ -263,7 +263,7 @@ function createPersistingInternalPostgres() {
               threadId: threadId as string,
               executionId: executionId as string,
               status: status as 'pending' | 'resolved',
-              surfacedInThread: surfacedInThread as boolean,
+              mirroredToActivity: mirroredToActivity as boolean,
               createdAt: createdAt as Date,
               resolvedAt: null,
             });
@@ -542,7 +542,7 @@ function hasSystemPromptFragments(
 }
 
 function createLifecycleDomain(options?: {
-  surfacedInThread?: boolean;
+  mirroredToActivity?: boolean;
   projectSharedState?: (params: {
     sharedState: Record<string, unknown>;
     currentProjection?: Record<string, unknown>;
@@ -595,7 +595,7 @@ function createLifecycleDomain(options?: {
         {
           type: 'operator-config',
           description: 'Capture an operator note.',
-          surfacedInThread: options?.surfacedInThread ?? true,
+          mirroredToActivity: options?.mirroredToActivity ?? true,
         },
       ],
     },
@@ -638,7 +638,7 @@ function createLifecycleDomain(options?: {
               },
               interrupt: {
                 type: 'operator-config',
-                surfacedInThread: options?.surfacedInThread ?? true,
+                mirroredToActivity: options?.mirroredToActivity ?? true,
                 message: 'Please provide a short operator note to continue onboarding.',
                 payload: {
                   promptKind: 'text-note',
@@ -1088,7 +1088,7 @@ describe('agent-runtime integration', () => {
       model: createModel('int-model-hidden-interrupt'),
       systemPrompt: 'You are a lifecycle agent.',
       domain: createLifecycleDomain({
-        surfacedInThread: false,
+        mirroredToActivity: false,
       }),
       agentOptions: {
         streamFn: () => createTextStream('Model fallback should not run for direct commands.'),
@@ -1118,7 +1118,7 @@ describe('agent-runtime integration', () => {
             type: 'interrupt-status',
             interruptType: 'operator-config',
             status: 'pending',
-            surfacedInThread: false,
+            mirroredToActivity: false,
           },
         },
         activity: {
@@ -1126,7 +1126,7 @@ describe('agent-runtime integration', () => {
             type: 'interrupt-status',
             interruptType: 'operator-config',
             status: 'pending',
-            surfacedInThread: false,
+            mirroredToActivity: false,
           },
         },
       },
@@ -1135,7 +1135,7 @@ describe('agent-runtime integration', () => {
     expect(persistedThreads.get(threadId)?.threadState.activityEvents ?? []).toEqual([]);
     expect([...persistedInterrupts.values()][0]).toMatchObject({
       status: 'pending',
-      surfacedInThread: false,
+      mirroredToActivity: false,
     });
 
     await collectEventSource(
@@ -1162,7 +1162,7 @@ describe('agent-runtime integration', () => {
             type: 'interrupt-status',
             interruptType: 'operator-config',
             status: 'pending',
-            surfacedInThread: false,
+            mirroredToActivity: false,
           },
         },
       },
@@ -1210,7 +1210,7 @@ describe('agent-runtime integration', () => {
           type: 'interrupt-status',
           interruptType: 'operator-config',
           status: 'pending',
-          surfacedInThread: false,
+          mirroredToActivity: false,
         },
       },
     });
@@ -1277,7 +1277,7 @@ describe('agent-runtime integration', () => {
     ).toBe(false);
     expect([...persistedInterrupts.values()][0]).toMatchObject({
       status: 'resolved',
-      surfacedInThread: false,
+      mirroredToActivity: false,
       resolvedAt: expect.any(Date),
     });
   });
@@ -2432,7 +2432,7 @@ describe('agent-runtime integration', () => {
       threadId: originalInterrupt.threadId,
       executionId: originalInterrupt.executionId,
       status: 'pending',
-      surfacedInThread: true,
+      mirroredToActivity: true,
       createdAt: new Date('2026-03-20T17:00:00.000Z'),
       resolvedAt: null,
     });

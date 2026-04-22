@@ -1425,7 +1425,7 @@ const shouldEmitArtifactActivityFallback = (
     return true;
   }
 
-  return artifact.data.surfacedInThread !== false;
+  return artifact.data.mirroredToActivity !== false;
 };
 
 export const buildPiThreadStateSnapshot = (params: PiRuntimeGatewaySession): Record<string, unknown> => {
