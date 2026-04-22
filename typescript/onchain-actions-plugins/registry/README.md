@@ -236,7 +236,7 @@ The schema system provides comprehensive type safety with Zod validation:
 
 **Action-Specific Schemas**:
 
-- **Lending** (`schemas/lending.ts`): Supply, borrow, repay, withdraw operations with comprehensive position tracking
+- **Lending** (`schemas/lending.ts`): Supply, borrow, repay, withdraw operations with comprehensive position tracking, optional `tokenAddress` targeting, and reserve quote fields for exact max-borrow resolution
 - **Liquidity** (`schemas/liquidity.ts`): Advanced liquidity provision with discriminated unions for full/limited range positions
 - **Swap** (`schemas/swap.ts`): Token exchange with slippage tolerance and price tracking
 - **Perpetuals** (`schemas/perpetuals.ts`): Integration with GMX SDK for complex derivatives trading
