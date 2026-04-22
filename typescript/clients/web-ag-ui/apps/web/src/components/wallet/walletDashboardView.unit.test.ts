@@ -265,4 +265,76 @@ describe('wallet dashboard view', () => {
     expect(view.treemapItems.map((item) => item.label)).toEqual(['USDC', 'ETH']);
     expect(view.treemapItems.find((item) => item.label === 'USDT')).toBeUndefined();
   });
+
+  it('excludes debt contributions from a mixed asset family treemap item', () => {
+    const portfolioProjection = buildPortfolioProjection({
+      benchmarkAsset: 'USD',
+      walletContents: [
+        {
+          asset: 'WBTC',
+          network: 'arbitrum',
+          quantity: '0.00002736',
+          valueUsd: 2.08,
+        },
+      ],
+      reservations: [],
+      ownedUnits: [],
+      activePositionScopes: [
+        {
+          scopeId: 'scope-1',
+          kind: 'lending-position',
+          network: 'arbitrum',
+          protocolSystem: 'aave',
+          containerRef: 'aave:scope-1',
+          status: 'active',
+          members: [
+            {
+              memberId: 'debt-wbtc',
+              role: 'debt',
+              asset: 'variableDebtArbWBTC',
+              quantity: '0.00002731',
+              valueUsd: 2.07,
+              economicExposures: [
+                {
+                  asset: 'WBTC',
+                  quantity: '0.00002731',
+                },
+              ],
+              state: {
+                borrowApr: '0.06',
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const view = buildWalletDashboardView({
+      portfolioProjection,
+      portfolioProjectionInput: {
+        benchmarkAsset: 'USD',
+        walletContents: [],
+        reservations: [],
+        ownedUnits: [],
+        activePositionScopes: [
+          {
+            scopeId: 'scope-1',
+            kind: 'lending-position',
+            network: 'arbitrum',
+            protocolSystem: 'aave',
+            containerRef: 'aave:scope-1',
+            status: 'active',
+            members: [],
+          },
+        ],
+      },
+    });
+
+    const wbtcTreemapItem = view.treemapItems.find((item) => item.label === 'WBTC');
+    expect(wbtcTreemapItem).toMatchObject({
+      value: 2.08,
+      valueLabel: '$2',
+    });
+    expect(wbtcTreemapItem?.hoverChildren?.map((item) => item.label)).toEqual(['Wallet WBTC']);
+  });
 });

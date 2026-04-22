@@ -408,8 +408,8 @@ function buildFamilyTreemapItem(
     return null;
   }
 
-  const grossValueUsd = family.positiveUsd + family.debtUsd;
-  if (grossValueUsd <= 0) {
+  const treemapValueUsd = family.positiveUsd;
+  if (treemapValueUsd <= 0) {
     return null;
   }
 
@@ -417,13 +417,13 @@ function buildFamilyTreemapItem(
 
   return {
     id: `treemap:${family.network}:${family.asset}`,
-    value: grossValueUsd,
+    value: treemapValueUsd,
     label: family.asset,
     subtitle: buildFamilyTreemapSubtitle(family),
     iconSymbol: family.asset,
     fallbackIconSymbol: family.asset,
-    valueLabel: formatUsdCompact(grossValueUsd),
-    shareLabel: totalGrossExposureUsd > 0 ? formatPercent(grossValueUsd / totalGrossExposureUsd) : '0%',
+    valueLabel: formatUsdCompact(treemapValueUsd),
+    shareLabel: totalGrossExposureUsd > 0 ? formatPercent(treemapValueUsd / totalGrossExposureUsd) : '0%',
     assetClass: family.semanticClass === 'cash' ? 'cash' : 'asset',
     positionAccent: family.semanticClass === 'liability' ? 'liability' : family.semanticClass === 'cash' ? 'mint' : 'dark',
     toneStyle: tones.toneStyle,
@@ -436,7 +436,7 @@ function buildFamilyTreemapItem(
           index,
         }),
       )
-      .filter((line) => line.valueUsd > 0)
+      .filter((line) => line.valueUsd > 0 && line.tone !== 'owed')
       .map((line) => ({
         id: `child:${line.id}`,
         value: line.valueUsd,
@@ -444,7 +444,7 @@ function buildFamilyTreemapItem(
         iconSymbol: family.asset,
         fallbackIconSymbol: family.asset,
         valueLabel: formatUsdCompact(line.valueUsd),
-        shareLabel: grossValueUsd > 0 ? formatPercent(line.valueUsd / grossValueUsd) : '0%',
+        shareLabel: treemapValueUsd > 0 ? formatPercent(line.valueUsd / treemapValueUsd) : '0%',
         assetClass: family.semanticClass === 'cash' ? 'cash' : 'asset',
         positionAccent: line.tone === 'owed' ? 'liability' : line.tone === 'wallet' ? 'mint' : 'dark',
         toneStyle:
