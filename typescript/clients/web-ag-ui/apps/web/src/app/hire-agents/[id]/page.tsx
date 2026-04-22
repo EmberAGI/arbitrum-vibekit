@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useRef, type ComponentProps } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { Message } from '@ag-ui/core';
+import { useLogin } from '@privy-io/react-auth';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
 import { getAgentConfig, isRegisteredAgentId } from '@/config/agents';
 import { useAgent } from '@/contexts/AgentContext';
@@ -10,6 +11,7 @@ import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { invokeAgentCommandRoute } from '@/utils/agentCommandRoute';
 import { getAgentThreadId } from '@/utils/agentThread';
 import { navigateToHref } from '@/utils/hardNavigation';
+import { isPrivyConfigured } from '@/utils/privyConfig';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
 type UiPreviewFixture = 'managed';
@@ -117,6 +119,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const { id } = use(params);
   const searchParams = useSearchParams();
   const agent = useAgent();
+  const { login } = useLogin();
   const { privyWallet } = usePrivyWalletClient();
   const activeAgentId = agent.config.id;
   const routeAgentId = id;
@@ -153,12 +156,26 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const handleBack = () => {
     navigateToHref('/hire-agents');
   };
+  const handleWalletGate = useCallback(() => {
+    if (isPrivyConfigured()) {
+      login();
+      return;
+    }
+
+    navigateToHref('/wallet');
+  }, [login]);
   const handleManagedOwnerNavigation = (ownerAgentId: string) => {
+    if (!getAgentThreadId(ownerAgentId, privyWallet?.address)) {
+      handleWalletGate();
+      return;
+    }
     navigateToHref(`/hire-agents/${ownerAgentId}`);
   };
   const handleHire = onboardingOwnerAgentId
     ? () => handleManagedOwnerNavigation(onboardingOwnerAgentId)
-    : agent.runHire;
+    : agent.threadId
+      ? agent.runHire
+      : handleWalletGate;
   const handleFire = onboardingOwnerAgentId
     ? () => handleManagedOwnerNavigation(onboardingOwnerAgentId)
     : agent.runFire;
