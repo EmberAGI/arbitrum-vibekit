@@ -14,6 +14,7 @@ function formatNumeric(value: string): string {
 
 export class UserSummary {
   public reserves: FormatUserSummaryResponse<FormatReserveUSDResponse>;
+  private readonly formattedReserves: FormatReserveUSDResponse[];
 
   /**
    * @param userReservesResponse - The response from getUserReservesHumanized.
@@ -28,7 +29,7 @@ export class UserSummary {
   ) {
     const currentTimestamp = Date.now() / 1000;
 
-    const formattedReserves = formatReserves({
+    this.formattedReserves = formatReserves({
       reserves: reservesResponse.reservesData,
       currentTimestamp,
       marketReferenceCurrencyDecimals:
@@ -44,9 +45,17 @@ export class UserSummary {
       marketReferenceCurrencyDecimals:
         reservesResponse.baseCurrencyData.marketReferenceCurrencyDecimals,
       userReserves: userReservesResponse.userReserves,
-      formattedReserves,
+      formattedReserves: this.formattedReserves,
       userEmodeCategoryId: userReservesResponse.userEmodeCategoryId,
     });
+  }
+
+  public getReserveByUnderlyingAsset(tokenAddress: string): FormatReserveUSDResponse | undefined {
+    const normalizedTokenAddress = tokenAddress.toLowerCase();
+
+    return this.formattedReserves.find(
+      (reserve) => reserve.underlyingAsset.toLowerCase() === normalizedTokenAddress,
+    );
   }
 
   public toHumanReadable(): string {

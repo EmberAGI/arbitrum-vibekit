@@ -72,17 +72,26 @@ export type GetWalletLendingPositionsRequest = z.infer<
 
 export const LendTokenDetailSchema = z.object({
   tokenUid: TokenIdentifierSchema,
+  symbol: z.string().optional(),
+  name: z.string().optional(),
+  decimals: z.number().int().optional(),
   underlyingBalance: z.string(),
   underlyingBalanceUsd: z.string(),
   variableBorrows: z.string(),
   variableBorrowsUsd: z.string(),
   totalBorrows: z.string(),
   totalBorrowsUsd: z.string(),
+  priceInUsd: z.string(),
+  priceInMarketReferenceCurrency: z.string(),
+  formattedPriceInMarketReferenceCurrency: z.string(),
+  availableLiquidity: z.string(),
+  availableLiquidityUsd: z.string(),
 });
 export type LendTokenDetail = z.infer<typeof LendTokenDetailSchema>;
 
 export const GetWalletLendingPositionsResponseSchema = z.object({
   userReserves: z.array(LendTokenDetailSchema),
+  requestedReserve: LendTokenDetailSchema.optional(),
   totalLiquidityUsd: z.string(),
   totalCollateralUsd: z.string(),
   totalBorrowsUsd: z.string(),
