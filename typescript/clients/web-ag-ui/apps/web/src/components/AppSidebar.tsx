@@ -864,7 +864,9 @@ function SpecialistActivitySection({
   };
 
   useEffect(() => {
-    syncScrollFades();
+    const frame = window.requestAnimationFrame(() => {
+      syncScrollFades();
+    });
 
     const handleResize = () => {
       syncScrollFades();
@@ -872,6 +874,7 @@ function SpecialistActivitySection({
 
     window.addEventListener('resize', handleResize);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', handleResize);
     };
   }, [agents]);

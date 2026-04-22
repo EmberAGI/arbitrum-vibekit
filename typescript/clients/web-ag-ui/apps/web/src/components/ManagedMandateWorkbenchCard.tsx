@@ -186,7 +186,6 @@ function ManagedMandateInlinePopoverField(props: {
 
   useLayoutEffect(() => {
     if (!props.active) {
-      setPopoverStyle(null);
       return;
     }
 
