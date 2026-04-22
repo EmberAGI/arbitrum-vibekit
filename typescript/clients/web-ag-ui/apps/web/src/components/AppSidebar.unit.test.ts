@@ -19,6 +19,7 @@ const pushMock = vi.fn();
 const useAgentListMock = vi.fn();
 const getAllAgentsMock = vi.fn();
 const getVisibleAgentsMock = vi.fn();
+const getAuthoritativeSnapshotMock = vi.fn();
 let pathnameMock = '/hire-agents';
 
 vi.mock('next/navigation', () => {
@@ -30,8 +31,18 @@ vi.mock('next/navigation', () => {
 
 vi.mock('next/link', () => {
   return {
-    default: (props: React.PropsWithChildren<{ href: string; className?: string }>) =>
-      React.createElement('a', { href: props.href, className: props.className }, props.children),
+    default: (
+      props: React.PropsWithChildren<{
+        href: string;
+        className?: string;
+        'aria-label'?: string;
+      }>,
+    ) =>
+      React.createElement(
+        'a',
+        { href: props.href, className: props.className, 'aria-label': props['aria-label'] },
+        props.children,
+      ),
   };
 });
 
@@ -86,6 +97,7 @@ vi.mock('@/contexts/AgentContext', () => {
   return {
     useAgent: () => ({
       config: { id: 'inactive-agent' },
+      domainProjection: {},
       uiState: {
         task: null,
         haltReason: null,
@@ -94,6 +106,15 @@ vi.mock('@/contexts/AgentContext', () => {
         operatorConfig: null,
         delegationBundle: null,
       },
+    }),
+  };
+});
+
+vi.mock('@/contexts/AuthoritativeAgentSnapshotCache', () => {
+  return {
+    useAuthoritativeAgentSnapshotCache: () => ({
+      getSnapshot: getAuthoritativeSnapshotMock,
+      setSnapshot: vi.fn(),
     }),
   };
 });
@@ -117,6 +138,7 @@ describe('AppSidebar wallet actions', () => {
     useAgentListMock.mockReset();
     getAllAgentsMock.mockReset();
     getVisibleAgentsMock.mockReset();
+    getAuthoritativeSnapshotMock.mockReset();
     pathnameMock = '/hire-agents';
     privyMocks.ready = true;
     privyMocks.authenticated = true;
@@ -130,6 +152,7 @@ describe('AppSidebar wallet actions', () => {
     useAgentListMock.mockReturnValue({ agents: {} });
     getAllAgentsMock.mockReturnValue([]);
     getVisibleAgentsMock.mockReturnValue([]);
+    getAuthoritativeSnapshotMock.mockReturnValue(null);
   });
 
   it('limits wallet selector chain options to Arbitrum and Ethereum', () => {
@@ -144,10 +167,11 @@ describe('AppSidebar wallet actions', () => {
     expect(html).toContain('href="/wallet"');
   });
 
-  it('uses the widened sidebar frame and refreshed logo asset', () => {
+  it('uses the widened sidebar frame and a light shell palette', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
     expect(html).toContain('w-[312px]');
+    expect(html).toContain('bg-[#F7EFE3] border-r border-[#DDC8B3] text-[#3C2A21]');
     expect(html).toContain('src="/ember-sidebar-logo.png"');
   });
 
@@ -171,7 +195,9 @@ describe('AppSidebar wallet actions', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
     expect(html).toContain('lucide-bot');
-    expect(html).toContain('lucide-terminal');
+    expect(html).not.toContain('lucide-terminal');
+    expect(html).not.toContain('lucide-alert-circle');
+    expect(html).not.toContain('lucide-check-circle');
     expect(html).not.toContain('lucide-loader');
     expect(html).not.toContain('animate-spin');
     expect(html).not.toContain('text-red-400');
@@ -179,19 +205,20 @@ describe('AppSidebar wallet actions', () => {
     expect(html).not.toContain('text-blue-400');
   });
 
-  it('uses a thin left nav indicator without active card backgrounds', () => {
+  it('uses a thin left nav indicator with light hover surfaces', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
     expect(html).toContain('w-px h-6 bg-[#fd6731]');
+    expect(html).toContain('hover:bg-[#F0E2D2]');
+    expect(html).not.toContain('hover:bg-[#1B1C21]');
     expect(html).not.toContain('text-white bg-[#1C1D23] border border-[#2F313B]');
-    expect(html).not.toContain('bg-[#1B1C21] border border-[#2B2D36]');
   });
 
   it('uses mono typography for sidebar section labels and badges', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('text-[10px] font-mono font-medium text-[#A7A7B2]');
-    expect(html).toContain('text-[11px] font-mono font-medium text-[#6F7280] tracking-[0.12em]');
+    expect(html).toContain('text-[10px] font-mono font-medium text-[#8A6F58]');
+    expect(html).toContain('text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em]');
   });
 
   it('shows only user-facing agents in activity sections', () => {
@@ -225,6 +252,434 @@ describe('AppSidebar wallet actions', () => {
 
     expect(html).toContain('Ember Portfolio Agent');
     expect(html).not.toContain('Pi Example Agent');
+  });
+
+  it('pins hired agents in the sidebar even when they temporarily have no task state', () => {
+    getVisibleAgentsMock.mockReturnValue([
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Agent',
+        chains: ['Arbitrum'],
+        protocols: ['Shared Ember'],
+        tokens: ['USDC'],
+      },
+      {
+        id: 'agent-ember-lending',
+        name: 'Ember Lending',
+        chains: ['Arbitrum'],
+        protocols: ['Aave'],
+        tokens: ['USDC'],
+      },
+    ]);
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-portfolio-manager': {
+          synced: false,
+          isHired: true,
+        },
+        'agent-ember-lending': {
+          synced: false,
+          isHired: true,
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('Specialists');
+    expect(html).toContain('group/specialists');
+    expect(html).toContain('Ember Portfolio Agent');
+    expect(html).toContain('Ember Lending');
+    expect(html).toContain('aria-label="Hire agents"');
+    expect(html).toContain('aria-label="Add agent"');
+    expect(html).toContain('href="/hire-agents"');
+    expect(html).toContain('Hire agent');
+    expect(html).toContain('Add specialist');
+    expect(html).not.toContain('Task:');
+    expect(html).not.toContain('Needs input');
+    expect(html).not.toContain('Done');
+  });
+
+  it('renders the portfolio card ahead of the specialist section', () => {
+    getVisibleAgentsMock.mockReturnValue([
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Agent',
+        chains: ['Arbitrum'],
+        protocols: ['Shared Ember'],
+        tokens: ['USDC'],
+      },
+      {
+        id: 'agent-ember-lending',
+        name: 'Ember Lending',
+        chains: ['Arbitrum'],
+        protocols: ['Aave'],
+        tokens: ['USDC'],
+      },
+      {
+        id: 'agent-clmm',
+        name: 'Camelot CLMM',
+        chains: ['Arbitrum'],
+        protocols: ['Camelot'],
+        tokens: ['USDC'],
+      },
+    ]);
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-portfolio-manager': {
+          synced: true,
+          lifecyclePhase: 'active',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Shared Ember'],
+            tokens: ['USDC'],
+            pools: [],
+            allowedPools: [],
+          },
+        },
+        'agent-ember-lending': {
+          synced: true,
+          lifecyclePhase: 'active',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Aave'],
+            tokens: ['USDC'],
+            pools: [],
+            allowedPools: [],
+          },
+        },
+        'agent-clmm': {
+          synced: true,
+          lifecyclePhase: 'active',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Camelot'],
+            tokens: ['USDC'],
+            pools: [],
+            allowedPools: [],
+          },
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html.indexOf('Ember Portfolio Agent')).toBeLessThan(html.indexOf('Specialists'));
+    expect(html.indexOf('Specialists')).toBeLessThan(html.indexOf('Ember Lending'));
+    expect(html.indexOf('Ember Lending')).toBeLessThan(html.indexOf('Camelot CLMM'));
+  });
+
+  it('keeps the add-agent CTA available even when no hired agents are pinned yet', () => {
+    getVisibleAgentsMock.mockReturnValue([
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Agent',
+        chains: ['Arbitrum'],
+        protocols: ['Shared Ember'],
+        tokens: ['USDC'],
+      },
+    ]);
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-portfolio-manager': {
+          synced: false,
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('aria-label="Hire agents"');
+    expect(html).toContain('aria-label="Add agent"');
+    expect(html).toContain('Hire agent');
+    expect(html).toContain('Add specialist');
+  });
+
+  it('does not pin untouched visible agents that have no hired-state evidence yet', () => {
+    getVisibleAgentsMock.mockReturnValue([
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Agent',
+        chains: ['Arbitrum'],
+        protocols: ['Shared Ember'],
+        tokens: ['USDC'],
+      },
+      {
+        id: 'agent-clmm',
+        name: 'CLMM Agent',
+        chains: ['Arbitrum'],
+        protocols: ['Uniswap'],
+        tokens: ['USDC'],
+      },
+    ]);
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-portfolio-manager': {
+          synced: true,
+          taskId: 'task-pm-1',
+          isHired: true,
+        },
+        'agent-clmm': {
+          synced: true,
+          isHired: false,
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('Ember Portfolio Agent');
+    expect(html).not.toContain('CLMM Agent');
+  });
+
+  it('renders workbench-style sidebar cards when agent exposure data is available', () => {
+    getVisibleAgentsMock.mockReturnValue([
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Agent',
+        chains: ['Arbitrum'],
+        protocols: ['Shared Ember'],
+        tokens: ['USDC', 'WETH'],
+      },
+      {
+        id: 'agent-ember-lending',
+        name: 'Ember Lending',
+        chains: ['Arbitrum'],
+        protocols: ['Aave'],
+        tokens: ['USDC'],
+      },
+    ]);
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-portfolio-manager': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Shared Ember'],
+            tokens: ['USDC', 'WETH'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 12_000,
+          },
+        },
+        'agent-ember-lending': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Aave'],
+            tokens: ['USDC'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 4_000,
+            apy: 8.2,
+          },
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('rounded-[18px]');
+    expect(html).toContain('px-3 pt-4 pb-3');
+    expect(html).toContain('$12k gross');
+    expect(html).toContain('$4k gross');
+    expect(html.match(/\$12k gross/g) ?? []).toHaveLength(1);
+    expect(html.match(/\$4k gross/g) ?? []).toHaveLength(1);
+    expect(html).toContain('USDC');
+    expect(html).toContain('ETH');
+  });
+
+  it('uses the portfolio projection for portfolio and lending allocation bars when cached state is available', () => {
+    getVisibleAgentsMock.mockReturnValue([
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Agent',
+        chains: ['Arbitrum'],
+        protocols: ['Shared Ember'],
+        tokens: ['USDC'],
+      },
+      {
+        id: 'agent-ember-lending',
+        name: 'Ember Lending',
+        chains: ['Arbitrum'],
+        protocols: ['Aave'],
+        tokens: ['USDC'],
+      },
+    ]);
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-portfolio-manager': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Shared Ember'],
+            tokens: ['USDC'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 12_000,
+          },
+        },
+        'agent-ember-lending': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Aave'],
+            tokens: ['USDC'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 4_000,
+            apy: 8.2,
+          },
+        },
+      },
+    });
+    getAuthoritativeSnapshotMock.mockReturnValue({
+      thread: {
+        domainProjection: {
+          portfolioProjectionInput: {
+            benchmarkAsset: 'USD',
+            walletContents: [
+              {
+                asset: 'USDC',
+                network: 'arbitrum',
+                quantity: '40',
+                valueUsd: 40,
+              },
+              {
+                asset: 'WETH',
+                network: 'arbitrum',
+                quantity: '0.01',
+                valueUsd: 20,
+                economicExposures: [
+                  {
+                    asset: 'ETH',
+                    quantity: '0.01',
+                  },
+                ],
+              },
+            ],
+            reservations: [
+              {
+                reservationId: 'reservation-1',
+                agentId: 'ember-lending',
+                purpose: 'position.enter',
+                controlPath: 'lending.supply',
+                createdAt: '2026-03-30T00:00:00.000Z',
+                status: 'active',
+                unitAllocations: [
+                  {
+                    unitId: 'unit-usdc-1',
+                    quantity: '25',
+                  },
+                ],
+              },
+            ],
+            ownedUnits: [
+              {
+                unitId: 'unit-usdc-1',
+                rootAsset: 'USDC',
+                network: 'arbitrum',
+                quantity: '25',
+                benchmarkAsset: 'USD',
+                benchmarkValue: 25,
+                reservationId: 'reservation-1',
+                positionScopeId: 'scope-1',
+              },
+            ],
+            activePositionScopes: [
+              {
+                scopeId: 'scope-1',
+                kind: 'lending-position',
+                network: 'arbitrum',
+                protocolSystem: 'aave',
+                containerRef: 'aave:scope-1',
+                status: 'active',
+                marketState: {
+                  availableBorrowsUsd: '18',
+                  borrowableHeadroomUsd: '12.5',
+                  currentLtvBps: 3200,
+                  liquidationThresholdBps: 7800,
+                  healthFactor: '2.1',
+                },
+                members: [
+                  {
+                    memberId: 'collateral-usdc',
+                    role: 'collateral',
+                    asset: 'USDC',
+                    quantity: '25',
+                    valueUsd: 25,
+                    economicExposures: [
+                      {
+                        asset: 'USDC',
+                        quantity: '25',
+                      },
+                    ],
+                    state: {
+                      withdrawableQuantity: '10',
+                      supplyApr: '0.03',
+                    },
+                  },
+                  {
+                    memberId: 'debt-usdt',
+                    role: 'debt',
+                    asset: 'USDT',
+                    quantity: '5',
+                    valueUsd: 5,
+                    economicExposures: [
+                      {
+                        asset: 'USDT',
+                        quantity: '5',
+                      },
+                    ],
+                    state: {
+                      borrowApr: '0.06',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('$90 gross');
+    expect(html).toContain('$30 gross');
+    expect(html.match(/\$90 gross/g) ?? []).toHaveLength(1);
+    expect(html.match(/\$30 gross/g) ?? []).toHaveLength(1);
+    expect(html).toContain('100% of portfolio');
+    expect(html).toContain('33% of portfolio');
+    expect(html).toContain('ETH');
+    expect(html).toContain('USDT');
+    expect(html).toContain('Unallocated');
+    expect(html).not.toContain('$12k gross');
+    expect(html).not.toContain('$4k gross');
   });
 
   it('routes portfolio agent sidebar clicks to the chat tab deep link', () => {

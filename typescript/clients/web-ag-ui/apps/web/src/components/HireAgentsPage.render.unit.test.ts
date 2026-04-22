@@ -16,6 +16,11 @@ describe('HireAgentsPage (render harness)', () => {
     );
 
     expect(html).toContain('Hire Agents');
+    expect(html).toContain(
+      'rounded-3xl border border-[#E2D0BE] bg-gradient-to-b from-[#FFF9F2] to-[#F2E8DB]',
+    );
+    expect(html).toContain(
+      'border border-[#E7D3BE] bg-gradient-to-r from-[#FFF4E8] via-[#FBEBDD] to-[#F6E4D4]',
+    );
   });
 });
-

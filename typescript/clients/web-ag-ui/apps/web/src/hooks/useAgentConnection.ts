@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo, type ReactNode } from 'react';
 import type { Message } from '@ag-ui/core';
 import { useCopilotContext } from '@copilotkit/react-core';
 import { useAgent, useCopilotKit, CopilotKitCoreRuntimeConnectionStatus } from '@copilotkit/react-core/v2';
@@ -1226,7 +1226,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   ]);
 
   // Initial refresh when the thread is established - runs once per agent instance
-  useEffect(() => {
+  useLayoutEffect(() => {
     agentRef.current = agent ?? null;
   }, [agent]);
 
@@ -1346,18 +1346,24 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     const ownerId = streamOwnerIdRef.current;
 
     return () => {
+      const isStaleCapturedAgent = agentRef.current !== agent;
       logConnectEvent('cleanup', {
         agentId,
         agent: getAgentDebugId(agent),
         threadId,
+        isStaleCapturedAgent,
       });
 
       // Active-owner cleanup is handled by stream coordinator release/unregister.
       // Only cleanup here when this captured agent instance is stale.
-      if (agentRef.current !== agent) {
+      if (isStaleCapturedAgent) {
         void cleanupAgentConnection(agent);
       } else if (ownerId) {
         void releaseAgentStreamOwner(ownerId);
+      }
+
+      if (isStaleCapturedAgent) {
+        return;
       }
 
       const disconnectThreadId =
@@ -1482,16 +1488,22 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     return () => {
       canceled = true;
       clearConnectRetryTimer();
+      const isStaleCapturedAgent = agentRef.current !== agent;
       logConnectEvent('effect-cleanup', {
         agentId,
         seq: connectSeq,
         threadId,
         agent: getAgentDebugId(agentRef.current),
+        isStaleCapturedAgent,
       });
       emitConnectTrace('connect-effect-cleanup', {
         seq: connectSeq,
         agent: getAgentDebugId(agentRef.current),
+        isStaleCapturedAgent,
       });
+      if (isStaleCapturedAgent) {
+        return;
+      }
       void releaseAgentStreamOwner(ownerId);
     };
   }, [

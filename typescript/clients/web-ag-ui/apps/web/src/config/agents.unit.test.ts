@@ -12,11 +12,9 @@ import {
 describe('agents config', () => {
   it('returns registered agent config and feature ordering', () => {
     const clmm = getAgentConfig('agent-clmm');
-    const piExample = getAgentConfig('agent-pi-example');
     const portfolioManager = getAgentConfig('agent-portfolio-manager');
     const emberLending = getAgentConfig('agent-ember-lending');
     expect(clmm.name).toBe('Camelot CLMM');
-    expect(piExample.name).toBe('Pi Example Agent');
     expect(portfolioManager.name).toBe('Ember Portfolio Agent');
     expect(portfolioManager.imageUrl).toBe(
       'https://www.emberai.xyz/Logo.svg?dpl=dpl_J6BA6gqb9V9kgyUjTjKdpkPToAd7',
@@ -38,13 +36,10 @@ describe('agents config', () => {
     expect(clmm.surfaceTag).toBe('Workflow');
     expect(clmm.imperativeCommandTransport).toBe('forwarded-props');
     expect(clmm.settingsRefreshTransport).toBe('refresh-command');
-    expect(piExample.imperativeCommandTransport).toBe('forwarded-props');
-    expect(piExample.settingsRefreshTransport).toBe('refresh-command');
     expect(portfolioManager.imperativeCommandTransport).toBe('forwarded-props');
     expect(portfolioManager.settingsRefreshTransport).toBe('shared-state-update');
     expect(emberLending.settingsRefreshTransport).toBe('shared-state-update');
     expect(isRegisteredAgentId('agent-clmm')).toBe(true);
-    expect(isRegisteredAgentId('agent-pi-example')).toBe(true);
     expect(isRegisteredAgentId('agent-portfolio-manager')).toBe(true);
     expect(isRegisteredAgentId('agent-ember-lending')).toBe(true);
 
@@ -72,13 +67,14 @@ describe('agents config', () => {
     expect(ids).toEqual(Object.keys(AGENT_REGISTRY).sort());
   });
 
-  it('excludes internal-only agents from visible user-facing lists', () => {
+  it('keeps only production agents in the host registry and visible lists', () => {
     const allAgentIds = getAllAgents().map((agent) => agent.id);
     const visibleAgentIds = getVisibleAgents().map((agent) => agent.id);
 
-    expect(allAgentIds).toContain('agent-pi-example');
+    expect(allAgentIds).not.toContain('agent-pi-example');
     expect(visibleAgentIds).not.toContain('agent-pi-example');
     expect(visibleAgentIds).toContain('agent-portfolio-manager');
     expect(visibleAgentIds).toContain('agent-ember-lending');
+    expect(visibleAgentIds).toEqual(allAgentIds);
   });
 });

@@ -45,21 +45,19 @@ type HireAgentsRoutePropsCapture = {
   onViewAgent: (agentId: string) => void;
 };
 
-const pushMock = vi.fn();
+const navigateToHrefMock = vi.fn();
 const useAgentListMock = vi.fn();
 let capturedProps: HireAgentsRoutePropsCapture | null = null;
-
-vi.mock('next/navigation', () => {
-  return {
-    useRouter: () => ({
-      push: pushMock,
-    }),
-  };
-});
 
 vi.mock('@/contexts/AgentListContext', () => {
   return {
     useAgentList: () => useAgentListMock(),
+  };
+});
+
+vi.mock('@/utils/hardNavigation', () => {
+  return {
+    navigateToHref: (...args: unknown[]) => navigateToHrefMock(...args),
   };
 });
 
@@ -74,7 +72,7 @@ vi.mock('@/components/HireAgentsPage', () => {
 
 describe('HireAgentsRoute integration', () => {
   beforeEach(() => {
-    pushMock.mockReset();
+    navigateToHrefMock.mockReset();
     capturedProps = null;
 
     useAgentListMock.mockReturnValue({
@@ -238,8 +236,8 @@ describe('HireAgentsRoute integration', () => {
     props.onHireAgent('agent-gmx-allora');
     props.onViewAgent('agent-pendle');
 
-    expect(pushMock).toHaveBeenNthCalledWith(1, '/hire-agents/agent-gmx-allora');
-    expect(pushMock).toHaveBeenNthCalledWith(2, '/hire-agents/agent-pendle');
+    expect(navigateToHrefMock).toHaveBeenNthCalledWith(1, '/hire-agents/agent-gmx-allora');
+    expect(navigateToHrefMock).toHaveBeenNthCalledWith(2, '/hire-agents/agent-pendle');
   });
 
   it('passes featured agent descriptions from config into page props', () => {
@@ -251,5 +249,32 @@ describe('HireAgentsRoute integration', () => {
 
     expect(portfolioManager).toBeDefined();
     expect(pendle?.description).toContain('highest-yielding Pendle YT markets');
+  });
+
+  it('treats dedicated hired-agent truth as hired even before lifecycle catches up', () => {
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-clmm': {
+          synced: true,
+          isHired: true,
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Camelot'],
+            tokens: ['USDC'],
+          },
+          metrics: {
+            iteration: 1,
+          },
+        },
+      },
+    });
+
+    renderToStaticMarkup(React.createElement(HireAgentsRoute));
+
+    const props = capturedProps as HireAgentsRoutePropsCapture;
+    const clmm = props.agents.find((agent) => agent.id === 'agent-clmm');
+
+    expect(clmm?.status).toBe('hired');
+    expect(clmm?.isActive).toBe(false);
   });
 });

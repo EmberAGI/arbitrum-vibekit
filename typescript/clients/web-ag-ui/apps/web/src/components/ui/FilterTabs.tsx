@@ -19,10 +19,10 @@ export function FilterTabs({ tabs, activeTab, onTabChange }: FilterTabsProps) {
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         const activeClassName =
-          tab.activeClassName ?? 'bg-white/10 text-white border border-white/10';
+          tab.activeClassName ?? 'bg-[#F0E2D2] text-[#241813] border border-[#DDC8B3]';
         const inactiveClassName =
           tab.inactiveClassName ??
-          'text-gray-400 border border-white/10 hover:text-white hover:bg-white/5';
+          'text-[#7B6758] border border-[#DDC8B3] hover:text-[#241813] hover:bg-[#FFF8F0]';
 
         return (
           <button
@@ -39,8 +39,8 @@ export function FilterTabs({ tabs, activeTab, onTabChange }: FilterTabsProps) {
                 className={[
                   'px-2 py-0.5 rounded-full text-xs font-medium',
                   isActive
-                    ? tab.countClassName ?? 'bg-black/20 text-current'
-                    : 'bg-white/10 text-gray-300',
+                    ? tab.countClassName ?? 'bg-[#E7D3BE] text-current'
+                    : 'bg-[#F4E6D8] text-[#8A6F58]',
                 ].join(' ')}
               >
                 {tab.count}

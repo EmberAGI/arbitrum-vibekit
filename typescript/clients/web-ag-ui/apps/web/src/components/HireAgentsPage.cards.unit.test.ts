@@ -131,7 +131,7 @@ describe('HireAgentsPage (top cards)', () => {
     expect(html).toContain('min-w-[340px] w-[340px] h-[230px]');
     expect(html).toContain('px-4 pb-2 flex-1 min-h-0 overflow-hidden');
     expect(html).toContain(
-      'class="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 bg-black/30 flex items-center justify-center"',
+      'class="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-[#E3D2BF] bg-[#F6ECDD] flex items-center justify-center"',
     );
   });
 
@@ -208,7 +208,7 @@ describe('HireAgentsPage (top cards)', () => {
       'style="--agent-card-bg:rgba(124,58,237,0.10);--agent-card-hover-bg:rgba(124,58,237,0.14)"',
     );
     expect(html).toContain(
-      'bg-[color:var(--agent-card-bg,rgba(255,255,255,0.05))] hover:bg-[color:var(--agent-card-hover-bg,rgba(255,255,255,0.07))]',
+      'bg-[color:var(--agent-card-bg,rgba(255,250,242,0.92))] hover:bg-[color:var(--agent-card-hover-bg,rgba(247,239,227,0.98))]',
     );
   });
 
@@ -383,7 +383,7 @@ describe('HireAgentsPage (top cards)', () => {
     );
 
     expect(html).toContain(
-      '<tr class="bg-[color:var(--agent-row-bg,transparent)] hover:bg-[color:var(--agent-row-hover-bg,rgba(255,255,255,0.05))] transition-colors cursor-pointer" style="--agent-row-bg:rgba(124,58,237,0.08);--agent-row-hover-bg:rgba(124,58,237,0.12)">',
+      '<tr class="bg-[color:var(--agent-row-bg,transparent)] hover:bg-[color:var(--agent-row-hover-bg,rgba(244,230,216,0.72))] transition-colors cursor-pointer" style="--agent-row-bg:rgba(124,58,237,0.08);--agent-row-hover-bg:rgba(124,58,237,0.12)">',
     );
   });
 });

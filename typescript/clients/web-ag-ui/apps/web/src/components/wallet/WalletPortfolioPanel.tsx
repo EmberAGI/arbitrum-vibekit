@@ -1,6 +1,8 @@
 import type React from 'react';
 import { formatUnits } from 'viem';
 
+import { parseUsdNotional } from './walletDashboardView';
+
 export type WalletBalanceView = {
   tokenUid: {
     chainId: string;
@@ -82,29 +84,29 @@ export function WalletPortfolioPanel(props: WalletPortfolioPanelProps): React.JS
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-[#2a2a2a] bg-[#121212] p-4">
+      <section className="rounded-[28px] border border-[#F0D9C7] bg-[#FFF9F2] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.08)]">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Token Balances</h2>
+          <h2 className="text-lg font-semibold text-[#221A13]">Token Balances</h2>
           <div className="text-right">
-            <div className="text-xs text-gray-400">Wallet Total</div>
-            <div className="text-sm font-medium text-gray-100">
+            <div className="text-xs text-[#8C7F72]">Wallet Total</div>
+            <div className="text-sm font-medium text-[#221A13]">
               {hasWalletTotalUsd ? formatUsd(walletTotalUsd) : '--'}
             </div>
           </div>
         </div>
         {props.balances.length === 0 ? (
-          <p className="text-sm text-gray-400">No token balances found.</p>
+          <p className="text-sm text-[#8C7F72]">No token balances found.</p>
         ) : (
           <ul className="space-y-2">
             {props.balances.map((balance) => (
               <li
                 key={`${balance.tokenUid.chainId}:${balance.tokenUid.address}`}
-                className="flex items-center justify-between text-sm text-gray-200"
+                className="flex items-center justify-between rounded-[16px] border border-[#E7DBD0] bg-[#FCF5EC] px-3 py-2.5 text-sm text-[#221A13]"
               >
                 <span>{balance.symbol ?? balance.tokenUid.address}</span>
                 <div className="text-right">
                   <div>{formatBalanceAmount(balance)}</div>
-                  <div className="text-xs text-gray-400">
+                  <div className="text-xs text-[#8C7F72]">
                     {typeof balance.valueUsd === 'number' && Number.isFinite(balance.valueUsd)
                       ? formatUsd(balance.valueUsd)
                       : '--'}
@@ -116,32 +118,35 @@ export function WalletPortfolioPanel(props: WalletPortfolioPanelProps): React.JS
         )}
       </section>
 
-      <section className="rounded-lg border border-[#2a2a2a] bg-[#121212] p-4">
-        <h2 className="text-lg font-semibold text-white mb-3">Perpetual Positions</h2>
+      <section className="rounded-[28px] border border-[#F0D9C7] bg-[#FFF9F2] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.08)]">
+        <h2 className="mb-3 text-lg font-semibold text-[#221A13]">Perpetual Positions</h2>
         {props.positions.perpetuals.length === 0 ? (
-          <p className="text-sm text-gray-400">No perpetual positions.</p>
+          <p className="text-sm text-[#8C7F72]">No perpetual positions.</p>
         ) : (
           <ul className="space-y-2">
             {props.positions.perpetuals.map((position) => (
-              <li key={position.key} className="text-sm text-gray-200">
+              <li
+                key={position.key}
+                className="rounded-[16px] border border-[#E7DBD0] bg-[#FCF5EC] px-3 py-2.5 text-sm text-[#221A13]"
+              >
                 {position.positionSide.toUpperCase()} · {position.marketAddress.slice(0, 10)}… · $
-                {position.sizeInUsd}
+                {parseUsdNotional(position.sizeInUsd)}
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      <section className="rounded-lg border border-[#2a2a2a] bg-[#121212] p-4">
-        <h2 className="text-lg font-semibold text-white mb-3">Pendle Positions</h2>
+      <section className="rounded-[28px] border border-[#F0D9C7] bg-[#FFF9F2] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.08)]">
+        <h2 className="mb-3 text-lg font-semibold text-[#221A13]">Pendle Positions</h2>
         {props.positions.pendle.length === 0 ? (
-          <p className="text-sm text-gray-400">No Pendle positions.</p>
+          <p className="text-sm text-[#8C7F72]">No Pendle positions.</p>
         ) : (
           <ul className="space-y-2">
             {props.positions.pendle.map((position) => (
               <li
                 key={`${position.marketIdentifier.chainId}:${position.marketIdentifier.address}`}
-                className="text-sm text-gray-200"
+                className="rounded-[16px] border border-[#E7DBD0] bg-[#FCF5EC] px-3 py-2.5 text-sm text-[#221A13]"
               >
                 {position.marketIdentifier.address.slice(0, 10)}… · PT {position.pt.exactAmount} · YT{' '}
                 {position.yt.exactAmount}
@@ -151,16 +156,19 @@ export function WalletPortfolioPanel(props: WalletPortfolioPanelProps): React.JS
         )}
       </section>
 
-      <section className="rounded-lg border border-[#2a2a2a] bg-[#121212] p-4">
-        <h2 className="text-lg font-semibold text-white mb-3">CLMM / Camelot Positions</h2>
+      <section className="rounded-[28px] border border-[#F0D9C7] bg-[#FFF9F2] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.08)]">
+        <h2 className="mb-3 text-lg font-semibold text-[#221A13]">CLMM / Camelot Positions</h2>
         {props.positions.liquidity.length === 0 ? (
-          <p className="text-sm text-gray-400">No CLMM/Camelot positions.</p>
+          <p className="text-sm text-[#8C7F72]">No CLMM/Camelot positions.</p>
         ) : (
           <ul className="space-y-2">
             {props.positions.liquidity.map((position) => (
-              <li key={position.positionId ?? position.poolName ?? 'unknown'} className="text-sm text-gray-200">
+              <li
+                key={position.positionId ?? position.poolName ?? 'unknown'}
+                className="rounded-[16px] border border-[#E7DBD0] bg-[#FCF5EC] px-3 py-2.5 text-sm text-[#221A13]"
+              >
                 {(position.poolName && position.poolName.length > 0) ? position.poolName : 'Unnamed Pool'}
-                {position.positionValueUsd ? ` · $${position.positionValueUsd}` : ''}
+                {position.positionValueUsd ? ` · $${parseUsdNotional(position.positionValueUsd)}` : ''}
               </li>
             ))}
           </ul>

@@ -10,7 +10,8 @@ import {
   buildPortfolioManagerWalletAccountingDetails,
   buildSharedEmberAccountingContextXml,
   resolvePortfolioManagerAccountingAgentId,
-  readPortfolioManagerOnboardingState,
+  readManagedAgentAccountingState,
+  type OnboardingState as SharedEmberOnboardingState,
 } from './sharedEmberOnboardingState.js';
 
 export type PortfolioManagerSharedEmberProtocolHost = {
@@ -674,6 +675,104 @@ type ManagedMandateEditorProjection = {
   } | null;
 };
 
+type PortfolioProjectionEconomicExposureInput = {
+  asset: string;
+  quantity: string;
+};
+
+type PortfolioProjectionWalletContentInput = {
+  asset: string;
+  network: string;
+  quantity: string;
+  valueUsd: number;
+  economicExposures?: PortfolioProjectionEconomicExposureInput[];
+};
+
+type PortfolioProjectionOwnedUnitInput = {
+  unitId: string;
+  rootAsset: string;
+  network: string;
+  quantity: string;
+  benchmarkAsset: string;
+  benchmarkValue: number;
+  reservationId: string | null;
+  positionScopeId: string | null;
+};
+
+type PortfolioProjectionReservationAllocationInput = {
+  unitId: string;
+  quantity: string;
+};
+
+type PortfolioProjectionReservationInput = {
+  reservationId: string;
+  agentId: string;
+  purpose: string;
+  controlPath: string;
+  createdAt: string;
+  status: 'active' | 'consumed' | 'released' | 'superseded';
+  unitAllocations: PortfolioProjectionReservationAllocationInput[];
+};
+
+type PortfolioProjectionActivePositionScopeMemberInput = {
+  memberId: string;
+  role: 'collateral' | 'debt';
+  asset: string;
+  quantity: string;
+  valueUsd: number;
+  economicExposures: PortfolioProjectionEconomicExposureInput[];
+  state: {
+    withdrawableQuantity: string | null;
+    supplyApr: string | null;
+    borrowApr: string | null;
+  };
+};
+
+type PortfolioProjectionActivePositionScopeInput = {
+  scopeId: string;
+  kind: string;
+  network: string;
+  protocolSystem: string;
+  containerRef: string;
+  status: 'active' | 'closed';
+  marketState?: {
+    availableBorrowsUsd?: string;
+    borrowableHeadroomUsd: string;
+    currentLtvBps?: number;
+    liquidationThresholdBps?: number;
+    healthFactor?: string;
+  };
+  members: PortfolioProjectionActivePositionScopeMemberInput[];
+};
+
+type PortfolioProjectionInput = {
+  benchmarkAsset: string;
+  walletContents: PortfolioProjectionWalletContentInput[];
+  reservations: PortfolioProjectionReservationInput[];
+  ownedUnits: PortfolioProjectionOwnedUnitInput[];
+  activePositionScopes: PortfolioProjectionActivePositionScopeInput[];
+};
+
+type ManagedAgentAccountingStateRead = {
+  agentId: string;
+  revision: number;
+  onboardingState: NonNullable<SharedEmberOnboardingState>;
+};
+
+type ManagedAgentPortfolioStateRead = Awaited<ReturnType<typeof readSharedEmberPortfolioState>> & {
+  agentId: string;
+};
+
+type ManagedPortfolioStateSnapshot = {
+  managedAgentIds: string[];
+  managedPortfolioStateReads: ManagedAgentPortfolioStateRead[];
+  managedMandateProjection: ManagedMandateEditorProjection | null;
+  managedWalletAddress: `0x${string}` | null;
+  accountingStateReads: ManagedAgentAccountingStateRead[];
+  portfolioProjectionInput: PortfolioProjectionInput | null;
+  revision: number | null;
+};
+
 type PortfolioManagerFirstManagedMandate = {
   targetAgentId: typeof FIRST_MANAGED_AGENT_TYPE;
   targetAgentKey: string;
@@ -852,6 +951,489 @@ function readManagedMandate(input: unknown): ManagedMandate | null {
   };
 }
 
+function readRecordArray(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is Record<string, unknown> => isRecord(entry));
+}
+
+function readNumberLike(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readEconomicExposureInputs(value: unknown): PortfolioProjectionEconomicExposureInput[] {
+  return readRecordArray(value)
+    .map((entry) => {
+      const asset = readString(entry['asset']);
+      const quantity = readString(entry['quantity']);
+
+      if (asset === null || quantity === null) {
+        return null;
+      }
+
+      return {
+        asset,
+        quantity,
+      };
+    })
+    .filter((entry): entry is PortfolioProjectionEconomicExposureInput => entry !== null);
+}
+
+function buildPortfolioProjectionOwnedUnits(params: {
+  portfolioState: Record<string, unknown>;
+  benchmarkAsset: string;
+}): PortfolioProjectionOwnedUnitInput[] {
+  return readRecordArray(params.portfolioState['owned_units'])
+    .map((entry) => {
+      const unitId = readString(entry['unit_id']);
+      const rootAsset = readString(entry['root_asset']);
+      const quantity = readString(entry['quantity']) ?? readString(entry['amount']);
+      const benchmarkValue =
+        readNumberLike(entry['benchmark_value']) ?? readNumberLike(entry['benchmark_value_usd']);
+
+      if (unitId === null || rootAsset === null || quantity === null || benchmarkValue === null) {
+        return null;
+      }
+
+      return {
+        unitId,
+        rootAsset,
+        network: readString(entry['network']) ?? PORTFOLIO_MANAGER_NETWORK,
+        quantity,
+        benchmarkAsset: readString(entry['benchmark_asset']) ?? params.benchmarkAsset,
+        benchmarkValue,
+        reservationId: readString(entry['reservation_id']),
+        positionScopeId:
+          readString(entry['position_scope_id']) ??
+          readString(entry['scope_id']) ??
+          readString(entry['protocol_position_ref']),
+      };
+    })
+    .filter((entry): entry is PortfolioProjectionOwnedUnitInput => entry !== null);
+}
+
+function buildPortfolioProjectionReservations(params: {
+  portfolioState: Record<string, unknown>;
+  fallbackAgentId: string;
+  ownedUnits: PortfolioProjectionOwnedUnitInput[];
+}): PortfolioProjectionReservationInput[] {
+  return readRecordArray(params.portfolioState['reservations'])
+    .map((entry) => {
+      const reservationId = readString(entry['reservation_id']);
+      if (reservationId === null) {
+        return null;
+      }
+
+      const unitAllocations = readRecordArray(entry['unit_allocations'])
+        .map((allocation) => {
+          const unitId = readString(allocation['unit_id']);
+          const quantity = readString(allocation['quantity']);
+
+          if (unitId === null || quantity === null) {
+            return null;
+          }
+
+          return {
+            unitId,
+            quantity,
+          };
+        })
+        .filter((allocation): allocation is PortfolioProjectionReservationAllocationInput => allocation !== null);
+
+      const fallbackUnitAllocations =
+        unitAllocations.length > 0
+          ? unitAllocations
+          : params.ownedUnits
+              .filter((unit) => unit.reservationId === reservationId)
+              .map((unit) => ({
+                unitId: unit.unitId,
+                quantity: unit.quantity,
+              }));
+
+      const statusValue = readString(entry['status']);
+      const status =
+        statusValue === 'active' ||
+        statusValue === 'consumed' ||
+        statusValue === 'released' ||
+        statusValue === 'superseded'
+          ? statusValue
+          : 'active';
+
+      return {
+        reservationId,
+        agentId: readString(entry['agent_id']) ?? params.fallbackAgentId,
+        purpose: readString(entry['purpose']) ?? 'position.enter',
+        controlPath: readString(entry['control_path']) ?? 'lending.supply',
+        createdAt: readString(entry['created_at']) ?? PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
+        status,
+        unitAllocations: fallbackUnitAllocations,
+      };
+    })
+    .filter((entry): entry is PortfolioProjectionReservationInput => entry !== null);
+}
+
+function buildPortfolioProjectionWalletContents(
+  portfolioState: Record<string, unknown>,
+): PortfolioProjectionWalletContentInput[] {
+  return readRecordArray(portfolioState['wallet_contents'])
+    .map((entry) => {
+      const asset = readString(entry['asset']);
+      const quantity = readString(entry['quantity']) ?? readString(entry['amount']);
+      const valueUsd = readNumberLike(entry['value_usd']) ?? readNumberLike(entry['valueUsd']);
+
+      if (asset === null || quantity === null || valueUsd === null) {
+        return null;
+      }
+
+      const economicExposures = readEconomicExposureInputs(entry['economic_exposures']);
+
+      return {
+        asset,
+        network: readString(entry['network']) ?? PORTFOLIO_MANAGER_NETWORK,
+        quantity,
+        valueUsd,
+        ...(economicExposures.length > 0 ? { economicExposures } : {}),
+      };
+    })
+    .filter((entry): entry is PortfolioProjectionWalletContentInput => entry !== null);
+}
+
+function buildPortfolioProjectionActivePositionScopes(
+  portfolioState: Record<string, unknown>,
+): PortfolioProjectionActivePositionScopeInput[] {
+  return readRecordArray(portfolioState['active_position_scopes'])
+    .map((scope) => {
+      const scopeId = readString(scope['scope_id']);
+      if (scopeId === null) {
+        return null;
+      }
+
+      const members = readRecordArray(scope['members'])
+        .map((member, index) => {
+          const memberId = readString(member['member_id']) ?? `${scopeId}-member-${index}`;
+          const asset = readString(member['asset']);
+          const quantity = readString(member['quantity']) ?? readString(member['amount']);
+          const valueUsd = readNumberLike(member['value_usd']) ?? readNumberLike(member['valueUsd']);
+
+          if (asset === null || quantity === null || valueUsd === null) {
+            return null;
+          }
+
+          const memberState = isRecord(member['state']) ? member['state'] : null;
+
+          return {
+            memberId,
+            role: readString(member['role']) === 'debt' ? 'debt' : 'collateral',
+            asset,
+            quantity,
+            valueUsd,
+            economicExposures: readEconomicExposureInputs(member['economic_exposures']),
+            state: {
+              withdrawableQuantity: readString(memberState?.['withdrawable_quantity']),
+              supplyApr: readString(memberState?.['supply_apr']),
+              borrowApr: readString(memberState?.['borrow_apr']),
+            },
+          };
+        })
+        .filter((entry): entry is PortfolioProjectionActivePositionScopeMemberInput => entry !== null);
+
+      const marketStateRecord = isRecord(scope['market_state']) ? scope['market_state'] : null;
+      const borrowableHeadroomUsd = readString(marketStateRecord?.['borrowable_headroom_usd']);
+      const availableBorrowsUsd = readString(marketStateRecord?.['available_borrows_usd']);
+      const healthFactor = readString(marketStateRecord?.['health_factor']);
+      const currentLtvBps = readFiniteNumber(marketStateRecord?.['current_ltv_bps']);
+      const liquidationThresholdBps = readFiniteNumber(marketStateRecord?.['liquidation_threshold_bps']);
+      const marketState =
+        borrowableHeadroomUsd === null &&
+        availableBorrowsUsd === null &&
+        healthFactor === null &&
+        currentLtvBps === null &&
+        liquidationThresholdBps === null
+          ? undefined
+          : {
+              ...(availableBorrowsUsd !== null ? { availableBorrowsUsd } : {}),
+              borrowableHeadroomUsd: borrowableHeadroomUsd ?? '0',
+              ...(currentLtvBps !== null ? { currentLtvBps } : {}),
+              ...(liquidationThresholdBps !== null ? { liquidationThresholdBps } : {}),
+              ...(healthFactor !== null ? { healthFactor } : {}),
+            };
+
+      return {
+        scopeId,
+        kind: readString(scope['kind']) ?? readString(scope['scope_type_id']) ?? 'position',
+        network: readString(scope['network']) ?? PORTFOLIO_MANAGER_NETWORK,
+        protocolSystem: readString(scope['protocol_system']) ?? 'unknown',
+        containerRef: readString(scope['container_ref']) ?? scopeId,
+        status: readString(scope['status']) === 'closed' ? 'closed' : 'active',
+        ...(marketState ? { marketState } : {}),
+        members,
+      };
+    })
+    .filter((entry): entry is PortfolioProjectionActivePositionScopeInput => entry !== null);
+}
+
+function buildPortfolioProjectionInput(params: {
+  portfolioState: Record<string, unknown> | null;
+  fallbackAgentId: string;
+}): PortfolioProjectionInput | null {
+  if (!params.portfolioState) {
+    return null;
+  }
+
+  const benchmarkAsset =
+    readString(params.portfolioState['benchmark_asset']) ?? FIRST_MANAGED_AGENT_BENCHMARK_ASSET;
+  const ownedUnits = buildPortfolioProjectionOwnedUnits({
+    portfolioState: params.portfolioState,
+    benchmarkAsset,
+  });
+
+  return {
+    benchmarkAsset,
+    walletContents: buildPortfolioProjectionWalletContents(params.portfolioState),
+    reservations: buildPortfolioProjectionReservations({
+      portfolioState: params.portfolioState,
+      fallbackAgentId: readString(params.portfolioState['agent_id']) ?? params.fallbackAgentId,
+      ownedUnits,
+    }),
+    ownedUnits,
+    activePositionScopes: buildPortfolioProjectionActivePositionScopes(params.portfolioState),
+  };
+}
+
+function buildPortfolioProjectionOwnedUnitsFromOnboardingState(params: {
+  onboardingState: NonNullable<SharedEmberOnboardingState>;
+  benchmarkAsset: string;
+}): PortfolioProjectionOwnedUnitInput[] {
+  return (params.onboardingState.owned_units ?? [])
+    .map((entry) => {
+      const benchmarkValue = readNumberLike(entry.benchmark_value);
+      if (
+        typeof entry.unit_id !== 'string' ||
+        typeof entry.root_asset !== 'string' ||
+        typeof entry.quantity !== 'string' ||
+        benchmarkValue === null
+      ) {
+        return null;
+      }
+
+      return {
+        unitId: entry.unit_id,
+        rootAsset: entry.root_asset,
+        network: entry.network ?? params.onboardingState.network,
+        quantity: entry.quantity,
+        benchmarkAsset: entry.benchmark_asset ?? params.benchmarkAsset,
+        benchmarkValue,
+        reservationId: entry.reservation_id,
+        positionScopeId: entry.position_scope_id ?? null,
+      };
+    })
+    .filter((entry): entry is PortfolioProjectionOwnedUnitInput => entry !== null);
+}
+
+function buildPortfolioProjectionReservationsFromOnboardingState(params: {
+  onboardingState: NonNullable<SharedEmberOnboardingState>;
+  fallbackAgentId: string;
+}): PortfolioProjectionReservationInput[] {
+  return (params.onboardingState.reservations ?? [])
+    .map((entry) => {
+      if (typeof entry.reservation_id !== 'string') {
+        return null;
+      }
+
+      const status =
+        entry.status === 'active' ||
+        entry.status === 'consumed' ||
+        entry.status === 'released' ||
+        entry.status === 'superseded'
+          ? entry.status
+          : 'active';
+
+      return {
+        reservationId: entry.reservation_id,
+        agentId: entry.agent_id ?? params.fallbackAgentId,
+        purpose: entry.purpose,
+        controlPath: entry.control_path,
+        createdAt: entry.created_at ?? PORTFOLIO_MANAGER_BOOTSTRAP_TIMESTAMP,
+        status,
+        unitAllocations: entry.unit_allocations
+          .filter(
+            (allocation) =>
+              typeof allocation.unit_id === 'string' && typeof allocation.quantity === 'string',
+          )
+          .map((allocation) => ({
+            unitId: allocation.unit_id,
+            quantity: allocation.quantity,
+          })),
+      };
+    })
+    .filter((entry): entry is PortfolioProjectionReservationInput => entry !== null);
+}
+
+function buildAggregatedPortfolioProjectionInputFromAccountingStates(params: {
+  baseProjectionInputs: PortfolioProjectionInput[];
+  accountingStateReads: ManagedAgentAccountingStateRead[];
+}): PortfolioProjectionInput | null {
+  if (params.baseProjectionInputs.length === 0) {
+    return null;
+  }
+
+  const walletProjectionInput =
+    params.baseProjectionInputs.find((input) => input.walletContents.length > 0) ??
+    params.baseProjectionInputs[0];
+  if (!walletProjectionInput) {
+    return null;
+  }
+
+  const benchmarkAsset =
+    params.accountingStateReads
+      .flatMap((stateRead) => stateRead.onboardingState.owned_units ?? [])
+      .find((unit) => typeof unit.benchmark_asset === 'string')?.benchmark_asset ??
+    walletProjectionInput.benchmarkAsset;
+  const ownedUnitsById = new Map<string, PortfolioProjectionOwnedUnitInput>();
+  const reservationsById = new Map<string, PortfolioProjectionReservationInput>();
+  const activePositionScopesById = new Map<string, PortfolioProjectionActivePositionScopeInput>();
+
+  for (const accountingStateRead of params.accountingStateReads) {
+    for (const ownedUnit of buildPortfolioProjectionOwnedUnitsFromOnboardingState({
+      onboardingState: accountingStateRead.onboardingState,
+      benchmarkAsset,
+    })) {
+      if (!ownedUnitsById.has(ownedUnit.unitId)) {
+        ownedUnitsById.set(ownedUnit.unitId, ownedUnit);
+      }
+    }
+
+    for (const reservation of buildPortfolioProjectionReservationsFromOnboardingState({
+      onboardingState: accountingStateRead.onboardingState,
+      fallbackAgentId: accountingStateRead.agentId,
+    })) {
+      if (!reservationsById.has(reservation.reservationId)) {
+        reservationsById.set(reservation.reservationId, reservation);
+      }
+    }
+  }
+
+  for (const baseProjectionInput of params.baseProjectionInputs) {
+    for (const activePositionScope of baseProjectionInput.activePositionScopes) {
+      if (!activePositionScopesById.has(activePositionScope.scopeId)) {
+        activePositionScopesById.set(activePositionScope.scopeId, activePositionScope);
+      }
+    }
+  }
+
+  return {
+    benchmarkAsset,
+    walletContents: walletProjectionInput.walletContents,
+    reservations: Array.from(reservationsById.values()),
+    ownedUnits: Array.from(ownedUnitsById.values()),
+    activePositionScopes: Array.from(activePositionScopesById.values()),
+  };
+}
+
+function buildAggregatedPortfolioManagerWalletAccountingDetails(params: {
+  accountingStateReads: ManagedAgentAccountingStateRead[];
+}): ReturnType<typeof buildPortfolioManagerWalletAccountingDetails> | null {
+  if (params.accountingStateReads.length === 0) {
+    return null;
+  }
+
+  const accountingDetails = params.accountingStateReads.map((stateRead) =>
+    buildPortfolioManagerWalletAccountingDetails({
+      revision: stateRead.revision,
+      onboardingState: stateRead.onboardingState,
+    }),
+  );
+  const primaryDetails = accountingDetails[0];
+  if (!primaryDetails) {
+    return null;
+  }
+
+  const assetsByUnitId = new Map<string, (typeof primaryDetails.assets)[number]>();
+  const reservationsById = new Map<string, (typeof primaryDetails.reservations)[number]>();
+  for (const details of accountingDetails) {
+    for (const asset of details.assets) {
+      if (!assetsByUnitId.has(asset.unitId)) {
+        assetsByUnitId.set(asset.unitId, asset);
+      }
+    }
+
+    for (const reservation of details.reservations) {
+      if (!reservationsById.has(reservation.reservationId)) {
+        reservationsById.set(reservation.reservationId, reservation);
+      }
+    }
+  }
+
+  const phaseValues = [...new Set(accountingDetails.map((details) => details.onboarding.phase))].sort();
+  const aggregatedProofs: typeof primaryDetails.onboarding.proofs = {
+    rooted_wallet_context_registered: accountingDetails.every(
+      (details) => details.onboarding.proofs.rooted_wallet_context_registered,
+    ),
+    root_delegation_registered: accountingDetails.every(
+      (details) => details.onboarding.proofs.root_delegation_registered,
+    ),
+    root_authority_active: accountingDetails.every(
+      (details) => details.onboarding.proofs.root_authority_active,
+    ),
+    wallet_baseline_observed: accountingDetails.every(
+      (details) => details.onboarding.proofs.wallet_baseline_observed,
+    ),
+    accounting_units_seeded: accountingDetails.every(
+      (details) => details.onboarding.proofs.accounting_units_seeded,
+    ),
+    mandate_inputs_configured: accountingDetails.every(
+      (details) => details.onboarding.proofs.mandate_inputs_configured,
+    ),
+    reserve_policy_configured: accountingDetails.every(
+      (details) => details.onboarding.proofs.reserve_policy_configured,
+    ),
+    capital_reserved_for_agent: accountingDetails.every(
+      (details) => details.onboarding.proofs.capital_reserved_for_agent,
+    ),
+    policy_snapshot_recorded: accountingDetails.every(
+      (details) => details.onboarding.proofs.policy_snapshot_recorded,
+    ),
+    initial_subagent_delegation_issued: accountingDetails.every(
+      (details) =>
+        details.onboarding.proofs.initial_subagent_delegation_issued ??
+        details.onboarding.proofs.agent_active,
+    ),
+    agent_active: accountingDetails.every((details) => details.onboarding.proofs.agent_active),
+  };
+
+  return {
+    wallet: primaryDetails.wallet,
+    onboarding: {
+      phase:
+        phaseValues.length === 1
+          ? primaryDetails.onboarding.phase
+          : `mixed:${phaseValues.join(',')}`,
+      revision: Math.max(...accountingDetails.map((details) => details.onboarding.revision)),
+      active: accountingDetails.every((details) => details.onboarding.active),
+      proofs: aggregatedProofs,
+      rootedWalletContextId:
+        accountingDetails.find((details) => details.onboarding.rootedWalletContextId !== null)?.onboarding
+          .rootedWalletContextId ?? null,
+      rootDelegationId:
+        accountingDetails.find((details) => details.onboarding.rootDelegationId !== null)?.onboarding
+          .rootDelegationId ?? null,
+    },
+    assets: Array.from(assetsByUnitId.values()),
+    reservations: Array.from(reservationsById.values()),
+  };
+}
+
 function parsePortfolioMandate(input: unknown): PortfolioManagerPortfolioMandate | null {
   if (typeof input !== 'object' || input === null) {
     return null;
@@ -1011,6 +1593,153 @@ function readOnboardingMandateSources(value: unknown): OnboardingMandateSource[]
   }
 
   return mandateSources;
+}
+
+function readManagedAgentIdsFromOnboardingBootstrap(value: unknown): string[] {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('mandates' in value) ||
+    !Array.isArray(value.mandates)
+  ) {
+    return [];
+  }
+
+  const managedAgentIds = new Set<string>();
+  for (const mandate of value.mandates) {
+    if (
+      typeof mandate !== 'object' ||
+      mandate === null ||
+      !('agent_id' in mandate) ||
+      typeof mandate.agent_id !== 'string' ||
+      !('managed_mandate' in mandate) ||
+      mandate.managed_mandate === null
+    ) {
+      continue;
+    }
+
+    managedAgentIds.add(mandate.agent_id);
+  }
+
+  return Array.from(managedAgentIds);
+}
+
+function readManagedAgentIdsForLifecycleState(currentState: PortfolioManagerLifecycleState): string[] {
+  if (currentState.phase === 'prehire') {
+    return [];
+  }
+
+  const bootstrapManagedAgentIds = readManagedAgentIdsFromOnboardingBootstrap(
+    currentState.lastOnboardingBootstrap,
+  );
+  return bootstrapManagedAgentIds.length > 0
+    ? bootstrapManagedAgentIds
+    : [FIRST_MANAGED_AGENT_TYPE];
+}
+
+async function readManagedPortfolioStateSnapshot(params: {
+  protocolHost: PortfolioManagerSharedEmberProtocolHost;
+  threadId: string;
+  currentState: PortfolioManagerLifecycleState;
+}): Promise<ManagedPortfolioStateSnapshot> {
+  const managedAgentIds = readManagedAgentIdsForLifecycleState(params.currentState);
+  const managedPortfolioStateReads =
+    managedAgentIds.length > 0
+      ? (
+          await Promise.all(
+            managedAgentIds.map(async (managedAgentId) => {
+              try {
+                const portfolioRead = await readSharedEmberPortfolioState({
+                  protocolHost: params.protocolHost,
+                  threadId: params.threadId,
+                  agentId: managedAgentId,
+                });
+                return {
+                  agentId: managedAgentId,
+                  ...portfolioRead,
+                };
+              } catch {
+                return null;
+              }
+            }),
+          )
+        ).filter(
+          (
+            portfolioRead,
+          ): portfolioRead is ManagedAgentPortfolioStateRead => portfolioRead !== null,
+        )
+      : [];
+  const managedMandateProjection =
+    managedPortfolioStateReads.reduce<ManagedMandateEditorProjection | null>(
+      (currentProjection, portfolioRead) => {
+        if (currentProjection) {
+          return currentProjection;
+        }
+
+        return buildManagedMandateEditorProjection(portfolioRead.portfolioState);
+      },
+      null,
+    );
+  const managedWalletAddress =
+    managedMandateProjection?.rootUserWallet ??
+    params.currentState.activeWalletAddress ??
+    readOnboardingBootstrapWalletAddress(params.currentState.lastOnboardingBootstrap);
+  const accountingStateReads =
+    managedWalletAddress && managedAgentIds.length > 0
+      ? (
+          await Promise.all(
+            managedAgentIds.map(async (managedAgentId) => {
+              try {
+                const stateRead = await readManagedAgentAccountingState({
+                  protocolHost: params.protocolHost,
+                  agentId: managedAgentId,
+                  walletAddress: managedWalletAddress,
+                });
+                return {
+                  agentId: managedAgentId,
+                  ...stateRead,
+                };
+              } catch {
+                return null;
+              }
+            }),
+          )
+        ).filter((stateRead): stateRead is ManagedAgentAccountingStateRead => stateRead !== null)
+      : [];
+  const managedPortfolioProjectionInputs = managedPortfolioStateReads
+    .map((portfolioRead) =>
+      buildPortfolioProjectionInput({
+        portfolioState: portfolioRead.portfolioState,
+        fallbackAgentId: portfolioRead.agentId,
+      }),
+    )
+    .filter((projectionInput): projectionInput is PortfolioProjectionInput => projectionInput !== null);
+  const portfolioProjectionInput =
+    managedPortfolioProjectionInputs.length > 0 && accountingStateReads.length > 0
+      ? buildAggregatedPortfolioProjectionInputFromAccountingStates({
+          baseProjectionInputs: managedPortfolioProjectionInputs,
+          accountingStateReads,
+        })
+      : managedPortfolioProjectionInputs.length > 0
+        ? managedPortfolioProjectionInputs[0] ?? null
+        : null;
+
+  return {
+    managedAgentIds,
+    managedPortfolioStateReads,
+    managedMandateProjection,
+    managedWalletAddress,
+    accountingStateReads,
+    portfolioProjectionInput,
+    revision:
+      managedPortfolioStateReads.length === 0 && accountingStateReads.length === 0
+        ? null
+        : Math.max(
+            0,
+            ...managedPortfolioStateReads.map((portfolioRead) => portfolioRead.revision ?? 0),
+            ...accountingStateReads.map((stateRead) => stateRead.revision ?? 0),
+          ),
+  };
 }
 
 function buildManagedMandateEditorProjection(
@@ -1520,21 +2249,15 @@ export function createPortfolioManagerDomain(
       const context = ['<portfolio_manager_context>'];
       const protocolHost = options.protocolHost;
       const projectedManagedMandateProjection = readManagedMandateEditorProjection(currentProjection);
-      const liveManagedMandateProjection =
+      const activeManagedSnapshot =
         currentState.phase === 'active' && protocolHost
-          ? await (async () => {
-              try {
-                const managedPortfolioState = await readSharedEmberPortfolioState({
-                  protocolHost,
-                  threadId: 'system-context',
-                  agentId: FIRST_MANAGED_AGENT_TYPE,
-                });
-                return buildManagedMandateEditorProjection(managedPortfolioState.portfolioState);
-              } catch {
-                return null;
-              }
-            })()
+          ? await readManagedPortfolioStateSnapshot({
+              protocolHost,
+              threadId: 'system-context',
+              currentState,
+            })
           : null;
+      const liveManagedMandateProjection = activeManagedSnapshot?.managedMandateProjection ?? null;
       const visibleManagedMandateProjection =
         liveManagedMandateProjection ?? (currentState.phase === 'active' ? projectedManagedMandateProjection : null);
 
@@ -1634,26 +2357,35 @@ export function createPortfolioManagerDomain(
 
       const walletAddress =
         currentState.phase === 'active'
-          ? visibleManagedMandateProjection?.rootUserWallet ?? currentState.activeWalletAddress
+          ? activeManagedSnapshot?.managedWalletAddress ??
+            visibleManagedMandateProjection?.rootUserWallet ??
+            currentState.activeWalletAddress
           : readPortfolioManagerContextWalletAddress(currentState);
-      if (walletAddress && options.protocolHost) {
+      if (walletAddress && protocolHost) {
         try {
-          const accountingAgentId =
+          const aggregatedAccountingDetails =
             currentState.phase === 'active'
-              ? FIRST_MANAGED_AGENT_TYPE
-              : resolvePortfolioManagerAccountingAgentId(currentState.lastOnboardingBootstrap);
-          const { revision, onboardingState } = await readPortfolioManagerOnboardingState({
-            protocolHost: options.protocolHost,
-            agentId: accountingAgentId,
-            walletAddress,
-          });
+              ? buildAggregatedPortfolioManagerWalletAccountingDetails({
+                  accountingStateReads: activeManagedSnapshot?.accountingStateReads ?? [],
+                })
+              : null;
           context.push(
             ...buildSharedEmberAccountingContextXml({
               status: 'live',
-              details: buildPortfolioManagerWalletAccountingDetails({
-                revision,
-                onboardingState,
-              }),
+              details:
+                aggregatedAccountingDetails ??
+                buildPortfolioManagerWalletAccountingDetails(
+                  await (async () => {
+                    const accountingAgentId = resolvePortfolioManagerAccountingAgentId(
+                      currentState.lastOnboardingBootstrap,
+                    );
+                    return readManagedAgentAccountingState({
+                      protocolHost,
+                      agentId: accountingAgentId,
+                      walletAddress,
+                    });
+                  })(),
+                ),
             }),
           );
         } catch (error) {
@@ -1964,7 +2696,7 @@ export function createPortfolioManagerDomain(
             walletAddress,
           });
           const { revision: onboardingRevision, onboardingState } =
-            await readPortfolioManagerOnboardingState({
+            await readManagedAgentAccountingState({
               protocolHost: options.protocolHost,
               agentId: resolvePortfolioManagerAccountingAgentId(onboarding),
               walletAddress,
@@ -2197,30 +2929,20 @@ export function createPortfolioManagerDomain(
             threadId,
             agentId,
           });
-          let managedPortfolioStateRead: Awaited<ReturnType<typeof readSharedEmberPortfolioState>> | null =
-            null;
-          if (currentState.phase !== 'prehire') {
-            try {
-              managedPortfolioStateRead = await readSharedEmberPortfolioState({
-                protocolHost: options.protocolHost,
-                threadId,
-                agentId: FIRST_MANAGED_AGENT_TYPE,
-              });
-            } catch {
-              managedPortfolioStateRead = null;
-            }
-          }
-          const managedMandateProjection =
-            managedPortfolioStateRead
-              ? buildManagedMandateEditorProjection(managedPortfolioStateRead.portfolioState)
-              : null;
+          const managedSnapshot = await readManagedPortfolioStateSnapshot({
+            protocolHost: options.protocolHost,
+            threadId,
+            currentState,
+          });
+          const managedMandateProjection = managedSnapshot.managedMandateProjection;
+          const portfolioProjectionInput = managedSnapshot.portfolioProjectionInput;
           const nextPhase = managedMandateProjection ? 'active' : currentState.phase;
           const nextRevision =
-            managedMandateProjection === null
+            managedMandateProjection === null && managedSnapshot.accountingStateReads.length === 0
               ? portfolioStateRead.revision
               : Math.max(
                   portfolioStateRead.revision ?? 0,
-                  managedPortfolioStateRead?.revision ?? 0,
+                  managedSnapshot.revision ?? 0,
                 );
 
           const nextState: PortfolioManagerLifecycleState = {
@@ -2232,7 +2954,7 @@ export function createPortfolioManagerDomain(
             lastRootedWalletContextId:
               managedMandateProjection?.rootedWalletContextId ?? currentState.lastRootedWalletContextId,
             activeWalletAddress:
-              managedMandateProjection?.rootUserWallet ?? currentState.activeWalletAddress,
+              managedSnapshot.managedWalletAddress ?? currentState.activeWalletAddress,
             pendingOnboardingWalletAddress:
               managedMandateProjection === null ? currentState.pendingOnboardingWalletAddress : null,
             pendingApprovedSetup:
@@ -2241,10 +2963,13 @@ export function createPortfolioManagerDomain(
 
           return {
             state: nextState,
-            ...(managedMandateProjection
+            ...(managedMandateProjection || portfolioProjectionInput
               ? {
                   domainProjectionUpdate: {
-                    managedMandateEditor: managedMandateProjection,
+                    ...(managedMandateProjection
+                      ? { managedMandateEditor: managedMandateProjection }
+                      : {}),
+                    ...(portfolioProjectionInput ? { portfolioProjectionInput } : {}),
                   },
                 }
               : {}),
@@ -2356,6 +3081,10 @@ export function createPortfolioManagerDomain(
           const updatedManagedProjection = buildManagedMandateEditorProjection(
             updatedManagedPortfolioState.portfolioState,
           );
+          const updatedPortfolioProjectionInput = buildPortfolioProjectionInput({
+            portfolioState: updatedManagedPortfolioState.portfolioState,
+            fallbackAgentId: updateInput.targetAgentId,
+          });
           const nextRevision =
             response.result?.revision ??
             updatedManagedPortfolioState.revision ??
@@ -2368,10 +3097,15 @@ export function createPortfolioManagerDomain(
 
           return {
             state: nextState,
-            ...(updatedManagedProjection
+            ...(updatedManagedProjection || updatedPortfolioProjectionInput
               ? {
                   domainProjectionUpdate: {
-                    managedMandateEditor: updatedManagedProjection,
+                    ...(updatedManagedProjection
+                      ? { managedMandateEditor: updatedManagedProjection }
+                      : {}),
+                    ...(updatedPortfolioProjectionInput
+                      ? { portfolioProjectionInput: updatedPortfolioProjectionInput }
+                      : {}),
                   },
                 }
               : {}),

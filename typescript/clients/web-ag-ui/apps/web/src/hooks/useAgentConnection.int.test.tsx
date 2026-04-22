@@ -220,6 +220,24 @@ function readLastRunCommand():
   return latestCall?.forwardedProps?.command ?? null;
 }
 
+function createReplacementAgent(): TestAgent {
+  const agent: TestAgent = {
+    threadId: undefined,
+    state: {},
+    addMessage: vi.fn(),
+    setState: vi.fn((next: Record<string, unknown>) => {
+      agent.state = next;
+    }),
+    subscribe: vi.fn(() => ({
+      unsubscribe: vi.fn(),
+    })),
+    detachActiveRun: vi.fn(async () => undefined),
+    connectAgent: vi.fn(async () => undefined),
+  };
+
+  return agent;
+}
+
 describe('useAgentConnection integration', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -2669,6 +2687,25 @@ describe('useAgentConnection integration', () => {
         content: 'Portfolio manager reconnected successfully.',
       }),
     ]);
+  });
+
+  it('does not disconnect the active runtime stream when a stale captured agent instance is replaced on rerender', async () => {
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-portfolio-manager" />);
+    });
+    await flushEffects();
+
+    const staleAgent = mocks.agent;
+    const replacementAgent = createReplacementAgent();
+    mocks.agent = replacementAgent;
+
+    await act(async () => {
+      root.render(<TestHarness agentId="agent-portfolio-manager" />);
+    });
+    await flushEffects();
+
+    expect(staleAgent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(mocks.disconnectFetch).not.toHaveBeenCalled();
   });
 
   it('keeps the last authoritative active snapshot when a later raw state rerender regresses lifecycle to prehire', async () => {

@@ -7,6 +7,14 @@ export const DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET = 'USDC';
 export const DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT = 35;
 export const DEFAULT_MANAGED_LENDING_MAX_LTV_BPS = 7000;
 export const DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR = '1.25';
+export const DEFAULT_MANAGED_MANDATE_TOKEN_CHOICES = [
+  'USDC',
+  'WETH',
+  'WBTC',
+  'ARB',
+  'USDT',
+  'DAI',
+] as const;
 
 export function normalizeManagedMandateAssetSymbol(value: string | null | undefined): string {
   return (value ?? '').trim().toUpperCase();

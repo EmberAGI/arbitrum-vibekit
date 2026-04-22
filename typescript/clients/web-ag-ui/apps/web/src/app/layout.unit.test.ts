@@ -21,4 +21,14 @@ describe('RootLayout font wiring', () => {
     expect(source).toContain('roboto.variable');
     expect(source).toContain('robotoMono.variable');
   });
+
+  it('does not hard-force a dark document shell', () => {
+    const source = fs.readFileSync(layoutPath, 'utf8');
+
+    expect(source).not.toContain('<html lang="en" className="dark"');
+    expect(source).not.toContain("colorScheme: 'dark'");
+    expect(source).not.toContain("document.documentElement.className='dark'");
+    expect(source).not.toContain("bg-[#09090B]");
+    expect(source).not.toContain("text-[#D1D1D1]");
+  });
 });

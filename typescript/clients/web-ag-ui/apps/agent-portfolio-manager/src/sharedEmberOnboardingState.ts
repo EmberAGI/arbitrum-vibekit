@@ -20,10 +20,15 @@ export type OnboardingProofs = {
 export type OnboardingOwnedUnit = {
   unit_id: string;
   root_asset: string;
+  network?: string;
+  wallet_address?: string;
   quantity: string;
   status: string;
   control_path: string;
+  benchmark_asset?: string;
+  benchmark_value?: string;
   reservation_id: string | null;
+  position_scope_id?: string | null;
 };
 
 export type OnboardingReservation = {
@@ -32,6 +37,7 @@ export type OnboardingReservation = {
   purpose: string;
   status: string;
   control_path: string;
+  created_at?: string;
   unit_allocations: Array<{
     unit_id: string;
     quantity: string;
@@ -146,7 +152,7 @@ export function resolvePortfolioManagerAccountingAgentId(onboardingBootstrap: un
   );
 }
 
-export async function readPortfolioManagerOnboardingState(input: {
+export async function readManagedAgentAccountingState(input: {
   protocolHost: PortfolioManagerSharedEmberProtocolHost;
   agentId: string;
   walletAddress: `0x${string}`;

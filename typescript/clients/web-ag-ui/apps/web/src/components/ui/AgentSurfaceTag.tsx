@@ -6,8 +6,8 @@ interface AgentSurfaceTagProps {
 export function AgentSurfaceTag({ tag, className }: AgentSurfaceTagProps) {
   const toneClassName =
     tag === 'Swarm'
-      ? 'border-[#7c3aed]/25 bg-[#7c3aed]/12 text-[#c4b5fd]'
-      : 'border-white/10 bg-white/[0.06] text-gray-200';
+      ? 'border-[#FD6731]/20 bg-[#FCE8DE] text-[#B14E27]'
+      : 'border-[#DDC8B3] bg-[#FFF8F0] text-[#6F5A4C]';
 
   return (
     <span

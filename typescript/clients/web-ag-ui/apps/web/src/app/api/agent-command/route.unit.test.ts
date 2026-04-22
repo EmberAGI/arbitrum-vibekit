@@ -1,4 +1,4 @@
-import { concat, from, NEVER } from 'rxjs';
+import { concat, from, NEVER, throwError } from 'rxjs';
 import { EventType } from '@ag-ui/core';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +14,6 @@ vi.mock('../copilotkit/piRuntimeHttpAgent', () => ({
 }));
 
 vi.mock('../copilotkit/copilotRuntimeRegistry', () => ({
-  PI_EXAMPLE_AGENT_NAME: 'agent-pi-example',
   PORTFOLIO_MANAGER_AGENT_NAME: 'agent-portfolio-manager',
   EMBER_LENDING_AGENT_NAME: 'agent-ember-lending',
   resolveAgentRuntimeUrl: vi.fn(() => 'http://127.0.0.1:3420/ag-ui'),
@@ -40,6 +39,24 @@ describe('POST /api/agent-command', () => {
 
   it('rejects invalid payloads', async () => {
     const response = await POST(buildRequest({ agentId: 'agent-portfolio-manager' }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Invalid agent command payload.',
+    });
+  });
+
+  it('rejects commands for agents removed from the production surface', async () => {
+    const response = await POST(
+      buildRequest({
+        agentId: 'agent-pi-example',
+        threadId: 'thread-1',
+        command: {
+          name: 'hydrate_runtime_projection',
+        },
+      }),
+    );
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
@@ -467,6 +484,39 @@ describe('POST /api/agent-command', () => {
           },
         },
       },
+    });
+  });
+
+  it('returns structured runtime transport errors instead of falling back to a generic 500 response', async () => {
+    runMock.mockReturnValue(
+      throwError(() =>
+        Object.assign(new Error('HTTP 502'), {
+          status: 502,
+          payload: {
+            error: 'agent-portfolio-manager request failed',
+            message:
+              'Shared Ember Domain Service JSON-RPC error: protocol_invalid_params: managed onboarding requires issuer provisioning for ember-lending',
+          },
+        }),
+      ),
+    );
+
+    const response = await POST(
+      buildRequest({
+        agentId: 'agent-portfolio-manager',
+        threadId: 'thread-1',
+        resume: {
+          outcome: 'signed',
+          signedDelegations: [],
+        },
+      }),
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error:
+        'Shared Ember Domain Service JSON-RPC error: protocol_invalid_params: managed onboarding requires issuer provisioning for ember-lending',
     });
   });
 });

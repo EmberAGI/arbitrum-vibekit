@@ -36,7 +36,7 @@ const EMBER_LENDING_ROUTE_AGENT_TITLE = 'Ember Lending';
 const PLANNING_PM_ONBOARDING_BLOCKED_MESSAGE =
   'Portfolio Manager onboarding must complete before lending can plan transactions for this thread.';
 const CREATE_TRANSACTION_INPUT_BLOCKED_MESSAGE =
-  'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}.';
+  'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}. For maximum or full borrow/withdraw/supply/repay, prefer {"kind":"percent","value":100} so Shared Ember computes the live protocol-safe exact amount.';
 const CREATE_TRANSACTION_CONTROL_PATH_BLOCKED_MESSAGE =
   'create_transaction control_path must be one of "lending.supply", "lending.withdraw", "lending.borrow", or "lending.repay". Do not pass a position-scope id like "position-scope-aave-arbitrum-...". Exact quantity strings like {"kind":"exact","value":"3"} are valid.';
 
@@ -1543,7 +1543,7 @@ function appendMandateContextXml(
     value: mandateContext,
   });
   lines.push(
-    '  <mandate_quantity_guidance>mandate_context is policy-only. Use wallet_contents, active_position_scopes, active_reservations, reservation summaries, and current_candidate_plan for live quantities and values.</mandate_quantity_guidance>',
+    '  <mandate_quantity_guidance>mandate_context is policy-only. Use wallet_contents, active_position_scopes, active_reservations, reservation summaries, and current_candidate_plan for live quantities and values. For maximum or full borrow/withdraw/supply/repay requests, prefer quantity kind percent with value 100 so Shared Ember computes the live protocol-safe exact amount instead of hand-derived price conversions.</mandate_quantity_guidance>',
   );
 }
 

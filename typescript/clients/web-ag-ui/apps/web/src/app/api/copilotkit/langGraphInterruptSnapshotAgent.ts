@@ -128,6 +128,19 @@ export class LangGraphInterruptSnapshotAgent extends CopilotKitLangGraphAgent {
     return new LangGraphInterruptSnapshotAgent(this.config);
   }
 
+  async readThreadSnapshot(threadId: string): Promise<LangGraphStateSnapshot | null> {
+    if (!threadId) {
+      return null;
+    }
+
+    try {
+      const threadState = await this.client.threads.getState(threadId);
+      return this.getStateSnapshot(threadState);
+    } catch {
+      return null;
+    }
+  }
+
   override getStateSnapshot(threadState: LangGraphThreadState): LangGraphStateSnapshot {
     const snapshot = super.getStateSnapshot(threadState) as LangGraphStateSnapshot;
 

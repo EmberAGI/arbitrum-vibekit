@@ -39,6 +39,10 @@ const AgentListContext = createContext<AgentListState | null>(null);
 
 export type AgentListUpdateSource = 'detail-connect' | 'poll';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function buildInitialState(agentIds: string[]): Record<string, AgentListEntry> {
   return agentIds.reduce<Record<string, AgentListEntry>>((acc, agentId) => {
     acc[agentId] = { synced: false };
@@ -160,6 +164,60 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
     inFlightRef.current.clear();
     pollBusyUntilByAgentRef.current.clear();
   }, [walletKey]);
+
+  useEffect(() => {
+    if (!walletKey) {
+      return;
+    }
+
+    let canceled = false;
+
+    void fetch(`/api/hired-agents?wallet=${encodeURIComponent(walletKey)}`, {
+      cache: 'no-store',
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          return null;
+        }
+
+        const payload = await response.json();
+        return isRecord(payload) && isRecord(payload['agents'])
+          ? (payload['agents'] as Record<string, unknown>)
+          : null;
+      })
+      .then((agentUpdates) => {
+        if (canceled || !agentUpdates) {
+          return;
+        }
+
+        setState((prev) => {
+          const baseAgents = prev.walletKey === walletKey ? prev.agents : buildInitialState(agentIds);
+          const nextAgents = { ...baseAgents };
+
+          for (const agentId of agentIds) {
+            const update = agentUpdates[agentId];
+            if (!isRecord(update)) {
+              continue;
+            }
+
+            nextAgents[agentId] = {
+              ...(baseAgents[agentId] ?? { synced: false }),
+              ...(update as Partial<AgentListEntry>),
+            };
+          }
+
+          return {
+            walletKey,
+            agents: nextAgents,
+          };
+        });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      canceled = true;
+    };
+  }, [agentIds, walletKey]);
 
   const pollAgent = useCallback(
     async (agentId: string) => {

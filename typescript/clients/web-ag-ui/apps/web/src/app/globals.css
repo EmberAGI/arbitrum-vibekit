@@ -2,42 +2,40 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Ember AI Dark Theme - Always dark mode */
+/* Ember AI light-mode-first shell */
 :root,
 html,
 html.light,
 html[data-theme="light"],
 html[data-theme="auto"] {
-  --background: 0 0% 7%;
-  --foreground: 0 0% 82%;
-  --card: 0 0% 12%;
-  --card-foreground: 0 0% 95%;
-  --popover: 0 0% 12%;
-  --popover-foreground: 0 0% 95%;
+  --background: 34 38% 96%;
+  --foreground: 20 24% 14%;
+  --card: 36 44% 99%;
+  --card-foreground: 20 24% 14%;
+  --popover: 36 44% 99%;
+  --popover-foreground: 20 24% 14%;
   --primary: 17 94% 58%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 16%;
-  --secondary-foreground: 0 0% 95%;
-  --muted: 0 0% 16%;
-  --muted-foreground: 0 0% 65%;
+  --secondary: 34 28% 90%;
+  --secondary-foreground: 20 18% 22%;
+  --muted: 34 23% 91%;
+  --muted-foreground: 18 10% 36%;
   --accent: 17 94% 58%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 18%;
-  --input: 0 0% 18%;
+  --border: 28 24% 82%;
+  --input: 28 24% 82%;
   --ring: 17 94% 58%;
-  --radius: 0.75rem;
+  --radius: 1rem;
 
   /* Ember brand colors */
   --ember-orange: #fd6731;
-  --ember-bg: #09090B;
-  --ember-card: #1e1e1e;
-  --ember-card-hover: #252525;
-  --ember-border: #2a2a2a;
-
-  /* Force dark mode color scheme */
-  color-scheme: dark !important;
+  --ember-bg: #f7efe3;
+  --ember-card: #241813;
+  --ember-card-hover: #f0dfcf;
+  --ember-border: #ddc8b3;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -66,17 +64,13 @@ html[data-theme="auto"] {
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* Force dark mode on all elements */
-*,
-*::before,
-*::after {
-  color-scheme: dark !important;
-}
-
 body {
-  background: #09090B !important;
-  color: hsl(var(--foreground)) !important;
-  color-scheme: dark !important;
+  background:
+    radial-gradient(circle at top left, rgba(253, 103, 49, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(244, 177, 116, 0.18), transparent 22%),
+    linear-gradient(180deg, #fbf7f2 0%, #f4ede3 100%);
+  color: hsl(var(--foreground));
+  color-scheme: light;
   font-family: var(--font-roboto), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -100,16 +94,16 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(84, 56, 38, 0.08);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(253, 103, 49, 0.4);
+  background: rgba(253, 103, 49, 0.32);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(253, 103, 49, 0.6);
+  background: rgba(253, 103, 49, 0.48);
 }
 
 @layer base {
@@ -166,7 +160,7 @@ html {
   position: relative;
   display: inline-block;
   overflow: hidden;
-  color: #ffffff;
+  color: hsl(var(--foreground));
 }
 
 .latest-activity-indicator::after {
@@ -226,7 +220,7 @@ html {
 }
 
 .agent-table tr:hover td {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(42, 24, 15, 0.04);
 }
 
 /* Hide scrollbars without changing scroll behavior (used for featured carousel). */
@@ -250,7 +244,7 @@ html {
 }
 
 .star-rating .star-empty {
-  color: #4a4a4a;
+  color: #bba894;
 }
 
 /* Wallet Connect Button Styling */

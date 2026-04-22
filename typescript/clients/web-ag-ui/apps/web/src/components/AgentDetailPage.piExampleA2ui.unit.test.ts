@@ -20,7 +20,7 @@ vi.mock('../hooks/usePrivyWalletClient', () => {
   };
 });
 
-function renderPiExamplePage(
+function renderChatFirstPage(
   container: HTMLDivElement,
   overrides: Partial<React.ComponentProps<typeof AgentDetailPage>> = {},
 ) {
@@ -29,8 +29,8 @@ function renderPiExamplePage(
   act(() => {
     root.render(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -57,7 +57,7 @@ function renderPiExamplePage(
   return root;
 }
 
-describe('AgentDetailPage Pi example A2UI rendering', () => {
+describe('AgentDetailPage chat-first A2UI rendering', () => {
   let container: HTMLDivElement;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   const previousActEnvironment = (globalThis as typeof globalThis & {
@@ -86,7 +86,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
   });
 
   it('renders automation status cards through the A2UI renderer', () => {
-    const root = renderPiExamplePage(container, {
+    const root = renderChatFirstPage(container, {
       events: [
         {
           type: 'artifact',
@@ -132,7 +132,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
 
   it('renders the interrupt flow through an A2UI text field and button, then resolves through interrupt submit', () => {
     const onInterruptSubmit = vi.fn();
-    const root = renderPiExamplePage(container, {
+    const root = renderChatFirstPage(container, {
       events: [
         {
           type: 'dispatch-response',
@@ -196,7 +196,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
   });
 
   it('renders repeated automation artifact history without duplicate React child keys', () => {
-    const root = renderPiExamplePage(container, {
+    const root = renderChatFirstPage(container, {
       events: [
         {
           type: 'artifact',
@@ -237,7 +237,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
   });
 
   it('renders lifecycle artifact updates after operator-note submission', () => {
-    const root = renderPiExamplePage(container, {
+    const root = renderChatFirstPage(container, {
       events: [
         {
           type: 'artifact',

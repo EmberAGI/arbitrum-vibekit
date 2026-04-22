@@ -14,6 +14,7 @@ export type AgentListEntry = {
   taskMessage?: string;
   lifecyclePhase?: ThreadLifecyclePhase | null;
   onboardingStatus?: OnboardingStatus;
+  isHired?: boolean;
   haltReason?: string;
   executionError?: string;
   synced: boolean;

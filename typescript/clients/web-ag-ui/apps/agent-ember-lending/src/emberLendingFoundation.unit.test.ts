@@ -58,6 +58,12 @@ describe('createEmberLendingAgentConfig', () => {
     expect(config.systemPrompt).toContain('{ "kind": "exact", "value": "1.25" }');
     expect(config.systemPrompt).toContain('{ "kind": "percent", "value": 50 }');
     expect(config.systemPrompt).toContain('supply uses the active reservation-backed supply amount when active_reservations are surfaced');
+    expect(config.systemPrompt).toContain(
+      'prefer { "kind": "percent", "value": 100 } so Shared Ember computes the live protocol-safe exact amount',
+    );
+    expect(config.systemPrompt).toContain(
+      'Do not reverse-engineer a max borrow exact asset quantity from quoted USD headroom or a user-supplied asset price',
+    );
     expect(config.systemPrompt).toContain('repay uses total debt');
     expect(config.systemPrompt).toContain(
       'instead of routing back through the portfolio manager for delegation refresh',

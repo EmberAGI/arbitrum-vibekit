@@ -1143,7 +1143,7 @@ describe('createEmberLendingDomain', () => {
         '  <subagent_wallet_address>0x00000000000000000000000000000000000000b1</subagent_wallet_address>',
         '  <root_user_wallet_address>0x00000000000000000000000000000000000000a1</root_user_wallet_address>',
         '  <portfolio_scope_guidance>wallet_contents and active_position_scopes describe rooted user wallet context, not balances held in subagent_wallet_address.</portfolio_scope_guidance>',
-        '  <mandate_quantity_guidance>mandate_context is policy-only. Use wallet_contents, active_position_scopes, active_reservations, reservation summaries, and current_candidate_plan for live quantities and values.</mandate_quantity_guidance>',
+        '  <mandate_quantity_guidance>mandate_context is policy-only. Use wallet_contents, active_position_scopes, active_reservations, reservation summaries, and current_candidate_plan for live quantities and values. For maximum or full borrow/withdraw/supply/repay requests, prefer quantity kind percent with value 100 so Shared Ember computes the live protocol-safe exact amount instead of hand-derived price conversions.</mandate_quantity_guidance>',
         '  <subagent_wallet_guidance>subagent_wallet_address is the dedicated execution wallet and only reflects balances explicitly surfaced for that wallet.</subagent_wallet_guidance>',
         '  <network>arbitrum</network>',
         '  <active_reservations>',
@@ -1306,7 +1306,7 @@ describe('createEmberLendingDomain', () => {
         '    </lending_policy>',
         '  <subagent_wallet_address>0x00000000000000000000000000000000000000b1</subagent_wallet_address>',
         '  <root_user_wallet_address>0x00000000000000000000000000000000000000a1</root_user_wallet_address>',
-        '  <mandate_quantity_guidance>mandate_context is policy-only. Use wallet_contents, active_position_scopes, active_reservations, reservation summaries, and current_candidate_plan for live quantities and values.</mandate_quantity_guidance>',
+        '  <mandate_quantity_guidance>mandate_context is policy-only. Use wallet_contents, active_position_scopes, active_reservations, reservation summaries, and current_candidate_plan for live quantities and values. For maximum or full borrow/withdraw/supply/repay requests, prefer quantity kind percent with value 100 so Shared Ember computes the live protocol-safe exact amount instead of hand-derived price conversions.</mandate_quantity_guidance>',
         '  <network>arbitrum</network>',
         '  <active_reservations>',
         '    <reservation reservation_id="reservation-ember-lending-001">',
@@ -2996,7 +2996,7 @@ describe('createEmberLendingDomain', () => {
         status: {
           executionStatus: 'failed',
           statusMessage:
-            'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}.',
+            'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}. For maximum or full borrow/withdraw/supply/repay, prefer {"kind":"percent","value":100} so Shared Ember computes the live protocol-safe exact amount.',
         },
       },
     });
@@ -3263,7 +3263,7 @@ describe('createEmberLendingDomain', () => {
         status: {
           executionStatus: 'failed',
           statusMessage:
-            'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}.',
+            'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}. For maximum or full borrow/withdraw/supply/repay, prefer {"kind":"percent","value":100} so Shared Ember computes the live protocol-safe exact amount.',
         },
       },
     });
@@ -3943,7 +3943,7 @@ describe('createEmberLendingDomain', () => {
         status: {
           executionStatus: 'failed',
           statusMessage:
-            'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}.',
+            'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}. For maximum or full borrow/withdraw/supply/repay, prefer {"kind":"percent","value":100} so Shared Ember computes the live protocol-safe exact amount.',
         },
       },
     });
@@ -4007,7 +4007,7 @@ describe('createEmberLendingDomain', () => {
         status: {
           executionStatus: 'failed',
           statusMessage:
-            'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}.',
+            'create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity. quantity must be {"kind":"exact","value":"1.25"} or {"kind":"percent","value":50}. For maximum or full borrow/withdraw/supply/repay, prefer {"kind":"percent","value":100} so Shared Ember computes the live protocol-safe exact amount.',
         },
       },
     });

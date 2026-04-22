@@ -45,10 +45,9 @@ describe('AgentDetailPage chat composer', () => {
     container.remove();
   });
 
-  it.each([
-    ['agent-pi-example', 'Pi Example Agent'],
-    ['agent-portfolio-manager', 'Ember Portfolio Agent'],
-  ])('submits the chat draft for %s when Enter is pressed without Shift', (agentId, agentName) => {
+  it.each([['agent-portfolio-manager', 'Ember Portfolio Agent']])(
+    'submits the chat draft for %s when Enter is pressed without Shift',
+    (agentId, agentName) => {
     const onSendChatMessage = vi.fn();
     const root = createRoot(container);
 
@@ -106,5 +105,6 @@ describe('AgentDetailPage chat composer', () => {
     act(() => {
       root.unmount();
     });
-  });
+    },
+  );
 });

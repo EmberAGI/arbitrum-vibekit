@@ -18,6 +18,7 @@ describe('WalletManagementView', () => {
               symbol: 'ETH',
               amount: '1000000000000000000',
               decimals: 18,
+              valueUsd: 2_000,
             },
           ],
           positions: {
@@ -49,6 +50,15 @@ describe('WalletManagementView', () => {
     );
 
     expect(html).toContain('Manage Wallet');
+    expect(html).toContain('Gross exposure');
+    expect(html).toContain('Wallet contents');
+    expect(html).toContain('In wallet');
+    expect(html).toContain('Deployed');
+    expect(html).toContain('Owed');
+    expect(html).toContain('Camelot ETH/USDC');
+    expect(html).toContain('Unpriced lanes');
+    expect(html).toContain('Accounting');
+    expect(html).toContain('Asset allocation treemap');
     expect(html).toContain('Token Balances');
     expect(html).toContain('Perpetual Positions');
     expect(html).toContain('Pendle Positions');

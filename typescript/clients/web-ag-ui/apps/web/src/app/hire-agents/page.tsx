@@ -1,12 +1,12 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { HireAgentsPage, type Agent, type FeaturedAgent } from '@/components/HireAgentsPage';
 import { useAgentList } from '@/contexts/AgentListContext';
 import { getFeaturedAgents, getVisibleAgents } from '@/config/agents';
 import type { AgentListEntry } from '@/contexts/agentListTypes';
 import { canonicalizeChainLabel } from '@/utils/iconResolution';
 import { mergeUniqueStrings, normalizeStringList } from '@/utils/agentCollections';
+import { navigateToHref } from '@/utils/hardNavigation';
 
 const PAGINATION_QA_MOCK_COUNT = 27;
 const PAGINATION_QA_MOCKS_ENABLED =
@@ -17,6 +17,7 @@ function deriveMarketplaceAgentStatus(
 ): Pick<Agent, 'status' | 'isActive'> {
   const lifecyclePhase = listState?.lifecyclePhase ?? null;
   const isHired =
+    listState?.isHired === true ||
     lifecyclePhase === 'onboarding' ||
     lifecyclePhase === 'active' ||
     lifecyclePhase === 'firing';
@@ -28,7 +29,6 @@ function deriveMarketplaceAgentStatus(
 }
 
 export default function HireAgentsRoute() {
-  const router = useRouter();
   const { agents: agentStates } = useAgentList();
   const registeredAgents = getVisibleAgents();
   const featuredAgentConfigs = getFeaturedAgents();
@@ -180,11 +180,11 @@ export default function HireAgentsRoute() {
   });
 
   const handleHireAgent = (agentId: string) => {
-    router.push(`/hire-agents/${agentId}`);
+    navigateToHref(`/hire-agents/${agentId}`);
   };
 
   const handleViewAgent = (agentId: string) => {
-    router.push(`/hire-agents/${agentId}`);
+    navigateToHref(`/hire-agents/${agentId}`);
   };
 
   return (

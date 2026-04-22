@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useCallback, useEffect, useRef, type ComponentProps } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import type { Message } from '@ag-ui/core';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
 import { getAgentConfig, isRegisteredAgentId } from '@/config/agents';
@@ -9,22 +9,13 @@ import { useAgent } from '@/contexts/AgentContext';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { invokeAgentCommandRoute } from '@/utils/agentCommandRoute';
 import { getAgentThreadId } from '@/utils/agentThread';
+import { navigateToHref } from '@/utils/hardNavigation';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
 type UiPreviewFixture = 'managed';
 type AgentRouteTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
 
 const EMPTY_MESSAGES: Message[] = [];
-
-function hasManagedMandateEditorProjection(value: Record<string, unknown> | undefined): boolean {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'managedMandateEditor' in value &&
-    typeof value.managedMandateEditor === 'object' &&
-    value.managedMandateEditor !== null
-  );
-}
 
 function parseUiPreviewState(value: string | null): UiPreviewState | null {
   if (value === 'prehire' || value === 'onboarding' || value === 'active') return value;
@@ -124,14 +115,13 @@ function buildUiPreviewDomainProjection(args: {
 
 export default function AgentDetailRoute({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const router = useRouter();
   const searchParams = useSearchParams();
   const agent = useAgent();
   const { privyWallet } = usePrivyWalletClient();
   const activeAgentId = agent.config.id;
   const routeAgentId = id;
   const routeHasRegisteredAgent = isRegisteredAgentId(routeAgentId);
-  const selectedAgentId = routeHasRegisteredAgent ? routeAgentId : activeAgentId;
+  const selectedAgentId = routeAgentId;
   const selectedConfig = getAgentConfig(selectedAgentId);
   const selectedLifecycleState = agent.uiState.lifecycle;
   const selectedOnboardingFlow = agent.uiState.onboardingFlow;
@@ -161,10 +151,10 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const projectionHydrationKeyRef = useRef<string | null>(null);
 
   const handleBack = () => {
-    router.push('/hire-agents');
+    navigateToHref('/hire-agents');
   };
   const handleManagedOwnerNavigation = (ownerAgentId: string) => {
-    router.push(`/hire-agents/${ownerAgentId}`);
+    navigateToHref(`/hire-agents/${ownerAgentId}`);
   };
   const handleHire = onboardingOwnerAgentId
     ? () => handleManagedOwnerNavigation(onboardingOwnerAgentId)
@@ -173,11 +163,8 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
     ? () => handleManagedOwnerNavigation(onboardingOwnerAgentId)
     : agent.runFire;
 
-  // Dev-only UI preview for screenshot-driven design work.
-  // This is guarded by NODE_ENV by default so it cannot affect production behavior.
-  // For local QA runs, it can be explicitly enabled via NEXT_PUBLIC_UI_PREVIEW=true.
-  const uiPreviewEnabled =
-    process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_UI_PREVIEW === 'true';
+  // Preview-only detail states must stay explicitly disabled unless the host opts in.
+  const uiPreviewEnabled = process.env.NEXT_PUBLIC_UI_PREVIEW === 'true';
   const uiPreviewState =
     uiPreviewEnabled ? parseUiPreviewState(searchParams.get('__uiState')) : null;
   const requestedTab = parseAgentRouteTab(searchParams.get('tab'));
@@ -185,11 +172,20 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const uiPreviewFixture = uiPreviewEnabled ? parseUiPreviewFixture(searchParams.get('__fixture')) : null;
   const selectedTab = requestedTab ?? uiPreviewTab;
   const selectedLifecyclePhase = selectedLifecycleState?.phase;
-  const hasManagedProjection = hasManagedMandateEditorProjection(agent.domainProjection);
   const portfolioManagerThreadId =
     selectedAgentId === 'agent-portfolio-manager' && agent.threadId
       ? agent.threadId
       : getAgentThreadId('agent-portfolio-manager', privyWallet?.address);
+  const lendingThreadId =
+    selectedAgentId === 'agent-ember-lending' && agent.threadId
+      ? agent.threadId
+      : getAgentThreadId('agent-ember-lending', privyWallet?.address);
+
+  useEffect(() => {
+    if (!routeHasRegisteredAgent) {
+      navigateToHref('/hire-agents', { replace: true });
+    }
+  }, [routeHasRegisteredAgent]);
 
   const handleManagedMandateSave = useCallback(
     async (input: Parameters<NonNullable<ComponentProps<typeof AgentDetailPage>['onManagedMandateSave']>>[0]) => {
@@ -213,24 +209,64 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         agent.applyDomainProjection(portfolioManagerUpdateResult.domainProjection);
       }
 
-      if (selectedAgentId === 'agent-ember-lending' && agent.threadId) {
-        const lendingHydrationResult = await invokeAgentCommandRoute({
-          agentId: 'agent-ember-lending',
-          threadId: agent.threadId,
-          command: {
-            name: 'hydrate_runtime_projection',
-          },
-        });
-        if (lendingHydrationResult.domainProjection) {
-          agent.applyDomainProjection(lendingHydrationResult.domainProjection);
+      const hydrationCommands: Array<{
+        agentId: 'agent-portfolio-manager' | 'agent-ember-lending';
+        threadId: string;
+        commandName: 'refresh_portfolio_state' | 'hydrate_runtime_projection';
+      }> = [
+        portfolioManagerThreadId
+          ? {
+              agentId: 'agent-portfolio-manager',
+              threadId: portfolioManagerThreadId,
+              commandName: 'refresh_portfolio_state',
+            }
+          : null,
+        lendingThreadId
+          ? {
+              agentId: 'agent-ember-lending',
+              threadId: lendingThreadId,
+              commandName: 'hydrate_runtime_projection',
+            }
+          : null,
+      ].filter(
+        (
+          command,
+        ): command is {
+          agentId: 'agent-portfolio-manager' | 'agent-ember-lending';
+          threadId: string;
+          commandName: 'refresh_portfolio_state' | 'hydrate_runtime_projection';
+        } => command !== null,
+      );
+
+      if (hydrationCommands.length > 0) {
+        const hydrationResults = await Promise.all(
+          hydrationCommands.map(async (command) => ({
+            agentId: command.agentId,
+            result: await invokeAgentCommandRoute({
+              agentId: command.agentId,
+              threadId: command.threadId,
+              command: {
+                name: command.commandName,
+              },
+            }),
+          })),
+        );
+        const activeHydrationResult = hydrationResults.find(
+          (result) => result.agentId === selectedAgentId,
+        )?.result;
+        if (activeHydrationResult?.domainProjection) {
+          agent.applyDomainProjection(activeHydrationResult.domainProjection);
         }
       }
     },
-    [agent, portfolioManagerThreadId, selectedAgentId],
+    [agent, lendingThreadId, portfolioManagerThreadId, selectedAgentId],
   );
 
   useEffect(() => {
-    if (!agent.threadId || !selectedIsHired || hasManagedProjection) {
+    if (!routeHasRegisteredAgent) {
+      return;
+    }
+    if (!agent.threadId || !selectedIsHired) {
       return;
     }
     if (selectedAgentId !== 'agent-portfolio-manager' && selectedLifecyclePhase !== 'active') {
@@ -266,10 +302,21 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         }
       })
       .catch(() => undefined);
-  }, [agent, agent.threadId, hasManagedProjection, selectedAgentId, selectedIsHired, selectedLifecyclePhase]);
+  }, [
+    agent,
+    agent.threadId,
+    routeHasRegisteredAgent,
+    selectedAgentId,
+    selectedIsHired,
+    selectedLifecyclePhase,
+  ]);
+
+  if (!routeHasRegisteredAgent) {
+    return null;
+  }
 
   if (uiPreviewState) {
-    const previewAgentId = routeHasRegisteredAgent ? routeAgentId : selectedAgentId;
+    const previewAgentId = routeAgentId;
     const config = getAgentConfig(previewAgentId);
     const previewOnboardingOwnerAgentId = config.onboardingOwnerAgentId;
 

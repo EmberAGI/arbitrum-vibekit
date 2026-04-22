@@ -62,7 +62,7 @@ function renderPortfolioManagerSetupPage(
   return root;
 }
 
-function setTextInputValue(input: HTMLInputElement, value: string) {
+function setInputValue(input: HTMLInputElement, value: string) {
   const descriptor = Object.getOwnPropertyDescriptor(
     HTMLInputElement.prototype,
     'value',
@@ -70,6 +70,7 @@ function setTextInputValue(input: HTMLInputElement, value: string) {
 
   descriptor?.set?.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 describe('AgentDetailPage portfolio-manager setup', () => {
@@ -100,40 +101,55 @@ describe('AgentDetailPage portfolio-manager setup', () => {
     container.remove();
   });
 
-  it('submits editable policy-only mandate inputs and allows supply-only setup', () => {
+  it('submits supply-only setup with the default risk policy when no borrow asset is selected', () => {
     const onInterruptSubmit = vi.fn();
     const root = renderPortfolioManagerSetupPage(container, onInterruptSubmit);
 
-    const collateralPoliciesInput = container.querySelector(
-      'input[name="portfolio-manager-collateral-policies"]',
-    ) as HTMLInputElement | null;
-    const allowedBorrowAssetsInput = container.querySelector(
-      'input[name="portfolio-manager-allowed-borrow-assets"]',
-    ) as HTMLInputElement | null;
-    const maxLtvBpsInput = container.querySelector(
-      'input[name="portfolio-manager-max-ltv-bps"]',
-    ) as HTMLInputElement | null;
-    const minHealthFactorInput = container.querySelector(
-      'input[name="portfolio-manager-min-health-factor"]',
-    ) as HTMLInputElement | null;
+    const editCollateralPolicyButton = container.querySelector(
+      'button[aria-label="Edit collateral policy"]',
+    ) as HTMLButtonElement | null;
+    const lendingAvatar = container.querySelector(
+      'img[alt="Ember Lending"]',
+    ) as HTMLImageElement | null;
+    const lendingLink = container.querySelector(
+      'a[aria-label="Open Ember Lending"]',
+    ) as HTMLAnchorElement | null;
     const submitButton = [...container.querySelectorAll('button')].find(
       (button) => button.textContent?.includes('Approve'),
     ) as HTMLButtonElement | undefined;
 
-    expect(collateralPoliciesInput).not.toBeNull();
-    expect(allowedBorrowAssetsInput).not.toBeNull();
-    expect(maxLtvBpsInput).not.toBeNull();
-    expect(minHealthFactorInput).not.toBeNull();
+    expect(lendingAvatar?.getAttribute('src')).toBe('/ember-lending-avatar.svg');
+    expect(lendingLink?.getAttribute('href')).toBe('/hire-agents/agent-ember-lending');
+    expect(editCollateralPolicyButton).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Edit maximum LTV"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Edit minimum health factor"]')).toBeNull();
     expect(submitButton).toBeDefined();
 
     act(() => {
-      setTextInputValue(collateralPoliciesInput!, 'weth:60, usdc:25');
-      setTextInputValue(allowedBorrowAssetsInput!, '');
-      setTextInputValue(maxLtvBpsInput!, '6500');
-      setTextInputValue(minHealthFactorInput!, '1.4');
+      editCollateralPolicyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     act(() => {
+      (
+        container.querySelector('button[aria-label="Toggle token WETH"]') as
+          | HTMLButtonElement
+          | null
+      )!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const usdcCollateralCapInput = container.querySelector(
+      'input[name="managed-mandate-collateral-cap-USDC"]',
+    ) as HTMLInputElement | null;
+    const wethCollateralCapInput = container.querySelector(
+      'input[name="managed-mandate-collateral-cap-WETH"]',
+    ) as HTMLInputElement | null;
+
+    expect(usdcCollateralCapInput).not.toBeNull();
+    expect(wethCollateralCapInput).not.toBeNull();
+
+    act(() => {
+      setInputValue(usdcCollateralCapInput!, '25');
+      setInputValue(wethCollateralCapInput!, '60');
       submitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
@@ -151,12 +167,12 @@ describe('AgentDetailPage portfolio-manager setup', () => {
             collateral_policy: {
               assets: [
                 {
-                  asset: 'WETH',
-                  max_allocation_pct: 60,
-                },
-                {
                   asset: 'USDC',
                   max_allocation_pct: 25,
+                },
+                {
+                  asset: 'WETH',
+                  max_allocation_pct: 60,
                 },
               ],
             },
@@ -164,8 +180,8 @@ describe('AgentDetailPage portfolio-manager setup', () => {
               allowed_assets: [],
             },
             risk_policy: {
-              max_ltv_bps: 6500,
-              min_health_factor: '1.4',
+              max_ltv_bps: 7000,
+              min_health_factor: '1.25',
             },
           },
         },

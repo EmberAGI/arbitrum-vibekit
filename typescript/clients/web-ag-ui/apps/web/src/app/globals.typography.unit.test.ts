@@ -19,4 +19,12 @@ describe('Global typography wiring', () => {
     expect(source).toContain('.agent-table th {');
     expect(source).toContain('text-transform: none;');
   });
+
+  it('defines a light-mode-first global shell instead of forcing dark mode', () => {
+    const source = fs.readFileSync(globalsPath, 'utf8');
+
+    expect(source).toContain('color-scheme: light;');
+    expect(source).not.toContain('color-scheme: dark !important;');
+    expect(source).not.toContain('background: #09090B !important;');
+  });
 });
