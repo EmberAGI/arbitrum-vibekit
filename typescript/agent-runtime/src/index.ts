@@ -486,7 +486,101 @@ function readPersistedSession(
     return null;
   }
 
-  return threadState as unknown as PiRuntimeGatewaySession;
+  return normalizeLegacyPersistedInterruptMetadata(
+    threadState as unknown as PiRuntimeGatewaySession,
+  );
+}
+
+function normalizeLegacyInterruptArtifactData(
+  data: unknown,
+): Record<string, unknown> | undefined {
+  if (!isRecord(data) || data.type !== 'interrupt-status') {
+    return undefined;
+  }
+
+  const legacyMirroredFlag =
+    typeof data.mirroredToActivity === 'boolean'
+      ? data.mirroredToActivity
+      : typeof data.surfacedInThread === 'boolean'
+        ? data.surfacedInThread
+        : null;
+
+  if (legacyMirroredFlag === null) {
+    return undefined;
+  }
+
+  if (typeof data.mirroredToActivity === 'boolean' && !('surfacedInThread' in data)) {
+    return undefined;
+  }
+
+  const { surfacedInThread: _surfacedInThread, ...remaining } = data;
+  return {
+    ...remaining,
+    mirroredToActivity: legacyMirroredFlag,
+  };
+}
+
+function normalizeLegacyInterruptArtifact(
+  artifact: PiRuntimeGatewayArtifact | undefined,
+): PiRuntimeGatewayArtifact | undefined {
+  const normalizedData = normalizeLegacyInterruptArtifactData(artifact?.data);
+  if (!artifact || !normalizedData) {
+    return artifact;
+  }
+
+  return {
+    ...artifact,
+    data: normalizedData,
+  };
+}
+
+function normalizeLegacyPersistedInterruptMetadata(
+  session: PiRuntimeGatewaySession,
+): PiRuntimeGatewaySession {
+  let nextSession = session;
+
+  const normalizedCurrentArtifact = normalizeLegacyInterruptArtifact(session.artifacts?.current);
+  const normalizedActivityArtifact = normalizeLegacyInterruptArtifact(session.artifacts?.activity);
+  if (
+    normalizedCurrentArtifact !== session.artifacts?.current ||
+    normalizedActivityArtifact !== session.artifacts?.activity
+  ) {
+    nextSession = {
+      ...nextSession,
+      artifacts: nextSession.artifacts
+        ? {
+            ...nextSession.artifacts,
+            ...(normalizedCurrentArtifact ? { current: normalizedCurrentArtifact } : {}),
+            ...(normalizedActivityArtifact ? { activity: normalizedActivityArtifact } : {}),
+          }
+        : nextSession.artifacts,
+    };
+  }
+
+  const normalizedActivityEvents = nextSession.activityEvents?.map((event) => {
+    if (event.type !== 'artifact') {
+      return event;
+    }
+
+    const normalizedArtifact = normalizeLegacyInterruptArtifact(event.artifact);
+    return normalizedArtifact === event.artifact
+      ? event
+      : {
+          ...event,
+          artifact: normalizedArtifact!,
+        };
+  });
+  if (
+    normalizedActivityEvents &&
+    normalizedActivityEvents.some((event, index) => event !== nextSession.activityEvents?.[index])
+  ) {
+    nextSession = {
+      ...nextSession,
+      activityEvents: normalizedActivityEvents,
+    };
+  }
+
+  return nextSession;
 }
 
 function readPersistedDomainState<TState>(

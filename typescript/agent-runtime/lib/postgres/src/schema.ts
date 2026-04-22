@@ -225,5 +225,23 @@ export function buildCreatePiRuntimeSchemaSql(): string[] {
     }
   }
 
+  statements.push('alter table pi_interrupts add column if not exists mirrored_to_activity boolean;');
+  statements.push(`
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_name = 'pi_interrupts'
+      and column_name = 'surfaced_in_thread'
+  ) then
+    execute 'update pi_interrupts set mirrored_to_activity = surfaced_in_thread where mirrored_to_activity is null';
+    execute 'alter table pi_interrupts drop column if exists surfaced_in_thread';
+  end if;
+end
+$$;`.trim());
+  statements.push('update pi_interrupts set mirrored_to_activity = true where mirrored_to_activity is null;');
+  statements.push('alter table pi_interrupts alter column mirrored_to_activity set not null;');
+
   return statements;
 }

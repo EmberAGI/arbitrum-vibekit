@@ -2382,6 +2382,129 @@ describe('agent-runtime integration', () => {
     ).not.toHaveProperty('a2ui');
   });
 
+  it('normalizes legacy surfacedInThread interrupt artifacts during reconnect repair', async () => {
+    const { persistedThreads, hooks: internalPostgres } = createPersistingInternalPostgres();
+
+    const runtimeA = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused after direct commands.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtimeA.service.run({
+        threadId: 'thread-hydrate-legacy-surfaced-flag',
+        runId: 'run-hydrate-legacy-surfaced-flag-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    const persistedThread = persistedThreads.get('thread-hydrate-legacy-surfaced-flag');
+    expect(persistedThread).toBeDefined();
+    if (!persistedThread) {
+      return;
+    }
+
+    const currentArtifact = persistedThread.threadState.artifacts?.current;
+    expect(currentArtifact).toBeDefined();
+    if (!currentArtifact) {
+      return;
+    }
+
+    const currentData =
+      typeof currentArtifact.data === 'object' && currentArtifact.data !== null
+        ? (currentArtifact.data as Record<string, unknown>)
+        : null;
+    expect(currentData).toBeTruthy();
+    if (!currentData) {
+      return;
+    }
+
+    const legacyInterruptData = {
+      ...currentData,
+      status: 'pending',
+      surfacedInThread: false,
+    } as Record<string, unknown>;
+    delete legacyInterruptData['mirroredToActivity'];
+
+    persistedThreads.set('thread-hydrate-legacy-surfaced-flag', {
+      ...persistedThread,
+      threadState: {
+        ...persistedThread.threadState,
+        execution: {
+          ...(persistedThread.threadState.execution as Record<string, unknown>),
+          status: 'completed',
+          statusMessage: 'Reconnect should normalize the legacy interrupt metadata.',
+        },
+        artifacts: {
+          ...(persistedThread.threadState.artifacts as Record<string, unknown>),
+          current: {
+            ...currentArtifact,
+            data: legacyInterruptData,
+          },
+          activity: {
+            ...currentArtifact,
+            data: legacyInterruptData,
+          },
+        },
+        activityEvents: [],
+        a2ui: undefined,
+      },
+      updatedAt: new Date('2026-03-20T17:05:00.000Z'),
+    });
+
+    const runtimeB = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain(),
+      agentOptions: {
+        streamFn: () => createTextStream('Unused after reconnect.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    const reconnectSnapshot = await readFirstMatchingEvent(
+      await runtimeB.service.connect({
+        threadId: 'thread-hydrate-legacy-surfaced-flag',
+        runId: 'run-hydrate-legacy-surfaced-flag-reconnect',
+      }),
+      isStateSnapshotEvent,
+    );
+
+    expect(reconnectSnapshot).toBeDefined();
+    expect(reconnectSnapshot!.snapshot.thread.activity?.events ?? []).toEqual([]);
+
+    const repairedThreadState = persistedThreads.get('thread-hydrate-legacy-surfaced-flag')?.threadState;
+    const repairedActivityData =
+      repairedThreadState &&
+      repairedThreadState.artifacts &&
+      typeof repairedThreadState.artifacts === 'object' &&
+      repairedThreadState.artifacts !== null &&
+      'activity' in repairedThreadState.artifacts &&
+      typeof repairedThreadState.artifacts.activity === 'object' &&
+      repairedThreadState.artifacts.activity !== null &&
+      'data' in repairedThreadState.artifacts.activity &&
+      typeof repairedThreadState.artifacts.activity.data === 'object' &&
+      repairedThreadState.artifacts.activity.data !== null
+        ? (repairedThreadState.artifacts.activity.data as Record<string, unknown>)
+        : null;
+
+    expect(repairedActivityData).toMatchObject({
+      type: 'interrupt-status',
+      status: 'resolved',
+      mirroredToActivity: false,
+    });
+    expect(repairedActivityData).not.toHaveProperty('surfacedInThread');
+  });
+
   it('repairs drifted execution and interrupt checkpoints when reconnect hydrates persisted thread state after restart', async () => {
     const { persistedExecutions, persistedInterrupts, hooks: internalPostgres } =
       createPersistingInternalPostgres();
