@@ -1346,18 +1346,24 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     const ownerId = streamOwnerIdRef.current;
 
     return () => {
+      const isStaleCapturedAgent = agentRef.current !== agent;
       logConnectEvent('cleanup', {
         agentId,
         agent: getAgentDebugId(agent),
         threadId,
+        isStaleCapturedAgent,
       });
 
       // Active-owner cleanup is handled by stream coordinator release/unregister.
       // Only cleanup here when this captured agent instance is stale.
-      if (agentRef.current !== agent) {
+      if (isStaleCapturedAgent) {
         void cleanupAgentConnection(agent);
       } else if (ownerId) {
         void releaseAgentStreamOwner(ownerId);
+      }
+
+      if (isStaleCapturedAgent) {
+        return;
       }
 
       const disconnectThreadId =
