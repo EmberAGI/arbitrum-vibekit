@@ -129,7 +129,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     );
   });
 
-  it('renders lending runtime context and enables chat only when the managed lane is active', () => {
+  it('renders only the shared managed-mandate workbench on lending while chat stays enabled', () => {
     const html = renderManagedAgentDetail({
       isHired: true,
       initialTab: 'chat',
@@ -143,25 +143,20 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).toContain('Subagent wallet');
     expect(html).toContain('0x0000...00b1');
     expect(html).toContain('aria-haspopup="dialog"');
-    expect(html).toContain('Mandate');
-    expect(html).toContain('lending_policy.collateral_policy.assets.0.asset');
-    expect(html).toContain('lending_policy.collateral_policy.assets.0.max_allocation_pct');
-    expect(html).toContain('lending_policy.borrow_policy.allowed_assets');
-    expect(html).toContain('USDC, WETH');
-    expect(html).toContain('lending_policy.risk_policy.max_ltv_bps');
-    expect(html).toContain('lending_policy.risk_policy.min_health_factor');
-    expect(html).toContain('max_allocation_pct');
-    expect(html).toContain('1.25');
-    expect(html).not.toContain('allocation_basis');
-    expect(html).not.toContain('asset_intent');
-    expect(html).toContain('Reservation');
-    expect(html).toContain(
-      'Reservation reservation-ember-lending-001 supplies 10 USDC via lending.supply.',
-    );
-    expect(html).toContain('class="grid gap-3 lg:grid-cols-2"');
+    expect(html).toContain('Edit collateral policy');
+    expect(html).toContain('Edit allowed borrow assets');
     expect(html).toContain('>Manage<');
     expect(html).toContain('Save managed mandate');
     expect(html).toContain('Send message');
+    expect(html).not.toContain('Managed lending lane');
+    expect(html).not.toContain('View lending agent');
+    expect(html).not.toContain('Reservation');
+    expect(html).not.toContain('lending.supply');
+    expect(html).not.toContain('lending_policy.collateral_policy.assets.0.asset');
+    expect(html).not.toContain('lending_policy.borrow_policy.allowed_assets');
+    expect(html).not.toContain('lending_policy.risk_policy.max_ltv_bps');
+    expect(html).not.toContain('allocation_basis');
+    expect(html).not.toContain('asset_intent');
     expect(html).not.toContain('Lifecycle state');
     expect(html).not.toContain('Task status');
     expect(html).not.toContain('Lane');
@@ -177,8 +172,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     );
     expect(html.indexOf('Ember Lending')).toBeLessThan(html.indexOf('Ember AI Team'));
     expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('desc'));
-    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Mandate'));
-    expect(html.indexOf('Reservation')).toBeLessThan(html.indexOf('Chains'));
+    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Save managed mandate'));
   });
 
   it('keeps lending chat visible while the thread is input-required', () => {
@@ -267,7 +261,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).not.toContain('Managed lending runtime');
   });
 
-  it('truncates long lending reservation identifiers in the visible summary', () => {
+  it('does not render lending reservation summaries now that only the workbench remains', () => {
     const longReservationId =
       'res-ember-lending-rwc-3bdae87fc824589696d2525dee4ca7ae0xad53ec51a70e9a17df6752fda80cd465457c258d';
     const html = renderManagedAgentDetail({
@@ -288,7 +282,9 @@ describe('AgentDetailPage managed-agent affordances', () => {
       }),
     });
 
-    expect(html).toContain('Reservation res...lending...57c258d supplies 10 USDC via lending.supply.');
+    expect(html).toContain('Save managed mandate');
+    expect(html).not.toContain('Reservation');
+    expect(html).not.toContain('lending.supply');
     expect(html).not.toContain(longReservationId);
   });
 
@@ -313,7 +309,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).toContain('Artifact: shared-ember-portfolio-state');
   });
 
-  it('renders the managed lending lane summary on the portfolio-manager detail page', () => {
+  it('renders only the shared managed-mandate workbench on the portfolio-manager detail page', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-portfolio-manager',
@@ -342,20 +338,21 @@ describe('AgentDetailPage managed-agent affordances', () => {
       }),
     );
 
-    expect(html).toContain('Managed lending lane');
-    expect(html).toContain('Ember Lending');
-    expect(html).toContain('/hire-agents/agent-ember-lending');
-    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('Edit collateral policy');
+    expect(html).toContain('Edit allowed borrow assets');
     expect(html).toContain('Send message');
     expect(html).not.toContain('Settings and policies');
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Activity\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
     expect(html).toContain('Save managed mandate');
+    expect(html).not.toContain('Managed lending lane');
+    expect(html).not.toContain('View lending agent');
+    expect(html).not.toContain('lending.supply');
     expect(html.indexOf('Ember Portfolio Agent')).toBeLessThan(html.indexOf('Ember AI Team'));
     expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('desc'));
-    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Managed lending lane'));
-    expect(html.indexOf('Managed lending lane')).toBeLessThan(html.indexOf('Send message'));
+    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Save managed mandate'));
+    expect(html.indexOf('Save managed mandate')).toBeLessThan(html.indexOf('Send message'));
   });
 
   it('keeps managed lending lane details hidden while portfolio-manager onboarding is in progress', () => {

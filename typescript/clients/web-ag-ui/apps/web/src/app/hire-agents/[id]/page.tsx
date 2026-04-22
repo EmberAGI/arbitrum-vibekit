@@ -16,16 +16,6 @@ type AgentRouteTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
 
 const EMPTY_MESSAGES: Message[] = [];
 
-function hasManagedMandateEditorProjection(value: Record<string, unknown> | undefined): boolean {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'managedMandateEditor' in value &&
-    typeof value.managedMandateEditor === 'object' &&
-    value.managedMandateEditor !== null
-  );
-}
-
 function parseUiPreviewState(value: string | null): UiPreviewState | null {
   if (value === 'prehire' || value === 'onboarding' || value === 'active') return value;
   return null;
@@ -182,7 +172,6 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const uiPreviewFixture = uiPreviewEnabled ? parseUiPreviewFixture(searchParams.get('__fixture')) : null;
   const selectedTab = requestedTab ?? uiPreviewTab;
   const selectedLifecyclePhase = selectedLifecycleState?.phase;
-  const hasManagedProjection = hasManagedMandateEditorProjection(agent.domainProjection);
   const portfolioManagerThreadId =
     selectedAgentId === 'agent-portfolio-manager' && agent.threadId
       ? agent.threadId
@@ -236,7 +225,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
     if (!routeHasRegisteredAgent) {
       return;
     }
-    if (!agent.threadId || !selectedIsHired || hasManagedProjection) {
+    if (!agent.threadId || !selectedIsHired) {
       return;
     }
     if (selectedAgentId !== 'agent-portfolio-manager' && selectedLifecyclePhase !== 'active') {
@@ -275,7 +264,6 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   }, [
     agent,
     agent.threadId,
-    hasManagedProjection,
     routeHasRegisteredAgent,
     selectedAgentId,
     selectedIsHired,

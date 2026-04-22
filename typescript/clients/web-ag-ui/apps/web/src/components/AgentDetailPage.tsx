@@ -83,21 +83,16 @@ import { resolveBlockersInterruptView } from './agentBlockersInterrupt';
 import { resolveCurrentSetupStep } from './agentCurrentSetupStep';
 import { resolveSetupSteps } from './agentSetupSteps';
 import { emitAgentConnectDebug } from '../utils/agentConnectDebug';
-import { buildPortfolioManagerSetupInput } from '../utils/portfolioManagerSetup';
 import {
   buildManagedLendingPolicy,
   DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
-  formatManagedLendingCollateralPolicies,
-  parseManagedLendingCollateralPolicies,
   DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
-  DEFAULT_MANAGED_LENDING_MAX_LTV_BPS,
-  DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
+  DEFAULT_MANAGED_MANDATE_TOKEN_CHOICES,
   normalizeManagedMandateAssetSymbol,
-  parseManagedMandateAssetList,
   readManagedLendingBorrowAssets,
   readManagedLendingCollateralPolicies,
-  readManagedLendingRiskPolicy,
 } from '../utils/managedMandate';
+import { ManagedMandateWorkbenchCard } from './ManagedMandateWorkbenchCard';
 import {
   buildPiExampleInterruptA2UiView,
   buildPiExampleStatusA2UiView,
@@ -114,12 +109,6 @@ const AGENT_X_URL = 'https://x.com/emberagi';
 const MANAGED_LENDING_NETWORK = 'arbitrum';
 const MANAGED_LENDING_PROTOCOL = 'aave';
 const MANAGED_LENDING_CONTROL_PATH = 'lending.supply';
-const DEFAULT_MANAGED_LENDING_COLLATERAL_POLICIES_INPUT = formatManagedLendingCollateralPolicies([
-  {
-    asset: DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
-    max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
-  },
-]);
 const DETAIL_PAGE_SHELL_CLASS =
   'flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.78),rgba(248,241,232,0.96)_38%,#efe3d2_100%)] p-8 text-[#261a12]';
 const DETAIL_CARD_CLASS =
@@ -341,10 +330,6 @@ function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
 
-function readFiniteNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
 function formatManagedLanePart(value: string | null): string | null {
   if (!value) {
     return null;
@@ -455,91 +440,6 @@ type ManagedMandateEditorSubmitInput = {
   managedMandate: ManagedMandateInput;
 };
 
-type ManagedMandateDisplayField = {
-  key: string;
-  value: string;
-};
-
-function readStringArray(value: unknown): string[] | null {
-  if (!Array.isArray(value)) {
-    return null;
-  }
-
-  const entries = value
-    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
-    .filter((entry) => entry.length > 0);
-
-  return entries.length > 0 ? entries : null;
-}
-
-function isManagedMandateDisplayScalar(value: unknown): value is string | number | boolean {
-  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
-}
-
-function buildManagedMandateDisplayFields(
-  managedMandate: Record<string, unknown> | null,
-): ManagedMandateDisplayField[] {
-  if (!managedMandate) {
-    return [];
-  }
-
-  const fields: ManagedMandateDisplayField[] = [];
-
-  const visit = (value: unknown, path: string[]) => {
-    if (Array.isArray(value)) {
-      const stringArray = readStringArray(value);
-      if (stringArray) {
-        fields.push({
-          key: path.join('.'),
-          value: stringArray.join(', '),
-        });
-        return;
-      }
-
-      value.forEach((entry, index) => visit(entry, [...path, String(index)]));
-      return;
-    }
-
-    const record = asRecord(value);
-    if (record) {
-      Object.entries(record).forEach(([key, entry]) => visit(entry, [...path, key]));
-      return;
-    }
-
-    if (isManagedMandateDisplayScalar(value)) {
-      fields.push({
-        key: path.join('.'),
-        value: String(value),
-      });
-    }
-  };
-
-  visit(managedMandate, []);
-  return fields;
-}
-
-function ManagedMandateDetails(props: { managedMandate: Record<string, unknown> | null }) {
-  const fields = buildManagedMandateDisplayFields(props.managedMandate);
-
-  if (fields.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="mt-2 grid gap-3 sm:grid-cols-2">
-      {fields.map((field) => (
-        <div
-          key={field.key}
-          className={`${DETAIL_INSET_CLASS} px-3 py-2.5`}
-        >
-          <div className="text-[11px] font-mono tracking-[0.04em] text-[#907764]">{field.key}</div>
-          <div className="mt-1 break-words text-sm leading-relaxed text-[#3b2a1f]">{field.value}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function buildReservationSummaryFromProjection(
   reservation: Record<string, unknown> | null,
 ): string | null {
@@ -608,31 +508,6 @@ function readManagedMandateEditorView(
   };
 }
 
-type PortfolioManagerManagedAgentView = {
-  title: string;
-  detailHref: string;
-  laneLabel: string | null;
-  managedMandate: Record<string, unknown> | null;
-  reservationSummary: string | null;
-};
-
-function buildPortfolioManagerManagedAgentView(
-  domainProjection: Record<string, unknown> | undefined,
-): PortfolioManagerManagedAgentView | null {
-  const managedMandateEditorView = readManagedMandateEditorView(domainProjection);
-  if (!managedMandateEditorView) {
-    return null;
-  }
-
-  return {
-    title: managedMandateEditorView.title,
-    detailHref: `/hire-agents/${managedMandateEditorView.targetAgentRouteId}`,
-    laneLabel: managedMandateEditorView.laneLabel,
-    managedMandate: managedMandateEditorView.managedMandate,
-    reservationSummary: managedMandateEditorView.reservationSummary,
-  };
-}
-
 type EmberLendingRuntimeView = {
   phase: string | null;
   laneLabel: string | null;
@@ -666,228 +541,32 @@ function buildEmberLendingRuntimeView(
     : null;
 }
 
-function buildUpdatedManagedMandate(params: {
-  existingManagedMandate: Record<string, unknown> | null;
-  collateralPolicies: ManagedMandateInput['lending_policy']['collateral_policy']['assets'];
-  allowedBorrowAssets: string[];
-  maxLtvBps?: number;
-  minHealthFactor?: string;
-}): ManagedMandateInput {
-  return {
-    lending_policy: buildManagedLendingPolicy({
-      existingManagedMandate: params.existingManagedMandate,
-      collateralPolicies: params.collateralPolicies,
-      allowedBorrowAssets: params.allowedBorrowAssets,
-      maxLtvBps: params.maxLtvBps,
-      minHealthFactor: params.minHealthFactor,
-    }),
-  };
-}
-
 function ManagedMandateEditorCard(props: {
   view: ManagedMandateEditorView;
+  availableTokenSymbols?: string[];
+  tokenIconBySymbol: Record<string, string>;
   onSave?: (input: ManagedMandateEditorSubmitInput) => Promise<void> | void;
 }) {
-  const initialCollateralPolicies = readManagedLendingCollateralPolicies(props.view.managedMandate);
-  const initialCollateralPoliciesValue = formatManagedLendingCollateralPolicies(
-    initialCollateralPolicies.length > 0
-      ? initialCollateralPolicies
-      : [
-          {
-            asset: DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
-            max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
-          },
-        ],
-  );
-  const initialAllowedBorrowAssets = readManagedLendingBorrowAssets(props.view.managedMandate);
-  const initialAllowedBorrowAssetsValue = initialAllowedBorrowAssets.join(', ');
-  const initialRiskPolicy = readManagedLendingRiskPolicy(props.view.managedMandate);
-  const [collateralPoliciesInput, setCollateralPoliciesInput] = useState(
-    initialCollateralPoliciesValue,
-  );
-  const [allowedBorrowAssetsInput, setAllowedBorrowAssetsInput] = useState(
-    initialAllowedBorrowAssetsValue,
-  );
-  const [maxLtvBpsInput, setMaxLtvBpsInput] = useState(
-    String(initialRiskPolicy.maxLtvBps ?? DEFAULT_MANAGED_LENDING_MAX_LTV_BPS),
-  );
-  const [minHealthFactorInput, setMinHealthFactorInput] = useState(
-    initialRiskPolicy.minHealthFactor ?? DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
-  );
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    setCollateralPoliciesInput(initialCollateralPoliciesValue);
-    setAllowedBorrowAssetsInput(initialAllowedBorrowAssetsValue);
-    setMaxLtvBpsInput(String(initialRiskPolicy.maxLtvBps ?? DEFAULT_MANAGED_LENDING_MAX_LTV_BPS));
-    setMinHealthFactorInput(
-      initialRiskPolicy.minHealthFactor ?? DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
-    );
-    setSubmitError(null);
-  }, [
-    initialCollateralPoliciesValue,
-    initialAllowedBorrowAssetsValue,
-    initialRiskPolicy.maxLtvBps,
-    initialRiskPolicy.minHealthFactor,
-    props.view.mandateRef,
-  ]);
-
-  const network = MANAGED_LENDING_NETWORK;
-  const controlPath = MANAGED_LENDING_CONTROL_PATH;
-  const previewCollateralPolicies = parseManagedLendingCollateralPolicies(collateralPoliciesInput);
-  const previewAllowedBorrowAssets = parseManagedMandateAssetList(allowedBorrowAssetsInput);
-  const previewMaxLtvBps = readFiniteNumber(Number(maxLtvBpsInput));
-  const previewManagedMandate = buildUpdatedManagedMandate({
-    existingManagedMandate: props.view.managedMandate,
-    collateralPolicies: previewCollateralPolicies,
-    allowedBorrowAssets: previewAllowedBorrowAssets,
-    maxLtvBps: previewMaxLtvBps ?? undefined,
-    minHealthFactor: minHealthFactorInput.trim() || undefined,
-  });
-
-  const handleSave = async () => {
-    if (!props.onSave) {
-      return;
-    }
-
-    const collateralPolicies = parseManagedLendingCollateralPolicies(collateralPoliciesInput);
-    if (collateralPolicies.length === 0) {
-      setSubmitError('At least one collateral policy is required.');
-      return;
-    }
-    const allowedBorrowAssets = parseManagedMandateAssetList(allowedBorrowAssetsInput);
-    const maxLtvBps = Number(maxLtvBpsInput);
-    if (!Number.isFinite(maxLtvBps)) {
-      setSubmitError('Max LTV bps must be a valid number.');
-      return;
-    }
-    const normalizedMinHealthFactor = minHealthFactorInput.trim();
-    if (normalizedMinHealthFactor.length === 0) {
-      setSubmitError('Minimum health factor is required.');
-      return;
-    }
-
-    setIsSaving(true);
-    setSubmitError(null);
-    try {
-      await props.onSave({
+  return (
+    <ManagedMandateWorkbenchCard
+      view={{
         ownerAgentId: props.view.ownerAgentId,
         targetAgentId: props.view.targetAgentId,
         targetAgentRouteId: props.view.targetAgentRouteId,
-        managedMandate: buildUpdatedManagedMandate({
-          existingManagedMandate: props.view.managedMandate,
-          collateralPolicies,
-          allowedBorrowAssets,
-          maxLtvBps,
-          minHealthFactor: normalizedMinHealthFactor,
-        }),
-      });
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Managed mandate update failed.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <div className={`${DETAIL_PANEL_CLASS} p-5`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className={DETAIL_LABEL_CLASS}>Managed mandate</div>
-          <div className="mt-2 text-base font-semibold text-[#261a12]">{props.view.title}</div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#7c6757]">
-            <span className="rounded-full border border-[#eadac7] bg-[#fffaf2] px-2.5 py-1">
-              {network}
-            </span>
-            <span className="rounded-full border border-[#eadac7] bg-[#fffaf2] px-2.5 py-1">
-              {controlPath}
-            </span>
-          </div>
-        </div>
-        {props.view.mandateRef ? (
-          <div className="text-right text-[11px] uppercase tracking-[0.18em] text-[#9b826f]">
-            {props.view.mandateRef}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
-        <div>
-          <label className="mb-2 block text-sm text-[#7c6757]">Collateral policy</label>
-          <input
-            id="managed-mandate-collateral-policies"
-            name="managed-mandate-collateral-policies"
-            type="text"
-            value={collateralPoliciesInput}
-            onChange={(event) => setCollateralPoliciesInput(event.target.value)}
-            className={DETAIL_INPUT_CLASS}
-          />
-          <div className="mt-2 text-xs text-[#937c69]">
-            Use <span className="font-mono">ASSET:PCT</span> entries, for example{' '}
-            <span className="font-mono">USDC:70, WETH:50</span>.
-          </div>
-        </div>
-        <div>
-          <label className="mb-2 block text-sm text-[#7c6757]">Allowed borrow assets</label>
-          <input
-            id="managed-mandate-allowed-borrow-assets"
-            name="managed-mandate-allowed-borrow-assets"
-            type="text"
-            value={allowedBorrowAssetsInput}
-            onChange={(event) => setAllowedBorrowAssetsInput(event.target.value)}
-            className={DETAIL_INPUT_CLASS}
-          />
-          <div className="mt-2 text-xs text-[#937c69]">
-            Leave blank for a supply-only mandate.
-          </div>
-        </div>
-        <div>
-          <label className="mb-2 block text-sm text-[#7c6757]">Max LTV bps</label>
-          <input
-            id="managed-mandate-max-ltv-bps"
-            name="managed-mandate-max-ltv-bps"
-            type="number"
-            value={maxLtvBpsInput}
-            onChange={(event) => setMaxLtvBpsInput(event.target.value)}
-            className={DETAIL_INPUT_CLASS}
-          />
-        </div>
-        <div>
-          <label className="mb-2 block text-sm text-[#7c6757]">Minimum health factor</label>
-          <input
-            id="managed-mandate-min-health-factor"
-            name="managed-mandate-min-health-factor"
-            type="text"
-            value={minHealthFactorInput}
-            onChange={(event) => setMinHealthFactorInput(event.target.value)}
-            className={DETAIL_INPUT_CLASS}
-          />
-        </div>
-      </div>
-
-      <div className={`${DETAIL_INSET_CLASS} mt-4 p-4`}>
-        <div className={DETAIL_LABEL_CLASS}>Exact mandate preview</div>
-        <ManagedMandateDetails managedMandate={previewManagedMandate as Record<string, unknown>} />
-      </div>
-
-      {submitError ? (
-        <div className="mt-4 rounded-xl border border-red-500/20 bg-[#fff0eb] px-4 py-3 text-sm text-[#b84f2c]">
-          {submitError}
-        </div>
-      ) : null}
-
-      <div className="mt-5 flex items-center justify-end">
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={!props.onSave || isSaving}
-          className="rounded-lg bg-[#fd6731] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#e55a28] disabled:opacity-60"
-        >
-          {isSaving ? 'Saving...' : 'Save managed mandate'}
-        </button>
-      </div>
-    </div>
+        mandateRef: props.view.mandateRef,
+        managedMandate: props.view.managedMandate,
+      }}
+      availableTokenSymbols={props.availableTokenSymbols}
+      tokenIconBySymbolOverride={props.tokenIconBySymbol}
+      onSave={(input) =>
+        props.onSave?.({
+          ownerAgentId: input.ownerAgentId,
+          targetAgentId: input.targetAgentId,
+          targetAgentRouteId: input.targetAgentRouteId,
+          managedMandate: input.managedMandate,
+        })
+      }
+    />
   );
 }
 
@@ -1121,10 +800,6 @@ export function AgentDetailPage({
     [agentId, domainProjection, lifecycleState],
   );
   const isPortfolioAgent = agentId === 'agent-portfolio-manager';
-  const portfolioManagerManagedAgentView = useMemo(
-    () => (isPortfolioAgent ? buildPortfolioManagerManagedAgentView(domainProjection) : null),
-    [domainProjection, isPortfolioAgent],
-  );
   const isOnboardingActive = resolveOnboardingActive({
     activeInterruptPresent: Boolean(activeInterrupt),
     taskStatus,
@@ -1135,9 +810,6 @@ export function AgentDetailPage({
     managedRuntimePhaseIsActive && (!isPortfolioAgent || !isOnboardingActive);
   const visibleManagedMandateEditorView = portfolioManagedContextVisible
     ? managedMandateEditorView
-    : null;
-  const visiblePortfolioManagerManagedAgentView = portfolioManagedContextVisible
-    ? portfolioManagerManagedAgentView
     : null;
   const emberLendingChatEnabled =
     agentId === 'agent-ember-lending' &&
@@ -1151,7 +823,6 @@ export function AgentDetailPage({
   const [hasUserSelectedTab, setHasUserSelectedTab] = useState(Boolean(initialTab));
   const [dismissedBlockingError, setDismissedBlockingError] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState('');
-  const [isManagedLaneExpanded, setIsManagedLaneExpanded] = useState(false);
   const [isSubagentWalletPopoverOpen, setIsSubagentWalletPopoverOpen] = useState(false);
   const [subagentWalletCopyStatus, setSubagentWalletCopyStatus] = useState<
     'idle' | 'success' | 'error'
@@ -1208,7 +879,6 @@ export function AgentDetailPage({
   const useEmbeddedPortfolioChat = isPortfolioAgent && !forceBlockersTab && !isFiring;
   const showLeftRailStats = !isPortfolioAgent && !isEmberLendingAgent;
   const showAgentMetadataGrid = !isPortfolioAgent;
-  const managedLaneContentId = useId();
   const subagentWalletPopoverId = useId();
 
   const blockingErrorMessage = (haltReason || executionError || null) as string | null;
@@ -1309,14 +979,25 @@ export function AgentDetailPage({
 
     for (const symbol of displayTokens) addSymbol(symbol);
     for (const protocol of displayProtocols) addSymbol(PROTOCOL_TOKEN_FALLBACK[protocol]);
+    for (const symbol of DEFAULT_MANAGED_MANDATE_TOKEN_CHOICES) addSymbol(symbol);
+    for (const policy of readManagedLendingCollateralPolicies(managedMandateEditorView?.managedMandate ?? null)) {
+      addSymbol(policy.asset);
+    }
+    for (const symbol of readManagedLendingBorrowAssets(managedMandateEditorView?.managedMandate ?? null)) {
+      addSymbol(symbol);
+    }
 
     return out;
-  }, [displayProtocols, displayTokens]);
+  }, [displayProtocols, displayTokens, managedMandateEditorView?.managedMandate]);
 
   const { chainIconByName, tokenIconBySymbol } = useOnchainActionsIconMaps({
     chainNames: profile.chains ?? [],
     tokenSymbols: desiredTokenSymbols,
   });
+  const managedMandateAvailableTokenSymbols = useMemo(
+    () => Array.from(new Set([...desiredTokenSymbols, ...Object.keys(tokenIconBySymbol)])),
+    [desiredTokenSymbols, tokenIconBySymbol],
+  );
 
   const agentAvatarUri = useMemo(
     () =>
@@ -1481,102 +1162,16 @@ export function AgentDetailPage({
       onInterruptSubmit={onInterruptSubmit}
     />
   ) : null;
-  const showManagedLendingRuntimeCards = Boolean(
-    managedRuntimePhaseIsActive &&
-      emberLendingRuntimeView &&
-      (emberLendingRuntimeView.managedMandate || emberLendingRuntimeView.reservationSummary),
-  );
-  const managedAgentContextCards =
-    visiblePortfolioManagerManagedAgentView || showManagedLendingRuntimeCards || visibleManagedMandateEditorView ? (
-      <div className="mt-6 space-y-5">
-        {visiblePortfolioManagerManagedAgentView ? (
-          <div className={`${DETAIL_PANEL_CLASS} p-5`}>
-            <div className="flex items-start justify-between gap-4">
-              <button
-                type="button"
-                aria-expanded={isManagedLaneExpanded}
-                aria-controls={managedLaneContentId}
-                onClick={() => setIsManagedLaneExpanded((current) => !current)}
-                className="min-w-0 flex-1 text-left"
-              >
-                <div className="flex items-start gap-3">
-                  <ChevronDown
-                    className={`mt-0.5 h-4 w-4 shrink-0 text-[#907764] transition-transform ${
-                      isManagedLaneExpanded ? 'rotate-180' : '-rotate-90'
-                    }`}
-                  />
-                  <div className="min-w-0">
-                    <div className={DETAIL_LABEL_CLASS}>
-                      Managed lending lane
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <div className="text-base font-semibold text-[#261a12]">
-                        {visiblePortfolioManagerManagedAgentView.title}
-                      </div>
-                      {visiblePortfolioManagerManagedAgentView.laneLabel ? (
-                        <span className="inline-flex items-center rounded-full border border-[#eadac7] bg-[#fffaf2] px-2.5 py-1 text-[11px] font-medium text-[#6f5a4c]">
-                          {visiblePortfolioManagerManagedAgentView.laneLabel}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              </button>
-              <a
-                href={visiblePortfolioManagerManagedAgentView.detailHref}
-                className="shrink-0 text-xs font-medium text-[#fd6731] hover:text-[#ff8a5c] transition-colors"
-              >
-                View lending agent
-              </a>
-            </div>
-            {isManagedLaneExpanded ? (
-              <div id={managedLaneContentId}>
-                {visiblePortfolioManagerManagedAgentView.managedMandate ? (
-                  <div className={`${DETAIL_INSET_CLASS} mt-4 p-4`}>
-                    <div className={DETAIL_LABEL_CLASS}>Mandate</div>
-                    <ManagedMandateDetails managedMandate={visiblePortfolioManagerManagedAgentView.managedMandate} />
-                  </div>
-                ) : null}
-                {visiblePortfolioManagerManagedAgentView.reservationSummary ? (
-                  <div className={`${DETAIL_INSET_CLASS} mt-4 p-4`}>
-                    <div className={DETAIL_LABEL_CLASS}>Reservation</div>
-                    <div className="mt-2 text-sm leading-relaxed text-[#6f5a4c]">
-                      {visiblePortfolioManagerManagedAgentView.reservationSummary}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {showManagedLendingRuntimeCards && emberLendingRuntimeView ? (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {emberLendingRuntimeView.managedMandate ? (
-              <div className={`${DETAIL_INSET_CLASS} min-w-0 p-4`}>
-                <div className={DETAIL_LABEL_CLASS}>Mandate</div>
-                <ManagedMandateDetails managedMandate={emberLendingRuntimeView.managedMandate} />
-              </div>
-            ) : null}
-            {emberLendingRuntimeView.reservationSummary ? (
-              <div className={`${DETAIL_INSET_CLASS} min-w-0 p-4`}>
-                <div className={DETAIL_LABEL_CLASS}>Reservation</div>
-                <div className="mt-2 text-sm leading-relaxed text-[#6f5a4c]">
-                  {emberLendingRuntimeView.reservationSummary}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {visibleManagedMandateEditorView ? (
-          <ManagedMandateEditorCard
-            view={visibleManagedMandateEditorView}
-            onSave={onManagedMandateSave}
-          />
-        ) : null}
-      </div>
-    ) : null;
+  const managedAgentContextCards = visibleManagedMandateEditorView ? (
+    <div className="mt-6">
+      <ManagedMandateEditorCard
+        view={visibleManagedMandateEditorView}
+        availableTokenSymbols={managedMandateAvailableTokenSymbols}
+        tokenIconBySymbol={tokenIconBySymbol}
+        onSave={onManagedMandateSave}
+      />
+    </div>
+  ) : null;
   const subagentWalletBar = emberLendingRuntimeView?.walletAddress ? (
     <div className="mt-6">
       <div className="relative border-t border-[#eadac7] pt-4" ref={subagentWalletPopoverRef}>
@@ -1735,6 +1330,7 @@ export function AgentDetailPage({
                 agentId={agentId}
                 activeInterrupt={activeInterrupt}
                 allowedPools={allowedPools}
+                availableTokenSymbols={managedMandateAvailableTokenSymbols}
                 onInterruptSubmit={onInterruptSubmit}
                 taskId={taskId}
                 taskStatus={taskStatus}
@@ -1743,6 +1339,7 @@ export function AgentDetailPage({
                 delegationsBypassActive={delegationsBypassActive}
                 onboardingFlow={onboardingFlow}
                 settings={settings}
+                tokenIconBySymbol={tokenIconBySymbol}
                 onSettingsChange={onSettingsChange}
               />
             ) : (
@@ -2794,6 +2391,7 @@ interface AgentBlockersTabProps {
   agentId: string;
   activeInterrupt?: AgentInterrupt | null;
   allowedPools: Array<Pool | PendleMarket>;
+  availableTokenSymbols?: string[];
   onInterruptSubmit?: (
     input:
       | OperatorConfigInput
@@ -2812,6 +2410,7 @@ interface AgentBlockersTabProps {
   delegationsBypassActive?: boolean;
   onboardingFlow?: OnboardingFlow;
   settings?: AgentSettings;
+  tokenIconBySymbol: Record<string, string>;
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
 }
 
@@ -2819,6 +2418,7 @@ function AgentBlockersTab({
   agentId,
   activeInterrupt,
   allowedPools,
+  availableTokenSymbols,
   onInterruptSubmit,
   taskId,
   taskStatus,
@@ -2827,6 +2427,7 @@ function AgentBlockersTab({
   delegationsBypassActive,
   onboardingFlow,
   settings,
+  tokenIconBySymbol,
   onSettingsChange,
 }: AgentBlockersTabProps) {
   const {
@@ -2854,16 +2455,6 @@ function AgentBlockersTab({
     settings?.amount?.toString() ?? '',
   );
   const [targetMarket, setTargetMarket] = useState<'BTC' | 'ETH'>('BTC');
-  const [portfolioManagerCollateralPoliciesInput, setPortfolioManagerCollateralPoliciesInput] =
-    useState(DEFAULT_MANAGED_LENDING_COLLATERAL_POLICIES_INPUT);
-  const [portfolioManagerAllowedBorrowAssetsInput, setPortfolioManagerAllowedBorrowAssetsInput] =
-    useState('');
-  const [portfolioManagerMaxLtvBpsInput, setPortfolioManagerMaxLtvBpsInput] = useState(
-    String(DEFAULT_MANAGED_LENDING_MAX_LTV_BPS),
-  );
-  const [portfolioManagerMinHealthFactorInput, setPortfolioManagerMinHealthFactorInput] = useState(
-    DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR,
-  );
   const [fundingTokenAddress, setFundingTokenAddress] = useState('');
   const [isSigningDelegations, setIsSigningDelegations] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2891,10 +2482,7 @@ function AgentBlockersTab({
       return;
     }
 
-    setPortfolioManagerCollateralPoliciesInput(DEFAULT_MANAGED_LENDING_COLLATERAL_POLICIES_INPUT);
-    setPortfolioManagerAllowedBorrowAssetsInput('');
-    setPortfolioManagerMaxLtvBpsInput(String(DEFAULT_MANAGED_LENDING_MAX_LTV_BPS));
-    setPortfolioManagerMinHealthFactorInput(DEFAULT_MANAGED_LENDING_MIN_HEALTH_FACTOR);
+    setError(null);
   }, [isPortfolioManagerSetupInterrupt]);
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
@@ -3019,72 +2607,59 @@ function AgentBlockersTab({
     });
   };
 
-  const handlePortfolioManagerSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const portfolioManagerSetupManagedMandate = useMemo<ManagedMandateInput>(
+    () => ({
+      lending_policy: buildManagedLendingPolicy({
+        existingManagedMandate: null,
+        collateralPolicies: [
+          {
+            asset: DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
+            max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
+          },
+        ],
+        allowedBorrowAssets: [],
+      }),
+    }),
+    [],
+  );
+
+  const submitPortfolioManagerSetupMandate = async (
+    managedMandate: ManagedMandateInput,
+  ) => {
     setError(null);
 
     const operatorWalletAddress =
       privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
 
     if (!operatorWalletAddress) {
-      setError(
+      throw new Error(
         delegationsBypassEnabled
           ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
           : 'Connect a wallet to continue.',
       );
-      return;
     }
 
     if (!isHexAddress(operatorWalletAddress)) {
-      setError(
+      throw new Error(
         delegationsBypassEnabled
           ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
           : 'Connected wallet address is not a valid 0x-prefixed hex string.',
       );
-      return;
-    }
-
-    const collateralPolicies = parseManagedLendingCollateralPolicies(
-      portfolioManagerCollateralPoliciesInput,
-    );
-    if (collateralPolicies.length === 0) {
-      setError('At least one collateral policy is required.');
-      return;
-    }
-    const normalizedAllowedBorrowAssets = parseManagedMandateAssetList(
-      portfolioManagerAllowedBorrowAssetsInput,
-    );
-    const maxLtvBps = Number(portfolioManagerMaxLtvBpsInput);
-    if (!Number.isFinite(maxLtvBps)) {
-      setError('Max LTV bps must be a valid number.');
-      return;
-    }
-    const minHealthFactor = portfolioManagerMinHealthFactorInput.trim();
-    if (minHealthFactor.length === 0) {
-      setError('Minimum health factor is required.');
-      return;
     }
 
     onInterruptSubmit?.({
-      ...buildPortfolioManagerSetupInput(operatorWalletAddress as `0x${string}`, {
-        collateralPoliciesInput: formatManagedLendingCollateralPolicies(collateralPolicies),
-        allowedBorrowAssetsInput: normalizedAllowedBorrowAssets.join(', '),
-        maxLtvBps,
-        minHealthFactor,
-      }),
+      walletAddress: operatorWalletAddress as `0x${string}`,
+      portfolioMandate: {
+        approved: true,
+        riskLevel: 'medium',
+      },
+      firstManagedMandate: {
+        targetAgentId: 'ember-lending',
+        targetAgentKey: 'ember-lending-primary',
+        managedMandate,
+      },
     });
   };
-
-  const portfolioManagerPreviewCollateralPolicies = parseManagedLendingCollateralPolicies(
-    portfolioManagerCollateralPoliciesInput,
-  );
-  const portfolioManagerPreviewManagedMandate = buildUpdatedManagedMandate({
-    existingManagedMandate: null,
-    collateralPolicies: portfolioManagerPreviewCollateralPolicies,
-    allowedBorrowAssets: parseManagedMandateAssetList(portfolioManagerAllowedBorrowAssetsInput),
-    maxLtvBps: readFiniteNumber(Number(portfolioManagerMaxLtvBpsInput)) ?? undefined,
-    minHealthFactor: portfolioManagerMinHealthFactorInput.trim() || undefined,
-  });
 
   const handleGmxSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3475,7 +3050,7 @@ function AgentBlockersTab({
                 </div>
               </form>
             ) : showPortfolioManagerSetupForm ? (
-              <form onSubmit={handlePortfolioManagerSetupSubmit}>
+              <div>
                 <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Ember Portfolio Agent Setup</h3>
                 {activeInterrupt?.message && (
                   <p className="mb-6 text-sm text-[#7c6757]">{activeInterrupt.message}</p>
@@ -3504,108 +3079,25 @@ function AgentBlockersTab({
 
                   <div className={`${DETAIL_INSET_CLASS} p-4`}>
                     <div className="mb-2 text-sm font-medium text-[#503826]">First managed lending lane</div>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <label
-                          htmlFor="portfolio-manager-collateral-policies"
-                          className="mb-2 block text-sm text-[#7c6757]"
-                        >
-                          Collateral policy
-                        </label>
-                        <input
-                          id="portfolio-manager-collateral-policies"
-                          name="portfolio-manager-collateral-policies"
-                          type="text"
-                          value={portfolioManagerCollateralPoliciesInput}
-                          onChange={(event) =>
-                            setPortfolioManagerCollateralPoliciesInput(event.target.value)
-                          }
-                          className={DETAIL_INPUT_CLASS}
-                        />
-                        <div className="mt-2 text-xs text-[#937c69]">
-                          Use <span className="font-mono">ASSET:PCT</span> entries, for example{' '}
-                          <span className="font-mono">USDC:70, WETH:50</span>.
-                        </div>
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="portfolio-manager-allowed-borrow-assets"
-                          className="mb-2 block text-sm text-[#7c6757]"
-                        >
-                          Allowed borrow assets
-                        </label>
-                        <input
-                          id="portfolio-manager-allowed-borrow-assets"
-                          name="portfolio-manager-allowed-borrow-assets"
-                          type="text"
-                          value={portfolioManagerAllowedBorrowAssetsInput}
-                          onChange={(event) =>
-                            setPortfolioManagerAllowedBorrowAssetsInput(event.target.value)
-                          }
-                          className={DETAIL_INPUT_CLASS}
-                        />
-                        <div className="mt-2 text-xs text-[#937c69]">
-                          Leave blank for a supply-only mandate.
-                        </div>
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="portfolio-manager-max-ltv-bps"
-                          className="mb-2 block text-sm text-[#7c6757]"
-                        >
-                          Max LTV bps
-                        </label>
-                        <input
-                          id="portfolio-manager-max-ltv-bps"
-                          name="portfolio-manager-max-ltv-bps"
-                          type="number"
-                          value={portfolioManagerMaxLtvBpsInput}
-                          onChange={(event) =>
-                            setPortfolioManagerMaxLtvBpsInput(event.target.value)
-                          }
-                          className={DETAIL_INPUT_CLASS}
-                        />
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="portfolio-manager-min-health-factor"
-                          className="mb-2 block text-sm text-[#7c6757]"
-                        >
-                          Minimum health factor
-                        </label>
-                        <input
-                          id="portfolio-manager-min-health-factor"
-                          name="portfolio-manager-min-health-factor"
-                          type="text"
-                          value={portfolioManagerMinHealthFactorInput}
-                          onChange={(event) =>
-                            setPortfolioManagerMinHealthFactorInput(event.target.value)
-                          }
-                          className={DETAIL_INPUT_CLASS}
-                        />
-                      </div>
-                    </div>
-                    <div className={`${DETAIL_INSET_CLASS} mt-4 p-4`}>
-                      <div className={DETAIL_LABEL_CLASS}>Exact mandate preview</div>
-                      <ManagedMandateDetails
-                        managedMandate={portfolioManagerPreviewManagedMandate as Record<string, unknown>}
-                      />
-                    </div>
+                    <p className="mb-4 text-xs text-[#7c6757]">
+                      Configure the first lending mandate inline before handing control to the portfolio manager.
+                    </p>
+                    <ManagedMandateWorkbenchCard
+                      view={{
+                        ownerAgentId: agentId,
+                        targetAgentId: 'ember-lending',
+                        targetAgentRouteId: 'agent-ember-lending',
+                        mandateRef: null,
+                        managedMandate: portfolioManagerSetupManagedMandate,
+                      }}
+                      availableTokenSymbols={availableTokenSymbols}
+                      tokenIconBySymbolOverride={tokenIconBySymbol}
+                      submitLabel="Approve & Continue"
+                      onSave={(input) => submitPortfolioManagerSetupMandate(input.managedMandate)}
+                    />
                   </div>
                 </div>
-
-                {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
-
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={isWalletLoading}
-                    className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-6 py-2.5`}
-                  >
-                    Approve &amp; Continue
-                  </button>
-                </div>
-              </form>
+              </div>
             ) : showPendleFundWalletForm ? (
               <div>
                 <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Fund Wallet</h3>

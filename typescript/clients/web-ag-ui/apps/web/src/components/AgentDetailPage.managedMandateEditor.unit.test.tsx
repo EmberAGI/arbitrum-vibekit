@@ -20,7 +20,7 @@ vi.mock('../hooks/usePrivyWalletClient', () => {
   };
 });
 
-function setTextInputValue(input: HTMLInputElement, value: string) {
+function setInputValue(input: HTMLInputElement, value: string) {
   const descriptor = Object.getOwnPropertyDescriptor(
     HTMLInputElement.prototype,
     'value',
@@ -28,6 +28,7 @@ function setTextInputValue(input: HTMLInputElement, value: string) {
 
   descriptor?.set?.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 describe('AgentDetailPage managed mandate editor', () => {
@@ -58,7 +59,7 @@ describe('AgentDetailPage managed mandate editor', () => {
     container.remove();
   });
 
-  it('saves a policy-only mandate and allows a supply-only borrow policy', async () => {
+  it('hides risk controls when borrow is cleared and preserves the existing supply-only risk policy', async () => {
     const onManagedMandateSave = vi.fn(async () => undefined);
     const root = createRoot(container);
 
@@ -135,34 +136,60 @@ describe('AgentDetailPage managed mandate editor', () => {
       );
     });
 
-    const collateralPoliciesInput = container.querySelector(
-      'input[name="managed-mandate-collateral-policies"]',
-    ) as HTMLInputElement | null;
-    const allowedBorrowAssetsInput = container.querySelector(
-      'input[name="managed-mandate-allowed-borrow-assets"]',
-    ) as HTMLInputElement | null;
-    const maxLtvBpsInput = container.querySelector(
-      'input[name="managed-mandate-max-ltv-bps"]',
-    ) as HTMLInputElement | null;
-    const minHealthFactorInput = container.querySelector(
-      'input[name="managed-mandate-min-health-factor"]',
-    ) as HTMLInputElement | null;
+    const editCollateralPolicyButton = container.querySelector(
+      'button[aria-label="Edit collateral policy"]',
+    ) as HTMLButtonElement | null;
+    const editBorrowAssetsButton = container.querySelector(
+      'button[aria-label="Edit allowed borrow assets"]',
+    ) as HTMLButtonElement | null;
+    const editMaxLtvButton = container.querySelector(
+      'button[aria-label="Edit maximum LTV"]',
+    ) as HTMLButtonElement | null;
+    const editHealthFactorButton = container.querySelector(
+      'button[aria-label="Edit minimum health factor"]',
+    ) as HTMLButtonElement | null;
     const submitButton = [...container.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('Save managed mandate'),
     );
 
-    expect(collateralPoliciesInput).toBeDefined();
-    expect(allowedBorrowAssetsInput).toBeDefined();
-    expect(maxLtvBpsInput).toBeDefined();
-    expect(minHealthFactorInput).toBeDefined();
+    expect(editCollateralPolicyButton).toBeDefined();
+    expect(editBorrowAssetsButton).toBeDefined();
+    expect(editMaxLtvButton).toBeDefined();
+    expect(editHealthFactorButton).toBeDefined();
     expect(submitButton).toBeDefined();
 
     await act(async () => {
-      setTextInputValue(collateralPoliciesInput!, 'weth:60, usdc:25');
-      setTextInputValue(allowedBorrowAssetsInput!, '');
-      setTextInputValue(maxLtvBpsInput!, '6500');
-      setTextInputValue(minHealthFactorInput!, '1.4');
+      editCollateralPolicyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+
+    const usdcCollateralCapInput = container.querySelector(
+      'input[name="managed-mandate-collateral-cap-USDC"]',
+    ) as HTMLInputElement | null;
+    const wethCollateralCapInput = container.querySelector(
+      'input[name="managed-mandate-collateral-cap-WETH"]',
+    ) as HTMLInputElement | null;
+
+    expect(usdcCollateralCapInput).toBeDefined();
+    expect(wethCollateralCapInput).toBeDefined();
+
+    await act(async () => {
+      setInputValue(usdcCollateralCapInput!, '25');
+      setInputValue(wethCollateralCapInput!, '60');
+      editBorrowAssetsButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const clearBorrowAssetsButton = container.querySelector(
+      'button[aria-label="Toggle token USDC"]',
+    ) as HTMLButtonElement | null;
+
+    expect(clearBorrowAssetsButton).toBeDefined();
+
+    await act(async () => {
+      clearBorrowAssetsButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('button[aria-label="Edit maximum LTV"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Edit minimum health factor"]')).toBeNull();
 
     await act(async () => {
       submitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -177,12 +204,12 @@ describe('AgentDetailPage managed mandate editor', () => {
           collateral_policy: {
             assets: [
               {
-                asset: 'WETH',
-                max_allocation_pct: 60,
-              },
-              {
                 asset: 'USDC',
                 max_allocation_pct: 25,
+              },
+              {
+                asset: 'WETH',
+                max_allocation_pct: 60,
               },
             ],
           },
@@ -190,8 +217,8 @@ describe('AgentDetailPage managed mandate editor', () => {
             allowed_assets: [],
           },
           risk_policy: {
-            max_ltv_bps: 6500,
-            min_health_factor: '1.4',
+            max_ltv_bps: 7000,
+            min_health_factor: '1.25',
           },
         },
       },

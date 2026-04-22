@@ -330,6 +330,14 @@ describe('AgentDetailRoute managed mandate wiring', () => {
         ok: true,
         domainProjection: {
           managedMandateEditor: {
+            mandateRef: 'mandate-ember-lending-001',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        domainProjection: {
+          managedMandateEditor: {
             mandateRef: 'mandate-ember-lending-002',
           },
         },
@@ -384,6 +392,13 @@ describe('AgentDetailRoute managed mandate wiring', () => {
     });
 
     expect(mocks.invokeAgentCommandRoute).toHaveBeenNthCalledWith(1, {
+      agentId: 'agent-ember-lending',
+      threadId: 'lending-thread',
+      command: {
+        name: 'hydrate_runtime_projection',
+      },
+    });
+    expect(mocks.invokeAgentCommandRoute).toHaveBeenNthCalledWith(2, {
       agentId: 'agent-portfolio-manager',
       threadId: 'pm-thread',
       command: {
@@ -416,14 +431,14 @@ describe('AgentDetailRoute managed mandate wiring', () => {
         },
       },
     });
-    expect(mocks.invokeAgentCommandRoute).toHaveBeenNthCalledWith(2, {
+    expect(mocks.invokeAgentCommandRoute).toHaveBeenNthCalledWith(3, {
       agentId: 'agent-ember-lending',
       threadId: 'lending-thread',
       command: {
         name: 'hydrate_runtime_projection',
       },
     });
-    expect(mocks.applyDomainProjection).toHaveBeenCalledWith({
+    expect(mocks.applyDomainProjection).toHaveBeenLastCalledWith({
       managedMandateEditor: {
         mandateRef: 'mandate-ember-lending-002',
         targetAgentRouteId: 'agent-ember-lending',
@@ -443,14 +458,23 @@ describe('AgentDetailRoute managed mandate wiring', () => {
         },
       },
     });
-    mocks.invokeAgentCommandRoute.mockResolvedValue({
-      ok: true,
-      domainProjection: {
-        managedMandateEditor: {
-          mandateRef: 'mandate-ember-lending-003',
+    mocks.invokeAgentCommandRoute
+      .mockResolvedValueOnce({
+        ok: true,
+        domainProjection: {
+          managedMandateEditor: {
+            mandateRef: 'mandate-ember-lending-001',
+          },
         },
-      },
-    });
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        domainProjection: {
+          managedMandateEditor: {
+            mandateRef: 'mandate-ember-lending-003',
+          },
+        },
+      });
 
     await renderRoute('agent-portfolio-manager');
     const props = readCapturedProps() as {
@@ -487,8 +511,15 @@ describe('AgentDetailRoute managed mandate wiring', () => {
       });
     });
 
-    expect(mocks.invokeAgentCommandRoute).toHaveBeenCalledTimes(1);
-    expect(mocks.invokeAgentCommandRoute).toHaveBeenCalledWith({
+    expect(mocks.invokeAgentCommandRoute).toHaveBeenCalledTimes(2);
+    expect(mocks.invokeAgentCommandRoute).toHaveBeenNthCalledWith(1, {
+      agentId: 'agent-portfolio-manager',
+      threadId: 'pm-thread',
+      command: {
+        name: 'refresh_portfolio_state',
+      },
+    });
+    expect(mocks.invokeAgentCommandRoute).toHaveBeenNthCalledWith(2, {
       agentId: 'agent-portfolio-manager',
       threadId: 'pm-thread',
       command: {
@@ -517,7 +548,7 @@ describe('AgentDetailRoute managed mandate wiring', () => {
         },
       },
     });
-    expect(mocks.applyDomainProjection).toHaveBeenCalledWith({
+    expect(mocks.applyDomainProjection).toHaveBeenLastCalledWith({
       managedMandateEditor: {
         mandateRef: 'mandate-ember-lending-003',
       },
