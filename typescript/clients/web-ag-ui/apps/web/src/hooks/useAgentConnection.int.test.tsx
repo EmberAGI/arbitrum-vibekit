@@ -3126,7 +3126,7 @@ describe('useAgentConnection integration', () => {
     });
   });
 
-  it('rehydrates onboarding from raw persisted runtime state without a mirrored task status', async () => {
+  it('rehydrates onboarding from raw persisted runtime state without mirrored task or activity events', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
 
     mocks.agent.state = {
@@ -3138,41 +3138,25 @@ describe('useAgentConnection integration', () => {
           phase: 'onboarding',
         },
       },
-      activityEvents: [
-        {
-          type: 'artifact',
-          append: true,
-          artifact: {
-            data: {
-              type: 'interrupt-status',
-              status: 'pending',
-              message: 'Connect the wallet you want the portfolio manager to onboard.',
-              interruptType: 'portfolio-manager-setup-request',
-            },
-            artifactId: 'domain-interrupt:thread-1:hire:1',
+      artifacts: {
+        current: {
+          data: {
+            type: 'lifecycle-status',
+            phase: 'onboarding',
           },
+          artifactId: 'domain-artifact:thread-1:refresh-status:2',
         },
-        {
-          type: 'dispatch-response',
-          parts: [
-            {
-              kind: 'a2ui',
-              data: {
-                payload: {
-                  kind: 'interrupt',
-                  payload: {
-                    type: 'portfolio-manager-setup-request',
-                    message: 'Connect the wallet you want the portfolio manager to onboard.',
-                    artifactId: 'domain-interrupt:thread-1:hire:1',
-                    inputLabel: 'Provide input',
-                    submitLabel: 'Continue',
-                  },
-                },
-              },
-            },
-          ],
+        activity: {
+          data: {
+            type: 'interrupt-status',
+            status: 'pending',
+            surfacedInThread: false,
+            message: 'Connect the wallet you want the portfolio manager to onboard.',
+            interruptType: 'portfolio-manager-setup-request',
+          },
+          artifactId: 'domain-interrupt:thread-1:hire:1',
         },
-      ],
+      },
     };
 
     await act(async () => {

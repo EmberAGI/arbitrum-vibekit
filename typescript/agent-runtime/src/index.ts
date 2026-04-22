@@ -839,8 +839,28 @@ function readInterruptStatus(data: unknown): string | null {
   return isRecord(data) && typeof data.status === 'string' ? data.status : null;
 }
 
+function readInterruptPayload(data: unknown): Record<string, unknown> | undefined {
+  return isRecord(data) && isRecord(data.payload) ? data.payload : undefined;
+}
+
+function readInterruptSurfacedInThread(data: unknown): boolean {
+  return isRecord(data) && typeof data.surfacedInThread === 'boolean'
+    ? data.surfacedInThread
+    : true;
+}
+
 function isInterruptStatusArtifact(artifact: PiRuntimeGatewayArtifact | undefined): artifact is PiRuntimeGatewayArtifact {
   return isRecord(artifact?.data) && artifact.data.type === 'interrupt-status';
+}
+
+function isHiddenPendingInterruptArtifact(
+  artifact: PiRuntimeGatewayArtifact | undefined,
+): artifact is PiRuntimeGatewayArtifact {
+  return (
+    isInterruptStatusArtifact(artifact) &&
+    readInterruptStatus(artifact.data) === 'pending' &&
+    !readInterruptSurfacedInThread(artifact.data)
+  );
 }
 
 function findLatestPendingInterruptArtifact(
@@ -856,6 +876,17 @@ function findLatestPendingInterruptArtifact(
     }
     if (status === 'resolved') {
       resolvedInterruptArtifactIds.add(currentArtifact.artifactId);
+    }
+  }
+
+  const activityArtifact = session.artifacts?.activity;
+  if (isInterruptStatusArtifact(activityArtifact)) {
+    const status = readInterruptStatus(activityArtifact.data);
+    if (status === 'pending' && !resolvedInterruptArtifactIds.has(activityArtifact.artifactId)) {
+      return activityArtifact;
+    }
+    if (status === 'resolved') {
+      resolvedInterruptArtifactIds.add(activityArtifact.artifactId);
     }
   }
 
@@ -906,6 +937,7 @@ function buildInterruptArtifact(params: {
       type: 'interrupt-status',
       interruptType: params.interrupt.type,
       status: 'pending',
+      surfacedInThread: params.interrupt.surfacedInThread,
       message: params.interrupt.message,
       ...(params.interrupt.payload ? { payload: params.interrupt.payload } : {}),
     },
@@ -1190,7 +1222,9 @@ function applyDomainOperationResult(params: {
     });
     const artifacts = nextArtifacts ?? {};
     artifacts.current = artifact;
-    artifacts.activity = artifact;
+    artifacts.activity = isHiddenPendingInterruptArtifact(artifacts.activity)
+      ? artifacts.activity
+      : artifact;
     nextArtifacts = artifacts;
     nextActivityEvents.push({
       type: 'artifact',
@@ -1209,36 +1243,44 @@ function applyDomainOperationResult(params: {
       operationName: params.operation.name,
       now: params.now,
     });
+    const surfacedInThread = domainOutputs.interrupt.surfacedInThread;
     const artifacts = nextArtifacts ?? {};
     artifacts.current = interruptArtifact;
+    if (!surfacedInThread) {
+      artifacts.activity = interruptArtifact;
+    }
     nextArtifacts = artifacts;
-    nextActivityEvents.push({
-      type: 'artifact',
-      artifact: interruptArtifact,
-      append: true,
-    });
-    nextA2Ui = {
-      kind: 'interrupt',
-      payload: {
-        ...(domainOutputs.interrupt.payload ?? {}),
-        type: domainOutputs.interrupt.type,
-        artifactId: interruptArtifact.artifactId,
-        message: domainOutputs.interrupt.message,
-        ...(!domainOutputs.interrupt.payload || !('inputLabel' in domainOutputs.interrupt.payload)
-          ? { inputLabel: 'Provide input' }
-          : {}),
-        ...(!domainOutputs.interrupt.payload || !('submitLabel' in domainOutputs.interrupt.payload)
-          ? { submitLabel: 'Continue' }
-          : {}),
-      },
-    };
-    nextActivityEvents.push(
-      buildPiA2UiActivityEventInternal({
-        threadId: params.threadId,
-        executionId: params.session.execution.id,
-        payload: nextA2Ui,
-      }),
-    );
+    if (surfacedInThread) {
+      nextActivityEvents.push({
+        type: 'artifact',
+        artifact: interruptArtifact,
+        append: true,
+      });
+      nextA2Ui = {
+        kind: 'interrupt',
+        payload: {
+          ...(domainOutputs.interrupt.payload ?? {}),
+          type: domainOutputs.interrupt.type,
+          artifactId: interruptArtifact.artifactId,
+          message: domainOutputs.interrupt.message,
+          ...(!domainOutputs.interrupt.payload || !('inputLabel' in domainOutputs.interrupt.payload)
+            ? { inputLabel: 'Provide input' }
+            : {}),
+          ...(!domainOutputs.interrupt.payload || !('submitLabel' in domainOutputs.interrupt.payload)
+            ? { submitLabel: 'Continue' }
+            : {}),
+        },
+      };
+      nextActivityEvents.push(
+        buildPiA2UiActivityEventInternal({
+          threadId: params.threadId,
+          executionId: params.session.execution.id,
+          payload: nextA2Ui,
+        }),
+      );
+    } else {
+      nextA2Ui = undefined;
+    }
     executionStatus = 'interrupted';
     executionStatusMessage = domainOutputs.interrupt.message;
     shouldWriteA2Ui = true;
@@ -1300,16 +1342,21 @@ function resolveInterruptedSessionForUserInput(
               },
       }
     : undefined;
+  const shouldSurfaceResolvedArtifact =
+    pendingInterruptArtifact !== null &&
+    readInterruptSurfacedInThread(pendingInterruptArtifact.data);
 
   const nextActivityEvents = resolvedArtifact
-    ? [
-        ...(session.activityEvents ?? []),
-        {
-          type: 'artifact' as const,
-          artifact: resolvedArtifact,
-          append: true,
-        },
-      ]
+    ? shouldSurfaceResolvedArtifact
+      ? [
+          ...(session.activityEvents ?? []),
+          {
+            type: 'artifact' as const,
+            artifact: resolvedArtifact,
+            append: true,
+          },
+        ]
+      : session.activityEvents
     : session.activityEvents;
 
   return {
@@ -1323,7 +1370,12 @@ function resolveInterruptedSessionForUserInput(
       ? {
           ...session.artifacts,
           current: resolvedArtifact,
-          activity: session.artifacts.activity,
+          activity:
+            session.artifacts.activity &&
+            isInterruptStatusArtifact(session.artifacts.activity) &&
+            session.artifacts.activity.artifactId === pendingInterruptArtifact?.artifactId
+              ? resolvedArtifact
+              : session.artifacts.activity,
         }
       : undefined,
     ...(nextActivityEvents ? { activityEvents: nextActivityEvents } : {}),
@@ -1358,19 +1410,26 @@ function repairHydratedPendingInterruptDrift(
           },
   };
 
-  const nextActivityEvents = [
-    ...(session.activityEvents ?? []),
-    {
-      type: 'artifact' as const,
-      artifact: resolvedArtifact,
-      append: true,
-    },
-  ];
+  const nextActivityEvents = readInterruptSurfacedInThread(pendingInterruptArtifact.data)
+    ? [
+        ...(session.activityEvents ?? []),
+        {
+          type: 'artifact' as const,
+          artifact: resolvedArtifact,
+          append: true,
+        },
+      ]
+    : session.activityEvents;
   const currentArtifact = session.artifacts?.current;
   const shouldReplaceCurrentArtifact =
     isInterruptStatusArtifact(currentArtifact) &&
     currentArtifact.artifactId === pendingInterruptArtifact.artifactId &&
     readInterruptStatus(currentArtifact.data) === 'pending';
+  const activityArtifact = session.artifacts?.activity;
+  const shouldReplaceActivityArtifact =
+    isInterruptStatusArtifact(activityArtifact) &&
+    activityArtifact.artifactId === pendingInterruptArtifact.artifactId &&
+    readInterruptStatus(activityArtifact.data) === 'pending';
 
   return {
     ...session,
@@ -1378,10 +1437,10 @@ function repairHydratedPendingInterruptDrift(
       ? {
           ...session.artifacts,
           current: shouldReplaceCurrentArtifact ? resolvedArtifact : session.artifacts.current,
-          activity: session.artifacts.activity,
+          activity: shouldReplaceActivityArtifact ? resolvedArtifact : session.artifacts.activity,
         }
       : session.artifacts,
-    activityEvents: nextActivityEvents,
+    ...(nextActivityEvents ? { activityEvents: nextActivityEvents } : {}),
     a2ui: session.a2ui?.kind === 'interrupt' ? undefined : session.a2ui,
   };
 }
@@ -1823,18 +1882,42 @@ export async function createAgentRuntime<TState = unknown>(
 
     return session.execution.id;
   };
-  const readCurrentInterruptPayload = (
+  const readCurrentInterruptState = (
     session: PiRuntimeGatewaySession,
-  ): Record<string, unknown> | undefined => {
+  ):
+    | {
+        type: string;
+        payload: Record<string, unknown>;
+        surfacedInThread: boolean;
+      }
+    | undefined => {
     if (session.execution.status !== 'interrupted') {
       return undefined;
     }
 
-    if (session.a2ui?.kind !== 'interrupt') {
+    if (session.a2ui?.kind === 'interrupt' && isRecord(session.a2ui.payload)) {
+      const interruptType =
+        typeof session.a2ui.payload.type === 'string' ? session.a2ui.payload.type : null;
+      if (interruptType) {
+        return {
+          type: interruptType,
+          payload: session.a2ui.payload,
+          surfacedInThread: true,
+        };
+      }
+    }
+
+    const pendingInterruptArtifact = findLatestPendingInterruptArtifact(session);
+    const interruptType = readInterruptType(pendingInterruptArtifact?.data);
+    if (!pendingInterruptArtifact || !interruptType) {
       return undefined;
     }
 
-    return isRecord(session.a2ui.payload) ? session.a2ui.payload : undefined;
+    return {
+      type: interruptType,
+      payload: readInterruptPayload(pendingInterruptArtifact.data) ?? {},
+      surfacedInThread: readInterruptSurfacedInThread(pendingInterruptArtifact.data),
+    };
   };
   const persistSessionSnapshot = async (
     threadId: string,
@@ -1842,8 +1925,8 @@ export async function createAgentRuntime<TState = unknown>(
   ): Promise<void> => {
     const ids = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
     const persistedExecutionId = resolvePersistedExecutionId(threadId, session);
-    const interruptPayload = readCurrentInterruptPayload(session);
-    const currentInterruptId = interruptPayload
+    const currentInterrupt = readCurrentInterruptState(session);
+    const currentInterruptId = currentInterrupt
       ? buildPiRuntimeStableUuid('interrupt', `agent-runtime:execution:${persistedExecutionId}:interrupt`)
       : null;
     const executionSource = session.automation?.runId ? 'automation' : 'user';
@@ -1868,8 +1951,9 @@ export async function createAgentRuntime<TState = unknown>(
           status: mapSessionExecutionStatusToPersistedStatus(session.execution.status),
           source: executionSource,
           currentInterruptId,
-          interruptPayload,
-          surfacedInThread: true,
+          interruptType: currentInterrupt?.type,
+          interruptPayload: currentInterrupt?.payload,
+          surfacedInThread: currentInterrupt?.surfacedInThread,
           now: currentNow,
         }),
       ],
@@ -1883,8 +1967,8 @@ export async function createAgentRuntime<TState = unknown>(
     const persistedExecutionId = resolvePersistedExecutionId(params.threadId, params.session);
     const expectedStatus = mapSessionExecutionStatusToPersistedStatus(params.session.execution.status);
     const expectedSource = params.session.automation?.runId ? 'automation' : 'user';
-    const interruptPayload = readCurrentInterruptPayload(params.session);
-    const expectedCurrentInterruptId = interruptPayload
+    const expectedInterrupt = readCurrentInterruptState(params.session);
+    const expectedCurrentInterruptId = expectedInterrupt
       ? buildPiRuntimeStableUuid(
           'interrupt',
           `agent-runtime:execution:${persistedExecutionId}:interrupt`,
@@ -1928,7 +2012,7 @@ export async function createAgentRuntime<TState = unknown>(
 
     return (
       currentInterrupt.status !== 'pending' ||
-      !currentInterrupt.surfacedInThread ||
+      currentInterrupt.surfacedInThread !== expectedInterrupt?.surfacedInThread ||
       pendingInterrupts.some((candidate) => candidate.interruptId !== expectedCurrentInterruptId)
     );
   };

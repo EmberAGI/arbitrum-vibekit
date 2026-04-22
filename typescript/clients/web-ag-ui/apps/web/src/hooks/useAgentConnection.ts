@@ -75,42 +75,72 @@ function messagesEqual(left: Message[], right: Message[]): boolean {
   return true;
 }
 
-function readPendingInterruptCheckpoint(events: ThreadState['activity']['events']): {
+function readPendingInterruptCheckpointFromArtifact(
+  artifact: NonNullable<ThreadState['artifacts']>['current'],
+): {
   interruptType: string | null;
   message: string;
 } | null {
+  const artifactData =
+    typeof artifact?.data === 'object' && artifact.data !== null
+      ? (artifact.data as {
+          type?: unknown;
+          status?: unknown;
+          message?: unknown;
+          interruptType?: unknown;
+        })
+      : null;
+
+  if (artifactData?.type !== 'interrupt-status') {
+    return null;
+  }
+
+  if (artifactData.status !== 'pending') {
+    return null;
+  }
+
+  return {
+    interruptType: typeof artifactData.interruptType === 'string' ? artifactData.interruptType : null,
+    message:
+      typeof artifactData.message === 'string'
+        ? artifactData.message
+        : 'Awaiting operator input.',
+  };
+}
+
+function readPendingInterruptCheckpoint(
+  events: ThreadState['activity']['events'],
+  artifacts?: ThreadState['artifacts'],
+): {
+  interruptType: string | null;
+  message: string;
+} | null {
+  const artifactCheckpoint =
+    readPendingInterruptCheckpointFromArtifact(artifacts?.current) ??
+    readPendingInterruptCheckpointFromArtifact(artifacts?.activity);
+  if (artifactCheckpoint) {
+    return artifactCheckpoint;
+  }
+
   for (let eventIndex = events.length - 1; eventIndex >= 0; eventIndex -= 1) {
     const event = events[eventIndex];
     if (event?.type !== 'artifact') {
       continue;
     }
 
-    const artifactData =
-      typeof event.artifact?.data === 'object' && event.artifact.data !== null
-        ? (event.artifact.data as {
-            type?: unknown;
-            status?: unknown;
-            message?: unknown;
-            interruptType?: unknown;
-          })
-        : null;
-
-    if (artifactData?.type !== 'interrupt-status') {
-      continue;
+    const checkpoint = readPendingInterruptCheckpointFromArtifact(event.artifact);
+    if (checkpoint) {
+      return checkpoint;
     }
 
-    if (artifactData.status !== 'pending') {
+    if (
+      typeof event.artifact?.data === 'object' &&
+      event.artifact.data !== null &&
+      'type' in event.artifact.data &&
+      event.artifact.data.type === 'interrupt-status'
+    ) {
       return null;
     }
-
-    return {
-      interruptType:
-        typeof artifactData.interruptType === 'string' ? artifactData.interruptType : null,
-      message:
-        typeof artifactData.message === 'string'
-          ? artifactData.message
-          : 'Awaiting operator input.',
-    };
   }
 
   return null;
@@ -119,7 +149,7 @@ function readPendingInterruptCheckpoint(events: ThreadState['activity']['events'
 function deriveSyncedInterrupt(state: ThreadSnapshot): AgentInterrupt | null {
   const threadState = state.thread;
   const events = threadState.activity?.events ?? [];
-  const pendingInterruptCheckpoint = readPendingInterruptCheckpoint(events);
+  const pendingInterruptCheckpoint = readPendingInterruptCheckpoint(events, threadState.artifacts);
 
   if (
     threadState?.task?.taskStatus?.state !== 'input-required' &&

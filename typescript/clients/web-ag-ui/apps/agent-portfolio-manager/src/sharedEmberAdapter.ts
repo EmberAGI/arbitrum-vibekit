@@ -1909,7 +1909,7 @@ function buildPortfolioManagerSigningInterrupt(
 ) {
   return {
     type: PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE,
-    surfacedInThread: true,
+    surfacedInThread: false,
     message: PORTFOLIO_MANAGER_SIGNING_MESSAGE,
     payload: {
       chainId: PORTFOLIO_MANAGER_CHAIN_ID,
@@ -2235,12 +2235,12 @@ export function createPortfolioManagerDomain(
         {
           type: PORTFOLIO_MANAGER_SETUP_INTERRUPT_TYPE,
           description: 'Collect the connected wallet before rooted delegation signing.',
-          surfacedInThread: true,
+          surfacedInThread: false,
         },
         {
           type: 'portfolio-manager-delegation-signing-request',
           description: 'Request delegation signatures needed to complete portfolio-manager onboarding.',
-          surfacedInThread: true,
+          surfacedInThread: false,
         },
       ],
     },
@@ -2420,7 +2420,7 @@ export function createPortfolioManagerDomain(
               },
               interrupt: {
                 type: PORTFOLIO_MANAGER_SETUP_INTERRUPT_TYPE,
-                surfacedInThread: true,
+                surfacedInThread: false,
                 message: PORTFOLIO_MANAGER_SETUP_MESSAGE,
               },
             },

@@ -59,6 +59,53 @@ describe('agentProjection', () => {
     expect('view' in (projected ?? {})).toBe(false);
   });
 
+  it('maps top-level runtime artifacts onto thread artifacts for canonical interrupt hydration', () => {
+    const projected = projectDetailStateFromPayload({
+      thread: {
+        lifecycle: {
+          phase: 'onboarding',
+        },
+      },
+      artifacts: {
+        current: {
+          artifactId: 'artifact-current',
+          data: {
+            type: 'lifecycle-status',
+            phase: 'onboarding',
+          },
+        },
+        activity: {
+          artifactId: 'artifact-hidden-interrupt',
+          data: {
+            type: 'interrupt-status',
+            status: 'pending',
+            surfacedInThread: false,
+            interruptType: 'portfolio-manager-setup-request',
+          },
+        },
+      },
+    });
+
+    expect(projected?.thread.artifacts).toEqual({
+      current: {
+        artifactId: 'artifact-current',
+        data: {
+          type: 'lifecycle-status',
+          phase: 'onboarding',
+        },
+      },
+      activity: {
+        artifactId: 'artifact-hidden-interrupt',
+        data: {
+          type: 'interrupt-status',
+          status: 'pending',
+          surfacedInThread: false,
+          interruptType: 'portfolio-manager-setup-request',
+        },
+      },
+    });
+  });
+
   it('projects sidebar list update from the same projected state artifact', () => {
     const projected = projectDetailStateFromPayload({
       thread: {

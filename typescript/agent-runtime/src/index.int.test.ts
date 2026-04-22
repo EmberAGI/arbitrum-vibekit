@@ -542,6 +542,7 @@ function hasSystemPromptFragments(
 }
 
 function createLifecycleDomain(options?: {
+  surfacedInThread?: boolean;
   projectSharedState?: (params: {
     sharedState: Record<string, unknown>;
     currentProjection?: Record<string, unknown>;
@@ -594,7 +595,7 @@ function createLifecycleDomain(options?: {
         {
           type: 'operator-config',
           description: 'Capture an operator note.',
-          surfacedInThread: true,
+          surfacedInThread: options?.surfacedInThread ?? true,
         },
       ],
     },
@@ -637,7 +638,7 @@ function createLifecycleDomain(options?: {
               },
               interrupt: {
                 type: 'operator-config',
-                surfacedInThread: true,
+                surfacedInThread: options?.surfacedInThread ?? true,
                 message: 'Please provide a short operator note to continue onboarding.',
                 payload: {
                   promptKind: 'text-note',
@@ -1077,6 +1078,208 @@ describe('agent-runtime integration', () => {
         },
       ]),
     );
+  });
+
+  it('keeps non-thread-surfaced interrupts canonical without mirroring them into transcript activity', async () => {
+    const threadId = 'thread-hidden-interrupt';
+    const { persistedThreads, persistedInterrupts, hooks: internalPostgres } =
+      createPersistingInternalPostgres();
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model-hidden-interrupt'),
+      systemPrompt: 'You are a lifecycle agent.',
+      domain: createLifecycleDomain({
+        surfacedInThread: false,
+      }),
+      agentOptions: {
+        streamFn: () => createTextStream('Model fallback should not run for direct commands.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId,
+        runId: 'run-hidden-hire',
+        forwardedProps: {
+          command: {
+            name: 'hire',
+          },
+        },
+      }),
+    );
+
+    expect(persistedThreads.get(threadId)?.threadState).toMatchObject({
+      execution: {
+        status: 'interrupted',
+      },
+      artifacts: {
+        current: {
+          data: {
+            type: 'interrupt-status',
+            interruptType: 'operator-config',
+            status: 'pending',
+            surfacedInThread: false,
+          },
+        },
+        activity: {
+          data: {
+            type: 'interrupt-status',
+            interruptType: 'operator-config',
+            status: 'pending',
+            surfacedInThread: false,
+          },
+        },
+      },
+    });
+    expect(persistedThreads.get(threadId)?.threadState).not.toHaveProperty('a2ui');
+    expect(persistedThreads.get(threadId)?.threadState.activityEvents ?? []).toEqual([]);
+    expect([...persistedInterrupts.values()][0]).toMatchObject({
+      status: 'pending',
+      surfacedInThread: false,
+    });
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId,
+        runId: 'run-hidden-refresh',
+        forwardedProps: {
+          command: {
+            name: 'refresh_status',
+          },
+        },
+      }),
+    );
+
+    expect(persistedThreads.get(threadId)?.threadState).toMatchObject({
+      artifacts: {
+        current: {
+          data: {
+            type: 'lifecycle-status',
+          },
+        },
+        activity: {
+          data: {
+            type: 'interrupt-status',
+            interruptType: 'operator-config',
+            status: 'pending',
+            surfacedInThread: false,
+          },
+        },
+      },
+    });
+    expect(persistedThreads.get(threadId)?.threadState.activityEvents ?? []).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'artifact',
+          artifact: expect.objectContaining({
+            data: expect.objectContaining({
+              type: 'lifecycle-status',
+            }),
+          }),
+        }),
+      ]),
+    );
+
+    const reconnectSnapshot = await readFirstMatchingEvent(
+      await runtime.service.connect({
+        threadId,
+        runId: 'run-hidden-reconnect',
+      }),
+      isStateSnapshotEvent,
+    );
+
+    expect(reconnectSnapshot).toBeDefined();
+    expect(
+      (reconnectSnapshot!.snapshot.thread.activity?.events ?? []).some(
+        (event) =>
+          event.type === 'artifact' &&
+          typeof event.artifact?.data === 'object' &&
+          event.artifact.data !== null &&
+          'type' in event.artifact.data &&
+          event.artifact.data.type === 'interrupt-status',
+      ),
+    ).toBe(false);
+    expect(reconnectSnapshot!.snapshot.thread.artifacts).toMatchObject({
+      current: {
+        data: {
+          type: 'lifecycle-status',
+        },
+      },
+      activity: {
+        data: {
+          type: 'interrupt-status',
+          interruptType: 'operator-config',
+          status: 'pending',
+          surfacedInThread: false,
+        },
+      },
+    });
+
+    const resumeEvents = await collectQueuedEvents(
+      await runtime.service.run({
+        threadId,
+        runId: 'run-hidden-resume',
+        forwardedProps: {
+          command: {
+            resume: {
+              operatorNote: 'safe window approved',
+            },
+          },
+        },
+      }),
+    );
+    const resumeDeltas = resumeEvents.filter(isStateDeltaEvent);
+    const domainResumeDelta = resumeDeltas.find((event) =>
+      event.delta.some(
+        (operation) =>
+          operation.op === 'replace' &&
+          operation.path === '/thread/lifecycle/onboardingStep' &&
+          operation.value === 'delegation-note',
+      ),
+    );
+
+    expect(domainResumeDelta).toBeDefined();
+    expect(domainResumeDelta!.delta).toContainEqual({
+      op: 'replace',
+      path: '/thread/lifecycle/operatorNote',
+      value: 'safe window approved',
+    });
+    expect(
+      resumeDeltas.some((event) =>
+        event.delta.some(
+          (operation) =>
+            operation.path.startsWith('/thread/activity/events/') &&
+            typeof operation.value === 'object' &&
+            operation.value !== null &&
+            'type' in operation.value &&
+            operation.value.type === 'artifact' &&
+            'artifact' in operation.value &&
+            typeof operation.value.artifact === 'object' &&
+            operation.value.artifact !== null &&
+            'data' in operation.value.artifact &&
+            typeof operation.value.artifact.data === 'object' &&
+            operation.value.artifact.data !== null &&
+            'type' in operation.value.artifact.data &&
+            operation.value.artifact.data.type === 'interrupt-status',
+        ),
+      ),
+    ).toBe(false);
+    expect(persistedThreads.get(threadId)?.threadState).not.toHaveProperty('a2ui');
+    expect(
+      (persistedThreads.get(threadId)?.threadState.activityEvents ?? []).some(
+        (event) =>
+          event.type === 'artifact' &&
+          typeof event.artifact?.data === 'object' &&
+          event.artifact.data !== null &&
+          'type' in event.artifact.data &&
+          event.artifact.data.type === 'interrupt-status',
+      ),
+    ).toBe(false);
+    expect([...persistedInterrupts.values()][0]).toMatchObject({
+      status: 'resolved',
+      surfacedInThread: false,
+      resolvedAt: expect.any(Date),
+    });
   });
 
   it('executes forwardedProps command before inference when both command and messages are present', async () => {
