@@ -220,7 +220,7 @@ describe('AAVEAdapter.getUserSummary', () => {
     ]);
   });
 
-  it('returns the requested reserve even when the user has no current exposure in it', async () => {
+  it('returns the requested reserve without injecting quote-only reserves into userReserves', async () => {
     const adapter = createAdapter();
     mockUserSummary(adapter);
 
@@ -249,26 +249,65 @@ describe('AAVEAdapter.getUserSummary', () => {
       availableLiquidity: '1000000',
       availableLiquidityUsd: '1000000',
     });
-    expect(response.userReserves).toContainEqual({
-      tokenUid: {
-        address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
-        chainId: '42161',
-      },
-      symbol: 'USDC',
-      name: 'USD Coin',
-      decimals: 6,
-      underlyingBalance: '0',
-      underlyingBalanceUsd: '0',
-      variableBorrows: '0',
-      variableBorrowsUsd: '0',
-      totalBorrows: '0',
-      totalBorrowsUsd: '0',
-      priceInUsd: '1',
-      priceInMarketReferenceCurrency: '100000000',
-      formattedPriceInMarketReferenceCurrency: '1',
-      availableLiquidity: '1000000',
-      availableLiquidityUsd: '1000000',
+    expect(response.userReserves).toHaveLength(2);
+    expect(
+      response.userReserves.some(
+        ({ tokenUid }) =>
+          tokenUid.address.toLowerCase() === '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+      ),
+    ).toBe(false);
+  });
+
+  it('does not duplicate an already surfaced reserve when tokenAddress casing differs', async () => {
+    const adapter = createAdapter();
+    Reflect.set(
+      adapter,
+      '_getUserSummary',
+      vi.fn().mockResolvedValue({
+        reserves: {
+          totalLiquidityUSD: '1',
+          totalCollateralUSD: '1',
+          totalBorrowsUSD: '0',
+          netWorthUSD: '1',
+          availableBorrowsUSD: '0',
+          currentLoanToValue: '0',
+          currentLiquidationThreshold: '0',
+          healthFactor: '1',
+          userReservesData: [
+            {
+              reserve: {
+                underlyingAsset: '0xAbCd000000000000000000000000000000000000',
+                symbol: 'TEST',
+                name: 'Test Token',
+                decimals: 18,
+                priceInUSD: '1',
+                priceInMarketReferenceCurrency: '100000000',
+                formattedPriceInMarketReferenceCurrency: '1',
+                availableLiquidity: '10',
+                availableLiquidityUSD: '10',
+              },
+              underlyingBalance: '1',
+              underlyingBalanceUSD: '1',
+              variableBorrows: '0',
+              variableBorrowsUSD: '0',
+              totalBorrows: '0',
+              totalBorrowsUSD: '0',
+            },
+          ],
+        },
+        getReserveByUnderlyingAsset: vi.fn().mockReturnValue(undefined),
+      }),
+    );
+
+    const response = await adapter.getUserSummary({
+      walletAddress,
+      tokenAddress: '0xabcd000000000000000000000000000000000000',
     });
+
+    expect(response.requestedReserve?.tokenUid.address).toBe(
+      '0xAbCd000000000000000000000000000000000000',
+    );
+    expect(response.userReserves).toHaveLength(1);
   });
 
   it('preserves aggregate lending fields when tokenAddress is used', async () => {

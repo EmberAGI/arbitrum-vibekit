@@ -356,15 +356,6 @@ export class AAVEAdapter {
         })()
       : undefined;
 
-    if (
-      requestedReserve &&
-      !userReservesFormatted.some(
-        ({ tokenUid }) => tokenUid.address.toLowerCase() === requestedReserve.tokenUid.address,
-      )
-    ) {
-      userReservesFormatted.push(requestedReserve);
-    }
-
     return {
       userReserves: userReservesFormatted,
       requestedReserve,
