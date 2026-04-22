@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useCallback, useEffect, useRef, type ComponentProps } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import type { Message } from '@ag-ui/core';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
 import { getAgentConfig, isRegisteredAgentId } from '@/config/agents';
@@ -9,6 +9,7 @@ import { useAgent } from '@/contexts/AgentContext';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { invokeAgentCommandRoute } from '@/utils/agentCommandRoute';
 import { getAgentThreadId } from '@/utils/agentThread';
+import { navigateToHref } from '@/utils/hardNavigation';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
 type UiPreviewFixture = 'managed';
@@ -114,7 +115,6 @@ function buildUiPreviewDomainProjection(args: {
 
 export default function AgentDetailRoute({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const router = useRouter();
   const searchParams = useSearchParams();
   const agent = useAgent();
   const { privyWallet } = usePrivyWalletClient();
@@ -151,10 +151,10 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const projectionHydrationKeyRef = useRef<string | null>(null);
 
   const handleBack = () => {
-    router.push('/hire-agents');
+    navigateToHref('/hire-agents');
   };
   const handleManagedOwnerNavigation = (ownerAgentId: string) => {
-    router.push(`/hire-agents/${ownerAgentId}`);
+    navigateToHref(`/hire-agents/${ownerAgentId}`);
   };
   const handleHire = onboardingOwnerAgentId
     ? () => handleManagedOwnerNavigation(onboardingOwnerAgentId)
@@ -176,12 +176,16 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
     selectedAgentId === 'agent-portfolio-manager' && agent.threadId
       ? agent.threadId
       : getAgentThreadId('agent-portfolio-manager', privyWallet?.address);
+  const lendingThreadId =
+    selectedAgentId === 'agent-ember-lending' && agent.threadId
+      ? agent.threadId
+      : getAgentThreadId('agent-ember-lending', privyWallet?.address);
 
   useEffect(() => {
     if (!routeHasRegisteredAgent) {
-      router.replace('/hire-agents');
+      navigateToHref('/hire-agents', { replace: true });
     }
-  }, [routeHasRegisteredAgent, router]);
+  }, [routeHasRegisteredAgent]);
 
   const handleManagedMandateSave = useCallback(
     async (input: Parameters<NonNullable<ComponentProps<typeof AgentDetailPage>['onManagedMandateSave']>>[0]) => {
@@ -205,20 +209,57 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         agent.applyDomainProjection(portfolioManagerUpdateResult.domainProjection);
       }
 
-      if (selectedAgentId === 'agent-ember-lending' && agent.threadId) {
-        const lendingHydrationResult = await invokeAgentCommandRoute({
-          agentId: 'agent-ember-lending',
-          threadId: agent.threadId,
-          command: {
-            name: 'hydrate_runtime_projection',
-          },
-        });
-        if (lendingHydrationResult.domainProjection) {
-          agent.applyDomainProjection(lendingHydrationResult.domainProjection);
+      const hydrationCommands: Array<{
+        agentId: 'agent-portfolio-manager' | 'agent-ember-lending';
+        threadId: string;
+        commandName: 'refresh_portfolio_state' | 'hydrate_runtime_projection';
+      }> = [
+        portfolioManagerThreadId
+          ? {
+              agentId: 'agent-portfolio-manager',
+              threadId: portfolioManagerThreadId,
+              commandName: 'refresh_portfolio_state',
+            }
+          : null,
+        lendingThreadId
+          ? {
+              agentId: 'agent-ember-lending',
+              threadId: lendingThreadId,
+              commandName: 'hydrate_runtime_projection',
+            }
+          : null,
+      ].filter(
+        (
+          command,
+        ): command is {
+          agentId: 'agent-portfolio-manager' | 'agent-ember-lending';
+          threadId: string;
+          commandName: 'refresh_portfolio_state' | 'hydrate_runtime_projection';
+        } => command !== null,
+      );
+
+      if (hydrationCommands.length > 0) {
+        const hydrationResults = await Promise.all(
+          hydrationCommands.map(async (command) => ({
+            agentId: command.agentId,
+            result: await invokeAgentCommandRoute({
+              agentId: command.agentId,
+              threadId: command.threadId,
+              command: {
+                name: command.commandName,
+              },
+            }),
+          })),
+        );
+        const activeHydrationResult = hydrationResults.find(
+          (result) => result.agentId === selectedAgentId,
+        )?.result;
+        if (activeHydrationResult?.domainProjection) {
+          agent.applyDomainProjection(activeHydrationResult.domainProjection);
         }
       }
     },
-    [agent, portfolioManagerThreadId, selectedAgentId],
+    [agent, lendingThreadId, portfolioManagerThreadId, selectedAgentId],
   );
 
   useEffect(() => {

@@ -72,6 +72,7 @@ function CaptureAgentList({
 describe('AgentListProvider integration', () => {
   let container: HTMLDivElement;
   let root: Root;
+  const fetchMock = vi.fn();
   const originalPollMs = process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_POLL_MS;
   const originalMaxConcurrent = process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT;
 
@@ -84,6 +85,11 @@ describe('AgentListProvider integration', () => {
     process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT = '2';
     vi.useFakeTimers();
     vi.clearAllMocks();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, agents: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
   });
 
   afterEach(async () => {
@@ -93,6 +99,7 @@ describe('AgentListProvider integration', () => {
     container.remove();
     process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_POLL_MS = originalPollMs;
     process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_MAX_CONCURRENT = originalMaxConcurrent;
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -176,6 +183,50 @@ describe('AgentListProvider integration', () => {
     latest?.upsertAgent('agent-clmm', { taskState: 'working' }, 'detail-connect');
     await flushEffects();
     expect(latest?.agents['agent-clmm']?.taskState).toBeUndefined();
+  });
+
+  it('hydrates hired-agent truth for both active and non-active agents from the dedicated read', async () => {
+    let latest: ReturnType<typeof useAgentList> | null = null;
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        agents: {
+          'agent-pendle': {
+            isHired: true,
+          },
+          'agent-clmm': {
+            isHired: true,
+          },
+          'agent-gmx-allora': {
+            isHired: false,
+          },
+        },
+      }),
+    });
+
+    await act(async () => {
+      root.render(
+        <AgentListProvider>
+          <CaptureAgentList
+            onSnapshot={(value) => {
+              latest = value;
+            }}
+          />
+        </AgentListProvider>,
+      );
+    });
+    await flushEffects();
+    await flushEffects();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/hired-agents?wallet=0x1111111111111111111111111111111111111111',
+      { cache: 'no-store' },
+    );
+    expect(latest?.agents['agent-pendle']?.isHired).toBe(true);
+    expect(latest?.agents['agent-clmm']?.isHired).toBe(true);
+    expect(latest?.agents['agent-gmx-allora']?.isHired).toBe(false);
   });
 
   it('hard-blocks agent-list polling for the active detail agent even if selection includes it', async () => {

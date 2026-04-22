@@ -425,7 +425,7 @@ function buildFamilyTreemapItem(
     valueLabel: formatUsdCompact(treemapValueUsd),
     shareLabel: totalGrossExposureUsd > 0 ? formatPercent(treemapValueUsd / totalGrossExposureUsd) : '0%',
     assetClass: family.semanticClass === 'cash' ? 'cash' : 'asset',
-    positionAccent: family.semanticClass === 'liability' ? 'liability' : family.semanticClass === 'cash' ? 'mint' : 'dark',
+    positionAccent: family.semanticClass === 'cash' ? 'mint' : 'dark',
     toneStyle: tones.toneStyle,
     hoverToneStyle: tones.hoverToneStyle,
     hoverChildren: family.observedAssets

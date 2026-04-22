@@ -111,11 +111,15 @@ describe('AgentDetailPage portfolio-manager setup', () => {
     const lendingAvatar = container.querySelector(
       'img[alt="Ember Lending"]',
     ) as HTMLImageElement | null;
+    const lendingLink = container.querySelector(
+      'a[aria-label="Open Ember Lending"]',
+    ) as HTMLAnchorElement | null;
     const submitButton = [...container.querySelectorAll('button')].find(
       (button) => button.textContent?.includes('Approve'),
     ) as HTMLButtonElement | undefined;
 
     expect(lendingAvatar?.getAttribute('src')).toBe('/ember-lending-avatar.svg');
+    expect(lendingLink?.getAttribute('href')).toBe('/hire-agents/agent-ember-lending');
     expect(editCollateralPolicyButton).not.toBeNull();
     expect(container.querySelector('button[aria-label="Edit maximum LTV"]')).toBeNull();
     expect(container.querySelector('button[aria-label="Edit minimum health factor"]')).toBeNull();

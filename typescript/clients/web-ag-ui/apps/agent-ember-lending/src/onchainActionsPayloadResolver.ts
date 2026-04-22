@@ -18,6 +18,7 @@ const SIGNING_RESOLUTION_ATTEMPTS = 2;
 const SIGNING_RESOLUTION_RETRY_DELAY_MS = 500;
 const MAX_UINT256 = ((1n << 256n) - 1n).toString();
 const AAVE_RESERVE_FROZEN_ERROR_SELECTOR = '0x6d305815';
+const AAVE_COLLATERAL_CANNOT_COVER_NEW_BORROW_ERROR_SELECTOR = '0x911ceb81';
 
 const HexStringSchema = z.string().regex(/^0x[0-9a-fA-F]+$/u);
 const AddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/u);
@@ -200,6 +201,8 @@ function describeKnownProtocolRevert(error: unknown): string | null {
   switch (revertData.slice(0, 10)) {
     case AAVE_RESERVE_FROZEN_ERROR_SELECTOR:
       return 'Aave rejected the requested borrow because the reserve is frozen. Create a new borrow plan for a different asset.';
+    case AAVE_COLLATERAL_CANNOT_COVER_NEW_BORROW_ERROR_SELECTOR:
+      return 'Aave rejected the requested borrow because the current collateral cannot cover the new borrow at that exact amount. Refresh the plan or use a smaller amount. For max borrow, prefer quantity kind percent with value 100 so Shared Ember computes the live protocol-safe exact amount.';
     default:
       return null;
   }

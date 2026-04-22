@@ -121,9 +121,13 @@ describe('AgentDetailPage managed mandate editor', () => {
     });
 
     const lendingAvatar = container.querySelector('img[alt="Ember Lending"]');
+    const lendingLink = container.querySelector(
+      'a[aria-label="Open Ember Lending"]',
+    ) as HTMLAnchorElement | null;
 
     expect(lendingAvatar).not.toBeNull();
     expect(lendingAvatar?.getAttribute('src')).toBe('/ember-lending-avatar.svg');
+    expect(lendingLink?.getAttribute('href')).toBe('/hire-agents/agent-ember-lending');
     expect(container.textContent).toContain('Aave');
 
     await act(async () => {

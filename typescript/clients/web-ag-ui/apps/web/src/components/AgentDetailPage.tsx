@@ -94,6 +94,7 @@ import {
   readManagedLendingCollateralPolicies,
 } from '../utils/managedMandate';
 import { ManagedMandateWorkbenchCard } from './ManagedMandateWorkbenchCard';
+import { HardNavLink } from './ui/HardNavLink';
 import {
   buildPiExampleInterruptA2UiView,
   buildPiExampleStatusA2UiView,
@@ -577,10 +578,15 @@ function PortfolioManagerMandateWorkbenchShell(props: {
   children: ReactNode;
 }) {
   const lendingAgentConfig = getAgentConfig('agent-ember-lending');
+  const lendingAgentHref = `/hire-agents/${lendingAgentConfig.id}`;
 
   return (
     <div className="flex items-stretch gap-4">
-      <div className="flex w-[92px] shrink-0 flex-col items-center justify-center gap-2 self-stretch border-r border-[#eadac7] pr-4 text-center">
+      <HardNavLink
+        href={lendingAgentHref}
+        aria-label="Open Ember Lending"
+        className="flex w-[92px] shrink-0 flex-col items-center justify-center gap-2 self-stretch border-r border-[#eadac7] pr-4 text-center transition-colors hover:text-[#2f2118]"
+      >
         <div
           className="mx-auto flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-[#f4ece1]"
           style={lendingAgentConfig.imageUrl && lendingAgentConfig.avatarBg
@@ -605,7 +611,7 @@ function PortfolioManagerMandateWorkbenchShell(props: {
         <div className="text-[11px] font-medium leading-[1.1] text-[#503826]">
           Lending
         </div>
-      </div>
+      </HardNavLink>
       <div className="min-w-0 flex-1 self-stretch">{props.children}</div>
     </div>
   );

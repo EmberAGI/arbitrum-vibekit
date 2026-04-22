@@ -6,17 +6,14 @@ import {
   ChevronRight,
   Bot,
   Trophy,
-  AlertCircle,
-  Terminal,
-  CheckCircle,
 } from 'lucide-react';
 import Image from 'next/image';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
 import type { Chain } from 'viem';
 import { defaultEvmChain, supportedEvmChains } from '@/config/evmChains';
+import { useOnchainActionsIconMaps } from '@/hooks/useOnchainActionsIconMaps';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
 import { useAgent } from '@/contexts/AgentContext';
@@ -38,8 +35,12 @@ import { extractTaskStatusMessage } from '@/utils/extractTaskStatusMessage';
 import { isPrivyConfigured } from '@/utils/privyConfig';
 import { invokeAgentCommandRoute } from '@/utils/agentCommandRoute';
 import { getAgentThreadId } from '@/utils/agentThread';
+import { normalizeSymbolKey } from '@/utils/iconResolution';
+import { navigateToHref } from '@/utils/hardNavigation';
+import { HardNavLink } from '@/components/ui/HardNavLink';
 import {
   SidebarActivityCard,
+  SidebarAgentAvatar,
   type SidebarActivityCardControlSlice,
   type SidebarActivityCardTokenSlice,
   type SidebarActivityCardView,
@@ -48,7 +49,7 @@ import {
 export interface AgentActivity {
   id: string;
   name: string;
-  subtitle: string;
+  subtitle?: string;
   status: 'active' | 'blocked' | 'completed';
   timestamp?: string;
   config: AgentConfig;
@@ -57,15 +58,19 @@ export interface AgentActivity {
 
 const ETHEREUM_MAINNET_CHAIN_ID = 1;
 const PORTFOLIO_AGENT_ID = 'agent-portfolio-manager';
+const HIRE_AGENTS_HREF = '/hire-agents';
 const PORTFOLIO_AGENT_CHAT_HREF = `/hire-agents/${PORTFOLIO_AGENT_ID}?tab=chat`;
 const NAV_ACCENT_PALETTE = ['#3566E8', '#7A5AF8', '#0EA5E9', '#D84E8F', '#4F46E5'] as const;
 const UNALLOCATED_ACCENT_HEX = '#CDBFB3';
 
 type SidebarProjectionCardData = {
   valueUsd: number;
+  positiveAssetsUsd: number;
+  liabilitiesUsd: number;
   allocationShare: number;
   tokenBreakdown: SidebarActivityCardTokenSlice[];
   controlBreakdown?: SidebarActivityCardControlSlice[];
+  thirtyDayPnlPct?: number;
 };
 
 export function getWalletSelectorChains(chains: readonly Chain[]): Chain[] {
@@ -78,13 +83,20 @@ export function getSidebarAgentHref(agentId: string): string {
   return agentId === PORTFOLIO_AGENT_ID ? PORTFOLIO_AGENT_CHAT_HREF : `/hire-agents/${agentId}`;
 }
 
+function getActiveSidebarAgentId(pathname: string | null): string | null {
+  if (!pathname?.startsWith('/hire-agents/')) {
+    return null;
+  }
+
+  const pathWithoutQuery = pathname.split('?')[0] ?? pathname;
+  const routeAgentId = pathWithoutQuery.slice('/hire-agents/'.length).split('/')[0] ?? '';
+  return routeAgentId.length > 0 ? routeAgentId : null;
+}
+
 export function AppSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const [isAgentsExpanded, setIsAgentsExpanded] = useState(true);
-  const [isBlockedExpanded, setIsBlockedExpanded] = useState(true);
-  const [isActiveExpanded, setIsActiveExpanded] = useState(true);
-  const [isCompletedExpanded, setIsCompletedExpanded] = useState(false);
+  const [isActivityRailCollapsed, setIsActivityRailCollapsed] = useState(false);
   const [isChainMenuOpen, setIsChainMenuOpen] = useState(false);
   const [isAddressPopoverOpen, setIsAddressPopoverOpen] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -123,6 +135,7 @@ export function AppSidebar() {
   const runtimeLifecyclePhase = agent.uiState.lifecycle?.phase;
   const runtimeHaltReason = agent.uiState.haltReason;
   const runtimeExecutionError = agent.uiState.executionError;
+  const runtimeIsHired = agent.uiState.selectors?.isHired;
   const portfolioManagerThreadId = getAgentThreadId(PORTFOLIO_AGENT_ID, privyWallet?.address);
   const portfolioManagerSnapshotCacheKey = portfolioManagerThreadId
     ? `${PORTFOLIO_AGENT_ID}:${portfolioManagerThreadId}`
@@ -139,43 +152,49 @@ export function AppSidebar() {
     taskMessage: runtimeTaskMessage,
   }) as TaskState | undefined;
 
-  const blockedAgents: AgentActivity[] = [];
-  const activeAgents: AgentActivity[] = [];
-  const completedAgents: AgentActivity[] = [];
+  const pinnedAgents: AgentActivity[] = [];
 
   agentConfigs.forEach((config) => {
     const listEntry = listAgents[config.id];
     const useRuntime = runtimeAgentId === config.id;
+    const resolvedTaskState = useRuntime
+      ? resolveSidebarTaskState({
+          listTaskState: listEntry?.taskState,
+          listLifecyclePhase: listEntry?.lifecyclePhase,
+          listOnboardingStatus: listEntry?.onboardingStatus,
+          runtimeTaskState,
+          runtimeLifecyclePhase,
+          runtimeOnboardingStatus: agent.uiState.onboardingFlow?.status,
+          runtimeTaskMessage,
+          fallbackToListWhenRuntimeMissing: false,
+        })
+      : listEntry?.taskState;
     const entry = useRuntime
       ? {
           ...listEntry,
           taskId: runtimeTaskId,
-          taskState: resolveSidebarTaskState({
-            listTaskState: listEntry?.taskState,
-            listLifecyclePhase: listEntry?.lifecyclePhase,
-            listOnboardingStatus: listEntry?.onboardingStatus,
-            runtimeTaskState,
-            runtimeLifecyclePhase,
-            runtimeOnboardingStatus: agent.uiState.onboardingFlow?.status,
-            runtimeTaskMessage,
-            fallbackToListWhenRuntimeMissing: false,
-          }),
+          taskState: resolvedTaskState,
           taskMessage: runtimeTaskMessage,
           haltReason: runtimeHaltReason,
           executionError: runtimeExecutionError,
+          lifecyclePhase: (runtimeLifecyclePhase as AgentListEntry['lifecyclePhase']) ?? listEntry?.lifecyclePhase,
+          onboardingStatus: agent.uiState.onboardingFlow?.status ?? listEntry?.onboardingStatus,
         }
       : listEntry;
-
-    let taskState = entry?.taskState;
-    if (!taskState) {
+    const isPinned =
+      shouldPinSidebarAgent({
+        entry,
+        useRuntime,
+        runtimeTaskId: useRuntime ? runtimeTaskId : undefined,
+        runtimeLifecyclePhase: useRuntime ? runtimeLifecyclePhase : undefined,
+        runtimeOnboardingStatus: useRuntime ? agent.uiState.onboardingFlow?.status : undefined,
+        runtimeIsHired: useRuntime ? runtimeIsHired : undefined,
+      });
+    if (!isPinned) {
       return;
     }
 
-    const taskId = entry.taskId ?? config.id;
-    const needsInput = taskState === 'input-required';
-    const hasError = taskState === 'failed';
-    const isBlocked = needsInput || hasError;
-    const isCompleted = taskState === 'completed' || taskState === 'canceled';
+    const status = resolvePinnedAgentStatus(entry?.taskState);
 
     if (debugStatus && runtimeAgentId === config.id) {
       console.debug('[AppSidebar] runtime classification', {
@@ -185,41 +204,16 @@ export function AppSidebar() {
         runtimeTaskState,
         runtimeTaskMessage,
         listTaskState: listEntry?.taskState,
-        resolvedTaskState: taskState,
-        isBlocked,
-        isCompleted,
+        resolvedTaskState: entry?.taskState,
+        isPinned,
+        status,
       });
     }
 
-    if (isBlocked) {
-      blockedAgents.push({
-        id: config.id,
-        name: config.name,
-        subtitle: needsInput ? 'Set up agent' : 'Blocked',
-        status: 'blocked',
-        config,
-        entry,
-      });
-      return;
-    }
-
-    if (isCompleted) {
-      completedAgents.push({
-        id: config.id,
-        name: config.name,
-        subtitle: taskState === 'canceled' ? 'Canceled' : 'Completed',
-        status: 'completed',
-        config,
-        entry,
-      });
-      return;
-    }
-
-    activeAgents.push({
+    pinnedAgents.push({
       id: config.id,
       name: config.name,
-      subtitle: taskState === 'working' ? 'Active' : `Task: ${taskState}`,
-      status: 'active',
+      status,
       config,
       entry,
     });
@@ -295,7 +289,7 @@ export function AppSidebar() {
 
   const walletSelectorChains = useMemo(() => getWalletSelectorChains(supportedEvmChains), []);
   const selectedChain = walletSelectorChains.find((chain) => chain.id === chainId) ?? defaultEvmChain;
-  const allActivityAgents = [...blockedAgents, ...activeAgents, ...completedAgents];
+  const allActivityAgents = pinnedAgents;
   const portfolioProjectionInput = cachedPortfolioProjectionInput ?? fetchedPortfolioProjectionInput;
   const portfolioProjection = useMemo<PortfolioProjectionPacket | null>(() => {
     if (!portfolioProjectionInput) {
@@ -304,6 +298,7 @@ export function AppSidebar() {
 
     return buildPortfolioProjection(portfolioProjectionInput);
   }, [portfolioProjectionInput]);
+  const activeSidebarAgentId = getActiveSidebarAgentId(pathname);
   const totalKnownExposureUsd = allActivityAgents.reduce((total, activity) => {
     const nextValue = resolveGrossExposureUsd(activity.entry);
     return nextValue !== undefined ? total + nextValue : total;
@@ -326,17 +321,64 @@ export function AppSidebar() {
       }),
     [accentColorByAgentId, allActivityAgents, portfolioProjection],
   );
-  const activityCardViewsById = Object.fromEntries(
-    allActivityAgents.map((activity) => [
-      activity.id,
-      buildSidebarActivityCardView({
-        activity,
-        totalKnownExposureUsd,
-        portfolioControlBreakdown: specialistControlBreakdown,
-        projectionCardData: projectionCardDataByAgentId.get(activity.id),
-      }),
-    ]),
-  ) as Record<string, SidebarActivityCardView>;
+  const baseActivityCardViewsById = useMemo(
+    () =>
+      Object.fromEntries(
+        allActivityAgents.map((activity) => [
+          activity.id,
+          buildSidebarActivityCardView({
+            activity,
+            totalKnownExposureUsd,
+            portfolioControlBreakdown: specialistControlBreakdown,
+            projectionCardData: projectionCardDataByAgentId.get(activity.id),
+          }),
+        ]),
+      ) as Record<string, SidebarActivityCardView>,
+    [allActivityAgents, projectionCardDataByAgentId, specialistControlBreakdown, totalKnownExposureUsd],
+  );
+  const sidebarTokenSymbols = useMemo(() => {
+    const seen = new Set<string>();
+    const tokens: string[] = [];
+
+    Object.values(baseActivityCardViewsById).forEach((card) => {
+      card.tokenBreakdown.forEach((slice) => {
+        const symbol = slice.asset.trim();
+        if (symbol.length === 0 || seen.has(symbol)) {
+          return;
+        }
+        seen.add(symbol);
+        tokens.push(symbol);
+      });
+    });
+
+    return tokens;
+  }, [baseActivityCardViewsById]);
+  const { tokenIconBySymbol: sidebarTokenIconBySymbol } = useOnchainActionsIconMaps({
+    chainNames: [],
+    tokenSymbols: sidebarTokenSymbols,
+  });
+  const activityCardViewsById = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(baseActivityCardViewsById).map(([agentId, card]) => [
+          agentId,
+          {
+            ...card,
+            tokenBreakdown: card.tokenBreakdown.map((slice) => ({
+              ...slice,
+              iconUri:
+                slice.iconUri ??
+                sidebarTokenIconBySymbol[normalizeSymbolKey(slice.asset)] ??
+                null,
+              fallbackIconSymbol: slice.fallbackIconSymbol ?? slice.asset,
+            })),
+          },
+        ]),
+      ) as Record<string, SidebarActivityCardView>,
+    [baseActivityCardViewsById, sidebarTokenIconBySymbol],
+  );
+  const portfolioActivity = allActivityAgents.find((activity) => activity.id === PORTFOLIO_AGENT_ID) ?? null;
+  const specialistActivities = allActivityAgents.filter((activity) => activity.id !== PORTFOLIO_AGENT_ID);
 
   const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
 
@@ -416,7 +458,7 @@ export function AppSidebar() {
 
   // Navigate to agent detail page when clicking on an agent in the sidebar
   const handleAgentClick = (agentId: string) => {
-    router.push(getSidebarAgentHref(agentId));
+    navigateToHref(getSidebarAgentHref(agentId));
   };
 
   const canSelectChain =
@@ -457,7 +499,7 @@ export function AppSidebar() {
             Platform
           </div>
           <div className="space-y-1">
-            <Link
+            <HardNavLink
               href={PORTFOLIO_AGENT_CHAT_HREF}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
                 isPortfolioAgentActive
@@ -470,7 +512,7 @@ export function AppSidebar() {
               )}
               <MessageSquare className="w-4 h-4 text-[#9B7C63]" />
               <span className="text-sm font-medium text-[#2C1E17]">Ember Portfolio Agent</span>
-            </Link>
+            </HardNavLink>
 
             {/* Agents */}
             <div>
@@ -491,8 +533,8 @@ export function AppSidebar() {
 
               {isAgentsExpanded && (
                 <div className="ml-7 mt-1.5 space-y-1">
-                  <Link
-                    href="/hire-agents"
+                  <HardNavLink
+                    href={HIRE_AGENTS_HREF}
                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
                       isHireAgentsActive
                         ? 'text-[#241813]'
@@ -503,8 +545,8 @@ export function AppSidebar() {
                       <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
                     )}
                     Hire
-                  </Link>
-                  <Link
+                  </HardNavLink>
+                  <HardNavLink
                     href="/acquire"
                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
                       isAcquireActive
@@ -516,13 +558,13 @@ export function AppSidebar() {
                       <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
                     )}
                     Acquire
-                  </Link>
+                  </HardNavLink>
                 </div>
               )}
             </div>
 
             {/* Leaderboard */}
-            <Link
+            <HardNavLink
               href="/leaderboard"
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
                 isLeaderboardActive
@@ -535,54 +577,62 @@ export function AppSidebar() {
               )}
               <Trophy className="w-4 h-4 text-[#9B7C63]" />
               <span className="text-sm font-medium text-[#2C1E17]">Leaderboard</span>
-            </Link>
+            </HardNavLink>
           </div>
         </div>
 
         {/* Agent Activity Section */}
         <div>
-          <div className="text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em] px-2 mb-3">
-            Agent Activity
+          <div className="flex items-center justify-between gap-3 px-2">
+            <div className="text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em]">
+              Agent Activity
+            </div>
+            <button
+              type="button"
+              aria-label={
+                isActivityRailCollapsed
+                  ? 'Expand agent activity rail'
+                  : 'Collapse agent activity rail'
+              }
+              onClick={() => setIsActivityRailCollapsed((value) => !value)}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#E7DBD0] bg-[#FCF8F3] text-[#8C7F72] transition hover:text-[#D97B3D]"
+            >
+              {isActivityRailCollapsed ? '›' : '‹'}
+            </button>
           </div>
 
-          {/* Blocked Agents */}
-          <ActivitySection
-            title="Blocked"
-            count={blockedAgents.length}
-            agents={blockedAgents}
-            cardViews={activityCardViewsById}
-            isExpanded={isBlockedExpanded}
-            onToggle={() => setIsBlockedExpanded(!isBlockedExpanded)}
-            badgeColor="bg-[#FCE6E4] text-[#B84C38]"
-            icon={<AlertCircle className="w-4 h-4 text-[#A98C74]" />}
-            onAgentClick={handleAgentClick}
-          />
+          {isActivityRailCollapsed ? (
+            <CollapsedActivityRail
+              portfolioActivity={portfolioActivity}
+              specialistActivities={specialistActivities}
+              activeAgentId={activeSidebarAgentId}
+              onAgentClick={handleAgentClick}
+              hireAgentsHref={HIRE_AGENTS_HREF}
+            />
+          ) : (
+            <>
+              {portfolioActivity ? (
+                <div className="mt-4">
+                  <SidebarActivityCard
+                    card={
+                      activityCardViewsById[portfolioActivity.id] ??
+                      buildFallbackCardView(portfolioActivity)
+                    }
+                    active={activeSidebarAgentId === portfolioActivity.id}
+                    onClick={() => handleAgentClick(portfolioActivity.id)}
+                  />
+                </div>
+              ) : null}
 
-          {/* Active Agents */}
-          <ActivitySection
-            title="Active"
-            count={activeAgents.length}
-            agents={activeAgents}
-            cardViews={activityCardViewsById}
-            isExpanded={isActiveExpanded}
-            onToggle={() => setIsActiveExpanded(!isActiveExpanded)}
-            badgeColor="bg-[#E6F1E8] text-[#4E7A58]"
-            icon={<Terminal className="w-4 h-4 text-[#A98C74]" />}
-            onAgentClick={handleAgentClick}
-          />
-
-          {/* Completed Agents */}
-          <ActivitySection
-            title="Completed"
-            count={completedAgents.length}
-            agents={completedAgents}
-            cardViews={activityCardViewsById}
-            isExpanded={isCompletedExpanded}
-            onToggle={() => setIsCompletedExpanded(!isCompletedExpanded)}
-            badgeColor="bg-[#E8EDF8] text-[#5D73B5]"
-            icon={<CheckCircle className="w-4 h-4 text-[#A98C74]" />}
-            onAgentClick={handleAgentClick}
-          />
+              <SpecialistActivitySection
+                agents={specialistActivities}
+                cardViews={activityCardViewsById}
+                activeAgentId={activeSidebarAgentId}
+                onAgentClick={handleAgentClick}
+                addAgentHref={HIRE_AGENTS_HREF}
+              />
+            </>
+          )}
         </div>
       </div>
 
@@ -711,12 +761,12 @@ export function AppSidebar() {
             </div>
 
             <div className="mt-2 border-t border-[#DDC8B3] pt-2">
-              <Link
+              <HardNavLink
                 href="/wallet"
                 className="inline-flex text-xs text-[#7B6758] hover:text-[#241813] transition-colors"
               >
                 Manage Wallet
-              </Link>
+              </HardNavLink>
             </div>
 
             {isAddressPopoverOpen && (
@@ -780,74 +830,181 @@ export function AppSidebar() {
   );
 }
 
-interface ActivitySectionProps {
-  title: string;
-  count: number;
+interface SpecialistActivitySectionProps {
   agents: AgentActivity[];
   cardViews: Record<string, SidebarActivityCardView>;
-  isExpanded: boolean;
-  onToggle: () => void;
-  badgeColor: string;
-  icon: React.ReactNode;
+  activeAgentId: string | null;
   onAgentClick?: (agentId: string) => void;
+  addAgentHref: string;
 }
 
-function ActivitySection({
-  title,
-  count,
+function SpecialistActivitySection({
   agents,
   cardViews,
-  isExpanded,
-  onToggle,
-  badgeColor,
-  icon,
+  activeAgentId,
   onAgentClick,
-}: ActivitySectionProps) {
-  const hasAgents = agents.length > 0;
+  addAgentHref,
+}: SpecialistActivitySectionProps) {
+  const listViewportRef = useRef<HTMLDivElement | null>(null);
+  const [showTopFade, setShowTopFade] = useState(false);
+  const [showBottomFade, setShowBottomFade] = useState(false);
+
+  const syncScrollFades = () => {
+    const viewport = listViewportRef.current;
+    if (!viewport) {
+      setShowTopFade(false);
+      setShowBottomFade(false);
+      return;
+    }
+
+    const scrollThreshold = 2;
+    const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    setShowTopFade(viewport.scrollTop > scrollThreshold);
+    setShowBottomFade(maxScrollTop - viewport.scrollTop > scrollThreshold);
+  };
+
+  useEffect(() => {
+    syncScrollFades();
+
+    const handleResize = () => {
+      syncScrollFades();
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [agents]);
 
   return (
-    <div className="mb-2">
-      <button
-        onClick={onToggle}
-        disabled={!hasAgents}
-        className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left transition-colors ${
-          hasAgents ? 'hover:bg-[#F0E2D2]' : 'cursor-default'
-        }`}
-      >
-        <div className="flex items-center gap-2">
-          {icon}
-          <span className={`text-sm ${!hasAgents ? 'text-[#A88F7A]' : 'text-[#3C2A21]'}`}>{title}</span>
-          <span
-            className={`text-[11px] font-mono px-2 py-0.5 rounded-full border ${
-              hasAgents ? `${badgeColor} border-current/20` : 'bg-[#EFE4D7] text-[#A88F7A] border-[#D9C6B1]'
-            }`}
-          >
-            {count}
-          </span>
+    <div className="group/specialists mt-4 border-t border-[#E4D5C7] pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8C7F72]">
+          Specialists
         </div>
-        {hasAgents && (
-          <>
-            {isExpanded ? (
-              <ChevronDown className="w-4 h-4 text-[#9B7C63]" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-[#9B7C63]" />
-            )}
-          </>
-        )}
-      </button>
+        {addAgentHref ? (
+          <HardNavLink
+            href={addAgentHref}
+            aria-label="Hire agents"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-[8px] border border-[#E7DBD0] bg-[#FCF8F3] font-mono text-[11px] leading-none text-[#8C7F72] opacity-0 transition group-hover/specialists:opacity-100 group-focus-within/specialists:opacity-100 hover:border-[#E8C9AA] hover:text-[#D97B3D]"
+          >
+            +
+          </HardNavLink>
+        ) : null}
+      </div>
 
-      {isExpanded && hasAgents && (
-        <div className="mt-1.5 ml-4 space-y-1.5">
-          {agents.map((agentItem) => (
-            <SidebarActivityCard
-              key={agentItem.id}
-              card={cardViews[agentItem.id] ?? buildFallbackCardView(agentItem)}
-              onClick={() => onAgentClick?.(agentItem.id)}
-            />
+      <div className="mt-2.5">
+        <div className="relative">
+          {showTopFade ? (
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-[#F7EFE3] via-[#F7EFE3]/95 to-transparent" />
+          ) : null}
+          <div
+            ref={listViewportRef}
+            onScroll={syncScrollFades}
+            className="max-h-[26rem] space-y-1.5 overflow-y-auto pr-1"
+          >
+            {agents.map((agentItem) => (
+              <SidebarActivityCard
+                key={agentItem.id}
+                card={cardViews[agentItem.id] ?? buildFallbackCardView(agentItem)}
+                active={activeAgentId === agentItem.id}
+                onClick={() => onAgentClick?.(agentItem.id)}
+              />
+            ))}
+            <AddAgentCard href={addAgentHref} />
+          </div>
+          {showBottomFade ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-[#F7EFE3] via-[#F7EFE3]/95 to-transparent" />
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CollapsedActivityRail(props: {
+  portfolioActivity: AgentActivity | null;
+  specialistActivities: AgentActivity[];
+  activeAgentId: string | null;
+  onAgentClick?: (agentId: string) => void;
+  hireAgentsHref: string;
+}) {
+  const portfolioActivity = props.portfolioActivity;
+
+  return (
+    <div className="mt-4 flex flex-col items-center">
+      {portfolioActivity ? (
+        <button
+          type="button"
+          aria-label={portfolioActivity.name}
+          onClick={() => props.onAgentClick?.(portfolioActivity.id)}
+          className={`rounded-[12px] transition ${
+            props.activeAgentId === portfolioActivity.id
+              ? 'ring-1 ring-[#FF9C5A]'
+              : 'hover:ring-1 hover:ring-[#E8C9AA]'
+          }`}
+        >
+          <SidebarAgentAvatar
+            agentId={portfolioActivity.id}
+            className="h-8 w-8 rounded-[10px]"
+          />
+        </button>
+      ) : null}
+
+      {portfolioActivity && props.specialistActivities.length > 0 ? (
+        <div className="mt-3 h-px w-5 bg-[#E4D5C7]" />
+      ) : null}
+
+      {props.specialistActivities.length > 0 ? (
+        <div className="mt-3 flex flex-col items-center gap-2.5">
+          {props.specialistActivities.map((activity) => (
+            <button
+              key={activity.id}
+              type="button"
+              aria-label={activity.name}
+              onClick={() => props.onAgentClick?.(activity.id)}
+              className={`rounded-[12px] transition ${
+                props.activeAgentId === activity.id
+                  ? 'ring-1 ring-[#FF9C5A]'
+                  : 'hover:ring-1 hover:ring-[#E8C9AA]'
+              }`}
+            >
+              <SidebarAgentAvatar agentId={activity.id} className="h-8 w-8 rounded-[10px]" />
+            </button>
           ))}
         </div>
-      )}
+      ) : null}
+
+      <HardNavLink
+        href={props.hireAgentsHref}
+        aria-label="Hire specialists"
+        className="mt-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#E7DBD0] bg-[#FCF8F3] font-mono text-[11px] leading-none text-[#8C7F72] transition hover:border-[#E8C9AA] hover:text-[#D97B3D]"
+      >
+        +
+      </HardNavLink>
     </div>
+  );
+}
+
+function AddAgentCard(props: { href: string }) {
+  return (
+    <HardNavLink
+      href={props.href}
+      aria-label="Add agent"
+      className="flex w-full items-center gap-3 rounded-[18px] border border-dashed border-[#E1D4C7] bg-[#FBF7F2] px-3 py-3 text-left transition hover:border-[#E8C9AA] hover:bg-[#FFF7F2]"
+    >
+      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-[#E7DBD0] bg-[#FCF8F3] font-mono text-[18px] leading-none text-[#8C7F72]">
+        +
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-mono text-[10px] uppercase tracking-[0.16em] text-[#8C7F72]">
+          Hire agent
+        </span>
+        <span className="mt-1 block text-[13px] font-semibold tracking-[-0.03em] text-[#6D5B4C]">
+          Add specialist
+        </span>
+      </span>
+    </HardNavLink>
   );
 }
 
@@ -880,9 +1037,14 @@ function buildSidebarActivityCardView(params: {
     statusLabel: params.activity.subtitle,
     statusTone: params.activity.status,
     valueUsd: grossExposureUsd,
+    positiveAssetsUsd:
+      params.projectionCardData?.positiveAssetsUsd ??
+      (grossExposureUsd !== undefined ? grossExposureUsd : undefined),
+    liabilitiesUsd: params.projectionCardData?.liabilitiesUsd ?? 0,
     allocationShare,
     metricBadge: resolveMetricBadge(params.activity.entry, params.activity.status),
     allocationShareLabel: params.projectionCardData ? 'portfolio' : 'tracked exposure',
+    thirtyDayPnlPct: params.projectionCardData?.thirtyDayPnlPct,
     tokenBreakdown:
       params.projectionCardData?.tokenBreakdown ??
       buildTokenBreakdown({
@@ -906,21 +1068,74 @@ function resolveGrossExposureUsd(entry: AgentListEntry | undefined): number | un
 
 function resolveMetricBadge(
   entry: AgentListEntry | undefined,
-  status: AgentActivity['status'],
+  _status: AgentActivity['status'],
 ): string | undefined {
   const apy = entry?.metrics?.apy ?? entry?.profile?.apy;
   if (typeof apy === 'number' && Number.isFinite(apy)) {
     return `${formatMetricNumber(apy)}% APY`;
   }
+  return undefined;
+}
 
-  if (status === 'blocked') {
-    return 'Needs input';
-  }
-  if (status === 'completed') {
-    return 'Done';
+function hasPinnedSidebarEvidence(entry: AgentListEntry | undefined): boolean {
+  if (!entry?.synced) {
+    return false;
   }
 
-  return 'Active';
+  return Boolean(
+    entry.taskId ||
+      entry.taskState ||
+      entry.profile ||
+      entry.metrics ||
+      entry.lifecyclePhase === 'active' ||
+      entry.onboardingStatus === 'completed' ||
+      entry.onboardingStatus === 'failed' ||
+      entry.onboardingStatus === 'canceled',
+  );
+}
+
+function shouldPinSidebarAgent(params: {
+  entry: AgentListEntry | undefined;
+  useRuntime: boolean;
+  runtimeTaskId?: string | null;
+  runtimeLifecyclePhase?: string | null;
+  runtimeOnboardingStatus?: AgentListEntry['onboardingStatus'];
+  runtimeIsHired?: boolean;
+}): boolean {
+  if (params.entry?.isHired) {
+    return true;
+  }
+
+  if (hasPinnedSidebarEvidence(params.entry)) {
+    return true;
+  }
+
+  if (!params.useRuntime) {
+    return false;
+  }
+
+  return Boolean(
+    params.runtimeIsHired ||
+    params.runtimeTaskId ||
+      params.runtimeLifecyclePhase === 'active' ||
+      params.runtimeOnboardingStatus === 'completed' ||
+      params.runtimeOnboardingStatus === 'failed' ||
+      params.runtimeOnboardingStatus === 'canceled',
+  );
+}
+
+function resolvePinnedAgentStatus(
+  taskState: AgentListEntry['taskState'] | undefined,
+): AgentActivity['status'] {
+  if (taskState === 'input-required' || taskState === 'failed') {
+    return 'blocked';
+  }
+
+  if (taskState === 'completed' || taskState === 'canceled') {
+    return 'completed';
+  }
+
+  return 'active';
 }
 
 function buildTokenBreakdown(params: {
@@ -1061,27 +1276,43 @@ function buildSidebarProjectionCardDataByAgentId(params: {
     return new Map();
   }
 
+  const portfolio = params.portfolio;
   const activityNameByAgentId = new Map(
     params.activities.map((activity) => [activity.id, activity.name] as const),
   );
-  const portfolioGrossExposureUsd = params.portfolio.agents.portfolio.grossExposureUsd;
-  const specialistControlledUsd = params.portfolio.agents.specialists.reduce(
+  const routeAgentIdByProjectionAgentId = new Map<string, string>();
+
+  params.activities.forEach((activity) => {
+    routeAgentIdByProjectionAgentId.set(activity.id, activity.id);
+    if (activity.id.startsWith('agent-')) {
+      routeAgentIdByProjectionAgentId.set(activity.id.slice('agent-'.length), activity.id);
+    }
+  });
+  const portfolioGrossExposureUsd = portfolio.agents.portfolio.grossExposureUsd;
+  const specialistControlledUsd = portfolio.agents.specialists.reduce(
     (sum, allocation) => sum + allocation.grossExposureUsd,
     0,
   );
-  const specialistSlices = params.portfolio.agents.specialists.map((allocation) => ({
-    id: allocation.agentId,
-    label: activityNameByAgentId.get(allocation.agentId) ?? formatAgentIdLabel(allocation.agentId),
-    share: portfolioGrossExposureUsd > 0 ? allocation.grossExposureUsd / portfolioGrossExposureUsd : 0,
-    colorHex: params.accentColorByAgentId.get(allocation.agentId) ?? NAV_ACCENT_PALETTE[0],
-  }));
+  const specialistSlices = portfolio.agents.specialists.map((allocation) => {
+    const routeAgentId =
+      routeAgentIdByProjectionAgentId.get(allocation.agentId) ?? allocation.agentId;
+
+    return {
+      id: routeAgentId,
+      label: activityNameByAgentId.get(routeAgentId) ?? formatAgentIdLabel(allocation.agentId),
+      share: portfolioGrossExposureUsd > 0 ? allocation.grossExposureUsd / portfolioGrossExposureUsd : 0,
+      colorHex: params.accentColorByAgentId.get(routeAgentId) ?? NAV_ACCENT_PALETTE[0],
+    };
+  });
   const unallocatedUsd = Math.max(0, portfolioGrossExposureUsd - specialistControlledUsd);
   const dataByAgentId = new Map<string, SidebarProjectionCardData>();
 
   dataByAgentId.set(PORTFOLIO_AGENT_ID, {
     valueUsd: portfolioGrossExposureUsd,
+    positiveAssetsUsd: portfolio.agents.portfolio.positiveAssetsUsd,
+    liabilitiesUsd: portfolio.agents.portfolio.liabilitiesUsd,
     allocationShare: 1,
-    tokenBreakdown: buildProjectionTokenBreakdown(params.portfolio.agents.portfolio.tokenExposures),
+    tokenBreakdown: buildProjectionTokenBreakdown(portfolio.agents.portfolio.tokenExposures),
     controlBreakdown: [
       ...specialistSlices,
       {
@@ -1091,13 +1322,22 @@ function buildSidebarProjectionCardDataByAgentId(params: {
         colorHex: UNALLOCATED_ACCENT_HEX,
       },
     ],
+    thirtyDayPnlPct: portfolio.previewExtensions?.topbarPerformance?.monthChangePct,
   });
 
-  params.portfolio.agents.specialists.forEach((allocation) => {
-    dataByAgentId.set(allocation.agentId, {
+  portfolio.agents.specialists.forEach((allocation) => {
+    const routeAgentId =
+      routeAgentIdByProjectionAgentId.get(allocation.agentId) ?? allocation.agentId;
+
+    dataByAgentId.set(routeAgentId, {
       valueUsd: allocation.grossExposureUsd,
+      positiveAssetsUsd: allocation.positiveAssetsUsd,
+      liabilitiesUsd: allocation.liabilitiesUsd,
       allocationShare: allocation.allocationShare,
       tokenBreakdown: buildProjectionTokenBreakdown(allocation.tokenExposures),
+      thirtyDayPnlPct:
+        portfolio.previewExtensions?.agentPerformanceById?.[routeAgentId]?.thirtyDayPnlPct ??
+        portfolio.previewExtensions?.agentPerformanceById?.[allocation.agentId]?.thirtyDayPnlPct,
     });
   });
 

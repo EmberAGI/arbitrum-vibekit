@@ -7,9 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AgentDetailRoute from './page';
 
+// React's act() helper expects this flag under the lightweight jsdom runner.
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
+
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
+  navigateToHref: vi.fn(),
   invokeAgentCommandRoute: vi.fn(),
   getAgentThreadId: vi.fn(),
   applyDomainProjection: vi.fn(),
@@ -45,6 +50,10 @@ vi.mock('@/utils/agentCommandRoute', () => ({
 
 vi.mock('@/utils/agentThread', () => ({
   getAgentThreadId: (...args: unknown[]) => mocks.getAgentThreadId(...args),
+}));
+
+vi.mock('@/utils/hardNavigation', () => ({
+  navigateToHref: (...args: unknown[]) => mocks.navigateToHref(...args),
 }));
 
 vi.mock('@/components/AgentDetailPage', () => ({
@@ -144,14 +153,21 @@ describe('AgentDetailRoute managed mandate wiring', () => {
   beforeEach(() => {
     mocks.push.mockReset();
     mocks.replace.mockReset();
+    mocks.navigateToHref.mockReset();
     mocks.invokeAgentCommandRoute.mockReset();
     mocks.getAgentThreadId.mockReset();
     mocks.applyDomainProjection.mockReset();
     mocks.capturedProps = null;
     mocks.agentValue = createAgentValue();
-    mocks.getAgentThreadId.mockImplementation((agentId: string) =>
-      agentId === 'agent-portfolio-manager' ? 'pm-thread' : null,
-    );
+    mocks.getAgentThreadId.mockImplementation((agentId: string) => {
+      if (agentId === 'agent-portfolio-manager') {
+        return 'pm-thread';
+      }
+      if (agentId === 'agent-ember-lending') {
+        return 'lending-thread';
+      }
+      return null;
+    });
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -180,7 +196,7 @@ describe('AgentDetailRoute managed mandate wiring', () => {
   it('redirects unregistered agent routes back to the marketplace instead of rendering a fallback detail view', async () => {
     await renderRoute('agent-pi-example');
 
-    expect(mocks.replace).toHaveBeenCalledWith('/hire-agents');
+    expect(mocks.navigateToHref).toHaveBeenCalledWith('/hire-agents', { replace: true });
     expect(mocks.capturedProps).toBeNull();
   });
 
@@ -347,6 +363,14 @@ describe('AgentDetailRoute managed mandate wiring', () => {
         domainProjection: {
           managedMandateEditor: {
             mandateRef: 'mandate-ember-lending-002',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        domainProjection: {
+          managedMandateEditor: {
+            mandateRef: 'mandate-ember-lending-002',
             targetAgentRouteId: 'agent-ember-lending',
           },
         },
@@ -432,6 +456,13 @@ describe('AgentDetailRoute managed mandate wiring', () => {
       },
     });
     expect(mocks.invokeAgentCommandRoute).toHaveBeenNthCalledWith(3, {
+      agentId: 'agent-portfolio-manager',
+      threadId: 'pm-thread',
+      command: {
+        name: 'refresh_portfolio_state',
+      },
+    });
+    expect(mocks.invokeAgentCommandRoute).toHaveBeenNthCalledWith(4, {
       agentId: 'agent-ember-lending',
       threadId: 'lending-thread',
       command: {
@@ -474,6 +505,23 @@ describe('AgentDetailRoute managed mandate wiring', () => {
             mandateRef: 'mandate-ember-lending-003',
           },
         },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        domainProjection: {
+          managedMandateEditor: {
+            mandateRef: 'mandate-ember-lending-004',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        domainProjection: {
+          managedMandateEditor: {
+            mandateRef: 'mandate-ember-lending-004',
+            targetAgentRouteId: 'agent-ember-lending',
+          },
+        },
       });
 
     await renderRoute('agent-portfolio-manager');
@@ -511,7 +559,7 @@ describe('AgentDetailRoute managed mandate wiring', () => {
       });
     });
 
-    expect(mocks.invokeAgentCommandRoute).toHaveBeenCalledTimes(2);
+    expect(mocks.invokeAgentCommandRoute).toHaveBeenCalledTimes(4);
     expect(mocks.invokeAgentCommandRoute).toHaveBeenNthCalledWith(1, {
       agentId: 'agent-portfolio-manager',
       threadId: 'pm-thread',
@@ -548,9 +596,23 @@ describe('AgentDetailRoute managed mandate wiring', () => {
         },
       },
     });
+    expect(mocks.invokeAgentCommandRoute).toHaveBeenNthCalledWith(3, {
+      agentId: 'agent-portfolio-manager',
+      threadId: 'pm-thread',
+      command: {
+        name: 'refresh_portfolio_state',
+      },
+    });
+    expect(mocks.invokeAgentCommandRoute).toHaveBeenNthCalledWith(4, {
+      agentId: 'agent-ember-lending',
+      threadId: 'lending-thread',
+      command: {
+        name: 'hydrate_runtime_projection',
+      },
+    });
     expect(mocks.applyDomainProjection).toHaveBeenLastCalledWith({
       managedMandateEditor: {
-        mandateRef: 'mandate-ember-lending-003',
+        mandateRef: 'mandate-ember-lending-004',
       },
     });
   });

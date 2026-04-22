@@ -1028,6 +1028,134 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
     expect(rpcClient.estimateGas).toHaveBeenCalledTimes(1);
   });
 
+  it('surfaces CollateralCannotCoverNewBorrow() as an actionable max-borrow failure instead of an unknown estimate-gas revert', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: [
+              {
+                tokenUid: {
+                  chainId: '42161',
+                  address: '0x00000000000000000000000000000000000000c1',
+                },
+                name: 'Wrapped Bitcoin',
+                symbol: 'WBTC',
+                isNative: false,
+                decimals: 8,
+                iconUri: null,
+                isVetted: true,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'EVM_TX',
+                to: '0x00000000000000000000000000000000000000d2',
+                value: '0',
+                data: '0xa415bcad',
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        ),
+      );
+    const collateralCoverageError = Object.assign(
+      new Error('Execution reverted for an unknown reason.'),
+      {
+        name: 'EstimateGasExecutionError',
+        shortMessage: 'Execution reverted for an unknown reason.',
+        details: 'execution reverted',
+        cause: Object.assign(new Error('Execution reverted for an unknown reason.'), {
+          name: 'ExecutionRevertedError',
+          cause: Object.assign(new Error('RPC Request failed.'), {
+            name: 'RpcRequestError',
+            data: '0x911ceb81',
+            details: 'execution reverted',
+          }),
+        }),
+      },
+    );
+    const rpcClient = {
+      getTransactionCount: vi.fn(async () => 11),
+      estimateFeesPerGas: vi.fn(async () => ({
+        maxFeePerGas: 200n,
+        maxPriorityFeePerGas: 3n,
+      })),
+      estimateGas: vi.fn(async () => {
+        throw collateralCoverageError;
+      }),
+    };
+    const resolvePublicClient = vi.fn(() => rpcClient);
+    const resolver = createEmberLendingOnchainActionsAnchoredPayloadResolver({
+      baseUrl: 'https://api.emberai.xyz',
+      fetch: fetchImpl,
+      resolvePublicClient,
+    });
+
+    await resolver.anchorCandidatePlanPayload({
+      agentId: 'ember-lending',
+      threadId: 'thread-collateral-coverage-001',
+      transactionPlanId: 'txplan-ember-lending-collateral-coverage-001',
+      walletAddress: '0x00000000000000000000000000000000000000b1',
+      rootUserWalletAddress: '0x00000000000000000000000000000000000000a1',
+      payloadBuilderOutput: {
+        transaction_payload_ref: 'txpayload-ember-lending-collateral-coverage-001',
+        required_control_path: 'lending.borrow',
+        network: 'arbitrum',
+      },
+      compactPlanSummary: {
+        control_path: 'lending.borrow',
+        asset: 'WBTC',
+        amount: '0.00007062',
+        summary: 'borrow WBTC from Aave',
+      },
+    });
+
+    await expect(
+      resolver.resolvePreparedUnsignedTransaction({
+        agentId: 'ember-lending',
+        executionPreparationId: 'execprep-ember-lending-collateral-coverage-001',
+        transactionPlanId: 'txplan-ember-lending-collateral-coverage-001',
+        requestId: 'req-ember-lending-collateral-coverage-001',
+        canonicalUnsignedPayloadRef:
+          'unsigned-txpayload-ember-lending-collateral-coverage-001',
+        delegationArtifactRef: TEST_ACTIVE_DELEGATION_ARTIFACT_REF,
+        rootDelegationArtifactRef: TEST_ROOT_DELEGATION_ARTIFACT_REF,
+        plannedTransactionPayloadRef: 'txpayload-ember-lending-collateral-coverage-001',
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        network: 'arbitrum',
+        requiredControlPath: 'lending.borrow',
+      }),
+    ).rejects.toThrow(
+      'Aave rejected the requested borrow because the current collateral cannot cover the new borrow at that exact amount. Refresh the plan or use a smaller amount. For max borrow, prefer quantity kind percent with value 100 so Shared Ember computes the live protocol-safe exact amount.',
+    );
+
+    expect(rpcClient.estimateGas).toHaveBeenCalledTimes(1);
+  });
+
   it('walks paginated token responses until it finds the requested asset', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
