@@ -60,6 +60,10 @@ import {
 
 const CONNECT_BUSY_RETRY_MS = 2_000;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function messagesEqual(left: Message[], right: Message[]): boolean {
   if (left === right) return true;
   if (left.length !== right.length) return false;
@@ -107,12 +111,7 @@ function readPendingInterruptCheckpointFromArtifact(
       typeof artifactData.message === 'string'
         ? artifactData.message
         : 'Awaiting operator input.',
-    payload:
-      typeof artifactData.payload === 'object' &&
-      artifactData.payload !== null &&
-      !Array.isArray(artifactData.payload)
-        ? artifactData.payload
-        : null,
+    payload: isRecord(artifactData.payload) ? artifactData.payload : null,
   };
 }
 
