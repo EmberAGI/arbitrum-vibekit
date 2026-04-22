@@ -136,6 +136,7 @@ type SharedEmberExecutionContext = {
     container_ref?: string;
     status?: string;
     market_state?: Record<string, unknown> | null;
+    action_capacities?: Record<string, unknown>[];
     members?: Record<string, unknown>[];
   }>;
 } | null;
@@ -449,6 +450,14 @@ function readFirstRecordFromArray(value: unknown): Record<string, unknown> | nul
   return null;
 }
 
+function readRecordArray(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is Record<string, unknown> => isRecord(entry));
+}
+
 function summarizeReservation(portfolioState: unknown): string | null {
   if (!isRecord(portfolioState)) {
     return null;
@@ -555,6 +564,55 @@ function scoreActivePositionScopeVisibility(scope: Record<string, unknown>): num
         score += 1;
       }
       if (readString(freshness['source_kind'])) {
+        score += 1;
+      }
+    }
+  }
+
+  const actionCapacities = readRecordArray(scope['action_capacities']);
+  score += actionCapacities.length * 2;
+  for (const actionCapacity of actionCapacities) {
+    if (readString(actionCapacity['control_path'])) {
+      score += 1;
+    }
+    if (readString(actionCapacity['capacity_kind'])) {
+      score += 1;
+    }
+    if (readString(actionCapacity['max_capacity'])) {
+      score += 2;
+    }
+    const limitingConstraints = readStringArray(actionCapacity['limiting_constraints']);
+    if (limitingConstraints) {
+      score += limitingConstraints.length;
+    }
+
+    const observedState = readRecordKey(actionCapacity, 'observed_state');
+    if (observedState) {
+      if (readString(observedState['total_supplied_usd'])) {
+        score += 1;
+      }
+      if (readString(observedState['total_borrowed_usd'])) {
+        score += 1;
+      }
+      if (readString(observedState['available_borrows_usd'])) {
+        score += 1;
+      }
+      if (readString(observedState['liquidation_threshold_borrow_capacity_usd'])) {
+        score += 1;
+      }
+      if (readFiniteNumber(observedState['current_ltv_bps']) !== null) {
+        score += 1;
+      }
+      if (readFiniteNumber(observedState['liquidation_threshold_bps']) !== null) {
+        score += 1;
+      }
+      if (readString(observedState['health_factor'])) {
+        score += 1;
+      }
+      if (readString(observedState['normalized_health_factor'])) {
+        score += 1;
+      }
+      if (readString(observedState['health_factor_status'])) {
         score += 1;
       }
     }
@@ -1354,6 +1412,99 @@ function appendActivePositionScopesXml(input: {
       }
 
       input.lines.push('      </market_state>');
+    }
+
+    const actionCapacities = readRecordArray(scope['action_capacities']);
+    if (actionCapacities.length > 0) {
+      input.lines.push('      <action_capacities>');
+      for (const actionCapacity of actionCapacities) {
+        const controlPath = readString(actionCapacity['control_path']);
+        const capacityKind = readString(actionCapacity['capacity_kind']);
+        const attributes = [
+          controlPath ? `control_path="${escapeXml(controlPath)}"` : null,
+          capacityKind ? `capacity_kind="${escapeXml(capacityKind)}"` : null,
+        ]
+          .filter((value): value is string => value !== null)
+          .join(' ');
+        input.lines.push(`        <action_capacity${attributes ? ` ${attributes}` : ''}>`);
+
+        const maxCapacity = readString(actionCapacity['max_capacity']);
+        if (maxCapacity) {
+          input.lines.push(`          <max_capacity>${escapeXml(maxCapacity)}</max_capacity>`);
+        }
+
+        const limitingConstraints = readStringArray(actionCapacity['limiting_constraints']);
+        if (limitingConstraints) {
+          input.lines.push('          <limiting_constraints>');
+          for (const constraint of limitingConstraints) {
+            input.lines.push(`            <constraint>${escapeXml(constraint)}</constraint>`);
+          }
+          input.lines.push('          </limiting_constraints>');
+        }
+
+        const observedState = readRecordKey(actionCapacity, 'observed_state');
+        if (observedState) {
+          input.lines.push('          <observed_state>');
+          const totalSuppliedUsd = readString(observedState['total_supplied_usd']);
+          if (totalSuppliedUsd) {
+            input.lines.push(
+              `            <total_supplied_usd>${escapeXml(totalSuppliedUsd)}</total_supplied_usd>`,
+            );
+          }
+          const totalBorrowedUsd = readString(observedState['total_borrowed_usd']);
+          if (totalBorrowedUsd) {
+            input.lines.push(
+              `            <total_borrowed_usd>${escapeXml(totalBorrowedUsd)}</total_borrowed_usd>`,
+            );
+          }
+          const availableBorrowsUsd = readString(observedState['available_borrows_usd']);
+          if (availableBorrowsUsd) {
+            input.lines.push(
+              `            <available_borrows_usd>${escapeXml(availableBorrowsUsd)}</available_borrows_usd>`,
+            );
+          }
+          const liquidationThresholdBorrowCapacityUsd = readString(
+            observedState['liquidation_threshold_borrow_capacity_usd'],
+          );
+          if (liquidationThresholdBorrowCapacityUsd) {
+            input.lines.push(
+              `            <liquidation_threshold_borrow_capacity_usd>${escapeXml(liquidationThresholdBorrowCapacityUsd)}</liquidation_threshold_borrow_capacity_usd>`,
+            );
+          }
+          const currentLtvBps = readFiniteNumber(observedState['current_ltv_bps']);
+          if (currentLtvBps !== null) {
+            input.lines.push(`            <current_ltv_bps>${currentLtvBps}</current_ltv_bps>`);
+          }
+          const liquidationThresholdBps = readFiniteNumber(
+            observedState['liquidation_threshold_bps'],
+          );
+          if (liquidationThresholdBps !== null) {
+            input.lines.push(
+              `            <liquidation_threshold_bps>${liquidationThresholdBps}</liquidation_threshold_bps>`,
+            );
+          }
+          const healthFactor = readString(observedState['health_factor']);
+          if (healthFactor) {
+            input.lines.push(`            <health_factor>${escapeXml(healthFactor)}</health_factor>`);
+          }
+          const normalizedHealthFactor = readString(observedState['normalized_health_factor']);
+          if (normalizedHealthFactor) {
+            input.lines.push(
+              `            <normalized_health_factor>${escapeXml(normalizedHealthFactor)}</normalized_health_factor>`,
+            );
+          }
+          const healthFactorStatus = readString(observedState['health_factor_status']);
+          if (healthFactorStatus) {
+            input.lines.push(
+              `            <health_factor_status>${escapeXml(healthFactorStatus)}</health_factor_status>`,
+            );
+          }
+          input.lines.push('          </observed_state>');
+        }
+
+        input.lines.push('        </action_capacity>');
+      }
+      input.lines.push('      </action_capacities>');
     }
 
     const members = Array.isArray(scope['members'])
