@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { WalletManagementView } from './WalletManagementView';
 
 describe('WalletManagementView', () => {
-  it('renders wallet portfolio and withdraw sections', () => {
+  it('renders the wallet dashboard without the placeholder manage wallet hero', () => {
     const html = renderToStaticMarkup(
       React.createElement(WalletManagementView, {
         walletAddress: '0x1111111111111111111111111111111111111111',
@@ -49,7 +49,9 @@ describe('WalletManagementView', () => {
       }),
     );
 
-    expect(html).toContain('Manage Wallet');
+    expect(html).not.toContain('Manage Wallet');
+    expect(html).not.toContain('Wallet dashboard');
+    expect(html).toContain('Portfolio');
     expect(html).toContain('Gross exposure');
     expect(html).toContain('Wallet contents');
     expect(html).toContain('In wallet');

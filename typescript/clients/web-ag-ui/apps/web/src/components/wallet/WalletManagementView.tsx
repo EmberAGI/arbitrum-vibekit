@@ -39,11 +39,6 @@ type WalletManagementViewProps = {
   onWithdrawConfirmed?: (hash: string) => Promise<void> | void;
 };
 
-function formatAddress(value: string): string {
-  if (value.length < 12) return value;
-  return `${value.slice(0, 6)}...${value.slice(-4)}`;
-}
-
 export function WalletManagementView(props: WalletManagementViewProps): React.JSX.Element {
   const dashboardView = props.portfolioProjection
     ? buildWalletDashboardView({
@@ -54,40 +49,6 @@ export function WalletManagementView(props: WalletManagementViewProps): React.JS
 
   return (
     <div className="mx-auto w-full max-w-[1400px] p-6 space-y-6">
-      <section className="rounded-[28px] border border-[#E4D5C7] bg-[linear-gradient(180deg,#FFF8F0_0%,#F7EBDD_100%)] px-6 py-5 shadow-[0_18px_40px_rgba(68,46,21,0.08)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#8C7F72]">
-              Wallet dashboard
-            </div>
-            <h1 className="mt-2 text-[30px] font-semibold tracking-[-0.05em] text-[#221A13]">
-              Manage Wallet
-            </h1>
-            <p className="mt-2 text-sm text-[#6D5B4C]">
-              MetaMask smart account: {formatAddress(props.walletAddress)}
-            </p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-[18px] border border-[#E4D5C7] bg-[#FCF5EC] px-4 py-3">
-              <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
-                Liquid cash
-              </div>
-              <div className="mt-1 text-[22px] font-semibold tracking-[-0.04em] text-[#221A13]">
-                {dashboardView.topbar.metrics[2]?.value ?? '$0'}
-              </div>
-            </div>
-            <div className="rounded-[18px] border border-[#E4D5C7] bg-[#FCF5EC] px-4 py-3">
-              <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
-                Active lanes
-              </div>
-              <div className="mt-1 text-[22px] font-semibold tracking-[-0.04em] text-[#221A13]">
-                {dashboardView.summary.activeLaneCount}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <PortfolioDashboardTopBar view={dashboardView.topbar} />
       <WalletContentsWorkbench view={dashboardView.contents} />
 
