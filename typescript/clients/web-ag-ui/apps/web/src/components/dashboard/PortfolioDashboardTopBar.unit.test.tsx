@@ -57,7 +57,8 @@ describe('PortfolioDashboardTopBar', () => {
     expect(html).toContain('hover:bg-[#FFF7F2]');
     expect(html).not.toContain('Benchmark switching is coming soon.');
     expect(html).toContain(
-      'The benchmark is the reference asset you compare this portfolio against to see whether active management is outperforming simple USDC exposure.',
+      'It gives you a quick baseline, so you can tell if active management is helping.',
     );
+    expect(html).not.toContain('rounded-[16px] border border-dashed border-[#d8c3ad] bg-[#fffaf2]');
   });
 });

@@ -94,9 +94,8 @@ function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
               <BenchmarkPreviewOption key={symbol} symbol={symbol} selected={index === 0} />
             ))}
           </div>
-          <div className="rounded-[16px] border border-dashed border-[#d8c3ad] bg-[#fffaf2] px-3 py-3 text-[13px] text-[#7c6757]">
-            The benchmark is the reference asset you compare this portfolio against to see whether active management is outperforming simple{' '}
-            {props.benchmarkAssetLabel} exposure.
+          <div className="text-[13px] leading-5 text-[#7c6757]">
+            It gives you a quick baseline, so you can tell if active management is helping.
           </div>
         </div>
       </div>
