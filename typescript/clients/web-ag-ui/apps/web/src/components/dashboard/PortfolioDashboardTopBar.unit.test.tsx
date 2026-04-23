@@ -37,6 +37,9 @@ describe('PortfolioDashboardTopBar', () => {
     expect(html).toContain('Gross exposure');
     expect(html).toContain('Net worth');
     expect(html).toContain('Unmanaged');
+    expect(html).toContain('font-mono text-[12px] font-semibold text-[#6D5B4C]');
+    expect(html).toContain('flex items-baseline gap-2 text-[18px] font-semibold');
+    expect(html).toContain('mt-0.5 text-[18px] font-semibold');
     expect(html).toContain('type="button"');
     expect(html).toContain('title="Preview benchmark selector"');
     expect(html).toContain('aria-disabled="true"');

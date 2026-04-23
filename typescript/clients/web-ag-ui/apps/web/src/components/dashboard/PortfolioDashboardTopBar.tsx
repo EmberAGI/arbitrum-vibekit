@@ -13,11 +13,11 @@ function ExposureSplitValue(props: {
         <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
           {props.label}
         </div>
-        <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
+        <div className="font-mono text-[12px] font-semibold text-[#6D5B4C]">
           {props.totalValue}
         </div>
       </div>
-      <div className="flex items-baseline gap-2 text-[16px] font-semibold tracking-[-0.04em]">
+      <div className="flex items-baseline gap-2 text-[18px] font-semibold tracking-[-0.04em]">
         <span className="text-[#0F5A38]">{props.positiveAssetsValue}</span>
         <span className="inline-flex items-baseline gap-1">
           <span className="text-[#8C7F72]">(</span>
@@ -128,7 +128,7 @@ export function PortfolioDashboardTopBar(props: {
                   {metric.label}
                 </div>
                 <div
-                  className={`mt-0.5 text-[16px] font-semibold tracking-[-0.04em] ${
+                  className={`mt-0.5 text-[18px] font-semibold tracking-[-0.04em] ${
                     metric.valueClassName ?? 'text-[#221A13]'
                   }`}
                 >
