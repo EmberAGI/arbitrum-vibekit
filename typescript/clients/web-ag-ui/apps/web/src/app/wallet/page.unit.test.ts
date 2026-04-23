@@ -26,8 +26,11 @@ vi.mock('@/hooks/usePrivyWalletClient', () => {
 });
 
 describe('/wallet page', () => {
-  it('renders manage wallet heading', () => {
+  it('renders the signed-in wallet dashboard without the placeholder hero heading', () => {
     const html = renderToStaticMarkup(React.createElement(WalletPage));
-    expect(html).toContain('Manage Wallet');
+    expect(html).not.toContain('Manage Wallet');
+    expect(html).not.toMatch(/>Portfolio</);
+    expect(html).toContain('Gross exposure');
+    expect(html).toContain('Wallet contents');
   });
 });

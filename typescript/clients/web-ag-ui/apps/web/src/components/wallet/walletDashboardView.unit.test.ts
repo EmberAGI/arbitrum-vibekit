@@ -67,6 +67,11 @@ describe('wallet dashboard view', () => {
     expect(view.summary.netWorthUsd).toBe(2_600);
     expect(view.summary.activeLaneCount).toBe(4);
     expect(view.topbar.benchmarkAssetLabel).toBe('USDC');
+    expect(view.topbar.metrics.map((metric) => metric.label)).toEqual([
+      'Gross exposure',
+      'Net worth',
+      'Unallocated',
+    ]);
     expect(view.accounting.segments.map((segment) => [segment.label, segment.valueUsd])).toEqual([
       ['Cash', 2_000],
       ['Assets', 700],
@@ -240,6 +245,11 @@ describe('wallet dashboard view', () => {
     expect(view.summary.liabilitiesUsd).toBe(5);
     expect(view.summary.grossExposureUsd).toBe(90);
     expect(view.summary.activeLaneCount).toBe(1);
+    expect(view.topbar.metrics.map((metric) => metric.label)).toEqual([
+      'Gross exposure',
+      'Net worth',
+      'Unallocated',
+    ]);
     expect(view.topbar.metrics[2]).toMatchObject({
       label: 'Unallocated',
       value: '$15',
