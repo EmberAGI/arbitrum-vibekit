@@ -5,6 +5,8 @@ import type {
   ObservedAssetProjection,
 } from './types';
 
+const FAMILY_ASSET_ALIASES = new Map<string, string>([['WETH', 'ETH']]);
+
 export function parseQuantity(value: string | undefined | null): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -24,8 +26,18 @@ export function deriveFamilyAsset(input: {
   asset: string;
   economicExposures?: EconomicExposureInput[];
 }): string {
+  const directFamilyAsset = FAMILY_ASSET_ALIASES.get(input.asset.trim().toUpperCase());
+  if (directFamilyAsset) {
+    return directFamilyAsset;
+  }
+
   const uniqueExposureAssets = Array.from(
-    new Set((input.economicExposures ?? []).map((exposure) => exposure.asset)),
+    new Set(
+      (input.economicExposures ?? []).map(
+        (exposure) =>
+          FAMILY_ASSET_ALIASES.get(exposure.asset.trim().toUpperCase()) ?? exposure.asset,
+      ),
+    ),
   );
 
   if (uniqueExposureAssets.length === 1) {
@@ -48,7 +60,10 @@ export function formatProtocolLabel(protocolSystem: string): string {
 }
 
 export function classifyObservedAssetSemantic(input: {
-  observedAsset: Pick<ObservedAssetProjection, 'asset' | 'familyAsset' | 'sourceKind' | 'protocolSystem'>;
+  observedAsset: Pick<
+    ObservedAssetProjection,
+    'asset' | 'familyAsset' | 'sourceKind' | 'protocolSystem'
+  >;
   cashFamilyAsset?: string;
 }): {
   semanticClass: AssetSemanticClass;

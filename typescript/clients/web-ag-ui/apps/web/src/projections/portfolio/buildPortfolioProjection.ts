@@ -3,11 +3,7 @@ import {
   buildAssetFamilyProjectionFromObservedAssets,
   buildObservedAssetProjectionFromPositionMember,
 } from './buildAssetFamilyProjection';
-import {
-  deriveFamilyAsset,
-  normalizeBenchmarkAssetToCashFamily,
-  parseQuantity,
-} from './helpers';
+import { deriveFamilyAsset, normalizeBenchmarkAssetToCashFamily, parseQuantity } from './helpers';
 import type {
   ActivePositionScopeInput,
   AgentAllocationProjection,
@@ -30,8 +26,13 @@ type AgentExposureLedger = {
   liabilitiesLedger: Map<string, number>;
 };
 
-function buildSummaryProjection(assetFamilies: AssetFamilyProjection[]): PortfolioSummaryProjection {
-  const positiveAssetsUsd = assetFamilies.reduce((sum, familyView) => sum + familyView.positiveUsd, 0);
+function buildSummaryProjection(
+  assetFamilies: AssetFamilyProjection[],
+): PortfolioSummaryProjection {
+  const positiveAssetsUsd = assetFamilies.reduce(
+    (sum, familyView) => sum + familyView.positiveUsd,
+    0,
+  );
   const liabilitiesUsd = assetFamilies.reduce((sum, familyView) => sum + familyView.debtUsd, 0);
 
   return {
@@ -64,7 +65,10 @@ function buildRiskSummaryProjection(
       return currentMinimum;
     }
 
-    const distance = Math.max(0, (liquidationThresholdBps - currentLtvBps) / liquidationThresholdBps);
+    const distance = Math.max(
+      0,
+      (liquidationThresholdBps - currentLtvBps) / liquidationThresholdBps,
+    );
 
     return currentMinimum === null ? distance : Math.min(currentMinimum, distance);
   }, null);
@@ -80,17 +84,28 @@ function buildAccountingProjection(params: {
   assetFamilies: AssetFamilyProjection[];
   risk: PortfolioRiskSummaryProjection;
 }): PortfolioAccountingProjection {
-  const familyViewByAsset = new Map(params.assetFamilies.map((familyView) => [familyView.asset, familyView]));
+  const familyViewByAsset = new Map(
+    params.assetFamilies.map((familyView) => [familyView.asset, familyView]),
+  );
   const cashFamilyAsset = normalizeBenchmarkAssetToCashFamily(params.benchmarkAsset);
   const cashFamilyView = familyViewByAsset.get(cashFamilyAsset);
   const cashUsd = cashFamilyView?.walletUsd ?? 0;
   const availableCashUsd = cashFamilyView?.walletAvailableUsd ?? 0;
   const committedCashUsd = cashFamilyView?.walletCommittedUsd ?? 0;
-  const totalWalletUsd = params.assetFamilies.reduce((sum, familyView) => sum + familyView.walletUsd, 0);
-  const totalDeployedUsd = params.assetFamilies.reduce((sum, familyView) => sum + familyView.deployedUsd, 0);
+  const totalWalletUsd = params.assetFamilies.reduce(
+    (sum, familyView) => sum + familyView.walletUsd,
+    0,
+  );
+  const totalDeployedUsd = params.assetFamilies.reduce(
+    (sum, familyView) => sum + familyView.deployedUsd,
+    0,
+  );
   const inWalletUsd = Math.max(0, totalWalletUsd - cashUsd);
   const assetsUsd = inWalletUsd + totalDeployedUsd;
-  const liabilitiesUsd = params.assetFamilies.reduce((sum, familyView) => sum + familyView.debtUsd, 0);
+  const liabilitiesUsd = params.assetFamilies.reduce(
+    (sum, familyView) => sum + familyView.debtUsd,
+    0,
+  );
 
   return {
     benchmarkAsset: params.benchmarkAsset,
@@ -103,7 +118,8 @@ function buildAccountingProjection(params: {
     deployedUsd: totalDeployedUsd,
     liabilitiesUsd,
     coverageRatio: liabilitiesUsd > 0 ? availableCashUsd / liabilitiesUsd : null,
-    marginBufferRatio: assetsUsd + cashUsd > 0 ? params.risk.totalHeadroomUsd / (assetsUsd + cashUsd) : null,
+    marginBufferRatio:
+      assetsUsd + cashUsd > 0 ? params.risk.totalHeadroomUsd / (assetsUsd + cashUsd) : null,
     distanceToLiquidationRatio: params.risk.minimumLiquidationDistance,
   };
 }
@@ -116,7 +132,9 @@ function buildOwnedUnitFamilyAsset(params: {
     return params.ownedUnit.rootAsset;
   }
 
-  const scope = params.activePositionScopes.find((candidate) => candidate.scopeId === params.ownedUnit.positionScopeId);
+  const scope = params.activePositionScopes.find(
+    (candidate) => candidate.scopeId === params.ownedUnit.positionScopeId,
+  );
   const member = scope?.members.find((candidate) => candidate.asset === params.ownedUnit.rootAsset);
 
   return deriveFamilyAsset({
@@ -129,7 +147,9 @@ function buildControllingAgentIdsByScopeId(params: {
   ownedUnits: OwnedUnitInput[];
   reservations: ReservationInput[];
 }): Map<string, Set<string>> {
-  const reservationsById = new Map(params.reservations.map((reservation) => [reservation.reservationId, reservation]));
+  const reservationsById = new Map(
+    params.reservations.map((reservation) => [reservation.reservationId, reservation]),
+  );
   const controllingAgentIdsByScopeId = new Map<string, Set<string>>();
 
   for (const unit of params.ownedUnits) {
@@ -155,7 +175,9 @@ function buildAgentLedgers(params: {
   reservations: ReservationInput[];
   activePositionScopes: ActivePositionScopeInput[];
 }): Map<string, AgentExposureLedger> {
-  const reservationsById = new Map(params.reservations.map((reservation) => [reservation.reservationId, reservation]));
+  const reservationsById = new Map(
+    params.reservations.map((reservation) => [reservation.reservationId, reservation]),
+  );
   const ledgers = new Map<string, AgentExposureLedger>();
   const controllingAgentIdsByScopeId = buildControllingAgentIdsByScopeId({
     ownedUnits: params.ownedUnits,
@@ -180,7 +202,10 @@ function buildAgentLedgers(params: {
       ownedUnit: unit,
       activePositionScopes: params.activePositionScopes,
     });
-    ledger.positiveLedger.set(familyAsset, (ledger.positiveLedger.get(familyAsset) ?? 0) + unit.benchmarkValue);
+    ledger.positiveLedger.set(
+      familyAsset,
+      (ledger.positiveLedger.get(familyAsset) ?? 0) + unit.benchmarkValue,
+    );
     ledgers.set(reservation.agentId, ledger);
   }
 
@@ -213,7 +238,10 @@ function buildAgentLedgers(params: {
         asset: member.asset,
         economicExposures: member.economicExposures,
       });
-      ledger.liabilitiesLedger.set(familyAsset, (ledger.liabilitiesLedger.get(familyAsset) ?? 0) + member.valueUsd);
+      ledger.liabilitiesLedger.set(
+        familyAsset,
+        (ledger.liabilitiesLedger.get(familyAsset) ?? 0) + member.valueUsd,
+      );
     }
 
     ledgers.set(agentId, ledger);
@@ -259,7 +287,9 @@ function buildAgentAssetFamilies(params: {
   activePositionScopes: ActivePositionScopeInput[];
   cashFamilyAsset: string;
 }): AssetFamilyProjection[] {
-  const reservationsById = new Map(params.reservations.map((reservation) => [reservation.reservationId, reservation]));
+  const reservationsById = new Map(
+    params.reservations.map((reservation) => [reservation.reservationId, reservation]),
+  );
   const controllingAgentIdsByScopeId = buildControllingAgentIdsByScopeId({
     ownedUnits: params.ownedUnits,
     reservations: params.reservations,
@@ -293,7 +323,11 @@ function buildAgentAssetFamilies(params: {
     }
 
     const controllingAgentIds = controllingAgentIdsByScopeId.get(unit.positionScopeId);
-    if (!controllingAgentIds || controllingAgentIds.size !== 1 || !controllingAgentIds.has(params.agentId)) {
+    if (
+      !controllingAgentIds ||
+      controllingAgentIds.size !== 1 ||
+      !controllingAgentIds.has(params.agentId)
+    ) {
       continue;
     }
 
@@ -343,6 +377,24 @@ function buildTokenExposures(ledger: AgentExposureLedger): AgentTokenExposurePro
     .sort((left, right) => right.valueUsd - left.valueUsd);
 }
 
+function buildTokenExposuresFromAssetFamilies(
+  assetFamilies: AssetFamilyProjection[],
+): AgentTokenExposureProjection[] {
+  const exposures = assetFamilies
+    .map((familyView) => ({
+      asset: familyView.asset,
+      valueUsd: familyView.positiveUsd + familyView.debtUsd,
+    }))
+    .filter((exposure) => exposure.valueUsd > 0)
+    .sort((left, right) => right.valueUsd - left.valueUsd);
+  const totalUsd = exposures.reduce((sum, exposure) => sum + exposure.valueUsd, 0);
+
+  return exposures.map((exposure) => ({
+    ...exposure,
+    share: totalUsd > 0 ? exposure.valueUsd / totalUsd : 0,
+  }));
+}
+
 function buildAgentAllocations(params: {
   assetFamilies: AssetFamilyProjection[];
   reservations: ReservationInput[];
@@ -389,9 +441,21 @@ function buildAgentAllocations(params: {
         activePositionScopes: params.activePositionScopes,
         cashFamilyAsset: params.cashFamilyAsset,
       });
-      const tokenExposures = buildTokenExposures(ledger);
-      const positiveAssetsUsd = Array.from(ledger.positiveLedger.values()).reduce((sum, valueUsd) => sum + valueUsd, 0);
-      const liabilitiesUsd = Array.from(ledger.liabilitiesLedger.values()).reduce((sum, valueUsd) => sum + valueUsd, 0);
+      const tokenExposures =
+        assetFamilies.length > 0
+          ? buildTokenExposuresFromAssetFamilies(assetFamilies)
+          : buildTokenExposures(ledger);
+      const positiveAssetsUsd =
+        assetFamilies.length > 0
+          ? assetFamilies.reduce((sum, familyView) => sum + familyView.positiveUsd, 0)
+          : Array.from(ledger.positiveLedger.values()).reduce((sum, valueUsd) => sum + valueUsd, 0);
+      const liabilitiesUsd =
+        assetFamilies.length > 0
+          ? assetFamilies.reduce((sum, familyView) => sum + familyView.debtUsd, 0)
+          : Array.from(ledger.liabilitiesLedger.values()).reduce(
+              (sum, valueUsd) => sum + valueUsd,
+              0,
+            );
       const grossExposureUsd = positiveAssetsUsd + liabilitiesUsd;
 
       return {
@@ -400,7 +464,9 @@ function buildAgentAllocations(params: {
         liabilitiesUsd,
         grossExposureUsd,
         allocationShare:
-          params.summary.grossExposureUsd > 0 ? grossExposureUsd / params.summary.grossExposureUsd : 0,
+          params.summary.grossExposureUsd > 0
+            ? grossExposureUsd / params.summary.grossExposureUsd
+            : 0,
         assetFamilies,
         tokenExposures,
       };
@@ -413,7 +479,9 @@ function buildAgentAllocations(params: {
   };
 }
 
-export function buildPortfolioProjection(params: PortfolioProjectionInput): PortfolioProjectionPacket {
+export function buildPortfolioProjection(
+  params: PortfolioProjectionInput,
+): PortfolioProjectionPacket {
   const cashFamilyAsset = normalizeBenchmarkAssetToCashFamily(params.benchmarkAsset);
   const assetFamilies = buildAssetFamilyProjection({
     walletContents: params.walletContents,
