@@ -52,6 +52,8 @@ describe('WalletManagementView', () => {
     expect(html).not.toContain('Manage Wallet');
     expect(html).not.toContain('Wallet dashboard');
     expect(html).not.toMatch(/>Portfolio</);
+    expect(html).toContain('mx-auto w-full max-w-[1400px] space-y-6 px-0 pt-0 pb-6');
+    expect(html).not.toContain('mx-auto w-full max-w-[1400px] p-6 space-y-6');
     expect(html).toContain('Benchmark');
     expect(html).toContain('Gross exposure');
     expect(html).toContain('Wallet contents');

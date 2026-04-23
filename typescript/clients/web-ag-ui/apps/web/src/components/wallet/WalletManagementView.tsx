@@ -48,7 +48,7 @@ export function WalletManagementView(props: WalletManagementViewProps): React.JS
     : buildWalletDashboardView({ portfolio: props.portfolio });
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] p-6 space-y-6">
+    <div className="mx-auto w-full max-w-[1400px] space-y-6 px-0 pt-0 pb-6">
       <PortfolioDashboardTopBar view={dashboardView.topbar} />
       <WalletContentsWorkbench view={dashboardView.contents} />
 

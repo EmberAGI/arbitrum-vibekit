@@ -111,7 +111,7 @@ export function PortfolioDashboardTopBar(props: {
     : 'sm:grid-cols-2 xl:grid-cols-3';
 
   return (
-    <section className="rounded-[24px] border border-[#E4D5C7] bg-[#EFE5DA] px-4 py-3 shadow-[0_12px_28px_rgba(68,46,21,0.08)] md:px-5">
+    <section className="rounded-b-[24px] rounded-t-none border border-[#E4D5C7] bg-[#EFE5DA] px-4 py-3 shadow-[0_12px_28px_rgba(68,46,21,0.08)] md:px-5">
       <div className={`grid gap-3 ${gridClassName}`}>
         {props.view.metrics.map((metric) => (
           <div key={metric.label}>
