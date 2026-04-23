@@ -38,7 +38,8 @@ function createInternalPostgresHooks(
     persistDirectExecution: (options: unknown) => Promise<void>;
   }> = {},
 ) {
-  const databaseUrl = overrides.databaseUrl ?? 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime';
+  const databaseUrl =
+    overrides.databaseUrl ?? 'postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime';
   const ensureReady = vi.fn(async (options?: { env?: { DATABASE_URL?: string } }) => ({
     bootstrapPlan: options?.env?.DATABASE_URL
       ? {
@@ -110,12 +111,12 @@ describe('agent-runtime facade', () => {
     expect(packageJson.dependencies).not.toHaveProperty('agent-workflow-core');
     expect(packageJson.scripts).toMatchObject({
       'build:deps': expect.any(String),
-      build: expect.any(String),
+      build: 'node ./scripts/build-with-lock.mjs',
       lint: expect.any(String),
-      prebuild: expect.any(String),
       test: expect.any(String),
       'test:ci': expect.any(String),
     });
+    expect(packageJson.scripts).not.toHaveProperty('prebuild');
   });
 
   it('keeps the package root focused on the blessed runtime builder surface', () => {
@@ -175,12 +176,22 @@ describe('agent-runtime facade', () => {
     expect(publicDomainContract).not.toContain('session: PiRuntimeGatewaySession');
     expect(publicDomainContract).not.toContain('PiRuntimeGatewayExecutionStatus');
     expect(builderContract).not.toContain('Omit<');
-    expect(source).not.toContain("Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']");
-    expect(source).not.toContain("Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['tools']");
-    expect(source).not.toContain("ReturnType<typeof createPiRuntimeGatewayFoundationInternal>['bootstrapPlan']");
+    expect(source).not.toContain(
+      "Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['agentOptions']",
+    );
+    expect(source).not.toContain(
+      "Parameters<typeof createPiRuntimeGatewayFoundationInternal>[0]['tools']",
+    );
+    expect(source).not.toContain(
+      "ReturnType<typeof createPiRuntimeGatewayFoundationInternal>['bootstrapPlan']",
+    );
     expect(declarations).not.toContain('createPiRuntimeGatewayFoundationInternal');
-    expect(declarations).not.toContain('Parameters<typeof createPiRuntimeGatewayFoundationInternal>');
-    expect(declarations).not.toContain('ReturnType<typeof createPiRuntimeGatewayFoundationInternal>');
+    expect(declarations).not.toContain(
+      'Parameters<typeof createPiRuntimeGatewayFoundationInternal>',
+    );
+    expect(declarations).not.toContain(
+      'ReturnType<typeof createPiRuntimeGatewayFoundationInternal>',
+    );
     expect(declarations).not.toContain('PiRuntimeGatewayHttpAgentInternal');
     expect(declarations).not.toContain('PiRuntimeGatewayAgUiHandlerOptions');
     expect(declarations).not.toContain('PiRuntimeGatewayHttpAgentConfig');
@@ -298,7 +309,9 @@ describe('agent-runtime facade', () => {
     );
 
     expect(syncScript).not.toContain("packageName: 'pi-runtime-legacy-contracts'");
-    expect(syncScript).not.toContain("path.join(packageRoot, '..', 'lib', 'pi-runtime-legacy-contracts')");
+    expect(syncScript).not.toContain(
+      "path.join(packageRoot, '..', 'lib', 'pi-runtime-legacy-contracts')",
+    );
     expect(syncScript).not.toContain("packageName: 'agent-runtime-contracts'");
     expect(syncScript).not.toContain("path.join('lib', 'contracts', 'dist')");
     expect(syncScript).toContain("packageName: 'agent-runtime-postgres'");
