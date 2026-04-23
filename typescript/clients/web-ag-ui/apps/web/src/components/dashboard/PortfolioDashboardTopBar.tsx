@@ -31,29 +31,29 @@ function ExposureSplitValue(props: {
 
 function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
   return (
-    <div>
-      <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">Benchmark</div>
-      <button
-        type="button"
-        title="Benchmark switching coming soon"
-        aria-label={`Benchmark ${props.benchmarkAssetLabel}. Benchmark switching coming soon.`}
-        className="group mt-1 inline-flex items-center gap-2.5 rounded-full border border-[#D7C5B4] bg-[#F8EFE5] px-2.5 py-1.5 text-left transition-colors hover:border-[#E8C9AA] hover:bg-[#FFF7F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8C9AA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#EFE5DA]"
-      >
-        <span className="inline-flex items-center gap-1.5">
-          <DashboardTokenAvatar
-            symbol={props.benchmarkAssetLabel}
-            fallbackSymbol={props.benchmarkAssetLabel}
-            small
-          />
-          <span className="text-[12px] font-semibold tracking-[-0.02em] text-[#221A13]">
-            {props.benchmarkAssetLabel}
-          </span>
+    <button
+      type="button"
+      title="Benchmark switching coming soon"
+      aria-label={`Benchmark ${props.benchmarkAssetLabel}. Benchmark switching coming soon.`}
+      className="group inline-flex self-center items-center gap-2.5 rounded-full border border-[#D7C5B4] bg-[#F8EFE5] px-2.5 py-1.5 text-left transition-colors hover:border-[#E8C9AA] hover:bg-[#FFF7F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8C9AA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#EFE5DA]"
+    >
+      <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
+        Benchmark
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <DashboardTokenAvatar
+          symbol={props.benchmarkAssetLabel}
+          fallbackSymbol={props.benchmarkAssetLabel}
+          small
+        />
+        <span className="text-[12px] font-semibold tracking-[-0.02em] text-[#221A13]">
+          {props.benchmarkAssetLabel}
         </span>
-        <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#B07A52] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-          Soon
-        </span>
-      </button>
-    </div>
+      </span>
+      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#B07A52] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+        Soon
+      </span>
+    </button>
   );
 }
 

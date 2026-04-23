@@ -32,12 +32,14 @@ describe('PortfolioDashboardTopBar', () => {
     );
 
     expect(html).not.toMatch(/>Portfolio</);
-    expect(html).toContain('Benchmark');
+    expect(html).not.toMatch(/>Benchmark<\/div><button/);
+    expect(html).toContain('>Benchmark<');
     expect(html).toContain('Gross exposure');
     expect(html).toContain('Net worth');
     expect(html).toContain('Unallocated');
     expect(html).toContain('type="button"');
     expect(html).toContain('title="Benchmark switching coming soon"');
+    expect(html).toContain('self-center');
     expect(html).toContain('hover:border-[#E8C9AA]');
     expect(html).toContain('hover:bg-[#FFF7F2]');
   });
