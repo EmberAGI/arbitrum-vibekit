@@ -352,6 +352,15 @@ function isSharedEmberRevisionConflict(error: unknown): boolean {
   );
 }
 
+function isSharedEmberActiveDelegationMismatch(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes(
+      'Shared Ember Domain Service JSON-RPC error: internal_error: signed transaction must match the active delegation id',
+    )
+  );
+}
+
 function readSharedEmberRevisionConflictMessage(error: Error): string {
   const match = error.message.match(/expected_revision=(\d+)\s+actual_revision=(\d+)/);
   if (!match) {
@@ -365,6 +374,10 @@ function readSharedEmberRevisionConflictMessage(error: Error): string {
 function normalizeSharedEmberExecutionErrorMessage(error: Error): string {
   if (isSharedEmberRevisionConflict(error)) {
     return readSharedEmberRevisionConflictMessage(error);
+  }
+
+  if (isSharedEmberActiveDelegationMismatch(error)) {
+    return 'Lending execution signing became stale because Shared Ember refreshed the active delegation. Retry execution to prepare a fresh signing package.';
   }
 
   if (
@@ -4225,57 +4238,80 @@ export function createEmberLendingDomain(
             threadId,
             transactionPlanId,
           });
+          const runExecutionAttempt = (state: EmberLendingLifecycleState) =>
+            state.pendingExecutionSubmission?.transactionPlanId === transactionPlanId &&
+            state.pendingExecutionSubmission?.idempotencyKey === idempotencyKey
+              ? resumePendingExecutionSubmission({
+                  protocolHost: options.protocolHost,
+                  threadId,
+                  agentId,
+                  pendingSubmission: state.pendingExecutionSubmission,
+                })
+              : runPreparedExecutionFlow({
+                  protocolHost: options.protocolHost,
+                  runtimeSigning: options.runtimeSigning,
+                  anchoredPayloadResolver: options.anchoredPayloadResolver,
+                  runtimeSignerRef: options.runtimeSignerRef,
+                  requestRedelegationRefresh: options.requestRedelegationRefresh,
+                  threadId,
+                  agentId,
+                  currentState: state,
+                  transactionPlanId,
+                  idempotencyKey,
+                });
           let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>>;
+          let executionAttemptState = currentState;
           try {
-            preparedExecutionResult =
-              currentState.pendingExecutionSubmission?.transactionPlanId === transactionPlanId &&
-              currentState.pendingExecutionSubmission?.idempotencyKey === idempotencyKey
-                ? await resumePendingExecutionSubmission({
-                    protocolHost: options.protocolHost,
-                    threadId,
-                    agentId,
-                    pendingSubmission: currentState.pendingExecutionSubmission,
-                  })
-                : await runPreparedExecutionFlow({
-                    protocolHost: options.protocolHost,
-                    runtimeSigning: options.runtimeSigning,
-                    anchoredPayloadResolver: options.anchoredPayloadResolver,
-                    runtimeSignerRef: options.runtimeSignerRef,
-                    requestRedelegationRefresh: options.requestRedelegationRefresh,
-                    threadId,
-                    agentId,
-                    currentState,
-                    transactionPlanId,
-                    idempotencyKey,
-                  });
+            preparedExecutionResult = await runExecutionAttempt(executionAttemptState);
           } catch (error) {
-            if (!(error instanceof Error)) {
-              throw error;
+            if (
+              isSharedEmberActiveDelegationMismatch(error) &&
+              executionAttemptState.pendingExecutionSubmission
+            ) {
+              executionAttemptState = {
+                ...executionAttemptState,
+                pendingExecutionSubmission: null,
+                lastSharedEmberRevision: mergeKnownRevision(
+                  executionAttemptState.lastSharedEmberRevision,
+                  error instanceof PendingExecutionSubmissionError ? error.revision : null,
+                ),
+              };
+              try {
+                preparedExecutionResult = await runExecutionAttempt(executionAttemptState);
+              } catch (retryError) {
+                error = retryError;
+              }
             }
 
-            return {
-              state: {
-                ...currentState,
-                phase: 'active',
-                lastSharedEmberRevision:
-                  error instanceof LocalExecutionFailureError ||
-                  error instanceof PendingExecutionSubmissionError
-                    ? error.revision ?? currentState.lastSharedEmberRevision
-                    : currentState.lastSharedEmberRevision,
-                lastExecutionResult: currentState.lastExecutionResult,
-                lastExecutionTxHash: null,
-                pendingExecutionSubmission:
-                  error instanceof PendingExecutionSubmissionError
-                    ? error.pendingSubmission
-                    : null,
-              },
-              outputs: {
-                status: {
-                  executionStatus: 'failed',
-                  statusMessage: normalizeSharedEmberExecutionErrorMessage(error),
+            if (preparedExecutionResult === undefined) {
+              if (!(error instanceof Error)) {
+                throw error;
+              }
+
+              return {
+                state: {
+                  ...executionAttemptState,
+                  phase: 'active',
+                  lastSharedEmberRevision:
+                    error instanceof LocalExecutionFailureError ||
+                    error instanceof PendingExecutionSubmissionError
+                      ? error.revision ?? executionAttemptState.lastSharedEmberRevision
+                      : executionAttemptState.lastSharedEmberRevision,
+                  lastExecutionResult: currentState.lastExecutionResult,
+                  lastExecutionTxHash: null,
+                  pendingExecutionSubmission:
+                    error instanceof PendingExecutionSubmissionError
+                      ? error.pendingSubmission
+                      : null,
                 },
-              },
-            };
+                outputs: {
+                  status: {
+                    executionStatus: 'failed',
+                    statusMessage: normalizeSharedEmberExecutionErrorMessage(error),
+                  },
+                },
+              };
+            }
           }
 
           const executionResult = preparedExecutionResult.executionResult ?? null;
