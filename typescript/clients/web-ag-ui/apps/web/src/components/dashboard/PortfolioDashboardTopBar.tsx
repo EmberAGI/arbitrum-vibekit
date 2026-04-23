@@ -78,7 +78,7 @@ function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
       </button>
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute right-0 top-[calc(100%+10px)] z-30 w-[min(22rem,calc(100vw-1.5rem))] rounded-[20px] border border-[#eadac7] bg-[#fffdf8]/98 p-3 shadow-[0_18px_44px_rgba(115,78,48,0.16)] opacity-0 backdrop-blur-sm translate-y-1 transition duration-150 group-hover/benchmark:translate-y-0 group-hover/benchmark:opacity-100 group-focus-within/benchmark:translate-y-0 group-focus-within/benchmark:opacity-100"
+        className="pointer-events-auto absolute right-0 top-[calc(100%+8px)] z-30 w-[min(22rem,calc(100vw-1.5rem))] cursor-default rounded-[20px] border border-[#eadac7] bg-[#fffdf8]/98 p-3 opacity-0 shadow-[0_18px_44px_rgba(115,78,48,0.16)] backdrop-blur-sm translate-y-1 transition duration-150 before:absolute before:-top-2 before:left-0 before:h-2 before:w-full before:content-[''] group-hover/benchmark:translate-y-0 group-hover/benchmark:opacity-100 group-focus-within/benchmark:translate-y-0 group-focus-within/benchmark:opacity-100"
       >
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">

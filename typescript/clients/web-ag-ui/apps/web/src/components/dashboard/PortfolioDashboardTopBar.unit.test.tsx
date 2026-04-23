@@ -47,6 +47,9 @@ describe('PortfolioDashboardTopBar', () => {
     expect(html).not.toContain('>Soon<');
     expect(html).toContain('Preview benchmark options');
     expect(html).toContain('rounded-[20px] border border-[#eadac7] bg-[#fffdf8]/98');
+    expect(html).toContain('pointer-events-auto');
+    expect(html).toContain("before:-top-2");
+    expect(html).toContain("before:h-2");
     expect(html).toContain('group-hover/benchmark:opacity-100');
     expect(html).toContain('group-focus-within/benchmark:opacity-100');
     expect(html).toContain('Preview only');
