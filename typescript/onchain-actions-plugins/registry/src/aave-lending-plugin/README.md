@@ -104,6 +104,26 @@ export class AAVEAdapter {
 }
 ```
 
+#### Positions Query Surface
+
+`getUserSummary()` / `queries.getPositions()` now honors the optional
+`tokenAddress` request field and surfaces live reserve quote data needed for
+exact max-borrow resolution:
+
+- `userReserves` keeps active supplied reserves and borrow-only reserves while
+  still omitting zero-exposure noise.
+- Each surfaced reserve carries:
+  - balances and borrow totals
+  - `priceInUsd`
+  - `priceInMarketReferenceCurrency`
+  - `formattedPriceInMarketReferenceCurrency`
+  - `availableLiquidity`
+  - `availableLiquidityUsd`
+- When `tokenAddress` is provided, the response also returns
+  `requestedReserve` for that reserve even if the wallet has no current
+  exposure in it.
+- Aggregate lending fields such as `availableBorrowsUsd` remain unchanged.
+
 ### 3. Action Definitions
 
 The plugin implements 5 distinct lending actions:
