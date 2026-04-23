@@ -3324,10 +3324,13 @@ function buildCreateTransactionIdempotencyKey(input: {
 function buildRequestExecutionIdempotencyKey(input: {
   threadId: string;
   transactionPlanId: string;
+  retryNonce?: string;
 }): string {
-  return `idem-request-execution-${input.threadId}-${buildStableCommandSuffix({
+  const base = `idem-request-execution-${input.threadId}-${buildStableCommandSuffix({
     transactionPlanId: input.transactionPlanId,
   })}`;
+
+  return input.retryNonce ? `${base}:retry:${input.retryNonce}` : base;
 }
 
 function buildCreateTransactionRequest(input: {
@@ -3433,6 +3436,31 @@ function readTransactionPlanId(
   }
 
   return null;
+}
+
+function shouldStartFreshExecutionRequestAttempt(
+  state: EmberLendingLifecycleState,
+  transactionPlanId: string,
+): boolean {
+  if (state.pendingExecutionSubmission?.transactionPlanId === transactionPlanId) {
+    return false;
+  }
+
+  const lastExecutionResult = isRecord(state.lastExecutionResult) ? state.lastExecutionResult : null;
+  if (!lastExecutionResult) {
+    return false;
+  }
+
+  if (readString(lastExecutionResult['transaction_plan_id']) !== transactionPlanId) {
+    return false;
+  }
+
+  if (readString(lastExecutionResult['phase']) !== 'completed') {
+    return false;
+  }
+
+  const execution = readRecordKey(lastExecutionResult, 'execution');
+  return readString(execution?.['status']) === 'failed_before_submission';
 }
 
 function buildExecutionPreparationContinuationIdempotencyKey(input: {
@@ -4237,6 +4265,15 @@ export function createEmberLendingDomain(
           const idempotencyKey = buildRequestExecutionIdempotencyKey({
             threadId,
             transactionPlanId,
+            ...(shouldStartFreshExecutionRequestAttempt(currentState, transactionPlanId)
+              ? {
+                  retryNonce: crypto
+                    .createHash('sha256')
+                    .update(crypto.randomUUID())
+                    .digest('hex')
+                    .slice(0, 12),
+                }
+              : {}),
           });
           const runExecutionAttempt = (state: EmberLendingLifecycleState) =>
             state.pendingExecutionSubmission?.transactionPlanId === transactionPlanId &&

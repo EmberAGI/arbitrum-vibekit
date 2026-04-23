@@ -7234,6 +7234,110 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
+  it('uses a fresh request-execution idempotency key after a failed-before-submission result for the same plan', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-prepare-execution-2'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-signed-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 11,
+            committed_event_ids: ['evt-submit-execution-2'],
+            execution_result: createTerminalExecutionResult({
+              status: 'confirmed',
+              transactionHash:
+                '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            }),
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      runtimeSigning,
+      runtimeSignerRef: 'service-wallet',
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'borrow WBTC on Aave',
+        lastExecutionResult: createTerminalExecutionResult({
+          status: 'failed_before_submission',
+          message:
+            'send_insufficient_funds: rpc_32000: insufficient funds for gas * price + value',
+        }),
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_execution',
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-request-execution',
+      method: 'subagent.requestExecution.v1',
+      params: {
+        idempotency_key: expect.stringMatching(
+          /^idem-request-execution-thread-1-07b74ae67cd9:retry:[0-9a-f]{12}$/,
+        ),
+        expected_revision: 7,
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+    });
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 11,
+        lastExecutionTxHash:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+        },
+      },
+    });
+  });
+
   it('re-prepares execution when a cached submission uses a stale active delegation id', async () => {
     const protocolHost = {
       handleJsonRpc: vi
