@@ -170,6 +170,26 @@ function buildControllingAgentIdsByScopeId(params: {
   return controllingAgentIdsByScopeId;
 }
 
+function resolvePositionScopeOwnerAgentId(params: {
+  scope: ActivePositionScopeInput;
+  controllingAgentIdsByScopeId: Map<string, Set<string>>;
+}): string | null {
+  if (
+    params.scope.ownerType === 'agent' &&
+    params.scope.ownerId &&
+    params.scope.ownerId !== 'user_idle'
+  ) {
+    return params.scope.ownerId;
+  }
+
+  const controllingAgentIds = params.controllingAgentIdsByScopeId.get(params.scope.scopeId);
+  if (!controllingAgentIds || controllingAgentIds.size !== 1) {
+    return null;
+  }
+
+  return Array.from(controllingAgentIds)[0] ?? null;
+}
+
 function buildAgentLedgers(params: {
   ownedUnits: OwnedUnitInput[];
   reservations: ReservationInput[];
@@ -214,12 +234,10 @@ function buildAgentLedgers(params: {
       continue;
     }
 
-    const controllingAgentIds = controllingAgentIdsByScopeId.get(scope.scopeId);
-    if (!controllingAgentIds || controllingAgentIds.size !== 1) {
-      continue;
-    }
-
-    const agentId = Array.from(controllingAgentIds)[0];
+    const agentId = resolvePositionScopeOwnerAgentId({
+      scope,
+      controllingAgentIdsByScopeId,
+    });
     if (!agentId) {
       continue;
     }
@@ -230,7 +248,7 @@ function buildAgentLedgers(params: {
     };
 
     for (const member of scope.members) {
-      if (member.role !== 'debt' || member.valueUsd <= 0) {
+      if (member.valueUsd <= 0) {
         continue;
       }
 
@@ -238,10 +256,9 @@ function buildAgentLedgers(params: {
         asset: member.asset,
         economicExposures: member.economicExposures,
       });
-      ledger.liabilitiesLedger.set(
-        familyAsset,
-        (ledger.liabilitiesLedger.get(familyAsset) ?? 0) + member.valueUsd,
-      );
+      const targetLedger =
+        member.role === 'debt' ? ledger.liabilitiesLedger : ledger.positiveLedger;
+      targetLedger.set(familyAsset, (targetLedger.get(familyAsset) ?? 0) + member.valueUsd);
     }
 
     ledgers.set(agentId, ledger);
@@ -348,6 +365,31 @@ function buildAgentAssetFamilies(params: {
       ),
     );
     includedScopeIds.add(unit.positionScopeId);
+  }
+
+  for (const scope of params.activePositionScopes) {
+    if (scope.status !== 'active' || includedScopeIds.has(scope.scopeId)) {
+      continue;
+    }
+
+    const ownerAgentId = resolvePositionScopeOwnerAgentId({
+      scope,
+      controllingAgentIdsByScopeId,
+    });
+    if (ownerAgentId !== params.agentId) {
+      continue;
+    }
+
+    observedAssets.push(
+      ...scope.members.map((member) =>
+        buildObservedAssetProjectionFromPositionMember({
+          scope,
+          member,
+          cashFamilyAsset: params.cashFamilyAsset,
+        }),
+      ),
+    );
+    includedScopeIds.add(scope.scopeId);
   }
 
   return buildAssetFamilyProjectionFromObservedAssets(observedAssets, {

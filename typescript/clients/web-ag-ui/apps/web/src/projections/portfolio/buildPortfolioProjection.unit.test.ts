@@ -174,4 +174,99 @@ describe('buildPortfolioProjection', () => {
       },
     ]);
   });
+
+  it('attributes active lending scopes to their explicit position-scope owner', () => {
+    const projection = buildPortfolioProjection({
+      benchmarkAsset: 'USD',
+      walletContents: [],
+      ownedUnits: [
+        {
+          unitId: 'unit-idle-usdc-collateral',
+          rootAsset: 'USDC',
+          network: 'arbitrum',
+          quantity: '7000000',
+          benchmarkAsset: 'USD',
+          benchmarkValue: 7,
+          reservationId: null,
+          positionScopeId: 'scope-aave',
+        },
+      ],
+      reservations: [],
+      activePositionScopes: [
+        {
+          scopeId: 'scope-aave',
+          kind: 'lending',
+          ownerType: 'agent',
+          ownerId: 'ember-lending',
+          network: 'arbitrum',
+          protocolSystem: 'aave',
+          containerRef: 'aave:arbitrum:0x540c144afc3b3a97eeded55376ab257ee706f0ca',
+          status: 'active',
+          marketState: {
+            borrowableHeadroomUsd: '1',
+            currentLtvBps: 2857,
+            liquidationThresholdBps: 7800,
+            healthFactor: '2.3',
+          },
+          members: [
+            {
+              memberId: 'scope-aave:collateral:aArbUSDCn',
+              role: 'collateral',
+              asset: 'aArbUSDCn',
+              quantity: '7000000',
+              valueUsd: 7,
+              economicExposures: [
+                {
+                  asset: 'USDC',
+                  quantity: '7',
+                },
+              ],
+              state: {
+                withdrawableQuantity: '3.5',
+              },
+            },
+            {
+              memberId: 'scope-aave:debt:variableDebtArbWBTC',
+              role: 'debt',
+              asset: 'variableDebtArbWBTC',
+              quantity: '2000',
+              valueUsd: 2,
+              economicExposures: [
+                {
+                  asset: 'WBTC',
+                  quantity: '0.00002',
+                },
+              ],
+              state: {
+                borrowApr: '0.01',
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const lendingAgent = projection.agents.specialists.find(
+      (allocation) => allocation.agentId === 'ember-lending',
+    );
+
+    expect(lendingAgent).toMatchObject({
+      positiveAssetsUsd: 7,
+      liabilitiesUsd: 2,
+      grossExposureUsd: 9,
+      allocationShare: 1,
+    });
+    expect(lendingAgent?.tokenExposures).toEqual([
+      {
+        asset: 'USDC',
+        valueUsd: 7,
+        share: 7 / 9,
+      },
+      {
+        asset: 'WBTC',
+        valueUsd: 2,
+        share: 2 / 9,
+      },
+    ]);
+  });
 });
