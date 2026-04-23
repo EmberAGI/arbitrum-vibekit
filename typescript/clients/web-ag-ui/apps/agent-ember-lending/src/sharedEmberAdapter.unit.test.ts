@@ -6706,6 +6706,62 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
+  it('surfaces a stale-plan message when Shared Ember keeps rejecting request_execution with expected_revision conflicts', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new Error(
+            'Shared Ember Domain Service JSON-RPC error: protocol_conflict expected_revision=7 actual_revision=8',
+          ),
+        )
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-read-current-revision',
+          result: {
+            protocol_version: 'v1',
+            revision: 8,
+          },
+        })
+        .mockRejectedValueOnce(
+          new Error(
+            'Shared Ember Domain Service JSON-RPC error: protocol_conflict expected_revision=8 actual_revision=9',
+          ),
+        ),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'borrow WBTC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_execution',
+      },
+    });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending transaction plan is stale because Shared Ember state advanced from revision 8 to 9. Create a fresh plan and execute that new plan.',
+        },
+      },
+    });
+  });
+
   it('keys signed-transaction submit idempotency by the exact signed artifact', async () => {
     const protocolHost = {
       handleJsonRpc: vi
@@ -7053,6 +7109,124 @@ describe('createEmberLendingDomain', () => {
         status: {
           executionStatus: 'completed',
           statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+        },
+      },
+    });
+  });
+
+  it('preserves a failed-before-submission message recovered from the committed-event outbox', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:4010'))
+        .mockRejectedValueOnce(new Error('projection refresh unavailable')),
+      readCommittedEventOutbox: vi
+        .fn()
+        .mockResolvedValueOnce({
+          protocol_version: 'v1',
+          revision: 10,
+          events: [
+            {
+              event_id: 'evt-request-execution-3',
+              sequence: 3,
+              aggregate: 'request',
+              aggregate_id: 'req-ember-lending-execution-001',
+              event_type: 'requestExecution.completed.v1',
+              committed_at: '2026-04-01T06:18:00Z',
+              payload: {
+                request_id: 'req-ember-lending-execution-001',
+                transaction_plan_id: 'txplan-ember-lending-001',
+                execution_id: 'exec-ember-lending-001',
+                status: 'failed_before_submission',
+                message:
+                  'send_insufficient_funds: rpc_32000: insufficient funds for gas * price + value',
+                transaction_hash: null,
+              },
+            },
+          ],
+        }),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      runtimeSigning,
+      runtimeSignerRef: 'service-wallet',
+      agentId: 'ember-lending',
+    });
+    const initialState = {
+      ...createManagedLifecycleState(),
+      lastCandidatePlan: {
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+      lastCandidatePlanSummary: 'borrow WBTC on Aave',
+    };
+
+    const firstAttempt = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: initialState,
+      operation: {
+        source: 'tool',
+        name: 'request_execution',
+      },
+    });
+
+    const resumedAttempt = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: firstAttempt?.state,
+      operation: {
+        source: 'tool',
+        name: 'request_execution',
+      },
+    });
+
+    expect(runtimeSigning.signPayload).toHaveBeenCalledTimes(1);
+    expect(resumedAttempt).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 10,
+        lastExecutionResult: {
+          phase: 'completed',
+          request_id: 'req-ember-lending-execution-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          execution: {
+            execution_id: 'exec-ember-lending-001',
+            status: 'failed_before_submission',
+            message:
+              'send_insufficient_funds: rpc_32000: insufficient funds for gas * price + value',
+          },
+        },
+        lastExecutionTxHash: null,
+        pendingExecutionSubmission: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending transaction failed before submission through Shared Ember: send_insufficient_funds: rpc_32000: insufficient funds for gas * price + value.',
         },
       },
     });

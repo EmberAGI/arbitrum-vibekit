@@ -352,6 +352,32 @@ function isSharedEmberRevisionConflict(error: unknown): boolean {
   );
 }
 
+function readSharedEmberRevisionConflictMessage(error: Error): string {
+  const match = error.message.match(/expected_revision=(\d+)\s+actual_revision=(\d+)/);
+  if (!match) {
+    return 'Lending transaction plan is stale because Shared Ember state changed. Create a fresh plan and execute that new plan.';
+  }
+
+  const [, expectedRevision, actualRevision] = match;
+  return `Lending transaction plan is stale because Shared Ember state advanced from revision ${expectedRevision} to ${actualRevision}. Create a fresh plan and execute that new plan.`;
+}
+
+function normalizeSharedEmberExecutionErrorMessage(error: Error): string {
+  if (isSharedEmberRevisionConflict(error)) {
+    return readSharedEmberRevisionConflictMessage(error);
+  }
+
+  if (
+    error.message.includes(
+      'Shared Ember Domain Service JSON-RPC error: protocol_invalid_params: transaction_plan_id must reference an existing transaction plan',
+    )
+  ) {
+    return 'Lending transaction plan is no longer available in Shared Ember. Create a fresh plan and try again.';
+  }
+
+  return error.message;
+}
+
 async function readSharedEmberExecutionContext(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
   threadId: string;
@@ -2084,6 +2110,7 @@ function readCommittedExecutionProgressEvent(input: {
   ) {
     const status = readString(matchingEvent.payload?.['status']);
     const executionId = readString(matchingEvent.payload?.['execution_id']);
+    const message = readString(matchingEvent.payload?.['message']);
     const transactionHash = readHexAddress(matchingEvent.payload?.['transaction_hash']);
 
     if (!status) {
@@ -2099,6 +2126,7 @@ function readCommittedExecutionProgressEvent(input: {
         execution: {
           status,
           ...(executionId ? { execution_id: executionId } : {}),
+          ...(message ? { message } : {}),
           ...(transactionHash ? { transaction_hash: transactionHash } : {}),
         },
       },
@@ -2158,9 +2186,9 @@ function readExecutionStatusMessage(executionResult: unknown): {
   if (phase === 'completed' && status === 'failed_before_submission') {
     return {
       executionStatus: 'failed',
-      statusMessage: withExecutionDetail(
-        'Lending transaction failed before submission through Shared Ember.',
-      ),
+      statusMessage: executionMessage
+        ? withExecutionDetail('Lending transaction failed before submission through Shared Ember.')
+        : 'Lending transaction failed before submission through Shared Ember. Create a fresh plan and try again if the problem persists.',
     };
   }
 
@@ -4244,7 +4272,7 @@ export function createEmberLendingDomain(
               outputs: {
                 status: {
                   executionStatus: 'failed',
-                  statusMessage: error.message,
+                  statusMessage: normalizeSharedEmberExecutionErrorMessage(error),
                 },
               },
             };
