@@ -70,7 +70,7 @@ describe('wallet dashboard view', () => {
     expect(view.topbar.metrics.map((metric) => metric.label)).toEqual([
       'Gross exposure',
       'Net worth',
-      'Unallocated',
+      'Unmanaged',
     ]);
     expect(view.topbar.metrics).toMatchObject([
       {
@@ -84,7 +84,7 @@ describe('wallet dashboard view', () => {
         value: '$2,600.00',
       },
       {
-        label: 'Unallocated',
+        label: 'Unmanaged',
         value: '$2,000.00',
       },
     ]);
@@ -264,18 +264,18 @@ describe('wallet dashboard view', () => {
     expect(view.topbar.metrics.map((metric) => metric.label)).toEqual([
       'Gross exposure',
       'Net worth',
-      'Unallocated',
+      'Unmanaged',
     ]);
     expect(view.topbar.metrics[2]).toMatchObject({
-      label: 'Unallocated',
-      value: '$15.00',
+      label: 'Unmanaged',
+      value: '$35.00',
     });
     expect(view.accounting.segments.map((segment) => [segment.label, segment.valueUsd])).toEqual([
       ['Cash', 40],
       ['Assets', 45],
       ['Liabilities', 5],
     ]);
-    expect(view.contents.summary.walletUsd).toBe(60);
+    expect(view.contents.summary.walletUsd).toBe(35);
     expect(view.contents.summary.deployedUsd).toBe(25);
     expect(view.contents.summary.owedUsd).toBe(5);
     expect(view.contents.families.find((family) => family.label === 'USDC')).toMatchObject({

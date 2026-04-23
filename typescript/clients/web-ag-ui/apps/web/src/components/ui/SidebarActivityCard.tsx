@@ -483,7 +483,7 @@ export function SidebarActivityCard(props: {
             {unallocatedShare !== undefined ? (
               <>
                 <span>·</span>
-                <span>{formatPercent(unallocatedShare)} unallocated</span>
+                <span>{formatPercent(unallocatedShare)} unmanaged</span>
               </>
             ) : null}
           </div>

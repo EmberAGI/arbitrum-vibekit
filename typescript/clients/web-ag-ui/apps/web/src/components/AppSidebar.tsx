@@ -1215,7 +1215,7 @@ function buildPortfolioControlBreakdown(params: {
   if (unallocatedUsd > 0) {
     slices.push({
       id: 'unallocated',
-      label: 'Unallocated',
+      label: 'Unmanaged',
       share: unallocatedUsd / portfolioGrossExposureUsd,
       colorHex: UNALLOCATED_ACCENT_HEX,
     });
@@ -1320,7 +1320,7 @@ function buildSidebarProjectionCardDataByAgentId(params: {
       ...specialistSlices,
       {
         id: 'unallocated',
-        label: 'Unallocated',
+        label: 'Unmanaged',
         share: portfolioGrossExposureUsd > 0 ? unallocatedUsd / portfolioGrossExposureUsd : 0,
         colorHex: UNALLOCATED_ACCENT_HEX,
       },

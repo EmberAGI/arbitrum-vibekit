@@ -31,6 +31,7 @@ describe('/wallet page', () => {
     expect(html).not.toContain('Manage Wallet');
     expect(html).not.toMatch(/>Portfolio</);
     expect(html).toContain('Gross exposure');
-    expect(html).toContain('Wallet contents');
+    expect(html).toContain('Grouped into 0 asset families');
+    expect(html).toContain('Reserved');
   });
 });

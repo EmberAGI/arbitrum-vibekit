@@ -677,7 +677,7 @@ describe('AppSidebar wallet actions', () => {
     expect(html).toContain('33% of portfolio');
     expect(html).toContain('ETH');
     expect(html).toContain('USDT');
-    expect(html).toContain('Unallocated');
+    expect(html).toContain('Unmanaged');
     expect(html).not.toContain('$12k gross');
     expect(html).not.toContain('$4k gross');
   });

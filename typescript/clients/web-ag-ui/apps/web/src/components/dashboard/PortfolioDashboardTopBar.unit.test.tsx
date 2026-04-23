@@ -22,7 +22,7 @@ describe('PortfolioDashboardTopBar', () => {
               value: '$2.6K',
             },
             {
-              label: 'Unallocated',
+              label: 'Unmanaged',
               value: '$2K',
               valueClassName: 'text-[#0F5A38]',
             },
@@ -36,7 +36,7 @@ describe('PortfolioDashboardTopBar', () => {
     expect(html).toContain('>Benchmark<');
     expect(html).toContain('Gross exposure');
     expect(html).toContain('Net worth');
-    expect(html).toContain('Unallocated');
+    expect(html).toContain('Unmanaged');
     expect(html).toContain('type="button"');
     expect(html).toContain('title="Preview benchmark selector"');
     expect(html).toContain('aria-disabled="true"');
