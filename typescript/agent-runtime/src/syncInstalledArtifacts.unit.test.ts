@@ -6,15 +6,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { copyArtifactDir } from './syncInstalledArtifacts.js';
 
 describe('syncInstalledArtifacts', () => {
-  it('retries snapshot replacement when cleanup briefly reports ENOTEMPTY', async () => {
-    const stat = vi.fn(() => Promise.resolve({
-      isDirectory: () => true,
-    }));
+  it('copies into installed artifact directories without removing current declarations', async () => {
+    const stat = vi.fn(() =>
+      Promise.resolve({
+        isDirectory: () => true,
+      }),
+    );
     const mkdir = vi.fn(() => Promise.resolve(undefined));
-    const rm = vi
-      .fn()
-      .mockRejectedValueOnce(Object.assign(new Error('directory still settling'), { code: 'ENOTEMPTY' }))
-      .mockResolvedValue(undefined);
+    const rm = vi.fn(() => Promise.resolve(undefined));
     const cp = vi.fn(() => Promise.resolve(undefined));
 
     await expect(
@@ -28,33 +27,35 @@ describe('syncInstalledArtifacts', () => {
           rm,
           cp,
         },
-        maxReplaceAttempts: 2,
         retryDelayMs: 0,
       }),
     ).resolves.toBeUndefined();
 
     expect(stat).toHaveBeenCalledWith('/source/dist');
-    expect(mkdir).toHaveBeenCalledWith('/target', { recursive: true });
-    expect(rm).toHaveBeenCalledTimes(3);
-    expect(rm).toHaveBeenNthCalledWith(1, '/target/dist', { recursive: true, force: true });
-    expect(rm).toHaveBeenNthCalledWith(2, '/target/dist', { recursive: true, force: true });
-    expect(rm).toHaveBeenNthCalledWith(3, '/target/dist.sync-lock', {
+    expect(mkdir).toHaveBeenCalledWith('/target/dist', { recursive: true });
+    expect(mkdir).toHaveBeenCalledWith('/target/dist.sync-lock');
+    expect(rm).not.toHaveBeenCalledWith('/target/dist', { recursive: true, force: true });
+    expect(rm).toHaveBeenCalledWith('/target/dist.sync-lock', { recursive: true, force: true });
+    expect(cp).toHaveBeenCalledTimes(1);
+    expect(cp).toHaveBeenCalledWith('/source/dist', '/target/dist', {
       recursive: true,
       force: true,
     });
-    expect(cp).toHaveBeenCalledTimes(1);
-    expect(cp).toHaveBeenCalledWith('/source/dist', '/target/dist', { recursive: true, force: true });
   });
 
-  it('retries snapshot replacement when copy races with an existing target directory', async () => {
-    const stat = vi.fn(() => Promise.resolve({
-      isDirectory: () => true,
-    }));
+  it('retries snapshot copy when copy races with an existing target directory', async () => {
+    const stat = vi.fn(() =>
+      Promise.resolve({
+        isDirectory: () => true,
+      }),
+    );
     const mkdir = vi.fn(() => Promise.resolve(undefined));
     const rm = vi.fn(() => Promise.resolve(undefined));
     const cp = vi
       .fn()
-      .mockRejectedValueOnce(Object.assign(new Error('target directory already exists'), { code: 'EEXIST' }))
+      .mockRejectedValueOnce(
+        Object.assign(new Error('target directory already exists'), { code: 'EEXIST' }),
+      )
       .mockResolvedValue(undefined);
 
     await expect(
@@ -73,43 +74,48 @@ describe('syncInstalledArtifacts', () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(rm).toHaveBeenCalledTimes(3);
+    expect(rm).not.toHaveBeenCalledWith('/target/dist', { recursive: true, force: true });
+    expect(rm).toHaveBeenCalledWith('/target/dist.sync-lock', { recursive: true, force: true });
     expect(cp).toHaveBeenCalledTimes(2);
-    expect(rm).toHaveBeenNthCalledWith(3, '/target/dist.sync-lock', {
+    expect(cp).toHaveBeenNthCalledWith(1, '/source/dist', '/target/dist', {
       recursive: true,
       force: true,
     });
-    expect(cp).toHaveBeenNthCalledWith(1, '/source/dist', '/target/dist', { recursive: true, force: true });
-    expect(cp).toHaveBeenNthCalledWith(2, '/source/dist', '/target/dist', { recursive: true, force: true });
+    expect(cp).toHaveBeenNthCalledWith(2, '/source/dist', '/target/dist', {
+      recursive: true,
+      force: true,
+    });
   });
 
-  it('waits for a per-target sync lock before replacing installed artifacts', async () => {
+  it('waits for a per-target sync lock before syncing installed artifacts', async () => {
     let releaseAfterSecondLockAttempt: (() => void) | null = null;
     const secondLockAttemptObserved = new Promise<void>((resolve) => {
       releaseAfterSecondLockAttempt = resolve;
     });
-    const stat = vi.fn(() => Promise.resolve({
-      isDirectory: () => true,
-    }));
+    const stat = vi.fn(() =>
+      Promise.resolve({
+        isDirectory: () => true,
+      }),
+    );
     let lockAttempt = 0;
-    const mkdir = vi.fn(async (targetPath: string, options?: { recursive?: boolean }) => {
-      if (targetPath === '/target') {
+    const mkdir = vi.fn((targetPath: string, options?: { recursive?: boolean }) => {
+      if (targetPath === '/target/dist') {
         expect(options).toEqual({ recursive: true });
-        return;
+        return Promise.resolve(undefined);
       }
 
       if (targetPath === '/target/dist.sync-lock') {
         lockAttempt += 1;
         if (lockAttempt === 1) {
-          return;
+          return Promise.resolve(undefined);
         }
 
         if (lockAttempt === 2) {
           releaseAfterSecondLockAttempt?.();
-          throw Object.assign(new Error('lock busy'), { code: 'EEXIST' });
+          return Promise.reject(Object.assign(new Error('lock busy'), { code: 'EEXIST' }));
         }
 
-        return;
+        return Promise.resolve(undefined);
       }
 
       throw new Error(`Unexpected mkdir path: ${targetPath}`);
@@ -152,7 +158,7 @@ describe('syncInstalledArtifacts', () => {
       ]),
     ).resolves.toEqual([undefined, undefined]);
 
-    expect(mkdir).toHaveBeenCalledWith('/target', { recursive: true });
+    expect(mkdir).toHaveBeenCalledWith('/target/dist', { recursive: true });
     expect(mkdir).toHaveBeenCalledWith('/target/dist.sync-lock');
     expect(rm).toHaveBeenCalledWith('/target/dist.sync-lock', { recursive: true, force: true });
     expect(cp).toHaveBeenCalledTimes(2);

@@ -98,7 +98,7 @@ export async function copyArtifactDir({
   }
 
   const targetDir = path.join(targetRoot, relativeDir);
-  await fileOps.mkdir(path.dirname(targetDir), { recursive: true });
+  await fileOps.mkdir(targetDir, { recursive: true });
   const lockDir = `${targetDir}.sync-lock`;
 
   await withDirectoryLock({
@@ -109,7 +109,6 @@ export async function copyArtifactDir({
     run: async () => {
       for (let attempt = 1; attempt <= maxReplaceAttempts; attempt += 1) {
         try {
-          await fileOps.rm(targetDir, { recursive: true, force: true });
           await fileOps.cp(sourceDir, targetDir, { recursive: true, force: true });
           return;
         } catch (error) {
