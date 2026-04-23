@@ -29,31 +29,77 @@ function ExposureSplitValue(props: {
   );
 }
 
-function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
+function BenchmarkPreviewOption(props: {
+  symbol: string;
+  selected?: boolean;
+}) {
   return (
-    <button
-      type="button"
-      title="Benchmark switching coming soon"
-      aria-label={`Benchmark ${props.benchmarkAssetLabel}. Benchmark switching coming soon.`}
-      className="group inline-flex self-center items-center gap-2.5 rounded-full border border-[#D7C5B4] bg-[#F8EFE5] px-2.5 py-1.5 text-left transition-colors hover:border-[#E8C9AA] hover:bg-[#FFF7F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8C9AA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#EFE5DA]"
+    <div
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] font-medium ${
+        props.selected
+          ? 'border-[#fd6731]/40 bg-[#fff0e6] text-[#2f2118]'
+          : 'border-[#eadac7] bg-[#fffdf8] text-[#8b7563] opacity-75'
+      }`}
     >
-      <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
-        Benchmark
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <DashboardTokenAvatar
-          symbol={props.benchmarkAssetLabel}
-          fallbackSymbol={props.benchmarkAssetLabel}
-          small
-        />
-        <span className="text-[12px] font-semibold tracking-[-0.02em] text-[#221A13]">
-          {props.benchmarkAssetLabel}
+      <DashboardTokenAvatar symbol={props.symbol} fallbackSymbol={props.symbol} small />
+      <span>{props.symbol}</span>
+    </div>
+  );
+}
+
+function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
+  const previewSymbols = [props.benchmarkAssetLabel, 'ETH', 'BTC'].filter(
+    (symbol, index, all) => all.indexOf(symbol) === index,
+  );
+
+  return (
+    <div className="group/benchmark relative inline-flex self-center">
+      <button
+        type="button"
+        title="Preview benchmark selector"
+        aria-label={`Benchmark ${props.benchmarkAssetLabel}. Preview benchmark selector.`}
+        aria-disabled="true"
+        aria-haspopup="dialog"
+        className="inline-flex cursor-default items-center gap-2.5 rounded-full border border-[#D7C5B4] bg-[#F8EFE5] px-2.5 py-1.5 text-left transition-colors hover:border-[#E8C9AA] hover:bg-[#FFF7F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8C9AA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#EFE5DA]"
+      >
+        <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
+          Benchmark
         </span>
-      </span>
-      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#B07A52] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-        Soon
-      </span>
-    </button>
+        <span className="inline-flex items-center gap-1.5">
+          <DashboardTokenAvatar
+            symbol={props.benchmarkAssetLabel}
+            fallbackSymbol={props.benchmarkAssetLabel}
+            small
+          />
+          <span className="text-[12px] font-semibold tracking-[-0.02em] text-[#221A13]">
+            {props.benchmarkAssetLabel}
+          </span>
+        </span>
+      </button>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute right-0 top-[calc(100%+10px)] z-30 w-[min(22rem,calc(100vw-1.5rem))] rounded-[20px] border border-[#eadac7] bg-[#fffdf8]/98 p-3 shadow-[0_18px_44px_rgba(115,78,48,0.16)] opacity-0 backdrop-blur-sm translate-y-1 transition duration-150 group-hover/benchmark:translate-y-0 group-hover/benchmark:opacity-100 group-focus-within/benchmark:translate-y-0 group-focus-within/benchmark:opacity-100"
+      >
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8C7F72]">
+              Preview benchmark options
+            </div>
+            <div className="rounded-full bg-[#fff0e6] px-2 py-0.5 text-[11px] font-medium text-[#b84f2c] ring-1 ring-[#f3d5c5]">
+              Preview only
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {previewSymbols.map((symbol, index) => (
+              <BenchmarkPreviewOption key={symbol} symbol={symbol} selected={index === 0} />
+            ))}
+          </div>
+          <div className="rounded-[16px] border border-dashed border-[#d8c3ad] bg-[#fffaf2] px-3 py-3 text-[13px] text-[#7c6757]">
+            This preview mirrors the mandate selector style without being live yet.
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
