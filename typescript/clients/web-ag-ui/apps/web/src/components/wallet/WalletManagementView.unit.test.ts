@@ -57,11 +57,9 @@ describe('WalletManagementView', () => {
     expect(html).toContain('space-y-6 px-4 pb-6 sm:px-6');
     expect(html).toContain('Benchmark');
     expect(html).toContain('Gross exposure');
-    expect(html).toContain('Grouped into 3 asset families');
+    expect(html).not.toContain('Grouped into 3 asset families');
     expect(html).toContain('Unmanaged');
-    expect(html).toContain('Reserved');
     expect(html).toContain('Deployed');
-    expect(html).toContain('Owed');
     expect(html).toContain('Camelot ETH/USDC');
     expect(html).toContain('Composition');
     expect(html).toContain('Accounting');

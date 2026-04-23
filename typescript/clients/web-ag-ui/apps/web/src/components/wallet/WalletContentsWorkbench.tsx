@@ -432,7 +432,6 @@ export function WalletContentsWorkbench(props: {
   const familyViews = props.view.families;
   const featuredAssets = familyViews.filter((familyView) => familyView.share > 0.04);
   const tailAssets = familyViews.filter((familyView) => familyView.share <= 0.04);
-  const totalExposureUsd = familyViews.reduce((sum, familyView) => sum + familyView.positiveUsd, 0);
   const reservedUsd = familyViews.reduce((sum, familyView) => sum + familyView.walletCommittedUsd, 0);
   const unmanagedUsd = props.view.summary.walletUsd;
   const deployedUsd = familyViews.reduce((sum, familyView) => sum + familyView.deployedUsd, 0);
@@ -448,28 +447,6 @@ export function WalletContentsWorkbench(props: {
           reservedUsd={reservedUsd}
           owedUsd={owedUsd}
         />
-      </div>
-      <div className="grid border-b border-[#E7DBD0] md:grid-cols-4">
-        <div className="px-4 py-4">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[#8C7F72]">Exposure</div>
-          <div className="mt-2 text-[28px] tracking-[-0.05em] text-[#221A13]">{formatUsd(totalExposureUsd)}</div>
-          <div className="mt-2 text-xs text-[#6D5B4C]">Grouped into {familyViews.length} asset families</div>
-        </div>
-        <div className="border-l border-[#E7DBD0] px-4 py-4 max-md:border-l-0 max-md:border-t">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[#8C7F72]">Unmanaged</div>
-          <div className="mt-2 text-[28px] tracking-[-0.05em] text-[#221A13]">{formatUsd(unmanagedUsd)}</div>
-          <div className="mt-2 text-xs text-[#6D5B4C]">Spendable without releasing a reservation</div>
-        </div>
-        <div className="border-l border-[#E7DBD0] px-4 py-4 max-md:border-l-0 max-md:border-t">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[#8C7F72]">Reserved</div>
-          <div className="mt-2 text-[28px] tracking-[-0.05em] text-[#221A13]">{formatUsd(reservedUsd)}</div>
-          <div className="mt-2 text-xs text-[#6D5B4C]">Unmanaged balance committed to active orchestration</div>
-        </div>
-        <div className="border-l border-[#E7DBD0] px-4 py-4 max-md:border-l-0 max-md:border-t">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[#8C7F72]">Owed</div>
-          <div className="mt-2 text-[28px] tracking-[-0.05em] text-[#B23A32]">{formatUsd(owedUsd)}</div>
-          <div className="mt-2 text-xs text-[#6D5B4C]">Protocol debt surfaced separately from held balances</div>
-        </div>
       </div>
       <div className="p-4">
         {familyViews.length === 0 ? (

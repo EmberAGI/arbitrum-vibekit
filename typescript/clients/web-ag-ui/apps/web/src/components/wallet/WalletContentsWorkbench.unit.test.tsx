@@ -238,15 +238,15 @@ describe('WalletContentsWorkbench', () => {
       }),
     );
 
-    expect(html).toContain('Grouped into 1 asset families');
-    expect(html).toContain('Spendable without releasing a reservation');
-    expect(html).toContain('Unmanaged balance committed to active orchestration');
-    expect(html).toContain('Protocol debt surfaced separately from held balances');
     expect(html).toContain('<details');
     expect(html).toContain('Direct unmanaged USDC');
     expect(html).toContain('Composition');
     expect(html).toContain('bg-[#FFF9F2]');
-    expect(html.indexOf('Composition')).toBeLessThan(html.indexOf('Exposure'));
+    expect(html).not.toContain('Grouped into 1 asset families');
+    expect(html).not.toContain('Spendable without releasing a reservation');
+    expect(html).not.toContain('Unmanaged balance committed to active orchestration');
+    expect(html).not.toContain('Protocol debt surfaced separately from held balances');
+    expect(html).not.toMatch(/>Exposure</);
   });
 
   it('uses the wallet summary total for top-level unmanaged exposure when family availability is zero', () => {
@@ -285,7 +285,6 @@ describe('WalletContentsWorkbench', () => {
 
     expect(html).toContain('title="Unmanaged $47.69"');
     expect(html).toContain('<span>Unmanaged $47.69</span>');
-    expect(html).toContain('>Unmanaged</div><div class="mt-2 text-[28px] tracking-[-0.05em] text-[#221A13]">$47.69</div>');
     expect(html).not.toContain('title="Unmanaged $0.00"');
     expect(html).not.toContain('Unallocated');
   });
@@ -325,7 +324,7 @@ describe('WalletContentsWorkbench', () => {
     );
 
     expect(html).toContain('title="Unmanaged $37.11"');
-    expect(html).toContain('>Unmanaged</div><div class="mt-2 text-[28px] tracking-[-0.05em] text-[#221A13]">$37.11</div>');
+    expect(html).toContain('<span>Unmanaged $37.11</span>');
     expect(html).not.toContain('title="Unmanaged $0.00"');
   });
 });
