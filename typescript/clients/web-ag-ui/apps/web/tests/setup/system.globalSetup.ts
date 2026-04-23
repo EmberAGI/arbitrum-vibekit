@@ -374,6 +374,11 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
         // Keep other agents from failing if the UI touches them.
         LANGGRAPH_DEPLOYMENT_URL: langgraphBaseUrl,
         LANGGRAPH_PENDLE_DEPLOYMENT_URL: langgraphBaseUrl,
+        // Explicit dev/QA-only runtime URLs so /api/copilotkit can fail closed by default.
+        PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL:
+          process.env.PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL ?? 'http://127.0.0.1:3420/ag-ui',
+        EMBER_LENDING_AGENT_DEPLOYMENT_URL:
+          process.env.EMBER_LENDING_AGENT_DEPLOYMENT_URL ?? 'http://127.0.0.1:3430/ag-ui',
         PI_AGENT_DEPLOYMENT_URL: piRuntimeUrl,
       },
     });

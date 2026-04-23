@@ -58,10 +58,8 @@ erc8004:
     operatorAddress: '0x1234567890123456789012345678901234567890'
   mirrors:
     - { chainId: 1 }      # Ethereum Mainnet
-    - { chainId: 8453 }   # Base
   identityRegistries:
     '1': '0x0000000000000000000000000000000000000000'       # Ethereum (placeholder)
-    '8453': '0x0000000000000000000000000000000000000000'   # Base (placeholder)
     '11155111': '0x8004a6090Cd10A7288092483047B097295Fb8847'  # Sepolia (deployed)
     '42161': '0x0000000000000000000000000000000000000000' # Arbitrum (placeholder)
   registrations:
@@ -204,10 +202,8 @@ erc8004:
     operatorAddress: '0x1234567890123456789012345678901234567890'
   mirrors:
     - { chainId: 1 }      # Ethereum Mainnet
-    - { chainId: 8453 }   # Base
   identityRegistries:
     '1': '0x0000000000000000000000000000000000000000'
-    '8453': '0x0000000000000000000000000000000000000000'
     '42161': '0x0000000000000000000000000000000000000000'
   registrations:
     '42161':
@@ -228,10 +224,8 @@ erc8004:
     operatorAddress: '0x1234567890123456789012345678901234567890'
   mirrors:
     - { chainId: 42161 }  # Arbitrum One
-    - { chainId: 8453 }   # Base
   identityRegistries:
     '1': '0x0000000000000000000000000000000000000000'
-    '8453': '0x0000000000000000000000000000000000000000'
     '42161': '0x0000000000000000000000000000000000000000'
 ```
 
@@ -245,10 +239,8 @@ erc8004:
     # operatorAddress omitted - CAIP-10 will not be included in extension
   mirrors:
     - { chainId: 1 }
-    - { chainId: 8453 }
   identityRegistries:
     '1': '0x0000000000000000000000000000000000000000'
-    '8453': '0x0000000000000000000000000000000000000000'
     '42161': '0x0000000000000000000000000000000000000000'
 ```
 
@@ -507,10 +499,8 @@ erc8004:
     operatorAddress: '0x1234567890123456789012345678901234567890'
   mirrors:
     - { chainId: 1 }
-    - { chainId: 8453 }
   identityRegistries:
     '1': '0x0000000000000000000000000000000000000000'
-    '8453': '0x0000000000000000000000000000000000000000'
     '42161': '0x0000000000000000000000000000000000000000'
   registrations:
     '42161':
@@ -519,9 +509,6 @@ erc8004:
     '1':
       agentId: 200
       registrationUri: 'ipfs://QmProdEthereumRegistration'
-    '8453':
-      agentId: 300
-      registrationUri: 'ipfs://QmProdBaseRegistration'
   supportedTrust:
     - 'https://example.com/trust/production-verified'
     - 'https://example.com/trust/security-audited-2024'
@@ -554,10 +541,9 @@ ERC-8004 Configuration:
   Status: Enabled
   Canonical Chain: 42161 (Arbitrum One)
   Operator Address: 0x1234567890123456789012345678901234567890
-  Mirrors: 2 chains (1, 8453)
+  Mirrors: 1 chain (1)
 
   ⚠ Warning: Zero-address registry for chain 1 (Ethereum Mainnet)
-  ⚠ Warning: Zero-address registry for chain 8453 (Base)
   ⚠ Warning: Zero-address registry for chain 42161 (Arbitrum One)
 
 Routing Configuration:

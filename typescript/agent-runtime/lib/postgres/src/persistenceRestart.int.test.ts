@@ -20,6 +20,21 @@ const findStatement = (statements: readonly PostgresStatement[], tableName: stri
   return statement;
 };
 
+const findStatementByPrefix = (
+  statements: readonly PostgresStatement[],
+  tableName: string,
+  prefix: string,
+): PostgresStatement => {
+  const statement = statements.find(
+    (candidate) => candidate.tableName === tableName && candidate.text.startsWith(prefix),
+  );
+  if (!statement) {
+    throw new Error(`Expected a statement for ${tableName} starting with "${prefix}".`);
+  }
+
+  return statement;
+};
+
 describe('persistence + restart integration', () => {
   it('keeps queued execution, interrupt, outbox, and bootstrap recovery aligned with persisted Postgres records', () => {
     const now = new Date('2026-03-18T20:00:00.000Z');
@@ -84,7 +99,11 @@ describe('persistence + restart integration', () => {
     const automationStatement = findStatement(automationStatements, 'pi_automations');
     const leaseStatement = findStatement(automationStatements, 'pi_scheduler_leases');
     const interruptedExecutionStatement = findStatement(interruptStatements, 'pi_executions');
-    const interruptStatement = findStatement(interruptStatements, 'pi_interrupts');
+    const interruptStatement = findStatementByPrefix(
+      interruptStatements,
+      'pi_interrupts',
+      'insert into pi_interrupts',
+    );
     const outboxStatement = findStatement(outboxStatements, 'pi_outbox');
 
     expect(bootstrapPlan).toEqual({
@@ -122,8 +141,8 @@ describe('persistence + restart integration', () => {
           {
             executionId: interruptedExecutionStatement.values[0] as string,
             threadId: interruptedExecutionStatement.values[1] as string,
-            status: interruptedExecutionStatement.values[2] as 'working' | 'interrupted',
-            currentInterruptId: interruptedExecutionStatement.values[4] as string,
+            status: interruptedExecutionStatement.values[3] as 'interrupted',
+            currentInterruptId: interruptedExecutionStatement.values[5] as string,
           },
         ],
         outboxIntents: [
@@ -140,7 +159,7 @@ describe('persistence + restart integration', () => {
             threadId: interruptStatement.values[1] as string,
             executionId: interruptStatement.values[2] as string,
             status: interruptStatement.values[4] as 'pending',
-            surfacedInThread: interruptStatement.values[5] as boolean,
+            mirroredToActivity: interruptStatement.values[5] as boolean,
           },
         ],
       }),

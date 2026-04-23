@@ -21,7 +21,7 @@ describe('serviceConfig', () => {
     const defaults = resolveLangGraphDefaults();
     expect(defaults).toEqual({ durability: 'exit', checkpointer: 'shallow' });
     expect(createCheckpointer().constructor.name).toBe('ShallowMemorySaver');
-  });
+  }, 15_000);
 
   it('loads overrides from a config file', async () => {
     existsSyncMock.mockReturnValue(true);

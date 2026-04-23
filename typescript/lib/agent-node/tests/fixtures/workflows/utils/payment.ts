@@ -10,7 +10,7 @@ import { X402_REQUIREMENTS_KEY, X402_STATUS_KEY } from '../../../../src/workflow
 export function createPaymentRequirements(agentsWallet: `0x${string}`): PaymentRequirements {
   return {
     scheme: 'exact',
-    network: 'base-sepolia',
+    network: 'arbitrum-sepolia',
     description: 'Enabling USDAi Points Trading Strategy execution (fixture)',
     // Upstream x402 schema validates this with z.string().url(), so a bare path fails validation.
     // Use a fully-qualified URL to satisfy the requirement.

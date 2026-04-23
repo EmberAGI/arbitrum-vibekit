@@ -1,6 +1,5 @@
 import {
-  extractCommandEnvelopeFromMessages,
-  extractCommandFromMessages,
+  extractCommandEnvelope as extractWorkflowCommandEnvelope,
   resolveCommandReplayGuardState,
   resolveCycleCommandTarget,
   resolveCommandTargetForBootstrappedFlow,
@@ -14,16 +13,18 @@ import { resolveNextOnboardingNode } from '../onboardingRouting.js';
 
 type CommandTarget = CommandRoutingTarget;
 
-export function extractCommandEnvelope(messages: ClmmState['messages']): CommandEnvelope<AgentCommand> | null {
-  return extractCommandEnvelopeFromMessages(messages);
+export function extractCommandEnvelope(
+  pendingCommand: ClmmState['private']['pendingCommand'],
+): CommandEnvelope<AgentCommand> | null {
+  return extractWorkflowCommandEnvelope(pendingCommand);
 }
 
-export function extractCommand(messages: ClmmState['messages']): AgentCommand | null {
-  return extractCommandFromMessages(messages);
+export function extractCommand(activeCommand: ClmmState['private']['activeCommand']): AgentCommand | null {
+  return activeCommand ?? null;
 }
 
 export function runCommandNode(state: ClmmState): ClmmUpdate {
-  const commandEnvelope = extractCommandEnvelope(state.messages);
+  const commandEnvelope = extractCommandEnvelope(state.private.pendingCommand);
   const parsedCommand = commandEnvelope?.command ?? null;
   const replayGuardState = resolveCommandReplayGuardState({
     parsedCommand,
@@ -31,12 +32,14 @@ export function runCommandNode(state: ClmmState): ClmmUpdate {
     lastAppliedCommandMutationId: state.private.lastAppliedCommandMutationId,
   });
   const lastAppliedClientMutationId =
-    parsedCommand === 'sync'
+    parsedCommand === 'refresh'
       ? commandEnvelope?.clientMutationId ?? state.thread.lastAppliedClientMutationId
       : state.thread.lastAppliedClientMutationId;
 
   return {
     private: {
+      pendingCommand: null,
+      activeCommand: parsedCommand,
       suppressDuplicateCommand: replayGuardState.suppressDuplicateCommand,
       lastAppliedCommandMutationId: replayGuardState.lastAppliedCommandMutationId,
     },
@@ -51,7 +54,7 @@ export function resolveCommandTarget(state: ClmmState): CommandTarget {
     return '__end__';
   }
 
-  const resolvedCommand = extractCommand(state.messages);
+  const resolvedCommand = extractCommand(state.private.activeCommand);
   if (resolvedCommand === 'cycle') {
     return resolveCycleCommandTarget({
       bootstrapped: state.private.bootstrapped,

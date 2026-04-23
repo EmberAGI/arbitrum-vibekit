@@ -60,7 +60,7 @@ describe('registerCommand (from-config) - Agent Card URL composition', () => {
     parsed.data['erc8004'] = {
       enabled: true,
       canonical: { chainId: 42161 },
-      mirrors: [{ chainId: 1 }, { chainId: 8453 }],
+      mirrors: [{ chainId: 1 }],
       identityRegistries: {},
       registrations: {},
       supportedTrust: [],

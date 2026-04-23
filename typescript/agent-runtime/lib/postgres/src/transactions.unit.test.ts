@@ -5,6 +5,7 @@ import {
   buildCompleteAutomationExecutionStatements,
   buildPersistAutomationDispatchStatements,
   buildPersistDirectExecutionStatements,
+  buildPersistExecutionCheckpointStatements,
   buildPersistInterruptCheckpointStatements,
   buildPersistOutboxIntentStatements,
 } from './index.js';
@@ -16,7 +17,6 @@ describe('transactions', () => {
       threadKey: 'root-thread-1',
       threadState: { phase: 'active' },
       executionId: 'exec-1',
-      interruptId: 'interrupt-1',
       artifactId: 'artifact-1',
       activityId: 'activity-1',
       now: new Date('2026-03-18T20:00:00.000Z'),
@@ -32,6 +32,91 @@ describe('transactions', () => {
     expect(statements[0]?.text).toContain('insert into pi_threads');
     expect(statements[1]?.text).toContain('insert into pi_executions');
     expect(statements[1]?.text).toContain('on conflict (id) do update');
+    expect(statements[2]?.text).toContain('update pi_interrupts');
+    expect(statements[1]?.values).toEqual([
+      'exec-1',
+      'thread-1',
+      null,
+      'working',
+      'user',
+      null,
+      new Date('2026-03-18T20:00:00.000Z'),
+      new Date('2026-03-18T20:00:00.000Z'),
+      null,
+    ]);
+  });
+
+  it('builds execution checkpoint statements that resolve stale pending interrupts when no interrupt is active', () => {
+    const statements = buildPersistExecutionCheckpointStatements({
+      executionId: 'exec-1',
+      threadId: 'thread-1',
+      automationRunId: null,
+      status: 'completed',
+      source: 'user',
+      currentInterruptId: null,
+      now: new Date('2026-03-18T20:05:00.000Z'),
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_executions',
+      'pi_interrupts',
+    ]);
+    expect(statements[0]?.text).toContain('insert into pi_executions');
+    expect(statements[0]?.values).toEqual([
+      'exec-1',
+      'thread-1',
+      null,
+      'completed',
+      'user',
+      null,
+      new Date('2026-03-18T20:05:00.000Z'),
+      new Date('2026-03-18T20:05:00.000Z'),
+      new Date('2026-03-18T20:05:00.000Z'),
+    ]);
+    expect(statements[1]?.text).toContain("where execution_id = $3 and status = 'pending'");
+    expect(statements[1]?.values).toEqual([
+      'resolved',
+      new Date('2026-03-18T20:05:00.000Z'),
+      'exec-1',
+    ]);
+  });
+
+  it('builds execution checkpoint statements that keep only the current interrupt pending', () => {
+    const statements = buildPersistExecutionCheckpointStatements({
+      executionId: 'exec-1',
+      threadId: 'thread-1',
+      automationRunId: null,
+      status: 'interrupted',
+      source: 'system',
+      currentInterruptId: 'interrupt-current',
+      interruptPayload: {
+        type: 'operator-config-request',
+        message: 'Need operator input.',
+      },
+      mirroredToActivity: true,
+      now: new Date('2026-03-18T20:05:00.000Z'),
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_executions',
+      'pi_interrupts',
+      'pi_interrupts',
+    ]);
+    expect(statements[1]?.text).toContain("id <> $4");
+    expect(statements[2]?.text).toContain('insert into pi_interrupts');
+    expect(statements[2]?.values).toEqual([
+      'interrupt-current',
+      'thread-1',
+      'exec-1',
+      'input-required',
+      'pending',
+      true,
+      JSON.stringify({
+        type: 'operator-config-request',
+        message: 'Need operator input.',
+      }),
+      new Date('2026-03-18T20:05:00.000Z'),
+    ]);
   });
 
   it('builds the automation dispatch boundary across automation, run, execution, lease, and activity tables', () => {
@@ -158,6 +243,7 @@ describe('transactions', () => {
     });
     expect(interruptStatements.map((statement) => statement.tableName)).toEqual([
       'pi_executions',
+      'pi_interrupts',
       'pi_interrupts',
       'pi_artifacts',
       'pi_thread_activity',

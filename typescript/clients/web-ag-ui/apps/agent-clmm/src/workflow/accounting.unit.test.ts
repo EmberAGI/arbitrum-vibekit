@@ -128,4 +128,48 @@ describe('createCamelotAccountingSnapshot', () => {
       }),
     );
   });
+
+  it('forwards refresh as the accounting trigger for hydration-driven snapshots', async () => {
+    const { createCamelotAccountingSnapshot } = await import('./accounting.js');
+
+    createCamelotNavSnapshot.mockResolvedValue({
+      contextId: 'thread-1',
+      trigger: 'refresh',
+      timestamp: '2026-02-20T00:00:00.000Z',
+      protocolId: 'camelot-clmm',
+      walletAddress: '0x1111111111111111111111111111111111111111',
+      chainId: 42161,
+      totalUsd: 1,
+      positions: [],
+      priceSource: 'unknown',
+    });
+
+    const state = {
+      thread: {
+        operatorConfig: {
+          walletAddress: '0x1111111111111111111111111111111111111111',
+        },
+        metrics: {
+          lastSnapshot: undefined,
+          latestSnapshot: undefined,
+        },
+        accounting: {
+          flowLog: [],
+        },
+      },
+    } as unknown as ClmmState;
+
+    await createCamelotAccountingSnapshot({
+      state,
+      camelotClient: {} as never,
+      trigger: 'refresh',
+      threadId: 'thread-1',
+    });
+
+    expect(createCamelotNavSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trigger: 'refresh',
+      }),
+    );
+  });
 });

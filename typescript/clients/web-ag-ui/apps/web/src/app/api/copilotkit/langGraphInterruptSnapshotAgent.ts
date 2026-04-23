@@ -8,8 +8,17 @@ type PrepareStreamInput = Parameters<CopilotKitLangGraphAgent['prepareStream']>[
 type PrepareStreamMode = Parameters<CopilotKitLangGraphAgent['prepareStream']>[1];
 type PrepareStreamResult = Awaited<ReturnType<CopilotKitLangGraphAgent['prepareStream']>>;
 
+type PendingWorkflowCommandEnvelope = {
+  command: string;
+  clientMutationId?: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function readInterruptTypesFromState(state: LangGraphThreadState | undefined): string[] {
@@ -62,6 +71,54 @@ function readResumeShape(input: PrepareStreamInput): {
   };
 }
 
+function translateNamedWorkflowCommand(command: Record<string, unknown>): Record<string, unknown> | null {
+  const name = readString(command.name);
+  if (!name) {
+    return null;
+  }
+
+  const pendingCommand: PendingWorkflowCommandEnvelope = {
+    command: name,
+  };
+  const clientMutationId = readString(command.clientMutationId);
+  if (clientMutationId) {
+    pendingCommand.clientMutationId = clientMutationId;
+  }
+
+  return {
+    update: {
+      private: {
+        pendingCommand,
+      },
+    },
+  };
+}
+
+function translatePrepareStreamInput(input: PrepareStreamInput): PrepareStreamInput {
+  const forwardedProps = isRecord(input.forwardedProps) ? input.forwardedProps : null;
+  const command = forwardedProps && isRecord(forwardedProps.command) ? forwardedProps.command : null;
+  if (!command) {
+    return input;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(command, 'resume') || Object.prototype.hasOwnProperty.call(command, 'update')) {
+    return input;
+  }
+
+  const translatedCommand = translateNamedWorkflowCommand(command);
+  if (!translatedCommand) {
+    return input;
+  }
+
+  return {
+    ...input,
+    forwardedProps: {
+      ...forwardedProps,
+      command: translatedCommand,
+    },
+  };
+}
+
 export class LangGraphInterruptSnapshotAgent extends CopilotKitLangGraphAgent {
   constructor(config: LangGraphAgentConfig) {
     super(config);
@@ -69,6 +126,19 @@ export class LangGraphInterruptSnapshotAgent extends CopilotKitLangGraphAgent {
 
   override clone(): LangGraphInterruptSnapshotAgent {
     return new LangGraphInterruptSnapshotAgent(this.config);
+  }
+
+  async readThreadSnapshot(threadId: string): Promise<LangGraphStateSnapshot | null> {
+    if (!threadId) {
+      return null;
+    }
+
+    try {
+      const threadState = await this.client.threads.getState(threadId);
+      return this.getStateSnapshot(threadState);
+    } catch {
+      return null;
+    }
   }
 
   override getStateSnapshot(threadState: LangGraphThreadState): LangGraphStateSnapshot {
@@ -88,8 +158,9 @@ export class LangGraphInterruptSnapshotAgent extends CopilotKitLangGraphAgent {
     input: PrepareStreamInput,
     streamMode: PrepareStreamMode,
   ): Promise<PrepareStreamResult> {
+    const translatedInput = translatePrepareStreamInput(input);
     const beforeState = input.threadId ? await this.client.threads.getState(input.threadId).catch(() => undefined) : undefined;
-    const resumeShape = readResumeShape(input);
+    const resumeShape = readResumeShape(translatedInput);
 
     console.warn('[langgraph-resume-trace] prepareStream start', {
       agentName: this.agentName,
@@ -104,7 +175,7 @@ export class LangGraphInterruptSnapshotAgent extends CopilotKitLangGraphAgent {
       persistedInterruptTypes: readInterruptTypesFromState(beforeState),
     });
 
-    const result = await super.prepareStream(input, streamMode);
+    const result = await super.prepareStream(translatedInput, streamMode);
 
     console.warn('[langgraph-resume-trace] prepareStream result', {
       agentName: this.agentName,

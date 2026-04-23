@@ -10,7 +10,7 @@ export type PiRestartInterruptRecord = {
   executionId: string;
   threadId: string;
   status: 'pending' | 'resolved';
-  surfacedInThread: boolean;
+  mirroredToActivity: boolean;
 };
 
 export type PiRestartExecutionRecord = {
@@ -35,6 +35,10 @@ export function buildRestartRecoveryPlan(params: {
   outboxIntents: readonly PiOutboxRecoveryRecord[];
   interrupts: readonly PiRestartInterruptRecord[];
 }): PiRestartRecoveryPlan {
+  const executionById = new Map(
+    params.executions.map((execution) => [execution.executionId, execution]),
+  );
+
   return {
     automationIdsToResume: recoverDueAutomations({
       now: params.now,
@@ -53,7 +57,17 @@ export function buildRestartRecoveryPlan(params: {
       intents: params.outboxIntents,
     }).map((intent) => intent.outboxId),
     interruptIdsToResurface: params.interrupts
-      .filter((interrupt) => interrupt.status === 'pending' && interrupt.surfacedInThread)
+      .filter((interrupt) => {
+        if (interrupt.status !== 'pending' || !interrupt.mirroredToActivity) {
+          return false;
+        }
+
+        const execution = executionById.get(interrupt.executionId);
+        return (
+          execution?.status === 'interrupted' &&
+          execution.currentInterruptId === interrupt.interruptId
+        );
+      })
       .map((interrupt) => interrupt.interruptId),
   };
 }

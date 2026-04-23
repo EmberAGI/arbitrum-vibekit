@@ -20,6 +20,9 @@
     "test:e2e": "pnpm -r --filter \"./apps/*\" run test:e2e",
     "test:watch": "pnpm -r --parallel --filter \"./apps/*\" run test:watch",
     "test:ci": "pnpm -r --filter \"./apps/*\" run test:ci",
+    "smoke:managed-identities": "pnpm --dir ./apps/agent-portfolio-manager exec tsx ./src/managedOnboardingIdentitySmoke.ts",
+    "smoke:redelegation-browser-signing": "node ./apps/agent-portfolio-manager/node_modules/tsx/dist/cli.mjs ./scripts/smoke/redelegation-browser-signing.ts",
+    "smoke:managed-idle-reconciliation": "node ./apps/agent-portfolio-manager/node_modules/tsx/dist/cli.mjs ./scripts/smoke/managed-idle-reconciliation.ts",
     "reset:dev-stack": "bash scripts/reset-dev-stack.sh"
   },
   "devDependencies": {

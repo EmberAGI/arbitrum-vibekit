@@ -6,7 +6,7 @@ import { buildLoggedStateUpdate } from '../stateUpdateFactory.js';
 import { applyAccountingToView } from '../viewMapping.js';
 
 /**
- * No-op sync node.
+ * No-op refresh node.
  *
  * Returns the current LangGraph state snapshot without any mutations.
  * Used by the frontend to fetch current state without triggering any actions.
@@ -23,7 +23,7 @@ export async function syncStateNode(
   const camelotClient = getCamelotClient();
   const threadId = config?.configurable?.thread_id;
   if (!threadId) {
-    logInfo('Accounting sync skipped: missing threadId', {});
+    logInfo('Accounting refresh skipped: missing threadId', {});
     return {};
   }
 
@@ -31,7 +31,7 @@ export async function syncStateNode(
     const snapshot = await createCamelotAccountingSnapshot({
       state,
       camelotClient,
-      trigger: 'sync',
+      trigger: 'refresh',
       threadId,
     });
     if (!snapshot) {
@@ -50,7 +50,7 @@ export async function syncStateNode(
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
-    logInfo('Accounting sync failed', { error: message });
+    logInfo('Accounting refresh failed', { error: message });
     return {};
   }
 }

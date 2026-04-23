@@ -5,7 +5,7 @@ This is a Model Context Protocol (MCP) agent example that demonstrates how to us
 ## Features
 
 - No integrated wallet: transaction data is returned for user signing
-- Supports swapping tokens across Arbitrum, Ethereum, Optimism, Polygon, and Base
+- Supports swapping tokens across Arbitrum, Ethereum, Optimism, and Polygon
 - Natural language interface for all swap and protocol questions
 - Token caching for improved performance
 - Enhanced intent detection for swap operations

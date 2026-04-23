@@ -1,4 +1,4 @@
-export type NavSnapshotTrigger = 'cycle' | 'transaction' | 'sync';
+export type NavSnapshotTrigger = 'cycle' | 'transaction' | 'refresh';
 
 export type PriceSource = 'ember' | 'coingecko';
 export type PriceSourceSummary = 'ember' | 'coingecko' | 'mixed' | 'unknown';

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildPiA2UiActivityEvent,
+  buildPiRuntimeGatewayStateDeltaEvent,
   buildPiThreadStateSnapshot,
   mapPiAgentEventsToAgUiEvents,
 } from './index.js';
@@ -34,11 +35,22 @@ describe('pi AG-UI projection', () => {
           kind: 'interrupt',
           payload: { type: 'operator-config-request', artifactId: 'current-artifact' },
         },
+        projectedState: {
+          managedMandate: {
+            status: 'active',
+          },
+        },
         threadPatch: {
           profile: { principalId: 'wallet:0xabc' },
         },
       }),
     ).toEqual({
+      shared: {},
+      projected: {
+        managedMandate: {
+          status: 'active',
+        },
+      },
       thread: {
         id: 'thread-1',
         task: {
@@ -85,18 +97,134 @@ describe('pi AG-UI projection', () => {
             },
           ],
         },
-        messages: [
-          {
-            id: 'message-1',
-            role: 'user',
-            content: 'Please continue.',
-          },
-        ],
         artifacts: {
           current: { artifactId: 'current-artifact', data: { phase: 'setup' } },
           activity: { artifactId: 'activity-artifact', data: { entries: 3 } },
         },
         profile: { principalId: 'wallet:0xabc' },
+      },
+    });
+  });
+
+  it('builds a JSON Patch state delta from the previous public thread snapshot to the next one', () => {
+    expect(
+      buildPiRuntimeGatewayStateDeltaEvent({
+        previousSession: {
+          thread: { id: 'thread-1' },
+          execution: {
+            id: 'exec-1',
+            status: 'working',
+          },
+          projectedState: {
+            managedMandate: {
+              summary: {
+                riskLevel: 'medium',
+              },
+            },
+          },
+        },
+        session: {
+          thread: { id: 'thread-1' },
+          execution: {
+            id: 'exec-1',
+            status: 'completed',
+          },
+          projectedState: {
+            managedMandate: {
+              summary: {
+                riskLevel: 'medium',
+                status: 'active',
+              },
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      type: EventType.STATE_DELTA,
+      delta: expect.arrayContaining([
+        {
+          op: 'replace',
+          path: '/thread/task/taskStatus/state',
+          value: 'completed',
+        },
+        {
+          op: 'add',
+          path: '/projected/managedMandate/summary/status',
+          value: 'active',
+        },
+      ]),
+    });
+  });
+
+  it('does not surface hidden interrupt checkpoint artifacts into thread activity fallbacks', () => {
+    expect(
+      buildPiThreadStateSnapshot({
+        thread: { id: 'thread-hidden' },
+        execution: {
+          id: 'exec-hidden',
+          status: 'interrupted',
+          statusMessage: 'Connect your wallet.',
+        },
+        artifacts: {
+          current: {
+            artifactId: 'current-artifact',
+            data: {
+              type: 'lifecycle-status',
+              phase: 'onboarding',
+            },
+          },
+          activity: {
+            artifactId: 'hidden-interrupt-artifact',
+            data: {
+              type: 'interrupt-status',
+              interruptType: 'portfolio-manager-setup-request',
+              status: 'pending',
+              mirroredToActivity: false,
+              message: 'Connect your wallet.',
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      shared: {},
+      projected: {},
+      thread: {
+        id: 'thread-hidden',
+        task: {
+          id: 'exec-hidden',
+          taskStatus: {
+            state: 'input-required',
+            message: {
+              content: 'Connect your wallet.',
+            },
+          },
+        },
+        projection: {
+          source: 'pi-runtime-gateway',
+          canonicalIds: {
+            piThreadId: 'thread-hidden',
+            piExecutionId: 'exec-hidden',
+          },
+        },
+        artifacts: {
+          current: {
+            artifactId: 'current-artifact',
+            data: {
+              type: 'lifecycle-status',
+              phase: 'onboarding',
+            },
+          },
+          activity: {
+            artifactId: 'hidden-interrupt-artifact',
+            data: {
+              type: 'interrupt-status',
+              interruptType: 'portfolio-manager-setup-request',
+              status: 'pending',
+              mirroredToActivity: false,
+              message: 'Connect your wallet.',
+            },
+          },
+        },
       },
     });
   });
@@ -294,6 +422,140 @@ describe('pi AG-UI projection', () => {
       {
         type: EventType.TEXT_MESSAGE_END,
         messageId: 'pi:exec-reasoning:assistant:1',
+      },
+    ]);
+  });
+
+  it('backfills final assistant text from message_end when no text delta was streamed', () => {
+    const startedAssistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: 2,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const completedAssistantMessage = {
+      ...startedAssistantMessage,
+      content: [{ type: 'text', text: 'Final assistant reply.' }],
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    expect(
+      mapPiAgentEventsToAgUiEvents({
+        executionId: 'exec-2',
+        events: [
+          { type: 'message_start', message: startedAssistantMessage },
+          { type: 'message_end', message: completedAssistantMessage },
+        ],
+      }),
+    ).toEqual([
+      {
+        type: EventType.TEXT_MESSAGE_START,
+        messageId: 'pi:exec-2:assistant:2',
+        role: 'assistant',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        messageId: 'pi:exec-2:assistant:2',
+        delta: 'Final assistant reply.',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_END,
+        messageId: 'pi:exec-2:assistant:2',
+      },
+    ]);
+  });
+
+  it('surfaces assistant error text from message_end when provider output failed before any text delta', () => {
+    const failedAssistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openrouter',
+      model: 'openai/gpt-5.4',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'error',
+      errorMessage: 'Key limit exceeded (monthly limit).',
+      timestamp: 4,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    expect(
+      mapPiAgentEventsToAgUiEvents({
+        executionId: 'exec-4',
+        events: [
+          { type: 'message_start', message: failedAssistantMessage },
+          { type: 'message_end', message: failedAssistantMessage },
+        ],
+      }),
+    ).toEqual([
+      {
+        type: EventType.TEXT_MESSAGE_START,
+        messageId: 'pi:exec-4:assistant:4',
+        role: 'assistant',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        messageId: 'pi:exec-4:assistant:4',
+        delta: 'Key limit exceeded (monthly limit).',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_END,
+        messageId: 'pi:exec-4:assistant:4',
+      },
+    ]);
+  });
+
+  it('backfills final user text from message_end when no text delta was streamed', () => {
+    const startedUserMessage = {
+      role: 'user',
+      content: '',
+      timestamp: 3,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const completedUserMessage = {
+      ...startedUserMessage,
+      content: 'Refresh your runtime state and tell me what you see.',
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    expect(
+      mapPiAgentEventsToAgUiEvents({
+        executionId: 'exec-3',
+        events: [
+          { type: 'message_start', message: startedUserMessage },
+          { type: 'message_end', message: completedUserMessage },
+        ],
+      }),
+    ).toEqual([
+      {
+        type: EventType.TEXT_MESSAGE_START,
+        messageId: 'pi:exec-3:user:3',
+        role: 'user',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        messageId: 'pi:exec-3:user:3',
+        delta: 'Refresh your runtime state and tell me what you see.',
+      },
+      {
+        type: EventType.TEXT_MESSAGE_END,
+        messageId: 'pi:exec-3:user:3',
       },
     ]);
   });

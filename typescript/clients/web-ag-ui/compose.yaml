@@ -66,6 +66,8 @@ services:
       - apps/agent/.env
     ports:
       - "8123:8123"
+    volumes:
+      - agent_langgraph_api:/app/apps/agent/.langgraph_api
     command: ["sh", "-lc", "npx @langchain/langgraph-cli dev --host 0.0.0.0 --port 8123 --no-browser -c /app/apps/agent"]
     restart: unless-stopped
 
@@ -83,6 +85,8 @@ services:
       - apps/agent-clmm/.env
     ports:
       - "8124:8124"
+    volumes:
+      - agent_clmm_langgraph_api:/app/apps/agent-clmm/.langgraph_api
     command: ["sh", "-lc", "npx @langchain/langgraph-cli dev --host 0.0.0.0 --port 8124 --no-browser -c /app/apps/agent-clmm"]
     restart: unless-stopped
 
@@ -100,6 +104,8 @@ services:
       - apps/agent-pendle/.env
     ports:
       - "8125:8125"
+    volumes:
+      - agent_pendle_langgraph_api:/app/apps/agent-pendle/.langgraph_api
     command: ["sh", "-lc", "npx @langchain/langgraph-cli dev --host 0.0.0.0 --port 8125 --no-browser -c /app/apps/agent-pendle"]
     restart: unless-stopped
 
@@ -117,5 +123,13 @@ services:
       - apps/agent-gmx-allora/.env
     ports:
       - "8126:8126"
+    volumes:
+      - agent_gmx_allora_langgraph_api:/app/apps/agent-gmx-allora/.langgraph_api
     command: ["sh", "-lc", "npx @langchain/langgraph-cli dev --host 0.0.0.0 --port 8126 --no-browser -c /app/apps/agent-gmx-allora"]
     restart: unless-stopped
+
+volumes:
+  agent_langgraph_api:
+  agent_clmm_langgraph_api:
+  agent_pendle_langgraph_api:
+  agent_gmx_allora_langgraph_api:

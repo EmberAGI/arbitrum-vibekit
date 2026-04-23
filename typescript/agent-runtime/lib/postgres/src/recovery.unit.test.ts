@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildRestartRecoveryPlan } from './index.js';
 
 describe('recovery', () => {
-  it('builds a restart recovery plan from durable automations, outbox intents, and surfaced interrupts', () => {
+  it('builds a restart recovery plan from durable automations, outbox intents, and the current interrupt on interrupted executions', () => {
     const now = new Date('2026-03-18T20:00:00.000Z');
 
     expect(
@@ -30,8 +30,8 @@ describe('recovery', () => {
           {
             executionId: 'exec-interrupted',
             threadId: 'thread-3',
-            status: 'working',
-            currentInterruptId: 'interrupt-1',
+            status: 'interrupted',
+            currentInterruptId: 'interrupt-current',
           },
           {
             executionId: 'exec-complete',
@@ -56,25 +56,32 @@ describe('recovery', () => {
         ],
         interrupts: [
           {
-            interruptId: 'interrupt-resurface',
-            executionId: 'exec-1',
-            threadId: 'thread-1',
+            interruptId: 'interrupt-current',
+            executionId: 'exec-interrupted',
+            threadId: 'thread-3',
             status: 'pending',
-            surfacedInThread: true,
+            mirroredToActivity: true,
+          },
+          {
+            interruptId: 'interrupt-stale',
+            executionId: 'exec-interrupted',
+            threadId: 'thread-3',
+            status: 'pending',
+            mirroredToActivity: true,
           },
           {
             interruptId: 'interrupt-hidden',
-            executionId: 'exec-2',
+            executionId: 'exec-working',
             threadId: 'thread-2',
             status: 'pending',
-            surfacedInThread: false,
+            mirroredToActivity: false,
           },
           {
             interruptId: 'interrupt-resolved',
-            executionId: 'exec-3',
+            executionId: 'exec-interrupted',
             threadId: 'thread-3',
             status: 'resolved',
-            surfacedInThread: true,
+            mirroredToActivity: true,
           },
         ],
       }),
@@ -82,7 +89,7 @@ describe('recovery', () => {
       automationIdsToResume: ['auto-due'],
       executionIdsToResume: ['exec-queued', 'exec-working'],
       outboxIdsToReplay: ['outbox-due'],
-      interruptIdsToResurface: ['interrupt-resurface'],
+      interruptIdsToResurface: ['interrupt-current'],
     });
   });
 });

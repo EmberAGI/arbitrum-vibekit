@@ -20,7 +20,7 @@ vi.mock('../hooks/usePrivyWalletClient', () => {
   };
 });
 
-function renderPiExamplePage(
+function renderChatFirstPage(
   container: HTMLDivElement,
   overrides: Partial<React.ComponentProps<typeof AgentDetailPage>> = {},
 ) {
@@ -29,8 +29,8 @@ function renderPiExamplePage(
   act(() => {
     root.render(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -57,7 +57,7 @@ function renderPiExamplePage(
   return root;
 }
 
-describe('AgentDetailPage Pi example A2UI rendering', () => {
+describe('AgentDetailPage chat-first A2UI rendering', () => {
   let container: HTMLDivElement;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   const previousActEnvironment = (globalThis as typeof globalThis & {
@@ -86,7 +86,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
   });
 
   it('renders automation status cards through the A2UI renderer', () => {
-    const root = renderPiExamplePage(container, {
+    const root = renderChatFirstPage(container, {
       events: [
         {
           type: 'artifact',
@@ -95,8 +95,8 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
             data: {
               type: 'automation-status',
               status: 'scheduled',
-              command: 'sync',
-              detail: 'Scheduled sync every 5 minutes.',
+              command: 'refresh',
+              detail: 'Scheduled refresh every 5 minutes.',
             },
           },
         },
@@ -110,8 +110,8 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
                   kind: 'automation-status',
                   payload: {
                     status: 'scheduled',
-                    command: 'sync',
-                    detail: 'Scheduled sync every 5 minutes.',
+                    command: 'refresh',
+                    detail: 'Scheduled refresh every 5 minutes.',
                   },
                 },
               },
@@ -123,7 +123,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
 
     expect(container.querySelector('.a2ui-card')).not.toBeNull();
     expect(container.textContent).toContain('Automation scheduled');
-    expect(container.textContent).toContain('Scheduled sync every 5 minutes.');
+    expect(container.textContent).toContain('Scheduled refresh every 5 minutes.');
 
     act(() => {
       root.unmount();
@@ -132,7 +132,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
 
   it('renders the interrupt flow through an A2UI text field and button, then resolves through interrupt submit', () => {
     const onInterruptSubmit = vi.fn();
-    const root = renderPiExamplePage(container, {
+    const root = renderChatFirstPage(container, {
       events: [
         {
           type: 'dispatch-response',
@@ -196,7 +196,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
   });
 
   it('renders repeated automation artifact history without duplicate React child keys', () => {
-    const root = renderPiExamplePage(container, {
+    const root = renderChatFirstPage(container, {
       events: [
         {
           type: 'artifact',
@@ -205,8 +205,8 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
             data: {
               type: 'automation-status',
               status: 'running',
-              command: 'sync',
-              detail: 'Running automation sync.',
+              command: 'refresh',
+              detail: 'Running automation refresh.',
             },
           },
         },
@@ -217,16 +217,16 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
             data: {
               type: 'automation-status',
               status: 'completed',
-              command: 'sync',
-              detail: 'Automation sync executed successfully.',
+              command: 'refresh',
+              detail: 'Automation refresh executed successfully.',
             },
           },
         },
       ] as never,
     });
 
-    expect(container.textContent).toContain('Running automation sync.');
-    expect(container.textContent).toContain('Automation sync executed successfully.');
+    expect(container.textContent).toContain('Running automation refresh.');
+    expect(container.textContent).toContain('Automation refresh executed successfully.');
     expect(consoleErrorSpy).not.toHaveBeenCalledWith(
       expect.stringContaining('Encountered two children with the same key'),
     );
@@ -237,7 +237,7 @@ describe('AgentDetailPage Pi example A2UI rendering', () => {
   });
 
   it('renders lifecycle artifact updates after operator-note submission', () => {
-    const root = renderPiExamplePage(container, {
+    const root = renderChatFirstPage(container, {
       events: [
         {
           type: 'artifact',

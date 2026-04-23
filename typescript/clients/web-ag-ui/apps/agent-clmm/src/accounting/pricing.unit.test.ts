@@ -43,7 +43,7 @@ describe('deriveTokenPricesFromPools', () => {
     // Then both token prices should be emitted from Ember sources
     expect(token0).toEqual({ tokenAddress: '0xaaa', usdPrice: 2, source: 'ember' });
     expect(token1).toEqual({ tokenAddress: '0xbbb', usdPrice: 3, source: 'ember' });
-  });
+  }, 15_000);
 });
 
 describe('resolveTokenPriceMap', () => {

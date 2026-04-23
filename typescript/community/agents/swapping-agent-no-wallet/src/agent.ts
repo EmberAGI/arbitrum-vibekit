@@ -65,7 +65,6 @@ const CHAIN_MAPPINGS = [
   { id: '42161', names: ['arbitrum', 'arbitrum one', 'arb'] },
   { id: '10', names: ['optimism', 'op'] },
   { id: '137', names: ['polygon', 'matic'] },
-  { id: '8453', names: ['base'] },
 ];
 
 const __filename = fileURLToPath(import.meta.url);
@@ -106,7 +105,6 @@ const quicknodeSegments: Record<string, string> = {
   '42161': 'arbitrum-mainnet',
   '10': 'optimism',
   '137': 'matic',
-  '8453': 'base-mainnet',
 };
 
 export function getChainConfigById(chainId: string): ChainConfig {
@@ -358,13 +356,13 @@ Available actions:
 </example3>
 
 <example4>
-<user>Swap 100.076 arb on arbitrum for dog on base</user>
+<user>Swap 100.076 usdc on ethereum for arb on arbitrum</user>
 <parameters>
 <amount>100.076</amount>
-<fromToken>arb</fromToken>
-<toToken>dog</toToken>
-<fromChain>arbitrum</fromChain>
-<toChain>base</toChain>
+<fromToken>usdc</fromToken>
+<toToken>arb</toToken>
+<fromChain>ethereum</fromChain>
+<toChain>arbitrum</toChain>
 </parameters>
 </example4>
 

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { WalletManagementView } from './WalletManagementView';
 
 describe('WalletManagementView', () => {
-  it('renders wallet portfolio and withdraw sections', () => {
+  it('renders the wallet dashboard without the placeholder manage wallet hero', () => {
     const html = renderToStaticMarkup(
       React.createElement(WalletManagementView, {
         walletAddress: '0x1111111111111111111111111111111111111111',
@@ -18,6 +18,7 @@ describe('WalletManagementView', () => {
               symbol: 'ETH',
               amount: '1000000000000000000',
               decimals: 18,
+              valueUsd: 2_000,
             },
           ],
           positions: {
@@ -48,7 +49,21 @@ describe('WalletManagementView', () => {
       }),
     );
 
-    expect(html).toContain('Manage Wallet');
+    expect(html).not.toContain('Manage Wallet');
+    expect(html).not.toContain('Wallet dashboard');
+    expect(html).not.toMatch(/>Portfolio</);
+    expect(html).toContain('mx-auto w-full max-w-[1400px] space-y-6 px-0 pt-0 pb-6');
+    expect(html).not.toContain('mx-auto w-full max-w-[1400px] p-6 space-y-6');
+    expect(html).toContain('Benchmark');
+    expect(html).toContain('Gross exposure');
+    expect(html).toContain('Wallet contents');
+    expect(html).toContain('In wallet');
+    expect(html).toContain('Deployed');
+    expect(html).toContain('Owed');
+    expect(html).toContain('Camelot ETH/USDC');
+    expect(html).toContain('Unpriced lanes');
+    expect(html).toContain('Accounting');
+    expect(html).toContain('Asset allocation treemap');
     expect(html).toContain('Token Balances');
     expect(html).toContain('Perpetual Positions');
     expect(html).toContain('Pendle Positions');

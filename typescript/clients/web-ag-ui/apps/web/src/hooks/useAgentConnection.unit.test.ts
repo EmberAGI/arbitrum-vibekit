@@ -22,21 +22,21 @@ describe('interruptSelection', () => {
     expect(normalizeAgentInterrupt('{not-json')).toBeNull();
   });
 
-  it('prefers stream interrupt over sync fallback', () => {
+  it('prefers stream interrupt over refresh fallback', () => {
     const streamInterrupt: AgentInterrupt = {
       type: 'operator-config-request',
       message: 'From stream',
     };
-    const syncPendingInterrupt: AgentInterrupt = {
+    const refreshPendingInterrupt: AgentInterrupt = {
       type: 'gmx-setup-request',
-      message: 'From sync',
+      message: 'From refresh',
     };
 
-    expect(selectActiveInterrupt({ streamInterrupt, syncPendingInterrupt })).toEqual(streamInterrupt);
+    expect(selectActiveInterrupt({ streamInterrupt, syncPendingInterrupt: refreshPendingInterrupt })).toEqual(streamInterrupt);
   });
 
-  it('uses sync fallback when stream interrupt is absent', () => {
-    const syncPendingInterrupt: AgentInterrupt = {
+  it('uses refresh fallback when stream interrupt is absent', () => {
+    const refreshPendingInterrupt: AgentInterrupt = {
       type: 'clmm-delegation-signing-request',
       message: 'Sign delegations',
       chainId: 42161,
@@ -48,8 +48,8 @@ describe('interruptSelection', () => {
       warnings: [],
     };
 
-    expect(selectActiveInterrupt({ streamInterrupt: null, syncPendingInterrupt })).toEqual(
-      syncPendingInterrupt,
+    expect(selectActiveInterrupt({ streamInterrupt: null, syncPendingInterrupt: refreshPendingInterrupt })).toEqual(
+      refreshPendingInterrupt,
     );
   });
 });

@@ -4,6 +4,7 @@
 
 import { SlidersHorizontal, Star, MoreHorizontal, ChevronDown, Flame } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { SearchBar } from './ui/SearchBar';
 import { FilterTabs } from './ui/FilterTabs';
 import { Pagination } from './ui/Pagination';
@@ -11,6 +12,7 @@ import { AgentsTable } from './agents/AgentsTable';
 import { Skeleton } from './ui/Skeleton';
 import { CreatorIdentity } from './ui/CreatorIdentity';
 import { CursorListTooltip } from './ui/CursorListTooltip';
+import { AgentSurfaceTag } from './ui/AgentSurfaceTag';
 import { CTA_SIZE_MD } from './ui/cta';
 import { PROTOCOL_TOKEN_FALLBACK } from '../constants/protocolTokenFallback';
 import { useOnchainActionsIconMaps } from '../hooks/useOnchainActionsIconMaps';
@@ -26,6 +28,7 @@ import {
   normalizeSymbolKey,
   proxyIconUri,
 } from '../utils/iconResolution';
+import { getVisibleSurfaceProtocols } from '../utils/agentSurfaceMetadata';
 
 export interface Agent {
   id: string;
@@ -45,6 +48,11 @@ export interface Agent {
   avatar?: string;
   avatarBg?: string;
   imageUrl?: string;
+  surfaceTag?: 'Swarm' | 'Workflow';
+  marketplaceCardBg?: string;
+  marketplaceCardHoverBg?: string;
+  marketplaceRowBg?: string;
+  marketplaceRowHoverBg?: string;
   chains?: string[];
   protocols?: string[];
   tokens?: string[];
@@ -73,6 +81,11 @@ export interface FeaturedAgent {
   avatar?: string;
   avatarBg?: string;
   imageUrl?: string;
+  surfaceTag?: 'Swarm' | 'Workflow';
+  marketplaceCardBg?: string;
+  marketplaceCardHoverBg?: string;
+  marketplaceRowBg?: string;
+  marketplaceRowHoverBg?: string;
   pointsTrend?: 'up' | 'down';
   trendMultiplier?: string;
   status: 'for_hire' | 'hired' | 'unavailable';
@@ -130,11 +143,19 @@ export function HireAgentsPage({
       return matchesSearch && matchesFilter;
     })
     .sort((a, b) => {
-      if (a.id === 'agent-clmm' && b.id !== 'agent-clmm') {
+      const aFeaturedRank = a.featuredRank ?? Number.POSITIVE_INFINITY;
+      const bFeaturedRank = b.featuredRank ?? Number.POSITIVE_INFINITY;
+      const aIsFeatured = a.featuredRank !== undefined;
+      const bIsFeatured = b.featuredRank !== undefined;
+
+      if (aIsFeatured && !bIsFeatured) {
         return -1;
       }
-      if (b.id === 'agent-clmm' && a.id !== 'agent-clmm') {
+      if (bIsFeatured && !aIsFeatured) {
         return 1;
+      }
+      if (aFeaturedRank !== bFeaturedRank) {
+        return aFeaturedRank - bFeaturedRank;
       }
       switch (sortBy) {
         case 'income':
@@ -185,26 +206,25 @@ export function HireAgentsPage({
     <div
       className={[
         'hire-agents-page flex-1 overflow-y-auto p-8',
-        '[--hire-accent:#8b5cf6]',
-        '[--hire-accent-hover:#7c3aed]',
-        '[--hire-accent-soft:rgba(139,92,246,0.18)]',
-        '[--hire-accent-soft-strong:rgba(139,92,246,0.28)]',
+        '[--hire-accent:#FD6731]',
+        '[--hire-accent-hover:#E55A28]',
+        '[--hire-accent-soft:rgba(253,103,49,0.16)]',
+        '[--hire-accent-soft-strong:rgba(253,103,49,0.26)]',
       ].join(' ')}
     >
       <div className="max-w-[1400px] mx-auto">
-        <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-[#14141a] to-[#0e0e12] shadow-[0_20px_80px_rgba(0,0,0,0.35)] p-8">
+        <div className="rounded-3xl border border-[#E2D0BE] bg-gradient-to-b from-[#FFF9F2] to-[#F2E8DB] shadow-[0_24px_80px_rgba(103,61,34,0.12)] p-8">
           {/* Page Header */}
-          <h1 className="text-[28px] leading-[1.1] font-semibold text-white tracking-tight mb-5">
+          <h1 className="text-[28px] leading-[1.1] font-semibold text-[#241813] tracking-tight mb-5">
             Hire Agents
           </h1>
 
           {/* Banner CTA */}
-          <div className="relative mb-8 rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-r from-[#191527] via-[#151625] to-[#12121a]">
+          <div className="relative mb-8 rounded-2xl overflow-hidden border border-[#E7D3BE] bg-gradient-to-r from-[#FFF4E8] via-[#FBEBDD] to-[#F6E4D4]">
             <div className="absolute inset-0">
-              <div className="absolute inset-0 opacity-80 bg-[radial-gradient(circle_at_15%_35%,rgba(139,92,246,0.35),transparent_55%)]" />
-              <div className="absolute inset-0 opacity-70 bg-[radial-gradient(circle_at_40%_10%,rgba(56,189,248,0.14),transparent_60%)]" />
-              <div className="absolute inset-0 opacity-50 bg-[radial-gradient(circle_at_70%_60%,rgba(236,72,153,0.10),transparent_60%)]" />
-              <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-black/60" />
+              <div className="absolute inset-0 opacity-90 bg-[radial-gradient(circle_at_15%_35%,rgba(253,103,49,0.18),transparent_55%)]" />
+              <div className="absolute inset-0 opacity-75 bg-[radial-gradient(circle_at_48%_12%,rgba(227,160,78,0.20),transparent_60%)]" />
+              <div className="absolute inset-0 opacity-55 bg-[radial-gradient(circle_at_78%_62%,rgba(255,255,255,0.55),transparent_58%)]" />
             </div>
             <div className="relative flex items-stretch justify-between gap-6 pr-5">
               <div className="flex items-stretch min-w-0">
@@ -217,10 +237,10 @@ export function HireAgentsPage({
                   />
                 </div>
                 <div className="min-w-0 py-5 pl-5">
-                  <h2 className="text-lg font-semibold text-white mb-1">
+                  <h2 className="text-lg font-semibold text-[#241813] mb-1">
                     Publish your agent for hire
                   </h2>
-                  <p className="text-gray-400 text-[13px] leading-5">
+                  <p className="text-[#7B6758] text-[13px] leading-5">
                     Your agent earns for it&apos;s services. And so do you.
                   </p>
                 </div>
@@ -252,7 +272,7 @@ export function HireAgentsPage({
                     label,
                     iconUri: chainIconByName[normalizeNameKey(label)] ?? null,
                   }));
-                  const protocolItems = (agent.protocols ?? []).map((label) => {
+                  const protocolItems = getVisibleSurfaceProtocols(agent.protocols ?? []).map((label) => {
                     const fallback = PROTOCOL_TOKEN_FALLBACK[label];
                     const iconUri = fallback
                       ? tokenIconBySymbol[normalizeSymbolKey(fallback)] ?? null
@@ -265,6 +285,7 @@ export function HireAgentsPage({
                   }));
                   const avatarUri =
                     resolveAgentAvatarUri({
+                      imageUrl: agent.imageUrl,
                       protocols: agent.protocols ?? [],
                       tokenIconBySymbol,
                     }) ??
@@ -309,17 +330,17 @@ export function HireAgentsPage({
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                  className="appearance-none h-10 flex items-center gap-2 px-4 pr-9 rounded-full bg-white/5 border border-white/10 hover:bg-white/7 hover:border-white/15 transition-colors text-[13px] cursor-pointer focus:outline-none focus:border-[color:var(--hire-accent)] focus:ring-2 focus:ring-[color:var(--hire-accent-soft)]"
+                  className="appearance-none h-10 flex items-center gap-2 px-4 pr-9 rounded-full bg-[#FFF8F0] border border-[#DDC8B3] hover:bg-[#F4E6D8] transition-colors text-[13px] text-[#241813] cursor-pointer focus:outline-none focus:border-[color:var(--hire-accent)] focus:ring-2 focus:ring-[color:var(--hire-accent-soft)]"
                 >
                   <option value="income">Sort by: Income</option>
                   <option value="apy">Sort by: APY</option>
                   <option value="users">Sort by: Users</option>
                   <option value="aum">Sort by: AUM</option>
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9B7C63] pointer-events-none" />
               </div>
 
-              <button className="h-10 flex items-center gap-2 px-4 rounded-full bg-white/5 border border-white/10 hover:bg-white/7 hover:border-white/15 transition-colors">
+              <button className="h-10 flex items-center gap-2 px-4 rounded-full bg-[#FFF8F0] border border-[#DDC8B3] hover:bg-[#F4E6D8] transition-colors text-[#241813]">
                 <SlidersHorizontal className="w-4 h-4" />
                 <span className="text-[13px]">Filter</span>
               </button>
@@ -333,8 +354,8 @@ export function HireAgentsPage({
                   id: 'hired',
                   label: 'Hired',
                   count: hiredCount,
-                  activeClassName: 'bg-teal-500/15 text-teal-300 border border-teal-500/25',
-                  countClassName: 'bg-teal-500/15 text-teal-200',
+                  activeClassName: 'bg-[#E6F1E8] text-[#4E7A58] border border-[#C8DFC9]',
+                  countClassName: 'bg-[#D9EAD9] text-[#4E7A58]',
                 },
                 {
                   id: 'for_hire',
@@ -365,8 +386,14 @@ export function HireAgentsPage({
               aum: agent.aum,
               points: agent.points,
               pointsTrend: agent.pointsTrend,
+              avatarBg: agent.avatarBg,
+              usesBrandedImage: Boolean(agent.imageUrl),
+              surfaceTag: agent.surfaceTag,
+              rowBg: agent.marketplaceRowBg,
+              rowHoverBg: agent.marketplaceRowHoverBg,
               iconUri:
                 resolveAgentAvatarUri({
+                  imageUrl: agent.imageUrl,
                   protocols: agent.protocols ?? [],
                   tokenIconBySymbol,
                 }) ??
@@ -418,17 +445,28 @@ function FeaturedAgentCard({
   const hasRating = agent.rating !== undefined && agent.rating > 0;
   const hasCreator = agent.creator !== undefined && agent.creator !== '';
   const hasTrend = agent.trendMultiplier !== undefined && agent.trendMultiplier !== '';
+  const cardStyle = agent.marketplaceCardBg
+    ? ({
+        '--agent-card-bg': agent.marketplaceCardBg,
+        '--agent-card-hover-bg': agent.marketplaceCardHoverBg ?? agent.marketplaceCardBg,
+      } as CSSProperties)
+    : undefined;
 
   return (
     <div
       onClick={onClick}
-      className="min-w-[340px] w-[340px] h-[230px] flex-shrink-0 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15 transition-colors cursor-pointer overflow-hidden flex flex-col"
+      className="min-w-[340px] w-[340px] h-[230px] flex-shrink-0 rounded-2xl border border-[#E3D2BF] bg-[color:var(--agent-card-bg,rgba(255,250,242,0.92))] hover:bg-[color:var(--agent-card-hover-bg,rgba(247,239,227,0.98))] hover:border-[#D4BFA8] transition-colors cursor-pointer overflow-hidden flex flex-col shadow-[0_16px_36px_rgba(103,61,34,0.08)]"
+      style={cardStyle}
     >
       {/* Header: avatar + title/subtitle on left, rank/menu on right */}
       <div className="px-4 pt-4 pb-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex items-start gap-3">
-            <div className="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 bg-black/30 flex items-center justify-center">
+            <div className="w-[72px] h-[72px] rounded-full flex-shrink-0 overflow-hidden ring-1 ring-[#E3D2BF] bg-[#F6ECDD] flex items-center justify-center">
+              <div
+                className="h-full w-full flex items-center justify-center bg-[#F6ECDD]"
+                style={agent.imageUrl && agent.avatarBg ? { background: agent.avatarBg } : undefined}
+              >
               {avatarUri ? (
                 <img
                   src={proxyIconUri(avatarUri)}
@@ -437,50 +475,56 @@ function FeaturedAgentCard({
                   className="h-full w-full object-contain p-2"
                 />
               ) : (
-                <span className="text-lg font-semibold text-white/75" aria-hidden="true">
+                <span className="text-lg font-semibold text-[#6F5A4C]" aria-hidden="true">
                   {iconMonogram(agent.name)}
                 </span>
               )}
+              </div>
             </div>
 
             <div className="min-w-0">
-              <h3 className="font-medium text-white text-[15px] leading-5">{agent.name}</h3>
-              {(hasCreator || hasRating) && (
-                <div className="mt-0.5 flex items-center gap-2">
-                  {hasCreator && (
-                    <span className="inline-flex items-center gap-1">
-                      <span className="text-[12px] text-gray-500">by</span>
-                      <CreatorIdentity
-                        name={agent.creator ?? ''}
-                        verified={agent.creatorVerified}
-                        size="sm"
-                        nameClassName="text-[12px] text-gray-200"
-                      />
-                    </span>
-                  )}
-                  {hasRating && (
-                    <div className="flex items-center">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`w-3 h-3 ${
-                            i < Math.floor(agent.rating ?? 0)
-                              ? 'fill-[color:var(--hire-accent)] text-[color:var(--hire-accent)]'
-                              : 'text-gray-700 fill-gray-700'
-                          }`}
-                        />
-                      ))}
+              <h3 className="font-medium text-[#241813] text-[15px] leading-5">{agent.name}</h3>
+              {(hasCreator || hasRating || agent.surfaceTag) && (
+                <div className="mt-0.5">
+                  {(hasCreator || hasRating) && (
+                    <div className="flex items-center gap-2">
+                      {hasCreator && (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="text-[12px] text-[#A98C74]">by</span>
+                          <CreatorIdentity
+                            name={agent.creator ?? ''}
+                            verified={agent.creatorVerified}
+                            size="sm"
+                            nameClassName="text-[12px] text-[#6F5A4C]"
+                          />
+                        </span>
+                      )}
+                      {hasRating && (
+                        <div className="flex items-center">
+                          {[...Array(5)].map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`w-3 h-3 ${
+                                i < Math.floor(agent.rating ?? 0)
+                                  ? 'fill-[color:var(--hire-accent)] text-[color:var(--hire-accent)]'
+                                  : 'text-[#D2B9A1] fill-[#D2B9A1]'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
+                  {agent.surfaceTag ? <AgentSurfaceTag tag={agent.surfaceTag} className="mt-1.5" /> : null}
                 </div>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {hasRank && <span className="text-xs text-gray-500 font-medium">#{agent.rank}</span>}
+            {hasRank && <span className="text-xs text-[#A98C74] font-medium">#{agent.rank}</span>}
             <button
               onClick={(e) => e.stopPropagation()}
-              className="p-1 rounded hover:bg-white/10 transition-colors"
+              className="p-1 rounded hover:bg-[#F4E6D8] transition-colors"
             >
               <MoreHorizontal className="w-5 h-5 text-[color:var(--hire-accent)]" />
             </button>
@@ -521,7 +565,7 @@ function FeaturedAgentCard({
         </div>
 
         {agent.description ? (
-          <p className="text-[11px] leading-4 text-gray-400 min-h-8 overflow-hidden text-ellipsis [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">
+          <p className="text-[11px] leading-4 text-[#7B6758] min-h-8 overflow-hidden text-ellipsis [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">
             {agent.description}
           </p>
         ) : null}
@@ -529,7 +573,7 @@ function FeaturedAgentCard({
 
       {/* Stats footer */}
       {!isMetricsCollapsed && (
-        <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-black/20 border-t border-white/10">
+        <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-[#F4E6D8] border-t border-[#E3D2BF]">
           <FeaturedStat
             label="AUM"
             isLoaded={agent.isLoaded}
@@ -544,7 +588,7 @@ function FeaturedAgentCard({
             label="APY"
             isLoaded={agent.isLoaded}
             value={agent.apy !== undefined ? `${agent.apy}%` : null}
-            valueClassName="text-teal-400"
+            valueClassName="text-[#4E7A58]"
           />
           <FeaturedStat
             label="Users"
@@ -562,10 +606,10 @@ function FeaturedAgentCard({
           onToggleMetrics?.();
         }}
         aria-label={isMetricsCollapsed ? 'Expand metrics' : 'Collapse metrics'}
-        className="flex w-full justify-center py-1.5 bg-black/20 border-t border-white/10 hover:bg-black/30 transition-colors"
+        className="flex w-full justify-center py-1.5 bg-[#F4E6D8] border-t border-[#E3D2BF] hover:bg-[#EEDAC6] transition-colors"
       >
         <ChevronDown
-          className={`w-4 h-4 text-gray-600 transition-transform ${isMetricsCollapsed ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-[#A98C74] transition-transform ${isMetricsCollapsed ? 'rotate-180' : ''}`}
         />
       </button>
     </div>
@@ -585,41 +629,63 @@ function IconGroup({
   const hasOverflow = items.length > MAX_ICONS;
   const displayItems = hasOverflow ? items.slice(0, MAX_ICONS - 1) : items.slice(0, MAX_ICONS);
   const overflowItems = hasOverflow ? items.slice(MAX_ICONS - 1) : [];
+  const rendersAsTextTags = displayItems.length > 0 && displayItems.every((item) => item.iconUri === null);
 
   return (
     <div className="min-w-0">
-      <div className="text-[11px] font-mono text-gray-500 tracking-wide mb-1">{title}</div>
+      <div className="text-[11px] font-mono text-[#A98C74] tracking-wide mb-1">{title}</div>
       <div className="flex items-center min-h-6">
-        <div className="flex items-center -space-x-2">
-          {displayItems.map((item) =>
-            item.iconUri ? (
-              <img
-                key={`${item.label}-${item.iconUri}`}
-                src={proxyIconUri(item.iconUri)}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] object-contain"
-              />
-            ) : (
-              <div
+        {rendersAsTextTags ? (
+          <div className="flex flex-wrap gap-1.5">
+            {displayItems.map((item) => (
+              <span
                 key={item.label}
-                className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] flex items-center justify-center text-[10px] font-semibold text-white/70 select-none"
-                aria-hidden="true"
+                className="inline-flex max-w-full items-center rounded-full bg-[#FFF8F0] px-2 py-1 text-[10px] font-medium leading-none text-[#6F5A4C] ring-1 ring-[#E3D2BF]"
               >
-                {iconMonogram(item.label)}
-              </div>
-            ),
-          )}
+                {item.label}
+              </span>
+            ))}
 
-          {overflowItems.length > 0 ? (
-            <CursorListTooltip title={`${title} (more)`} items={overflowItems}>
-              <div className="h-6 w-6 rounded-full bg-black/30 ring-1 ring-[#0e0e12] flex items-center justify-center text-[12px] text-gray-200 font-semibold whitespace-nowrap select-none cursor-default">
-                …
-              </div>
-            </CursorListTooltip>
-          ) : null}
-        </div>
+            {overflowItems.length > 0 ? (
+              <CursorListTooltip title={`${title} (more)`} items={overflowItems}>
+                <span className="inline-flex items-center rounded-full bg-[#F4E6D8] px-2 py-1 text-[10px] font-medium leading-none text-[#8A6F58] ring-1 ring-[#E3D2BF] select-none cursor-default">
+                  +{overflowItems.length}
+                </span>
+              </CursorListTooltip>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex items-center -space-x-2">
+            {displayItems.map((item) =>
+              item.iconUri ? (
+                <img
+                  key={`${item.label}-${item.iconUri}`}
+                  src={proxyIconUri(item.iconUri)}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-6 w-6 rounded-full bg-[#F6ECDD] ring-1 ring-[#E3D2BF] object-contain"
+                />
+              ) : (
+                <div
+                  key={item.label}
+                  className="h-6 w-6 rounded-full bg-[#F6ECDD] ring-1 ring-[#E3D2BF] flex items-center justify-center text-[10px] font-semibold text-[#6F5A4C] select-none"
+                  aria-hidden="true"
+                >
+                  {iconMonogram(item.label)}
+                </div>
+              ),
+            )}
+
+            {overflowItems.length > 0 ? (
+              <CursorListTooltip title={`${title} (more)`} items={overflowItems}>
+                <div className="h-6 w-6 rounded-full bg-[#F4E6D8] ring-1 ring-[#E3D2BF] flex items-center justify-center text-[12px] text-[#6F5A4C] font-semibold whitespace-nowrap select-none cursor-default">
+                  …
+                </div>
+              </CursorListTooltip>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -629,7 +695,7 @@ function FeaturedStat({
   label,
   isLoaded,
   value,
-  valueClassName = 'text-white',
+  valueClassName = 'text-[#241813]',
 }: {
   label: string;
   isLoaded: boolean;
@@ -638,13 +704,13 @@ function FeaturedStat({
 }) {
   return (
     <div>
-      <div className="text-[9px] font-mono text-gray-500 tracking-wide mb-0.5">{label}</div>
+      <div className="text-[9px] font-mono text-[#A98C74] tracking-wide mb-0.5">{label}</div>
       {!isLoaded ? (
         <Skeleton className="h-4 w-10" />
       ) : value !== null ? (
           <div className={`font-semibold text-[12px] leading-4 ${valueClassName}`}>{value}</div>
         ) : (
-          <div className="text-gray-500 font-semibold text-[12px] leading-4">-</div>
+          <div className="text-[#A98C74] font-semibold text-[12px] leading-4">-</div>
         )}
     </div>
   );

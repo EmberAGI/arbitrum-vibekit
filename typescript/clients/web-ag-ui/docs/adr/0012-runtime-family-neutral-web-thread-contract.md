@@ -26,6 +26,7 @@ The required shared contract is:
 - `thread.lifecycle.phase` must be emitted by the runtime as a concrete string value and must not be omitted or left `null` when a thread snapshot exists
 - every emitted thread snapshot used by the web must include `thread.task.taskStatus.state`
 - when `thread.task.taskStatus.message` is present, it must use the LangGraph-compatible object shape `{ content: string }`
+- attach and hydration paths such as AG-UI `connect` must establish this shared thread contract with a concrete snapshot baseline before the web is expected to reconcile later deltas against it
 
 Ownership rules:
 - runtime families are responsible for adapting their internal execution state into the shared web-facing contract before the snapshot reaches the web

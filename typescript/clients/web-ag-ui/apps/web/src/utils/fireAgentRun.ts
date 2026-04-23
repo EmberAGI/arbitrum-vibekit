@@ -2,12 +2,9 @@ import type { v7 as uuidv7 } from 'uuid';
 import { isAbortLikeError, isAgentRunning, isBusyRunError } from './runConcurrency';
 
 type AgentLike = {
-  addMessage: (message: { id: string; role: 'user'; content: string }) => void;
   detachActiveRun?: () => Promise<void> | void;
   isRunning?: boolean | (() => boolean);
 };
-
-type FireCommandTransport = 'message' | 'forwarded-props';
 
 type BoolRef = { current: boolean };
 
@@ -140,13 +137,14 @@ const startFireRun = async <TAgent extends AgentLike>(
 
 export async function fireAgentRun<TAgent extends AgentLike>(params: {
   agent: TAgent | null;
-  runAgent: (agent: TAgent) => Promise<unknown>;
-  runDirectCommand?: (agent: TAgent, commandName: 'fire') => Promise<unknown>;
+  runDirectCommand: (
+    agent: TAgent,
+    input: { commandName: 'fire'; clientMutationId: string },
+  ) => Promise<unknown>;
   preemptActiveRun?: (agent: TAgent) => Promise<void> | void;
   threadId: string | undefined;
   runInFlightRef: BoolRef;
   createId: typeof uuidv7;
-  commandTransport?: FireCommandTransport;
   onError?: (message: string) => void;
   preemptWaitMs?: number;
   preemptPollMs?: number;
@@ -303,26 +301,12 @@ export async function fireAgentRun<TAgent extends AgentLike>(params: {
     runInFlight: runInFlightRef.current,
   });
 
-  const commandTransport = params.commandTransport ?? 'message';
-  if (commandTransport === 'message') {
-    const fireClientMutationId = params.createId();
-    agent.addMessage({
-      id: params.createId(),
-      role: 'user',
-      content: JSON.stringify({ command: 'fire', clientMutationId: fireClientMutationId }),
+  const fireClientMutationId = params.createId();
+  const startRun = (currentAgent: TAgent) =>
+    params.runDirectCommand(currentAgent, {
+      commandName: 'fire',
+      clientMutationId: fireClientMutationId,
     });
-  }
-
-  const startRun =
-    commandTransport === 'forwarded-props'
-      ? (currentAgent: TAgent) => {
-          if (!params.runDirectCommand) {
-            throw new Error('Direct fire command transport requires runDirectCommand.');
-          }
-
-          return params.runDirectCommand(currentAgent, 'fire');
-        }
-      : params.runAgent;
 
   // Fire-and-forget with short retry if the runtime is still finalizing a previous run.
   logFireCommandDebug('starting fire run dispatch', {

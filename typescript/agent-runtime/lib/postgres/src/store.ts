@@ -43,7 +43,6 @@ export type PersistPiRuntimeDirectExecutionOptions = {
   threadKey: string;
   threadState: Record<string, unknown>;
   executionId: string;
-  interruptId: string;
   artifactId: string;
   activityId: string;
   now: Date;
@@ -150,7 +149,7 @@ export async function loadPiRuntimeInspectionState(
     'select id, thread_id, automation_run_id, status, source, current_interrupt_id, created_at, updated_at, completed_at from pi_executions',
     'select id, thread_id, command_name, cadence, schedule_payload, suspended, next_run_at, created_at, updated_at from pi_automations',
     'select id, automation_id, thread_id, execution_id, status, scheduled_at, started_at, completed_at from pi_automation_runs',
-    'select id, thread_id, execution_id, status, surfaced_in_thread from pi_interrupts',
+    'select id, thread_id, execution_id, status, mirrored_to_activity from pi_interrupts',
     'select automation_id, owner_id, lease_expires_at, last_heartbeat_at from pi_scheduler_leases',
     'select id, status, available_at, delivered_at from pi_outbox',
     'select id, execution_id, thread_id, event_kind, created_at from pi_execution_events',
@@ -219,7 +218,7 @@ export async function loadPiRuntimeInspectionState(
       threadId: asString(row.thread_id, 'pi_interrupts.thread_id'),
       executionId: asString(row.execution_id, 'pi_interrupts.execution_id'),
       status: asString(row.status, 'pi_interrupts.status') as PiRestartInterruptRecord['status'],
-      surfacedInThread: asBoolean(row.surfaced_in_thread, 'pi_interrupts.surfaced_in_thread'),
+      mirroredToActivity: asBoolean(row.mirrored_to_activity, 'pi_interrupts.mirrored_to_activity'),
     })),
     leases: leaseRows.map((row) => ({
       automationId: asString(row.automation_id, 'pi_scheduler_leases.automation_id'),
@@ -258,7 +257,6 @@ export async function persistPiRuntimeDirectExecution(
     threadKey: options.threadKey,
     threadState: options.threadState,
     executionId: options.executionId,
-    interruptId: options.interruptId,
     artifactId: options.artifactId,
     activityId: options.activityId,
     now: options.now,

@@ -1,7 +1,9 @@
 export {
   AGENT_COMMANDS,
-  extractCommandEnvelopeFromMessages,
-  extractCommandFromMessages,
+  buildPendingCommandStateValues,
+  buildRunCommandStateUpdate,
+  extractCommandEnvelope,
+  extractCommand,
   type AgentCommand,
   type CommandEnvelope,
 } from './taskLifecycle.js';

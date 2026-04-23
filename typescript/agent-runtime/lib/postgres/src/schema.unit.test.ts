@@ -41,5 +41,10 @@ describe('schema', () => {
     expect(sql).toContain(
       'create unique index if not exists pi_action_fingerprints_wallet_fingerprint_key on pi_action_fingerprints (wallet_address, action_fingerprint)',
     );
+    expect(sql).toContain(
+      'alter table pi_interrupts add column if not exists mirrored_to_activity boolean',
+    );
+    expect(sql).toContain('update pi_interrupts set mirrored_to_activity = surfaced_in_thread');
+    expect(sql).toContain('alter table pi_interrupts drop column if exists surfaced_in_thread');
   });
 });

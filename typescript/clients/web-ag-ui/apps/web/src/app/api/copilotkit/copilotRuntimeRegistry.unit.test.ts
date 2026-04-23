@@ -16,14 +16,13 @@ const mockAgentRuntimeHttpAgent = (config: Record<string, unknown>) => {
   };
 };
 
-vi.mock('agent-runtime', async () => {
-  const actual = await vi.importActual<typeof import('agent-runtime')>('agent-runtime');
-  return {
-    ...actual,
-    createAgentRuntimeHttpAgent: mockAgentRuntimeHttpAgent,
-  };
-}
-);
+vi.mock('@copilotkit/runtime', () => ({
+  CopilotRuntime: class MockCopilotRuntime {},
+}));
+
+vi.mock('./piRuntimeHttpAgent', () => ({
+  createAgentRuntimeHttpAgent: mockAgentRuntimeHttpAgent,
+}));
 
 vi.mock('./langGraphInterruptSnapshotAgent', () => ({
   LangGraphInterruptSnapshotAgent: MockLangGraphInterruptSnapshotAgent,
@@ -31,11 +30,12 @@ vi.mock('./langGraphInterruptSnapshotAgent', () => ({
 
 describe('buildCopilotRuntimeAgents', () => {
   beforeEach(() => {
+    vi.resetModules();
     langGraphInterruptSnapshotAgentConfigs.length = 0;
     agentRuntimeHttpAgentConfigs.length = 0;
   });
 
-  it('registers LangGraph agents through the interrupt-preserving adapter and keeps Pi on the AG-UI HTTP runtime', async () => {
+  it('registers production AG-UI agents through the runtime adapter', async () => {
     const { buildCopilotRuntimeAgents } = await import('./copilotRuntimeRegistry');
 
     const agents = buildCopilotRuntimeAgents({
@@ -43,17 +43,16 @@ describe('buildCopilotRuntimeAgents', () => {
       LANGGRAPH_PENDLE_DEPLOYMENT_URL: 'http://langgraph-pendle:8125',
       LANGGRAPH_GMX_ALLORA_DEPLOYMENT_URL: 'http://langgraph-gmx:8126',
       LANGSMITH_API_KEY: 'test-langsmith-key',
-      PI_AGENT_DEPLOYMENT_URL: 'http://pi-agent-example:3410/ag-ui',
       PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL: 'http://portfolio-manager:3420/ag-ui',
+      EMBER_LENDING_AGENT_DEPLOYMENT_URL: 'http://ember-lending:3430/ag-ui',
     });
 
     expect(Object.keys(agents)).toEqual([
       'agent-clmm',
       'agent-pendle',
       'agent-gmx-allora',
-      'starterAgent',
-      'agent-pi-example',
       'agent-portfolio-manager',
+      'agent-ember-lending',
     ]);
 
     expect(langGraphInterruptSnapshotAgentConfigs).toEqual([
@@ -72,63 +71,75 @@ describe('buildCopilotRuntimeAgents', () => {
         graphId: 'agent-gmx-allora',
         langsmithApiKey: 'test-langsmith-key',
       },
-      {
-        deploymentUrl: 'http://localhost:8123',
-        graphId: 'starterAgent',
-        langsmithApiKey: 'test-langsmith-key',
-      },
     ]);
 
     expect(agentRuntimeHttpAgentConfigs).toEqual([
       {
-        agentId: 'agent-pi-example',
-        runtimeUrl: 'http://pi-agent-example:3410/ag-ui',
-      },
-      {
         agentId: 'agent-portfolio-manager',
         runtimeUrl: 'http://portfolio-manager:3420/ag-ui',
       },
-    ]);
-    expect(agents['agent-pi-example']).toMatchObject({
-      config: {
-        agentId: 'agent-pi-example',
-        runtimeUrl: 'http://pi-agent-example:3410/ag-ui',
+      {
+        agentId: 'agent-ember-lending',
+        runtimeUrl: 'http://ember-lending:3430/ag-ui',
       },
-    });
+    ]);
     expect(agents['agent-portfolio-manager']).toMatchObject({
       config: {
         agentId: 'agent-portfolio-manager',
         runtimeUrl: 'http://portfolio-manager:3420/ag-ui',
+      },
+    });
+    expect(agents['agent-ember-lending']).toMatchObject({
+      config: {
+        agentId: 'agent-ember-lending',
+        runtimeUrl: 'http://ember-lending:3430/ag-ui',
       },
     });
   });
 
-  it('defaults the Pi example runtime URL for local development', async () => {
+  it('fails closed when an AG-UI runtime URL is missing', async () => {
+    const { resolveAgentRuntimeUrl } = await import('./copilotRuntimeRegistry');
+
+    expect(() =>
+      resolveAgentRuntimeUrl(
+        {
+          LANGSMITH_API_KEY: 'test-langsmith-key',
+        },
+        'agent-portfolio-manager',
+      ),
+    ).toThrow(
+      'Missing required runtime URL env var PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL for agent-portfolio-manager.',
+    );
+  });
+
+  it('registers only configured LangGraph runtimes while keeping AG-UI runtimes required', async () => {
     const { buildCopilotRuntimeAgents } = await import('./copilotRuntimeRegistry');
 
     const agents = buildCopilotRuntimeAgents({
       LANGSMITH_API_KEY: 'test-langsmith-key',
+      PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL: 'http://portfolio-manager:3420/ag-ui',
+      EMBER_LENDING_AGENT_DEPLOYMENT_URL: 'http://ember-lending:3430/ag-ui',
     });
 
-    expect(agents['agent-pi-example']).toMatchObject({
-      config: {
-        agentId: 'agent-pi-example',
-        runtimeUrl: 'http://127.0.0.1:3410/ag-ui',
-      },
-    });
-    expect(agents['agent-portfolio-manager']).toMatchObject({
-      config: {
+    expect(Object.keys(agents)).toEqual(['agent-portfolio-manager', 'agent-ember-lending']);
+    expect(langGraphInterruptSnapshotAgentConfigs).toEqual([]);
+    expect(agentRuntimeHttpAgentConfigs).toEqual([
+      {
         agentId: 'agent-portfolio-manager',
-        runtimeUrl: 'http://127.0.0.1:3420/ag-ui',
+        runtimeUrl: 'http://portfolio-manager:3420/ag-ui',
       },
-    });
-    expect(agentRuntimeHttpAgentConfigs).toContainEqual({
-      agentId: 'agent-pi-example',
-      runtimeUrl: 'http://127.0.0.1:3410/ag-ui',
-    });
-    expect(agentRuntimeHttpAgentConfigs).toContainEqual({
-      agentId: 'agent-portfolio-manager',
-      runtimeUrl: 'http://127.0.0.1:3420/ag-ui',
-    });
+      {
+        agentId: 'agent-ember-lending',
+        runtimeUrl: 'http://ember-lending:3430/ag-ui',
+      },
+    ]);
+  });
+
+  it('rejects agent ids that are no longer part of the production runtime registry', async () => {
+    const { resolveAgentRuntimeUrl } = await import('./copilotRuntimeRegistry');
+
+    expect(() =>
+      resolveAgentRuntimeUrl({ LANGSMITH_API_KEY: 'test-langsmith-key' }, 'agent-pi-example'),
+    ).toThrow('Unsupported AG-UI runtime agent "agent-pi-example".');
   });
 });

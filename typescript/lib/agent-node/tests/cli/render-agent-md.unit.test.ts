@@ -26,7 +26,7 @@ describe('renderAgentMdTemplate', () => {
       aiModel: 'openai/gpt-5',
       enableErc8004: true,
       canonicalChain: 42161,
-      mirrorChains: [1, 8453],
+      mirrorChains: [1],
       operatorAddress: undefined,
       secrets: {},
     });
@@ -44,8 +44,7 @@ describe('renderAgentMdTemplate', () => {
     expect(parsed.data['erc8004']['enabled']).toBe(true);
     expect(parsed.data['erc8004']['canonical']['chainId']).toBe(42161);
     const mirrors = parsed.data['erc8004']['mirrors'].map((m: { chainId: number }) => m.chainId);
-    expect(mirrors).toContain(1);
-    expect(mirrors).toContain(8453);
+    expect(mirrors).toEqual([1]);
     // And: ERC markers removed when included
     expect(content).not.toMatch(/ERC8004:START/);
   });

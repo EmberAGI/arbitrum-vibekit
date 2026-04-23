@@ -78,7 +78,7 @@ describe('agentThread wallet resolution', () => {
     expect(second).toBe(first);
   });
 
-  it('allocates and reuses an anonymous browser-scoped thread for the Pi example agent', () => {
+  it('does not allocate anonymous browser-scoped threads for retired agent surfaces', () => {
     const storage = new Map<string, string>();
     const first = ensureAnonymousAgentThreadId('agent-pi-example', {
       getItem: (key) => storage.get(key) ?? null,
@@ -93,9 +93,9 @@ describe('agentThread wallet resolution', () => {
       },
     });
 
-    expect(supportsAnonymousAgentThread('agent-pi-example')).toBe(true);
-    expect(first).toBeTruthy();
-    expect(second).toBe(first);
+    expect(supportsAnonymousAgentThread('agent-pi-example')).toBe(false);
+    expect(first).toBeNull();
+    expect(second).toBeNull();
   });
 
   it('does not allocate anonymous threads for non-Pi agents', () => {

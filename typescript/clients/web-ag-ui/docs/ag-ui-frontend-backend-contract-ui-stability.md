@@ -35,7 +35,8 @@ Use one-way MVVM/MVI-lite rules:
 
 ### 3.1 Control Plane (intent)
 
-- User/system intents are ephemeral command events (`hire`, `sync`, `fire`, `resume`, `cycle`).
+- User/system intents are ephemeral command events (`hire`, `fire`, `resume`, `cycle`) plus shared-state `command.update`.
+- `resume` may carry a structured object payload; the control lane must preserve that payload unchanged across web and runtime boundaries.
 - Intents are not durable render state.
 - Intent metadata must not live in shared render-driving state.
 
@@ -55,6 +56,8 @@ Monotonic requirements:
 ### 3.3 Projection Plane (web VM/read model)
 
 - A single projection reducer in the ViewModel applies AG-UI snapshots/events and builds `UiState`.
+- For Pi-backed flows, both `STATE_SNAPSHOT` and `STATE_DELTA` are authoritative inputs for the visible `/shared` plus `/projected` model.
+- In v1, the writable public slice is the subtree rooted at `/shared`; `/projected` is public but runtime-owned and read-only.
 - source authority is explicit per agent/thread:
   - active detail route: `connect` stream authority,
   - non-active detail: poll run authority,
@@ -83,8 +86,10 @@ Command must not be persisted in shared render-driving state.
 2. `thread.lifecycle.phase` is render truth source.
 3. projection merge must be undefined-safe and preserve durable fields unless explicitly replaced.
 4. out-of-band cron updates must preserve full durable lifecycle context or skip state writes.
-5. sync confirmation remains explicit (`clientMutationId -> lastAppliedClientMutationId`) until lifecycle/version ack supersedes it.
-6. Invariants are enforced in two layers:
+5. shared-state confirmation remains explicit through `shared-state.control` `update-ack` (`clientMutationId`, `status`, `resultingRevision`, optional `code`) until lifecycle/version ack supersedes it.
+   Malformed Pi `command.update` requests that omit `clientMutationId` are rejected at the boundary before that ack lane rather than synthesizing an uncorrelatable acknowledgment.
+6. optimistic writable-state edits must roll back to the last authoritative projection when a Pi mutation is rejected or when the local `command.update` run fails before any matching `shared-state.control` acknowledgment arrives.
+7. Invariants are enforced in two layers:
    - domain invariants in agents (authoritative business/workflow truth),
    - VM invariants in web reducer (stale/out-of-order event defense).
 

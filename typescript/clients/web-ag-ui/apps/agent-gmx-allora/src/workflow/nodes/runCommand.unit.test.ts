@@ -4,9 +4,9 @@ import type { ClmmState } from '../context.js';
 
 import { resolveCommandTarget, runCommandNode } from './runCommand.js';
 
-function createState(messageContent: string): ClmmState {
+function createState(commandEnvelope: { command: 'hire' | 'fire' | 'cycle' | 'refresh'; clientMutationId?: string }): ClmmState {
   return {
-    messages: [{ role: 'user', content: messageContent }],
+    messages: [],
     copilotkit: { actions: [], context: [] },
     settings: {},
     private: {
@@ -15,6 +15,8 @@ function createState(messageContent: string): ClmmState {
       streamLimit: -1,
       cronScheduled: false,
       bootstrapped: true,
+      pendingCommand: commandEnvelope,
+      activeCommand: null,
     },
     thread: {
       lastAppliedClientMutationId: undefined,
@@ -45,8 +47,8 @@ function applyRunCommandUpdate(state: ClmmState): ClmmState {
 }
 
 describe('runCommandNode (gmx-allora)', () => {
-  it('records sync mutation acknowledgements in thread state envelope', () => {
-    const state = createState(JSON.stringify({ command: 'sync', clientMutationId: 'cmid-1' }));
+  it('records refresh mutation acknowledgements in thread state envelope', () => {
+    const state = createState({ command: 'refresh', clientMutationId: 'cmid-1' });
 
     const result = runCommandNode(state) as unknown as {
       thread?: { lastAppliedClientMutationId?: string };
@@ -56,13 +58,14 @@ describe('runCommandNode (gmx-allora)', () => {
   });
 
   it('suppresses cycle commands while onboarding is incomplete', () => {
-    const state = createState(JSON.stringify({ command: 'cycle' }));
+    const state = createState({ command: 'cycle' });
+    const next = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('syncState');
+    expect(resolveCommandTarget(next)).toBe('syncState');
   });
 
   it('routes cycle commands once onboarding is complete', () => {
-    const state = createState(JSON.stringify({ command: 'cycle' }));
+    const state = createState({ command: 'cycle' });
     state.thread.operatorInput = {
       delegatorWalletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9',
       targetMarketAddress: '0x1111111111111111111111111111111111111111',
@@ -92,19 +95,21 @@ describe('runCommandNode (gmx-allora)', () => {
         shortToken: 'USDC',
       },
     };
+    const next = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('runCycleCommand');
+    expect(resolveCommandTarget(next)).toBe('runCycleCommand');
   });
 
   it('routes cycle to bootstrap when thread is not bootstrapped', () => {
-    const state = createState(JSON.stringify({ command: 'cycle' }));
+    const state = createState({ command: 'cycle' });
     state.private.bootstrapped = false;
+    const next = applyRunCommandUpdate(state);
 
-    expect(resolveCommandTarget(state)).toBe('bootstrap');
+    expect(resolveCommandTarget(next)).toBe('bootstrap');
   });
 
   it('suppresses replayed non-sync command envelopes with the same clientMutationId', () => {
-    const state = createState(JSON.stringify({ command: 'cycle', clientMutationId: 'cycle-1' }));
+    const state = createState({ command: 'cycle', clientMutationId: 'cycle-1' });
     state.thread.operatorInput = {
       delegatorWalletAddress: '0x8aF45a2C60aBE9172D93aCddB40473DCc66AA9B9',
       targetMarketAddress: '0x1111111111111111111111111111111111111111',
@@ -136,6 +141,8 @@ describe('runCommandNode (gmx-allora)', () => {
     };
 
     const first = applyRunCommandUpdate(state);
+    expect(first.private.activeCommand).toBe('cycle');
+    expect(first.private.pendingCommand).toBeNull();
     expect(resolveCommandTarget(first)).toBe('runCycleCommand');
 
     const second = applyRunCommandUpdate(first);

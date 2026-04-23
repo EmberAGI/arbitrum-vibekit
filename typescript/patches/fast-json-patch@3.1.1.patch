@@ -1,3 +1,26 @@
+diff --git a/package.json b/package.json
+index 688a6d0fb714a57ff5b247f2a13db31ba29c6726..489498b0f9a0d1b49c3bb1ecb38e621c58b204bc 100644
+--- a/package.json
++++ b/package.json
+@@ -24,6 +24,18 @@
+     "license": "MIT",
+     "main": "index.js",
+     "module": "index.mjs",
++    "exports": {
++        ".": {
++            "types": "./index.d.ts",
++            "import": "./index.mjs",
++            "require": "./index.js",
++            "default": "./index.js"
++        },
++        "./module/core.mjs": "./module/core.mjs",
++        "./module/duplex.mjs": "./module/duplex.mjs",
++        "./module/helpers.mjs": "./module/helpers.mjs",
++        "./package.json": "./package.json"
++    },
+     "typings": "index.d.ts",
+     "devDependencies": {
+         "benchmark": "^2.1.4",
 diff --git a/src/core.ts b/src/core.ts
 new file mode 100644
 index 0000000000000000000000000000000000000000..fc83dcd2f643fe52cb6fa9dc5f9c974958bb6313

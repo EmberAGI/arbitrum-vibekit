@@ -14,6 +14,7 @@ class ScriptedPiAgent {
   public readonly state = {
     messages: [],
     isStreaming: false,
+    error: undefined as string | undefined,
   };
 
   public abortCalled = false;
@@ -68,6 +69,51 @@ class ScriptedPiAgent {
     }
   }
 }
+
+const buildAssistantEventMessage = (timestamp: number) =>
+  ({
+    role: 'assistant',
+    content: [],
+    api: 'responses',
+    provider: 'openai',
+    model: 'gpt-5.4-mini',
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: 'stop',
+    timestamp,
+  }) as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+const getAssistantPromptText = (promptMessages: unknown): string | undefined => {
+  if (!Array.isArray(promptMessages)) {
+    return undefined;
+  }
+
+  const assistantMessages = promptMessages.filter((message): message is { role: string; content: unknown } => {
+    return typeof message === 'object' && message !== null && 'role' in message && 'content' in message;
+  });
+
+  const lastAssistantMessage = [...assistantMessages].reverse().find((message) => message.role === 'assistant');
+  if (!lastAssistantMessage || !Array.isArray(lastAssistantMessage.content)) {
+    return undefined;
+  }
+
+  const textParts = lastAssistantMessage.content.flatMap((part) => {
+    if (typeof part !== 'object' || part === null || !('type' in part) || part.type !== 'text' || !('text' in part)) {
+      return [];
+    }
+
+    return [typeof part.text === 'string' ? part.text : ''];
+  });
+
+  const text = textParts.join('');
+  return text.length > 0 ? text : undefined;
+};
 
 async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): Promise<T[]> {
   if (Array.isArray(source)) {
@@ -171,6 +217,8 @@ describe('pi gateway service integration', () => {
       {
         type: EventType.STATE_SNAPSHOT,
         snapshot: {
+          shared: {},
+          projected: {},
           thread: {
             id: 'thread-1',
             task: {
@@ -210,22 +258,19 @@ describe('pi gateway service integration', () => {
                 },
               ],
             },
-            messages: [
-              {
-                id: 'user-msg-1',
-                role: 'user',
-                content: 'Connect now',
-              },
-              {
-                id: 'assistant-msg-1',
-                role: 'assistant',
-                content: 'Pi is connected.',
-              },
-            ],
             artifacts: {
               current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
             },
           },
+        },
+      },
+      {
+        type: EventType.CUSTOM,
+        name: 'shared-state.control',
+        value: {
+          kind: 'hydration',
+          reason: 'bootstrap',
+          revision: 'shared-rev-0',
         },
       },
       {
@@ -270,69 +315,14 @@ describe('pi gateway service integration', () => {
     });
     expect(runEvents).toContainEqual({
       type: EventType.TEXT_MESSAGE_CONTENT,
-      messageId: 'pi:exec-1:assistant:1',
+      messageId: 'pi:exec-1:run-1:assistant:1',
       delta: 'Pi is connected.',
     });
-    expect(runEvents).toContainEqual({
-      type: EventType.STATE_SNAPSHOT,
-      snapshot: {
-        thread: {
-          id: 'thread-1',
-            task: {
-              id: 'exec-1',
-              taskStatus: {
-                state: 'working',
-                message: {
-                  content: 'Pi is connected.',
-                },
-              },
-            },
-          projection: {
-            source: 'pi-runtime-gateway',
-            canonicalIds: {
-              piThreadId: 'thread-1',
-              piExecutionId: 'exec-1',
-            },
-          },
-          activity: {
-            telemetry: [],
-            events: [
-              {
-                type: 'dispatch-response',
-                parts: [
-                  {
-                    kind: 'a2ui',
-                    data: {
-                      threadId: 'thread-1',
-                      executionId: 'exec-1',
-                      payload: {
-                        kind: 'status-card',
-                        payload: { headline: 'Connected' },
-                      },
-                    },
-                  },
-                ],
-              },
-            ],
-          },
-          messages: [
-            {
-              id: 'user-msg-1',
-              role: 'user',
-              content: 'Connect now',
-            },
-            {
-              id: 'assistant-msg-1',
-              role: 'assistant',
-              content: 'Pi is connected.',
-            },
-          ],
-          artifacts: {
-            current: { artifactId: 'current-artifact', data: { phase: 'connected' } },
-          },
-        },
-      },
-    });
+    expect(
+      runEvents.filter(
+        (event) => event.type === EventType.STATE_SNAPSHOT || event.type === EventType.STATE_DELTA,
+      ),
+    ).toEqual([]);
     expect(runEvents).toContainEqual({
       type: EventType.RUN_FINISHED,
       threadId: 'thread-1',
@@ -470,10 +460,381 @@ describe('pi gateway service integration', () => {
         content: 'Schedule a sync every minute.',
       },
       {
-        id: 'pi:exec-1:assistant:2',
+        id: 'pi:exec-1:run-2:assistant:2',
         role: 'assistant',
         content: 'Scheduled sync every minute.',
       },
+    ]);
+  });
+
+  it('keeps multi-turn request and assistant transcript entries separated when the execution id stays stable', async () => {
+    const firstEchoedUserMessage = {
+      role: 'user',
+      content: 'whats in my wallet',
+      timestamp: 1,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+    const firstAssistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: 2,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+    const secondEchoedUserMessage = {
+      role: 'user',
+      content: 'borrow usdc',
+      timestamp: 1,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+    const secondAssistantMessage = {
+      ...firstAssistantMessage,
+      timestamp: 2,
+    };
+
+    class QueuedScriptedPiAgent extends ScriptedPiAgent {
+      constructor(private readonly queuedRunEvents: AgentEvent[][]) {
+        super([]);
+      }
+
+      override async prompt(messages: unknown): Promise<void> {
+        this.promptCalls.push(messages);
+        const nextRunEvents = this.queuedRunEvents.shift() ?? [];
+        for (const event of nextRunEvents) {
+          this.emit(event);
+        }
+      }
+    }
+
+    const agent = new QueuedScriptedPiAgent([
+      [
+        { type: 'agent_start' },
+        { type: 'turn_start' },
+        { type: 'message_start', message: firstEchoedUserMessage },
+        { type: 'message_end', message: firstEchoedUserMessage },
+        { type: 'message_start', message: firstAssistantMessage },
+        {
+          type: 'message_update',
+          message: firstAssistantMessage,
+          assistantMessageEvent: {
+            type: 'text_delta',
+            contentIndex: 0,
+            delta: 'You have collateral available.',
+            partial: firstAssistantMessage,
+          },
+        },
+        { type: 'message_end', message: firstAssistantMessage },
+        { type: 'turn_end', message: firstAssistantMessage, toolResults: [] },
+        { type: 'agent_end', messages: [firstAssistantMessage] },
+      ],
+      [
+        { type: 'agent_start' },
+        { type: 'turn_start' },
+        { type: 'message_start', message: secondEchoedUserMessage },
+        { type: 'message_end', message: secondEchoedUserMessage },
+        { type: 'message_start', message: secondAssistantMessage },
+        {
+          type: 'message_update',
+          message: secondAssistantMessage,
+          assistantMessageEvent: {
+            type: 'text_delta',
+            contentIndex: 0,
+            delta: 'I created a borrow plan for USDC.',
+            partial: secondAssistantMessage,
+          },
+        },
+        { type: 'message_end', message: secondAssistantMessage },
+        { type: 'turn_end', message: secondAssistantMessage, toolResults: [] },
+        { type: 'agent_end', messages: [secondAssistantMessage] },
+      ],
+    ]);
+
+    let session = {
+      thread: { id: 'thread-multi-turn' },
+      execution: { id: 'exec-stable-thread', status: 'working' as const },
+      messages: [],
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-multi-turn',
+        runId: 'run-wallet',
+        messages: [{ id: 'request-wallet', role: 'user', content: 'whats in my wallet' }],
+      }),
+    );
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-multi-turn',
+        runId: 'run-borrow',
+        messages: [{ id: 'request-borrow', role: 'user', content: 'borrow usdc' }],
+      }),
+    );
+
+    expect(session.messages).toEqual([
+      {
+        id: 'request-wallet',
+        role: 'user',
+        content: 'whats in my wallet',
+      },
+      {
+        id: 'pi:exec-stable-thread:run-wallet:assistant:2',
+        role: 'assistant',
+        content: 'You have collateral available.',
+      },
+      {
+        id: 'request-borrow',
+        role: 'user',
+        content: 'borrow usdc',
+      },
+      {
+        id: 'pi:exec-stable-thread:run-borrow:assistant:2',
+        role: 'assistant',
+        content: 'I created a borrow plan for USDC.',
+      },
+    ]);
+  });
+
+  it('does not duplicate persisted assistant transcript content when one run replays the same assistant stream', async () => {
+    const replayedAssistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: 2,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const assistantDelta = [
+      'Created the collateral supply plan per mandate.',
+      '',
+      '- Action: lending.supply',
+      '- Asset: WETH',
+      '- Protocol: Aave V3',
+      '- Network: Arbitrum',
+      '- Amount: 0.008179235772205978 WETH',
+      '',
+      'If you want, I can now attempt execution of this current plan.',
+    ].join('\n');
+
+    const agent = new ScriptedPiAgent([
+      { type: 'agent_start' },
+      { type: 'turn_start' },
+      { type: 'message_start', message: replayedAssistantMessage },
+      {
+        type: 'message_update',
+        message: replayedAssistantMessage,
+        assistantMessageEvent: {
+          type: 'text_delta',
+          contentIndex: 0,
+          delta: assistantDelta,
+          partial: replayedAssistantMessage,
+        },
+      },
+      { type: 'message_end', message: replayedAssistantMessage },
+      { type: 'message_start', message: replayedAssistantMessage },
+      {
+        type: 'message_update',
+        message: replayedAssistantMessage,
+        assistantMessageEvent: {
+          type: 'text_delta',
+          contentIndex: 0,
+          delta: assistantDelta,
+          partial: replayedAssistantMessage,
+        },
+      },
+      { type: 'message_end', message: replayedAssistantMessage },
+      { type: 'turn_end', message: replayedAssistantMessage, toolResults: [] },
+      { type: 'agent_end', messages: [replayedAssistantMessage] },
+    ]);
+
+    let session = {
+      thread: { id: 'thread-replayed-assistant-stream' },
+      execution: { id: 'exec-replayed-assistant-stream', status: 'working' as const },
+      messages: [],
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-replayed-assistant-stream',
+        runId: 'run-replayed-assistant-stream',
+        messages: [
+          {
+            id: 'request-plan',
+            role: 'user',
+            content: 'create collateral lending plan according to mandate using human values',
+          },
+        ],
+      }),
+    );
+
+    expect(session.messages).toEqual([
+      {
+        id: 'request-plan',
+        role: 'user',
+        content: 'create collateral lending plan according to mandate using human values',
+      },
+      {
+        id: 'pi:exec-replayed-assistant-stream:run-replayed-assistant-stream:assistant:2',
+        role: 'assistant',
+        content: assistantDelta,
+      },
+    ]);
+  });
+
+  it('does not replay the previous assistant turn when a later run resends full transcript history', async () => {
+    class ReplayPriorAssistantFromPromptAgent extends ScriptedPiAgent {
+      private promptCount = 0;
+
+      constructor() {
+        super([]);
+      }
+
+      override async prompt(messages: unknown): Promise<void> {
+        this.promptCalls.push(messages);
+        this.promptCount += 1;
+
+        const previousAssistantText = getAssistantPromptText(messages);
+        const nextAssistantText =
+          this.promptCount === 1
+            ? 'Hi — how can I help with the lending position?'
+            : 'I only see the current lending mandate and wallet snapshot.';
+
+        const emitAssistantTurn = (text: string, timestamp: number): void => {
+          const assistantMessage = buildAssistantEventMessage(timestamp);
+          this.emit({ type: 'message_start', message: assistantMessage });
+          this.emit({
+            type: 'message_update',
+            message: assistantMessage,
+            assistantMessageEvent: {
+              type: 'text_delta',
+              contentIndex: 0,
+              delta: text,
+              partial: assistantMessage,
+            },
+          });
+          this.emit({ type: 'message_end', message: assistantMessage });
+        };
+
+        this.emit({ type: 'agent_start' });
+        this.emit({ type: 'turn_start' });
+        if (previousAssistantText) {
+          emitAssistantTurn(previousAssistantText, this.promptCount * 10 + 1);
+        }
+        emitAssistantTurn(nextAssistantText, this.promptCount * 10 + 2);
+        this.emit({
+          type: 'turn_end',
+          message: buildAssistantEventMessage(this.promptCount * 10 + 3),
+          toolResults: [],
+        });
+        this.emit({
+          type: 'agent_end',
+          messages: [buildAssistantEventMessage(this.promptCount * 10 + 4)],
+        });
+      }
+    }
+
+    const agent = new ReplayPriorAssistantFromPromptAgent();
+
+    let session = {
+      thread: { id: 'thread-full-transcript-history' },
+      execution: { id: 'exec-full-transcript-history', status: 'working' as const },
+      messages: [],
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-full-transcript-history',
+        runId: 'run-greeting',
+        messages: [{ id: 'user-hi', role: 'user', content: 'hi' }],
+      }),
+    );
+
+    const persistedGreetingAssistantMessageId = session.messages.find((message) => message.role === 'assistant')?.id;
+    expect(persistedGreetingAssistantMessageId).toBeDefined();
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-full-transcript-history',
+        runId: 'run-position',
+        messages: [
+          { id: 'user-hi', role: 'user', content: 'hi' },
+          {
+            id: persistedGreetingAssistantMessageId!,
+            role: 'assistant',
+            content: 'Hi — how can I help with the lending position?',
+          },
+          { id: 'user-position', role: 'user', content: 'what do you know about it?' },
+        ],
+      }),
+    );
+
+    expect(agent.promptCalls).toEqual([
+      [
+        {
+          role: 'user',
+          content: 'hi',
+          timestamp: expect.any(Number),
+        },
+      ],
+      [
+        {
+          role: 'user',
+          content: 'what do you know about it?',
+          timestamp: expect.any(Number),
+        },
+      ],
+    ]);
+
+    expect(session.messages.map(({ role, content }) => ({ role, content }))).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'Hi — how can I help with the lending position?' },
+      { role: 'user', content: 'what do you know about it?' },
+      { role: 'assistant', content: 'I only see the current lending mandate and wallet snapshot.' },
     ]);
   });
 
@@ -580,6 +941,326 @@ describe('pi gateway service integration', () => {
     ]);
   });
 
+  it('rebuilds assistant tool-call history against the active responses model for replay', async () => {
+    const agent = new ScriptedPiAgent([
+      { type: 'agent_start' },
+      { type: 'turn_start' },
+      { type: 'agent_end', messages: [] },
+    ]);
+    (agent.state as { model?: unknown }).model = {
+      id: 'openai/gpt-5.4-mini',
+      name: 'openai/gpt-5.4-mini',
+      api: 'openai-responses',
+      provider: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      reasoning: true,
+      input: ['text'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 8192,
+      maxTokens: 2048,
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      now: () => 123,
+      getSession: () => ({
+        thread: { id: 'thread-openrouter-tool-history' },
+        execution: { id: 'exec-openrouter-tool-history', status: 'working' },
+        messages: [],
+      }),
+      updateSession: (_threadId, update) =>
+        update({
+          thread: { id: 'thread-openrouter-tool-history' },
+          execution: { id: 'exec-openrouter-tool-history', status: 'working' },
+          messages: [],
+        }),
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-openrouter-tool-history',
+        runId: 'run-openrouter-tool-history',
+        messages: [
+          {
+            id: 'user-msg',
+            role: 'user',
+            content: 'withdraw all aArbUSDCn',
+          },
+          {
+            id: 'assistant-msg',
+            role: 'assistant',
+            content: '',
+            toolCalls: [
+              {
+                id: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+                type: 'function',
+                function: {
+                  name: 'agent_runtime_domain_command',
+                  arguments:
+                    '{"name":"create_transaction","inputJson":"{\\"control_path\\":\\"lending.withdraw\\",\\"asset\\":\\"aArbUSDCn\\",\\"protocol_system\\":\\"aave\\",\\"network\\":\\"arbitrum\\",\\"quantity\\":{\\"kind\\":\\"exact\\",\\"value\\":\\"3\\"}}"}',
+                },
+              },
+            ],
+          },
+          {
+            id: 'tool-msg',
+            role: 'tool',
+            toolCallId: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+            content:
+              '{"content":[{"type":"text","text":"create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity."}]}',
+          },
+        ],
+      }),
+    );
+
+    expect(agent.promptCalls).toEqual([
+      [
+        {
+          role: 'user',
+          content: 'withdraw all aArbUSDCn',
+          timestamp: 123,
+        },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'toolCall',
+              id: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+              name: 'agent_runtime_domain_command',
+              arguments: {
+                name: 'create_transaction',
+                inputJson:
+                  '{"control_path":"lending.withdraw","asset":"aArbUSDCn","protocol_system":"aave","network":"arbitrum","quantity":{"kind":"exact","value":"3"}}',
+              },
+            },
+          ],
+          api: 'openai-responses',
+          provider: 'openrouter',
+          model: 'openai/gpt-5.4-mini',
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: 'stop',
+          timestamp: 123,
+        },
+        {
+          role: 'toolResult',
+          toolCallId: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+          toolName: 'ag-ui-tool',
+          content: [
+            {
+              type: 'text',
+              text:
+                '{"content":[{"type":"text","text":"create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity."}]}',
+            },
+          ],
+          isError: false,
+          timestamp: 123,
+        },
+      ],
+    ]);
+  });
+
+  it('rehydrates persisted tool-call history into the agent state before replaying the next turn', async () => {
+    class StatefulReplayPiAgent extends ScriptedPiAgent {
+      public replaceMessagesCalls: unknown[] = [];
+
+      replaceMessages(messages: unknown): void {
+        this.replaceMessagesCalls.push(messages);
+        this.state.messages = Array.isArray(messages) ? [...messages] : [];
+      }
+
+      override async prompt(messages: unknown): Promise<void> {
+        this.promptCalls.push(messages);
+
+        const stateMessages = this.state.messages;
+        const replayedAssistantMessage = stateMessages.find(
+          (message): message is {
+            role: string;
+            api?: string;
+            provider?: string;
+            model?: string;
+            content?: Array<{ type?: string; id?: string }>;
+          } =>
+            typeof message === 'object' &&
+            message !== null &&
+            'role' in message &&
+            message.role === 'assistant',
+        );
+        const replayedToolResultMessage = stateMessages.find(
+          (message): message is { role: string; toolCallId?: string } =>
+            typeof message === 'object' &&
+            message !== null &&
+            'role' in message &&
+            message.role === 'toolResult',
+        );
+
+        const hasReplayedToolCall = replayedAssistantMessage?.content?.some(
+          (part) =>
+            part.type === 'toolCall' &&
+            part.id === 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+        );
+        const hasReplayedToolResult =
+          replayedToolResultMessage?.toolCallId ===
+          'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85';
+        const hasActiveModelIdentity =
+          replayedAssistantMessage?.api === 'openai-responses' &&
+          replayedAssistantMessage?.provider === 'openrouter' &&
+          replayedAssistantMessage?.model === 'openai/gpt-5.4-mini';
+
+        if (!hasReplayedToolCall || !hasReplayedToolResult || !hasActiveModelIdentity) {
+          throw new Error('missing rehydrated tool-call replay state');
+        }
+
+        this.emit({ type: 'agent_start' });
+        this.emit({ type: 'turn_start' });
+        this.emit({ type: 'agent_end', messages: [] });
+      }
+    }
+
+    const agent = new StatefulReplayPiAgent([]);
+    (agent.state as { model?: unknown }).model = {
+      id: 'openai/gpt-5.4-mini',
+      name: 'openai/gpt-5.4-mini',
+      api: 'openai-responses',
+      provider: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      reasoning: true,
+      input: ['text'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 8192,
+      maxTokens: 2048,
+    };
+
+    const persistedMessages = [
+      {
+        id: 'user-msg',
+        role: 'user' as const,
+        content: 'withdraw all aArbUSDCn',
+      },
+      {
+        id: 'assistant-msg',
+        role: 'assistant' as const,
+        content: '',
+        toolCalls: [
+          {
+            id: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+            type: 'function' as const,
+            function: {
+              name: 'agent_runtime_domain_command',
+              arguments:
+                '{"name":"create_transaction","inputJson":"{\\"control_path\\":\\"lending.withdraw\\",\\"asset\\":\\"aArbUSDCn\\",\\"protocol_system\\":\\"aave\\",\\"network\\":\\"arbitrum\\",\\"quantity\\":{\\"kind\\":\\"exact\\",\\"value\\":\\"3\\"}}"}',
+            },
+          },
+        ],
+      },
+      {
+        id: 'tool-msg',
+        role: 'tool' as const,
+        toolCallId: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+        content:
+          '{"content":[{"type":"text","text":"create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity."}]}',
+      },
+    ];
+
+    let session = {
+      thread: { id: 'thread-openrouter-rehydration' },
+      execution: { id: 'exec-openrouter-rehydration', status: 'working' as const },
+      messages: persistedMessages,
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      now: () => 123,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-openrouter-rehydration',
+        runId: 'run-openrouter-rehydration',
+        messages: [
+          ...persistedMessages,
+          {
+            id: 'user-retry',
+            role: 'user',
+            content: 'one more time',
+          },
+        ],
+      }),
+    );
+
+    expect(agent.replaceMessagesCalls).toEqual([
+      [
+        {
+          role: 'user',
+          content: 'withdraw all aArbUSDCn',
+          timestamp: 123,
+        },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'toolCall',
+              id: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+              name: 'agent_runtime_domain_command',
+              arguments: {
+                name: 'create_transaction',
+                inputJson:
+                  '{"control_path":"lending.withdraw","asset":"aArbUSDCn","protocol_system":"aave","network":"arbitrum","quantity":{"kind":"exact","value":"3"}}',
+              },
+            },
+          ],
+          api: 'openai-responses',
+          provider: 'openrouter',
+          model: 'openai/gpt-5.4-mini',
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: 'stop',
+          timestamp: 123,
+        },
+        {
+          role: 'toolResult',
+          toolCallId: 'call_iHEyccPxt8Yo99N9o7d62EfN|fc_tmp_ub0wnczh85',
+          toolName: 'ag-ui-tool',
+          content: [
+            {
+              type: 'text',
+              text:
+                '{"content":[{"type":"text","text":"create_transaction requires JSON with control_path, asset, protocol_system, network, and quantity."}]}',
+            },
+          ],
+          isError: false,
+          timestamp: 123,
+        },
+      ],
+    ]);
+    expect(agent.promptCalls).toEqual([
+      [
+        {
+          role: 'user',
+          content: 'one more time',
+          timestamp: 123,
+        },
+      ],
+    ]);
+  });
+
   it('emits a canonical request-message snapshot before streamed assistant output on run', async () => {
     const assistantMessage = {
       role: 'assistant',
@@ -656,6 +1337,162 @@ describe('pi gateway service integration', () => {
     expect(firstRequestSnapshotIndex).toBeLessThan(firstAssistantDeltaIndex);
   });
 
+  it('does not duplicate canonical request messages when provider events echo the same user input', async () => {
+    const startedUserMessage = {
+      role: 'user',
+      content: '',
+      timestamp: 2,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const completedUserMessage = {
+      ...startedUserMessage,
+      content: 'Refresh your runtime state and tell me what you see.',
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent: new ScriptedPiAgent([
+        { type: 'agent_start' },
+        { type: 'turn_start' },
+        { type: 'message_start', message: startedUserMessage },
+        { type: 'message_end', message: completedUserMessage },
+        { type: 'turn_end', message: completedUserMessage, toolResults: [] },
+        { type: 'agent_end', messages: [completedUserMessage] },
+      ]),
+      getSession: () => ({
+        thread: { id: 'thread-user-backfill' },
+        execution: { id: 'exec-user-backfill', status: 'working', statusMessage: 'Waiting.' },
+        messages: [],
+      }),
+      updateSession: (_threadId, update) =>
+        update({
+          thread: { id: 'thread-user-backfill' },
+          execution: { id: 'exec-user-backfill', status: 'working', statusMessage: 'Waiting.' },
+          messages: [],
+        }),
+    });
+
+    const runEvents = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-user-backfill',
+        runId: 'run-user-backfill',
+        messages: [{ id: 'request-user-msg', role: 'user', content: 'Refresh your runtime state and tell me what you see.' }],
+      }),
+    );
+
+    const finalMessagesSnapshot = [...runEvents]
+      .reverse()
+      .find((event) => event.type === EventType.MESSAGES_SNAPSHOT);
+
+    expect(finalMessagesSnapshot).toEqual({
+      type: EventType.MESSAGES_SNAPSHOT,
+      messages: [
+        {
+          id: 'request-user-msg',
+          role: 'user',
+          content: 'Refresh your runtime state and tell me what you see.',
+        },
+      ],
+    });
+  });
+
+  it('surfaces provider failures as failed runs with assistant error text', async () => {
+    const failedAssistantMessage = {
+      role: 'assistant',
+      content: [],
+      api: 'responses',
+      provider: 'openrouter',
+      model: 'openai/gpt-5.4',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'error',
+      errorMessage: 'Key limit exceeded (monthly limit).',
+      timestamp: 5,
+    } as AgentEvent extends { message: infer TMessage } ? TMessage : never;
+
+    class FailedRunPiAgent extends ScriptedPiAgent {
+      override async prompt(messages: unknown): Promise<void> {
+        await super.prompt(messages);
+        this.state.error = 'Key limit exceeded (monthly limit).';
+      }
+    }
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent: new FailedRunPiAgent([
+        { type: 'agent_start' },
+        { type: 'turn_start' },
+        { type: 'message_start', message: failedAssistantMessage },
+        { type: 'message_end', message: failedAssistantMessage },
+        { type: 'turn_end', message: failedAssistantMessage, toolResults: [] },
+        { type: 'agent_end', messages: [failedAssistantMessage] },
+      ]),
+      getSession: () => ({
+        thread: { id: 'thread-failed-run' },
+        execution: { id: 'exec-failed-run', status: 'working', statusMessage: 'Waiting.' },
+        messages: [],
+      }),
+      updateSession: (_threadId, update) =>
+        update({
+          thread: { id: 'thread-failed-run' },
+          execution: { id: 'exec-failed-run', status: 'working', statusMessage: 'Waiting.' },
+          messages: [],
+        }),
+    });
+
+    const runEvents = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-failed-run',
+        runId: 'run-failed-run',
+        messages: [{ id: 'request-user-msg', role: 'user', content: 'Try again.' }],
+      }),
+    );
+
+    expect(runEvents).toContainEqual({
+      type: EventType.TEXT_MESSAGE_CONTENT,
+      messageId: 'pi:exec-failed-run:run-failed-run:assistant:5',
+      delta: 'Key limit exceeded (monthly limit).',
+    });
+    expect(runEvents).toContainEqual({
+      type: EventType.RUN_FINISHED,
+      threadId: 'thread-failed-run',
+      runId: 'run-failed-run',
+      result: {
+        executionId: 'exec-failed-run',
+        status: 'failed',
+      },
+    });
+    expect(runEvents).toContainEqual({
+      type: EventType.STATE_DELTA,
+      delta: expect.arrayContaining([
+        {
+          op: 'replace',
+          path: '/thread/task/taskStatus/state',
+          value: 'failed',
+        },
+        {
+          op: 'replace',
+          path: '/thread/task/taskStatus/message/content',
+          value: 'Key limit exceeded (monthly limit).',
+        },
+      ]),
+    });
+    expect(runEvents).toContainEqual({
+      type: EventType.MESSAGES_SNAPSHOT,
+      messages: expect.arrayContaining([
+        {
+          id: 'pi:exec-failed-run:run-failed-run:assistant:5',
+          role: 'assistant',
+          content: 'Key limit exceeded (monthly limit).',
+        },
+      ]),
+    });
+  });
+
   it('queues active-run user input through Pi steering instead of re-prompting the agent', async () => {
     const agent = new ScriptedPiAgent([]);
     agent.state.isStreaming = true;
@@ -690,30 +1527,6 @@ describe('pi gateway service integration', () => {
         type: EventType.RUN_STARTED,
         threadId: 'thread-2',
         runId: 'run-2',
-      },
-      {
-        type: EventType.STATE_SNAPSHOT,
-        snapshot: {
-          thread: {
-            id: 'thread-2',
-            task: {
-              id: 'exec-2',
-              taskStatus: {
-                state: 'working',
-                message: {
-                  content: 'Awaiting steering',
-                },
-              },
-            },
-            projection: {
-              source: 'pi-runtime-gateway',
-              canonicalIds: {
-                piThreadId: 'thread-2',
-                piExecutionId: 'exec-2',
-              },
-            },
-          },
-        },
       },
       {
         type: EventType.RUN_FINISHED,
@@ -776,30 +1589,6 @@ describe('pi gateway service integration', () => {
         runId: 'run-3',
       },
       {
-        type: EventType.STATE_SNAPSHOT,
-        snapshot: {
-          thread: {
-            id: 'thread-3',
-            task: {
-              id: 'exec-3',
-              taskStatus: {
-                state: 'working',
-                message: {
-                  content: 'Awaiting follow-up',
-                },
-              },
-            },
-            projection: {
-              source: 'pi-runtime-gateway',
-              canonicalIds: {
-                piThreadId: 'thread-3',
-                piExecutionId: 'exec-3',
-              },
-            },
-          },
-        },
-      },
-      {
         type: EventType.RUN_FINISHED,
         threadId: 'thread-3',
         runId: 'run-3',
@@ -811,7 +1600,7 @@ describe('pi gateway service integration', () => {
     ]);
   });
 
-  it('routes explicit resume payloads through Pi prompt instead of continue()', async () => {
+  it('routes explicit object resume payloads through Pi prompt instead of continue()', async () => {
     const agent = new ScriptedPiAgent([]);
 
     const runtime = createPiRuntimeGatewayRuntime({
@@ -829,7 +1618,9 @@ describe('pi gateway service integration', () => {
         runId: 'run-5',
         forwardedProps: {
           command: {
-            resume: '{"operatorNote":"safe window approved"}',
+            resume: {
+              operatorNote: 'safe window approved',
+            },
           },
         },
       }),
@@ -852,30 +1643,6 @@ describe('pi gateway service integration', () => {
         runId: 'run-5',
       },
       {
-        type: EventType.STATE_SNAPSHOT,
-        snapshot: {
-          thread: {
-            id: 'thread-5',
-            task: {
-              id: 'exec-5',
-              taskStatus: {
-                state: 'input-required',
-                message: {
-                  content: 'Awaiting explicit resume',
-                },
-              },
-            },
-            projection: {
-              source: 'pi-runtime-gateway',
-              canonicalIds: {
-                piThreadId: 'thread-5',
-                piExecutionId: 'exec-5',
-              },
-            },
-          },
-        },
-      },
-      {
         type: EventType.RUN_FINISHED,
         threadId: 'thread-5',
         runId: 'run-5',
@@ -885,6 +1652,392 @@ describe('pi gateway service integration', () => {
         },
       },
     ]);
+  });
+
+  it('emits shared-state hydration metadata after the snapshot on connect', async () => {
+    const agent = new ScriptedPiAgent([]);
+    let session = {
+      thread: { id: 'thread-hydration' },
+      execution: { id: 'exec-hydration', status: 'working' as const, statusMessage: 'Hydrated.' },
+      sharedState: {
+        settings: {
+          amount: 250,
+        },
+      },
+      sharedStateVersion: 1,
+      sharedStateRevision: 'shared-rev-1',
+      sharedStateHydrated: false,
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    const bootstrapEvents = await collectEventSource(
+      await runtime.connect({
+        threadId: 'thread-hydration',
+      }),
+    );
+
+    expect(bootstrapEvents).toContainEqual({
+      type: EventType.STATE_SNAPSHOT,
+      snapshot: expect.objectContaining({
+        shared: {
+          settings: {
+            amount: 250,
+          },
+        },
+        projected: {},
+      }),
+    });
+    expect(bootstrapEvents).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'bootstrap',
+        revision: 'shared-rev-1',
+      },
+    });
+    expect(
+      bootstrapEvents.findIndex((event) => event.type === EventType.STATE_SNAPSHOT),
+    ).toBeLessThan(
+      bootstrapEvents.findIndex(
+        (event) =>
+          event.type === EventType.CUSTOM &&
+          'name' in event &&
+          event.name === 'shared-state.control',
+      ),
+    );
+
+    const reconnectEvents = await collectEventSource(
+      await runtime.connect({
+        threadId: 'thread-hydration',
+      }),
+    );
+
+    expect(reconnectEvents).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'hydration',
+        reason: 'reconnect',
+        revision: 'shared-rev-1',
+      },
+    });
+  });
+
+  it('accepts canonical shared-state updates and acknowledges them after the state delta', async () => {
+    const agent = new ScriptedPiAgent([]);
+    let session = {
+      thread: { id: 'thread-update' },
+      execution: { id: 'exec-update', status: 'working' as const, statusMessage: 'Ready.' },
+      sharedState: {
+        settings: {
+          amount: 100,
+        },
+      },
+      sharedStateVersion: 1,
+      sharedStateRevision: 'shared-rev-1',
+      sharedStateHydrated: true,
+    };
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => session,
+      updateSession: (_threadId, update) => {
+        session = update(session);
+        return session;
+      },
+    });
+
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-update',
+        runId: 'run-update',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: 'mutation-1',
+              baseRevision: 'shared-rev-1',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(agent.promptCalls).toEqual([]);
+    expect(agent.continueCalls).toBe(0);
+    expect(events).toContainEqual({
+      type: EventType.STATE_DELTA,
+      delta: expect.arrayContaining([
+        {
+          op: 'replace',
+          path: '/shared/settings/amount',
+          value: 250,
+        },
+      ]),
+    });
+    expect(events).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'update-ack',
+        clientMutationId: 'mutation-1',
+        status: 'accepted',
+        resultingRevision: 'shared-rev-2',
+        baseRevision: 'shared-rev-1',
+      },
+    });
+    expect(
+      events.findIndex((event) => event.type === EventType.STATE_DELTA),
+    ).toBeLessThan(
+      events.findIndex(
+        (event) =>
+          event.type === EventType.CUSTOM &&
+          'name' in event &&
+          event.name === 'shared-state.control',
+      ),
+    );
+    expect(session.sharedState).toEqual({
+      settings: {
+        amount: 250,
+      },
+    });
+    expect(session.sharedStateRevision).toBe('shared-rev-2');
+    expect(session.sharedStateVersion).toBe(2);
+  });
+
+  it('acknowledges noop shared-state updates without emitting a state delta', async () => {
+    const agent = new ScriptedPiAgent([]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => ({
+        thread: { id: 'thread-update-noop' },
+        execution: { id: 'exec-update-noop', status: 'working' as const, statusMessage: 'Ready.' },
+        sharedState: {
+          settings: {
+            amount: 250,
+          },
+        },
+        sharedStateVersion: 2,
+        sharedStateRevision: 'shared-rev-2',
+        sharedStateHydrated: true,
+      }),
+    });
+
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-update-noop',
+        runId: 'run-update-noop',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: 'mutation-noop',
+              baseRevision: 'shared-rev-2',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(events.filter((event) => event.type === EventType.STATE_DELTA)).toEqual([]);
+    expect(events).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'update-ack',
+        clientMutationId: 'mutation-noop',
+        status: 'noop',
+        resultingRevision: 'shared-rev-2',
+        baseRevision: 'shared-rev-2',
+      },
+    });
+  });
+
+  it('rejects shared-state updates without a base revision on hydrated threads', async () => {
+    const agent = new ScriptedPiAgent([]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => ({
+        thread: { id: 'thread-update-missing-base' },
+        execution: { id: 'exec-update-missing-base', status: 'working' as const, statusMessage: 'Ready.' },
+        sharedState: {
+          settings: {
+            amount: 100,
+          },
+        },
+        sharedStateVersion: 1,
+        sharedStateRevision: 'shared-rev-1',
+        sharedStateHydrated: true,
+      }),
+    });
+
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-update-missing-base',
+        runId: 'run-update-missing-base',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: 'mutation-missing-base',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(events.filter((event) => event.type === EventType.STATE_DELTA)).toEqual([]);
+    expect(events).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'update-ack',
+        clientMutationId: 'mutation-missing-base',
+        status: 'rejected',
+        resultingRevision: 'shared-rev-1',
+        code: 'missing_base_revision',
+      },
+    });
+  });
+
+  it('rejects shared-state updates that patch outside the writable shared surface', async () => {
+    const agent = new ScriptedPiAgent([]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => ({
+        thread: { id: 'thread-update-forbidden' },
+        execution: { id: 'exec-update-forbidden', status: 'working' as const, statusMessage: 'Ready.' },
+        sharedState: {
+          settings: {
+            amount: 100,
+          },
+        },
+        sharedStateVersion: 1,
+        sharedStateRevision: 'shared-rev-1',
+        sharedStateHydrated: true,
+      }),
+    });
+
+    const events = await collectEventSource(
+      await runtime.run({
+        threadId: 'thread-update-forbidden',
+        runId: 'run-update-forbidden',
+        forwardedProps: {
+          command: {
+            update: {
+              clientMutationId: 'mutation-forbidden',
+              baseRevision: 'shared-rev-1',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/projected/managedMandate',
+                  value: {
+                    status: 'active',
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(events.filter((event) => event.type === EventType.STATE_DELTA)).toEqual([]);
+    expect(events).toContainEqual({
+      type: EventType.CUSTOM,
+      name: 'shared-state.control',
+      value: {
+        kind: 'update-ack',
+        clientMutationId: 'mutation-forbidden',
+        status: 'rejected',
+        resultingRevision: 'shared-rev-1',
+        baseRevision: 'shared-rev-1',
+        code: 'forbidden_path',
+      },
+    });
+  });
+
+  it('fails malformed shared-state update commands without emitting an uncorrelatable update ack', async () => {
+    const agent = new ScriptedPiAgent([]);
+
+    const runtime = createPiRuntimeGatewayRuntime({
+      agent,
+      getSession: () => ({
+        thread: { id: 'thread-update-missing-client-mutation-id' },
+        execution: {
+          id: 'exec-update-missing-client-mutation-id',
+          status: 'working' as const,
+          statusMessage: 'Ready.',
+        },
+        sharedState: {
+          settings: {
+            amount: 100,
+          },
+        },
+        sharedStateVersion: 1,
+        sharedStateRevision: 'shared-rev-1',
+        sharedStateHydrated: true,
+      }),
+    });
+
+    expect(() =>
+      runtime.run({
+        threadId: 'thread-update-missing-client-mutation-id',
+        runId: 'run-update-missing-client-mutation-id',
+        forwardedProps: {
+          command: {
+            update: {
+              baseRevision: 'shared-rev-1',
+              patch: [
+                {
+                  op: 'add',
+                  path: '/shared/settings',
+                  value: {
+                    amount: 250,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrow('Shared-state update commands require a non-empty clientMutationId.');
   });
 
   it('streams text events before the Pi prompt fully completes', async () => {
@@ -958,7 +2111,7 @@ describe('pi gateway service integration', () => {
       done: false,
       value: {
         type: EventType.TEXT_MESSAGE_START,
-        messageId: 'pi:exec-4:assistant:1',
+        messageId: 'pi:exec-4:run-4:assistant:1',
         role: 'assistant',
       },
     });
@@ -966,7 +2119,7 @@ describe('pi gateway service integration', () => {
       done: false,
       value: {
         type: EventType.TEXT_MESSAGE_CONTENT,
-        messageId: 'pi:exec-4:assistant:1',
+        messageId: 'pi:exec-4:run-4:assistant:1',
         delta: 'Streaming from Pi.',
       },
     });
@@ -977,7 +2130,7 @@ describe('pi gateway service integration', () => {
       done: false,
       value: {
         type: EventType.TEXT_MESSAGE_END,
-        messageId: 'pi:exec-4:assistant:1',
+        messageId: 'pi:exec-4:run-4:assistant:1',
       },
     });
   });

@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 
 import { END, InMemoryStore, START, StateGraph } from '@langchain/langgraph';
 import { restorePersistedCronSchedulesWithRunReconciliation } from 'agent-runtime-langgraph';
+import { buildRunCommandStateUpdate } from 'agent-workflow-core';
 import { v7 as uuidv7 } from 'uuid';
 import { privateKeyToAccount } from 'viem/accounts';
 import { z } from 'zod';
@@ -140,14 +141,15 @@ async function ensureThread(baseUrl: string, threadId: string, graphId: string) 
   await parseJsonResponse(patchResponse, ThreadResponseSchema);
 }
 
-async function updateCycleState(baseUrl: string, threadId: string, runMessage: { id: string; role: 'user'; content: string }) {
+async function updateCycleState(
+  baseUrl: string,
+  threadId: string,
+  cycleCommand: { command: 'cycle'; clientMutationId?: string },
+) {
   const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      values: { messages: [runMessage] },
-      as_node: 'runCommand',
-    }),
+    body: JSON.stringify(buildRunCommandStateUpdate(cycleCommand)),
   });
   await parseJsonResponse(response, ThreadStateUpdateResponseSchema);
 }
@@ -229,10 +231,9 @@ export async function runGraphOnce(threadId: string, options?: { durability?: La
   console.info(`[cron] Starting CLMM graph run via API (thread=${threadId})`);
 
   const clientMutationId = uuidv7();
-  const runMessage = {
-    id: uuidv7(),
-    role: 'user' as const,
-    content: JSON.stringify({ command: 'cycle', clientMutationId }),
+  const cycleCommand = {
+    command: 'cycle' as const,
+    clientMutationId,
   };
 
   const baseUrl = resolveLangGraphDeploymentUrl();
@@ -241,7 +242,7 @@ export async function runGraphOnce(threadId: string, options?: { durability?: La
 
   try {
     await ensureThread(baseUrl, threadId, graphId);
-    await updateCycleState(baseUrl, threadId, runMessage);
+    await updateCycleState(baseUrl, threadId, cycleCommand);
     const runId = await createRun({ baseUrl, threadId, graphId, durability });
     if (!runId) {
       return;

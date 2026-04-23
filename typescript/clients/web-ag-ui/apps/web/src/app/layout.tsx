@@ -36,16 +36,9 @@ export default function RootLayout({
   const themeColor = '#fd6731';
 
   return (
-    <html lang="en" className="dark" style={{ colorScheme: 'dark' }}>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `document.documentElement.className='dark';document.documentElement.style.colorScheme='dark';`,
-          }}
-        />
-      </head>
+    <html lang="en">
       <body
-        className={`${roboto.variable} ${robotoMono.variable} antialiased bg-[#09090B] text-[#D1D1D1] dark`}
+        className={`${roboto.variable} ${robotoMono.variable} bg-background text-foreground antialiased`}
       >
         <ProvidersNoSSR>
           <AgentRuntimeProvider>
@@ -53,7 +46,7 @@ export default function RootLayout({
             <div className="flex h-screen overflow-hidden">
               <AppSidebarNoSSR />
               <main
-                className="flex-1 min-w-0 overflow-y-auto bg-[#09090B]"
+                className="flex-1 min-w-0 overflow-y-auto"
                 style={{ '--copilot-kit-primary-color': themeColor } as CopilotKitCSSProperties}
               >
                 {children}

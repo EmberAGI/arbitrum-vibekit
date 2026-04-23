@@ -4,6 +4,7 @@ import { AlertCircle } from 'lucide-react';
 import { useLogin } from '@privy-io/react-auth';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { resolveAgentThreadWalletAddress, supportsAnonymousAgentThread } from '@/utils/agentThread';
+import { isPrivyConfigured } from '@/utils/privyConfig';
 import { usePathname } from 'next/navigation';
 
 function resolveRouteAgentId(pathname: string | null): string | null {
@@ -21,6 +22,14 @@ function resolveRouteAgentId(pathname: string | null): string | null {
 }
 
 export function PrivyGateBanner() {
+  if (!isPrivyConfigured()) {
+    return null;
+  }
+
+  return <ConfiguredPrivyGateBanner />;
+}
+
+function ConfiguredPrivyGateBanner() {
   const { login } = useLogin();
   const { privyWallet } = usePrivyWalletClient();
   const pathname = usePathname();

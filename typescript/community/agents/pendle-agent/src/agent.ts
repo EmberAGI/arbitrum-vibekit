@@ -95,7 +95,6 @@ const CHAIN_MAPPINGS = [
   { id: '42161', names: ['arbitrum', 'arbitrum one', 'arb'] },
   { id: '10', names: ['optimism', 'op'] },
   { id: '137', names: ['polygon', 'matic'] },
-  { id: '8453', names: ['base'] },
 ];
 
 function selectTokenByChain(
@@ -124,7 +123,7 @@ function selectTokenByChain(
       }
     } else {
       throw new Error(
-        `Chain ${chainName} not recognized. Supported chains: Ethereum, Arbitrum, Optimism, Polygon, Base`
+        `Chain ${chainName} not recognized. Supported chains: Ethereum, Arbitrum, Optimism, Polygon`
       );
     }
   } else if (tokenList.length > 1) {
@@ -526,7 +525,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
           chain: z
             .string()
             .optional()
-            .describe('Optional chain name (e.g., Arbitrum, Ethereum, Base)'),
+            .describe('Optional chain name (e.g., Arbitrum, Ethereum, Polygon)'),
         }),
         execute: async args => {
           this.log('Executing getTokenMarketData tool with args:', args);

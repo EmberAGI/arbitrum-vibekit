@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { UnsignedDelegation } from '../types/agent';
 
-import { signDelegationWithFallback } from './delegationSigning';
+import { formatDelegationSigningError, signDelegationWithFallback } from './delegationSigning';
 
 type SignDelegationAction = typeof import('@metamask/delegation-toolkit/actions').signDelegation;
 
@@ -95,5 +95,37 @@ describe('signDelegationWithFallback', () => {
       walletClient,
       expect.objectContaining({ allowInsecureUnrestrictedDelegation: false }),
     );
+  });
+});
+
+describe('formatDelegationSigningError', () => {
+  it('explains fetch-failed provider errors with signing context', () => {
+    const message = formatDelegationSigningError({
+      error: new Error('fetch failed'),
+      context: {
+        chainId: 42161,
+        expectedChainId: 42161,
+        requiredDelegatorAddress: '0x0000000000000000000000000000000000000002',
+        currentSignerAddress: '0x0000000000000000000000000000000000000002',
+      },
+    });
+
+    expect(message).toContain('eth_signTypedData_v4');
+    expect(message).toContain('Privy wallet session');
+    expect(message).toContain('Raw error: fetch failed');
+  });
+
+  it('explains wallet rejection explicitly', () => {
+    const message = formatDelegationSigningError({
+      error: new Error('User rejected the request'),
+      context: {
+        chainId: 42161,
+        expectedChainId: 42161,
+        requiredDelegatorAddress: '0x0000000000000000000000000000000000000002',
+        currentSignerAddress: '0x0000000000000000000000000000000000000002',
+      },
+    });
+
+    expect(message).toBe('Delegation signing was rejected in the wallet confirmation.');
   });
 });

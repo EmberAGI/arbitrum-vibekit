@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
 import type { HttpAgent, HttpAgentConfig } from '@ag-ui/client';
-import type { BaseEvent, Message as AgUiMessage } from '@ag-ui/core';
+import { EventType, type BaseEvent, type Message as AgUiMessage } from '@ag-ui/core';
 import type { AgentOptions as RuntimeAgentOptions, AgentTool as RuntimeAgentTool } from '@mariozechner/pi-agent-core';
 import { Type, streamSimple, type Api, type Model } from '@mariozechner/pi-ai';
 
@@ -10,6 +10,7 @@ import {
   buildPiA2UiActivityEvent as buildPiA2UiActivityEventInternal,
   buildPiRuntimeDirectExecutionRecordIds as buildPiRuntimeDirectExecutionRecordIdsInternal,
   buildPiRuntimeGatewayConnectEvents as buildPiRuntimeGatewayConnectEventsInternal,
+  buildPiRuntimeGatewayStateDeltaEvent as buildPiRuntimeGatewayStateDeltaEventInternal,
   createCanonicalPiRuntimeGatewayControlPlane as createCanonicalPiRuntimeGatewayControlPlaneInternal,
   createPiRuntimeGatewayAgUiHandler as createPiRuntimeGatewayAgUiHandlerInternal,
   createPiRuntimeGatewayFoundation as createPiRuntimeGatewayFoundationInternal,
@@ -21,6 +22,7 @@ import {
   type PiRuntimeGatewayActivityEvent,
   type PiRuntimeGatewayArtifact,
   type PiRuntimeGatewayInspectionState,
+  type PiRuntimeGatewayRunRequest,
   type PiRuntimeGatewayRuntime,
   type PiRuntimeGatewaySession,
 } from '../lib/pi/dist/index.js';
@@ -28,6 +30,7 @@ import {
   buildCancelAutomationStatements,
   buildCompleteAutomationExecutionStatements,
   buildPersistAutomationDispatchStatements,
+  buildPersistExecutionCheckpointStatements,
   buildPersistInterruptCheckpointStatements,
   buildPersistThreadStateStatements,
   buildPiRuntimeStableUuid,
@@ -42,6 +45,9 @@ type AgentRuntimeGetApiKey = NonNullable<RuntimeAgentOptions['getApiKey']>;
 type AgentRuntimeInitialState = NonNullable<RuntimeAgentOptions['initialState']>;
 type AgentRuntimeConvertToLlm = NonNullable<RuntimeAgentOptions['convertToLlm']>;
 type AgentRuntimeTool = RuntimeAgentTool;
+type AgentRuntimeInternalForwardedCommand = NonNullable<
+  NonNullable<PiRuntimeGatewayRunRequest['forwardedProps']>['command']
+>;
 type AgentRuntimeConnectEvent = ReturnType<typeof buildPiRuntimeGatewayConnectEventsInternal>[number];
 type AgentRuntimeAttachedEventSource = readonly AgentRuntimeConnectEvent[] | AsyncIterable<AgentRuntimeConnectEvent>;
 type AgentRuntimeAttachedThreadListener = (event: AgentRuntimeConnectEvent) => void;
@@ -73,7 +79,7 @@ type AgentRuntimeDomainLifecycleTransition<
 type AgentRuntimeDomainInterrupt<TInterrupt extends string = string> = {
   type: TInterrupt;
   description: string;
-  surfacedInThread: boolean;
+  mirroredToActivity: boolean;
 };
 
 type AgentRuntimeDomainLifecycle<
@@ -116,7 +122,7 @@ export type AgentRuntimeDomainArtifactOutput = {
 
 export type AgentRuntimeDomainInterruptOutput = {
   type: string;
-  surfacedInThread: boolean;
+  mirroredToActivity: boolean;
   message: string;
   payload?: Record<string, unknown>;
 };
@@ -129,6 +135,7 @@ export type AgentRuntimeDomainOutputs = {
 
 export type AgentRuntimeDomainOperationResult<TState = unknown> = {
   state?: TState;
+  domainProjectionUpdate?: Record<string, unknown>;
   outputs?: AgentRuntimeDomainOutputs;
 };
 
@@ -137,15 +144,27 @@ export type AgentRuntimeDomainContext<TState = unknown> = {
   state?: TState;
 };
 
+export type AgentRuntimeSystemContext<TState = unknown> = AgentRuntimeDomainContext<TState> & {
+  currentProjection?: Record<string, unknown>;
+};
+
+export type AgentRuntimeSharedStateProjectionContext<TState = unknown> = AgentRuntimeDomainContext<TState> & {
+  sharedState: Record<string, unknown>;
+  currentProjection?: Record<string, unknown>;
+};
+
 export type AgentRuntimeDomainConfig<TState = unknown> = {
   lifecycle: AgentRuntimeDomainLifecycle;
   systemContext?: (
-    params: AgentRuntimeDomainContext<TState>,
+    params: AgentRuntimeSystemContext<TState>,
   ) =>
     | string
     | readonly string[]
     | undefined
     | Promise<string | readonly string[] | undefined>;
+  projectSharedState?: (
+    params: AgentRuntimeSharedStateProjectionContext<TState>,
+  ) => Record<string, unknown> | undefined;
   handleOperation?: (params: AgentRuntimeDomainContext<TState> & {
     operation: AgentRuntimeDomainOperation;
   }) => AgentRuntimeDomainOperationResult<TState> | Promise<AgentRuntimeDomainOperationResult<TState>>;
@@ -161,10 +180,21 @@ export interface AgentRuntimeAgentOptions {
   convertToLlm?: AgentRuntimeConvertToLlm;
 }
 
+export type AgentRuntimeSharedStatePatchOperation = {
+  op: 'add' | 'replace' | 'remove';
+  path: string;
+  value?: unknown;
+};
+
 export type AgentRuntimeForwardedCommand = {
   name?: string;
   input?: unknown;
-  resume?: string;
+  resume?: unknown;
+  update?: {
+    clientMutationId: string;
+    baseRevision?: string;
+    patch: ReadonlyArray<AgentRuntimeSharedStatePatchOperation>;
+  };
 };
 
 type AgentRuntimeDomainCommandToolArgs = {
@@ -263,6 +293,13 @@ type AgentRuntimeAutomationRecord = {
   lastRunAt: string | null;
   lastRunStatus: string | null;
 };
+
+type PersistedExecutionCheckpointStatus =
+  | 'queued'
+  | 'working'
+  | 'interrupted'
+  | 'completed'
+  | 'failed';
 
 type AgentRuntimeAutomationRegistry = {
   upsert: (record: AgentRuntimeAutomationRecord) => AgentRuntimeAutomationRecord;
@@ -449,7 +486,101 @@ function readPersistedSession(
     return null;
   }
 
-  return threadState as unknown as PiRuntimeGatewaySession;
+  return normalizeLegacyPersistedInterruptMetadata(
+    threadState as unknown as PiRuntimeGatewaySession,
+  );
+}
+
+function normalizeLegacyInterruptArtifactData(
+  data: unknown,
+): Record<string, unknown> | undefined {
+  if (!isRecord(data) || data.type !== 'interrupt-status') {
+    return undefined;
+  }
+
+  const legacyMirroredFlag =
+    typeof data.mirroredToActivity === 'boolean'
+      ? data.mirroredToActivity
+      : typeof data.surfacedInThread === 'boolean'
+        ? data.surfacedInThread
+        : null;
+
+  if (legacyMirroredFlag === null) {
+    return undefined;
+  }
+
+  if (typeof data.mirroredToActivity === 'boolean' && !('surfacedInThread' in data)) {
+    return undefined;
+  }
+
+  const { surfacedInThread: _surfacedInThread, ...remaining } = data;
+  return {
+    ...remaining,
+    mirroredToActivity: legacyMirroredFlag,
+  };
+}
+
+function normalizeLegacyInterruptArtifact(
+  artifact: PiRuntimeGatewayArtifact | undefined,
+): PiRuntimeGatewayArtifact | undefined {
+  const normalizedData = normalizeLegacyInterruptArtifactData(artifact?.data);
+  if (!artifact || !normalizedData) {
+    return artifact;
+  }
+
+  return {
+    ...artifact,
+    data: normalizedData,
+  };
+}
+
+function normalizeLegacyPersistedInterruptMetadata(
+  session: PiRuntimeGatewaySession,
+): PiRuntimeGatewaySession {
+  let nextSession = session;
+
+  const normalizedCurrentArtifact = normalizeLegacyInterruptArtifact(session.artifacts?.current);
+  const normalizedActivityArtifact = normalizeLegacyInterruptArtifact(session.artifacts?.activity);
+  if (
+    normalizedCurrentArtifact !== session.artifacts?.current ||
+    normalizedActivityArtifact !== session.artifacts?.activity
+  ) {
+    nextSession = {
+      ...nextSession,
+      artifacts: nextSession.artifacts
+        ? {
+            ...nextSession.artifacts,
+            ...(normalizedCurrentArtifact ? { current: normalizedCurrentArtifact } : {}),
+            ...(normalizedActivityArtifact ? { activity: normalizedActivityArtifact } : {}),
+          }
+        : nextSession.artifacts,
+    };
+  }
+
+  const normalizedActivityEvents = nextSession.activityEvents?.map((event) => {
+    if (event.type !== 'artifact') {
+      return event;
+    }
+
+    const normalizedArtifact = normalizeLegacyInterruptArtifact(event.artifact);
+    return normalizedArtifact === event.artifact
+      ? event
+      : {
+          ...event,
+          artifact: normalizedArtifact!,
+        };
+  });
+  if (
+    normalizedActivityEvents &&
+    normalizedActivityEvents.some((event, index) => event !== nextSession.activityEvents?.[index])
+  ) {
+    nextSession = {
+      ...nextSession,
+      activityEvents: normalizedActivityEvents,
+    };
+  }
+
+  return nextSession;
 }
 
 function readPersistedDomainState<TState>(
@@ -713,7 +844,7 @@ function validateDomainLifecycle(lifecycle: AgentRuntimeDomainLifecycle): void {
 }
 
 function readDirectCommandOperation(
-  command: AgentRuntimeForwardedCommand | undefined,
+  command: Pick<AgentRuntimeInternalForwardedCommand, 'name' | 'input'> | undefined,
 ): AgentRuntimeDomainOperation | null {
   if (!command || typeof command.name !== 'string') {
     return null;
@@ -732,24 +863,22 @@ function readDirectCommandOperation(
 }
 
 function readInterruptOperation<TState>(params: {
-  command: AgentRuntimeForwardedCommand | undefined;
+  command: Pick<AgentRuntimeInternalForwardedCommand, 'resume'> | undefined;
   session: PiRuntimeGatewaySession;
   domain: AgentRuntimeDomainConfig<TState> | undefined;
 }): AgentRuntimeDomainOperation | null {
+  const hasResume = Object.prototype.hasOwnProperty.call(params.command ?? {}, 'resume');
   const resumePayload = params.command?.resume;
-  if (typeof resumePayload !== 'string' || !params.domain?.handleOperation) {
+  if (!hasResume || !params.domain?.handleOperation) {
     return null;
   }
 
-  const currentArtifact = params.session.artifacts?.current?.data;
-  if (typeof currentArtifact !== 'object' || currentArtifact === null) {
+  const pendingInterruptArtifact = findLatestPendingInterruptArtifact(params.session);
+  if (!pendingInterruptArtifact) {
     return null;
   }
 
-  const interruptType =
-    'interruptType' in currentArtifact && typeof currentArtifact.interruptType === 'string'
-      ? currentArtifact.interruptType
-      : null;
+  const interruptType = readInterruptType(pendingInterruptArtifact.data);
   if (!interruptType) {
     return null;
   }
@@ -764,7 +893,10 @@ function readInterruptOperation<TState>(params: {
   return {
     source: 'interrupt',
     name: interruptType,
-    input: parseDomainCommandToolInput(resumePayload),
+    input:
+      typeof resumePayload === 'string'
+        ? parseDomainCommandToolInput(resumePayload)
+        : resumePayload,
   };
 }
 
@@ -793,6 +925,86 @@ function parseDomainCommandToolInput(inputJson: string): unknown {
   return normalized.length === 0 ? {} : JSON.parse(normalized);
 }
 
+function readInterruptType(data: unknown): string | null {
+  return isRecord(data) && typeof data.interruptType === 'string' ? data.interruptType : null;
+}
+
+function readInterruptStatus(data: unknown): string | null {
+  return isRecord(data) && typeof data.status === 'string' ? data.status : null;
+}
+
+function readInterruptPayload(data: unknown): Record<string, unknown> | undefined {
+  return isRecord(data) && isRecord(data.payload) ? data.payload : undefined;
+}
+
+function readInterruptMirroredToActivity(data: unknown): boolean {
+  return isRecord(data) && typeof data.mirroredToActivity === 'boolean'
+    ? data.mirroredToActivity
+    : true;
+}
+
+function isInterruptStatusArtifact(artifact: PiRuntimeGatewayArtifact | undefined): artifact is PiRuntimeGatewayArtifact {
+  return isRecord(artifact?.data) && artifact.data.type === 'interrupt-status';
+}
+
+function isHiddenPendingInterruptArtifact(
+  artifact: PiRuntimeGatewayArtifact | undefined,
+): artifact is PiRuntimeGatewayArtifact {
+  return (
+    isInterruptStatusArtifact(artifact) &&
+    readInterruptStatus(artifact.data) === 'pending' &&
+    !readInterruptMirroredToActivity(artifact.data)
+  );
+}
+
+function findLatestPendingInterruptArtifact(
+  session: Pick<PiRuntimeGatewaySession, 'activityEvents' | 'artifacts'>,
+): PiRuntimeGatewayArtifact | null {
+  const resolvedInterruptArtifactIds = new Set<string>();
+  const currentArtifact = session.artifacts?.current;
+
+  if (isInterruptStatusArtifact(currentArtifact)) {
+    const status = readInterruptStatus(currentArtifact.data);
+    if (status === 'pending') {
+      return currentArtifact;
+    }
+    if (status === 'resolved') {
+      resolvedInterruptArtifactIds.add(currentArtifact.artifactId);
+    }
+  }
+
+  const activityArtifact = session.artifacts?.activity;
+  if (isInterruptStatusArtifact(activityArtifact)) {
+    const status = readInterruptStatus(activityArtifact.data);
+    if (status === 'pending' && !resolvedInterruptArtifactIds.has(activityArtifact.artifactId)) {
+      return activityArtifact;
+    }
+    if (status === 'resolved') {
+      resolvedInterruptArtifactIds.add(activityArtifact.artifactId);
+    }
+  }
+
+  for (const event of [...(session.activityEvents ?? [])].reverse()) {
+    if (event.type !== 'artifact' || !isInterruptStatusArtifact(event.artifact)) {
+      continue;
+    }
+
+    const status = readInterruptStatus(event.artifact.data);
+    if (status === 'resolved') {
+      resolvedInterruptArtifactIds.add(event.artifact.artifactId);
+      continue;
+    }
+
+    if (status !== 'pending' || resolvedInterruptArtifactIds.has(event.artifact.artifactId)) {
+      continue;
+    }
+
+    return event.artifact;
+  }
+
+  return null;
+}
+
 function buildDomainArtifact(params: {
   artifact: AgentRuntimeDomainArtifactOutput;
   threadId: string;
@@ -819,6 +1031,7 @@ function buildInterruptArtifact(params: {
       type: 'interrupt-status',
       interruptType: params.interrupt.type,
       status: 'pending',
+      mirroredToActivity: params.interrupt.mirroredToActivity,
       message: params.interrupt.message,
       ...(params.interrupt.payload ? { payload: params.interrupt.payload } : {}),
     },
@@ -848,6 +1061,83 @@ function buildLifecycleThreadPatch(params: {
 
   return {
     lifecycle: lifecycleState,
+  };
+}
+
+function isExplicitProjectionDelete(value: unknown): value is { $delete: true } {
+  return isRecord(value) && value.$delete === true && Object.keys(value).length === 1;
+}
+
+function mergeDomainProjectionValue(currentValue: unknown, updateValue: unknown): unknown {
+  if (updateValue === undefined) {
+    return currentValue;
+  }
+
+  if (isExplicitProjectionDelete(updateValue)) {
+    return undefined;
+  }
+
+  if (Array.isArray(updateValue)) {
+    return updateValue;
+  }
+
+  if (isRecord(currentValue) && isRecord(updateValue)) {
+    const merged: Record<string, unknown> = { ...currentValue };
+
+    for (const [key, nextValue] of Object.entries(updateValue)) {
+      const mergedValue = mergeDomainProjectionValue(currentValue[key], nextValue);
+      if (mergedValue === undefined) {
+        delete merged[key];
+        continue;
+      }
+      merged[key] = mergedValue;
+    }
+
+    return Object.keys(merged).length > 0 ? merged : undefined;
+  }
+
+  return updateValue;
+}
+
+function mergeDomainProjection(
+  currentProjection: Record<string, unknown> | undefined,
+  updateProjection: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!updateProjection) {
+    return currentProjection;
+  }
+
+  const merged = mergeDomainProjectionValue(currentProjection ?? {}, updateProjection);
+  return isRecord(merged) ? merged : undefined;
+}
+
+function reconcileSharedStateProjection<TState>(params: {
+  threadId: string;
+  session: PiRuntimeGatewaySession;
+  domain: AgentRuntimeDomainConfig<TState> | undefined;
+  domainState: TState | undefined;
+}): PiRuntimeGatewaySession {
+  const projectSharedState = params.domain?.projectSharedState;
+  if (!projectSharedState) {
+    return params.session;
+  }
+
+  const currentProjection = isRecord(params.session.projectedState)
+    ? params.session.projectedState
+    : undefined;
+  const projectionUpdate = projectSharedState({
+    threadId: params.threadId,
+    state: params.domainState,
+    sharedState: isRecord(params.session.sharedState) ? params.session.sharedState : {},
+    currentProjection,
+  });
+  if (!projectionUpdate) {
+    return params.session;
+  }
+
+  return {
+    ...params.session,
+    projectedState: mergeDomainProjection(currentProjection, projectionUpdate),
   };
 }
 
@@ -985,6 +1275,7 @@ function applyDomainOperationResult(params: {
 }): PiRuntimeGatewaySession {
   const outputs = params.result.outputs;
   const domainOutputs = outputs ?? {};
+  const hasDomainProjectionUpdate = 'domainProjectionUpdate' in params.result;
   const lifecycleThreadPatch =
     params.result.state === undefined
       ? undefined
@@ -992,7 +1283,13 @@ function applyDomainOperationResult(params: {
           lifecycle: params.lifecycle,
           state: params.result.state,
         });
-  if (!outputs && !lifecycleThreadPatch) {
+  const nextLifecyclePhase =
+    lifecycleThreadPatch &&
+    isRecord(lifecycleThreadPatch['lifecycle']) &&
+    typeof lifecycleThreadPatch['lifecycle']['phase'] === 'string'
+      ? (lifecycleThreadPatch['lifecycle']['phase'])
+      : null;
+  if (!outputs && !lifecycleThreadPatch && !hasDomainProjectionUpdate) {
     return params.session;
   }
 
@@ -1006,6 +1303,9 @@ function applyDomainOperationResult(params: {
     : [];
   let nextA2Ui = params.session.a2ui;
   let shouldWriteA2Ui = false;
+  const nextDomainProjection = hasDomainProjectionUpdate
+    ? mergeDomainProjection(params.session.projectedState, params.result.domainProjectionUpdate)
+    : params.session.projectedState;
 
   for (const artifactOutput of domainOutputs.artifacts ?? []) {
     const artifact = buildDomainArtifact({
@@ -1016,7 +1316,9 @@ function applyDomainOperationResult(params: {
     });
     const artifacts = nextArtifacts ?? {};
     artifacts.current = artifact;
-    artifacts.activity = artifact;
+    artifacts.activity = isHiddenPendingInterruptArtifact(artifacts.activity)
+      ? artifacts.activity
+      : artifact;
     nextArtifacts = artifacts;
     nextActivityEvents.push({
       type: 'artifact',
@@ -1035,42 +1337,60 @@ function applyDomainOperationResult(params: {
       operationName: params.operation.name,
       now: params.now,
     });
+    const mirroredToActivity = domainOutputs.interrupt.mirroredToActivity;
     const artifacts = nextArtifacts ?? {};
     artifacts.current = interruptArtifact;
+    if (!mirroredToActivity) {
+      artifacts.activity = interruptArtifact;
+    }
     nextArtifacts = artifacts;
-    nextActivityEvents.push({
-      type: 'artifact',
-      artifact: interruptArtifact,
-      append: true,
-    });
-    nextA2Ui = {
-      kind: 'interrupt',
-      payload: {
-        ...(domainOutputs.interrupt.payload ?? {}),
-        type: domainOutputs.interrupt.type,
-        artifactId: interruptArtifact.artifactId,
-        message: domainOutputs.interrupt.message,
-        ...(!domainOutputs.interrupt.payload || !('inputLabel' in domainOutputs.interrupt.payload)
-          ? { inputLabel: 'Provide input' }
-          : {}),
-        ...(!domainOutputs.interrupt.payload || !('submitLabel' in domainOutputs.interrupt.payload)
-          ? { submitLabel: 'Continue' }
-          : {}),
-      },
-    };
-    nextActivityEvents.push(
-      buildPiA2UiActivityEventInternal({
-        threadId: params.threadId,
-        executionId: params.session.execution.id,
-        payload: nextA2Ui,
-      }),
-    );
+    if (mirroredToActivity) {
+      nextActivityEvents.push({
+        type: 'artifact',
+        artifact: interruptArtifact,
+        append: true,
+      });
+      nextA2Ui = {
+        kind: 'interrupt',
+        payload: {
+          ...(domainOutputs.interrupt.payload ?? {}),
+          type: domainOutputs.interrupt.type,
+          artifactId: interruptArtifact.artifactId,
+          message: domainOutputs.interrupt.message,
+          ...(!domainOutputs.interrupt.payload || !('inputLabel' in domainOutputs.interrupt.payload)
+            ? { inputLabel: 'Provide input' }
+            : {}),
+          ...(!domainOutputs.interrupt.payload || !('submitLabel' in domainOutputs.interrupt.payload)
+            ? { submitLabel: 'Continue' }
+            : {}),
+        },
+      };
+      nextActivityEvents.push(
+        buildPiA2UiActivityEventInternal({
+          threadId: params.threadId,
+          executionId: params.session.execution.id,
+          payload: nextA2Ui,
+        }),
+      );
+    } else {
+      nextA2Ui = undefined;
+    }
     executionStatus = 'interrupted';
     executionStatusMessage = domainOutputs.interrupt.message;
     shouldWriteA2Ui = true;
   } else if (domainOutputs.status && domainOutputs.status.executionStatus !== 'interrupted') {
     nextA2Ui = undefined;
     shouldWriteA2Ui = true;
+  }
+
+  if (
+    nextLifecyclePhase === 'prehire' &&
+    !domainOutputs.interrupt &&
+    (!domainOutputs.artifacts || domainOutputs.artifacts.length === 0) &&
+    nextArtifacts?.current
+  ) {
+    const { current: _current, ...remainingArtifacts } = nextArtifacts;
+    nextArtifacts = Object.keys(remainingArtifacts).length > 0 ? remainingArtifacts : undefined;
   }
 
   return {
@@ -1083,6 +1403,7 @@ function applyDomainOperationResult(params: {
     ...(nextArtifacts ? { artifacts: nextArtifacts } : {}),
     ...(nextActivityEvents.length > 0 ? { activityEvents: nextActivityEvents } : {}),
     ...(shouldWriteA2Ui ? { a2ui: nextA2Ui } : {}),
+    ...(hasDomainProjectionUpdate ? { projectedState: nextDomainProjection } : {}),
     ...(lifecycleThreadPatch
       ? {
           threadPatch: mergeThreadPatch(params.session.threadPatch, lifecycleThreadPatch),
@@ -1098,14 +1419,14 @@ function resolveInterruptedSessionForUserInput(
     return session;
   }
 
-  const currentArtifact = session.artifacts?.current;
-  const resolvedArtifact = currentArtifact
+  const pendingInterruptArtifact = findLatestPendingInterruptArtifact(session);
+  const resolvedArtifact = pendingInterruptArtifact
     ? {
-        artifactId: currentArtifact.artifactId,
+        artifactId: pendingInterruptArtifact.artifactId,
         data:
-          typeof currentArtifact.data === 'object' && currentArtifact.data !== null
+          typeof pendingInterruptArtifact.data === 'object' && pendingInterruptArtifact.data !== null
             ? {
-                ...currentArtifact.data,
+                ...pendingInterruptArtifact.data,
                 type: 'interrupt-status',
                 status: 'resolved',
               }
@@ -1115,16 +1436,21 @@ function resolveInterruptedSessionForUserInput(
               },
       }
     : undefined;
+  const shouldSurfaceResolvedArtifact =
+    pendingInterruptArtifact !== null &&
+    readInterruptMirroredToActivity(pendingInterruptArtifact.data);
 
   const nextActivityEvents = resolvedArtifact
-    ? [
-        ...(session.activityEvents ?? []),
-        {
-          type: 'artifact' as const,
-          artifact: resolvedArtifact,
-          append: true,
-        },
-      ]
+    ? shouldSurfaceResolvedArtifact
+      ? [
+          ...(session.activityEvents ?? []),
+          {
+            type: 'artifact' as const,
+            artifact: resolvedArtifact,
+            append: true,
+          },
+        ]
+      : session.activityEvents
     : session.activityEvents;
 
   return {
@@ -1138,11 +1464,78 @@ function resolveInterruptedSessionForUserInput(
       ? {
           ...session.artifacts,
           current: resolvedArtifact,
-          activity: session.artifacts.activity,
+          activity:
+            session.artifacts.activity &&
+            isInterruptStatusArtifact(session.artifacts.activity) &&
+            session.artifacts.activity.artifactId === pendingInterruptArtifact?.artifactId
+              ? resolvedArtifact
+              : session.artifacts.activity,
         }
       : undefined,
     ...(nextActivityEvents ? { activityEvents: nextActivityEvents } : {}),
     a2ui: undefined,
+  };
+}
+
+function repairHydratedPendingInterruptDrift(
+  session: PiRuntimeGatewaySession,
+): PiRuntimeGatewaySession {
+  if (session.execution.status === 'interrupted') {
+    return session;
+  }
+
+  const pendingInterruptArtifact = findLatestPendingInterruptArtifact(session);
+  if (!pendingInterruptArtifact) {
+    return session;
+  }
+
+  const resolvedArtifact = {
+    artifactId: pendingInterruptArtifact.artifactId,
+    data:
+      typeof pendingInterruptArtifact.data === 'object' && pendingInterruptArtifact.data !== null
+        ? {
+            ...pendingInterruptArtifact.data,
+            type: 'interrupt-status',
+            status: 'resolved',
+          }
+        : {
+            type: 'interrupt-status',
+            status: 'resolved',
+          },
+  };
+
+  const nextActivityEvents = readInterruptMirroredToActivity(pendingInterruptArtifact.data)
+    ? [
+        ...(session.activityEvents ?? []),
+        {
+          type: 'artifact' as const,
+          artifact: resolvedArtifact,
+          append: true,
+        },
+      ]
+    : session.activityEvents;
+  const currentArtifact = session.artifacts?.current;
+  const shouldReplaceCurrentArtifact =
+    isInterruptStatusArtifact(currentArtifact) &&
+    currentArtifact.artifactId === pendingInterruptArtifact.artifactId &&
+    readInterruptStatus(currentArtifact.data) === 'pending';
+  const activityArtifact = session.artifacts?.activity;
+  const shouldReplaceActivityArtifact =
+    isInterruptStatusArtifact(activityArtifact) &&
+    activityArtifact.artifactId === pendingInterruptArtifact.artifactId &&
+    readInterruptStatus(activityArtifact.data) === 'pending';
+
+  return {
+    ...session,
+    artifacts: session.artifacts
+      ? {
+          ...session.artifacts,
+          current: shouldReplaceCurrentArtifact ? resolvedArtifact : session.artifacts.current,
+          activity: shouldReplaceActivityArtifact ? resolvedArtifact : session.artifacts.activity,
+        }
+      : session.artifacts,
+    ...(nextActivityEvents ? { activityEvents: nextActivityEvents } : {}),
+    a2ui: session.a2ui?.kind === 'interrupt' ? undefined : session.a2ui,
   };
 }
 
@@ -1336,10 +1729,51 @@ function cloneAttachedEvents(events: readonly AgentRuntimeConnectEvent[]): Agent
   return clonedEvents;
 }
 
+function isAttachedEventArray(
+  source: AgentRuntimeAttachedEventSource,
+): source is readonly AgentRuntimeConnectEvent[] {
+  return Array.isArray(source);
+}
+
+function injectAttachedEventsAfterFirstEvent(
+  source: AgentRuntimeAttachedEventSource,
+  injectedEvents: readonly AgentRuntimeConnectEvent[],
+): AgentRuntimeAttachedEventSource {
+  if (injectedEvents.length === 0) {
+    return source;
+  }
+
+  if (isAttachedEventArray(source)) {
+    if (source.length === 0) {
+      return cloneAttachedEvents(injectedEvents);
+    }
+
+    const mergedEvents = cloneAttachedEvents(source);
+    mergedEvents.splice(1, 0, ...cloneAttachedEvents(injectedEvents));
+    return mergedEvents;
+  }
+
+  return {
+    async *[Symbol.asyncIterator]() {
+      let isFirstEvent = true;
+      for await (const event of source) {
+        yield event;
+        if (isFirstEvent) {
+          isFirstEvent = false;
+          for (const injectedEvent of injectedEvents) {
+            yield injectedEvent;
+          }
+        }
+      }
+    },
+  };
+}
+
 function tapAttachedEventSource(
   source: AgentRuntimeAttachedEventSource,
   onEvents: (events: readonly AgentRuntimeConnectEvent[]) => void,
   onComplete?: () => void,
+  onError?: (error: unknown) => Promise<void> | void,
 ): AgentRuntimeAttachedEventSource {
   if (Array.isArray(source)) {
     onEvents(source);
@@ -1350,25 +1784,45 @@ function tapAttachedEventSource(
   return {
     [Symbol.asyncIterator]() {
       const iterator = (source as AsyncIterable<AgentRuntimeConnectEvent>)[Symbol.asyncIterator]();
+      let completed = false;
+      const markComplete = () => {
+        if (completed) {
+          return;
+        }
+
+        completed = true;
+        onComplete?.();
+      };
 
       return {
         async next() {
-          const result = await iterator.next();
-          if (!result.done) {
-            onEvents([result.value]);
-          } else {
-            onComplete?.();
+          try {
+            const result = await iterator.next();
+            if (!result.done) {
+              onEvents([result.value]);
+            } else {
+              markComplete();
+            }
+            return result;
+          } catch (error) {
+            try {
+              await onError?.(error);
+            } catch {
+              // Preserve the original run-stream failure if checkpoint persistence also fails.
+            } finally {
+              markComplete();
+            }
+            throw error;
           }
-          return result;
         },
         async return() {
-          onComplete?.();
+          markComplete();
           return typeof iterator.return === 'function'
             ? await iterator.return()
             : { value: undefined, done: true };
         },
         async throw(error: unknown) {
-          onComplete?.();
+          markComplete();
           if (typeof iterator.throw === 'function') {
             return await iterator.throw(error);
           }
@@ -1378,6 +1832,27 @@ function tapAttachedEventSource(
       };
     },
   };
+}
+
+function mapSessionExecutionStatusToPersistedStatus(
+  status: AgentRuntimeExecutionStatus,
+): PersistedExecutionCheckpointStatus {
+  switch (status) {
+    case 'queued':
+      return 'queued';
+    case 'working':
+      return 'working';
+    case 'interrupted':
+      return 'interrupted';
+    case 'completed':
+      return 'completed';
+    case 'failed':
+      return 'failed';
+    case 'canceled':
+      return 'failed';
+    case 'auth-required':
+      return 'interrupted';
+  }
 }
 
 export interface CreateAgentRuntimeOptions<TState = unknown> {
@@ -1443,6 +1918,36 @@ export async function createAgentRuntime<TState = unknown>(
   const initialLifecyclePhase = domain?.lifecycle.initialPhase;
   const sessionStore = createSessionStore(initialLifecyclePhase);
   const domainStateStore = new Map<string, TState>();
+  const reconcileSession = (
+    threadId: string,
+    session: PiRuntimeGatewaySession,
+  ): PiRuntimeGatewaySession =>
+    reconcileSharedStateProjection({
+      threadId,
+      session,
+      domain,
+      domainState: domainStateStore.get(threadId),
+    });
+  const getSession = (threadId: string): PiRuntimeGatewaySession => {
+    const session = sessionStore.getSession(threadId);
+    const reconciled = reconcileSession(threadId, session);
+    if (reconciled !== session) {
+      sessionStore.setSession(threadId, reconciled);
+    }
+    return reconciled;
+  };
+  const setSession = (threadId: string, session: PiRuntimeGatewaySession): PiRuntimeGatewaySession => {
+    const reconciled = reconcileSession(threadId, session);
+    sessionStore.setSession(threadId, reconciled);
+    return reconciled;
+  };
+  const updateSession = (
+    threadId: string,
+    update: (session: PiRuntimeGatewaySession) => PiRuntimeGatewaySession,
+  ): PiRuntimeGatewaySession => {
+    const nextSession = update(getSession(threadId));
+    return setSession(threadId, nextSession);
+  };
   const automationRegistry = createAutomationRegistry();
   const attachedRuns = createAttachedRunRegistry();
   const executionContext = new AsyncLocalStorage<AgentRuntimeExecutionContext>();
@@ -1453,38 +1958,165 @@ export async function createAgentRuntime<TState = unknown>(
   };
   const getActiveSessionContext = (): PiRuntimeGatewaySession | undefined => {
     const threadId = getActiveThreadId();
-    return threadId ? sessionStore.getSession(threadId) : undefined;
+    return threadId ? getSession(threadId) : undefined;
   };
   const loadInspectionState = async (): Promise<PiRuntimeGatewayInspectionState> => {
     return await postgres.loadInspectionState({
       databaseUrl: resolvedDatabaseUrl,
     });
   };
+  const resolvePersistedExecutionId = (
+    threadId: string,
+    session: PiRuntimeGatewaySession,
+  ): string => {
+    const defaultExecutionId = `agent-runtime:${threadId}`;
+    if (session.execution.id === defaultExecutionId) {
+      return buildPiRuntimeDirectExecutionRecordIdsInternal(threadId).executionId;
+    }
+
+    return session.execution.id;
+  };
+  const readCurrentInterruptState = (
+    session: PiRuntimeGatewaySession,
+  ):
+    | {
+        type: string;
+        payload: Record<string, unknown>;
+        mirroredToActivity: boolean;
+      }
+    | undefined => {
+    if (session.execution.status !== 'interrupted') {
+      return undefined;
+    }
+
+    if (session.a2ui?.kind === 'interrupt' && isRecord(session.a2ui.payload)) {
+      const interruptType =
+        typeof session.a2ui.payload.type === 'string' ? session.a2ui.payload.type : null;
+      if (interruptType) {
+        return {
+          type: interruptType,
+          payload: session.a2ui.payload,
+          mirroredToActivity: true,
+        };
+      }
+    }
+
+    const pendingInterruptArtifact = findLatestPendingInterruptArtifact(session);
+    const interruptType = readInterruptType(pendingInterruptArtifact?.data);
+    if (!pendingInterruptArtifact || !interruptType) {
+      return undefined;
+    }
+
+    return {
+      type: interruptType,
+      payload: readInterruptPayload(pendingInterruptArtifact.data) ?? {},
+      mirroredToActivity: readInterruptMirroredToActivity(pendingInterruptArtifact.data),
+    };
+  };
   const persistSessionSnapshot = async (
     threadId: string,
-    session: PiRuntimeGatewaySession = sessionStore.getSession(threadId),
+    session: PiRuntimeGatewaySession = getSession(threadId),
   ): Promise<void> => {
     const ids = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+    const persistedExecutionId = resolvePersistedExecutionId(threadId, session);
+    const currentInterrupt = readCurrentInterruptState(session);
+    const currentInterruptId = currentInterrupt
+      ? buildPiRuntimeStableUuid('interrupt', `agent-runtime:execution:${persistedExecutionId}:interrupt`)
+      : null;
+    const executionSource = session.automation?.runId ? 'automation' : 'user';
+    const currentNow = new Date(now());
     const threadState = buildPersistedThreadStateSnapshot({
       session,
       state: domainStateStore.get(threadId),
     });
     await postgres.executeStatements(
       resolvedDatabaseUrl,
-      buildPersistThreadStateStatements({
-        threadId: ids.threadId,
-        threadKey: threadId,
-        threadState,
-        now: new Date(now()),
-      }),
+      [
+        ...buildPersistThreadStateStatements({
+          threadId: ids.threadId,
+          threadKey: threadId,
+          threadState,
+          now: currentNow,
+        }),
+        ...buildPersistExecutionCheckpointStatements({
+          executionId: persistedExecutionId,
+          threadId: ids.threadId,
+          automationRunId: session.automation?.runId ?? null,
+          status: mapSessionExecutionStatusToPersistedStatus(session.execution.status),
+          source: executionSource,
+          currentInterruptId,
+          interruptType: currentInterrupt?.type,
+          interruptPayload: currentInterrupt?.payload,
+          mirroredToActivity: currentInterrupt?.mirroredToActivity,
+          now: currentNow,
+        }),
+      ],
+    );
+  };
+  const isPersistedExecutionCheckpointOutOfSync = (params: {
+    threadId: string;
+    session: PiRuntimeGatewaySession;
+    inspectionState: PiRuntimeGatewayInspectionState;
+  }): boolean => {
+    const persistedExecutionId = resolvePersistedExecutionId(params.threadId, params.session);
+    const expectedStatus = mapSessionExecutionStatusToPersistedStatus(params.session.execution.status);
+    const expectedSource = params.session.automation?.runId ? 'automation' : 'user';
+    const expectedInterrupt = readCurrentInterruptState(params.session);
+    const expectedCurrentInterruptId = expectedInterrupt
+      ? buildPiRuntimeStableUuid(
+          'interrupt',
+          `agent-runtime:execution:${persistedExecutionId}:interrupt`,
+        )
+      : null;
+    const execution = params.inspectionState.executions.find(
+      (candidate) => candidate.executionId === persistedExecutionId,
+    );
+
+    if (!execution) {
+      return true;
+    }
+
+    const expectedCompleted = expectedStatus === 'completed' || expectedStatus === 'failed';
+    if (
+      execution.status !== expectedStatus ||
+      execution.source !== expectedSource ||
+      execution.currentInterruptId !== expectedCurrentInterruptId ||
+      (expectedCompleted ? execution.completedAt === null : execution.completedAt !== null)
+    ) {
+      return true;
+    }
+
+    const executionInterrupts = params.inspectionState.interrupts.filter(
+      (candidate) => candidate.executionId === persistedExecutionId,
+    );
+    const pendingInterrupts = executionInterrupts.filter(
+      (candidate) => candidate.status === 'pending',
+    );
+
+    if (expectedCurrentInterruptId === null) {
+      return pendingInterrupts.length > 0;
+    }
+
+    const currentInterrupt = executionInterrupts.find(
+      (candidate) => candidate.interruptId === expectedCurrentInterruptId,
+    );
+    if (!currentInterrupt) {
+      return true;
+    }
+
+    return (
+      currentInterrupt.status !== 'pending' ||
+      currentInterrupt.mirroredToActivity !== expectedInterrupt?.mirroredToActivity ||
+      pendingInterrupts.some((candidate) => candidate.interruptId !== expectedCurrentInterruptId)
     );
   };
   const hydrateThreadSession = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
     if (sessionStore.hasSession(threadId)) {
-      return sessionStore.getSession(threadId);
+      return getSession(threadId);
     }
 
-    const persistedThread = (await loadInspectionState()).threads.find((candidate) => candidate.threadKey === threadId);
+    const inspectionState = await loadInspectionState();
+    const persistedThread = inspectionState.threads.find((candidate) => candidate.threadKey === threadId);
     if (persistedThread) {
       persistedThreads.add(threadId);
       const persistedSession = readPersistedSession(threadId, persistedThread.threadState);
@@ -1495,15 +2127,21 @@ export async function createAgentRuntime<TState = unknown>(
             ? readPersistedLifecycleDomainState<TState>(persistedThread.threadState)
             : undefined;
         const normalizedSession = materializeSessionLifecycle(persistedSession, initialLifecyclePhase);
-        const hydratedSession = sessionStore.setSession(threadId, normalizedSession);
+        const repairedSession = repairHydratedPendingInterruptDrift(normalizedSession);
+        const hydratedSession = setSession(threadId, repairedSession);
         if (persistedDomainState !== undefined) {
           domainStateStore.set(threadId, persistedDomainState);
         } else if (recoveredLifecycleState !== undefined) {
           domainStateStore.set(threadId, recoveredLifecycleState);
         }
         if (
-          normalizedSession !== persistedSession ||
-          (persistedDomainState === undefined && recoveredLifecycleState !== undefined)
+          repairedSession !== persistedSession ||
+          (persistedDomainState === undefined && recoveredLifecycleState !== undefined) ||
+          isPersistedExecutionCheckpointOutOfSync({
+            threadId,
+            session: hydratedSession,
+            inspectionState,
+          })
         ) {
           await persistSessionSnapshot(threadId, hydratedSession);
         }
@@ -1511,7 +2149,7 @@ export async function createAgentRuntime<TState = unknown>(
       }
     }
 
-    return sessionStore.getSession(threadId);
+    return getSession(threadId);
   };
   const ensureThread = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
     const session = await hydrateThreadSession(threadId);
@@ -1530,7 +2168,6 @@ export async function createAgentRuntime<TState = unknown>(
       threadKey: threadId,
       threadState,
       executionId: ids.executionId,
-      interruptId: ids.interruptId,
       artifactId: ids.artifactId,
       activityId: randomUUID(),
       now: new Date(now()),
@@ -1538,14 +2175,37 @@ export async function createAgentRuntime<TState = unknown>(
     persistedThreads.add(threadId);
     return session;
   };
-  const publishSessionUpdate = async (threadId: string, runId?: string): Promise<void> => {
+  const publishSessionUpdate = async (params: {
+    threadId: string;
+    previousSession: PiRuntimeGatewaySession;
+    nextSession: PiRuntimeGatewaySession;
+    runId?: string;
+  }): Promise<void> => {
+    const runId = params.runId ?? `update:${params.threadId}:${now()}`;
+    const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
+      previousSession: params.previousSession,
+      session: params.nextSession,
+    });
+    const events: BaseEvent[] = [
+      {
+        type: EventType.RUN_STARTED,
+        threadId: params.threadId,
+        runId,
+      },
+      ...(stateDeltaEvent ? [stateDeltaEvent] : []),
+      {
+        type: EventType.RUN_FINISHED,
+        threadId: params.threadId,
+        runId,
+        result: {
+          executionId: params.nextSession.execution.id,
+          status: params.nextSession.execution.status,
+        },
+      },
+    ];
     await attachedRuns.publishEventSource(
-      threadId,
-      buildPiRuntimeGatewayConnectEventsInternal({
-        threadId,
-        runId: runId ?? `update:${threadId}:${now()}`,
-        session: sessionStore.getSession(threadId),
-      }),
+      params.threadId,
+      events,
     );
   };
   const transformContext: AgentRuntimeTransformContext | undefined =
@@ -1556,12 +2216,16 @@ export async function createAgentRuntime<TState = unknown>(
     options.agentOptions?.streamFn || domain
       ? async (model, context, streamOptions) => {
           const threadId = getActiveThreadId();
+          const session = threadId ? getSession(threadId) : null;
           const lines = threadId && domain
             ? [
                 ...normalizeDomainSystemContextLines(
                   await domain.systemContext?.({
                     threadId,
                     state: domainStateStore.get(threadId),
+                    currentProjection: session && isRecord(session.projectedState)
+                      ? session.projectedState
+                      : undefined,
                   }),
                 ),
               ]
@@ -1591,7 +2255,7 @@ export async function createAgentRuntime<TState = unknown>(
     operation: AgentRuntimeDomainOperation,
   ): Promise<PiRuntimeGatewaySession> => {
     if (!domain?.handleOperation) {
-      return sessionStore.getSession(threadId);
+      return getSession(threadId);
     }
 
     const result = await domain.handleOperation({
@@ -1607,7 +2271,7 @@ export async function createAgentRuntime<TState = unknown>(
       }
     }
 
-    const nextSession = sessionStore.updateSession(threadId, (currentSession) =>
+    const nextSession = updateSession(threadId, (currentSession) =>
       applyDomainOperationResult({
         threadId,
         now,
@@ -1622,7 +2286,25 @@ export async function createAgentRuntime<TState = unknown>(
   };
 
   const resumeInterruptedSession = async (threadId: string): Promise<PiRuntimeGatewaySession> => {
-    const nextSession = sessionStore.updateSession(threadId, resolveInterruptedSessionForUserInput);
+    const nextSession = updateSession(threadId, resolveInterruptedSessionForUserInput);
+    await persistSessionSnapshot(threadId, nextSession);
+    return nextSession;
+  };
+
+  const persistFailedRun = async (
+    threadId: string,
+    error: unknown,
+  ): Promise<PiRuntimeGatewaySession> => {
+    const detail = error instanceof Error ? error.message : String(error);
+    const nextSession = updateSession(threadId, (session) => ({
+      ...session,
+      execution: {
+        ...session.execution,
+        status: 'failed',
+        statusMessage: detail,
+      },
+      a2ui: undefined,
+    }));
     await persistSessionSnapshot(threadId, nextSession);
     return nextSession;
   };
@@ -1856,9 +2538,9 @@ export async function createAgentRuntime<TState = unknown>(
             command: 'sync',
             schedule: { kind: 'every', intervalMinutes: 5 },
             runId: `run:${threadId}`,
-            executionId: sessionStore.getSession(threadId).execution.id,
+            executionId: getSession(threadId).execution.id,
             artifactId:
-              sessionStore.getSession(threadId).artifacts?.current?.artifactId ??
+              getSession(threadId).artifacts?.current?.artifactId ??
               `artifact:${threadId}:automation`,
             nextRunAt: null,
             status: 'active',
@@ -1923,7 +2605,10 @@ export async function createAgentRuntime<TState = unknown>(
           resolvedDatabaseUrl,
           buildPersistInterruptCheckpointStatements({
             executionId: directExecutionIds.executionId,
-            interruptId: buildPiRuntimeStableUuid('interrupt', `agent-runtime:${threadId}:interrupt`),
+            interruptId: buildPiRuntimeStableUuid(
+              'interrupt',
+              `agent-runtime:execution:${directExecutionIds.executionId}:interrupt`,
+            ),
             artifactId,
             activityId: buildPiRuntimeStableUuid('activity', `agent-runtime:${threadId}:interrupt-activity`),
             threadId: directExecutionIds.threadId,
@@ -2017,8 +2702,8 @@ export async function createAgentRuntime<TState = unknown>(
 
   const runtime = createPiRuntimeGatewayRuntimeInternal({
     agent: foundation.agent,
-    getSession: sessionStore.getSession,
-    updateSession: sessionStore.updateSession,
+    getSession,
+    updateSession,
     onSessionUpdated: persistSessionSnapshot,
     now,
   });
@@ -2026,7 +2711,7 @@ export async function createAgentRuntime<TState = unknown>(
   const runtimeWithDomain: PiRuntimeGatewayRuntime = {
     ...runtime,
     run: async (request) => {
-      const session = sessionStore.getSession(request.threadId);
+      const session = getSession(request.threadId);
       const operation =
         readDirectCommandOperation(request.forwardedProps?.command) ??
         readInterruptOperation({
@@ -2044,12 +2729,29 @@ export async function createAgentRuntime<TState = unknown>(
       }
 
       const nextSession = await runDomainOperation(request.threadId, operation);
-
-      return buildPiRuntimeGatewayConnectEventsInternal({
-        threadId: request.threadId,
-        runId: request.runId,
+      const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
+        previousSession: session,
         session: nextSession,
       });
+
+      const events: BaseEvent[] = [
+        {
+          type: EventType.RUN_STARTED,
+          threadId: request.threadId,
+          runId: request.runId,
+        },
+        ...(stateDeltaEvent ? [stateDeltaEvent] : []),
+        {
+          type: EventType.RUN_FINISHED,
+          threadId: request.threadId,
+          runId: request.runId,
+          result: {
+            executionId: nextSession.execution.id,
+            status: nextSession.execution.status,
+          },
+        },
+      ];
+      return events;
     },
   };
 
@@ -2069,23 +2771,81 @@ export async function createAgentRuntime<TState = unknown>(
     },
     run: async (request) => {
       const session = await ensureThread(request.threadId);
+      let leadingEvents: AgentRuntimeConnectEvent[] = [];
+      const resumeOperation =
+        Object.prototype.hasOwnProperty.call(request.forwardedProps?.command ?? {}, 'resume') &&
+        domain?.handleOperation
+          ? readInterruptOperation({
+              command: request.forwardedProps?.command,
+              session,
+              domain,
+            })
+          : null;
 
-      const isDomainInterruptResume =
-        readInterruptOperation({
-          command: request.forwardedProps?.command,
-          session,
-          domain,
-        }) !== null;
-      if (typeof request.forwardedProps?.command?.resume === 'string' && !isDomainInterruptResume) {
-        await resumeInterruptedSession(request.threadId);
+      const hasResume = Object.prototype.hasOwnProperty.call(
+        request.forwardedProps?.command ?? {},
+        'resume',
+      );
+      if (hasResume) {
+        const resumedSession = await resumeInterruptedSession(request.threadId);
+        const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
+          previousSession: session,
+          session: resumedSession,
+        });
+        if (stateDeltaEvent) {
+          leadingEvents = [stateDeltaEvent];
+        }
       }
 
       attachedRuns.startRun(request.threadId, request.runId);
 
+      if (resumeOperation && domain?.handleOperation) {
+        const previousSession = getSession(request.threadId);
+        const nextSession = await runDomainOperation(request.threadId, resumeOperation);
+        const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
+          previousSession,
+          session: nextSession,
+        });
+
+        return tapAttachedEventSource(
+          injectAttachedEventsAfterFirstEvent(
+            [
+              {
+                type: EventType.RUN_STARTED,
+                threadId: request.threadId,
+                runId: request.runId,
+              },
+              ...(stateDeltaEvent ? [stateDeltaEvent] : []),
+              {
+                type: EventType.RUN_FINISHED,
+                threadId: request.threadId,
+                runId: request.runId,
+                result: {
+                  executionId: nextSession.execution.id,
+                  status: nextSession.execution.status,
+                },
+              },
+            ],
+            leadingEvents,
+          ),
+          (events) => attachedRuns.appendRunEvents(request.threadId, request.runId, events),
+          () => attachedRuns.finishRun(request.threadId, request.runId),
+          async (error) => {
+            await persistFailedRun(request.threadId, error);
+          },
+        );
+      }
+
       return tapAttachedEventSource(
-        await runtimeWithDomain.run(request),
+        injectAttachedEventsAfterFirstEvent(
+          await runtimeWithDomain.run(request),
+          leadingEvents,
+        ),
         (events) => attachedRuns.appendRunEvents(request.threadId, request.runId, events),
         () => attachedRuns.finishRun(request.threadId, request.runId),
+        async (error) => {
+          await persistFailedRun(request.threadId, error);
+        },
       );
     },
     stop: async (request) =>
@@ -2152,7 +2912,7 @@ export async function createAgentRuntime<TState = unknown>(
           `agent-runtime:${thread.threadKey}:automation-artifact`,
         );
 
-        await hydrateThreadSession(thread.threadKey);
+        const session = await hydrateThreadSession(thread.threadKey);
         const runningSession = applyAutomationStatusUpdate({
           sessionStore,
           threadId: thread.threadKey,
@@ -2166,7 +2926,12 @@ export async function createAgentRuntime<TState = unknown>(
           detail: `Running automation ${automation.commandName}.`,
         });
         await persistSessionSnapshot(thread.threadKey, runningSession);
-        await publishSessionUpdate(thread.threadKey, scheduledRun.runId);
+        await publishSessionUpdate({
+          threadId: thread.threadKey,
+          previousSession: session,
+          nextSession: runningSession,
+          runId: scheduledRun.runId,
+        });
 
         await postgres.executeStatements(
           resolvedDatabaseUrl,
@@ -2212,7 +2977,12 @@ export async function createAgentRuntime<TState = unknown>(
           detail: `Automation ${automation.commandName} executed successfully.`,
         });
         await persistSessionSnapshot(thread.threadKey, completedSession);
-        await publishSessionUpdate(thread.threadKey, scheduledRun.runId);
+        await publishSessionUpdate({
+          threadId: thread.threadKey,
+          previousSession: runningSession,
+          nextSession: completedSession,
+          runId: scheduledRun.runId,
+        });
       }
     } finally {
       tickInFlight = false;

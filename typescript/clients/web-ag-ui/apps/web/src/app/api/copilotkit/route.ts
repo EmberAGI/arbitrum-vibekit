@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { NextRequest } from 'next/server';
+import { parseCopilotRouteMetadata, type CopilotRouteRequestMetadata } from './routeMetadata';
 import { installCopilotRuntimeDebugFilter } from '../../../utils/copilotRuntimeDebugFilter';
 
 export const runtime = 'nodejs';
@@ -21,32 +22,14 @@ const shouldTraceCopilotRouteConnect =
 
 installCopilotRuntimeDebugFilter({ enabled: shouldLogCopilotRuntimeDebug });
 
-type CopilotRouteRequestMetadata = {
-  method?: string;
-  agentId?: string;
-  threadId?: string;
-  command?: string;
-  hasResumePayload?: boolean;
-  resumePayloadLength?: number;
-  resumePayloadPreview?: string;
-  source?: string;
-  clientMutationId?: string;
-  parseError?: string;
-  payloadKind?: 'object' | 'array' | 'other';
-  batchLength?: number;
-  topLevelKeys?: string[];
-  metadataMatched?: boolean;
-  rawLength?: number;
-};
-
 const shouldLogCopilotRouteRequests =
   process.env.NODE_ENV !== 'production' || process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
-const shouldLogCopilotRouteSyncPolls =
+const shouldLogCopilotRouteRefreshPolls =
   process.env.COPILOTKIT_ROUTE_DEBUG === 'true' || process.env.COPILOTKIT_ROUTE_LOG_SYNC === 'true';
 const shouldTraceAllRunCommands =
   process.env.COPILOTKIT_ROUTE_TRACE_RUN_ALL === 'true' ||
   process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
-const shouldWarnOnSlowSyncPolls = process.env.COPILOTKIT_ROUTE_WARN_SYNC_SLOW !== 'false';
+const shouldWarnOnSlowRefreshPolls = process.env.COPILOTKIT_ROUTE_WARN_SYNC_SLOW !== 'false';
 const shouldLogUnmatchedRequests =
   process.env.COPILOTKIT_ROUTE_LOG_UNMATCHED === 'true' || process.env.COPILOTKIT_ROUTE_DEBUG === 'true';
 const slowCopilotRouteWarnThresholdMs = (() => {
@@ -55,144 +38,6 @@ const slowCopilotRouteWarnThresholdMs = (() => {
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 15000;
 })();
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function extractThreadId(payloadBody: Record<string, unknown>): string | undefined {
-  const fromBody = readString(payloadBody.threadId) ?? readString(payloadBody.thread_id);
-  if (fromBody) return fromBody;
-
-  const config = payloadBody.config;
-  if (!isRecord(config)) return undefined;
-  const configurable = config.configurable;
-  if (!isRecord(configurable)) return undefined;
-  return readString(configurable.threadId) ?? readString(configurable.thread_id);
-}
-
-function extractLastMessageContent(payloadBody: Record<string, unknown>): string | undefined {
-  const messages = payloadBody.messages;
-  if (!Array.isArray(messages) || messages.length === 0) return undefined;
-  const last = messages[messages.length - 1];
-  if (typeof last === 'string') return last;
-  if (!isRecord(last)) return undefined;
-  return readString(last.content);
-}
-
-function readResumeMetadata(payloadBody: Record<string, unknown>): {
-  hasResumePayload: boolean;
-  resumePayloadLength?: number;
-  resumePayloadPreview?: string;
-} {
-  const forwardedProps = payloadBody.forwardedProps;
-  if (!isRecord(forwardedProps)) {
-    return {
-      hasResumePayload: false,
-    };
-  }
-
-  const command = forwardedProps.command;
-  if (!isRecord(command)) {
-    return {
-      hasResumePayload: false,
-    };
-  }
-
-  const resume = readString(command.resume);
-  return {
-    hasResumePayload: typeof resume === 'string',
-    resumePayloadLength: typeof resume === 'string' ? resume.length : undefined,
-    resumePayloadPreview: typeof resume === 'string' ? resume.slice(0, 240) : undefined,
-  };
-}
-
-function readCommandMetadata(lastMessageContent: string | undefined): {
-  command?: string;
-  source?: string;
-  clientMutationId?: string;
-} {
-  if (!lastMessageContent) return {};
-  try {
-    const parsed = JSON.parse(lastMessageContent) as unknown;
-    if (!isRecord(parsed)) return {};
-    return {
-      command: readString(parsed.command),
-      source: readString(parsed.source),
-      clientMutationId: readString(parsed.clientMutationId),
-    };
-  } catch {
-    return {};
-  }
-}
-
-function parseCopilotRouteMetadataFromObject(payload: Record<string, unknown>): CopilotRouteRequestMetadata {
-  const method = readString(payload.method);
-  const params = isRecord(payload.params) ? payload.params : undefined;
-  const payloadBody = isRecord(payload.body) ? payload.body : undefined;
-  const lastMessageContent = payloadBody ? extractLastMessageContent(payloadBody) : undefined;
-  const commandMetadata = readCommandMetadata(lastMessageContent);
-  const resumeMetadata = payloadBody ? readResumeMetadata(payloadBody) : { hasResumePayload: false };
-  const threadId = payloadBody ? extractThreadId(payloadBody) : undefined;
-  const agentId = readString(params?.agentId);
-  const command = commandMetadata.command ?? (resumeMetadata.hasResumePayload ? 'resume' : undefined);
-  const source = commandMetadata.source;
-  const clientMutationId = commandMetadata.clientMutationId;
-
-  return {
-    method,
-    agentId,
-    threadId,
-    command,
-    hasResumePayload: resumeMetadata.hasResumePayload,
-    resumePayloadLength: resumeMetadata.resumePayloadLength,
-    source,
-    clientMutationId,
-    payloadKind: 'object',
-    topLevelKeys: Object.keys(payload).slice(0, 20),
-    metadataMatched: Boolean(
-      method ||
-        agentId ||
-        threadId ||
-        command ||
-        resumeMetadata.hasResumePayload ||
-        source ||
-        clientMutationId,
-    ),
-  };
-}
-
-function parseCopilotRouteMetadata(payload: unknown): CopilotRouteRequestMetadata {
-  if (isRecord(payload)) {
-    return parseCopilotRouteMetadataFromObject(payload);
-  }
-
-  if (Array.isArray(payload)) {
-    const first = payload[0];
-    if (isRecord(first)) {
-      const parsedFirst = parseCopilotRouteMetadataFromObject(first);
-      return {
-        ...parsedFirst,
-        payloadKind: 'array',
-        batchLength: payload.length,
-      };
-    }
-    return {
-      payloadKind: 'array',
-      batchLength: payload.length,
-      metadataMatched: false,
-    };
-  }
-
-  return {
-    payloadKind: 'other',
-    metadataMatched: false,
-  };
-}
 
 function cloneResponse(response: Response, body: ReadableStream<Uint8Array>): Response {
   return new Response(body, {
@@ -212,10 +57,10 @@ async function appendCopilotRouteTrace(entry: Record<string, unknown>): Promise<
 function monitorCopilotResponseStream(params: {
   requestId: string;
   requestMetadata: CopilotRouteRequestMetadata;
-  isAgentListSyncPoll: boolean;
+  isAgentListRefreshPoll: boolean;
   shouldTraceRequest: boolean;
   shouldLogCopilotRouteRequests: boolean;
-  shouldWarnOnSlowSyncPolls: boolean;
+  shouldWarnOnSlowRefreshPolls: boolean;
   slowCopilotRouteWarnThresholdMs: number;
   startedAt: number;
   stream: ReadableStream<Uint8Array>;
@@ -239,14 +84,14 @@ function monitorCopilotResponseStream(params: {
       const streamDurationMs = Date.now() - streamStartedAt;
       const shouldWarnSlowStream =
         params.shouldLogCopilotRouteRequests &&
-        (params.shouldWarnOnSlowSyncPolls || !params.isAgentListSyncPoll) &&
+        (params.shouldWarnOnSlowRefreshPolls || !params.isAgentListRefreshPoll) &&
         totalDurationMs >= params.slowCopilotRouteWarnThresholdMs;
 
       if (params.shouldTraceRequest || shouldWarnSlowStream) {
         const payload = {
           requestId: params.requestId,
           ...params.requestMetadata,
-          isAgentListSyncPoll: params.isAgentListSyncPoll,
+          isAgentListRefreshPoll: params.isAgentListRefreshPoll,
           totalDurationMs,
           streamDurationMs,
           chunkCount,
@@ -293,9 +138,9 @@ async function readCopilotRouteMetadata(req: NextRequest): Promise<CopilotRouteR
 export const POST = async (req: NextRequest) => {
   const requestId = randomUUID();
   const requestMetadata = await readCopilotRouteMetadata(req);
-  const isAgentListSyncPoll =
+  const isAgentListRefreshPoll =
     requestMetadata.method === 'agent/run' &&
-    requestMetadata.command === 'sync' &&
+    requestMetadata.command === 'refresh' &&
     requestMetadata.source === 'agent-list-poll';
   const isFireRun = requestMetadata.method === 'agent/run' && requestMetadata.command === 'fire';
   const shouldTraceRunCommand =
@@ -307,7 +152,7 @@ export const POST = async (req: NextRequest) => {
   const shouldTraceRequest =
     shouldLogCopilotRouteRequests &&
     shouldTraceMethod &&
-    (!isAgentListSyncPoll || shouldLogCopilotRouteSyncPolls);
+    (!isAgentListRefreshPoll || shouldLogCopilotRouteRefreshPolls);
   const startedAt = Date.now();
   const metadataParsedAt = Date.now();
 
@@ -377,16 +222,16 @@ export const POST = async (req: NextRequest) => {
   }
   if (
     shouldLogCopilotRouteRequests &&
-    (shouldWarnOnSlowSyncPolls || !isAgentListSyncPoll) &&
+    (shouldWarnOnSlowRefreshPolls || !isAgentListRefreshPoll) &&
     durationMs >= slowCopilotRouteWarnThresholdMs
   ) {
     console.warn('[copilotkit-route] slow request', {
       requestId,
       ...requestMetadata,
-      isAgentListSyncPoll,
+      isAgentListRefreshPoll,
       status: response.status,
       durationMs,
-      shouldWarnOnSlowSyncPolls,
+      shouldWarnOnSlowRefreshPolls,
       phaseDurationsMs: {
         metadataParse: metadataParseDurationMs,
         handlerInit: handlerInitDurationMs,
@@ -430,10 +275,10 @@ export const POST = async (req: NextRequest) => {
   monitorCopilotResponseStream({
     requestId,
     requestMetadata,
-    isAgentListSyncPoll,
+    isAgentListRefreshPoll,
     shouldTraceRequest,
     shouldLogCopilotRouteRequests,
-    shouldWarnOnSlowSyncPolls,
+    shouldWarnOnSlowRefreshPolls,
     slowCopilotRouteWarnThresholdMs,
     startedAt,
     stream: bodyForMonitor,

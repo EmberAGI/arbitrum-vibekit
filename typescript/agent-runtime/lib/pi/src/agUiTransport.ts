@@ -15,6 +15,9 @@ export type PiRuntimeGatewayHttpAgentConfig = Omit<HttpAgentConfig, 'url'> & {
   runtimeUrl: string;
 };
 
+const MISSING_CLIENT_MUTATION_ID_ERROR =
+  'Shared-state update commands require a non-empty clientMutationId.';
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -81,21 +84,40 @@ function parseRunRequest(body: Record<string, unknown>): PiRuntimeGatewayRunRequ
 
   const forwardedProps = isRecord(body.forwardedProps) ? body.forwardedProps : undefined;
   const command = forwardedProps && isRecord(forwardedProps.command) ? forwardedProps.command : undefined;
-  const resume = command ? readStringField(command, 'resume') : undefined;
+  const hasResume = command ? Object.prototype.hasOwnProperty.call(command, 'resume') : false;
+  const resume = hasResume ? command?.resume : undefined;
   const name = command ? readStringField(command, 'name') : undefined;
   const input = command && Object.prototype.hasOwnProperty.call(command, 'input') ? command.input : undefined;
+  const update = command && isRecord(command.update) ? command.update : undefined;
+  const updateClientMutationId = update ? readStringField(update, 'clientMutationId') : undefined;
+  const updateBaseRevision = update ? readStringField(update, 'baseRevision') : undefined;
+  const updatePatch =
+    update && Object.prototype.hasOwnProperty.call(update, 'patch') ? update.patch : undefined;
+
+  if (update && !updateClientMutationId) {
+    return jsonResponse({ error: MISSING_CLIENT_MUTATION_ID_ERROR }, 400);
+  }
 
   return {
     threadId,
     runId,
     messages: Array.isArray(body.messages) ? (body.messages as PiRuntimeGatewayRunRequest['messages']) : undefined,
-    ...(resume || name
+    ...(hasResume || name || update
       ? {
           forwardedProps: {
             command: {
               ...(name ? { name } : {}),
               ...(Object.prototype.hasOwnProperty.call(command ?? {}, 'input') ? { input } : {}),
-              ...(resume ? { resume } : {}),
+              ...(hasResume ? { resume } : {}),
+              ...(update
+                ? {
+                    update: {
+                      ...(updateClientMutationId ? { clientMutationId: updateClientMutationId } : {}),
+                      ...(updateBaseRevision ? { baseRevision: updateBaseRevision } : {}),
+                      ...(Object.prototype.hasOwnProperty.call(update, 'patch') ? { patch: updatePatch } : {}),
+                    },
+                  }
+                : {}),
             },
           },
         }

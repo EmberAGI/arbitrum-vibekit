@@ -1,6 +1,42 @@
 // Base vitest setup - runs for all test types
 import { beforeAll, afterAll } from 'vitest';
 
+function createMemoryStorage() {
+  const entries = new Map<string, string>();
+
+  return {
+    get length() {
+      return entries.size;
+    },
+    clear() {
+      entries.clear();
+    },
+    getItem(key: string) {
+      return entries.get(key) ?? null;
+    },
+    key(index: number) {
+      return [...entries.keys()][index] ?? null;
+    },
+    removeItem(key: string) {
+      entries.delete(key);
+    },
+    setItem(key: string, value: string) {
+      entries.set(key, String(value));
+    },
+  } satisfies Storage;
+}
+
+if (
+  !globalThis.localStorage ||
+  typeof globalThis.localStorage.getItem !== 'function' ||
+  typeof globalThis.localStorage.setItem !== 'function'
+) {
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: createMemoryStorage(),
+  });
+}
+
 // Global setup
 beforeAll(() => {
   // Set test environment flag

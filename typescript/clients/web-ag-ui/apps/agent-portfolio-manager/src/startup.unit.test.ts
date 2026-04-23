@@ -27,6 +27,7 @@ describe('preparePortfolioManagerServer', () => {
   it('forwards the provided env directly into the blessed service factory', async () => {
     const service = createStubService();
     const createService = vi.fn(async () => service);
+    const inspectHealth = vi.spyOn(service.control, 'inspectHealth');
 
     await expect(
       preparePortfolioManagerServer({
@@ -49,11 +50,13 @@ describe('preparePortfolioManagerServer', () => {
         PORT: '3420',
       },
     });
+    expect(inspectHealth).toHaveBeenCalledOnce();
   });
 
   it('uses the default portfolio-manager port when no override is configured', async () => {
     const service = createStubService();
     const createService = vi.fn(async () => service);
+    const inspectHealth = vi.spyOn(service.control, 'inspectHealth');
 
     await expect(
       preparePortfolioManagerServer({
@@ -72,5 +75,21 @@ describe('preparePortfolioManagerServer', () => {
         OPENROUTER_API_KEY: 'test-openrouter-key',
       },
     });
+    expect(inspectHealth).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when startup health inspection fails', async () => {
+    const service = createStubService();
+    vi.spyOn(service.control, 'inspectHealth').mockRejectedValue(new Error('identity preflight failed'));
+    const createService = vi.fn(async () => service);
+
+    await expect(
+      preparePortfolioManagerServer({
+        env: {
+          OPENROUTER_API_KEY: 'test-openrouter-key',
+        },
+        createService,
+      }),
+    ).rejects.toThrow('identity preflight failed');
   });
 });

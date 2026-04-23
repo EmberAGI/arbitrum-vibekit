@@ -8,6 +8,8 @@ See also:
 - `docs/c4-pi-runtime-architecture-and-boundaries.md` for the Pi-backed runtime specialization of this target architecture
 - `docs/ag-ui-client-runtime-invariants.md`
 - `docs/ag-ui-frontend-backend-contract-ui-stability.md`
+- `docs/source-traced-portfolio-manager-ember-lending-sequence.mdd`
+- `docs/target-state-portfolio-manager-ember-lending-sequence.mdd`
 
 ## 1. Why this document exists
 
@@ -39,19 +41,20 @@ Current code references that motivate this:
 flowchart LR
   U[End User] --> W[web-ag-ui Web App]
   W --> R[CopilotKit Runtime Endpoint /api/copilotkit]
-  R --> A1[Agent Runtime: agent-clmm]
-  R --> A2[Agent Runtime: agent-pendle]
-  R --> A3[Agent Runtime: agent-gmx-allora]
+  R --> PM[Agent Runtime: agent-portfolio-manager]
+  R --> EL[Agent Runtime: agent-ember-lending]
+  R --> O[Other Agent Runtimes]
 
-  A1 --> X1[External Protocols/APIs]
-  A2 --> X2[External Protocols/APIs]
-  A3 --> X3[External Protocols/APIs]
+  PM --> SE[Shared Ember Domain Service]
+  EL --> SE
+  O --> X[External Protocols/APIs]
 ```
 
 Boundary intent:
 
 - User-facing web talks only to CopilotKit runtime over AG-UI-compatible routes.
 - Runtime talks to agent runtimes; web never talks directly to LangGraph thread APIs.
+- The first concrete managed-runtime pair is `agent-portfolio-manager` plus `agent-ember-lending`; they stay as separate runtimes and meet only through the Shared Ember boundary rather than direct runtime-to-runtime calls.
 
 ## 4. C4 Level 2: Container View
 
@@ -69,18 +72,22 @@ flowchart TB
   end
 
   subgraph AgentRuntimes[Agent Runtimes]
-    CLMM[agent-clmm]
-    PENDLE[agent-pendle]
-    GMX[agent-gmx-allora]
+    PM[agent-portfolio-manager]
+    EL[agent-ember-lending]
+    OTHER[other agent runtimes]
   end
+
+  SE[Shared Ember Domain Service]
 
   UI --> StreamMgr
   StreamMgr --> Store
   StreamMgr --> CK
   BFF --> CK
-  CK --> CLMM
-  CK --> PENDLE
-  CK --> GMX
+  CK --> PM
+  CK --> EL
+  CK --> OTHER
+  PM --> SE
+  EL --> SE
 ```
 
 Container responsibilities:
@@ -90,6 +97,10 @@ Container responsibilities:
 - Projection Store: derives sidebar/detail state from AG-UI events.
 - CopilotKit endpoint: protocol boundary and routing to agents.
 - Agent runtimes: workflow execution and state emission.
+- Managed downstream note: `agent-portfolio-manager` owns managed onboarding/control-plane flows, while `agent-ember-lending` stays on the bounded subagent read/plan/execute/escalate surface against Shared Ember.
+  - Shared Ember, not the portfolio-manager runtime, owns the durable wallet observation, managed-lane owned units, reservations, and policy snapshots produced during onboarding completion.
+  - Portfolio-manager wallet/accounting context must read `orchestrator.readOnboardingState.v1` through the activated managed mandate lane so the operator sees the same `lending.supply` reservation and policy state that Ember Lending consumes.
+  - During migration, portfolio-manager keeps a read-side fallback for older stored bootstrap payloads that only recorded `activation.agentId`; current writes still use `activation.mandateRef`.
 
 Explicit non-goal container:
 
@@ -105,8 +116,9 @@ Explicit non-goal container:
   - Enforces a hard cap of active streams (target: `<= 1` long-lived detail stream).
 
 - `AgentStatusPoller` (refactored list polling):
-  - Every 15s, performs one-shot AG-UI `run` status sync for agents whose detail page is not currently active.
+  - Every 15s, performs one-shot AG-UI `run` status refresh for agents whose detail page is not currently active.
   - Poll runs are bounded lifecycle invocations (`run` start -> snapshot/events -> terminal), not persistent `connect` loops.
+  - Poll intent stays on `forwardedProps.command`, while observability provenance such as `agent-list-poll` rides in sibling `forwardedProps.source` metadata instead of the public command contract.
   - Uses protocol-compliant calls only; no direct thread endpoints.
   - Writes normalized status to shared projection store.
 
@@ -119,14 +131,15 @@ Explicit non-goal container:
   - Removes split-brain between stream state and sync endpoint state.
 
 - `AgentCommandBus`:
-  - Sends `hire`, `sync`, `fire`, interrupt responses, and client mutation intents via AG-UI `run` payloads.
+  - Sends named commands such as `hire`/`fire`, interrupt responses, and shared-state `command.update` intents via AG-UI `run` payloads.
+  - Uses `forwardedProps.command` for imperative control intent instead of synthetic JSON chat messages.
   - `fire` may invoke AG-UI `stop` as a pre-dispatch preemption control.
   - No out-of-band command mutation.
 
 - `AgentCommandScheduler` (new):
   - Enforces command concurrency policy by `agentId+threadId`.
   - `fire` is preemptive for backend and local ownership (`stop` then detach, wait terminal/timeout, then dispatch).
-  - `sync` uses coalescing intent policy (single pending intent, last-write-wins).
+  - Shared-state `command.update` uses coalescing intent policy (single pending intent, last-write-wins).
   - Normalizes server busy responses into deterministic observe/retry behavior.
 
 - `AgentMetricsRendererRegistry` (new):
@@ -141,12 +154,16 @@ Explicit non-goal container:
 - `CopilotKit Runtime Route` (`/api/copilotkit`):
   - The only server route used by web for agent communication.
   - Exposes AG-UI `connect`, `run`, and `stop` semantics used by web.
+  - Request metadata and debug traces should read command intent from `forwardedProps.command`, provenance from sibling fields such as `forwardedProps.source`, and never infer either by parsing the last chat message.
+  - Workflow-runtime adapters may translate `forwardedProps.command` into internal `private.pendingCommand` state updates before graph execution, but that is runtime-private implementation detail rather than a second web contract.
+  - Structured interrupt-resume tracing should log full serialized `resumePayloadLength` separately from the truncated `resumePayloadPreview`.
   - For standalone Pi-backed agents, imports runtime-owned transport helpers rather than defining Pi-specific transport behavior locally.
 
 - `Agent Registry`:
   - Maps agent ids to runtime endpoints and capabilities.
   - Provides metadata only; does not mirror thread state.
   - Must support multiple runtime families cleanly, including standalone Pi gateway-backed agents registered through `HttpAgent` rather than in-process runtime embedding.
+  - Must register managed-runtime pairs cleanly, such as `agent-portfolio-manager` and `agent-ember-lending`, without collapsing them into one combined runtime identity.
 
 - Pi-backed runtime package ownership:
   - The `agent-runtime` package family owns the reusable Pi AG-UI HTTP adapter/server layer.
@@ -166,10 +183,59 @@ Each `apps/agent*` uses a standard graph shape:
 Target factorization:
 
 - `@web-ag-ui/agent-workflow-core` (new shared internal package):
-  - Canonical command parsing
+  - Canonical direct-command envelope parsing and pending-command state-update helpers
   - Canonical onboarding + task state machine
   - Shared `ThreadState` schema + versioning
   - Shared event/status helpers
+
+Current concrete managed-path specialization:
+
+- `agent-portfolio-manager`
+  - owns onboarding approval, rooted-signing collection, and managed-agent activation/deactivation intent submission
+  - resolves the configured direct OWS controller wallet during startup and confirms or rewrites the durable `portfolio-manager` / `orchestrator` identity before boot
+  - treats each distinct startup identity rewrite as a new command with its own identity-scoped idempotency key and fails closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address
+  - only marks onboarding complete after rooted bootstrap once a follow-up `subagent.readExecutionContext.v1` read for `ember-lending` exposes a non-null `subagent_wallet_address`
+  - submits the minimal rooted-bootstrap activation contract that tells Shared Ember which managed mandate should materialize the initial lane
+  - consumes Shared Ember through a thin app-local adapter without owning Ember business logic
+
+- `agent-ember-lending`
+  - owns the first bounded managed-subagent runtime
+  - resolves the configured direct OWS signer wallet during startup and confirms or rewrites the durable `ember-lending` / `subagent` identity before boot
+  - treats each distinct startup identity rewrite as a new command with its own identity-scoped idempotency key and fails closed unless Shared Ember echoes the confirmed identity with the expected `agent_id`, `role`, and wallet address
+  - consumes runtime-internal Shared Ember projection and execution-context reads plus the model-visible `create_transaction_plan`, `request_transaction_execution`, and `create_escalation_request` contract
+  - keeps planning on the bounded Shared Ember planner contract, sending only a bounded planning handoff while receiving planner-generated payload output back in the candidate plan
+  - keeps Shared Ember idempotency internal to the runtime-owned adapter; model-visible planning and execution tools do not accept or require caller-managed idempotency keys
+  - treats candidate-plan creation as complete only after the lending service has privately anchored that planner-returned payload; missing planner metadata, missing managed wallet context, or missing anchored-resolver wiring must fail closed instead of leaving an apparently executable local plan
+  - keeps `request_transaction_execution` as one model-visible tool while
+    internally composing Shared Ember execution preparation, service-owned
+    anchored Onchain Actions ordered transaction-request persistence and step
+    resolution in runtime-owned domain state, local OWS signing custody, shared
+    runtime / adapter support for redelegation and delegated-execution
+    preparation, and Ember-owned submission/finalization
+  - treats `authority_preparation_needed` as an internal wait state and re-polls the Shared Ember execution request with a stage-scoped retry idempotency key instead of exposing a second tool or reusing the original acknowledged request key
+  - reconciles dropped signed-transaction submit responses through the Shared Ember committed-event outbox before replaying an idempotent submit
+  - fails closed when the direct OWS identity/signing path cannot prove it matches the prepared dedicated subagent signing package
+  - expects the first healthy post-onboarding `subagent.readExecutionContext.v1` read to expose a non-null `subagent_wallet_address` without any manual reseed step
+  - projects lifecycle, wallet, mandate, reservation, planning, execution, and escalation state into the shared AG-UI thread contract
+  - treats `owned_units` and `reservations` as lending-lane truth while treating `wallet_contents` as rooted-wallet-wide context for prompt visibility
+
+Managed-path direction note:
+
+- signing custody remains local to each agent runtime
+- the leaf account topology remains open so current direct-OWS / EOA-style
+  leaves and future smart-account leaves can both fit behind the same shared
+  execution contract
+- agent apps should not be the steady-state owners of low-level redelegation
+  wrapper assembly, signature normalization, or submission-artifact
+  serialization
+
+Validation note:
+
+- `pnpm smoke:managed-identities` is the current repo-local proof for the two non-null identity reads plus the non-null post-bootstrap `subagent_wallet_address`.
+- That smoke stays on the current downstream runtime-owned direct OWS path; deeper OWS-internals changes are intentionally handled elsewhere.
+- `RUN_SHARED_EMBER_INT=1 EMBER_ORCHESTRATION_V1_SPEC_ROOT=<private-repo-root> pnpm --filter agent-ember-lending test:int -- src/sharedEmberAdapter.int.test.ts`
+  is the repo-backed proof for the real runtime-owned redelegation typed-data
+  signing seam.
 
 ## 6. Dynamic views (sequence)
 
@@ -216,7 +282,7 @@ sequenceDiagram
   participant Agent
 
   loop every 15s
-    Poller->>Runtime: bounded AG-UI run(agentId, threadId, status/sync)
+    Poller->>Runtime: bounded AG-UI run(agentId, threadId, status refresh)
     Runtime->>Agent: execute one-shot run
     Agent-->>Runtime: projection events + terminal
     Runtime-->>Poller: reduced status payload
@@ -232,14 +298,17 @@ sequenceDiagram
   participant Runtime as /api/copilotkit
   participant Agent
 
-  User->>Web: Trigger save/sync
-  Web->>Web: set local agent state/messages
-  Web->>Runtime: run(agentId, threadId, input.state/messages)
-  Runtime->>Agent: apply run input state/messages, execute run
-  Agent-->>Runtime: AG-UI state/message events + terminal event
+  User->>Web: Trigger shared-state save
+  Web->>Web: optimistically update local writable `/shared` view
+  Web->>Runtime: run(agentId, threadId, forwardedProps.command.update)
+  Runtime->>Agent: validate that every patch path stays rooted at `/shared`, update `/shared`, recompute `/projected`
+  Agent-->>Runtime: STATE_DELTA(shared + projected) then shared-state.control update-ack
   Runtime-->>Web: streamed events
-  Web->>Web: mark sync complete only after projected confirmation
+  Web->>Web: apply authoritative delta, then clear pending save after matching update-ack
 ```
+
+- Malformed Pi `command.update` requests that omit `clientMutationId` are rejected at the runtime boundary before `shared-state.control` `update-ack`, because `clientMutationId` is the acknowledgment correlation key.
+- If the local forwarded `command.update` run fails before any matching `shared-state.control` arrives, the web must roll back the optimistic `/shared` view immediately and clear the pending mutation locally.
 
 ## 7. Data contracts
 
@@ -248,7 +317,9 @@ sequenceDiagram
 - `ThreadState@vN` (versioned, domain-facing): profile, metrics, activity, task, interrupts, onboarding.
 - `UiState` (web VM-facing): deterministic projection from AG-UI events + `ThreadState` snapshots.
 - `TaskState` enum (shared): `submitted`, `working`, `input-required`, `completed`, `failed`, `canceled`.
-- `AgentCommand` enum (shared control-plane intent): `hire`, `sync`, `fire`, plus typed interrupt resolutions.
+- Named control-plane commands stay explicit (`hire`, `fire`, typed interrupt resolutions); shared-state writes use `command.update` against the writable public-state slice rooted at `/shared`.
+- In v1, `/shared` versus `/projected` is the editability model: `/shared` is writable, while `/projected` remains runtime-owned and non-patchable.
+- Typed interrupt resolutions may carry structured `command.resume` payload objects across the direct command lane without pre-stringifying them in the web client.
 
 ### 7.2 Rules
 
@@ -271,7 +342,7 @@ sequenceDiagram
    - non-active-detail agents -> polling snapshots projected from one-shot poll `run`,
    - fallback without either -> active `run` stream for that command lifecycle.
 7. Local run-in-flight gating is advisory; server busy responses are authoritative for global concurrency.
-8. `sync` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
+8. Shared-state `command.update` uses coalescing intent semantics (single pending intent per `agentId+threadId`, last-write-wins).
 9. `fire` is the only preemptive stop command: issue `stop`, detach local stream, wait terminal/timeout, then dispatch `fire`.
 10. Terminal run handling is idempotent: client converges on one terminal outcome even if terminal callbacks are duplicated.
 11. On detail-page route leave/unmount, stream teardown is deterministic.
@@ -282,7 +353,7 @@ sequenceDiagram
 ### Slice 1: Protocol boundary cleanup
 
 - Remove `apps/web/src/app/api/agents/sync/route.ts` and consumers.
-- Replace `useAgentConnection` sync fallback with AG-UI-only projection path.
+- Replace `useAgentConnection` mutation fallback with AG-UI-only direct-command projection path.
 - Keep behavior parity via tests before deletion.
 
 ### Slice 2: Detail-route stream governance
@@ -293,7 +364,7 @@ sequenceDiagram
 
 ### Slice 3: Sidebar projection refactor
 
-- Replace `AgentListContext` direct sync with bounded AG-UI one-shot `run` status polling.
+- Replace `AgentListContext` direct status refresh with bounded AG-UI one-shot `run` status polling.
 - Share reducer/state model between sidebar and detail.
 
 ### Slice 4: Metrics UI decomposition
@@ -317,13 +388,13 @@ sequenceDiagram
   `@ag-ui/langgraph@0.0.25-alpha.0` do not expose `connect` on `LangGraphAgent` in `dist/index.d.ts`.
 - Exit criteria for this exception:
   - Upstream package exposes `connect` on `LangGraphAgent` (types and runtime),
-  - Behavior parity is validated against detail-page open/leave and sidebar sync scenarios,
+  - Behavior parity is validated against detail-page open/leave and sidebar refresh scenarios,
   - Local patch can be removed without regressing stream lifecycle correctness.
 
 ## 10. Success criteria for target architecture
 
 - Web has zero direct LangGraph thread API calls.
-- AG-UI events are the only source for UI state sync.
+- AG-UI events are the only source for UI state refresh.
 - Hidden persistent streams are eliminated.
 - Agent apps share one state-machine contract and lifecycle rules.
 - Sidebar and detail are consistent under load and navigation churn.
@@ -348,12 +419,13 @@ Completed:
 - Non-metrics blockers/onboarding branch helpers are extracted from `AgentDetailPage` into specialized modules:
   - `apps/web/src/components/agentBlockersBehavior.ts`,
   - `apps/web/src/components/agentBlockersInterrupt.ts`.
-- Web command scheduling now uses a dedicated `AgentCommandScheduler` (`apps/web/src/utils/agentCommandScheduler.ts`) with bounded busy-retry handling for `sync` and coalescing intent semantics.
+- Web command scheduling now uses a dedicated `AgentCommandScheduler` (`apps/web/src/utils/agentCommandScheduler.ts`) with bounded busy-retry handling for coalesced shared-state writes.
 - Integration coverage now verifies key lifecycle invariants:
   - `apps/web/src/contexts/AgentListContext.int.test.tsx` asserts bounded non-active-detail polling fan-out and periodic no-overlap behavior.
-  - `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts detail-page connect and deterministic detach on unmount.
-  - `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts `sync` coalescing, terminal replay, bounded busy retries, and non-sync in-flight rejection.
-- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts sync confirmation semantics via client mutation id handshake between command dispatch and projected state acknowledgement.
+- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts detail-page connect and deterministic detach on unmount.
+- `apps/web/src/utils/agentCommandScheduler.unit.test.ts` asserts coalescing, terminal replay, bounded busy retries, and non-update in-flight rejection.
+- `apps/web/src/hooks/useAgentConnection.int.test.tsx` asserts authoritative Pi `STATE_DELTA` hydration, `shared-state.control` confirmation, rejected-ack reconciliation, and rollback on local pre-ack Pi run failures for optimistic shared-state writes.
+- `apps/web/src/app/api/copilotkit/piRuntimeHttpAgent.int.test.ts` and `agent-runtime/src/index.int.test.ts` assert object `command.resume` payload passthrough across the web, transport, and Pi runtime layers.
 
 Remaining gaps:
 

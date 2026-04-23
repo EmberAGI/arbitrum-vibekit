@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+
+import { navigateToHref } from '@/utils/hardNavigation';
 
 export default function HomePage() {
-  const router = useRouter();
-
   useEffect(() => {
-    router.replace('/hire-agents');
-  }, [router]);
+    navigateToHref('/hire-agents', { replace: true });
+  }, []);
 
   return null;
 }

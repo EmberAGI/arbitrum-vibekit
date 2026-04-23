@@ -83,7 +83,37 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('Total Users');
   });
 
-  it('keeps pre-hire chat disabled for non-Pi agents', () => {
+  it('renders pre-hire detail chrome on the light shell palette', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-clmm',
+        agentName: 'Camelot CLMM',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('bg-[linear-gradient(180deg,#fffdf9_0%,#f7efe4_100%)]');
+    expect(html).toContain('border-[#eadac7]');
+    expect(html).not.toContain('bg-[#1e1e1e]');
+  });
+
+  it('keeps pre-hire chat disabled for non-chat-first agents', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-clmm',
@@ -111,7 +141,38 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toMatch(new RegExp('<button[^>]*disabled[^>]*>\\s*Chat\\s*</button>'));
   });
 
-  it('enables pre-hire chat for the Pi example agent', () => {
+  it('shows reconnecting state instead of a hire affordance while waiting for an authoritative snapshot', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        isHired: false,
+        isRestoringState: true,
+        isHiring: false,
+        hasLoadedView: false,
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('Reconnecting...');
+    expect(html).toContain('Restoring state');
+    expect(html).not.toContain('>Hire<');
+  });
+
+  it('keeps chat disabled for agents removed from the host surface', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-pi-example',
@@ -137,16 +198,15 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
       }),
     );
 
-    expect(html).toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
-    expect(html).not.toMatch(new RegExp('<button[^>]*disabled[^>]*>\\s*Chat\\s*</button>'));
-    expect(html).toContain('Send message');
+    expect(html).toMatch(new RegExp('<button[^>]*disabled[^>]*>\\s*Chat\\s*</button>'));
+    expect(html).not.toContain('Send message');
   });
 
-  it('renders reasoning messages in the Pi example chat transcript', () => {
+  it('renders reasoning messages in the Ember Portfolio Agent pre-hire chat transcript', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -179,7 +239,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('Analyzing the request before answering.');
   });
 
-  it('keeps reasoning ahead of its linked assistant response in the transcript', () => {
+  it('renders linked reasoning in the order supplied by the runtime transcript', () => {
     const messages: Message[] = [
       {
         id: 'assistant-1',
@@ -196,8 +256,8 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
 
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -222,16 +282,16 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
 
     expect(html).toContain('Thinking through the request first.');
     expect(html).toContain('Here is the final answer.');
-    expect(html.indexOf('Thinking through the request first.')).toBeLessThan(
-      html.indexOf('Here is the final answer.'),
+    expect(html.indexOf('Here is the final answer.')).toBeLessThan(
+      html.indexOf('Thinking through the request first.'),
     );
   });
 
-  it('renders Pi automation status artifacts and A2UI cards in the chat transcript', () => {
+  it('renders automation status artifacts and A2UI cards in the Ember Portfolio Agent chat transcript', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -253,8 +313,8 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
               data: {
                 type: 'automation-status',
                 status: 'scheduled',
-                command: 'sync',
-                detail: 'Scheduled sync every 5 minutes.',
+                command: 'refresh',
+                detail: 'Scheduled refresh every 5 minutes.',
               },
             },
           },
@@ -268,8 +328,8 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
                     kind: 'automation-status',
                     payload: {
                       status: 'scheduled',
-                      command: 'sync',
-                      detail: 'Scheduled sync every 5 minutes.',
+                      command: 'refresh',
+                      detail: 'Scheduled refresh every 5 minutes.',
                     },
                   },
                 },
@@ -290,11 +350,11 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('pi-example-a2ui-view');
   });
 
-  it('renders Pi interrupt A2UI controls in the chat transcript', () => {
+  it('renders interrupt A2UI controls in the Ember Portfolio Agent chat transcript', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -340,11 +400,11 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('pi-example-a2ui-view');
   });
 
-  it('keeps the Pi chat tab visible while the thread is input-required', () => {
+  it('keeps the Ember Lending chat tab visible while the thread is input-required', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
-        agentId: 'agent-pi-example',
-        agentName: 'Pi Example Agent',
+        agentId: 'agent-ember-lending',
+        agentName: 'Ember Lending',
         agentDescription: 'desc',
         creatorName: 'Ember AI Team',
         creatorVerified: true,
@@ -355,9 +415,12 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
         },
         metrics: {},
         initialTab: 'chat',
-        isHired: false,
+        isHired: true,
         isHiring: false,
         hasLoadedView: true,
+        lifecycleState: {
+          phase: 'active',
+        } as never,
         taskStatus: 'input-required',
         activeInterrupt: {
           type: 'operator-config-request',

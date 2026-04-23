@@ -123,11 +123,16 @@ export function resolveTokenIconUris(params: {
 }
 
 export function resolveAgentAvatarUri(params: {
+  imageUrl?: string;
   protocols: string[];
   tokenIconBySymbol: Record<string, string>;
   protocolTokenFallback?: Record<string, string>;
 }): string | null {
-  const { protocols, tokenIconBySymbol, protocolTokenFallback = PROTOCOL_TOKEN_FALLBACK } = params;
+  const { imageUrl, protocols, tokenIconBySymbol, protocolTokenFallback = PROTOCOL_TOKEN_FALLBACK } =
+    params;
+  if (imageUrl && imageUrl.trim().length > 0) {
+    return imageUrl;
+  }
   for (const protocol of protocols) {
     const fallbackSymbol = protocolTokenFallback[protocol];
     if (!fallbackSymbol) continue;

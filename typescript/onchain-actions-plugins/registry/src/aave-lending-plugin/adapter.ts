@@ -5,6 +5,7 @@ import {
   type ReservesDataHumanized,
   type ReserveDataHumanized,
 } from '@aave/contract-helpers';
+import type { ComputedUserReserve, FormatReserveUSDResponse } from '@aave/math-utils';
 import { ethers, type PopulatedTransaction, utils } from 'ethers';
 
 import {
@@ -28,6 +29,67 @@ import { getUiPoolDataProviderImpl, type IUiPoolDataProvider } from './dataProvi
 import { type AAVEMarket, getMarket } from './market.js';
 import { populateTransaction } from './populateTransaction.js';
 import { UserSummary } from './userSummary.js';
+
+type UserReserveWithQuote = ComputedUserReserve<FormatReserveUSDResponse>;
+type ReserveQuoteFields = Pick<
+  FormatReserveUSDResponse,
+  | 'underlyingAsset'
+  | 'priceInUSD'
+  | 'priceInMarketReferenceCurrency'
+  | 'formattedPriceInMarketReferenceCurrency'
+  | 'availableLiquidity'
+  | 'availableLiquidityUSD'
+> &
+  Partial<Pick<FormatReserveUSDResponse, 'symbol' | 'name' | 'decimals'>>;
+
+function hasVisibleReservePosition({
+  underlyingBalance,
+  totalBorrows,
+}: Pick<UserReserveWithQuote, 'underlyingBalance' | 'totalBorrows'>): boolean {
+  return underlyingBalance !== '0' || totalBorrows !== '0';
+}
+
+function toLendingReserveDetail(
+  chainId: string,
+  {
+    reserve,
+    underlyingBalance = '0',
+    underlyingBalanceUSD = '0',
+    variableBorrows = '0',
+    variableBorrowsUSD = '0',
+    totalBorrows = '0',
+    totalBorrowsUSD = '0',
+  }: {
+    reserve: ReserveQuoteFields;
+    underlyingBalance?: string;
+    underlyingBalanceUSD?: string;
+    variableBorrows?: string;
+    variableBorrowsUSD?: string;
+    totalBorrows?: string;
+    totalBorrowsUSD?: string;
+  },
+) {
+  return {
+    tokenUid: {
+      address: reserve.underlyingAsset,
+      chainId,
+    },
+    ...(reserve.symbol !== undefined ? { symbol: reserve.symbol } : {}),
+    ...(reserve.name !== undefined ? { name: reserve.name } : {}),
+    ...(reserve.decimals !== undefined ? { decimals: reserve.decimals } : {}),
+    underlyingBalance,
+    underlyingBalanceUsd: underlyingBalanceUSD,
+    variableBorrows,
+    variableBorrowsUsd: variableBorrowsUSD,
+    totalBorrows,
+    totalBorrowsUsd: totalBorrowsUSD,
+    priceInUsd: reserve.priceInUSD,
+    priceInMarketReferenceCurrency: reserve.priceInMarketReferenceCurrency,
+    formattedPriceInMarketReferenceCurrency: reserve.formattedPriceInMarketReferenceCurrency,
+    availableLiquidity: reserve.availableLiquidity,
+    availableLiquidityUsd: reserve.availableLiquidityUSD,
+  };
+}
 
 export type EModeCategory = 'default' | 'stablecoins';
 
@@ -271,32 +333,32 @@ export class AAVEAdapter {
       userReservesData,
     } = userSummaryResponse.reserves;
 
-    const userReservesFormatted = [];
-    for (const {
-      reserve,
-      underlyingBalance,
-      underlyingBalanceUSD,
-      variableBorrows,
-      variableBorrowsUSD,
-      totalBorrows,
-      totalBorrowsUSD,
-    } of userReservesData.filter((ur) => ur.underlyingBalanceUSD !== '0')) {
-      userReservesFormatted.push({
-        tokenUid: {
-          address: reserve.underlyingAsset,
-          chainId: this.chain.id.toString(),
-        },
-        underlyingBalance,
-        underlyingBalanceUsd: underlyingBalanceUSD,
-        variableBorrows,
-        variableBorrowsUsd: variableBorrowsUSD,
-        totalBorrows,
-        totalBorrowsUsd: totalBorrowsUSD,
-      });
-    }
+    const chainId = this.chain.id.toString();
+    const userReservesFormatted = userReservesData
+      .filter(hasVisibleReservePosition)
+      .map((reserve) => toLendingReserveDetail(chainId, reserve));
+
+    const requestedReserveAddress = params.tokenAddress
+      ? params.tokenAddress.toLowerCase()
+      : undefined;
+    const requestedReserve = requestedReserveAddress
+      ? userReservesFormatted.find(
+          ({ tokenUid }) => tokenUid.address.toLowerCase() === requestedReserveAddress,
+        ) ??
+        (() => {
+          const reserve = userSummaryResponse.getReserveByUnderlyingAsset(requestedReserveAddress);
+
+          if (!reserve) {
+            return undefined;
+          }
+
+          return toLendingReserveDetail(chainId, { reserve });
+        })()
+      : undefined;
 
     return {
       userReserves: userReservesFormatted,
+      requestedReserve,
       totalLiquidityUsd: totalLiquidityUSD,
       totalCollateralUsd: totalCollateralUSD,
       totalBorrowsUsd: totalBorrowsUSD,

@@ -72,7 +72,7 @@ describe('loadPiRuntimeInspectionState', () => {
             thread_id: 'thread-1',
             execution_id: 'exec-1',
             status: 'pending',
-            surfaced_in_thread: true,
+            mirrored_to_activity: true,
           },
         ];
       }
@@ -186,7 +186,7 @@ describe('loadPiRuntimeInspectionState', () => {
           threadId: 'thread-1',
           executionId: 'exec-1',
           status: 'pending',
-          surfacedInThread: true,
+          mirroredToActivity: true,
         },
       ],
       leases: [
@@ -238,7 +238,6 @@ describe('persistPiRuntimeDirectExecution', () => {
       threadKey: 'thread-1',
       threadState: { threadId: 'thread-1' },
       executionId: 'pi-example:thread-1',
-      interruptId: 'interrupt-1',
       artifactId: 'artifact-1',
       activityId: 'activity-1',
       now,
@@ -251,7 +250,6 @@ describe('persistPiRuntimeDirectExecution', () => {
       expect.arrayContaining([
         expect.objectContaining({ tableName: 'pi_threads' }),
         expect.objectContaining({ tableName: 'pi_executions' }),
-        expect.objectContaining({ tableName: 'pi_interrupts' }),
         expect.objectContaining({ tableName: 'pi_artifacts' }),
         expect.objectContaining({ tableName: 'pi_thread_activity' }),
       ]),

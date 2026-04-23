@@ -95,7 +95,6 @@ const quicknodeSegments: Record<string, string> = {
   '42161': 'arbitrum-mainnet',
   '10': 'optimism',
   '137': 'matic',
-  '8453': 'base-mainnet',
 };
 
 export function getChainConfigById(chainId: string): ChainConfig {

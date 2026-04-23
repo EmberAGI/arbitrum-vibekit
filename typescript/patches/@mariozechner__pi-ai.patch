@@ -1,0 +1,103 @@
+diff --git a/dist/providers/openai-responses.js b/dist/providers/openai-responses.js
+index 6ecbb7f6a2e9394905ae91e04a2860e195ccf6f3..4a9b0cd9ed1cde20089ef094c29914c1eb7dbeed 100644
+--- a/dist/providers/openai-responses.js
++++ b/dist/providers/openai-responses.js
+@@ -6,6 +6,89 @@ import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copi
+ import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.js";
+ import { buildBaseOptions, clampReasoning } from "./simple-options.js";
+ const OPENAI_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode"]);
++function isRecord(value) {
++    return typeof value === "object" && value !== null && !Array.isArray(value);
++}
++function readNonEmptyString(value) {
++    return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
++}
++function ensureSentence(text) {
++    return /[.!?]$/.test(text) ? text : `${text}.`;
++}
++function formatProviderLabel(provider) {
++    switch (provider) {
++        case "openrouter":
++            return "OpenRouter";
++        case "openai":
++            return "OpenAI";
++        default:
++            return provider;
++    }
++}
++function formatOpenAIResponsesError(error, model) {
++    const fallbackMessage = error instanceof Error ? error.message : JSON.stringify(error);
++    if (!isRecord(error)) {
++        return fallbackMessage;
++    }
++    const errorPayload = isRecord(error.error) ? error.error : undefined;
++    const metadata = errorPayload && isRecord(errorPayload.metadata) ? errorPayload.metadata : undefined;
++    const status = typeof error.status === "number" ? error.status : undefined;
++    const providerMessage = readNonEmptyString(errorPayload?.message);
++    const nestedDetail = readNonEmptyString(metadata?.raw) ??
++        readNonEmptyString(metadata?.provider_reason) ??
++        readNonEmptyString(errorPayload?.details) ??
++        readNonEmptyString(errorPayload?.provider_message) ??
++        readNonEmptyString(errorPayload?.provider_error);
++    const code = readNonEmptyString(error.code) ?? readNonEmptyString(errorPayload?.code);
++    const type = readNonEmptyString(error.type) ?? readNonEmptyString(errorPayload?.type);
++    const param = readNonEmptyString(error.param) ?? readNonEmptyString(errorPayload?.param);
++    const requestId = readNonEmptyString(error.request_id) ??
++        (isRecord(error.headers) ? readNonEmptyString(error.headers["x-request-id"]) : undefined);
++    const providerName = readNonEmptyString(metadata?.provider_name) ??
++        readNonEmptyString(errorPayload?.provider_name) ??
++        readNonEmptyString(errorPayload?.provider);
++    const genericProviderError = /provider returned error/i.test(fallbackMessage) ||
++        (providerMessage !== undefined && /provider returned error/i.test(providerMessage));
++    if (!genericProviderError && nestedDetail === undefined && providerMessage === undefined) {
++        return fallbackMessage;
++    }
++    const formatted = [];
++    if (status !== undefined) {
++        formatted.push(`${formatProviderLabel(model.provider)} rejected the request before generation (HTTP ${status}).`);
++    }
++    else if (!genericProviderError) {
++        formatted.push(ensureSentence(fallbackMessage));
++    }
++    if (nestedDetail !== undefined) {
++        formatted.push(ensureSentence(nestedDetail));
++    }
++    else if (providerMessage !== undefined && !genericProviderError && providerMessage !== fallbackMessage) {
++        formatted.push(ensureSentence(providerMessage));
++    }
++    else if (genericProviderError) {
++        formatted.push("The upstream provider did not return a more specific cause.");
++    }
++    const details = [];
++    if (providerName !== undefined) {
++        details.push(`provider ${providerName}`);
++    }
++    if (code !== undefined) {
++        details.push(`code ${code}`);
++    }
++    if (type !== undefined) {
++        details.push(`type ${type}`);
++    }
++    if (param !== undefined) {
++        details.push(`param ${param}`);
++    }
++    if (requestId !== undefined) {
++        details.push(`request id ${requestId}`);
++    }
++    if (details.length > 0) {
++        formatted.push(`Details: ${details.join(", ")}.`);
++    }
++    return formatted.join(" ");
++}
+ /**
+  * Resolve cache retention preference.
+  * Defaults to "short" and uses PI_CACHE_RETENTION for backward compatibility.
+@@ -84,7 +167,7 @@ export const streamOpenAIResponses = (model, context, options) => {
+             for (const block of output.content)
+                 delete block.index;
+             output.stopReason = options?.signal?.aborted ? "aborted" : "error";
+-            output.errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
++            output.errorMessage = formatOpenAIResponsesError(error, model);
+             stream.push({ type: "error", reason: output.stopReason, error: output });
+             stream.end();
+         }

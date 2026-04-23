@@ -249,8 +249,41 @@ export interface PendleSetupInput {
   baseContributionUsd: number;
 }
 
+export interface PortfolioManagerMandateApproval {
+  approved: true;
+  riskLevel: 'medium';
+}
+
+export interface ManagedLendingCollateralAssetPolicyInput {
+  asset: string;
+  max_allocation_pct: number;
+}
+
+export interface ManagedMandateInput extends Record<string, unknown> {
+  lending_policy: Record<string, unknown> & {
+    collateral_policy: {
+      assets: ManagedLendingCollateralAssetPolicyInput[];
+    };
+    borrow_policy: {
+      allowed_assets: string[];
+    };
+    risk_policy: {
+      max_ltv_bps: number;
+      min_health_factor: string;
+    };
+  };
+}
+
+export interface PortfolioManagerFirstManagedMandateInput {
+  targetAgentId: 'ember-lending';
+  targetAgentKey: string;
+  managedMandate: ManagedMandateInput;
+}
+
 export interface PortfolioManagerSetupInput {
   walletAddress: `0x${string}`;
+  portfolioMandate: PortfolioManagerMandateApproval;
+  firstManagedMandate: PortfolioManagerFirstManagedMandateInput;
 }
 
 export interface FundWalletAcknowledgement {
@@ -399,13 +432,18 @@ export interface ThreadLifecycle {
   phase: ThreadLifecyclePhase;
   reason?: string;
   updatedAt?: string;
+  [key: string]: unknown;
 }
 
 // Domain thread state emitted by agents
 export interface ThreadState {
   lifecycle?: ThreadLifecycle;
-  lastAppliedClientMutationId?: string;
   task?: Task;
+  domainProjection?: Record<string, unknown>;
+  artifacts?: {
+    current?: Artifact;
+    activity?: Artifact;
+  };
   onboardingFlow?: OnboardingFlow;
   poolArtifact?: Artifact;
   operatorInput?:
@@ -550,8 +588,8 @@ export const defaultThreadState: ThreadState = {
   lifecycle: {
     phase: 'prehire',
   },
-  lastAppliedClientMutationId: undefined,
   task: undefined,
+  domainProjection: {},
   onboardingFlow: undefined,
   poolArtifact: undefined,
   operatorInput: undefined,

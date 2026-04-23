@@ -1,6 +1,7 @@
 import type { PortfolioManagerSharedEmberProtocolHost } from './sharedEmberAdapter.js';
 
 export const PORTFOLIO_MANAGER_SHARED_EMBER_NETWORK = 'arbitrum';
+export const PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID = 'ember-lending';
 
 export type OnboardingProofs = {
   rooted_wallet_context_registered: boolean;
@@ -12,16 +13,22 @@ export type OnboardingProofs = {
   reserve_policy_configured: boolean;
   capital_reserved_for_agent: boolean;
   policy_snapshot_recorded: boolean;
+  initial_subagent_delegation_issued?: boolean;
   agent_active: boolean;
 };
 
 export type OnboardingOwnedUnit = {
   unit_id: string;
   root_asset: string;
+  network?: string;
+  wallet_address?: string;
   quantity: string;
   status: string;
   control_path: string;
+  benchmark_asset?: string;
+  benchmark_value?: string;
   reservation_id: string | null;
+  position_scope_id?: string | null;
 };
 
 export type OnboardingReservation = {
@@ -30,6 +37,7 @@ export type OnboardingReservation = {
   purpose: string;
   status: string;
   control_path: string;
+  created_at?: string;
   unit_allocations: Array<{
     unit_id: string;
     quantity: string;
@@ -56,6 +64,12 @@ type OnboardingStateResponse = {
     revision?: number;
     onboarding_state?: OnboardingState;
   };
+};
+
+type OnboardingBootstrapMandate = {
+  mandate_ref?: string;
+  agent_id?: string;
+  managed_mandate?: unknown;
 };
 
 export type PortfolioManagerWalletAccountingDetails = {
@@ -102,7 +116,43 @@ function escapeXml(value: string): string {
     .replaceAll("'", '&apos;');
 }
 
-export async function readPortfolioManagerOnboardingState(input: {
+export function resolvePortfolioManagerAccountingAgentId(onboardingBootstrap: unknown): string {
+  if (typeof onboardingBootstrap !== 'object' || onboardingBootstrap === null) {
+    return PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID;
+  }
+
+  const onboardingBootstrapRecord = onboardingBootstrap as Record<string, unknown>;
+  const mandates = Array.isArray(onboardingBootstrapRecord['mandates'])
+    ? (onboardingBootstrapRecord['mandates'] as OnboardingBootstrapMandate[])
+    : [];
+  const activation =
+    typeof onboardingBootstrapRecord['activation'] === 'object' &&
+    onboardingBootstrapRecord['activation'] !== null
+      ? onboardingBootstrapRecord['activation']
+      : null;
+  const activatedMandateRef =
+    activation && 'mandateRef' in activation && typeof activation.mandateRef === 'string'
+      ? activation.mandateRef
+      : null;
+
+  const managedMandates = mandates.filter(
+    (mandate) =>
+      typeof mandate.agent_id === 'string' &&
+      'managed_mandate' in mandate &&
+      mandate.managed_mandate !== null,
+  );
+  const activatedManagedMandate = managedMandates.find(
+    (mandate) => mandate.mandate_ref === activatedMandateRef,
+  );
+
+  return (
+    activatedManagedMandate?.agent_id ??
+    managedMandates[0]?.agent_id ??
+    PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID
+  );
+}
+
+export async function readManagedAgentAccountingState(input: {
   protocolHost: PortfolioManagerSharedEmberProtocolHost;
   agentId: string;
   walletAddress: `0x${string}`;
