@@ -29,7 +29,8 @@ describe('/wallet page', () => {
   it('renders the signed-in wallet dashboard without the placeholder hero heading', () => {
     const html = renderToStaticMarkup(React.createElement(WalletPage));
     expect(html).not.toContain('Manage Wallet');
-    expect(html).toContain('Portfolio');
+    expect(html).not.toMatch(/>Portfolio</);
+    expect(html).toContain('Gross exposure');
     expect(html).toContain('Wallet contents');
   });
 });

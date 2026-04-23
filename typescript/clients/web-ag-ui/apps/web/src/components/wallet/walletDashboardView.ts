@@ -142,7 +142,7 @@ function buildWalletDashboardViewFromProjection(
       (count, family) => count + family.observedAssets.filter((asset) => asset.sourceKind !== 'wallet').length,
       0,
     );
-  const topbar = buildProjectionTopbarView(portfolio, activeLaneCount);
+  const topbar = buildProjectionTopbarView(portfolio);
   const accounting = buildProjectionAccountingView(portfolio);
   const contents = buildProjectionContentsView(portfolio);
 
@@ -165,7 +165,6 @@ function buildWalletDashboardViewFromProjection(
 
 function buildProjectionTopbarView(
   portfolio: PortfolioProjectionPacket,
-  activeLaneCount: number,
 ): DashboardTopbarView {
   return {
     benchmarkAssetLabel: portfolio.accounting.cashFamilyAsset,
@@ -184,10 +183,6 @@ function buildProjectionTopbarView(
         label: 'Unallocated',
         value: formatUsdCompact(portfolio.accounting.availableCashUsd),
         valueClassName: 'text-[#0F5A38]',
-      },
-      {
-        label: 'Active lanes',
-        value: String(activeLaneCount),
       },
     ],
   };
@@ -549,10 +544,6 @@ function buildLegacyWalletDashboardView(portfolio: WalletPortfolioView): WalletD
           label: 'Unallocated',
           value: formatUsdCompact(cashUsd),
           valueClassName: 'text-[#0F5A38]',
-        },
-        {
-          label: 'Active lanes',
-          value: String(activeLaneCount),
         },
       ],
     },

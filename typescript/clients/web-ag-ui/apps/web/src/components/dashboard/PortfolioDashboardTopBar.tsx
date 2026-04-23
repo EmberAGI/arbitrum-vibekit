@@ -29,30 +29,42 @@ function ExposureSplitValue(props: {
   );
 }
 
+function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
+  return (
+    <div>
+      <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">Benchmark</div>
+      <button
+        type="button"
+        title="Benchmark switching coming soon"
+        aria-label={`Benchmark ${props.benchmarkAssetLabel}. Benchmark switching coming soon.`}
+        className="group mt-1 inline-flex items-center gap-2.5 rounded-full border border-[#D7C5B4] bg-[#F8EFE5] px-2.5 py-1.5 text-left transition-colors hover:border-[#E8C9AA] hover:bg-[#FFF7F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8C9AA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#EFE5DA]"
+      >
+        <span className="inline-flex items-center gap-1.5">
+          <DashboardTokenAvatar
+            symbol={props.benchmarkAssetLabel}
+            fallbackSymbol={props.benchmarkAssetLabel}
+            small
+          />
+          <span className="text-[12px] font-semibold tracking-[-0.02em] text-[#221A13]">
+            {props.benchmarkAssetLabel}
+          </span>
+        </span>
+        <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#B07A52] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+          Soon
+        </span>
+      </button>
+    </div>
+  );
+}
+
 export function PortfolioDashboardTopBar(props: {
   view: DashboardTopbarView;
 }): React.JSX.Element {
+  const gridClassName = props.view.benchmarkAssetLabel ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-2 xl:grid-cols-3';
+
   return (
     <section className="rounded-[24px] border border-[#E4D5C7] bg-[#EFE5DA] px-4 py-3 shadow-[0_12px_28px_rgba(68,46,21,0.08)] md:px-5">
-      <div className="flex items-center justify-between gap-4">
-        <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
-          Portfolio
-        </div>
-        {props.view.benchmarkAssetLabel ? (
-          <div className="inline-flex items-center gap-2.5 rounded-full border border-[#D7C5B4] bg-[#F8EFE5] px-2.5 py-1.5">
-            <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
-              Benchmark
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <DashboardTokenAvatar symbol={props.view.benchmarkAssetLabel} fallbackSymbol={props.view.benchmarkAssetLabel} small />
-              <span className="text-[12px] font-semibold tracking-[-0.02em] text-[#221A13]">
-                {props.view.benchmarkAssetLabel}
-              </span>
-            </span>
-          </div>
-        ) : null}
-      </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={`grid gap-3 ${gridClassName}`}>
         {props.view.metrics.map((metric) => (
           <div key={metric.label}>
             {metric.positiveAssetsValue && metric.liabilitiesValue ? (
@@ -78,6 +90,9 @@ export function PortfolioDashboardTopBar(props: {
             )}
           </div>
         ))}
+        {props.view.benchmarkAssetLabel ? (
+          <BenchmarkTeaserControl benchmarkAssetLabel={props.view.benchmarkAssetLabel} />
+        ) : null}
       </div>
     </section>
   );
