@@ -1894,7 +1894,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
             interruptType: interruptType ?? null,
             runInFlight: runInFlightRef.current,
           });
-          const currentThreadId = threadIdRef.current;
+          const currentThreadId =
+            currentAgent?.threadId ?? lastConnectedThreadRef.current ?? threadIdRef.current;
           if (currentThreadId) {
             await invokeAgentCommandRoute({
               agentId,

@@ -136,6 +136,7 @@ type SharedEmberExecutionContext = {
     container_ref?: string;
     status?: string;
     market_state?: Record<string, unknown> | null;
+    action_capacities?: Record<string, unknown>[];
     members?: Record<string, unknown>[];
   }>;
 } | null;
@@ -351,6 +352,45 @@ function isSharedEmberRevisionConflict(error: unknown): boolean {
   );
 }
 
+function isSharedEmberActiveDelegationMismatch(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes(
+      'Shared Ember Domain Service JSON-RPC error: internal_error: signed transaction must match the active delegation id',
+    )
+  );
+}
+
+function readSharedEmberRevisionConflictMessage(error: Error): string {
+  const match = error.message.match(/expected_revision=(\d+)\s+actual_revision=(\d+)/);
+  if (!match) {
+    return 'Lending transaction plan is stale because Shared Ember state changed. Create a fresh plan and execute that new plan.';
+  }
+
+  const [, expectedRevision, actualRevision] = match;
+  return `Lending transaction plan is stale because Shared Ember state advanced from revision ${expectedRevision} to ${actualRevision}. Create a fresh plan and execute that new plan.`;
+}
+
+function normalizeSharedEmberExecutionErrorMessage(error: Error): string {
+  if (isSharedEmberRevisionConflict(error)) {
+    return readSharedEmberRevisionConflictMessage(error);
+  }
+
+  if (isSharedEmberActiveDelegationMismatch(error)) {
+    return 'Lending execution signing became stale because Shared Ember refreshed the active delegation. Retry execution to prepare a fresh signing package.';
+  }
+
+  if (
+    error.message.includes(
+      'Shared Ember Domain Service JSON-RPC error: protocol_invalid_params: transaction_plan_id must reference an existing transaction plan',
+    )
+  ) {
+    return 'Lending transaction plan is no longer available in Shared Ember. Create a fresh plan and try again.';
+  }
+
+  return error.message;
+}
+
 async function readSharedEmberExecutionContext(input: {
   protocolHost: EmberLendingSharedEmberProtocolHost;
   threadId: string;
@@ -447,6 +487,14 @@ function readFirstRecordFromArray(value: unknown): Record<string, unknown> | nul
   }
 
   return null;
+}
+
+function readRecordArray(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is Record<string, unknown> => isRecord(entry));
 }
 
 function summarizeReservation(portfolioState: unknown): string | null {
@@ -555,6 +603,55 @@ function scoreActivePositionScopeVisibility(scope: Record<string, unknown>): num
         score += 1;
       }
       if (readString(freshness['source_kind'])) {
+        score += 1;
+      }
+    }
+  }
+
+  const actionCapacities = readRecordArray(scope['action_capacities']);
+  score += actionCapacities.length * 2;
+  for (const actionCapacity of actionCapacities) {
+    if (readString(actionCapacity['control_path'])) {
+      score += 1;
+    }
+    if (readString(actionCapacity['capacity_kind'])) {
+      score += 1;
+    }
+    if (readString(actionCapacity['max_capacity'])) {
+      score += 2;
+    }
+    const limitingConstraints = readStringArray(actionCapacity['limiting_constraints']);
+    if (limitingConstraints) {
+      score += limitingConstraints.length;
+    }
+
+    const observedState = readRecordKey(actionCapacity, 'observed_state');
+    if (observedState) {
+      if (readString(observedState['total_supplied_usd'])) {
+        score += 1;
+      }
+      if (readString(observedState['total_borrowed_usd'])) {
+        score += 1;
+      }
+      if (readString(observedState['available_borrows_usd'])) {
+        score += 1;
+      }
+      if (readString(observedState['liquidation_threshold_borrow_capacity_usd'])) {
+        score += 1;
+      }
+      if (readFiniteNumber(observedState['current_ltv_bps']) !== null) {
+        score += 1;
+      }
+      if (readFiniteNumber(observedState['liquidation_threshold_bps']) !== null) {
+        score += 1;
+      }
+      if (readString(observedState['health_factor'])) {
+        score += 1;
+      }
+      if (readString(observedState['normalized_health_factor'])) {
+        score += 1;
+      }
+      if (readString(observedState['health_factor_status'])) {
         score += 1;
       }
     }
@@ -1356,6 +1453,99 @@ function appendActivePositionScopesXml(input: {
       input.lines.push('      </market_state>');
     }
 
+    const actionCapacities = readRecordArray(scope['action_capacities']);
+    if (actionCapacities.length > 0) {
+      input.lines.push('      <action_capacities>');
+      for (const actionCapacity of actionCapacities) {
+        const controlPath = readString(actionCapacity['control_path']);
+        const capacityKind = readString(actionCapacity['capacity_kind']);
+        const attributes = [
+          controlPath ? `control_path="${escapeXml(controlPath)}"` : null,
+          capacityKind ? `capacity_kind="${escapeXml(capacityKind)}"` : null,
+        ]
+          .filter((value): value is string => value !== null)
+          .join(' ');
+        input.lines.push(`        <action_capacity${attributes ? ` ${attributes}` : ''}>`);
+
+        const maxCapacity = readString(actionCapacity['max_capacity']);
+        if (maxCapacity) {
+          input.lines.push(`          <max_capacity>${escapeXml(maxCapacity)}</max_capacity>`);
+        }
+
+        const limitingConstraints = readStringArray(actionCapacity['limiting_constraints']);
+        if (limitingConstraints) {
+          input.lines.push('          <limiting_constraints>');
+          for (const constraint of limitingConstraints) {
+            input.lines.push(`            <constraint>${escapeXml(constraint)}</constraint>`);
+          }
+          input.lines.push('          </limiting_constraints>');
+        }
+
+        const observedState = readRecordKey(actionCapacity, 'observed_state');
+        if (observedState) {
+          input.lines.push('          <observed_state>');
+          const totalSuppliedUsd = readString(observedState['total_supplied_usd']);
+          if (totalSuppliedUsd) {
+            input.lines.push(
+              `            <total_supplied_usd>${escapeXml(totalSuppliedUsd)}</total_supplied_usd>`,
+            );
+          }
+          const totalBorrowedUsd = readString(observedState['total_borrowed_usd']);
+          if (totalBorrowedUsd) {
+            input.lines.push(
+              `            <total_borrowed_usd>${escapeXml(totalBorrowedUsd)}</total_borrowed_usd>`,
+            );
+          }
+          const availableBorrowsUsd = readString(observedState['available_borrows_usd']);
+          if (availableBorrowsUsd) {
+            input.lines.push(
+              `            <available_borrows_usd>${escapeXml(availableBorrowsUsd)}</available_borrows_usd>`,
+            );
+          }
+          const liquidationThresholdBorrowCapacityUsd = readString(
+            observedState['liquidation_threshold_borrow_capacity_usd'],
+          );
+          if (liquidationThresholdBorrowCapacityUsd) {
+            input.lines.push(
+              `            <liquidation_threshold_borrow_capacity_usd>${escapeXml(liquidationThresholdBorrowCapacityUsd)}</liquidation_threshold_borrow_capacity_usd>`,
+            );
+          }
+          const currentLtvBps = readFiniteNumber(observedState['current_ltv_bps']);
+          if (currentLtvBps !== null) {
+            input.lines.push(`            <current_ltv_bps>${currentLtvBps}</current_ltv_bps>`);
+          }
+          const liquidationThresholdBps = readFiniteNumber(
+            observedState['liquidation_threshold_bps'],
+          );
+          if (liquidationThresholdBps !== null) {
+            input.lines.push(
+              `            <liquidation_threshold_bps>${liquidationThresholdBps}</liquidation_threshold_bps>`,
+            );
+          }
+          const healthFactor = readString(observedState['health_factor']);
+          if (healthFactor) {
+            input.lines.push(`            <health_factor>${escapeXml(healthFactor)}</health_factor>`);
+          }
+          const normalizedHealthFactor = readString(observedState['normalized_health_factor']);
+          if (normalizedHealthFactor) {
+            input.lines.push(
+              `            <normalized_health_factor>${escapeXml(normalizedHealthFactor)}</normalized_health_factor>`,
+            );
+          }
+          const healthFactorStatus = readString(observedState['health_factor_status']);
+          if (healthFactorStatus) {
+            input.lines.push(
+              `            <health_factor_status>${escapeXml(healthFactorStatus)}</health_factor_status>`,
+            );
+          }
+          input.lines.push('          </observed_state>');
+        }
+
+        input.lines.push('        </action_capacity>');
+      }
+      input.lines.push('      </action_capacities>');
+    }
+
     const members = Array.isArray(scope['members'])
       ? scope['members'].filter((candidate): candidate is Record<string, unknown> => isRecord(candidate))
       : [];
@@ -1933,6 +2123,7 @@ function readCommittedExecutionProgressEvent(input: {
   ) {
     const status = readString(matchingEvent.payload?.['status']);
     const executionId = readString(matchingEvent.payload?.['execution_id']);
+    const message = readString(matchingEvent.payload?.['message']);
     const transactionHash = readHexAddress(matchingEvent.payload?.['transaction_hash']);
 
     if (!status) {
@@ -1948,6 +2139,7 @@ function readCommittedExecutionProgressEvent(input: {
         execution: {
           status,
           ...(executionId ? { execution_id: executionId } : {}),
+          ...(message ? { message } : {}),
           ...(transactionHash ? { transaction_hash: transactionHash } : {}),
         },
       },
@@ -2007,9 +2199,9 @@ function readExecutionStatusMessage(executionResult: unknown): {
   if (phase === 'completed' && status === 'failed_before_submission') {
     return {
       executionStatus: 'failed',
-      statusMessage: withExecutionDetail(
-        'Lending transaction failed before submission through Shared Ember.',
-      ),
+      statusMessage: executionMessage
+        ? withExecutionDetail('Lending transaction failed before submission through Shared Ember.')
+        : 'Lending transaction failed before submission through Shared Ember. Create a fresh plan and try again if the problem persists.',
     };
   }
 
@@ -3132,10 +3324,13 @@ function buildCreateTransactionIdempotencyKey(input: {
 function buildRequestExecutionIdempotencyKey(input: {
   threadId: string;
   transactionPlanId: string;
+  retryNonce?: string;
 }): string {
-  return `idem-request-execution-${input.threadId}-${buildStableCommandSuffix({
+  const base = `idem-request-execution-${input.threadId}-${buildStableCommandSuffix({
     transactionPlanId: input.transactionPlanId,
   })}`;
+
+  return input.retryNonce ? `${base}:retry:${input.retryNonce}` : base;
 }
 
 function buildCreateTransactionRequest(input: {
@@ -3241,6 +3436,31 @@ function readTransactionPlanId(
   }
 
   return null;
+}
+
+function shouldStartFreshExecutionRequestAttempt(
+  state: EmberLendingLifecycleState,
+  transactionPlanId: string,
+): boolean {
+  if (state.pendingExecutionSubmission?.transactionPlanId === transactionPlanId) {
+    return false;
+  }
+
+  const lastExecutionResult = isRecord(state.lastExecutionResult) ? state.lastExecutionResult : null;
+  if (!lastExecutionResult) {
+    return false;
+  }
+
+  if (readString(lastExecutionResult['transaction_plan_id']) !== transactionPlanId) {
+    return false;
+  }
+
+  if (readString(lastExecutionResult['phase']) !== 'completed') {
+    return false;
+  }
+
+  const execution = readRecordKey(lastExecutionResult, 'execution');
+  return readString(execution?.['status']) === 'failed_before_submission';
 }
 
 function buildExecutionPreparationContinuationIdempotencyKey(input: {
@@ -4027,6 +4247,7 @@ export function createEmberLendingDomain(
               },
             };
           }
+          const protocolHost = options.protocolHost;
 
           const transactionPlanId = readTransactionPlanId(operation.input, currentState);
           if (!transactionPlanId) {
@@ -4045,58 +4266,91 @@ export function createEmberLendingDomain(
           const idempotencyKey = buildRequestExecutionIdempotencyKey({
             threadId,
             transactionPlanId,
+            ...(shouldStartFreshExecutionRequestAttempt(currentState, transactionPlanId)
+              ? {
+                  retryNonce: crypto
+                    .createHash('sha256')
+                    .update(crypto.randomUUID())
+                    .digest('hex')
+                    .slice(0, 12),
+                }
+              : {}),
           });
-          let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>>;
+          const runExecutionAttempt = (state: EmberLendingLifecycleState) =>
+            state.pendingExecutionSubmission?.transactionPlanId === transactionPlanId &&
+            state.pendingExecutionSubmission?.idempotencyKey === idempotencyKey
+              ? resumePendingExecutionSubmission({
+                  protocolHost,
+                  threadId,
+                  agentId,
+                  pendingSubmission: state.pendingExecutionSubmission,
+                })
+              : runPreparedExecutionFlow({
+                  protocolHost,
+                  runtimeSigning: options.runtimeSigning,
+                  anchoredPayloadResolver: options.anchoredPayloadResolver,
+                  runtimeSignerRef: options.runtimeSignerRef,
+                  requestRedelegationRefresh: options.requestRedelegationRefresh,
+                  threadId,
+                  agentId,
+                  currentState: state,
+                  transactionPlanId,
+                  idempotencyKey,
+                });
+          let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>> | null =
+            null;
+          let executionAttemptState = currentState;
           try {
-            preparedExecutionResult =
-              currentState.pendingExecutionSubmission?.transactionPlanId === transactionPlanId &&
-              currentState.pendingExecutionSubmission?.idempotencyKey === idempotencyKey
-                ? await resumePendingExecutionSubmission({
-                    protocolHost: options.protocolHost,
-                    threadId,
-                    agentId,
-                    pendingSubmission: currentState.pendingExecutionSubmission,
-                  })
-                : await runPreparedExecutionFlow({
-                    protocolHost: options.protocolHost,
-                    runtimeSigning: options.runtimeSigning,
-                    anchoredPayloadResolver: options.anchoredPayloadResolver,
-                    runtimeSignerRef: options.runtimeSignerRef,
-                    requestRedelegationRefresh: options.requestRedelegationRefresh,
-                    threadId,
-                    agentId,
-                    currentState,
-                    transactionPlanId,
-                    idempotencyKey,
-                  });
+            preparedExecutionResult = await runExecutionAttempt(executionAttemptState);
           } catch (error) {
-            if (!(error instanceof Error)) {
-              throw error;
+            if (
+              isSharedEmberActiveDelegationMismatch(error) &&
+              executionAttemptState.pendingExecutionSubmission
+            ) {
+              executionAttemptState = {
+                ...executionAttemptState,
+                pendingExecutionSubmission: null,
+                lastSharedEmberRevision: mergeKnownRevision(
+                  executionAttemptState.lastSharedEmberRevision,
+                  error instanceof PendingExecutionSubmissionError ? error.revision : null,
+                ),
+              };
+              try {
+                preparedExecutionResult = await runExecutionAttempt(executionAttemptState);
+              } catch (retryError) {
+                error = retryError;
+              }
             }
 
-            return {
-              state: {
-                ...currentState,
-                phase: 'active',
-                lastSharedEmberRevision:
-                  error instanceof LocalExecutionFailureError ||
-                  error instanceof PendingExecutionSubmissionError
-                    ? error.revision ?? currentState.lastSharedEmberRevision
-                    : currentState.lastSharedEmberRevision,
-                lastExecutionResult: currentState.lastExecutionResult,
-                lastExecutionTxHash: null,
-                pendingExecutionSubmission:
-                  error instanceof PendingExecutionSubmissionError
-                    ? error.pendingSubmission
-                    : null,
-              },
-              outputs: {
-                status: {
-                  executionStatus: 'failed',
-                  statusMessage: error.message,
+            if (preparedExecutionResult === null) {
+              if (!(error instanceof Error)) {
+                throw error;
+              }
+
+              return {
+                state: {
+                  ...executionAttemptState,
+                  phase: 'active',
+                  lastSharedEmberRevision:
+                    error instanceof LocalExecutionFailureError ||
+                    error instanceof PendingExecutionSubmissionError
+                      ? error.revision ?? executionAttemptState.lastSharedEmberRevision
+                      : executionAttemptState.lastSharedEmberRevision,
+                  lastExecutionResult: currentState.lastExecutionResult,
+                  lastExecutionTxHash: null,
+                  pendingExecutionSubmission:
+                    error instanceof PendingExecutionSubmissionError
+                      ? error.pendingSubmission
+                      : null,
                 },
-              },
-            };
+                outputs: {
+                  status: {
+                    executionStatus: 'failed',
+                    statusMessage: normalizeSharedEmberExecutionErrorMessage(error),
+                  },
+                },
+              };
+            }
           }
 
           const executionResult = preparedExecutionResult.executionResult ?? null;

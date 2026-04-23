@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
   navigateToHref: vi.fn(),
+  login: vi.fn(),
   invokeAgentCommandRoute: vi.fn(),
   getAgentThreadId: vi.fn(),
   applyDomainProjection: vi.fn(),
@@ -42,6 +43,16 @@ vi.mock('@/hooks/usePrivyWalletClient', () => ({
       address: '0x1111111111111111111111111111111111111111',
     },
   }),
+}));
+
+vi.mock('@privy-io/react-auth', () => ({
+  useLogin: () => ({
+    login: mocks.login,
+  }),
+}));
+
+vi.mock('@/utils/privyConfig', () => ({
+  isPrivyConfigured: () => true,
 }));
 
 vi.mock('@/utils/agentCommandRoute', () => ({
@@ -154,6 +165,7 @@ describe('AgentDetailRoute managed mandate wiring', () => {
     mocks.push.mockReset();
     mocks.replace.mockReset();
     mocks.navigateToHref.mockReset();
+    mocks.login.mockReset();
     mocks.invokeAgentCommandRoute.mockReset();
     mocks.getAgentThreadId.mockReset();
     mocks.applyDomainProjection.mockReset();
@@ -231,6 +243,29 @@ describe('AgentDetailRoute managed mandate wiring', () => {
         mandateRef: 'mandate-ember-lending-001',
       },
     });
+  });
+
+  it('opens Privy login instead of no-op hire when only a derived thread id exists', async () => {
+    mocks.agentValue = createAgentValue({
+      config: {
+        id: 'inactive-agent',
+      },
+      threadId: undefined,
+      hasLoadedView: false,
+      hasAuthoritativeState: false,
+      isConnected: false,
+      isHired: false,
+      isActive: false,
+    });
+    mocks.getAgentThreadId.mockReturnValue('derived-thread-id');
+
+    await renderRoute('agent-portfolio-manager');
+
+    const props = readCapturedProps();
+    expect(typeof props.onHire).toBe('function');
+    (props.onHire as () => void)();
+
+    expect(mocks.login).toHaveBeenCalledTimes(1);
   });
 
   it('hydrates the PM page from refresh even when the hired PM thread is still marked onboarding', async () => {

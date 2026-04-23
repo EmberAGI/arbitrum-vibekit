@@ -3547,6 +3547,93 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.uiError).toBeNull();
   });
 
+  it('resumes a thread-backed interrupt on the connected thread when the derived thread id has drifted', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    const payload = {
+      outcome: 'signed' as const,
+      signedDelegations: [
+        {
+          delegate: '0x0000000000000000000000000000000000000003' as const,
+          delegator: '0x0000000000000000000000000000000000000002' as const,
+          authority: '0x' as const,
+          caveats: [],
+          salt: '0x01' as const,
+          signature: '0x1234' as const,
+        },
+      ],
+    };
+
+    mocks.threadId = 'thread-live';
+    mocks.interruptState.activeInterrupt = {
+      type: 'portfolio-manager-delegation-signing-request',
+      message: 'Review and sign the delegation needed to activate your portfolio manager.',
+      chainId: 42161,
+      delegationManager: '0x0000000000000000000000000000000000000001',
+      delegatorAddress: '0x0000000000000000000000000000000000000002',
+      delegateeAddress: '0x0000000000000000000000000000000000000003',
+      delegationsToSign: [
+        {
+          delegate: '0x0000000000000000000000000000000000000003',
+          delegator: '0x0000000000000000000000000000000000000002',
+          authority: '0x',
+          caveats: [],
+          salt: '0x01',
+        },
+      ],
+      descriptions: ['delegate portfolio-manager actions'],
+      warnings: [],
+    };
+    mocks.interruptState.canResolve = true;
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(mocks.agent.threadId).toBe('thread-live');
+
+    mocks.runtimeStatus = mocks.runtimeStatuses.Disconnected;
+    mocks.threadId = 'thread-drifted';
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.resolveInterrupt(payload);
+    await flushEffects();
+
+    expect(mocks.disconnectFetch).toHaveBeenCalledWith(
+      '/api/agent-command',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          agentId: 'agent-portfolio-manager',
+          threadId: 'thread-live',
+          resume: payload,
+        }),
+      }),
+    );
+    expect(latestValue?.uiError).toBeNull();
+  });
+
   it('falls back to CopilotKit interrupt resolution when no thread id is available', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     const payload = {

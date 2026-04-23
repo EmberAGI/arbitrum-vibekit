@@ -130,67 +130,7 @@ function createManagedLifecycleState() {
         },
       ],
       active_position_scopes: [
-        {
-          scope_id:
-            'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
-          kind: 'lending',
-          scope_type_id: 'lending.aave.position',
-          root_user_wallet: '0x00000000000000000000000000000000000000a1',
-          network: 'arbitrum',
-          protocol_system: 'aave',
-          container_ref: 'aave:0x00000000000000000000000000000000000000a1',
-          status: 'active',
-          market_state: {
-            available_borrows_usd: '63.00',
-            borrowable_headroom_usd: '63.00',
-            current_ltv_bps: 3000,
-            liquidation_threshold_bps: 8400,
-            health_factor: '1.42',
-            freshness: {
-              derived_at: '2026-04-01T06:00:00.000Z',
-              oldest_observed_at: '2026-04-01T05:59:00.000Z',
-              latest_observed_at: '2026-04-01T06:00:00.000Z',
-              source_kind: 'valuation_ref',
-            },
-          },
-          members: [
-            {
-              member_id:
-                'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC',
-              role: 'collateral',
-              asset: 'aArbUSDC',
-              quantity: '90',
-              value_usd: '90.00',
-              economic_exposures: [
-                {
-                  asset: 'USDC',
-                  quantity: '90',
-                },
-              ],
-              state: {
-                withdrawable_quantity: '63',
-                supply_apr: '0.03',
-              },
-            },
-            {
-              member_id:
-                'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:debt:USDC',
-              role: 'debt',
-              asset: 'variableDebtArbUSDC',
-              quantity: '27',
-              value_usd: '27.00',
-              economic_exposures: [
-                {
-                  asset: 'USDC',
-                  quantity: '27',
-                },
-              ],
-              state: {
-                borrow_apr: '0.05',
-              },
-            },
-          ],
-        },
+        createActivePositionScope(),
       ],
       owned_units: [
         {
@@ -242,6 +182,89 @@ function createManagedMandateContext() {
   };
 }
 
+function createActivePositionScope() {
+  return {
+    scope_id:
+      'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
+    kind: 'lending',
+    scope_type_id: 'lending.aave.position',
+    root_user_wallet: '0x00000000000000000000000000000000000000a1',
+    network: 'arbitrum',
+    protocol_system: 'aave',
+    container_ref: 'aave:0x00000000000000000000000000000000000000a1',
+    status: 'active',
+    market_state: {
+      available_borrows_usd: '63.00',
+      borrowable_headroom_usd: '63.00',
+      current_ltv_bps: 3000,
+      liquidation_threshold_bps: 8400,
+      health_factor: '1.42',
+      freshness: {
+        derived_at: '2026-04-01T06:00:00.000Z',
+        oldest_observed_at: '2026-04-01T05:59:00.000Z',
+        latest_observed_at: '2026-04-01T06:00:00.000Z',
+        source_kind: 'valuation_ref',
+      },
+    },
+    action_capacities: [
+      {
+        control_path: 'lending.borrow',
+        capacity_kind: 'usd',
+        max_capacity: '48.00',
+        limiting_constraints: ['mandate_max_ltv'],
+        observed_state: {
+          total_supplied_usd: '90.00',
+          total_borrowed_usd: '27.00',
+          available_borrows_usd: '63.00',
+          liquidation_threshold_borrow_capacity_usd: '67.00',
+          current_ltv_bps: 3000,
+          liquidation_threshold_bps: 8400,
+          health_factor: '1.42',
+          normalized_health_factor: '1.42',
+          health_factor_status: 'measured',
+        },
+      },
+    ],
+    members: [
+      {
+        member_id:
+          'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC',
+        role: 'collateral',
+        asset: 'aArbUSDC',
+        quantity: '90',
+        value_usd: '90.00',
+        economic_exposures: [
+          {
+            asset: 'USDC',
+            quantity: '90',
+          },
+        ],
+        state: {
+          withdrawable_quantity: '63',
+          supply_apr: '0.03',
+        },
+      },
+      {
+        member_id:
+          'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:debt:USDC',
+        role: 'debt',
+        asset: 'variableDebtArbUSDC',
+        quantity: '27',
+        value_usd: '27.00',
+        economic_exposures: [
+          {
+            asset: 'USDC',
+            quantity: '27',
+          },
+        ],
+        state: {
+          borrow_apr: '0.05',
+        },
+      },
+    ],
+  };
+}
+
 function createPortfolioStateResponse() {
   return {
     jsonrpc: '2.0',
@@ -277,67 +300,7 @@ function createPortfolioStateResponse() {
           },
         ],
         active_position_scopes: [
-          {
-            scope_id:
-              'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
-            kind: 'lending',
-            scope_type_id: 'lending.aave.position',
-            root_user_wallet: '0x00000000000000000000000000000000000000a1',
-            network: 'arbitrum',
-            protocol_system: 'aave',
-            container_ref: 'aave:0x00000000000000000000000000000000000000a1',
-            status: 'active',
-            market_state: {
-              available_borrows_usd: '63.00',
-              borrowable_headroom_usd: '63.00',
-              current_ltv_bps: 3000,
-              liquidation_threshold_bps: 8400,
-              health_factor: '1.42',
-              freshness: {
-                derived_at: '2026-04-01T06:00:00.000Z',
-                oldest_observed_at: '2026-04-01T05:59:00.000Z',
-                latest_observed_at: '2026-04-01T06:00:00.000Z',
-                source_kind: 'valuation_ref',
-              },
-            },
-            members: [
-              {
-                member_id:
-                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC',
-                role: 'collateral',
-                asset: 'aArbUSDC',
-                quantity: '90',
-                value_usd: '90.00',
-                economic_exposures: [
-                  {
-                    asset: 'USDC',
-                    quantity: '90',
-                  },
-                ],
-                state: {
-                  withdrawable_quantity: '63',
-                  supply_apr: '0.03',
-                },
-              },
-              {
-                member_id:
-                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:debt:USDC',
-                role: 'debt',
-                asset: 'variableDebtArbUSDC',
-                quantity: '27',
-                value_usd: '27.00',
-                economic_exposures: [
-                  {
-                    asset: 'USDC',
-                    quantity: '27',
-                  },
-                ],
-                state: {
-                  borrow_apr: '0.05',
-                },
-              },
-            ],
-          },
+          createActivePositionScope(),
         ],
         owned_units: [
           {
@@ -456,67 +419,7 @@ function createExecutionContextResponse() {
         subagent_wallet_address: '0x00000000000000000000000000000000000000b1',
         root_user_wallet_address: '0x00000000000000000000000000000000000000a1',
         active_position_scopes: [
-          {
-            scope_id:
-              'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1',
-            kind: 'lending',
-            scope_type_id: 'lending.aave.position',
-            root_user_wallet: '0x00000000000000000000000000000000000000a1',
-            network: 'arbitrum',
-            protocol_system: 'aave',
-            container_ref: 'aave:0x00000000000000000000000000000000000000a1',
-            status: 'active',
-            market_state: {
-              available_borrows_usd: '63.00',
-              borrowable_headroom_usd: '63.00',
-              current_ltv_bps: 3000,
-              liquidation_threshold_bps: 8400,
-              health_factor: '1.42',
-              freshness: {
-                derived_at: '2026-04-01T06:00:00.000Z',
-                oldest_observed_at: '2026-04-01T05:59:00.000Z',
-                latest_observed_at: '2026-04-01T06:00:00.000Z',
-                source_kind: 'valuation_ref',
-              },
-            },
-            members: [
-              {
-                member_id:
-                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC',
-                role: 'collateral',
-                asset: 'aArbUSDC',
-                quantity: '90',
-                value_usd: '90.00',
-                economic_exposures: [
-                  {
-                    asset: 'USDC',
-                    quantity: '90',
-                  },
-                ],
-                state: {
-                  withdrawable_quantity: '63',
-                  supply_apr: '0.03',
-                },
-              },
-              {
-                member_id:
-                  'position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:debt:USDC',
-                role: 'debt',
-                asset: 'variableDebtArbUSDC',
-                quantity: '27',
-                value_usd: '27.00',
-                economic_exposures: [
-                  {
-                    asset: 'USDC',
-                    quantity: '27',
-                  },
-                ],
-                state: {
-                  borrow_apr: '0.05',
-                },
-              },
-            ],
-          },
+          createActivePositionScope(),
         ],
         wallet_contents: [
           {
@@ -727,6 +630,7 @@ function createReadyForExecutionSigningPreparationResult(input?: {
   executionPreparationId?: string;
   canonicalUnsignedPayloadRef?: string;
   plannedTransactionPayloadRef?: string;
+  activeDelegationId?: string;
 }) {
   const executionPreparationId =
     input?.executionPreparationId ?? 'execprep-ember-lending-001';
@@ -734,6 +638,7 @@ function createReadyForExecutionSigningPreparationResult(input?: {
     input?.canonicalUnsignedPayloadRef ?? 'unsigned-txpayload-ember-lending-001';
   const plannedTransactionPayloadRef =
     input?.plannedTransactionPayloadRef ?? 'txpayload-ember-lending-001';
+  const activeDelegationId = input?.activeDelegationId ?? 'del-ember-lending-001';
   return {
     phase: 'ready_for_execution_signing',
     transaction_plan_id: 'txplan-ember-lending-001',
@@ -750,7 +655,7 @@ function createReadyForExecutionSigningPreparationResult(input?: {
       reservation_id: 'reservation-ember-lending-001',
       required_control_path: 'lending.supply',
       canonical_unsigned_payload_ref: canonicalUnsignedPayloadRef,
-      active_delegation_id: 'del-ember-lending-001',
+      active_delegation_id: activeDelegationId,
       root_delegation_id: 'root-user-ember-lending-001',
       prepared_at: '2026-04-01T06:15:00.000Z',
       metadata: {
@@ -761,7 +666,7 @@ function createReadyForExecutionSigningPreparationResult(input?: {
       execution_preparation_id: executionPreparationId,
       transaction_plan_id: 'txplan-ember-lending-001',
       request_id: 'req-ember-lending-execution-001',
-      active_delegation_id: 'del-ember-lending-001',
+      active_delegation_id: activeDelegationId,
       delegation_artifact_ref: 'metamask-delegation:delegation-ember-lending-001',
       root_delegation_artifact_ref: 'metamask-delegation:root-ember-lending-001',
       canonical_unsigned_payload_ref: canonicalUnsignedPayloadRef,
@@ -1158,6 +1063,9 @@ describe('createEmberLendingDomain', () => {
         '      <protocol_system>aave</protocol_system>',
         '      <market_state>',
         '        <health_factor>1.42</health_factor>',
+        '      <action_capacities>',
+        '        <action_capacity control_path="lending.borrow" capacity_kind="usd">',
+        '          <max_capacity>48.00</max_capacity>',
         '      <members>',
         '        <member member_id="position-scope-aave-arbitrum-0x00000000000000000000000000000000000000a1:collateral:USDC" role="collateral" asset="aArbUSDC">',
         '          <value_usd>90.00</value_usd>',
@@ -1317,6 +1225,9 @@ describe('createEmberLendingDomain', () => {
         '  <active_position_scopes>',
         '      <protocol_system>aave</protocol_system>',
         '        <borrowable_headroom_usd>63.00</borrowable_headroom_usd>',
+        '      <action_capacities>',
+        '        <action_capacity control_path="lending.borrow" capacity_kind="usd">',
+        '          <max_capacity>48.00</max_capacity>',
         '    <wallet_balance asset="USDC" network="arbitrum">',
         '      <value_usd>100.00</value_usd>',
       ]),
@@ -1366,6 +1277,9 @@ describe('createEmberLendingDomain', () => {
         '      <protocol_system>aave</protocol_system>',
         '      <market_state>',
         '        <health_factor>1.42</health_factor>',
+        '      <action_capacities>',
+        '        <action_capacity control_path="lending.borrow" capacity_kind="usd">',
+        '          <max_capacity>48.00</max_capacity>',
       ]),
     );
     expect(context?.join('\n')).toContain('<active_reservations>');
@@ -6794,6 +6708,62 @@ describe('createEmberLendingDomain', () => {
     });
   });
 
+  it('surfaces a stale-plan message when Shared Ember keeps rejecting request_execution with expected_revision conflicts', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new Error(
+            'Shared Ember Domain Service JSON-RPC error: protocol_conflict expected_revision=7 actual_revision=8',
+          ),
+        )
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-read-current-revision',
+          result: {
+            protocol_version: 'v1',
+            revision: 8,
+          },
+        })
+        .mockRejectedValueOnce(
+          new Error(
+            'Shared Ember Domain Service JSON-RPC error: protocol_conflict expected_revision=8 actual_revision=9',
+          ),
+        ),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'borrow WBTC on Aave',
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_execution',
+      },
+    });
+
+    expect(result).toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending transaction plan is stale because Shared Ember state advanced from revision 8 to 9. Create a fresh plan and execute that new plan.',
+        },
+      },
+    });
+  });
+
   it('keys signed-transaction submit idempotency by the exact signed artifact', async () => {
     const protocolHost = {
       handleJsonRpc: vi
@@ -7135,6 +7105,387 @@ describe('createEmberLendingDomain', () => {
         },
         lastExecutionTxHash:
           '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        pendingExecutionSubmission: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+        },
+      },
+    });
+  });
+
+  it('preserves a failed-before-submission message recovered from the committed-event outbox', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            committed_event_ids: ['evt-prepare-execution-1'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:4010'))
+        .mockRejectedValueOnce(new Error('projection refresh unavailable')),
+      readCommittedEventOutbox: vi
+        .fn()
+        .mockResolvedValueOnce({
+          protocol_version: 'v1',
+          revision: 10,
+          events: [
+            {
+              event_id: 'evt-request-execution-3',
+              sequence: 3,
+              aggregate: 'request',
+              aggregate_id: 'req-ember-lending-execution-001',
+              event_type: 'requestExecution.completed.v1',
+              committed_at: '2026-04-01T06:18:00Z',
+              payload: {
+                request_id: 'req-ember-lending-execution-001',
+                transaction_plan_id: 'txplan-ember-lending-001',
+                execution_id: 'exec-ember-lending-001',
+                status: 'failed_before_submission',
+                message:
+                  'send_insufficient_funds: rpc_32000: insufficient funds for gas * price + value',
+                transaction_hash: null,
+              },
+            },
+          ],
+        }),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 10,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      runtimeSigning,
+      runtimeSignerRef: 'service-wallet',
+      agentId: 'ember-lending',
+    });
+    const initialState = {
+      ...createManagedLifecycleState(),
+      lastCandidatePlan: {
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+      lastCandidatePlanSummary: 'borrow WBTC on Aave',
+    };
+
+    const firstAttempt = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: initialState,
+      operation: {
+        source: 'tool',
+        name: 'request_execution',
+      },
+    });
+
+    const resumedAttempt = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: firstAttempt?.state,
+      operation: {
+        source: 'tool',
+        name: 'request_execution',
+      },
+    });
+
+    expect(runtimeSigning.signPayload).toHaveBeenCalledTimes(1);
+    expect(resumedAttempt).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 10,
+        lastExecutionResult: {
+          phase: 'completed',
+          request_id: 'req-ember-lending-execution-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          execution: {
+            execution_id: 'exec-ember-lending-001',
+            status: 'failed_before_submission',
+            message:
+              'send_insufficient_funds: rpc_32000: insufficient funds for gas * price + value',
+          },
+        },
+        lastExecutionTxHash: null,
+        pendingExecutionSubmission: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Lending transaction failed before submission through Shared Ember: send_insufficient_funds: rpc_32000: insufficient funds for gas * price + value.',
+        },
+      },
+    });
+  });
+
+  it('uses a fresh request-execution idempotency key after a failed-before-submission result for the same plan', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-prepare-execution-2'],
+            execution_result: createReadyForExecutionSigningPreparationResult(),
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-signed-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 11,
+            committed_event_ids: ['evt-submit-execution-2'],
+            execution_result: createTerminalExecutionResult({
+              status: 'confirmed',
+              transactionHash:
+                '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            }),
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 11,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      runtimeSigning,
+      runtimeSignerRef: 'service-wallet',
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'borrow WBTC on Aave',
+        lastExecutionResult: createTerminalExecutionResult({
+          status: 'failed_before_submission',
+          message:
+            'send_insufficient_funds: rpc_32000: insufficient funds for gas * price + value',
+        }),
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_execution',
+      },
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-request-execution',
+      method: 'subagent.requestExecution.v1',
+      params: {
+        idempotency_key: expect.stringMatching(
+          /^idem-request-execution-thread-1-07b74ae67cd9:retry:[0-9a-f]{12}$/,
+        ),
+        expected_revision: 7,
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+    });
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 11,
+        lastExecutionTxHash:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Lending transaction execution confirmed through Shared Ember.',
+        },
+      },
+    });
+  });
+
+  it('re-prepares execution when a cached submission uses a stale active delegation id', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new Error(
+            'Shared Ember Domain Service JSON-RPC error: internal_error: signed transaction must match the active delegation id (expected del-ember-lending-002, got del-ember-lending-001)',
+          ),
+        )
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-prepare-execution-2'],
+            execution_result: createReadyForExecutionSigningPreparationResult({
+              executionPreparationId: 'execprep-ember-lending-002',
+              canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-002',
+              plannedTransactionPayloadRef: 'txpayload-ember-lending-002',
+              activeDelegationId: 'del-ember-lending-002',
+            }),
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-signed-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 11,
+            committed_event_ids: ['evt-request-execution-3'],
+            execution_result: createTerminalExecutionResult({
+              status: 'confirmed',
+              transactionHash:
+                '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            }),
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 9,
+        consumer_id: 'ember-lending',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000b1',
+        signedPayload: {
+          signature: ALT_TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const domain = createEmberLendingDomain({
+      protocolHost,
+      runtimeSigning,
+      runtimeSignerRef: 'service-wallet',
+      agentId: 'ember-lending',
+    });
+
+    const result = await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        ...createManagedLifecycleState(),
+        lastCandidatePlan: {
+          transaction_plan_id: 'txplan-ember-lending-001',
+        },
+        lastCandidatePlanSummary: 'borrow WBTC on Aave',
+        pendingExecutionSubmission: {
+          transactionPlanId: 'txplan-ember-lending-001',
+          requestId: 'req-ember-lending-execution-001',
+          idempotencyKey: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
+          signedTransaction: {
+            execution_preparation_id: 'execprep-ember-lending-001',
+            transaction_plan_id: 'txplan-ember-lending-001',
+            request_id: 'req-ember-lending-execution-001',
+            active_delegation_id: 'del-ember-lending-001',
+            canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-001',
+            signer_address: '0x00000000000000000000000000000000000000b1',
+            raw_transaction: '0xdeadbeef',
+          },
+          revision: 9,
+        },
+      },
+      operation: {
+        source: 'tool',
+        name: 'request_execution',
+      },
+    });
+
+    expect(runtimeSigning.signPayload).toHaveBeenCalledTimes(1);
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(1, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-submit-signed-transaction',
+      method: 'subagent.submitSignedTransaction.v1',
+      params: expect.objectContaining({
+        transaction_plan_id: 'txplan-ember-lending-001',
+        signed_transaction: expect.objectContaining({
+          active_delegation_id: 'del-ember-lending-001',
+        }),
+      }),
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-request-execution',
+      method: 'subagent.requestExecution.v1',
+      params: {
+        idempotency_key: DEFAULT_EXECUTION_IDEMPOTENCY_KEY,
+        expected_revision: 9,
+        transaction_plan_id: 'txplan-ember-lending-001',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(3, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-submit-signed-transaction',
+      method: 'subagent.submitSignedTransaction.v1',
+      params: expect.objectContaining({
+        transaction_plan_id: 'txplan-ember-lending-001',
+        signed_transaction: expect.objectContaining({
+          execution_preparation_id: 'execprep-ember-lending-002',
+          active_delegation_id: 'del-ember-lending-002',
+          canonical_unsigned_payload_ref: 'unsigned-txpayload-ember-lending-002',
+        }),
+      }),
+    });
+    expect(result).toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 11,
+        lastExecutionResult: {
+          phase: 'completed',
+          request_id: 'req-ember-lending-execution-001',
+          transaction_plan_id: 'txplan-ember-lending-001',
+          execution: {
+            execution_id: 'exec-ember-lending-001',
+            status: 'confirmed',
+            transaction_hash:
+              '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          },
+        },
+        lastExecutionTxHash:
+          '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         pendingExecutionSubmission: null,
       },
       outputs: {
