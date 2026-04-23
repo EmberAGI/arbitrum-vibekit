@@ -4247,6 +4247,7 @@ export function createEmberLendingDomain(
               },
             };
           }
+          const protocolHost = options.protocolHost;
 
           const transactionPlanId = readTransactionPlanId(operation.input, currentState);
           if (!transactionPlanId) {
@@ -4279,13 +4280,13 @@ export function createEmberLendingDomain(
             state.pendingExecutionSubmission?.transactionPlanId === transactionPlanId &&
             state.pendingExecutionSubmission?.idempotencyKey === idempotencyKey
               ? resumePendingExecutionSubmission({
-                  protocolHost: options.protocolHost,
+                  protocolHost,
                   threadId,
                   agentId,
                   pendingSubmission: state.pendingExecutionSubmission,
                 })
               : runPreparedExecutionFlow({
-                  protocolHost: options.protocolHost,
+                  protocolHost,
                   runtimeSigning: options.runtimeSigning,
                   anchoredPayloadResolver: options.anchoredPayloadResolver,
                   runtimeSignerRef: options.runtimeSignerRef,
@@ -4296,7 +4297,8 @@ export function createEmberLendingDomain(
                   transactionPlanId,
                   idempotencyKey,
                 });
-          let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>>;
+          let preparedExecutionResult: Awaited<ReturnType<typeof runPreparedExecutionFlow>> | null =
+            null;
           let executionAttemptState = currentState;
           try {
             preparedExecutionResult = await runExecutionAttempt(executionAttemptState);
@@ -4320,7 +4322,7 @@ export function createEmberLendingDomain(
               }
             }
 
-            if (preparedExecutionResult === undefined) {
+            if (preparedExecutionResult === null) {
               if (!(error instanceof Error)) {
                 throw error;
               }
