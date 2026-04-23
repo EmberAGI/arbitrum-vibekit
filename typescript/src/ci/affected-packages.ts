@@ -45,8 +45,12 @@ interface PackageManifest {
   name?: string;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  engines?: Record<string, string>;
   peerDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
+  packageManager?: string;
+  pnpm?: unknown;
+  scripts?: Record<string, string>;
 }
 
 interface WorkspaceFile {
@@ -54,11 +58,21 @@ interface WorkspaceFile {
 }
 
 const execFileAsync = promisify(execFile);
+const ROOT_PACKAGE_JSON_FULL_SCOPE_INVALIDATOR = "__ci__/root-package-json-full-scope";
+const ROOT_PACKAGE_JSON_RISKY_FIELDS = [
+  "dependencies",
+  "devDependencies",
+  "engines",
+  "optionalDependencies",
+  "packageManager",
+  "peerDependencies",
+  "pnpm",
+] as const;
 
 export const DEFAULT_GLOBAL_INVALIDATORS = [
   ".github/workflows/ci.yml",
   "eslint.config.js",
-  "package.json",
+  ROOT_PACKAGE_JSON_FULL_SCOPE_INVALIDATOR,
   "pnpm-workspace.yaml",
   "tsconfig.base.json",
   "tsconfig.json",
@@ -142,16 +156,87 @@ function collectManifestDependencyNames(manifest: PackageManifest): string[] {
   return dependencyGroups.flatMap((group) => Object.keys(group ?? {}));
 }
 
+async function resolveRepositoryPaths(workspaceRoot: string) {
+  const { stdout: repoRootStdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: workspaceRoot,
+  });
+  const repoRoot = await realpath(repoRootStdout.trim());
+  const normalizedWorkspaceRoot = await realpath(workspaceRoot);
+
+  return {
+    repoRoot,
+    workspaceRoot: normalizedWorkspaceRoot,
+    workspaceRootRelativePath: normalizePath(path.relative(repoRoot, normalizedWorkspaceRoot)),
+  };
+}
+
+function resolveRepoRelativePath(workspaceRelativePath: string, workspaceRootRelativePath: string): string {
+  if (workspaceRootRelativePath.length === 0) {
+    return workspaceRelativePath;
+  }
+
+  return normalizePath(path.posix.join(workspaceRootRelativePath, workspaceRelativePath));
+}
+
+async function readGitFileAtRef(ref: string, repoRelativePath: string, cwd: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync("git", ["show", `${ref}:${repoRelativePath}`], {
+      cwd,
+    });
+
+    return stdout;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "stderr" in error &&
+      typeof error.stderr === "string" &&
+      error.stderr.includes("exists on disk, but not in")
+    ) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function manifestFieldChanged(
+  previousManifest: PackageManifest,
+  nextManifest: PackageManifest,
+  field: (typeof ROOT_PACKAGE_JSON_RISKY_FIELDS)[number],
+): boolean {
+  return JSON.stringify(previousManifest[field] ?? null) !== JSON.stringify(nextManifest[field] ?? null);
+}
+
+async function shouldForceFullScopeForRootPackageJsonChange(options: {
+  baseRef: string;
+  headRef: string;
+  workspaceRoot: string;
+  workspaceRootRelativePath: string;
+}): Promise<boolean> {
+  const repoRelativePackageJsonPath = resolveRepoRelativePath("package.json", options.workspaceRootRelativePath);
+  const previousPackageJson = await readGitFileAtRef(
+    options.baseRef,
+    repoRelativePackageJsonPath,
+    options.workspaceRoot,
+  );
+  const nextPackageJson = await readGitFileAtRef(
+    options.headRef,
+    repoRelativePackageJsonPath,
+    options.workspaceRoot,
+  );
+  const previousManifest = previousPackageJson ? (JSON.parse(previousPackageJson) as PackageManifest) : {};
+  const nextManifest = nextPackageJson ? (JSON.parse(nextPackageJson) as PackageManifest) : {};
+
+  return ROOT_PACKAGE_JSON_RISKY_FIELDS.some((field) =>
+    manifestFieldChanged(previousManifest, nextManifest, field),
+  );
+}
+
 export async function listChangedFilesFromGit(
   options: ChangedFilesFromGitOptions,
 ): Promise<string[]> {
   const headRef = options.headRef ?? "HEAD";
-  const { stdout: repoRootStdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], {
-    cwd: options.workspaceRoot,
-  });
-  const repoRoot = await realpath(repoRootStdout.trim());
-  const workspaceRoot = await realpath(options.workspaceRoot);
-  const workspaceRootRelativePath = normalizePath(path.relative(repoRoot, workspaceRoot));
+  const repositoryPaths = await resolveRepositoryPaths(options.workspaceRoot);
   const { stdout } = await execFileAsync(
     "git",
     ["diff", "--name-only", `${options.baseRef}...${headRef}`],
@@ -160,11 +245,25 @@ export async function listChangedFilesFromGit(
     },
   );
 
-  return stdout
+  const changedFiles = stdout
     .split(/\r?\n/u)
     .map(normalizePath)
-    .map((changedFile) => relativizeToWorkspaceRoot(changedFile, workspaceRootRelativePath))
+    .map((changedFile) => relativizeToWorkspaceRoot(changedFile, repositoryPaths.workspaceRootRelativePath))
     .filter((changedFile) => changedFile.length > 0);
+
+  if (
+    changedFiles.includes("package.json") &&
+    await shouldForceFullScopeForRootPackageJsonChange({
+      baseRef: options.baseRef,
+      headRef,
+      workspaceRoot: repositoryPaths.workspaceRoot,
+      workspaceRootRelativePath: repositoryPaths.workspaceRootRelativePath,
+    })
+  ) {
+    return [...changedFiles, ROOT_PACKAGE_JSON_FULL_SCOPE_INVALIDATOR];
+  }
+
+  return changedFiles;
 }
 
 export async function discoverWorkspacePackages(workspaceRoot: string): Promise<WorkspacePackage[]> {
