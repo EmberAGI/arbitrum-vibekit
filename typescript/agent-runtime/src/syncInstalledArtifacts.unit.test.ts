@@ -172,4 +172,21 @@ describe('syncInstalledArtifacts', () => {
 
     expect(scriptSource.includes("path.join('lib', 'postgres', 'dist')")).toBe(true);
   });
+
+  it('serializes the agent-runtime build before compiling and syncing artifacts', () => {
+    const packageJson = JSON.parse(
+      readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8'),
+    ) as { scripts?: Record<string, string> };
+    const scriptSource = readFileSync(
+      path.resolve(import.meta.dirname, '../scripts/build-with-lock.mjs'),
+      'utf8',
+    );
+
+    expect(packageJson.scripts?.build).toBe('node ./scripts/build-with-lock.mjs');
+    expect(packageJson.scripts).not.toHaveProperty('prebuild');
+    expect(scriptSource).toContain('agent-runtime-build.sync-lock');
+    expect(scriptSource).toContain("'pnpm', ['build:deps']");
+    expect(scriptSource).toContain("'pnpm', ['exec', 'tsc', '--project', 'tsconfig.json']");
+    expect(scriptSource).toContain("'node', ['./scripts/sync-installed-artifacts.mjs']");
+  });
 });
