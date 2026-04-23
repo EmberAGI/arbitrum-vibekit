@@ -24,7 +24,7 @@
     "lint:root": "pnpm exec eslint src tests --ext .ts",
     "test": "pnpm run test:ci",
     "test:ci": "pnpm run test:ci:root && pnpm --filter '!monorepo-root' --workspace-concurrency=1 --sort run test:ci && pnpm run test:anvil",
-    "test:ci:root": "pnpm test:vitest src/ci/affected-packages.unit.test.ts tests/ci/detect-affected-packages.int.test.ts tests/ci/run-affected-command.int.test.ts",
+    "test:ci:root": "pnpm test:vitest src/ci/affected-packages.unit.test.ts tests/ci/detect-affected-packages.int.test.ts tests/ci/run-affected-command.int.test.ts tests/ci/release-workflow-config.int.test.ts tests/ci/detect-release-targets.int.test.ts",
     "test:anvil": "echo \"Skipping Anvil-dependent test suites in CI\"",
     "test:vitest": "vitest run",
     "lint:require-submodule": "./scripts/require-submodule.sh",

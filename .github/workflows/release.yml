@@ -19,13 +19,6 @@ on:
     branches:
       - main
       - next
-    paths:
-      - "typescript/lib/agent-node/**"
-      - "typescript/onchain-actions-plugins/registry/**"
-      - "typescript/scripts/**"
-      - "typescript/release/**"
-      - "typescript/.multi-releaserc.cjs"
-      - ".github/workflows/release.yml"
 
 permissions:
   contents: write
@@ -51,12 +44,6 @@ jobs:
         with:
           node-version: 24.10.0
           registry-url: https://registry.npmjs.org
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
       - name: Determine release targets
         id: targets
         env:
