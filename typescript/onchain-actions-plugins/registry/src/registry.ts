@@ -48,6 +48,14 @@ export class PublicEmberPluginRegistry {
   }
 
   /**
+   * Returns the lifecycle capability registered for a provider id, if present.
+   * @param providerId Provider/plugin id to look up.
+   */
+  public getLifecycleCapability(providerId: string): LifecycleCapability | undefined {
+    return this.lifecycleCapabilities.get(providerId);
+  }
+
+  /**
    * Iterator for the registered Ember plugins.
    */
   public async *getPlugins(): AsyncIterable<EmberPlugin<PluginType>> {
