@@ -171,17 +171,17 @@ function buildProjectionTopbarView(
     metrics: [
       {
         label: 'Gross exposure',
-        value: formatUsdCompact(portfolio.summary.grossExposureUsd),
-        positiveAssetsValue: formatUsdCompact(portfolio.summary.positiveAssetsUsd),
-        liabilitiesValue: formatUsdCompact(portfolio.summary.liabilitiesUsd),
+        value: formatUsd(portfolio.summary.grossExposureUsd),
+        positiveAssetsValue: formatUsd(portfolio.summary.positiveAssetsUsd),
+        liabilitiesValue: formatUsd(portfolio.summary.liabilitiesUsd),
       },
       {
         label: 'Net worth',
-        value: formatUsdCompact(portfolio.summary.netWorthUsd),
+        value: formatUsd(portfolio.summary.netWorthUsd),
       },
       {
         label: 'Unallocated',
-        value: formatUsdCompact(portfolio.accounting.availableCashUsd),
+        value: formatUsd(portfolio.accounting.availableCashUsd),
         valueClassName: 'text-[#0F5A38]',
       },
     ],
@@ -532,17 +532,17 @@ function buildLegacyWalletDashboardView(portfolio: WalletPortfolioView): WalletD
       metrics: [
         {
           label: 'Gross exposure',
-          value: formatUsdCompact(grossExposureUsd),
-          positiveAssetsValue: formatUsdCompact(positiveAssetsUsd),
-          liabilitiesValue: formatUsdCompact(liabilitiesUsd),
+          value: formatUsd(grossExposureUsd),
+          positiveAssetsValue: formatUsd(positiveAssetsUsd),
+          liabilitiesValue: formatUsd(liabilitiesUsd),
         },
         {
           label: 'Net worth',
-          value: formatUsdCompact(netWorthUsd),
+          value: formatUsd(netWorthUsd),
         },
         {
           label: 'Unallocated',
-          value: formatUsdCompact(cashUsd),
+          value: formatUsd(cashUsd),
           valueClassName: 'text-[#0F5A38]',
         },
       ],
@@ -856,6 +856,15 @@ function formatUsdCompact(value: number): string {
     currency: 'USD',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatUsd(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 

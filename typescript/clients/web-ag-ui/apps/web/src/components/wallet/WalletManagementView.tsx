@@ -50,24 +50,26 @@ export function WalletManagementView(props: WalletManagementViewProps): React.JS
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-6 px-0 pt-0 pb-6">
       <PortfolioDashboardTopBar view={dashboardView.topbar} />
-      <WalletContentsWorkbench view={dashboardView.contents} />
+      <div className="space-y-6 px-4 pb-6 sm:px-6">
+        <WalletContentsWorkbench view={dashboardView.contents} />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
-        <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
-          <div className="space-y-6">
-            <AssetsWidget view={dashboardView} />
-            <AccountingWidget view={dashboardView} />
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
+          <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
+            <div className="space-y-6">
+              <AssetsWidget view={dashboardView} />
+              <AccountingWidget view={dashboardView} />
+            </div>
+            <WalletPortfolioPanel balances={props.portfolio.balances} positions={props.portfolio.positions} />
           </div>
-          <WalletPortfolioPanel balances={props.portfolio.balances} positions={props.portfolio.positions} />
-        </div>
 
-        <WalletWithdrawPanel
-          sourceAddress={props.walletAddress}
-          connectedDestinationAddress={props.connectedDestinationAddress}
-          walletClient={props.walletClient}
-          balances={props.portfolio.balances}
-          onWithdrawConfirmed={props.onWithdrawConfirmed}
-        />
+          <WalletWithdrawPanel
+            sourceAddress={props.walletAddress}
+            connectedDestinationAddress={props.connectedDestinationAddress}
+            walletClient={props.walletClient}
+            balances={props.portfolio.balances}
+            onWithdrawConfirmed={props.onWithdrawConfirmed}
+          />
+        </div>
       </div>
     </div>
   );

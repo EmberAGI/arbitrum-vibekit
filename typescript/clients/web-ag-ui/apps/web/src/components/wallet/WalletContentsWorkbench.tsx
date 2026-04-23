@@ -34,10 +34,10 @@ export function WalletContentsWorkbench(props: {
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-4">
-            <SummaryStat label="Exposure" value={formatCompactUsd(props.view.summary.grossExposureUsd)} />
-            <SummaryStat label="In wallet" value={formatCompactUsd(props.view.summary.walletUsd)} />
-            <SummaryStat label="Deployed" value={formatCompactUsd(props.view.summary.deployedUsd)} />
-            <SummaryStat label="Owed" value={formatCompactUsd(props.view.summary.owedUsd)} tone="owed" />
+            <SummaryStat label="Exposure" value={formatUsd(props.view.summary.grossExposureUsd)} />
+            <SummaryStat label="In wallet" value={formatUsd(props.view.summary.walletUsd)} />
+            <SummaryStat label="Deployed" value={formatUsd(props.view.summary.deployedUsd)} />
+            <SummaryStat label="Owed" value={formatUsd(props.view.summary.owedUsd)} tone="owed" />
           </div>
         </div>
         <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#E9DED4]">
@@ -65,7 +65,7 @@ export function WalletContentsWorkbench(props: {
                 style={{ backgroundColor: segment.colorHex }}
               />
               <span>{segment.label}</span>
-              <span>{formatCompactUsd(segment.valueUsd)}</span>
+              <span>{formatUsd(segment.valueUsd)}</span>
             </div>
           ))}
           <div className="inline-flex items-center gap-1.5 rounded-full border border-[#E7DBD0] bg-[#FCF5EC] px-2 py-1">
@@ -131,7 +131,7 @@ function FeaturedFamilyCard(props: {
             {props.family.label}
           </div>
           <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8C7F72]">
-            {formatCompactUsd(props.family.grossExposureUsd)} gross
+            {formatUsd(props.family.grossExposureUsd)} gross
           </div>
         </div>
         <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8C7F72]">
@@ -186,7 +186,7 @@ function FeaturedFamilyCard(props: {
                 <span className="truncate text-sm text-[#3C2A21]">{line.label}</span>
               </div>
               <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.12em] text-[#8C7F72]">
-                {formatCompactUsd(line.valueUsd)}
+                {formatUsd(line.valueUsd)}
               </span>
             </div>
           );
@@ -210,7 +210,7 @@ function TailFamilyRow(props: {
         </div>
       </div>
       <div className="shrink-0 font-mono text-[11px] uppercase tracking-[0.14em] text-[#8C7F72]">
-        {formatCompactUsd(props.family.grossExposureUsd)} gross
+        {formatUsd(props.family.grossExposureUsd)} gross
       </div>
     </div>
   );
@@ -234,33 +234,18 @@ function MetricChip(props: {
       }`}
     >
       <span>{props.label}</span>
-      <span>{formatCompactUsd(props.value)}</span>
+      <span>{formatUsd(props.value)}</span>
     </span>
   );
 }
 
-function formatCompactUsd(value: number): string {
-  if (value >= 1_000_000) {
-    return `$${formatNumber(value / 1_000_000)}M`;
-  }
-
-  if (value >= 1_000) {
-    return `$${formatNumber(value / 1_000)}k`;
-  }
-
+function formatUsd(value: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
-}
-
-function formatNumber(value: number): string {
-  return value
-    .toFixed(1)
-    .replace(/\.0$/, '')
-    .replace(/(\.\d*[1-9])0+$/, '$1');
 }
 
 function formatPercent(value: number): string {

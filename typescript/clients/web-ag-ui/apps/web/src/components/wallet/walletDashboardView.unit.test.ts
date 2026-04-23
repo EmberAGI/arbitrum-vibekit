@@ -72,6 +72,22 @@ describe('wallet dashboard view', () => {
       'Net worth',
       'Unallocated',
     ]);
+    expect(view.topbar.metrics).toMatchObject([
+      {
+        label: 'Gross exposure',
+        value: '$2,800.00',
+        positiveAssetsValue: '$2,700.00',
+        liabilitiesValue: '$100.00',
+      },
+      {
+        label: 'Net worth',
+        value: '$2,600.00',
+      },
+      {
+        label: 'Unallocated',
+        value: '$2,000.00',
+      },
+    ]);
     expect(view.accounting.segments.map((segment) => [segment.label, segment.valueUsd])).toEqual([
       ['Cash', 2_000],
       ['Assets', 700],
@@ -252,7 +268,7 @@ describe('wallet dashboard view', () => {
     ]);
     expect(view.topbar.metrics[2]).toMatchObject({
       label: 'Unallocated',
-      value: '$15',
+      value: '$15.00',
     });
     expect(view.accounting.segments.map((segment) => [segment.label, segment.valueUsd])).toEqual([
       ['Cash', 40],
