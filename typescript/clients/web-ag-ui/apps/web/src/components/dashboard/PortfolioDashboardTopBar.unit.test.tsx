@@ -45,16 +45,19 @@ describe('PortfolioDashboardTopBar', () => {
     expect(html).toContain('self-center');
     expect(html).toContain('xl:grid-cols-[repeat(3,minmax(0,1fr))_auto]');
     expect(html).not.toContain('>Soon<');
-    expect(html).toContain('Preview benchmark options');
+    expect(html).toContain('Selected Benchmark');
     expect(html).toContain('rounded-[20px] border border-[#eadac7] bg-[#fffdf8]/98');
     expect(html).toContain('pointer-events-auto');
     expect(html).toContain("before:-top-2");
     expect(html).toContain("before:h-2");
     expect(html).toContain('group-hover/benchmark:opacity-100');
     expect(html).toContain('group-focus-within/benchmark:opacity-100');
-    expect(html).toContain('Preview only');
+    expect(html).toContain('Pro Only');
     expect(html).toContain('hover:border-[#E8C9AA]');
     expect(html).toContain('hover:bg-[#FFF7F2]');
     expect(html).not.toContain('Benchmark switching is coming soon.');
+    expect(html).toContain(
+      'The benchmark is the reference asset you compare this portfolio against to see whether active management is outperforming simple USDC exposure.',
+    );
   });
 });

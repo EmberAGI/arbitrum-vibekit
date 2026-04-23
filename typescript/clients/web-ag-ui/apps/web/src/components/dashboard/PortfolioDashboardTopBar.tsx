@@ -83,10 +83,10 @@ function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8C7F72]">
-              Preview benchmark options
+              Selected Benchmark
             </div>
             <div className="rounded-full bg-[#fff0e6] px-2 py-0.5 text-[11px] font-medium text-[#b84f2c] ring-1 ring-[#f3d5c5]">
-              Preview only
+              Pro Only
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -95,7 +95,8 @@ function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
             ))}
           </div>
           <div className="rounded-[16px] border border-dashed border-[#d8c3ad] bg-[#fffaf2] px-3 py-3 text-[13px] text-[#7c6757]">
-            This preview mirrors the mandate selector style without being live yet.
+            The benchmark is the reference asset you compare this portfolio against to see whether active management is outperforming simple{' '}
+            {props.benchmarkAssetLabel} exposure.
           </div>
         </div>
       </div>
