@@ -48,7 +48,9 @@ describe('PortfolioDashboardTopBar', () => {
     expect(html).toContain('Selected Benchmark');
     expect(html).toContain('rounded-[20px] border border-[#eadac7] bg-[#fffdf8]/98');
     expect(html).toContain('rounded-b-[24px] rounded-t-none');
-    expect(html).toContain('pointer-events-auto');
+    expect(html).toContain('pointer-events-none');
+    expect(html).toContain('group-hover/benchmark:pointer-events-auto');
+    expect(html).toContain('group-focus-within/benchmark:pointer-events-auto');
     expect(html).toContain("before:-top-2");
     expect(html).toContain("before:h-2");
     expect(html).toContain('group-hover/benchmark:opacity-100');
