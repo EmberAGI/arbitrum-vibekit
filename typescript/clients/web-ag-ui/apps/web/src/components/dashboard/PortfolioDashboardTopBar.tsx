@@ -60,7 +60,9 @@ function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
 export function PortfolioDashboardTopBar(props: {
   view: DashboardTopbarView;
 }): React.JSX.Element {
-  const gridClassName = props.view.benchmarkAssetLabel ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-2 xl:grid-cols-3';
+  const gridClassName = props.view.benchmarkAssetLabel
+    ? 'sm:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto]'
+    : 'sm:grid-cols-2 xl:grid-cols-3';
 
   return (
     <section className="rounded-[24px] border border-[#E4D5C7] bg-[#EFE5DA] px-4 py-3 shadow-[0_12px_28px_rgba(68,46,21,0.08)] md:px-5">

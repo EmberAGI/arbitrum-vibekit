@@ -40,6 +40,7 @@ describe('PortfolioDashboardTopBar', () => {
     expect(html).toContain('type="button"');
     expect(html).toContain('title="Benchmark switching coming soon"');
     expect(html).toContain('self-center');
+    expect(html).toContain('xl:grid-cols-[repeat(3,minmax(0,1fr))_auto]');
     expect(html).toContain('hover:border-[#E8C9AA]');
     expect(html).toContain('hover:bg-[#FFF7F2]');
   });
