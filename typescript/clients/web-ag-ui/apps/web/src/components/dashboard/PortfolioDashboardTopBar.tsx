@@ -95,7 +95,7 @@ function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
             ))}
           </div>
           <div className="text-[13px] leading-5 text-[#7c6757]">
-            It gives you a quick baseline, so you can tell if active management is helping.
+            The benchmark is the reference asset you compare this portfolio against to measure performance.
           </div>
         </div>
       </div>
