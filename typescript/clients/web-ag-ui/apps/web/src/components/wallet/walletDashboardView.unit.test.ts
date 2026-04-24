@@ -363,4 +363,82 @@ describe('wallet dashboard view', () => {
     });
     expect(wbtcTreemapItem?.hoverChildren?.map((item) => item.label)).toEqual(['Wallet WBTC']);
   });
+
+  it('uses economic exposure quantities for Aave wrapper position cards', () => {
+    const portfolioProjection = buildPortfolioProjection({
+      benchmarkAsset: 'USD',
+      walletContents: [],
+      reservations: [],
+      ownedUnits: [],
+      activePositionScopes: [
+        {
+          scopeId: 'position-scope-aave-arbitrum-wallet',
+          kind: 'lending-position',
+          network: 'arbitrum',
+          protocolSystem: 'aave',
+          containerRef: 'aave:position-scope-aave-arbitrum-wallet',
+          status: 'active',
+          members: [
+            {
+              memberId: 'aave-weth-collateral',
+              role: 'collateral',
+              asset: 'aArbWETH',
+              quantity: '20776430481205574',
+              valueUsd: 48.070624975982546,
+              economicExposures: [
+                {
+                  asset: 'WETH',
+                  quantity: '0.020776430517459555',
+                },
+              ],
+              state: {
+                withdrawableQuantity: '0.0198384825984434',
+              },
+            },
+            {
+              memberId: 'aave-native-usdc-collateral',
+              role: 'collateral',
+              asset: 'aArbUSDCn',
+              quantity: '8244483',
+              valueUsd: 8.24315860625088,
+              economicExposures: [
+                {
+                  asset: 'USDC',
+                  quantity: '8.244483',
+                },
+              ],
+              state: {
+                withdrawableQuantity: '7.872287',
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const view = buildWalletDashboardView({
+      portfolioProjection,
+      portfolioProjectionInput: {
+        benchmarkAsset: 'USD',
+        walletContents: [],
+        reservations: [],
+        ownedUnits: [],
+        activePositionScopes: [],
+      },
+    });
+
+    const wethFamily = view.contents.families.find((family) => family.label === 'WETH');
+    const usdcFamily = view.contents.families.find((family) => family.label === 'USDC');
+
+    expect(wethFamily?.observedAssets[0]).toMatchObject({
+      asset: 'aArbWETH',
+      quantity: 0.020776430517459555,
+      valueUsd: 48.070624975982546,
+    });
+    expect(usdcFamily?.observedAssets[0]).toMatchObject({
+      asset: 'aArbUSDCn',
+      quantity: 8.244483,
+      valueUsd: 8.24315860625088,
+    });
+  });
 });

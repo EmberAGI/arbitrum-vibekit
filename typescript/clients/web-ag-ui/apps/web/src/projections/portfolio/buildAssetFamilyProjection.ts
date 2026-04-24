@@ -98,6 +98,8 @@ function buildPositionObservedAssetProjection(input: {
   member: ActivePositionScopeMemberInput;
   cashFamilyAsset?: string;
 }): ObservedAssetProjection {
+  const primaryEconomicExposure =
+    input.member.economicExposures.length === 1 ? input.member.economicExposures[0] : null;
   const familyAsset = deriveFamilyAsset({
     asset: input.member.asset,
     economicExposures: input.member.economicExposures,
@@ -117,7 +119,7 @@ function buildPositionObservedAssetProjection(input: {
     asset: input.member.asset,
     familyAsset,
     network: input.scope.network,
-    quantity: parseQuantity(input.member.quantity),
+    quantity: parseQuantity(primaryEconomicExposure?.quantity ?? input.member.quantity),
     valueUsd: input.member.valueUsd,
     sourceKind,
     semanticClass: semantic.semanticClass,
