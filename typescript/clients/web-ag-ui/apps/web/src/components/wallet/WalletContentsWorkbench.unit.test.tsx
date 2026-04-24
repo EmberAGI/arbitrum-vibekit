@@ -70,14 +70,15 @@ describe('WalletContentsWorkbench', () => {
                   commitments: [],
                 },
                 {
-                  asset: 'variableDebtUSDC',
-                  familyAsset: 'USDC',
-                  quantity: 12,
-                  valueUsd: 12,
+                  asset: 'WBTC',
+                  familyAsset: 'WBTC',
+                  quantity: 2731,
+                  displayQuantity: '0.00002731',
+                  valueUsd: 2.104561,
                   sourceKind: 'debt',
                   protocolSystem: 'aave',
                   scopeKind: 'lending-position',
-                  economicExposures: [{ asset: 'USDC', quantity: '12' }],
+                  economicExposures: [{ asset: 'WBTC', quantity: '2731' }],
                   commitments: [],
                 },
               ],
@@ -131,14 +132,15 @@ describe('WalletContentsWorkbench', () => {
                   commitments: [],
                 },
                 {
-                  asset: 'variableDebtUSDC',
-                  familyAsset: 'USDC',
-                  quantity: 12,
-                  valueUsd: 12,
+                  asset: 'WBTC',
+                  familyAsset: 'WBTC',
+                  quantity: 2731,
+                  displayQuantity: '0.00002731',
+                  valueUsd: 2.104561,
                   sourceKind: 'debt',
                   protocolSystem: 'aave',
                   scopeKind: 'lending-position',
-                  economicExposures: [{ asset: 'USDC', quantity: '12' }],
+                  economicExposures: [{ asset: 'WBTC', quantity: '2731' }],
                   commitments: [],
                 },
               ],
@@ -163,6 +165,7 @@ describe('WalletContentsWorkbench', () => {
     expect(html).toContain('$1,259.35');
     expect(html).toContain('$1,135.95');
     expect(html).toContain('$12.00');
+    expect(html).toContain('0.000027');
     expect(html).not.toContain('>$23<');
     expect(html).not.toContain('>$100<');
     expect(html).not.toContain('>$123<');

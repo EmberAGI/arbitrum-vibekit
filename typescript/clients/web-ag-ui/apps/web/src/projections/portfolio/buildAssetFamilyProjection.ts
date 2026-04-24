@@ -79,6 +79,7 @@ function buildWalletObservedAssetProjections(params: {
       familyAsset,
       network: entry.network,
       quantity,
+      ...(entry.displayQuantity !== undefined ? { displayQuantity: entry.displayQuantity } : {}),
       valueUsd: entry.valueUsd,
       sourceKind: 'wallet',
       semanticClass: semantic.semanticClass,
@@ -98,8 +99,6 @@ function buildPositionObservedAssetProjection(input: {
   member: ActivePositionScopeMemberInput;
   cashFamilyAsset?: string;
 }): ObservedAssetProjection {
-  const primaryEconomicExposure =
-    input.member.economicExposures.length === 1 ? input.member.economicExposures[0] : null;
   const familyAsset = deriveFamilyAsset({
     asset: input.member.asset,
     economicExposures: input.member.economicExposures,
@@ -119,7 +118,8 @@ function buildPositionObservedAssetProjection(input: {
     asset: input.member.asset,
     familyAsset,
     network: input.scope.network,
-    quantity: parseQuantity(primaryEconomicExposure?.quantity ?? input.member.quantity),
+    quantity: parseQuantity(input.member.quantity),
+    ...(input.member.displayQuantity !== undefined ? { displayQuantity: input.member.displayQuantity } : {}),
     valueUsd: input.member.valueUsd,
     sourceKind,
     semanticClass: semantic.semanticClass,

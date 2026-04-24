@@ -9,6 +9,7 @@ export const walletContentInputSchema = z.object({
   asset: z.string().min(1),
   network: z.string().min(1),
   quantity: z.string().min(1),
+  displayQuantity: z.string().min(1).optional(),
   valueUsd: z.number(),
   economicExposures: z.array(economicExposureInputSchema).optional(),
 });
@@ -50,6 +51,7 @@ export const activePositionScopeMemberInputSchema = z.object({
   role: z.enum(['collateral', 'debt']),
   asset: z.string().min(1),
   quantity: z.string().min(1),
+  displayQuantity: z.string().min(1).optional(),
   valueUsd: z.number(),
   economicExposures: z.array(economicExposureInputSchema),
   state: activePositionScopeMemberStateInputSchema,

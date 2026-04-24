@@ -5,7 +5,7 @@ import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 import { signPreparedDelegation } from 'agent-runtime/internal';
 import { getDeleGatorEnvironment, ROOT_AUTHORITY } from '@metamask/delegation-toolkit';
 import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
-import { keccak256, toHex } from 'viem';
+import { formatUnits, keccak256, toHex } from 'viem';
 import {
   buildPortfolioManagerWalletAccountingDetails,
   buildSharedEmberAccountingContextXml,
@@ -684,6 +684,7 @@ type PortfolioProjectionWalletContentInput = {
   asset: string;
   network: string;
   quantity: string;
+  displayQuantity?: string;
   valueUsd: number;
   economicExposures?: PortfolioProjectionEconomicExposureInput[];
 };
@@ -719,6 +720,7 @@ type PortfolioProjectionActivePositionScopeMemberInput = {
   role: 'collateral' | 'debt';
   asset: string;
   quantity: string;
+  displayQuantity?: string;
   valueUsd: number;
   economicExposures: PortfolioProjectionEconomicExposureInput[];
   state: {
@@ -972,6 +974,46 @@ function readNumberLike(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const TOKEN_DECIMALS_BY_ASSET = new Map<string, number>([
+  ['ETH', 18],
+  ['WETH', 18],
+  ['USDC', 6],
+  ['USDCN', 6],
+  ['USDT', 6],
+  ['WBTC', 8],
+]);
+
+function normalizeAssetForDisplayDecimals(asset: string): string {
+  const upperAsset = asset.toUpperCase();
+  if (upperAsset.startsWith('AARB')) {
+    return upperAsset.slice('AARB'.length);
+  }
+  if (upperAsset.startsWith('VARIABLEDEBT')) {
+    return upperAsset.slice('VARIABLEDEBT'.length);
+  }
+  if (upperAsset.startsWith('STABLEDEBT')) {
+    return upperAsset.slice('STABLEDEBT'.length);
+  }
+  return upperAsset;
+}
+
+function buildTokenDisplayQuantity(input: {
+  asset: string;
+  quantity: string;
+  explicitDisplayQuantity?: string | null;
+}): string | undefined {
+  if (input.explicitDisplayQuantity) {
+    return input.explicitDisplayQuantity;
+  }
+
+  if (!/^\d+$/.test(input.quantity)) {
+    return input.quantity;
+  }
+
+  const decimals = TOKEN_DECIMALS_BY_ASSET.get(normalizeAssetForDisplayDecimals(input.asset));
+  return decimals === undefined ? undefined : formatUnits(BigInt(input.quantity), decimals);
+}
+
 function readEconomicExposureInputs(value: unknown): PortfolioProjectionEconomicExposureInput[] {
   return readRecordArray(value)
     .map((entry) => {
@@ -1097,11 +1139,17 @@ function buildPortfolioProjectionWalletContents(
       }
 
       const economicExposures = readEconomicExposureInputs(entry['economic_exposures']);
+      const displayQuantity = buildTokenDisplayQuantity({
+        asset,
+        quantity,
+        explicitDisplayQuantity: readString(entry['display_quantity']) ?? readString(entry['displayQuantity']),
+      });
 
       return {
         asset,
         network: readString(entry['network']) ?? PORTFOLIO_MANAGER_NETWORK,
         quantity,
+        ...(displayQuantity !== undefined ? { displayQuantity } : {}),
         valueUsd,
         ...(economicExposures.length > 0 ? { economicExposures } : {}),
       };
@@ -1131,12 +1179,19 @@ function buildPortfolioProjectionActivePositionScopes(
           }
 
           const memberState = isRecord(member['state']) ? member['state'] : null;
+          const displayQuantity = buildTokenDisplayQuantity({
+            asset,
+            quantity,
+            explicitDisplayQuantity:
+              readString(member['display_quantity']) ?? readString(member['displayQuantity']),
+          });
 
           return {
             memberId,
             role: readString(member['role']) === 'debt' ? 'debt' : 'collateral',
             asset,
             quantity,
+            ...(displayQuantity !== undefined ? { displayQuantity } : {}),
             valueUsd,
             economicExposures: readEconomicExposureInputs(member['economic_exposures']),
             state: {

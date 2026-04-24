@@ -384,6 +384,7 @@ describe('wallet dashboard view', () => {
               role: 'collateral',
               asset: 'aArbWETH',
               quantity: '20776430481205574',
+              displayQuantity: '0.020776430481205574',
               valueUsd: 48.070624975982546,
               economicExposures: [
                 {
@@ -400,6 +401,7 @@ describe('wallet dashboard view', () => {
               role: 'collateral',
               asset: 'aArbUSDCn',
               quantity: '8244483',
+              displayQuantity: '8.244483',
               valueUsd: 8.24315860625088,
               economicExposures: [
                 {
@@ -432,12 +434,14 @@ describe('wallet dashboard view', () => {
 
     expect(wethFamily?.observedAssets[0]).toMatchObject({
       asset: 'aArbWETH',
-      quantity: 0.020776430517459555,
+      quantity: 20776430481205576,
+      displayQuantity: '0.020776430481205574',
       valueUsd: 48.070624975982546,
     });
     expect(usdcFamily?.observedAssets[0]).toMatchObject({
       asset: 'aArbUSDCn',
-      quantity: 8.244483,
+      quantity: 8244483,
+      displayQuantity: '8.244483',
       valueUsd: 8.24315860625088,
     });
   });

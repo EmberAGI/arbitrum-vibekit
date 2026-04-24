@@ -18,11 +18,26 @@ function formatUsd(value: number): string {
   }).format(value);
 }
 
-function formatQuantity(value: number): string {
+function resolveDisplayQuantityDivisor(observedAsset: WalletContentsObservedAssetView): number {
+  const displayQuantity =
+    observedAsset.displayQuantity === undefined ? null : Number(observedAsset.displayQuantity);
+  if (
+    displayQuantity === null ||
+    !Number.isFinite(displayQuantity) ||
+    displayQuantity <= 0 ||
+    observedAsset.quantity <= 0
+  ) {
+    return 1;
+  }
+
+  return observedAsset.quantity / displayQuantity;
+}
+
+function formatQuantity(value: number, divisor = 1): string {
   return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: value >= 100 ? 0 : value >= 10 ? 2 : 3,
-    maximumFractionDigits: value >= 100 ? 0 : value >= 10 ? 2 : 3,
-  }).format(value);
+    minimumFractionDigits: 6,
+    maximumFractionDigits: 6,
+  }).format(value / divisor);
 }
 
 function formatPercent(value: number): string {
@@ -193,6 +208,7 @@ function FamilyCompositionBar(props: {
 function WalletAgentAllocationBar(props: {
   observedAsset: WalletContentsObservedAssetView;
 }): React.JSX.Element | null {
+  const displayQuantityDivisor = resolveDisplayQuantityDivisor(props.observedAsset);
   const blueClassNames = ['bg-[#8EB5FF]', 'bg-[#6C97FF]', 'bg-[#4E78F4]', 'bg-[#335BD1]'];
   const agentEntries = Array.from(
     props.observedAsset.commitments.reduce((groups, commitment) => {
@@ -222,7 +238,9 @@ function WalletAgentAllocationBar(props: {
             label: 'Unmanaged',
             value: props.observedAsset.availableQuantity,
             className: 'bg-[#A7F3D0]',
-            title: `Unmanaged ${formatQuantity(props.observedAsset.availableQuantity)} ${props.observedAsset.asset}`,
+            title: `Unmanaged ${formatQuantity(props.observedAsset.availableQuantity, displayQuantityDivisor)} ${
+              props.observedAsset.asset
+            }`,
           },
         ]
       : []),
@@ -231,7 +249,9 @@ function WalletAgentAllocationBar(props: {
       label: entry.agentLabel,
       value: entry.quantity,
       className: entry.className,
-      title: `${entry.agentLabel} ${formatQuantity(entry.quantity)} ${props.observedAsset.asset}`,
+      title: `${entry.agentLabel} ${formatQuantity(entry.quantity, displayQuantityDivisor)} ${
+        props.observedAsset.asset
+      }`,
     })),
   ];
   const total = segments.reduce((sum, segment) => sum + segment.value, 0);
@@ -257,7 +277,7 @@ function WalletAgentAllocationBar(props: {
           <span key={`${segment.key}-legend-${index}`} className="inline-flex items-center gap-1.5">
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${segment.className}`} />
             <span>
-              {segment.label} {formatQuantity(segment.value)}
+              {segment.label} {formatQuantity(segment.value, displayQuantityDivisor)}
             </span>
           </span>
         ))}
@@ -269,6 +289,7 @@ function WalletAgentAllocationBar(props: {
 function PositionScopeAllocationBar(props: {
   observedAsset: WalletContentsObservedAssetView;
 }): React.JSX.Element {
+  const displayQuantityDivisor = resolveDisplayQuantityDivisor(props.observedAsset);
   const label = `${formatProtocolSystem(props.observedAsset.protocolSystem)} / ${formatScopeKind(
     props.observedAsset.scopeKind,
   )}`;
@@ -278,14 +299,16 @@ function PositionScopeAllocationBar(props: {
       <div className="flex h-1.5 overflow-hidden rounded-full bg-[#E9DED4]">
         <span
           className="w-full bg-[#6C97FF]"
-          title={`${label} ${formatQuantity(props.observedAsset.quantity)} ${props.observedAsset.asset}`}
+          title={`${label} ${formatQuantity(props.observedAsset.quantity, displayQuantityDivisor)} ${
+            props.observedAsset.asset
+          }`}
         />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#8C7F72]">
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#6C97FF]" />
           <span>
-            {label} {formatQuantity(props.observedAsset.quantity)}
+            {label} {formatQuantity(props.observedAsset.quantity, displayQuantityDivisor)}
           </span>
         </span>
       </div>
@@ -298,6 +321,7 @@ function ObservedAssetBreakdown(props: {
   index: number;
 }): React.JSX.Element {
   const zebraClassName = props.index % 2 === 0 ? 'bg-[#FFF9F2]' : 'bg-[#FCF5EC]';
+  const displayQuantityDivisor = resolveDisplayQuantityDivisor(props.observedAsset);
 
   return (
     <div className={`${zebraClassName} px-4 py-3`}>
@@ -323,7 +347,7 @@ function ObservedAssetBreakdown(props: {
             {formatUsd(props.observedAsset.valueUsd)}
           </div>
           <div className="mt-1 text-[11px] text-[#8C7F72]">
-            {formatQuantity(props.observedAsset.quantity)} {props.observedAsset.asset}
+            {formatQuantity(props.observedAsset.quantity, displayQuantityDivisor)} {props.observedAsset.asset}
           </div>
         </div>
       </div>

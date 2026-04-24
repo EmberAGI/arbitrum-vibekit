@@ -73,6 +73,7 @@ export type WalletContentsObservedAssetView = {
   asset: string;
   familyAsset: string;
   quantity: number;
+  displayQuantity?: string;
   valueUsd: number;
   sourceKind: 'wallet' | 'position' | 'debt';
   protocolSystem?: string;
@@ -341,6 +342,9 @@ function buildProjectionFamilyView(
       asset: observedAsset.asset,
       familyAsset: observedAsset.familyAsset,
       quantity: observedAsset.quantity,
+      ...(observedAsset.displayQuantity !== undefined
+        ? { displayQuantity: observedAsset.displayQuantity }
+        : {}),
       valueUsd: observedAsset.valueUsd,
       sourceKind: observedAsset.sourceKind,
       protocolSystem: observedAsset.protocolSystem,
