@@ -59,6 +59,20 @@ type OnchainActionsSwapResponse = {
   transactions: OnchainActionsTransactionRequest[];
 };
 
+type OnchainActionsTokensPage = {
+  tokens: OnchainActionsToken[];
+  currentPage?: number;
+  totalPages?: number;
+};
+
+type PreparedOcaSwapPayload = {
+  transactionPayloadRef: string;
+  canonicalUnsignedPayloadRef: string;
+  chainId: string;
+  network: string;
+  transactions: OnchainActionsTransactionRequest[];
+};
+
 export type HiddenOcaReservationConflictHandling =
   | {
       kind: 'allow_reserved_for_other_agent';
@@ -129,6 +143,7 @@ export type HiddenOcaOnchainActionsClient = {
 type PreparedUnsignedTransactionResolutionInput = {
   executionResult: Record<string, unknown>;
   swapResponse: OnchainActionsSwapResponse;
+  preparedPayload: PreparedOcaSwapPayload;
 };
 
 type HiddenOcaSpotSwapExecutorOptions = {
@@ -353,6 +368,43 @@ function normalizeNetworkName(chain: string): string {
   }
 }
 
+function uniqueTokensByAddress(tokens: OnchainActionsToken[]): OnchainActionsToken[] {
+  const seen = new Set<string>();
+  const unique: OnchainActionsToken[] = [];
+  for (const token of tokens) {
+    const addressKey = token.tokenUid.address.toLowerCase();
+    if (seen.has(addressKey)) {
+      continue;
+    }
+
+    seen.add(addressKey);
+    unique.push(token);
+  }
+
+  return unique;
+}
+
+function resolveUnambiguousTokenMatch(input: {
+  matches: OnchainActionsToken[];
+  token: string;
+  chainId: string;
+}): OnchainActionsToken | null {
+  if (input.matches.length === 0) {
+    return null;
+  }
+
+  const vettedMatches = input.matches.filter((token) => token.isVetted === true);
+  const preferredMatches = vettedMatches.length > 0 ? vettedMatches : input.matches;
+  const uniqueMatches = uniqueTokensByAddress(preferredMatches);
+  if (uniqueMatches.length === 1) {
+    return uniqueMatches[0]!;
+  }
+
+  throw new Error(
+    `Ambiguous Onchain Actions token resolution for ${input.token} on chain ${input.chainId}; use an exact token address.`,
+  );
+}
+
 function resolveToken(input: {
   tokens: OnchainActionsToken[];
   chainId: string;
@@ -360,19 +412,39 @@ function resolveToken(input: {
 }): OnchainActionsToken {
   const needle = input.token.trim().toLowerCase();
   const candidates = input.tokens.filter((token) => token.tokenUid.chainId === input.chainId);
-  const resolved =
-    candidates.find((token) => token.tokenUid.address.toLowerCase() === needle) ??
-    candidates.find((token) => token.symbol.toLowerCase() === needle) ??
-    candidates.find((token) => token.name.toLowerCase() === needle) ??
-    null;
-
-  if (!resolved) {
-    throw new Error(
-      `Onchain Actions token resolution failed for ${input.token} on chain ${input.chainId}.`,
-    );
+  const exactAddressMatches = candidates.filter(
+    (token) => token.tokenUid.address.toLowerCase() === needle,
+  );
+  const resolvedAddress = resolveUnambiguousTokenMatch({
+    matches: exactAddressMatches,
+    token: input.token,
+    chainId: input.chainId,
+  });
+  if (resolvedAddress) {
+    return resolvedAddress;
   }
 
-  return resolved;
+  const resolvedSymbol = resolveUnambiguousTokenMatch({
+    matches: candidates.filter((token) => token.symbol.toLowerCase() === needle),
+    token: input.token,
+    chainId: input.chainId,
+  });
+  if (resolvedSymbol) {
+    return resolvedSymbol;
+  }
+
+  const resolvedName = resolveUnambiguousTokenMatch({
+    matches: candidates.filter((token) => token.name.toLowerCase() === needle),
+    token: input.token,
+    chainId: input.chainId,
+  });
+  if (resolvedName) {
+    return resolvedName;
+  }
+
+  throw new Error(
+    `Onchain Actions token resolution failed for ${input.token} on chain ${input.chainId}.`,
+  );
 }
 
 function buildSwapSummary(input: {
@@ -399,6 +471,89 @@ function buildInputOnlySwapSummary(
     amountType: request.amountType,
     displayFromAmount: '',
     displayToAmount: '',
+  };
+}
+
+function normalizeChainIdForComparison(chainId: string): string {
+  const normalized = chainId.trim();
+  if (!/^[0-9]+$/u.test(normalized)) {
+    throw new Error(`Invalid hidden swap transaction chain id "${chainId}".`);
+  }
+
+  const parsed = BigInt(normalized);
+  if (parsed <= 0n) {
+    throw new Error(`Invalid hidden swap transaction chain id "${chainId}".`);
+  }
+
+  return parsed.toString();
+}
+
+function normalizeOcaSwapTransaction(
+  transaction: OnchainActionsTransactionRequest,
+): OnchainActionsTransactionRequest {
+  const to = readHexAddress(transaction.to);
+  const data = readString(transaction.data);
+  const chainId = readString(transaction.chainId);
+  const transactionValue =
+    transaction.value === undefined ? undefined : readString(transaction.value);
+
+  if (!to || !data || !isHex(data) || !chainId) {
+    throw new Error('Onchain Actions swap response included malformed transaction entries.');
+  }
+  if (transaction.value !== undefined && transactionValue === null) {
+    throw new Error('Onchain Actions swap response included malformed transaction entries.');
+  }
+
+  return {
+    type: transaction.type,
+    to,
+    ...(transactionValue ? { value: transactionValue } : {}),
+    data: data.toLowerCase() as `0x${string}`,
+    chainId: normalizeChainIdForComparison(chainId),
+  };
+}
+
+function buildPreparedOcaSwapPayload(input: {
+  requestChainId: string;
+  network: string;
+  swapResponse: OnchainActionsSwapResponse;
+}): PreparedOcaSwapPayload {
+  const normalizedTransactions = input.swapResponse.transactions.map(normalizeOcaSwapTransaction);
+  if (normalizedTransactions.length === 0) {
+    throw new Error('Hidden swap execution signing requires at least one OCA transaction request.');
+  }
+
+  for (const transaction of normalizedTransactions) {
+    if (transaction.chainId !== input.requestChainId) {
+      throw new Error(
+        `Onchain Actions swap response chain id "${transaction.chainId}" did not match requested chain id "${input.requestChainId}".`,
+      );
+    }
+  }
+
+  const payloadFingerprint = createHash('sha256')
+    .update(
+      JSON.stringify({
+        controlPath: HIDDEN_OCA_EXECUTOR_CONTROL_PATH,
+        transactions: normalizedTransactions.map((transaction) => ({
+          type: transaction.type,
+          to: transaction.to,
+          value: transaction.value ?? '0',
+          data: transaction.data,
+          chainId: transaction.chainId,
+        })),
+      }),
+    )
+    .digest('hex')
+    .slice(0, 16);
+  const transactionPayloadRef = `txpayload-hidden-oca-swap-${payloadFingerprint}`;
+
+  return {
+    transactionPayloadRef,
+    canonicalUnsignedPayloadRef: `unsigned-${transactionPayloadRef}`,
+    chainId: input.requestChainId,
+    network: input.network,
+    transactions: normalizedTransactions,
   };
 }
 
@@ -451,6 +606,7 @@ function buildCreateTransactionRequest(input: {
   rootedWalletContextId?: string;
   request: HiddenOcaSpotSwapInput;
   swapResponse: OnchainActionsSwapResponse;
+  preparedPayload: PreparedOcaSwapPayload;
   fromToken: OnchainActionsToken;
   network: string;
 }) {
@@ -474,6 +630,11 @@ function buildCreateTransactionRequest(input: {
           kind: 'exact',
           value: input.swapResponse.exactFromAmount || input.request.amount,
         },
+      },
+      payload_builder_output: {
+        transaction_payload_ref: input.preparedPayload.transactionPayloadRef,
+        required_control_path: HIDDEN_OCA_EXECUTOR_CONTROL_PATH,
+        network: input.preparedPayload.network,
       },
     },
   };
@@ -614,26 +775,18 @@ function readExecutionPreparation(executionResult: Record<string, unknown>) {
 
 async function resolvePreparedUnsignedTransactionHexFromSwapResponse(input: {
   executionSigningPackage: Record<string, unknown> | null;
-  swapResponse: OnchainActionsSwapResponse;
+  preparedPayload: PreparedOcaSwapPayload;
   walletAddress: `0x${string}`;
   resolveExecutionPublicClient: ResolveHiddenOcaExecutionPublicClient;
 }): Promise<`0x${string}`> {
-  const [firstTransaction, ...remainingTransactions] = input.swapResponse.transactions;
+  const [firstTransaction] = input.preparedPayload.transactions;
   if (!firstTransaction) {
     throw new Error('Hidden swap execution signing requires at least one OCA transaction request.');
   }
 
-  const chainId = Number(firstTransaction.chainId);
+  const chainId = Number(input.preparedPayload.chainId);
   if (!Number.isFinite(chainId) || chainId <= 0) {
     throw new Error(`Invalid hidden swap transaction chain id "${firstTransaction.chainId}".`);
-  }
-
-  for (const transaction of remainingTransactions) {
-    if (Number(transaction.chainId) !== chainId) {
-      throw new Error(
-        'Hidden swap execution signing requires all OCA transaction requests to use the same chain id.',
-      );
-    }
   }
 
   const network = resolveSupportedExecutionNetworkForChainId(chainId);
@@ -641,7 +794,7 @@ async function resolvePreparedUnsignedTransactionHexFromSwapResponse(input: {
   const delegationManager = getDeleGatorEnvironment(
     chainId,
   ).DelegationManager.toLowerCase() as `0x${string}`;
-  const executions = input.swapResponse.transactions.map((transaction) =>
+  const executions = input.preparedPayload.transactions.map((transaction) =>
     createExecution({
       target: transaction.to.toLowerCase() as `0x${string}`,
       value: BigInt(transaction.value ?? '0'),
@@ -721,6 +874,7 @@ async function signAndSubmitPreparedExecution(input: {
   transactionPlanId: string;
   executionResult: Record<string, unknown>;
   swapResponse: OnchainActionsSwapResponse;
+  preparedPayload: PreparedOcaSwapPayload;
 }): Promise<{
   response: unknown;
   executionResult: Record<string, unknown> | null;
@@ -744,14 +898,37 @@ async function signAndSubmitPreparedExecution(input: {
     );
   }
 
+  const preparedNetwork = readString(executionPreparation?.['network']);
+  if (!preparedNetwork) {
+    throw new Error(
+      'Hidden swap execution signing could not continue because Shared Ember did not return a prepared network.',
+    );
+  }
+  const normalizedPreparedNetwork = normalizeNetworkName(preparedNetwork);
+  if (normalizedPreparedNetwork !== input.preparedPayload.network) {
+    throw new Error(
+      `Shared Ember prepared hidden swap execution for network "${preparedNetwork}", but the OCA payload was prepared for network "${input.preparedPayload.network}".`,
+    );
+  }
+
+  const canonicalUnsignedPayloadRef = readString(
+    executionSigningPackage?.['canonical_unsigned_payload_ref'],
+  );
+  if (canonicalUnsignedPayloadRef !== input.preparedPayload.canonicalUnsignedPayloadRef) {
+    throw new Error(
+      'Hidden swap execution signing could not continue because Shared Ember canonical unsigned payload ref does not match the prepared OCA payload.',
+    );
+  }
+
   const unsignedTransactionHex =
     (await input.options.resolvePreparedUnsignedTransactionHex?.({
       executionResult: input.executionResult,
       swapResponse: input.swapResponse,
+      preparedPayload: input.preparedPayload,
     })) ??
     (await resolvePreparedUnsignedTransactionHexFromSwapResponse({
       executionSigningPackage,
-      swapResponse: input.swapResponse,
+      preparedPayload: input.preparedPayload,
       walletAddress: expectedWalletAddress,
       resolveExecutionPublicClient:
         input.options.resolveExecutionPublicClient ??
@@ -794,9 +971,7 @@ async function signAndSubmitPreparedExecution(input: {
           transaction_plan_id: input.transactionPlanId,
           request_id: requestId,
           active_delegation_id: readString(executionSigningPackage?.['active_delegation_id']),
-          canonical_unsigned_payload_ref: readString(
-            executionSigningPackage?.['canonical_unsigned_payload_ref'],
-          ),
+          canonical_unsigned_payload_ref: canonicalUnsignedPayloadRef,
           signer_address: signed.confirmedAddress,
           raw_transaction: signed.rawTransaction,
         },
@@ -858,6 +1033,7 @@ async function runExecutionFlow(input: {
   transactionPlanId: string;
   request: HiddenOcaSpotSwapInput;
   swapResponse: OnchainActionsSwapResponse;
+  preparedPayload: PreparedOcaSwapPayload;
 }): Promise<HiddenOcaSpotSwapResult> {
   let revision = input.currentRevision;
   let attempt = 1;
@@ -963,6 +1139,7 @@ async function runExecutionFlow(input: {
           transactionPlanId: input.transactionPlanId,
           executionResult,
           swapResponse: input.swapResponse,
+          preparedPayload: input.preparedPayload,
         });
         revision = readResultRevision(submitResult.response);
         committedEventIds.push(...readCommittedEventIds(submitResult.response));
@@ -1023,20 +1200,31 @@ async function parseJsonResponse(response: Response, endpoint: string): Promise<
   return text.length > 0 ? (JSON.parse(text) as unknown) : {};
 }
 
-function readTokensResponse(value: unknown): OnchainActionsToken[] {
+function readTokensPage(value: unknown): OnchainActionsTokensPage {
   const tokens = isRecord(value) && Array.isArray(value['tokens']) ? value['tokens'] : [];
-  return tokens.filter((token): token is OnchainActionsToken => {
-    if (!isRecord(token) || !isRecord(token['tokenUid'])) {
-      return false;
-    }
+  const currentPage = isRecord(value) ? readInt(value['currentPage']) : null;
+  const totalPages = isRecord(value) ? readInt(value['totalPages']) : null;
 
-    return (
-      typeof token['tokenUid']['chainId'] === 'string' &&
-      typeof token['tokenUid']['address'] === 'string' &&
-      typeof token['name'] === 'string' &&
-      typeof token['symbol'] === 'string'
-    );
-  });
+  return {
+    tokens: tokens.filter((token): token is OnchainActionsToken => {
+      if (!isRecord(token) || !isRecord(token['tokenUid'])) {
+        return false;
+      }
+
+      return (
+        typeof token['tokenUid']['chainId'] === 'string' &&
+        typeof token['tokenUid']['address'] === 'string' &&
+        typeof token['name'] === 'string' &&
+        typeof token['symbol'] === 'string'
+      );
+    }),
+    ...(currentPage === null ? {} : { currentPage }),
+    ...(totalPages === null ? {} : { totalPages }),
+  };
+}
+
+function readTokensResponse(value: unknown): OnchainActionsToken[] {
+  return readTokensPage(value).tokens;
 }
 
 function readSwapTransaction(value: unknown): OnchainActionsTransactionRequest | null {
@@ -1119,12 +1307,29 @@ export function createHiddenOcaOnchainActionsClient(input: {
 
   return {
     async listTokens(params) {
-      const query = new URLSearchParams();
-      for (const chainId of params.chainIds ?? []) {
-        query.append('chainIds', chainId);
+      const tokens: OnchainActionsToken[] = [];
+      let page = 1;
+
+      while (true) {
+        const query = new URLSearchParams();
+        for (const chainId of params.chainIds ?? []) {
+          query.append('chainIds', chainId);
+        }
+        query.append('page', String(page));
+        const endpoint = `/tokens?${query.toString()}`;
+        const tokenPage = readTokensPage(
+          await parseJsonResponse(await fetchImpl(`${baseUrl}${endpoint}`), endpoint),
+        );
+        tokens.push(...tokenPage.tokens);
+
+        const currentPage = tokenPage.currentPage ?? page;
+        const totalPages = tokenPage.totalPages ?? currentPage;
+        if (currentPage >= totalPages) {
+          return tokens;
+        }
+
+        page = currentPage + 1;
       }
-      const endpoint = query.toString() ? `/tokens?${query.toString()}` : '/tokens';
-      return readTokensResponse(await parseJsonResponse(await fetchImpl(`${baseUrl}${endpoint}`), endpoint));
     },
     async createSwap(params) {
       const payload = {
@@ -1179,8 +1384,21 @@ export function createHiddenOcaSpotSwapExecutor(
         walletAddress,
       };
       const idempotencyKey = request.idempotencyKey ?? buildPayloadDerivedIdempotencyKey(request);
-      const fromChainId = resolveChainId(request.fromChain);
-      const toChainId = resolveChainId(request.toChain);
+      let fromChainId: string;
+      let toChainId: string;
+      let network: string;
+      try {
+        fromChainId = resolveChainId(request.fromChain);
+        toChainId = resolveChainId(request.toChain);
+        network = normalizeNetworkName(request.fromChain);
+      } catch (error) {
+        return createInputFailedResult({
+          request,
+          idempotencyKey,
+          failureReason:
+            error instanceof Error ? error.message : 'Unknown hidden OCA swap chain resolution failure.',
+        });
+      }
       if (fromChainId !== toChainId) {
         return createInputFailedResult({
           request,
@@ -1189,30 +1407,49 @@ export function createHiddenOcaSpotSwapExecutor(
         });
       }
 
-      const fromTokens = await onchainActionsClient.listTokens({ chainIds: [fromChainId] });
-      const toTokens =
-        toChainId === fromChainId
-          ? fromTokens
-          : await onchainActionsClient.listTokens({ chainIds: [toChainId] });
-      const fromToken = resolveToken({
-        tokens: fromTokens,
-        chainId: fromChainId,
-        token: request.fromToken,
-      });
-      const toToken = resolveToken({
-        tokens: toTokens,
-        chainId: toChainId,
-        token: request.toToken,
-      });
-      const swapResponse = await onchainActionsClient.createSwap({
-        walletAddress: request.walletAddress,
-        amount: request.amount,
-        amountType: request.amountType,
-        fromTokenUid: fromToken.tokenUid,
-        toTokenUid: toToken.tokenUid,
-        ...(request.slippageTolerance ? { slippageTolerance: request.slippageTolerance } : {}),
-        ...(request.expiration ? { expiration: request.expiration } : {}),
-      });
+      let fromToken: OnchainActionsToken;
+      let swapResponse: OnchainActionsSwapResponse;
+      let preparedPayload: PreparedOcaSwapPayload;
+      try {
+        const fromTokens = await onchainActionsClient.listTokens({ chainIds: [fromChainId] });
+        const toTokens =
+          toChainId === fromChainId
+            ? fromTokens
+            : await onchainActionsClient.listTokens({ chainIds: [toChainId] });
+        fromToken = resolveToken({
+          tokens: fromTokens,
+          chainId: fromChainId,
+          token: request.fromToken,
+        });
+        const toToken = resolveToken({
+          tokens: toTokens,
+          chainId: toChainId,
+          token: request.toToken,
+        });
+        swapResponse = await onchainActionsClient.createSwap({
+          walletAddress: request.walletAddress,
+          amount: request.amount,
+          amountType: request.amountType,
+          fromTokenUid: fromToken.tokenUid,
+          toTokenUid: toToken.tokenUid,
+          ...(request.slippageTolerance ? { slippageTolerance: request.slippageTolerance } : {}),
+          ...(request.expiration ? { expiration: request.expiration } : {}),
+        });
+        preparedPayload = buildPreparedOcaSwapPayload({
+          requestChainId: fromChainId,
+          network,
+          swapResponse,
+        });
+      } catch (error) {
+        return createInputFailedResult({
+          request,
+          idempotencyKey,
+          failureReason:
+            error instanceof Error
+              ? error.message
+              : 'Unknown hidden OCA swap preparation failure.',
+        });
+      }
       const createResponse = await runSharedEmberCommandWithResolvedRevision({
         protocolHost: options.protocolHost,
         threadId,
@@ -1225,8 +1462,9 @@ export function createHiddenOcaSpotSwapExecutor(
             rootedWalletContextId: request.rootedWalletContextId,
             request,
             swapResponse,
+            preparedPayload,
             fromToken,
-            network: normalizeNetworkName(request.fromChain),
+            network,
           }),
       });
       const transactionPlanId = readCandidatePlanId(createResponse);
@@ -1251,6 +1489,7 @@ export function createHiddenOcaSpotSwapExecutor(
         transactionPlanId,
         request,
         swapResponse,
+        preparedPayload,
       });
     },
   };
