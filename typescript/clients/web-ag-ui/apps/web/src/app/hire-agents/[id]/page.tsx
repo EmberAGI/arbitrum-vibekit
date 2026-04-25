@@ -12,9 +12,10 @@ import { invokeAgentCommandRoute } from '@/utils/agentCommandRoute';
 import { getAgentThreadId } from '@/utils/agentThread';
 import { navigateToHref } from '@/utils/hardNavigation';
 import { isPrivyConfigured } from '@/utils/privyConfig';
+import type { EmberOnboardingSeed } from '@/types/agent';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
-type UiPreviewFixture = 'managed';
+type UiPreviewFixture = 'managed' | 'wallet-profiler-seed';
 type AgentRouteTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
 
 const EMPTY_MESSAGES: Message[] = [];
@@ -26,6 +27,7 @@ function parseUiPreviewState(value: string | null): UiPreviewState | null {
 
 function parseUiPreviewFixture(value: string | null): UiPreviewFixture | null {
   if (value === 'managed') return value;
+  if (value === 'wallet-profiler-seed') return value;
   return null;
 }
 
@@ -115,6 +117,106 @@ function buildUiPreviewDomainProjection(args: {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isManagedLendingMandate(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.lending_policy)) {
+    return false;
+  }
+
+  const { collateral_policy, borrow_policy, risk_policy } = value.lending_policy;
+  if (
+    !isRecord(collateral_policy) ||
+    !Array.isArray(collateral_policy.assets) ||
+    !isRecord(borrow_policy) ||
+    !isStringArray(borrow_policy.allowed_assets) ||
+    !isRecord(risk_policy)
+  ) {
+    return false;
+  }
+
+  return (
+    collateral_policy.assets.every(
+      (asset) =>
+        isRecord(asset) &&
+        typeof asset.asset === 'string' &&
+        typeof asset.max_allocation_pct === 'number',
+    ) &&
+    typeof risk_policy.max_ltv_bps === 'number' &&
+    typeof risk_policy.min_health_factor === 'string'
+  );
+}
+
+function isEmberOnboardingSeed(value: unknown): value is EmberOnboardingSeed {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const { pm_setup, first_managed_mandate, future_subagent_plan } = value;
+  if (
+    !isRecord(pm_setup) ||
+    !isRecord(first_managed_mandate) ||
+    !isRecord(future_subagent_plan)
+  ) {
+    return false;
+  }
+
+  return (
+    (pm_setup.risk_level === 'low' ||
+      pm_setup.risk_level === 'medium' ||
+      pm_setup.risk_level === 'high') &&
+    typeof pm_setup.diagnosis_summary === 'string' &&
+    typeof pm_setup.portfolio_intent_summary === 'string' &&
+    isStringArray(pm_setup.operator_caveats) &&
+    first_managed_mandate.target_agent_id === 'ember-lending' &&
+    typeof first_managed_mandate.target_agent_key === 'string' &&
+    isManagedLendingMandate(first_managed_mandate.managed_mandate) &&
+    future_subagent_plan.status === 'exploratory_not_persisted' &&
+    typeof future_subagent_plan.summary === 'string'
+  );
+}
+
+function parseWalletProfilerSeedParam(value: string | null): EmberOnboardingSeed | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(value)) as unknown;
+    return isEmberOnboardingSeed(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildUiPreviewActiveInterrupt(args: {
+  agentId: string;
+  fixture: UiPreviewFixture | null;
+  uiState: UiPreviewState | null;
+  walletProfilerSeed: EmberOnboardingSeed | null;
+}): ComponentProps<typeof AgentDetailPage>['activeInterrupt'] {
+  if (
+    args.agentId !== 'agent-portfolio-manager' ||
+    args.uiState !== 'onboarding' ||
+    args.fixture !== 'wallet-profiler-seed' ||
+    !args.walletProfilerSeed
+  ) {
+    return null;
+  }
+
+  return {
+    type: 'portfolio-manager-setup-request',
+    message: 'Review the wallet-profiler onboarding seed.',
+    emberOnboardingSeed: args.walletProfilerSeed,
+  };
+}
+
 export default function AgentDetailRoute({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const searchParams = useSearchParams();
@@ -187,6 +289,9 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const requestedTab = parseAgentRouteTab(searchParams.get('tab'));
   const uiPreviewTab = uiPreviewEnabled ? parseAgentRouteTab(searchParams.get('__tab')) : null;
   const uiPreviewFixture = uiPreviewEnabled ? parseUiPreviewFixture(searchParams.get('__fixture')) : null;
+  const walletProfilerSeed = uiPreviewEnabled
+    ? parseWalletProfilerSeedParam(searchParams.get('__walletProfilerSeed'))
+    : null;
   const selectedTab = requestedTab ?? uiPreviewTab;
   const selectedLifecyclePhase = selectedLifecycleState?.phase;
   const portfolioManagerThreadId =
@@ -348,6 +453,12 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       fixture: uiPreviewFixture,
       uiState: uiPreviewState,
     });
+    const previewActiveInterrupt = buildUiPreviewActiveInterrupt({
+      agentId: previewAgentId,
+      fixture: uiPreviewFixture,
+      uiState: uiPreviewState,
+      walletProfilerSeed,
+    });
     const previewTaskStatus =
       uiPreviewState === 'active' && uiPreviewFixture === 'managed' ? 'working' : undefined;
 
@@ -399,7 +510,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         }
         onSync={() => undefined}
         onBack={handleBack}
-        activeInterrupt={null}
+        activeInterrupt={previewActiveInterrupt}
         allowedPools={[]}
         onInterruptSubmit={() => undefined}
         taskId={undefined}

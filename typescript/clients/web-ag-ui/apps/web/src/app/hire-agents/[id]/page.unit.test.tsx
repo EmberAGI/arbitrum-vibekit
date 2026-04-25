@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AgentDetailRoute from './page';
+import type { EmberOnboardingSeed } from '@/types/agent';
 
 // React's act() helper expects this flag under the lightweight jsdom runner.
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -21,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   applyDomainProjection: vi.fn(),
   agentValue: null as Record<string, unknown> | null,
   capturedProps: null as Record<string, unknown> | null,
+  searchParams: new Map<string, string>(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -29,7 +31,7 @@ vi.mock('next/navigation', () => ({
     replace: mocks.replace,
   }),
   useSearchParams: () => ({
-    get: () => null,
+    get: (key: string) => mocks.searchParams.get(key) ?? null,
   }),
 }));
 
@@ -73,6 +75,43 @@ vi.mock('@/components/AgentDetailPage', () => ({
     return React.createElement('div', { 'data-testid': 'agent-detail-page' });
   },
 }));
+
+const walletProfilerSeed: EmberOnboardingSeed = {
+  pm_setup: {
+    risk_level: 'medium',
+    diagnosis_summary: 'Active DeFi user with missing reserve policy.',
+    portfolio_intent_summary:
+      'Use Portfolio Agent to preserve upside while enforcing reserve discipline.',
+    operator_caveats: ['Only the lending mandate is persisted today.'],
+  },
+  first_managed_mandate: {
+    target_agent_id: 'ember-lending',
+    target_agent_key: 'ember-lending-primary',
+    managed_mandate: {
+      lending_policy: {
+        collateral_policy: {
+          assets: [
+            {
+              asset: 'USDC',
+              max_allocation_pct: 35,
+            },
+          ],
+        },
+        borrow_policy: {
+          allowed_assets: [],
+        },
+        risk_policy: {
+          max_ltv_bps: 4500,
+          min_health_factor: '1.60',
+        },
+      },
+    },
+  },
+  future_subagent_plan: {
+    status: 'exploratory_not_persisted',
+    summary: 'Future strategy is not persisted by current onboarding.',
+  },
+};
 
 function createAgentValue(overrides: Record<string, unknown> = {}) {
   return {
@@ -162,14 +201,17 @@ describe('AgentDetailRoute managed mandate wiring', () => {
   let root: Root;
 
   beforeEach(() => {
+    delete process.env.NEXT_PUBLIC_UI_PREVIEW;
     mocks.push.mockReset();
     mocks.replace.mockReset();
     mocks.navigateToHref.mockReset();
     mocks.login.mockReset();
     mocks.invokeAgentCommandRoute.mockReset();
+    mocks.invokeAgentCommandRoute.mockResolvedValue({ ok: true });
     mocks.getAgentThreadId.mockReset();
     mocks.applyDomainProjection.mockReset();
     mocks.capturedProps = null;
+    mocks.searchParams.clear();
     mocks.agentValue = createAgentValue();
     mocks.getAgentThreadId.mockImplementation((agentId: string) => {
       if (agentId === 'agent-portfolio-manager') {
@@ -362,6 +404,48 @@ describe('AgentDetailRoute managed mandate wiring', () => {
     expect(props.isRestoringState).toBe(true);
     expect(props.hasLoadedView).toBe(false);
     expect(mocks.invokeAgentCommandRoute).not.toHaveBeenCalled();
+  });
+
+  it('passes an encoded wallet-profiler seed into the PM setup interrupt in UI preview mode', async () => {
+    process.env.NEXT_PUBLIC_UI_PREVIEW = 'true';
+    mocks.searchParams.set('__uiState', 'onboarding');
+    mocks.searchParams.set('__fixture', 'wallet-profiler-seed');
+    mocks.searchParams.set(
+      '__walletProfilerSeed',
+      encodeURIComponent(JSON.stringify(walletProfilerSeed)),
+    );
+
+    await renderRoute('agent-portfolio-manager');
+
+    expect(readCapturedProps().activeInterrupt).toEqual({
+      type: 'portfolio-manager-setup-request',
+      message: 'Review the wallet-profiler onboarding seed.',
+      emberOnboardingSeed: walletProfilerSeed,
+    });
+  });
+
+  it('ignores wallet-profiler seed preview parameters when UI preview mode is disabled', async () => {
+    mocks.searchParams.set('__uiState', 'onboarding');
+    mocks.searchParams.set('__fixture', 'wallet-profiler-seed');
+    mocks.searchParams.set(
+      '__walletProfilerSeed',
+      encodeURIComponent(JSON.stringify(walletProfilerSeed)),
+    );
+
+    await renderRoute('agent-portfolio-manager');
+
+    expect(readCapturedProps().activeInterrupt).toBeNull();
+  });
+
+  it('ignores invalid wallet-profiler seed preview JSON instead of passing it through', async () => {
+    process.env.NEXT_PUBLIC_UI_PREVIEW = 'true';
+    mocks.searchParams.set('__uiState', 'onboarding');
+    mocks.searchParams.set('__fixture', 'wallet-profiler-seed');
+    mocks.searchParams.set('__walletProfilerSeed', encodeURIComponent('{"pm_setup":{}'));
+
+    await renderRoute('agent-portfolio-manager');
+
+    expect(readCapturedProps().activeInterrupt).toBeNull();
   });
 
   it('routes hosted lending edits through the PM-owned command and then rehydrates the lending thread projection', async () => {
