@@ -7,12 +7,9 @@ import {
   Bot,
   Trophy,
 } from 'lucide-react';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
-import type { Chain } from 'viem';
-import { defaultEvmChain, supportedEvmChains } from '@/config/evmChains';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLogin, usePrivy } from '@privy-io/react-auth';
 import { useOnchainActionsIconMaps } from '@/hooks/useOnchainActionsIconMaps';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
@@ -56,7 +53,6 @@ export interface AgentActivity {
   entry?: AgentListEntry;
 }
 
-const ETHEREUM_MAINNET_CHAIN_ID = 1;
 const PORTFOLIO_AGENT_ID = 'agent-portfolio-manager';
 const HIRE_AGENTS_HREF = '/hire-agents';
 const PORTFOLIO_AGENT_CHAT_HREF = `/hire-agents/${PORTFOLIO_AGENT_ID}?tab=chat`;
@@ -73,11 +69,10 @@ type SidebarProjectionCardData = {
   thirtyDayPnlPct?: number;
 };
 
-export function getWalletSelectorChains(chains: readonly Chain[]): Chain[] {
-  return chains.filter(
-    (chain) => chain.id === defaultEvmChain.id || chain.id === ETHEREUM_MAINNET_CHAIN_ID,
-  );
-}
+type FetchedPortfolioProjectionInput = {
+  walletAddress: string;
+  input: PortfolioProjectionInput;
+};
 
 export function getSidebarAgentHref(agentId: string): string {
   return agentId === PORTFOLIO_AGENT_ID ? PORTFOLIO_AGENT_CHAT_HREF : `/hire-agents/${agentId}`;
@@ -97,21 +92,12 @@ export function AppSidebar() {
   const pathname = usePathname();
   const [isAgentsExpanded, setIsAgentsExpanded] = useState(true);
   const [isActivityRailCollapsed, setIsActivityRailCollapsed] = useState(false);
-  const [isChainMenuOpen, setIsChainMenuOpen] = useState(false);
-  const [isAddressPopoverOpen, setIsAddressPopoverOpen] = useState(false);
-  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const addressPopoverRef = useRef<HTMLDivElement | null>(null);
-  const copyResetTimeoutRef = useRef<number | null>(null);
-  const addressPopoverId = useId();
   const privyConfigured = isPrivyConfigured();
 
   const { ready, authenticated } = usePrivy();
   const { login } = useLogin();
-  const { logout } = useLogout();
   const {
     privyWallet,
-    chainId,
-    switchChain,
     isLoading: isWalletLoading,
     error: walletError,
   } = usePrivyWalletClient();
@@ -141,7 +127,7 @@ export function AppSidebar() {
     ? `${PORTFOLIO_AGENT_ID}:${portfolioManagerThreadId}`
     : null;
   const [fetchedPortfolioProjectionInput, setFetchedPortfolioProjectionInput] =
-    useState<PortfolioProjectionInput | null>(null);
+    useState<FetchedPortfolioProjectionInput | null>(null);
   const requestedPortfolioProjectionKeyRef = useRef<string | null>(null);
   const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
   const runtimeTaskMessage = extractTaskStatusMessage(agent.uiState.task?.taskStatus?.message);
@@ -242,12 +228,7 @@ export function AppSidebar() {
   ]);
 
   useEffect(() => {
-    requestedPortfolioProjectionKeyRef.current = null;
-    setFetchedPortfolioProjectionInput(null);
-  }, [privyWallet?.address]);
-
-  useEffect(() => {
-    if (cachedPortfolioProjectionInput || !portfolioManagerThreadId) {
+    if (cachedPortfolioProjectionInput || !portfolioManagerThreadId || !privyWallet?.address) {
       return;
     }
 
@@ -275,7 +256,10 @@ export function AppSidebar() {
 
         const projectionInput = readPortfolioProjectionInput(response.domainProjection ?? null);
         if (projectionInput) {
-          setFetchedPortfolioProjectionInput(projectionInput);
+          setFetchedPortfolioProjectionInput({
+            walletAddress: privyWallet.address,
+            input: projectionInput,
+          });
         }
       } catch {
         // Keep the existing metric-based fallback when the shared projection is unavailable.
@@ -285,12 +269,15 @@ export function AppSidebar() {
     return () => {
       canceled = true;
     };
-  }, [cachedPortfolioProjectionInput, portfolioManagerThreadId]);
+  }, [cachedPortfolioProjectionInput, portfolioManagerThreadId, privyWallet?.address]);
 
-  const walletSelectorChains = useMemo(() => getWalletSelectorChains(supportedEvmChains), []);
-  const selectedChain = walletSelectorChains.find((chain) => chain.id === chainId) ?? defaultEvmChain;
   const allActivityAgents = pinnedAgents;
-  const portfolioProjectionInput = cachedPortfolioProjectionInput ?? fetchedPortfolioProjectionInput;
+  const portfolioProjectionInput =
+    cachedPortfolioProjectionInput ??
+    (fetchedPortfolioProjectionInput &&
+    fetchedPortfolioProjectionInput.walletAddress === privyWallet?.address
+      ? fetchedPortfolioProjectionInput.input
+      : null);
   const portfolioProjection = useMemo<PortfolioProjectionPacket | null>(() => {
     if (!portfolioProjectionInput) {
       return null;
@@ -312,15 +299,11 @@ export function AppSidebar() {
     activities: allActivityAgents,
     accentColorByAgentId,
   });
-  const projectionCardDataByAgentId = useMemo(
-    () =>
-      buildSidebarProjectionCardDataByAgentId({
-        portfolio: portfolioProjection,
-        activities: allActivityAgents,
-        accentColorByAgentId,
-      }),
-    [accentColorByAgentId, allActivityAgents, portfolioProjection],
-  );
+  const projectionCardDataByAgentId = buildSidebarProjectionCardDataByAgentId({
+    portfolio: portfolioProjection,
+    activities: allActivityAgents,
+    accentColorByAgentId,
+  });
   const baseActivityCardViewsById = useMemo(
     () =>
       Object.fromEntries(
@@ -380,114 +363,28 @@ export function AppSidebar() {
   const portfolioActivity = allActivityAgents.find((activity) => activity.id === PORTFOLIO_AGENT_ID) ?? null;
   const specialistActivities = allActivityAgents.filter((activity) => activity.id !== PORTFOLIO_AGENT_ID);
 
-  const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
-
-  const clearCopyResetTimeout = () => {
-    if (copyResetTimeoutRef.current !== null) {
-      window.clearTimeout(copyResetTimeoutRef.current);
-      copyResetTimeoutRef.current = null;
-    }
-  };
-
-  const closeAddressPopover = () => {
-    setIsAddressPopoverOpen(false);
-    setCopyStatus('idle');
-  };
-
-  const handleCopyAddress = async () => {
-    if (!privyWallet?.address) return;
-
-    try {
-      if (!navigator?.clipboard?.writeText) {
-        throw new Error('Clipboard unavailable');
-      }
-      await navigator.clipboard.writeText(privyWallet.address);
-      setCopyStatus('success');
-    } catch {
-      setCopyStatus('error');
-    }
-
-    clearCopyResetTimeout();
-    copyResetTimeoutRef.current = window.setTimeout(() => {
-      setCopyStatus('idle');
-    }, 2000);
-  };
-
-  const handleAddressFieldFocus: React.FocusEventHandler<HTMLInputElement> = (event) => {
-    event.currentTarget.select();
-  };
-
-  const handleAddressFieldClick: React.MouseEventHandler<HTMLInputElement> = (event) => {
-    event.currentTarget.select();
-  };
-
-  useEffect(() => {
-    if (!isAddressPopoverOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (addressPopoverRef.current?.contains(target)) return;
-      closeAddressPopover();
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeAddressPopover();
-      }
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isAddressPopoverOpen]);
-
-  useEffect(() => {
-    return () => {
-      clearCopyResetTimeout();
-    };
-  }, []);
-
-  useEffect(() => {
-    setCopyStatus('idle');
-  }, [privyWallet?.address]);
-
   // Navigate to agent detail page when clicking on an agent in the sidebar
   const handleAgentClick = (agentId: string) => {
     navigateToHref(getSidebarAgentHref(agentId));
   };
-
-  const canSelectChain =
-    privyConfigured && ready && authenticated && Boolean(privyWallet) && !isWalletLoading;
 
   const isPortfolioAgentActive = pathname?.startsWith(`/hire-agents/${PORTFOLIO_AGENT_ID}`);
   const isHireAgentsActive =
     pathname === '/hire-agents' || (pathname?.startsWith('/hire-agents/') && !isPortfolioAgentActive);
   const isAcquireActive = pathname === '/acquire';
   const isLeaderboardActive = pathname === '/leaderboard';
+  const shouldShowSmartAccountUpgrade =
+    privyConfigured &&
+    authenticated &&
+    Boolean(privyWallet) &&
+    !walletError &&
+    (isSmartAccountLoading || Boolean(smartAccountError) || isSmartAccountDeployed === false);
+  const shouldShowWalletConnectionFooter =
+    Boolean(walletError) || !privyConfigured || !authenticated || !privyWallet;
+  const shouldShowFooter = shouldShowSmartAccountUpgrade || shouldShowWalletConnectionFooter;
 
   return (
     <div className="flex flex-col h-full w-[312px] flex-shrink-0 bg-[#F7EFE3] border-r border-[#DDC8B3] text-[#3C2A21]">
-      {/* Header */}
-      <div className="px-4 py-3.5 border-b border-[#DDC8B3]">
-        <div className="flex items-center gap-2.5">
-          <Image
-            src="/ember-sidebar-logo.png"
-            alt="Ember Logo"
-            width={10}
-            height={16}
-            className="w-auto h-4 object-contain"
-          />
-          <div className="flex items-center gap-2">
-            <Image src="/ember-name.svg" alt="Ember" width={76} height={15} className="h-[15px] w-auto" />
-          </div>
-        </div>
-      </div>
-
       {/* Main Navigation */}
       <div className="flex-1 overflow-y-auto p-4">
         {/* Platform Section */}
@@ -633,196 +530,56 @@ export function AppSidebar() {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-[#DDC8B3] space-y-3">
-        {/* Network Selector */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setIsChainMenuOpen((open) => !open)}
-            disabled={!canSelectChain}
-            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors ${
-              canSelectChain
-                ? 'bg-[#FFF8F0] hover:bg-[#F4E6D8] border border-[#DDC8B3]'
-                : 'bg-[#EFE4D7] border border-[#DDC8B3] opacity-60'
-            }`}
-          >
-            <span className="text-sm">{selectedChain.name}</span>
-            <ChevronDown className="w-4 h-4 text-[#9B7C63] ml-auto" />
-          </button>
-
-          {isChainMenuOpen && canSelectChain && (
-            <div className="absolute bottom-full mb-2 w-full rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] overflow-hidden z-50 shadow-[0_12px_32px_rgba(81,49,30,0.12)]">
-              {walletSelectorChains.map((chain) => {
-                const isSelected = chain.id === selectedChain.id;
-                return (
+      {shouldShowFooter ? (
+        <div className="p-4 border-t border-[#DDC8B3] space-y-3">
+          {shouldShowSmartAccountUpgrade ? (
+            <>
+              {isSmartAccountLoading ? (
+                <div className="w-full px-3 py-2 rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] text-xs text-[#6F5A4C]">
+                  Checking wallet status…
+                </div>
+              ) : smartAccountError ? (
+                <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-200">
+                  {smartAccountError.message}
+                </div>
+              ) : isSmartAccountDeployed === false ? (
+                <div className="w-full p-3 rounded-lg bg-[#FFF8F0] border border-[#DDC8B3]">
+                  <div className="text-xs text-[#6F5A4C]">
+                    Upgrade your wallet to a smart account to enable delegations.
+                  </div>
                   <button
-                    key={chain.id}
                     type="button"
-                    onClick={() => {
-                      setIsChainMenuOpen(false);
-                      void switchChain(chain.id);
-                    }}
-                    className={`w-full flex items-center px-3 py-2 text-sm text-left transition-colors ${
-                      isSelected
-                        ? 'bg-[#F0E2D2] text-[#241813]'
-                        : 'text-[#6F5A4C] hover:bg-[#FFF2E4]'
-                    }`}
+                    onClick={() => upgradeToSmartAccount()}
+                    disabled={isSmartAccountUpgrading || isWalletLoading}
+                    className="mt-2 w-full flex items-center justify-center px-3 py-2 rounded-lg bg-[#2F211B] hover:bg-[#241813] text-white text-sm font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#2F211B]"
                   >
-                    {chain.name}
+                    {isSmartAccountUpgrading ? 'Upgrading…' : 'Upgrade wallet'}
                   </button>
-                );
-              })}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
+          {walletError ? (
+            <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-200">
+              Wallet unavailable
             </div>
-          )}
+          ) : !privyConfigured ? (
+            <div className="w-full px-3 py-2 rounded-lg border border-[#DDC8B3] bg-[#EFE4D7] text-xs text-[#8A6F58]">
+              Privy auth unavailable
+            </div>
+          ) : !authenticated || !privyWallet ? (
+            <button
+              type="button"
+              onClick={() => login()}
+              disabled={!ready || (ready && authenticated)}
+              className="w-full flex items-center justify-center px-4 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#e55a28] text-white font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#fd6731]"
+            >
+              {ready ? 'Login / Connect' : 'Loading...'}
+            </button>
+          ) : null}
         </div>
-
-        {/* Build Agent Button */}
-        <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] hover:bg-[#F4E6D8] text-[#2C1E17] font-medium transition-colors">
-          Build my Agent
-        </button>
-
-        {/* Smart Account Upgrade */}
-        {privyConfigured && authenticated && privyWallet && !walletError && (
-          <>
-            {isSmartAccountLoading ? (
-              <div className="w-full px-3 py-2 rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] text-xs text-[#6F5A4C]">
-                Checking wallet status…
-              </div>
-            ) : smartAccountError ? (
-              <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-200">
-                {smartAccountError.message}
-              </div>
-            ) : isSmartAccountDeployed === false ? (
-              <div className="w-full p-3 rounded-lg bg-[#FFF8F0] border border-[#DDC8B3]">
-                <div className="text-xs text-[#6F5A4C]">
-                  Upgrade your wallet to a smart account to enable delegations.
-                </div>
-                <button
-                  type="button"
-                  onClick={() => upgradeToSmartAccount()}
-                  disabled={isSmartAccountUpgrading || isWalletLoading}
-                  className="mt-2 w-full flex items-center justify-center px-3 py-2 rounded-lg bg-[#2F211B] hover:bg-[#241813] text-white text-sm font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#2F211B]"
-                >
-                  {isSmartAccountUpgrading ? 'Upgrading…' : 'Upgrade wallet'}
-                </button>
-              </div>
-            ) : null}
-          </>
-        )}
-
-        {/* Wallet Connection */}
-        {walletError ? (
-          <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-200">
-            Wallet unavailable
-          </div>
-        ) : authenticated && privyWallet ? (
-          <div
-            ref={addressPopoverRef}
-            className="relative w-full rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] px-3 py-2.5"
-          >
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500" />
-              <button
-                type="button"
-                onClick={() => setIsAddressPopoverOpen((prev) => !prev)}
-                className="flex-1 min-w-0 text-left text-sm font-mono truncate hover:text-[#241813]"
-                aria-haspopup="dialog"
-                aria-expanded={isAddressPopoverOpen}
-                aria-controls={addressPopoverId}
-              >
-                {formatAddress(privyWallet.address)}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsAddressPopoverOpen((prev) => !prev)}
-                className="text-xs text-[#7B6758] hover:text-[#241813]"
-                aria-label={
-                  isAddressPopoverOpen ? 'Hide full wallet address' : 'Show full wallet address'
-                }
-              >
-                {isAddressPopoverOpen ? (
-                  <ChevronDown className="w-4 h-4 rotate-180" />
-                ) : (
-                  <ChevronDown className="w-4 h-4" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => void logout()}
-                className="ml-auto text-xs text-[#7B6758] hover:text-[#241813]"
-                disabled={!ready || isWalletLoading}
-              >
-                Logout
-              </button>
-            </div>
-
-            <div className="mt-2 border-t border-[#DDC8B3] pt-2">
-              <HardNavLink
-                href="/wallet"
-                className="inline-flex text-xs text-[#7B6758] hover:text-[#241813] transition-colors"
-              >
-                Manage Wallet
-              </HardNavLink>
-            </div>
-
-            {isAddressPopoverOpen && (
-              <div
-                id={addressPopoverId}
-                role="dialog"
-                aria-label="Privy wallet address"
-                className="absolute left-3 bottom-full mb-2 z-30 w-max rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] p-3 shadow-[0_12px_32px_rgba(81,49,30,0.12)]"
-              >
-                <div className="text-xs text-[#8A6F58]">Privy wallet address</div>
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={privyWallet.address}
-                    onFocus={handleAddressFieldFocus}
-                    onClick={handleAddressFieldClick}
-                    className="shrink-0 w-auto rounded-md border border-[#DDC8B3] bg-[#FCF5EC] px-2 py-1 text-xs font-mono text-[#2C1E17]"
-                    style={{
-                      width: `calc(${Math.max(privyWallet.address.length, 20)}ch + 1rem)`,
-                    }}
-                    aria-label="Full wallet address"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleCopyAddress()}
-                    className="shrink-0 rounded-md border border-[#DDC8B3] bg-[#F0E2D2] px-2 py-1 text-xs text-[#2C1E17] hover:bg-[#E6D2BF]"
-                  >
-                    {copyStatus === 'success' ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-                {copyStatus === 'error' && (
-                  <div className="mt-2 text-xs text-red-300" role="status" aria-live="polite">
-                    Clipboard unavailable. Select and copy manually.
-                  </div>
-                )}
-                {copyStatus === 'success' && (
-                  <div className="mt-2 text-xs text-green-300" role="status" aria-live="polite">
-                    Copied to clipboard.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ) : !privyConfigured ? (
-          <div className="w-full px-3 py-2 rounded-lg border border-[#DDC8B3] bg-[#EFE4D7] text-xs text-[#8A6F58]">
-            Privy auth unavailable
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => login()}
-            disabled={!ready || (ready && authenticated)}
-            className="w-full flex items-center justify-center px-4 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#e55a28] text-white font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#fd6731]"
-          >
-            {ready ? 'Login / Connect' : 'Loading...'}
-          </button>
-        )}
-      </div>
+      ) : null}
     </div>
   );
 }

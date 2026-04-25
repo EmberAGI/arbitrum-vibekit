@@ -174,6 +174,8 @@ describe('WalletContentsWorkbench', () => {
     expect(html).toContain('$12.00');
     expect(html).toContain('0.000027');
     expect(html.indexOf('Composition')).toBeLessThan(html.indexOf('DeFi'));
+    expect(html).toContain('<h3 class="text-[10px] uppercase tracking-[0.18em] text-[#8C7F72]">DeFi</h3>');
+    expect(html).not.toContain('<h3 class="text-sm font-semibold text-[#221A13]">DeFi</h3>');
     expect(html).toContain('No perpetual positions.');
     expect(html).toContain('No Pendle positions.');
     expect(html).toContain('No CLMM/Camelot positions.');

@@ -1,9 +1,8 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { arbitrum, mainnet, polygon } from 'viem/chains';
 
-import { AppSidebar, getSidebarAgentHref, getWalletSelectorChains } from './AppSidebar';
+import { AppSidebar, getSidebarAgentHref } from './AppSidebar';
 
 const privyMocks = vi.hoisted(() => ({
   ready: true,
@@ -155,16 +154,21 @@ describe('AppSidebar wallet actions', () => {
     getAuthoritativeSnapshotMock.mockReturnValue(null);
   });
 
-  it('limits wallet selector chain options to Arbitrum and Ethereum', () => {
-    const result = getWalletSelectorChains([arbitrum, mainnet, polygon]);
-    expect(result.map((chain) => chain.id)).toEqual([arbitrum.id, mainnet.id]);
-  });
-
-  it('renders a secondary Manage Wallet link when wallet is connected', () => {
+  it('does not render the network selector or build-agent CTA in the bottom nav', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('Manage Wallet');
-    expect(html).toContain('href="/wallet"');
+    expect(html).not.toContain('Arbitrum One');
+    expect(html).not.toContain('Ethereum');
+    expect(html).not.toContain('Build my Agent');
+    expect(html).not.toContain('p-4 border-t border-[#DDC8B3] space-y-3');
+  });
+
+  it('does not render wallet management actions once they move to the global top bar', () => {
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).not.toContain('Manage Wallet');
+    expect(html).not.toContain('href="/wallet"');
+    expect(html).not.toContain('Logout');
   });
 
   it('uses the widened sidebar frame and a light shell palette', () => {
@@ -172,8 +176,8 @@ describe('AppSidebar wallet actions', () => {
 
     expect(html).toContain('w-[312px]');
     expect(html).toContain('bg-[#F7EFE3] border-r border-[#DDC8B3] text-[#3C2A21]');
-    expect(html).toContain('src="/ember-sidebar-logo.png"');
-    expect(html).toContain('src="/ember-name.svg"');
+    expect(html).not.toContain('src="/ember-sidebar-logo.png"');
+    expect(html).not.toContain('src="/ember-name.svg"');
     expect(html).not.toContain('>AI</span>');
   });
 

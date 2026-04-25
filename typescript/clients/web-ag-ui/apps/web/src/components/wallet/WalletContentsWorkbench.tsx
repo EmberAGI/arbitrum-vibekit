@@ -474,7 +474,7 @@ function DeFiPositionsSection(props: {
 }): React.JSX.Element {
   return (
     <div className="mt-5 border-t border-[#E7DBD0] pt-4">
-      <h3 className="text-sm font-semibold text-[#221A13]">DeFi</h3>
+      <h3 className="text-[10px] uppercase tracking-[0.18em] text-[#8C7F72]">DeFi</h3>
 
       <div className="mt-3 divide-y divide-[#E7DBD0] border-y border-[#E7DBD0]">
         <div className="py-3">

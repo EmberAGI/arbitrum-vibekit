@@ -56,8 +56,8 @@ describe('WalletManagementView', () => {
     expect(html).not.toContain('mx-auto w-full max-w-[1400px] p-6 space-y-6');
     expect(html).toContain('space-y-6 px-4 pb-6 sm:px-6');
     expect(html).toContain('grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]');
-    expect(html).toContain('Benchmark');
-    expect(html).toContain('Gross exposure');
+    expect(html).not.toContain('Benchmark');
+    expect(html).not.toContain('Gross exposure');
     expect(html).not.toContain('Grouped into 3 asset families');
     expect(html).toContain('Unmanaged');
     expect(html).toContain('Deployed');

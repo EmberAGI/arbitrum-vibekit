@@ -30,7 +30,7 @@ describe('/wallet page', () => {
     const html = renderToStaticMarkup(React.createElement(WalletPage));
     expect(html).not.toContain('Manage Wallet');
     expect(html).not.toMatch(/>Portfolio</);
-    expect(html).toContain('Gross exposure');
+    expect(html).not.toContain('Gross exposure');
     expect(html).toContain('Composition');
     expect(html).not.toContain('Grouped into 0 asset families');
   });

@@ -1,3 +1,5 @@
+import type React from 'react';
+
 import type { DashboardTopbarView } from './dashboardTypes';
 import { DashboardTokenAvatar } from './DashboardTokenAvatar';
 
@@ -60,7 +62,7 @@ function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
         aria-label={`Benchmark ${props.benchmarkAssetLabel}. Preview benchmark selector.`}
         aria-disabled="true"
         aria-haspopup="dialog"
-        className="inline-flex cursor-default items-center gap-2.5 rounded-full border border-[#D7C5B4] bg-[#F8EFE5] px-2.5 py-1.5 text-left transition-colors hover:border-[#E8C9AA] hover:bg-[#FFF7F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8C9AA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#EFE5DA]"
+        className="inline-flex h-9 cursor-default items-center gap-2.5 rounded-full border border-[#D7C5B4] bg-[#F8EFE5] px-3 text-left transition-colors hover:border-[#E8C9AA] hover:bg-[#FFF7F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8C9AA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#EFE5DA]"
       >
         <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
           Benchmark
@@ -105,6 +107,8 @@ function BenchmarkTeaserControl(props: { benchmarkAssetLabel: string }) {
 
 export function PortfolioDashboardTopBar(props: {
   view: DashboardTopbarView;
+  leftAccessory?: React.ReactNode;
+  rightAccessory?: React.ReactNode;
 }): React.JSX.Element {
   const gridClassName = props.view.benchmarkAssetLabel
     ? 'sm:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto]'
@@ -112,35 +116,39 @@ export function PortfolioDashboardTopBar(props: {
 
   return (
     <section className="rounded-b-[24px] rounded-t-none border border-[#E4D5C7] bg-[#EFE5DA] px-4 py-3 shadow-[0_12px_28px_rgba(68,46,21,0.08)] md:px-5">
-      <div className={`grid gap-3 ${gridClassName}`}>
-        {props.view.metrics.map((metric) => (
-          <div key={metric.label}>
-            {metric.positiveAssetsValue && metric.liabilitiesValue ? (
-              <ExposureSplitValue
-                label={metric.label}
-                positiveAssetsValue={metric.positiveAssetsValue}
-                liabilitiesValue={metric.liabilitiesValue}
-                totalValue={metric.value}
-              />
-            ) : (
-              <>
-                <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
-                  {metric.label}
-                </div>
-                <div
-                  className={`mt-0.5 text-[18px] font-semibold tracking-[-0.04em] ${
-                    metric.valueClassName ?? 'text-[#221A13]'
-                  }`}
-                >
-                  {metric.value}
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-        {props.view.benchmarkAssetLabel ? (
-          <BenchmarkTeaserControl benchmarkAssetLabel={props.view.benchmarkAssetLabel} />
-        ) : null}
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+        {props.leftAccessory ? <div className="shrink-0">{props.leftAccessory}</div> : null}
+        <div className={`grid flex-1 gap-3 xl:pl-3 ${gridClassName}`}>
+          {props.view.metrics.map((metric) => (
+            <div key={metric.label}>
+              {metric.positiveAssetsValue && metric.liabilitiesValue ? (
+                <ExposureSplitValue
+                  label={metric.label}
+                  positiveAssetsValue={metric.positiveAssetsValue}
+                  liabilitiesValue={metric.liabilitiesValue}
+                  totalValue={metric.value}
+                />
+              ) : (
+                <>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
+                    {metric.label}
+                  </div>
+                  <div
+                    className={`mt-0.5 text-[18px] font-semibold tracking-[-0.04em] ${
+                      metric.valueClassName ?? 'text-[#221A13]'
+                    }`}
+                  >
+                    {metric.value}
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+          {props.view.benchmarkAssetLabel ? (
+            <BenchmarkTeaserControl benchmarkAssetLabel={props.view.benchmarkAssetLabel} />
+          ) : null}
+        </div>
+        {props.rightAccessory ? <div className="ml-auto">{props.rightAccessory}</div> : null}
       </div>
     </section>
   );

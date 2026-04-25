@@ -31,4 +31,14 @@ describe('RootLayout font wiring', () => {
     expect(source).not.toContain("bg-[#09090B]");
     expect(source).not.toContain("text-[#D1D1D1]");
   });
+
+  it('renders the persistent portfolio top bar above every page', () => {
+    const source = fs.readFileSync(layoutPath, 'utf8');
+
+    expect(source).toContain("import { GlobalPortfolioTopBarNoSSR }");
+    expect(source).toContain('flex h-screen flex-col overflow-hidden');
+    expect(source).toContain('flex min-h-0 flex-1 overflow-hidden');
+    expect(source.indexOf('<GlobalPortfolioTopBarNoSSR />')).toBeLessThan(source.indexOf('<AppSidebarNoSSR />'));
+    expect(source.indexOf('<GlobalPortfolioTopBarNoSSR />')).toBeLessThan(source.indexOf('{children}'));
+  });
 });

@@ -2,7 +2,6 @@
 
 import type { Account, Chain, Transport, WalletClient } from 'viem';
 
-import { PortfolioDashboardTopBar } from '@/components/dashboard/PortfolioDashboardTopBar';
 import type {
   PortfolioProjectionInput,
   PortfolioProjectionPacket,
@@ -48,7 +47,6 @@ export function WalletManagementView(props: WalletManagementViewProps): React.JS
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-6 px-0 pt-0 pb-6">
-      <PortfolioDashboardTopBar view={dashboardView.topbar} />
       <div className="space-y-6 px-4 pb-6 sm:px-6">
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] xl:items-start">
           <WalletContentsWorkbench view={dashboardView.contents} positions={props.portfolio.positions} />
